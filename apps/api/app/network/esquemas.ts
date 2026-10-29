@@ -773,6 +773,24 @@ export const VistaPreviaVelocidad = definirEsquema(
 |--------------------------------------------------------------------------
 */
 
+const CODIGOS_CORTE = [
+    'sin_api',
+    'router_no_responde',
+    'faltan_reglas',
+    'reglas_desactivadas',
+    'reglas_distintas',
+    'reglas_desordenadas',
+    'falta_lista_suspendidos',
+    'falta_perfil_suspendido',
+    'walled_garden',
+    'portal_sin_configurar',
+    'portal_sin_ipv4',
+    'portal_inalcanzable',
+    'portal_sin_corte',
+    'suspendidos_fuera_de_lista',
+    'fasttrack',
+]
+
 const problemaEstrategia = objeto({
     field: {
         ...texto,
@@ -928,22 +946,44 @@ export const DiagnosticoCorte = definirEsquema(
     'DiagnosticoCorte',
     objeto({
         router_id: id,
-        ok: booleano,
+        ok: {
+            ...booleano,
+            description: 'Un suspendido de este router ve la página de corte (todo en verde)',
+        },
+        chequeos: lista(
+            objeto({
+                clave: {
+                    ...enumerado([
+                        'lista_suspendidos',
+                        'reglas',
+                        'portal_http',
+                        'sesiones_suspendidas',
+                        'fasttrack',
+                        'perfil_suspendido',
+                        'walled_garden',
+                    ]),
+                    description:
+                        'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
+                        'portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la ' +
+                        'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden',
+                },
+                ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
+                codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },
+                detalle: { ...texto, description: 'Qué se vio y qué hacer, en lenguaje simple' },
+                comandos: {
+                    ...lista(texto),
+                    description:
+                        'Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta',
+                },
+                reconciliar: { ...booleano, description: '«Reconciliar ahora» lo arregla' },
+            }),
+        ),
         problemas: lista(
             objeto({
-                codigo: enumerado([
-                    'sin_api',
-                    'router_no_responde',
-                    'faltan_reglas',
-                    'reglas_desordenadas',
-                    'falta_lista_suspendidos',
-                    'falta_perfil_suspendido',
-                    'walled_garden',
-                    'portal_sin_configurar',
-                    'portal_inalcanzable',
-                ]),
+                codigo: enumerado(CODIGOS_CORTE),
                 mensaje: { ...texto, description: 'Qué falla y qué hacer, en lenguaje simple' },
                 reconciliar: { ...booleano, description: '«Reconciliar ahora» lo arregla' },
+                comandos: lista(texto),
             }),
         ),
         faltan: lista(
@@ -954,10 +994,42 @@ export const DiagnosticoCorte = definirEsquema(
             }),
         ),
         portal: objeto({
-            url: nulable(texto),
-            alcanzable: { ...nulable(booleano), description: 'null: no se probó (sin URL del portal)' },
+            url: { ...nulable(texto), description: 'PORTAL_URL_PUBLICA (la que ve el cliente)' },
+            fqdn: nulable(texto),
+            ipv4: {
+                ...nulable(texto),
+                description:
+                    'IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el ' +
+                    'FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe',
+            },
+            origen: nulable(enumerado(['variable', 'url', 'dns'])),
+            destino_nat: {
+                ...nulable(texto),
+                description:
+                    'http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado)',
+            },
+            alcanzable: { ...nulable(booleano), description: 'null: no se probó (sin destino)' },
+            http_status: nulable(entero),
             detalle: nulable(texto),
         }),
+        suspendidos: objeto({
+            total: { ...entero, description: 'Suspendidos con IPv4 (PPPoE con sesión abierta o WISP)' },
+            fuera_de_lista: {
+                ...entero,
+                description: 'Cuántos no están en la address-list: navegan sin corte',
+            },
+            ejemplos: lista(
+                objeto({
+                    servicio_id: id,
+                    tipo_conexion: enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                    ipv4: texto,
+                }),
+            ),
+        }),
+        limites: {
+            ...lista(texto),
+            description: 'Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre',
+        },
     }),
 )
 
@@ -1022,7 +1094,11 @@ export const ChequeoConexion = definirEsquema(
     'ChequeoConexion',
     objeto(
         {
-            clave: enumerado(['tunel', 'api', 'equipo', 'radius']),
+            clave: {
+                ...enumerado(['tunel', 'api', 'equipo', 'radius', 'corte']),
+                description:
+                    '`corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)',
+            },
             ok: {
                 ...nulable(booleano),
                 description: 'null = no se pudo comprobar (falló otro chequeo antes)',
@@ -1042,8 +1118,13 @@ export const ChequeoConexion = definirEsquema(
                     '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; ' +
                     'si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)',
             },
+            corte: {
+                ...nulable(DiagnosticoCorte),
+                description:
+                    'Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites',
+            },
         },
-        ['motivo', 'datos'],
+        ['motivo', 'datos', 'corte'],
     ),
 )
 

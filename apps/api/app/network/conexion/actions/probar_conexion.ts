@@ -10,8 +10,10 @@ import type { ErrorRouterOS } from '#network/routeros/errores'
 import { diagnosticarErrorRouterOS, type MotivoApi } from '#network/diagnostico_routeros'
 import { sondearRouter } from '#network/routeros/actions/sondear_routers'
 import type { ObjetoRouterOS } from '#network/routeros/cliente'
+import type { ResolverIPv4 } from '#network/routeros/corte_router'
+import { diagnosticoCorte, resumenCorte, type DiagnosticoCorte } from '#network/routeros/diagnostico'
 
-export type ClaveChequeo = 'tunel' | 'api' | 'equipo' | 'radius'
+export type ClaveChequeo = 'tunel' | 'api' | 'equipo' | 'radius' | 'corte'
 export type { MotivoApi } from '#network/diagnostico_routeros'
 
 export interface Chequeo {
@@ -24,6 +26,8 @@ export interface Chequeo {
     motivo?: MotivoApi | null
     /** `equipo`: version, modelo, uptime, cpu_pct; `radius`: direcciones y secreto_verificado */
     datos?: Record<string, unknown> | null
+    /** Solo en `corte`: el diagnóstico completo (pasos, comandos, suspendidos fuera de la lista, límites) */
+    corte?: DiagnosticoCorte | null
 }
 
 export interface ResultadoProbarConexion {
@@ -49,16 +53,22 @@ export interface ResultadoProbarConexion {
  *   `ROUTERS_RADIUS_DIRECCIONES`). Si el router devuelve el secreto (usuario con política
  *   `sensitive`), se compara con el del router sin devolverlo nunca; si no lo devuelve, se dice que no
  *   se pudo verificar.
+ * - **corte** (A2, si la API respondió): ¿un suspendido ve la página de corte? `diagnosticoCorte`: la
+ *   address-list `suspendidos`, las reglas de filter y NAT (activas y en orden), el destino real del NAT
+ *   probado con `/tool/fetch` a `http://<ip>:<puerto>/corte`, que cada suspendido tenga su IP en la
+ *   lista y la excepción de FastTrack; cada paso con los comandos de RouterOS para arreglarlo.
  *
  * Es la acción de alguien: siempre se audita. Nunca lanza por un router caído; lo informa.
  */
 export default class ProbarConexion extends DomainAction<{ router_id: number }, ResultadoProbarConexion> {
     readonly nombre = 'routers.probar_conexion'
     readonly #clientes: FabricaClientes
+    readonly #resolver: ResolverIPv4 | undefined
 
-    constructor(opciones: { clientes?: FabricaClientes } = {}) {
+    constructor(opciones: { clientes?: FabricaClientes; resolver?: ResolverIPv4 } = {}) {
         super()
         this.#clientes = opciones.clientes ?? fabricaPorDefecto
+        this.#resolver = opciones.resolver
     }
 
     protected async handle(input: { router_id: number }, t: Transaccion): Promise<ResultadoProbarConexion> {
@@ -168,6 +178,24 @@ export default class ProbarConexion extends DomainAction<{ router_id: number }, 
                           detalle: 'No se pudo leer /radius: la API no respondió',
                       },
             )
+        }
+
+        if (recurso) {
+            const inicio = performance.now()
+            // Sin contacto: el sondeo de arriba ya lo anotó en esta transacción (que tiene la fila
+            // tomada); otro cliente que lo anotara en su propia conexión esperaría ese lock para siempre.
+            const corte = await diagnosticoCorte(
+                routerId,
+                { clientes: (api) => this.#clientes(api, { sinContacto: true }), resolver: this.#resolver },
+                t.ctx.requestId,
+            )
+            chequeos.push({
+                clave: 'corte',
+                ok: corte.ok,
+                ms: Math.round(performance.now() - inicio),
+                detalle: resumenCorte(corte),
+                corte,
+            })
         }
 
         const hechos = chequeos.filter((c) => c.ok !== null)

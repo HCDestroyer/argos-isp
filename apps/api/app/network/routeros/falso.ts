@@ -77,6 +77,15 @@ function hostDeUrl(url: string): string {
     }
 }
 
+function hostPuerto(url: string): string {
+    try {
+        const u = new URL(url)
+        return `${u.hostname}:${u.port || (u.protocol === 'https:' ? '443' : '80')}`
+    } catch {
+        return url
+    }
+}
+
 function velocidad(valor: string): string {
     return valor
         .split('/')
@@ -158,6 +167,11 @@ export class RouterOSFalso {
     version = '7.24.5 (stable)'
     /** Hosts (o IPs) que el router alcanza con `/tool/fetch` y `/ping`; vacío = todos */
     alcanzables: Set<string> | null = null
+    /**
+     * Respuesta de `/tool/fetch` por `host:puerto` de la URL cuando el destino responde con error, como
+     * RouterOS 7: `400` con `failure: Status 404, File not found` (`'404, File not found'`…).
+     */
+    readonly respuestasFetch = new Map<string, string>()
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -326,6 +340,11 @@ export class RouterOSFalso {
             }
             if (!llega) {
                 return this.#error(res, 400, 'Bad Request', `failure: connection timeout (${destino})`)
+            }
+            const status =
+                camino === '/tool/fetch' ? this.respuestasFetch.get(hostPuerto(cuerpo?.url ?? '')) : undefined
+            if (status) {
+                return this.#error(res, 400, 'Bad Request', `failure: Status ${status}`)
             }
             return this.#json(res, 200, [{ status: 'finished', downloaded: '1', total: '1', duration: '1s' }])
         }

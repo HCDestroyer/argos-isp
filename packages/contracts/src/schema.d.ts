@@ -8260,8 +8260,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Chequeo del corte: reglas, listas, perfil suspendido, walled garden y portal
-         * @description El chequeo `corte` de «Probar conexión»: lee el router (y hace `/tool/fetch` al portal con `output=none`) y dice en lenguaje simple qué falta y qué hacer; `reconciliar: true` si «Reconciliar ahora» lo arregla.
+         * ¿Un suspendido de este router ve la página de corte?
+         * @description El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), `sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y `walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 no se redirigen.
          */
         get: operations["routersDiagnosticoCorte"];
         put?: never;
@@ -8377,8 +8377,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)
-         * @description Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.
+         * Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)
+         * @description Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.
          */
         post: operations["routersProbarConexion"];
         delete?: never;
@@ -10739,8 +10739,11 @@ export interface components {
             historial?: components["schemas"]["CheckCierre"][];
         };
         ChequeoConexion: {
-            /** @enum {string} */
-            clave: "tunel" | "api" | "equipo" | "radius";
+            /**
+             * @description `corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)
+             * @enum {string}
+             */
+            clave: "tunel" | "api" | "equipo" | "radius" | "corte";
             /** @description null = no se pudo comprobar (falló otro chequeo antes) */
             ok: boolean | null;
             /** @description Explicación en lenguaje simple; nunca trae secretos */
@@ -10755,6 +10758,8 @@ export interface components {
             datos?: {
                 [key: string]: unknown;
             } | null;
+            /** @description Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites */
+            corte?: components["schemas"]["DiagnosticoCorte"] | null;
         };
         CierreAnual: {
             id: number;
@@ -12118,14 +12123,36 @@ export interface components {
         };
         DiagnosticoCorte: {
             router_id: number;
+            /** @description Un suspendido de este router ve la página de corte (todo en verde) */
             ok: boolean;
+            chequeos: {
+                /**
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden
+                 * @enum {string}
+                 */
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden";
+                /** @description null: no se pudo comprobar */
+                ok: boolean | null;
+                /**
+                 * @description null si salió bien
+                 * @enum {string|null}
+                 */
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | null;
+                /** @description Qué se vio y qué hacer, en lenguaje simple */
+                detalle: string;
+                /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
+                comandos: string[];
+                /** @description «Reconciliar ahora» lo arregla */
+                reconciliar: boolean;
+            }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_inalcanzable";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */
                 reconciliar: boolean;
+                comandos: string[];
             }[];
             faltan: {
                 ruta: string;
@@ -12134,11 +12161,34 @@ export interface components {
                 accion: "crear" | "actualizar" | "borrar" | "mover";
             }[];
             portal: {
+                /** @description PORTAL_URL_PUBLICA (la que ve el cliente) */
                 url: string | null;
-                /** @description null: no se probó (sin URL del portal) */
+                fqdn: string | null;
+                /** @description IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe */
+                ipv4: string | null;
+                /** @enum {string|null} */
+                origen: "variable" | "url" | "dns" | null;
+                /** @description http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado) */
+                destino_nat: string | null;
+                /** @description null: no se probó (sin destino) */
                 alcanzable: boolean | null;
+                http_status: number | null;
                 detalle: string | null;
             };
+            suspendidos: {
+                /** @description Suspendidos con IPv4 (PPPoE con sesión abierta o WISP) */
+                total: number;
+                /** @description Cuántos no están en la address-list: navegan sin corte */
+                fuera_de_lista: number;
+                ejemplos: {
+                    servicio_id: number;
+                    /** @enum {string} */
+                    tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    ipv4: string;
+                }[];
+            };
+            /** @description Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre */
+            limites: string[];
         };
         Diario: {
             id: number;

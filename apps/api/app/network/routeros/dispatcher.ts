@@ -22,6 +22,7 @@ import {
     normalizarDireccion,
     ordenDeseado,
     type EstadoCorte,
+    type ResolverIPv4,
 } from '#network/routeros/corte_router'
 import type { Estrategia } from '#network/estrategia_velocidad'
 import {
@@ -100,6 +101,8 @@ export type FabricaClientes = (router: RouterApi, opciones?: { sinContacto?: boo
 export interface OpcionesDispatcher {
     clientes?: FabricaClientes
     red?: PredeterminadosRed
+    /** DNS para el FQDN del portal (`configCorteResuelta`); por defecto `getaddrinfo` */
+    resolver?: ResolverIPv4
 }
 
 export const fabricaPorDefecto: FabricaClientes = (router, opciones = {}) =>

@@ -253,16 +253,36 @@ Endpoints (todos en `packages/contracts`):
 - **Versión de RouterOS**: la reconciliación lee `/system/resource` y guarda `routeros_version`.
 - **Auditoría**: cada comando en `audit.red`; `routeros.reconciliar` solo deja fila en `audit.acciones` si corrigió algo o falló (excepción vigente de la regla 9).
 
-### Chequeo `corte` de «Probar conexión»
+### 10.1 · IPv4 del portal para el dst-nat (portal por FQDN)
 
-`diagnosticoCorte(routerId)` (`apps/api/app/network/routeros/diagnostico.ts`, también `GET /routers/:id/diagnostico-corte`) para que A1 lo sume como chequeo `corte` de `POST /routers/:id/probar-conexion`. Lee el router y hace `/tool/fetch url=<portal> output=none`. Cada problema trae `codigo`, `mensaje` (qué hacer, en lenguaje simple) y `reconciliar` (si «Reconciliar ahora» lo arregla):
+El `dst-nat` HTTP → `/corte` (`argosisp: corte-nat HTTP a /corte`) necesita una **IPv4** en `to-addresses`. De dónde sale, en este orden (`configCorteResuelta`, `corte_router.ts`):
 
-| `codigo` | Mensaje |
-| --- | --- |
-| `faltan_reglas` | «Faltan las reglas de corte: genera el script de conexión con "incluir configuración de servicio" o usa "Reconciliar ahora"» |
-| `reglas_desordenadas` | Las reglas de corte están detrás de FastTrack o de «accept established» |
-| `falta_lista_suspendidos` / `falta_perfil_suspendido` | Falta la address-list o el perfil PPP del suspendido |
-| `walled_garden` | El walled garden no incluye el portal o la pasarela |
-| `portal_sin_configurar` | Argos no sabe la dirección del portal (`PORTAL_URL_PUBLICA` o `ROUTERS_SERVICIO_PORTAL_V4`) |
-| `portal_inalcanzable` | «El router no llega al portal en <url>: revisa que el servidor sea alcanzable desde la red del router; si Argos corre en WSL, activa el modo de red mirrored» |
-| `sin_api` / `router_no_responde` | Sin credenciales de API, o la API no respondió |
+1. `ROUTERS_SERVICIO_PORTAL_V4` (fijada a mano; manda sobre todo lo demás). **Úsala cuando el DNS del servidor de Argos no da la IP que debe usar el router** (p. ej. resuelve a la IP interna de Docker y el router necesita la pública, o al revés).
+2. La IP de `PORTAL_URL_PUBLICA`, si la URL es una IP.
+3. El FQDN del portal (`ROUTERS_SERVICIO_PORTAL_FQDN` o el host de `PORTAL_URL_PUBLICA`) **resuelto a IPv4 desde la API en cada reconciliación** (`getaddrinfo`, espera máxima 3 s, primer registro A). La IP resuelta vive solo en el estado deseado de esa pasada: no se guarda en la base ni se cachea (regla 5: sin TTL). Si el DNS cambia, la siguiente reconciliación corrige el `to-addresses` y la entrada `argosisp: portal IP` de `argos-portal`.
+
+`ROUTERS_SERVICIO_PORTAL_PUERTO` (80 por defecto) es el `to-ports`. Si el FQDN **no resuelve**: el reconciliador no escribe el `dst-nat` (la regla que haya, del script o de una pasada anterior, se conserva tal cual), emite `routeros.fallido` (`operacion: "resolver portal"`, `servicio_id: null`), deja `error_portal` en el resultado y su fila en `audit.acciones`; el chequeo de corte sale en rojo (`portal_sin_ipv4`) con el paso a seguir. Nunca un verde.
+
+### 10.2 · Chequeo `corte` de «Probar conexión»
+
+`diagnosticoCorte(routerId)` (`apps/api/app/network/routeros/diagnostico.ts`). Es el chequeo `corte` de `POST /routers/:id/probar-conexion` (si la API respondió; el diagnóstico completo va en `chequeos[].corte`) y también `GET /routers/:id/diagnostico-corte` (`routers.ver`). Responde una pregunta: **¿un suspendido de este router ve la página de corte?** Solo lee, salvo un `/tool/fetch` (queda en `audit.red`).
+
+Respuesta (`DiagnosticoCorte`): `ok`, `chequeos[]` (`clave`, `ok`, `codigo`, `detalle` en lenguaje simple, `comandos[]` de RouterOS para la terminal, `reconciliar`), `problemas[]` (los chequeos en rojo, más `sin_api` / `router_no_responde`), `faltan[]` (lo que «Reconciliar ahora» crearía o movería), `portal` (`url`, `fqdn`, `ipv4`, `origen` `variable`/`url`/`dns`, `destino_nat`, `alcanzable`, `http_status`, `detalle`), `suspendidos` (`total`, `fuera_de_lista`, `ejemplos[]`) y `limites[]`.
+
+| `clave` | Qué verifica | En rojo (`codigo`) |
+| --- | --- | --- |
+| `lista_suspendidos` | Existe la address-list `suspendidos` (entradas estáticas o dinámicas). **Si no hay ningún suspendido con IP en el router, que no exista no es un problema** (verde, «no hace falta») | `falta_lista_suspendidos` (hay suspendidos y no existe) |
+| `reglas` | Las reglas de corte de filter (IPv4 e IPv6) y NAT están, activas, iguales a lo deseado y en orden | `faltan_reglas` (incluye el `dst-nat` HTTP si Argos no tiene la IPv4 del portal y el router tampoco la tiene), `reglas_desactivadas`, `reglas_distintas` (p. ej. el NAT apunta a otra IP), `reglas_desordenadas` |
+| `portal_http` | `/tool/fetch url=http://<ip>:<puerto>/corte output=none` **al destino real del dst-nat**: el `to-addresses`/`to-ports` de la regla del router si existe y está activa; si no, el deseado. No prueba `PORTAL_URL_PUBLICA`. Un 3xx cuenta como bien (el navegador sigue la redirección) | `portal_sin_ipv4` (FQDN sin resolver), `portal_sin_configurar`, `portal_sin_corte` (responde 4xx/5xx), `portal_inalcanzable` (timeout o puerto cerrado) |
+| `sesiones_suspendidas` | Cada servicio `suspendido` del router con IPv4 (PPPoE: la de su sesión abierta en `network.sesiones`; WISP: la asignada) tiene su IP en `suspendidos`. Dice cuántos faltan | `suspendidos_fuera_de_lista` (PPPoE: `/ppp active remove [find address=<ip>]` para que reconecte con el perfil suspendido; WISP: «Reconciliar ahora» o la entrada `argosisp:servicio:<id>`) |
+| `fasttrack` | Si hay una regla `fasttrack-connection` activa, los saltos `argosisp:top` de forward (corte, Filter-Id y, si la estrategia lo pide, la excepción de los clientes con colas) van antes | `fasttrack` |
+| `perfil_suspendido` | El perfil PPP `suspendido` pone sus sesiones en `suspendidos` | `falta_perfil_suspendido` |
+| `walled_garden` | `argos-portal` (IP y FQDN) y `argos-walled` (pasarela) tienen lo configurado | `walled_garden` |
+
+Los comandos usan la sintaxis de la terminal (`/ip firewall nat add …`, `enable [find comment="…"]`, `move [find comment="…"] destination=([find where dynamic=no]->0)`); hasta 12 por chequeo. `reconciliar: true` cuando «Reconciliar ahora» lo arregla solo.
+
+### 10.3 · Límites del corte (el panel los muestra siempre; `limites[]`)
+
+- **HTTPS (443) no se redirige**: no se puede redirigir TLS sin un certificado del sitio que el cliente quiso abrir. El router corta con un reset TCP (`argosisp: corte TCP reset`) y el navegador muestra «no se puede conectar». La página aparece al abrir un sitio `http://` o con la detección de portal cautivo del teléfono o la computadora (que usa HTTP).
+- **IPv6 no se redirige**: no hay NAT a `/corte` en IPv6; al suspendido solo se le deja DNS, el portal y el walled garden, y el resto se rechaza. Si su equipo prefiere IPv6, la página aparece cuando el navegador cae a IPv4.
+- **El portal** (A5) debe responder `/corte` por HTTP en `ROUTERS_SERVICIO_PORTAL_PUERTO` **con cualquier encabezado `Host`** (llega el del sitio que el cliente intentó abrir) y ver la **IP real del cliente** (sin NAT de origen entre el router y el portal, o con `X-Forwarded-For` de un proxy de confianza) para identificarlo por `network.sesiones`.

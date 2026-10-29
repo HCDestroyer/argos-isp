@@ -234,10 +234,12 @@ test.group('RouterOS · corte de nivel router', (group) => {
         const codigos = antes.problemas.map((p) => p.codigo)
         assert.includeMembers(codigos, [
             'faltan_reglas',
-            'falta_lista_suspendidos',
+            'fasttrack',
             'falta_perfil_suspendido',
             'walled_garden',
         ])
+        // Sin nadie suspendido, que no exista la lista no es un problema (antes daba un falso positivo).
+        assert.notInclude(codigos, 'falta_lista_suspendidos')
         assert.match(
             antes.problemas.find((p) => p.codigo === 'faltan_reglas')!.mensaje,
             /incluir configuración de servicio/,
@@ -267,7 +269,7 @@ test.group('RouterOS · corte de nivel router', (group) => {
         const problema = d.problemas.find((p) => p.codigo === 'portal_inalcanzable')!
         assert.match(
             problema.mensaje,
-            /El router no llega al portal en http:\/\/portal\.argosisp\.example\/corte/,
+            /El router no llega a http:\/\/192\.0\.2\.20:80\/corte \(destino del NAT de corte\)/,
         )
         assert.match(problema.mensaje, /mirrored/)
         assert.isFalse(problema.reconciliar)

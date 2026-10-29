@@ -181,17 +181,21 @@ const velocidad: Ruta[] = [
         metodo: 'get',
         ruta: '/routers/:id/diagnostico-corte',
         operacion: 'routersDiagnosticoCorte',
-        resumen: 'Chequeo del corte: reglas, listas, perfil suspendido, walled garden y portal',
+        resumen: '¿Un suspendido de este router ve la página de corte?',
         descripcion:
-            'El chequeo `corte` de «Probar conexión»: lee el router (y hace `/tool/fetch` al portal con ' +
-            '`output=none`) y dice en lenguaje simple qué falta y qué hacer; `reconciliar: true` si «Reconciliar ' +
-            'ahora» lo arregla.',
+            'El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace ' +
+            'falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` ' +
+            'desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), ' +
+            '`sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y ' +
+            '`walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. ' +
+            'Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 ' +
+            'no se redirigen.',
         etiqueta: 'routers',
         permiso: 'routers.ver',
         respuesta: { status: 200, descripcion: 'Diagnóstico', esquema: DiagnosticoCorte },
         handler: (ctx, { params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
-            return diagnosticoCorte(Number(params.id))
+            return diagnosticoCorte(Number(params.id), {}, ctx.contextoAccion().requestId)
         },
     }),
 ]

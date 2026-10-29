@@ -59881,8 +59881,8 @@
     "/api/v1/routers/{id}/diagnostico-corte": {
       "get": {
         "operationId": "routersDiagnosticoCorte",
-        "summary": "Chequeo del corte: reglas, listas, perfil suspendido, walled garden y portal",
-        "description": "El chequeo `corte` de «Probar conexión»: lee el router (y hace `/tool/fetch` al portal con `output=none`) y dice en lenguaje simple qué falta y qué hacer; `reconciliar: true` si «Reconciliar ahora» lo arregla.",
+        "summary": "¿Un suspendido de este router ve la página de corte?",
+        "description": "El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), `sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y `walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 no se redirigen.",
         "tags": [
           "routers"
         ],
@@ -60503,8 +60503,8 @@
     "/api/v1/routers/{id}/probar-conexion": {
       "post": {
         "operationId": "routersProbarConexion",
-        "summary": "Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)",
-        "description": "Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.",
+        "summary": "Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)",
+        "description": "Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.",
         "tags": [
           "routers"
         ],
@@ -74249,8 +74249,10 @@
               "tunel",
               "api",
               "equipo",
-              "radius"
-            ]
+              "radius",
+              "corte"
+            ],
+            "description": "`corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)"
           },
           "ok": {
             "type": [
@@ -74292,6 +74294,17 @@
             ],
             "additionalProperties": true,
             "description": "`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)"
+          },
+          "corte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticoCorte"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites"
           }
         }
       },
@@ -79479,9 +79492,12 @@
         "required": [
           "router_id",
           "ok",
+          "chequeos",
           "problemas",
           "faltan",
-          "portal"
+          "portal",
+          "suspendidos",
+          "limites"
         ],
         "properties": {
           "router_id": {
@@ -79489,7 +79505,83 @@
             "minimum": 1
           },
           "ok": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Un suspendido de este router ve la página de corte (todo en verde)"
+          },
+          "chequeos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "ok",
+                "codigo",
+                "detalle",
+                "comandos",
+                "reconciliar"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "lista_suspendidos",
+                    "reglas",
+                    "portal_http",
+                    "sesiones_suspendidas",
+                    "fasttrack",
+                    "perfil_suspendido",
+                    "walled_garden"
+                  ],
+                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden"
+                },
+                "ok": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "null: no se pudo comprobar"
+                },
+                "codigo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "sin_api",
+                    "router_no_responde",
+                    "faltan_reglas",
+                    "reglas_desactivadas",
+                    "reglas_distintas",
+                    "reglas_desordenadas",
+                    "falta_lista_suspendidos",
+                    "falta_perfil_suspendido",
+                    "walled_garden",
+                    "portal_sin_configurar",
+                    "portal_sin_ipv4",
+                    "portal_inalcanzable",
+                    "portal_sin_corte",
+                    "suspendidos_fuera_de_lista",
+                    "fasttrack"
+                  ],
+                  "description": "null si salió bien"
+                },
+                "detalle": {
+                  "type": "string",
+                  "description": "Qué se vio y qué hacer, en lenguaje simple"
+                },
+                "comandos": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta"
+                },
+                "reconciliar": {
+                  "type": "boolean",
+                  "description": "«Reconciliar ahora» lo arregla"
+                }
+              }
+            }
           },
           "problemas": {
             "type": "array",
@@ -79498,7 +79590,8 @@
               "required": [
                 "codigo",
                 "mensaje",
-                "reconciliar"
+                "reconciliar",
+                "comandos"
               ],
               "properties": {
                 "codigo": {
@@ -79507,12 +79600,18 @@
                     "sin_api",
                     "router_no_responde",
                     "faltan_reglas",
+                    "reglas_desactivadas",
+                    "reglas_distintas",
                     "reglas_desordenadas",
                     "falta_lista_suspendidos",
                     "falta_perfil_suspendido",
                     "walled_garden",
                     "portal_sin_configurar",
-                    "portal_inalcanzable"
+                    "portal_sin_ipv4",
+                    "portal_inalcanzable",
+                    "portal_sin_corte",
+                    "suspendidos_fuera_de_lista",
+                    "fasttrack"
                   ]
                 },
                 "mensaje": {
@@ -79522,6 +79621,12 @@
                 "reconciliar": {
                   "type": "boolean",
                   "description": "«Reconciliar ahora» lo arregla"
+                },
+                "comandos": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -79558,7 +79663,12 @@
             "type": "object",
             "required": [
               "url",
+              "fqdn",
+              "ipv4",
+              "origen",
+              "destino_nat",
               "alcanzable",
+              "http_status",
               "detalle"
             ],
             "properties": {
@@ -79566,14 +79676,52 @@
                 "type": [
                   "string",
                   "null"
+                ],
+                "description": "PORTAL_URL_PUBLICA (la que ve el cliente)"
+              },
+              "fqdn": {
+                "type": [
+                  "string",
+                  "null"
                 ]
+              },
+              "ipv4": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe"
+              },
+              "origen": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "variable",
+                  "url",
+                  "dns"
+                ]
+              },
+              "destino_nat": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado)"
               },
               "alcanzable": {
                 "type": [
                   "boolean",
                   "null"
                 ],
-                "description": "null: no se probó (sin URL del portal)"
+                "description": "null: no se probó (sin destino)"
+              },
+              "http_status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
               },
               "detalle": {
                 "type": [
@@ -79582,6 +79730,59 @@
                 ]
               }
             }
+          },
+          "suspendidos": {
+            "type": "object",
+            "required": [
+              "total",
+              "fuera_de_lista",
+              "ejemplos"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "description": "Suspendidos con IPv4 (PPPoE con sesión abierta o WISP)"
+              },
+              "fuera_de_lista": {
+                "type": "integer",
+                "description": "Cuántos no están en la address-list: navegan sin corte"
+              },
+              "ejemplos": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "servicio_id",
+                    "tipo_conexion",
+                    "ipv4"
+                  ],
+                  "properties": {
+                    "servicio_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "tipo_conexion": {
+                      "type": "string",
+                      "enum": [
+                        "pppoe",
+                        "ip_estatica",
+                        "dhcp_fija"
+                      ]
+                    },
+                    "ipv4": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "limites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre"
           }
         }
       },

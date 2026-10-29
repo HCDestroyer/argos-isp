@@ -12,7 +12,7 @@ import {
     servicioRed,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
+import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
@@ -102,11 +102,13 @@ export default class MigrarControlRouterOS extends DomainAction<
     readonly nombre = 'routeros.cambiar_control'
     readonly #fabrica: FabricaClientes
     readonly #red: OpcionesDispatcher['red']
+    readonly #resolver: OpcionesDispatcher['resolver']
 
     constructor(opciones: OpcionesDispatcher = {}) {
         super()
         this.#fabrica = opciones.clientes ?? fabricaPorDefecto
         this.#red = opciones.red
+        this.#resolver = opciones.resolver
     }
 
     protected async handle(input: EntradaMigrarControl, t: Transaccion): Promise<ResultadoMigrarControl> {
@@ -171,7 +173,7 @@ export default class MigrarControlRouterOS extends DomainAction<
                         if (router.con_credenciales) {
                             const lecturaCorte = await leerCorteRouter(cliente)
                             const corte = estadoCorteRouter(
-                                configCorte(),
+                                await configCorteResuelta(process.env, this.#resolver),
                                 {
                                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                                     redes_v4: await redesV4DeRouter(input.router_id, t.trx),
