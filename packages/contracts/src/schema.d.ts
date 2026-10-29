@@ -8056,7 +8056,7 @@ export interface paths {
         put?: never;
         /**
          * Unir dos registros del mismo MikroTik (el router :id absorbe a absorber_id)
-         * @description Solo admin. Pasan al router :id las implementaciones de planes (si los dos implementan el mismo plan, gana la de :id y se avisa), las redes IPv4, los bloques y pools IPv6, los servicios no retirados (cada uno con servicios.editar anidada: auditoría, servicio.config_cambiada con router y motivo union_routers, aaa y RouterOS por evento, sin cambiar sus direcciones) y las sesiones abiertas. El absorbido queda desactivado con unido_a_id. `version` es la del router :id (409 si cambió). `simular: true` devuelve lo que pasaría con sus avisos sin guardar nada. 422 `router_unido`, `router_inactivo` o `servicio_no_unible` (contratos/routers.md §3).
+         * @description Solo admin. Pasan al router :id las implementaciones de planes (si los dos implementan el mismo plan, gana la de :id y se avisa), las redes IPv4, los bloques y pools IPv6, los servicios no retirados (cada uno con servicios.editar anidada: auditoría, servicio.config_cambiada con router y motivo union_routers, aaa y RouterOS por evento, sin cambiar sus direcciones) y las sesiones abiertas. El absorbido queda desactivado con unido_a_id. `version` es la del router :id (409 si cambió). `simular: true` devuelve lo que pasaría con sus avisos sin guardar nada. 422 `router_unido`, `router_inactivo`, `servicio_no_unible` o `secreto_radius_distinto` (primero el mismo secreto RADIUS en el equipo y en Argos; la simulación lo devuelve en `bloqueos`). Los routers ya unidos al absorbido pasan a apuntar al que queda (contratos/routers.md §3).
          */
         post: operations["routersUnir"];
         delete?: never;
@@ -17087,6 +17087,10 @@ export interface components {
             sesiones_abiertas: number;
             /** @description Lo que el operador debe saber antes de confirmar */
             avisos: string[];
+            /** @description Solo en la simulación: lo que hará fallar la unión (422 con ese código). secreto_radius_distinto: primero el mismo secreto RADIUS en el equipo y en Argos. Vacío = se puede unir */
+            bloqueos: "secreto_radius_distinto"[];
+            /** @description Routers que ya estaban unidos al absorbido y ahora apuntan al que queda */
+            reencadenados: number[];
             router: components["schemas"]["Router"];
             absorbido: components["schemas"]["Router"];
         };

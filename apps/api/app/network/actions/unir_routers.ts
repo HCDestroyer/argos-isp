@@ -1,4 +1,5 @@
 import { DomainAction, simularEnTransaccion, type Transaccion } from '#shared/domain_action'
+import { descifrar } from '#shared/cifrado'
 import type { ContextoAccion } from '#shared/contexto'
 import { ConflictoVersion, NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -27,10 +28,13 @@ import { clavesCompartidas, type MotivoDuplicado } from '#network/routers_duplic
  * 4. Las sesiones abiertas del absorbido pasan al que queda.
  * 5. El absorbido se desactiva con `EditarRouter` anidada y queda `unido_a_id` = el que queda. El
  *    dispatcher de RouterOS ya no limpia en él (`routersConHistorial`) y su reconciliador lo omite
- *    (inactivo): nadie borra los objetos `argosisp:` que ahora son del que queda. No se elimina:
+ *    (inactivo): nadie borra los objetos `argosisp:` que ahora son del que queda. Los routers que ya
+ *    estaban unidos al absorbido pasan a apuntar al que queda (un salto). No se elimina:
  *    `routers.eliminar` aún no existe en main (fila en `.claude/integration/a1.md`).
  *
- * `simular` corre todo y lo revierte: devuelve lo que pasaría con sus avisos.
+ * Con secretos RADIUS distintos responde 422 `secreto_radius_distinto` (decisión del líder: el CoA
+ * de las sesiones movidas sale con el secreto del que queda). `simular` corre todo y lo revierte:
+ * devuelve lo que pasaría con sus avisos, y ese bloqueo en `bloqueos` en vez del 422.
  */
 
 export interface EntradaUnirRouters {
@@ -64,6 +68,10 @@ export interface ResultadoUnion {
     planes_descartados: number[]
     sesiones_abiertas: number
     avisos: string[]
+    /** solo en la simulación: lo que impediría unir (`secreto_radius_distinto`); vacío = se puede */
+    bloqueos: Array<'secreto_radius_distinto'>
+    /** routers que ya estaban unidos al absorbido y ahora apuntan al que queda */
+    reencadenados: number[]
     router: RouterVista
     absorbido: RouterVista
 }
@@ -81,7 +89,15 @@ interface FilaRouter {
     activo: boolean
     unido_a_id: number | null
     control_velocidad: string
+    /** cifrado v1; solo se compara, nunca sale */
+    radius_secret: string | null
     version: number
+}
+
+/** ¿Los dos registros tienen el mismo secreto RADIUS? (dos null también cuentan como iguales) */
+function mismoSecreto(a: string | null, b: string | null): boolean {
+    const claro = (v: string | null) => (v ? descifrar(v) : null)
+    return claro(a) === claro(b)
 }
 
 async function bloquearRouters(t: Transaccion, ids: number[]): Promise<FilaRouter[]> {
@@ -100,11 +116,16 @@ async function bloquearRouters(t: Transaccion, ids: number[]): Promise<FilaRoute
             'activo',
             'unido_a_id',
             'control_velocidad',
+            'radius_secret',
             'version',
         )) as FilaRouter[]
 }
 
-export async function unirRouters(t: Transaccion, entrada: EntradaUnirRouters): Promise<ResultadoUnion> {
+export async function unirRouters(
+    t: Transaccion,
+    entrada: EntradaUnirRouters,
+    simulando = false,
+): Promise<ResultadoUnion> {
     t.fijarEntidad('router', entrada.id)
     if (entrada.absorber_id === entrada.id) {
         throw new ValidacionFallida([
@@ -141,6 +162,18 @@ export async function unirRouters(t: Transaccion, entrada: EntradaUnirRouters): 
     if (Number(queda.version) !== entrada.version) throw new ConflictoVersion('network.routers', entrada.id)
 
     const avisos: string[] = []
+    const bloqueos: Array<'secreto_radius_distinto'> = []
+    // Decisión del líder (29 oct, nota de A2): el CoA de las sesiones del absorbido sale con la nas_ip y
+    // el secreto del que queda; con secretos distintos el equipo daría NAK. Primero el mismo secreto.
+    if (!mismoSecreto(queda.radius_secret, absorbido.radius_secret)) {
+        const texto =
+            `«${queda.nombre}» y «${absorbido.nombre}» tienen secretos RADIUS distintos. Primero deja el mismo ` +
+            `secreto en el MikroTik (/radius) y en Argos (el de «${queda.nombre}», que es el que queda), y ` +
+            'después únelos'
+        if (!simulando) throw new ReglaNegocio(texto, 'secreto_radius_distinto')
+        bloqueos.push('secreto_radius_distinto')
+        avisos.push(texto)
+    }
     const coincidencias = clavesCompartidas(queda, absorbido)
     if (coincidencias.length === 0) {
         avisos.push(
@@ -364,6 +397,20 @@ export async function unirRouters(t: Transaccion, entrada: EntradaUnirRouters): 
         { unido_a_id: antesAbsorbido.unido_a_id },
         { unido_a_id: despuesAbsorbido.unido_a_id },
     )
+    // uniones encadenadas: los que ya apuntaban al absorbido apuntan al que queda (un solo salto)
+    const encadenados = (await t.trx
+        .from('network.routers')
+        .where('unido_a_id', absorbido.id)
+        .orderBy('id')
+        .select('id')) as Array<{ id: number }>
+    for (const { id } of encadenados) {
+        await t.trx.from('network.routers').where('id', id).update({ unido_a_id: queda.id })
+        await t.registrarCambios(
+            { tipo: 'router', id: Number(id) },
+            { unido_a_id: Number(absorbido.id) },
+            { unido_a_id: Number(queda.id) },
+        )
+    }
     avisos.push(
         `«${absorbido.nombre}» queda desactivado y unido a «${queda.nombre}» (no se elimina: conserva su historial)`,
     )
@@ -380,6 +427,8 @@ export async function unirRouters(t: Transaccion, entrada: EntradaUnirRouters): 
         planes_descartados: planesDescartados,
         sesiones_abiertas: sesiones.length,
         avisos,
+        bloqueos,
+        reencadenados: encadenados.map((r) => Number(r.id)),
         router: await verRouter(Number(queda.id), t.trx),
         absorbido: despuesAbsorbido,
     }
@@ -406,7 +455,7 @@ export default class UnirRouters extends DomainAction<EntradaUnirRouters, Result
 
     /** Lo mismo sin guardar nada: qué se movería y con qué avisos. */
     static async simular(input: EntradaUnirRouters, ctx: ContextoAccion): Promise<ResultadoUnion> {
-        const resultado = await simularEnTransaccion(ctx, (t) => unirRouters(t, input))
+        const resultado = await simularEnTransaccion(ctx, (t) => unirRouters(t, input, true))
         return { ...resultado, simulado: true }
     }
 }

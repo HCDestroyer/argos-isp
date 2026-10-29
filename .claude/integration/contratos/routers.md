@@ -16,7 +16,7 @@ Dos routers son el mismo equipo si coinciden en alguna clave:
 
 `Router.serial` (texto o null) y `Router.unido_a_id` (id o null) salen en la vista `Router`; opcionales en el OpenAPI hasta que las fixtures del panel los traigan (la API siempre los envía).
 
-**Serial.** `routeros.sondear` (cron cada 5 min, routers con credenciales y sin contacto reciente), cuando el router responde, lee `/system/routerboard` y, si no trae `serial-number`, `/system/license`. Si cambió, lo guarda sin subir `version` y deja el diff (`campo = serial`) en `audit.cambios`; la lectura queda en `audit.red` (`comando.operacion = identificar`). Nunca bloquea: un router que no lo informa queda con `serial` null.
+**Serial.** `routeros.sondear` (cron cada 5 min, routers con credenciales y sin contacto reciente), cuando el router responde **y** su `serial` es null o vuelve de estar caído (sin contacto más allá del umbral de `en_linea`, `SESIONES_COLGADAS_INTERVALOS` × `AAA_INTERIM_SEGUNDOS`), lee `/system/routerboard` y, si no trae `serial-number`, `/system/license`. Si cambió, lo guarda sin subir `version` y deja el diff (`campo = serial`) en `audit.cambios`; la lectura queda en `audit.red` (`comando.operacion = identificar`, `comando.ruta` = la ruta que respondió). Nunca bloquea: un router que no lo informa queda con `serial` null.
 
 ## 2. Impedir y detectar
 
@@ -60,13 +60,15 @@ Dos routers son el mismo equipo si coinciden en alguna clave:
 
 `POST /api/v1/routers/:id/unir { absorber_id, version, simular? }` (acción y permiso `routers.unir`, **solo admin**; `Idempotency-Key`). El router `:id` queda y absorbe a `absorber_id`. `version` es la del router `:id` (409 si cambió).
 
+**Secreto RADIUS** (decisión del líder, 29 oct): si los dos registros tienen secretos RADIUS distintos (en claro; dos sin secreto cuentan como iguales), responde **422** `secreto_radius_distinto`: el CoA de las sesiones movidas sale con la `nas_ip` y el secreto del que queda y el equipo daría NAK. Primero se deja el mismo secreto en el MikroTik (`/radius`) y en Argos, y después se une. La simulación no falla: lo devuelve en `bloqueos` con su aviso.
+
 En una transacción, con auditoría:
 
 1. **Planes.** Cada `planes_routers` del absorbido pasa al que queda (diff `plan_router`). Si los dos implementan el mismo plan, **gana la del que queda** y la del absorbido se borra (diff a null; aviso). Cada implementación que llega emite `plan.velocidad_cambiada` (`router_id` = el que queda) si trae campos de cola, y reescribe `aaa:user:*` de los servicios de ese plan en el que queda.
 2. **Redes y pools.** Redes IPv4 y bloques IPv6 (sus pools van con el bloque) pasan al que queda (diff `red_ipv4` / `ipv6_bloque`).
 3. **Servicios.** Cada servicio no retirado pasa con `servicios.editar` anidada (`mismo_equipo`): diff `router_id`, `servicio.config_cambiada` con `campos: ['router']` y `motivo: 'union_routers'`, write-through de `aaa:user:*` y RouterOS por evento. **Las direcciones no cambian** (sin `asignacion.cambiada`). Si uno no puede pasar, 422 `servicio_no_unible` y no cambia nada. Los retirados quedan en el historial del absorbido (aviso).
 4. **Sesiones abiertas** del absorbido pasan al que queda (diff `sesion`). El accounting que siga llegando con la `nas_ip` de un router unido se atribuye al que queda (`coalesce(unido_a_id, id)`).
-5. **Absorbido.** Se desactiva con `routers.editar` anidada y queda `unido_a_id` (diff). No se elimina (conserva su historial; `routers.eliminar` aún no está en main). Ya no aparece en los duplicados.
+5. **Absorbido.** Se desactiva con `routers.editar` anidada y queda `unido_a_id` (diff). Los routers que ya estaban unidos al absorbido pasan a apuntar al que queda (diff; `reencadenados`), así `unido_a_id` siempre está a un salto del router vigente. No se elimina (conserva su historial; `routers.eliminar` aún no está en main). Ya no aparece en los duplicados.
 
 RouterOS después de unir (A2):
 - El dispatcher (`AplicarRedServicio`) no limpia en un router unido: `routersConHistorial` lo excluye. Limpiar ahí borraría en el mismo equipo lo que se acaba de asegurar en el que queda.
@@ -86,9 +88,11 @@ Respuesta (`UnionRouters`):
 | `redes_ipv4[]`, `ipv6_bloques[]` | Ids que pasan |
 | `planes_movidos[]`, `planes_descartados[]` | `plan_id` que pasan y los del absorbido que se descartan por choque |
 | `sesiones_abiertas` | Cuántas pasan |
+| `bloqueos[]` | Solo en la simulación: lo que hará fallar la unión (`secreto_radius_distinto`); vacío = se puede |
+| `reencadenados[]` | Routers que ya estaban unidos al absorbido y ahora apuntan al que queda |
 | `avisos[]` | Texto para el operador: no parecen el mismo equipo, control de velocidad distinto, plan implementado en los dos, RADIUS llega con la `nas_ip` del absorbido (une al revés o cambia el NAS en el equipo), bodegas asociadas al absorbido, servicios retirados que quedan, absorbido desactivado |
 | `router`, `absorbido` | Vista `Router` de los dos después de unir |
 
-Errores: 404 si `:id` no existe; 422 `validacion` si `absorber_id` no existe o es el mismo; 422 `router_unido` si alguno ya está unido; 422 `router_inactivo` si el que queda está desactivado; 409 `conflicto_version`; 403 sin `routers.unir` o fuera del alcance de alguno de los dos.
+Errores: 422 `secreto_radius_distinto`; 404 si `:id` no existe; 422 `validacion` si `absorber_id` no existe o es el mismo; 422 `router_unido` si alguno ya está unido; 422 `router_inactivo` si el que queda está desactivado; 409 `conflicto_version`; 403 sin `routers.unir` o fuera del alcance de alguno de los dos.
 
 **RADIUS.** El absorbido queda inactivo y deja de ser cliente de FreeRADIUS (`pnpm aaa:clients` solo genera los activos). Debe quedar el registro cuya `nas_ip` y secreto usa el equipo; si no, la simulación lo avisa.

@@ -172,7 +172,9 @@ const routers: Ruta[] = [
             'union_routers, aaa y RouterOS por evento, sin cambiar sus direcciones) y las sesiones abiertas. El ' +
             'absorbido queda desactivado con unido_a_id. `version` es la del router :id (409 si cambió). ' +
             '`simular: true` devuelve lo que pasaría con sus avisos sin guardar nada. 422 `router_unido`, ' +
-            '`router_inactivo` o `servicio_no_unible` (contratos/routers.md §3).',
+            '`router_inactivo`, `servicio_no_unible` o `secreto_radius_distinto` (primero el mismo secreto RADIUS en el ' +
+            'equipo y en Argos; la simulación lo devuelve en `bloqueos`). Los routers ya unidos al absorbido pasan a ' +
+            'apuntar al que queda (contratos/routers.md §3).',
         etiqueta: 'routers',
         permiso: 'routers.unir',
         cuerpo: v.unirRoutersValidator,

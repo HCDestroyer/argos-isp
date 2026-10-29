@@ -540,6 +540,16 @@ export const UnionRouters = definirEsquema(
         },
         sesiones_abiertas: { ...entero, description: 'Sesiones abiertas que pasan al que queda' },
         avisos: { ...lista(texto), description: 'Lo que el operador debe saber antes de confirmar' },
+        bloqueos: {
+            ...lista(enumerado(['secreto_radius_distinto'])),
+            description:
+                'Solo en la simulación: lo que hará fallar la unión (422 con ese código). secreto_radius_distinto: ' +
+                'primero el mismo secreto RADIUS en el equipo y en Argos. Vacío = se puede unir',
+        },
+        reencadenados: {
+            ...lista(id),
+            description: 'Routers que ya estaban unidos al absorbido y ahora apuntan al que queda',
+        },
         router: Router,
         absorbido: Router,
     }),

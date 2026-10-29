@@ -10,8 +10,9 @@ import { bitacoraRed } from '#network/routeros/dispatcher'
  * MikroTik registrado dos veces (`GET /routers/duplicados`); nunca bloquea: si el equipo no lo
  * informa o la lectura falla, el serial queda como estaba.
  *
- * La lectura queda en `audit.red` (`comando.operacion = identificar`) con su resultado, igual que
- * cada GET del sondeo.
+ * La lectura queda en `audit.red` (`comando.operacion = identificar`, `comando.ruta` = la que
+ * respondió: `/system/routerboard` o `/system/license`) con su resultado. El sondeo solo la hace
+ * cuando el serial no se conoce o el router vuelve de estar caído (nota de A2, 29 oct).
  */
 export async function identificarRouter(
     t: Transaccion,
@@ -25,9 +26,9 @@ export async function identificarRouter(
         request_id: t.ctx.requestId,
         host: cliente.host,
     }
-    let serial: string | null
+    let leido: Awaited<ReturnType<ClienteRouterOS['identificar']>>
     try {
-        serial = await cliente.identificar()
+        leido = await cliente.identificar()
     } catch (error) {
         const e = error as Error & { status?: number | null; tipo?: string }
         await bitacoraRed.registrar({
@@ -40,11 +41,13 @@ export async function identificarRouter(
         })
         return null
     }
+    const serial = leido?.serial ?? null
     await bitacoraRed.registrar({
         tipo: 'routeros',
         router_id: routerId,
         servicio_id: null,
-        comando,
+        // sin dato se leyeron las dos rutas; la última fue `/system/license`
+        comando: { ...comando, ruta: leido?.ruta ?? '/system/license' },
         respuesta: { status: 200, serial },
         ok: true,
     })

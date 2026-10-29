@@ -20,6 +20,7 @@ import SondearRouters from '#network/routeros/actions/sondear_routers'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import type { EventoEntrante } from '#shared/eventos_bus'
 import { extremoApi } from '#network/routers_duplicados'
+import { umbralEnLineaS } from '#network/contacto_router'
 
 /**
  * Routers duplicados (pedido del PM, 29 oct; `contratos/routers.md`): el alta y la edición
@@ -60,7 +61,7 @@ function hostUnico() {
     return `${unico('mk').toLowerCase()}.lab`
 }
 
-async function columnaRouter(id: number, columna: 'serial' | 'activo') {
+async function columnaRouter(id: number, columna: 'serial' | 'activo' | 'unido_a_id') {
     const router = await db.from('network.routers').where('id', id).select(columna).firstOrFail()
     return router[columna]
 }
@@ -252,17 +253,39 @@ test.group('Routers duplicados · serial del equipo y detección', (group) => {
             .whereRaw("comando->>'operacion' = 'identificar'")
         assert.lengthOf(red, 1)
         assert.isTrue(red[0].ok)
+        assert.equal(red[0].comando.ruta, '/system/routerboard')
 
-        // el segundo sondeo con el mismo serial no deja otro diff
-        await db.from('network.routers_contacto').where('router_id', id).delete()
+        // serial conocido y el router no estuvo caído: el sondeo no lo vuelve a leer
+        const hace = (s: number) => db.knexRawQuery(`now() - make_interval(secs => ${s})`)
+        const umbral = umbralEnLineaS()
+        await db
+            .from('network.routers_contacto')
+            .where('router_id', id)
+            .update({ ultimo_contacto: hace(Math.min(400, umbral - 60)) })
         await new SondearRouters(OPCIONES).execute(
             { sin_contacto_desde_s: 300, router_ids: [id] },
             contextoPrueba(),
         )
+        const lecturas = () =>
+            db.from('audit.red').where('router_id', id).whereRaw("comando->>'operacion' = 'identificar'")
+        assert.lengthOf(await lecturas(), 1, 'sin lectura nueva')
+
+        // vuelve de estar caído (sin contacto más allá del umbral): lo lee y guarda el serial nuevo
+        falso.serial = unico('HD09').toUpperCase()
+        await db
+            .from('network.routers_contacto')
+            .where('router_id', id)
+            .update({ ultimo_contacto: hace(umbral + 60) })
+        await new SondearRouters(OPCIONES).execute(
+            { sin_contacto_desde_s: 300, router_ids: [id] },
+            contextoPrueba(),
+        )
+        assert.lengthOf(await lecturas(), 2)
+        assert.equal(await columnaRouter(id, 'serial'), falso.serial)
         const cambios = await db
             .from('audit.cambios')
             .where({ entidad_tipo: 'router', entidad_id: id, campo: 'serial' })
-        assert.lengthOf(cambios, 1)
+        assert.lengthOf(cambios, 2)
     })
 
     test('un CHR: software-id de /system/license; sin ninguno, el serial queda null sin fallar el sondeo', async ({
@@ -275,6 +298,13 @@ test.group('Routers duplicados · serial del equipo y detección', (group) => {
             contextoPrueba(),
         )
         assert.equal(await columnaRouter(chr, 'serial'), falso.softwareId)
+
+        const redChr = await db
+            .from('audit.red')
+            .where('router_id', chr)
+            .whereRaw("comando->>'operacion' = 'identificar'")
+            .firstOrFail()
+        assert.equal(redChr.comando.ruta, '/system/license')
 
         falso.softwareId = null
         const sinDato = await routerConApi()
@@ -653,6 +683,92 @@ test.group('Routers duplicados · unir', (group) => {
             .where({ servicio_id: servicio.id, router_id: absorbido })
             .where('created_at', '>=', desde)
         assert.lengthOf(limpiezas, 0, 'nada se escribió en el absorbido')
+    })
+
+    test('uniones encadenadas: C→B y luego B→A deja C apuntando a A (un salto)', async ({
+        client,
+        assert,
+    }) => {
+        const host = hostUnico()
+        const a = await crearRouterFila({ host })
+        const b = await crearRouterFila({ host })
+        const c = await crearRouterFila({ host })
+        const cFila = await db
+            .from('network.routers')
+            .where('id', c)
+            .select(db.raw('host(nas_ip) AS nas_ip'))
+            .firstOrFail()
+        await unirConStatus(client, b, { version: 1, absorber_id: c }, 200)
+        assert.equal(Number(await columnaRouter(c, 'unido_a_id')), b)
+        const { r, requestId } = await unir(client, a, { version: 1, absorber_id: b })
+        r.assertStatus(200)
+        assert.deepEqual(r.body().reencadenados, [c])
+        assert.equal(Number(await columnaRouter(b, 'unido_a_id')), a)
+        assert.equal(Number(await columnaRouter(c, 'unido_a_id')), a)
+        const diff = await db
+            .from('audit.cambios')
+            .where({ request_id: requestId, entidad_tipo: 'router', entidad_id: c, campo: 'unido_a_id' })
+            .firstOrFail()
+        assert.deepEqual([diff.antes, diff.despues], [b, a])
+
+        // accounting con la nas_ip de C se atribuye a A
+        const userPpp = unico('ppp')
+        await db.table('core.servicios').insert({
+            cliente_id: await crearClienteFila(),
+            router_id: a,
+            plan_id: await crearPlanFila(),
+            user_ppp: userPpp,
+            pass_ppp: 'x',
+            ipv6_modo: 'ninguno',
+        })
+        const acct = unico('ses')
+        await new IniciarSesion().execute(
+            {
+                tipo: 'Start',
+                nas_ip: cFila.nas_ip,
+                acct_session_id: acct,
+                user_ppp: userPpp,
+                ipv4: null,
+                prefijo_enlace_v6: null,
+                prefijo_delegado_v6: null,
+                bytes_in: '0',
+                bytes_out: '0',
+                duracion_s: null,
+                causa_fin: null,
+                evento_en: new Date().toISOString(),
+            },
+            contextoPrueba(),
+        )
+        const sesion = await db.from('network.sesiones').where('acct_session_id', acct).firstOrFail()
+        assert.equal(Number(sesion.router_id), a)
+    })
+
+    test('secretos RADIUS distintos: la simulación lo avisa en bloqueos y unir responde 422 secreto_radius_distinto', async ({
+        client,
+        assert,
+    }) => {
+        const host = hostUnico()
+        const a = await crearRouterFila({ nombre: unico('MK A'), host, radius_secret: cifrar('secreto-a') })
+        const b = await crearRouterFila({ host, radius_secret: cifrar('secreto-b') })
+        const sim = await unir(client, a, { version: 1, absorber_id: b, simular: true })
+        sim.r.assertStatus(200)
+        assert.deepEqual(sim.r.body().bloqueos, ['secreto_radius_distinto'])
+        assert.isTrue(sim.r.body().avisos.some((x: string) => x.includes('secretos RADIUS distintos')))
+        const { r } = await unir(client, a, { version: 1, absorber_id: b })
+        r.assertStatus(422)
+        assert.equal(r.body().type, 'urn:argosisp:problema:secreto_radius_distinto')
+        assert.include(r.body().detail, 'Primero deja el mismo secreto')
+        assert.isTrue(await columnaRouter(b, 'activo'), 'no cambió nada')
+        assert.notInclude(JSON.stringify(r.body()), 'secreto-a')
+
+        // mismo secreto (cifrado distinto, igual en claro): se une
+        await db
+            .from('network.routers')
+            .where('id', b)
+            .update({ radius_secret: cifrar('secreto-a') })
+        const ok = await unir(client, a, { version: 1, absorber_id: b, simular: true })
+        assert.deepEqual(ok.r.body().bloqueos, [])
+        await unirConStatus(client, a, { version: 1, absorber_id: b }, 200)
     })
 
     test('errores: consigo mismo 422, absorbido inexistente 422, router inexistente 404', async ({
