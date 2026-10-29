@@ -6,12 +6,13 @@ import { leerRedTunel } from '#network/conexion/config'
 import { filaConexion, vistaConexion } from '#network/conexion/consultas'
 import { routerDispatcher } from '#network/routeros/consultas'
 import { bitacoraRed, fabricaPorDefecto, type FabricaClientes } from '#network/routeros/dispatcher'
-import { esErrorTls, type ErrorRouterOS } from '#network/routeros/errores'
+import type { ErrorRouterOS } from '#network/routeros/errores'
+import { diagnosticarErrorRouterOS, type MotivoApi } from '#network/diagnostico_routeros'
 import { sondearRouter } from '#network/routeros/actions/sondear_routers'
 import type { ObjetoRouterOS } from '#network/routeros/cliente'
 
 export type ClaveChequeo = 'tunel' | 'api' | 'equipo' | 'radius'
-export type MotivoApi = 'sin_credenciales' | 'no_responde' | 'credenciales' | 'certificado' | 'respuesta'
+export type { MotivoApi } from '#network/diagnostico_routeros'
 
 export interface Chequeo {
     clave: ClaveChequeo
@@ -40,8 +41,8 @@ export interface ResultadoProbarConexion {
  *   últimos 180 s. Lee lo que informa el servicio `wireguard`; no toca el router.
  * - **api**: `GET /rest/system/resource` con las credenciales guardadas, con el mismo código que el
  *   sondeo (`sondearRouter`: queda en `audit.red` y, si responde, actualiza `en_linea` y
- *   `ultimo_contacto` con fuente `sondeo`). Si falla distingue `no_responde`, `credenciales` y
- *   `certificado`.
+ *   `ultimo_contacto` con fuente `sondeo`). Si falla, `motivo` y `detalle` en lenguaje simple con los
+ *   comandos de RouterOS (`diagnostico_routeros.ts`); el texto de OpenSSL solo en `datos.error_tecnico`.
  * - **equipo**: versión de RouterOS, modelo, uptime y CPU de esa misma respuesta.
  * - **radius** (routers en modo `radius`): `GET /rest/radius` (también a `audit.red`) y que haya un
  *   cliente con servicio `ppp` hacia Argos (la IP del servidor en el túnel o
@@ -116,8 +117,15 @@ export default class ProbarConexion extends DomainAction<{ router_id: number }, 
                     detalle: `La API REST respondió en ${sondeo.host}`,
                 })
             } else {
-                const { motivo, detalle } = explicarError(sondeo.error)
-                chequeos.push({ clave: 'api', ok: false, ms: sondeo.ms, motivo, detalle })
+                const { motivo, detalle, error_tecnico: errorTecnico } = sondeo.diagnostico
+                chequeos.push({
+                    clave: 'api',
+                    ok: false,
+                    ms: sondeo.ms,
+                    motivo,
+                    detalle,
+                    datos: { error_tecnico: errorTecnico },
+                })
             }
         }
 
@@ -211,7 +219,14 @@ export default class ProbarConexion extends DomainAction<{ router_id: number }, 
                 },
                 ok: false,
             })
-            return { clave: 'radius', ok: false, ms, detalle: `No se pudo leer /radius: ${e.message}` }
+            const diagnostico = diagnosticarErrorRouterOS(e, cliente?.host ?? api.host)
+            return {
+                clave: 'radius',
+                ok: false,
+                ms,
+                detalle: `No se pudo leer /radius. ${diagnostico.detalle}`,
+                datos: { error_tecnico: diagnostico.error_tecnico },
+            }
         } finally {
             cliente?.cerrar()
         }
@@ -278,29 +293,4 @@ function texto(valor: unknown): string | null {
 /** Comparación en tiempo constante (sobre el hash: mismo largo siempre). */
 function mismoTexto(a: string, b: string): boolean {
     return timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest())
-}
-
-export function explicarError(
-    error: Error & { tipo?: string; codigo?: string | null; status?: number | null },
-): {
-    motivo: MotivoApi
-    detalle: string
-} {
-    if (error.tipo === 'credenciales') {
-        return {
-            motivo: 'credenciales',
-            detalle:
-                'El router rechazó el usuario o la clave de la API (o el usuario no tiene la política rest-api)',
-        }
-    }
-    if (error.tipo === 'inalcanzable' && esErrorTls(error.codigo)) {
-        return {
-            motivo: 'certificado',
-            detalle: `El certificado TLS del router no es válido (${error.codigo}); carga su CA o desactiva la verificación`,
-        }
-    }
-    if (error.tipo === 'respuesta' || error.tipo === 'solicitud') {
-        return { motivo: 'respuesta', detalle: `El router respondió algo inesperado: ${error.message}` }
-    }
-    return { motivo: 'no_responde', detalle: `El router no responde: ${error.message}` }
 }

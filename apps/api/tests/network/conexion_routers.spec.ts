@@ -5,6 +5,7 @@ import env from '#start/env'
 import { cifrar, descifrar } from '#shared/cifrado'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearRouterFila } from '#tests/core/fabricas'
+import { CA_PEM } from '#tests/network/certificados'
 
 /** Clave pública WireGuard válida (32 bytes en base64). */
 const clave = () => randomBytes(32).toString('base64')
@@ -189,7 +190,7 @@ test.group('Conexión de routers · API', (group) => {
         const tokenRegistro = extraer(script, 'token')
         const ipTunel = extraer(script, 'wgIp')
         const publica = clave()
-        const ca = '-----BEGIN CERTIFICATE-----\nMIIBcaDelRouter\n-----END CERTIFICATE-----'
+        const ca = CA_PEM
 
         const r = await estado(
             client.post('/api/v1/routers/conexion/registrar').json({

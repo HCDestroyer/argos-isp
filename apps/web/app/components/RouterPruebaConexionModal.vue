@@ -146,9 +146,10 @@ const resumen = computed(() => {
                                     />
                                 </span>
                             </div>
-                            <p class="text-xs break-words text-muted">
-                                {{ chequeo.detalle }}
-                            </p>
+                            <DetalleRouterOs
+                                :detalle="chequeo.detalle"
+                                :error-tecnico="errorTecnico(chequeo)"
+                            />
                             <p
                                 v-if="consejoChequeo(chequeo)"
                                 class="flex items-start gap-1.5 text-xs"
