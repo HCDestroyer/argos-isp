@@ -27048,205 +27048,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/internal/wireguard/estado": {
-      "post": {
-        "operationId": "internoWireguardEstado",
-        "summary": "Estado del servidor WireGuard y último handshake por peer (wireguard-agente)",
-        "description": "`{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos de 3 min. Claves desconocidas se ignoran.",
-        "tags": [
-          "interno"
-        ],
-        "security": [
-          {
-            "interno": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "servidor": {
-                    "type": "object",
-                    "properties": {
-                      "public_key": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                        "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
-                      },
-                      "ip": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 64
-                      },
-                      "red": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 64
-                      },
-                      "puerto": {
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "minimum": 1,
-                        "maximum": 65535
-                      },
-                      "interfaz": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 64
-                      },
-                      "modo": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 64
-                      }
-                    },
-                    "required": [
-                      "public_key"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "peers": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "public_key": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                          "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
-                        },
-                        "ultimo_handshake": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "format": "date-time"
-                        },
-                        "endpoint": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "maxLength": 100
-                        },
-                        "rx_bytes": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "minimum": 0
-                        },
-                        "tx_bytes": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "minimum": 0
-                        }
-                      },
-                      "required": [
-                        "public_key"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "maxItems": 65536
-                  },
-                  "generado_en": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "format": "date-time"
-                  }
-                },
-                "required": [
-                  "servidor",
-                  "peers"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Estado registrado"
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-implementado": true
-      }
-    },
-    "/api/v1/internal/wireguard/peers": {
-      "get": {
-        "operationId": "internoWireguardPeers",
-        "summary": "Peers WireGuard vigentes (wireguard-agente)",
-        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.",
-        "tags": [
-          "interno"
-        ],
-        "security": [
-          {
-            "interno": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Peers",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PeersWireguard"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-implementado": true
-      }
-    },
     "/api/v1/inventario/ajustes": {
       "post": {
         "operationId": "inventarioAjustar",
@@ -57338,14 +57139,9 @@
                         "roles.editar",
                         "roles.ver",
                         "routers.cambiar_control_velocidad",
-                        "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
-                        "routers.generar_script",
                         "routers.marcar_migrado",
-                        "routers.probar_conexion",
-                        "routers.reconciliar",
-                        "routers.rotar_conexion",
                         "routers.ver",
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
@@ -57362,7 +57158,6 @@
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
-                        "servicios.sincronizar_router",
                         "servicios.suspender",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
@@ -57677,14 +57472,9 @@
                         "roles.editar",
                         "roles.ver",
                         "routers.cambiar_control_velocidad",
-                        "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
-                        "routers.generar_script",
                         "routers.marcar_migrado",
-                        "routers.probar_conexion",
-                        "routers.reconciliar",
-                        "routers.rotar_conexion",
                         "routers.ver",
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
@@ -57701,7 +57491,6 @@
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
-                        "servicios.sincronizar_router",
                         "servicios.suspender",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
@@ -58026,7 +57815,7 @@
                       "null"
                     ],
                     "maxLength": 200,
-                    "description": "Clave del usuario de la API REST. Se guarda cifrada. Vacía o null = sin credencial"
+                    "description": "Se guarda cifrada"
                   },
                   "radius_secret": {
                     "type": [
@@ -58034,7 +57823,7 @@
                       "null"
                     ],
                     "maxLength": 200,
-                    "description": "Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado. Vacía o null = sin credencial"
+                    "description": "Se guarda cifrado"
                   },
                   "nas_ip": {
                     "type": "string",
@@ -58054,14 +57843,6 @@
                     ],
                     "minimum": 1,
                     "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
-                  },
-                  "zona_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Zona del router (opcional); 422 si no existe"
                   },
                   "control_velocidad": {
                     "type": "string",
@@ -58319,24 +58100,14 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 200,
-                    "description": "Clave nueva de la API REST (cifrada). Vacía o null = no cambiar"
+                    "maxLength": 200
                   },
                   "radius_secret": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "maxLength": 200,
-                    "description": "Secreto RADIUS nuevo (cifrado; el de FreeRADIUS). Vacío o null = no cambiar"
-                  },
-                  "quitar_api_password": {
-                    "description": "Borra la clave de la API (422 si además llega api_password)",
-                    "type": "boolean"
-                  },
-                  "quitar_radius_secret": {
-                    "description": "Borra el secreto RADIUS (422 si además llega radius_secret)",
-                    "type": "boolean"
+                    "maxLength": 200
                   },
                   "nas_ip": {
                     "type": "string",
@@ -58356,14 +58127,6 @@
                     ],
                     "minimum": 1,
                     "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
-                  },
-                  "zona_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Zona del router (opcional); 422 si no existe"
                   },
                   "capacidad_bajada_kbps": {
                     "type": [
@@ -58625,289 +58388,6 @@
           }
         },
         "x-permiso": "routers.cambiar_control_velocidad",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/routers/{id}/conexion": {
-      "get": {
-        "operationId": "routersConexion",
-        "summary": "Estado de la conexión WireGuard del router",
-        "description": "Estado (`sin_configurar`, `pendiente`, `conectado`), IP del túnel, clave pública, último handshake y vencimiento del token del último script. Nunca trae secretos. 404 si el router no existe.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Conexión del router",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConexionRouter"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.ver",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/routers/{id}/conexion/clave": {
-      "post": {
-        "operationId": "routersConexionClave",
-        "summary": "Pegar a mano la clave pública WireGuard del router",
-        "description": "Para un router sin internet: la clave que imprimió el script. Mismo efecto que el registro por token (lo consume): el router queda `pendiente` hasta el primer handshake y `host`/`nas_ip` pasan a la IP del túnel. 422 `script_no_generado` si nunca se generó el script; 409 `clave_en_uso` si la clave es de otro router.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "public_key": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                    "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
-                  }
-                },
-                "required": [
-                  "public_key"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Conexión del router",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConexionRouter"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.conexion_clave; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.conexion_clave",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/routers/{id}/conexion/rotar": {
-      "post": {
-        "operationId": "routersConexionRotar",
-        "summary": "Rotar la conexión WireGuard del router y generar un script nuevo (.rsc)",
-        "description": "Invalida el peer (borra la clave pública registrada, vuelve a `pendiente`, emite `router.conexion_rotada`) y responde el script nuevo como `GET /routers/:id/script-conexion` (mismos `?admin=` e `?incluir=`). La IP del túnel no cambia.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "admin",
-            "in": "query",
-            "required": false,
-            "description": "IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). Vacía: gestión solo por el túnel",
-            "schema": {
-              "type": "string",
-              "maxLength": 2000
-            }
-          },
-          {
-            "name": "incluir",
-            "in": "query",
-            "required": false,
-            "description": "`servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "servicio"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Script .rsc nuevo",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.rotar_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.rotar_conexion",
         "x-implementado": true
       }
     },
@@ -59460,152 +58940,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/routers/{id}/probar-conexion": {
-      "post": {
-        "operationId": "routersProbarConexion",
-        "summary": "Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)",
-        "description": "Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resultado de la prueba",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PruebaConexion"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.probar_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.probar_conexion",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/routers/{id}/reconciliar": {
-      "post": {
-        "operationId": "routersReconciliar",
-        "summary": "Reconciliar ahora la configuración de RouterOS del router",
-        "description": "Encola `routeros.reconciliar` (`motivo: manual`) en el worker de routeros, con lock: si ya hay uno esperando o en curso para el router, responde el mismo `job_id` con `encolado: false`. Lo corregido queda en `audit.red`. 404 si el router no existe.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Reconciliación encolada",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReconciliacionEncolada"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.reconciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.reconciliar",
-        "x-implementado": true
-      }
-    },
     "/api/v1/routers/{id}/redes-ipv4": {
       "get": {
         "operationId": "redesIpv4Listar",
@@ -59929,112 +59263,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/routers/{id}/script-conexion": {
-      "get": {
-        "operationId": "routersScriptConexion",
-        "summary": "Generar el script de conexión del router (.rsc)",
-        "description": "Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.",
-        "tags": [
-          "routers"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "admin",
-            "in": "query",
-            "required": false,
-            "description": "IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). Vacía: gestión solo por el túnel",
-            "schema": {
-              "type": "string",
-              "maxLength": 2000
-            }
-          },
-          {
-            "name": "incluir",
-            "in": "query",
-            "required": false,
-            "description": "`servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "servicio"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Script .rsc",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso routers.generar_script",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "routers.generar_script",
-        "x-implementado": true
-      }
-    },
     "/api/v1/routers/{id}/vista-previa-control": {
       "get": {
         "operationId": "routersVistaPreviaControl",
@@ -60127,93 +59355,6 @@
           }
         },
         "x-permiso": "routers.cambiar_control_velocidad",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/routers/conexion/registrar": {
-      "post": {
-        "operationId": "routersConexionRegistrar",
-        "summary": "Registro del router con su token (lo llama el script, sin sesión)",
-        "description": "Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el certificado del router. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.",
-        "tags": [
-          "routers"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string",
-                    "minLength": 16,
-                    "maxLength": 128
-                  },
-                  "public_key": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                    "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
-                  },
-                  "routeros_version": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 100,
-                    "description": "Versión de RouterOS del equipo (`/system resource version`)"
-                  },
-                  "api_ca": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 20000,
-                    "pattern": "^-----BEGIN CERTIFICATE-----",
-                    "description": "PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella el certificado de www-ssl"
-                  }
-                },
-                "required": [
-                  "token",
-                  "public_key"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Router registrado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegistroConexion"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
         "x-implementado": true
       }
     },
@@ -64514,110 +63655,6 @@
         "x-implementado": true
       }
     },
-    "/api/v1/servicios/{id}/sincronizar-router": {
-      "post": {
-        "operationId": "serviciosSincronizarRouter",
-        "summary": "Sincronizar ya el servicio con su MikroTik (cola, address-list, lease y ARP)",
-        "description": "Ejecuta `routeros.aplicar_servicio` en el acto y devuelve lo corregido (`cambios[]`) o `ya_estaba_bien`. Idempotente y con candado por servicio; cada comando queda en `audit.red`. Si el router no responde, 200 con `error` (`motivo`, `detalle`). 422 `servicio_pendiente_instalacion`; 422 `router_sin_api` (router inactivo o sin usuario y clave de la API).",
-        "tags": [
-          "servicios"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resultado de la sincronización",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SincronizacionServicio"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso servicios.sincronizar_router; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No encontrado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "servicios.sincronizar_router",
-        "x-implementado": true
-      }
-    },
     "/api/v1/servicios/{id}/suspender": {
       "post": {
         "operationId": "serviciosSuspender",
@@ -65529,14 +64566,9 @@
                             "roles.editar",
                             "roles.ver",
                             "routers.cambiar_control_velocidad",
-                            "routers.conexion_clave",
                             "routers.crear",
                             "routers.editar",
-                            "routers.generar_script",
                             "routers.marcar_migrado",
-                            "routers.probar_conexion",
-                            "routers.reconciliar",
-                            "routers.rotar_conexion",
                             "routers.ver",
                             "servicios.activar_instalacion",
                             "servicios.adicional_cortesia",
@@ -65553,7 +64585,6 @@
                             "servicios.quitar_limite",
                             "servicios.reactivar",
                             "servicios.retirar",
-                            "servicios.sincronizar_router",
                             "servicios.suspender",
                             "servicios.ver",
                             "servicios.ver_credencial_adicional",
@@ -72456,67 +71487,6 @@
           }
         }
       },
-      "ChequeoConexion": {
-        "type": "object",
-        "required": [
-          "clave",
-          "ok",
-          "detalle",
-          "ms"
-        ],
-        "properties": {
-          "clave": {
-            "type": "string",
-            "enum": [
-              "tunel",
-              "api",
-              "equipo",
-              "radius"
-            ]
-          },
-          "ok": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "null = no se pudo comprobar (falló otro chequeo antes)"
-          },
-          "detalle": {
-            "type": "string",
-            "description": "Explicación en lenguaje simple; nunca trae secretos"
-          },
-          "ms": {
-            "type": "integer"
-          },
-          "motivo": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "sin_credenciales",
-              "sin_certificado",
-              "certificado_no_confiable",
-              "certificado_proposito",
-              "puerto_cerrado",
-              "protocolo",
-              "credenciales",
-              "politicas",
-              "no_responde",
-              "respuesta"
-            ],
-            "description": "Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta"
-          },
-          "datos": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "additionalProperties": true,
-            "description": "`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)"
-          }
-        }
-      },
       "CierreAnual": {
         "type": "object",
         "required": [
@@ -74737,87 +73707,6 @@
           "version": {
             "type": "integer",
             "minimum": 0
-          }
-        }
-      },
-      "ConexionRouter": {
-        "type": "object",
-        "required": [
-          "router_id",
-          "estado",
-          "ip_tunel",
-          "public_key",
-          "ultimo_handshake",
-          "handshake_reciente",
-          "registrado_en",
-          "routeros_version",
-          "token_vence",
-          "version"
-        ],
-        "properties": {
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "estado": {
-            "type": "string",
-            "enum": [
-              "sin_configurar",
-              "pendiente",
-              "conectado"
-            ],
-            "description": "sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los últimos 3 min; conectado: handshake de menos de 3 min"
-          },
-          "ip_tunel": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "IP del router en el túnel (/32 de ARGOSISP_WG_RED)"
-          },
-          "public_key": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Clave pública WireGuard del router (no es secreta)"
-          },
-          "ultimo_handshake": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "handshake_reciente": {
-            "type": "boolean",
-            "description": "Hubo handshake en los últimos 180 s (el túnel está vivo)"
-          },
-          "registrado_en": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "routeros_version": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "La que informó el router al registrarse"
-          },
-          "token_vence": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "description": "Vencimiento del token del último script; null si ya se usó o no hay"
-          },
-          "version": {
-            "type": "integer",
-            "description": "0 sin configurar"
           }
         }
       },
@@ -85231,14 +84120,9 @@
           "roles.editar",
           "roles.ver",
           "routers.cambiar_control_velocidad",
-          "routers.conexion_clave",
           "routers.crear",
           "routers.editar",
-          "routers.generar_script",
           "routers.marcar_migrado",
-          "routers.probar_conexion",
-          "routers.reconciliar",
-          "routers.rotar_conexion",
           "routers.ver",
           "servicios.activar_instalacion",
           "servicios.adicional_cortesia",
@@ -85255,7 +84139,6 @@
           "servicios.quitar_limite",
           "servicios.reactivar",
           "servicios.retirar",
-          "servicios.sincronizar_router",
           "servicios.suspender",
           "servicios.ver",
           "servicios.ver_credencial_adicional",
@@ -85463,14 +84346,9 @@
           "Editar roles y sus permisos",
           "Ver roles y permisos",
           "Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin",
-          "Pegar a mano la clave pública WireGuard de un router",
           "Crear routers",
           "Editar routers y sus credenciales",
-          "Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token",
           "Marcar cuándo un router pasó al nuevo RADIUS (aaa)",
-          "Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)",
-          "Reconciliar ahora la configuración de RouterOS de un router",
-          "Rotar la conexión WireGuard de un router (invalida el peer y genera un script nuevo)",
           "Ver routers",
           "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
@@ -85487,7 +84365,6 @@
           "Quitar el límite de velocidad",
           "Reactivar servicios manualmente",
           "Retirar servicios",
-          "Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió",
           "Suspender servicios manualmente",
           "Ver servicios",
           "Ver la credencial de un adicional de un servicio (queda auditado)",
@@ -86913,40 +85790,6 @@
           },
           "monto": {
             "$ref": "#/components/schemas/Dinero"
-          }
-        }
-      },
-      "PeersWireguard": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PeerWireguard"
-            }
-          }
-        }
-      },
-      "PeerWireguard": {
-        "type": "object",
-        "required": [
-          "router_id",
-          "public_key",
-          "ip_tunel"
-        ],
-        "properties": {
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "public_key": {
-            "type": "string"
-          },
-          "ip_tunel": {
-            "type": "string"
           }
         }
       },
@@ -91089,35 +89932,6 @@
           }
         }
       },
-      "PruebaConexion": {
-        "type": "object",
-        "required": [
-          "router_id",
-          "ok",
-          "probado_en",
-          "chequeos"
-        ],
-        "properties": {
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "ok": {
-            "type": "boolean",
-            "description": "Todos los chequeos salieron bien"
-          },
-          "probado_en": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "chequeos": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ChequeoConexion"
-            }
-          }
-        }
-      },
       "PuntosCanjeables": {
         "type": "object",
         "required": [
@@ -91342,27 +90156,6 @@
               }
             ],
             "description": "Empresa del servicio de esa IP (su marca y su soporte); null sin identificar"
-          }
-        }
-      },
-      "ReconciliacionEncolada": {
-        "type": "object",
-        "required": [
-          "router_id",
-          "job_id",
-          "encolado"
-        ],
-        "properties": {
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "job_id": {
-            "type": "string"
-          },
-          "encolado": {
-            "type": "boolean",
-            "description": "false: ya había una esperando o en curso (no se encoló otra)"
           }
         }
       },
@@ -91648,50 +90441,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FraseFiscal"
-            }
-          }
-        }
-      },
-      "RegistroConexion": {
-        "type": "object",
-        "required": [
-          "router_id",
-          "ip_tunel",
-          "servidor"
-        ],
-        "properties": {
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "ip_tunel": {
-            "type": "string",
-            "description": "IP /32 del router en el túnel (el script la compara con la suya)"
-          },
-          "servidor": {
-            "type": "object",
-            "required": [
-              "public_key",
-              "endpoint",
-              "puerto",
-              "ip"
-            ],
-            "properties": {
-              "public_key": {
-                "type": "string",
-                "description": "Clave pública del servidor WireGuard"
-              },
-              "endpoint": {
-                "type": "string",
-                "description": "ARGOSISP_WG_ENDPOINT"
-              },
-              "puerto": {
-                "type": "integer"
-              },
-              "ip": {
-                "type": "string",
-                "description": "IP del servidor en el túnel (RADIUS, CoA, API)"
-              }
             }
           }
         }
@@ -97745,14 +96494,9 @@
               "roles.editar",
               "roles.ver",
               "routers.cambiar_control_velocidad",
-              "routers.conexion_clave",
               "routers.crear",
               "routers.editar",
-              "routers.generar_script",
               "routers.marcar_migrado",
-              "routers.probar_conexion",
-              "routers.reconciliar",
-              "routers.rotar_conexion",
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.adicional_cortesia",
@@ -97769,7 +96513,6 @@
               "servicios.quitar_limite",
               "servicios.reactivar",
               "servicios.retirar",
-              "servicios.sincronizar_router",
               "servicios.suspender",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
@@ -97859,7 +96602,6 @@
               "promesas.ver",
               "red.ver",
               "redes.ver",
-              "routers.probar_conexion",
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
@@ -97873,7 +96615,6 @@
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
               "servicios.reactivar",
-              "servicios.sincronizar_router",
               "servicios.suspender",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
@@ -97908,13 +96649,9 @@
               "redes.editar",
               "redes.migrar",
               "redes.ver",
-              "routers.conexion_clave",
               "routers.crear",
               "routers.editar",
-              "routers.generar_script",
               "routers.marcar_migrado",
-              "routers.probar_conexion",
-              "routers.reconciliar",
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
@@ -97923,7 +96660,6 @@
               "servicios.editar",
               "servicios.editar_adicional",
               "servicios.quitar_adicional",
-              "servicios.sincronizar_router",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
@@ -98250,14 +96986,6 @@
             ],
             "format": "date-time",
             "description": "Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca"
-          },
-          "zona_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 1,
-            "description": "Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
           },
           "version": {
             "type": "integer",
@@ -99309,105 +98037,6 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
-          }
-        }
-      },
-      "SincronizacionServicio": {
-        "type": "object",
-        "required": [
-          "servicio_id",
-          "router_id",
-          "cambios",
-          "ya_estaba_bien",
-          "avisos",
-          "error"
-        ],
-        "properties": {
-          "servicio_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "router_id": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "cambios": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "router_id",
-                "ruta",
-                "comment",
-                "accion"
-              ],
-              "properties": {
-                "router_id": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "ruta": {
-                  "type": "string",
-                  "description": "Menú de RouterOS (`/queue/simple`, `/ip/arp`…)"
-                },
-                "comment": {
-                  "type": "string",
-                  "description": "`argosisp:servicio:<id>` o `argosisp:plan:<id>`"
-                },
-                "accion": {
-                  "type": "string",
-                  "enum": [
-                    "creado",
-                    "actualizado",
-                    "borrado"
-                  ]
-                },
-                "duplicados": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "ya_estaba_bien": {
-            "type": "boolean",
-            "description": "Nada que corregir y el router respondió"
-          },
-          "avisos": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "error": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "required": [
-              "motivo",
-              "detalle"
-            ],
-            "properties": {
-              "motivo": {
-                "type": "string",
-                "enum": [
-                  "sin_credenciales",
-                  "sin_certificado",
-                  "certificado_no_confiable",
-                  "certificado_proposito",
-                  "puerto_cerrado",
-                  "protocolo",
-                  "credenciales",
-                  "politicas",
-                  "no_responde",
-                  "respuesta"
-                ]
-              },
-              "detalle": {
-                "type": "string"
-              }
-            },
-            "description": "El router no respondió o rechazó un comando (lenguaje simple); null si todo bien"
           }
         }
       },
