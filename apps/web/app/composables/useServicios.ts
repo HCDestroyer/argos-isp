@@ -6,6 +6,8 @@ export type DatosServicio = paths['/api/v1/servicios']['post']['requestBody']['c
 export type ModoIpv6 = Servicio['ipv6_modo']
 export type TramoAsignacion = Schema<'TramoAsignacion'>
 export type ConfiguracionEfectivaServicio = Schema<'ConfiguracionEfectivaServicio'>
+/** Respuesta de `POST /servicios/:id/sincronizar-router`. */
+export type SincronizacionServicio = Schema<'SincronizacionServicio'>
 /** Cuerpo de `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
 export type DatosActivarInstalacion = paths['/api/v1/servicios/{id}/activar-instalacion']['post']['requestBody']['content']['application/json']
 /** Referencia de planta (caja, puerto, OLT, slot, PON, potencia), de solo lectura. */
@@ -129,5 +131,17 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion }
+    /**
+     * `POST /servicios/:id/sincronizar-router` (`servicios.sincronizar_router`, A1): aplica ya en el
+     * MikroTik la cola, address-list, lease y ARP del servicio y devuelve lo corregido o
+     * `ya_estaba_bien`. Si el router no responde es 200 con `error`; 422 `servicio_pendiente_instalacion`
+     * y `router_sin_api`. Idempotente.
+     */
+    function sincronizarRouter(id: number, claveIdempotencia: string): Promise<Resultado<SincronizacionServicio>> {
+        return resolver(api.POST('/api/v1/servicios/{id}/sincronizar-router', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion, sincronizarRouter }
 }

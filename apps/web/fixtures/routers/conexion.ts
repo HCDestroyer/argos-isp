@@ -8,7 +8,7 @@ import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, pr
  * script de conexión (`text/plain`), clave pegada a mano, rotar, probar conexión y reconciliar.
  *
  * En los fixtures: RB-Centro (1) está conectado, CCR-Mixco (2) tiene un script generado sin
- * registrar y RB-Bodega (3) está sin configurar y sin secreto RADIUS (422 `radius_secret_requerido`).
+ * registrar y su www-ssl sin certificado («Probar conexión» → `sin_certificado`) y RB-Bodega (3) está sin configurar y sin secreto RADIUS (422 `radius_secret_requerido`).
  * «Incluir configuración de servicio» responde 422 `servicio_incompleto` salvo en RB-Centro.
  */
 
@@ -36,6 +36,18 @@ function siguienteIpTunel(): string {
         }
     }
     return '10.255.255.254'
+}
+
+/** Los comandos de `comandosCertificado` de A1 (`diagnostico_routeros.ts`). */
+function comandosCertificado(host: string): string {
+    const san = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ? `IP:${host}` : `DNS:${host}`
+    return [
+        '/certificate add name=argos-ca common-name=argos-ca key-usage=key-cert-sign,crl-sign days-valid=3650',
+        '/certificate sign argos-ca',
+        `/certificate add name=argosisp-api common-name=${host} subject-alt-name=${san} key-usage=digital-signature,key-encipherment,tls-server days-valid=3650`,
+        '/certificate sign argosisp-api ca=argos-ca',
+        '/ip service set www-ssl certificate=argosisp-api disabled=no',
+    ].join('\n')
 }
 
 /** Script de muestra: la API arma el real con las plantillas de A6; aquí solo lo que el panel muestra. */
@@ -116,7 +128,8 @@ function prueba(router: Schema<'Router'>): Schema<'PruebaConexion'> {
     }
     else {
         chequeos.push(
-            { clave: 'api', ok: false, ms: 5000, motivo: 'no_responde', detalle: 'El router no responde: tiempo de espera agotado (5 s)' },
+            // CCR-Mixco: www-ssl sin certificado (caso real del PM, 29 oct), con el texto de `diagnostico_routeros.ts`.
+            { clave: 'api', ok: false, ms: 38, motivo: 'sin_certificado', datos: { error_tecnico: 'C0D7A1E3B87F0000:error:0A000410:SSL routines:ssl3_read_bytes:sslv3 alert handshake failure:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1605:SSL alert number 40' }, detalle: `El router no tiene certificado en www-ssl, así que no puede hacer HTTPS. En el router (New Terminal):\n${comandosCertificado(router.host)}` },
             { clave: 'equipo', ok: null, ms: 0, datos: null, detalle: 'Sin datos del equipo: la API no respondió' },
             { clave: 'radius', ok: null, ms: 0, detalle: 'No se pudo leer /radius: la API no respondió' },
         )

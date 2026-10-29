@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
+import { PEM_NO_CA } from '~~/fixtures/routers/rutas'
 import RouterClaveModal from '~/components/RouterClaveModal.vue'
+import RouterConexion from '~/components/RouterConexion.vue'
 import RouterConexionSeccion from '~/components/RouterConexionSeccion.vue'
 import RouterPruebaConexionModal from '~/components/RouterPruebaConexionModal.vue'
 import RouterScriptModal from '~/components/RouterScriptModal.vue'
@@ -55,15 +57,51 @@ describe('conexión del router', () => {
         expect(vista.emitted('probado')).toHaveLength(1)
     })
 
-    it('probar conexión: si la API no responde dice qué revisar y lo demás queda «no se pudo comprobar»', async () => {
+    it('probar conexión: sin certificado en www-ssl explica la causa, deja copiar los comandos y pliega el error técnico', async () => {
         const vista = await mountSuspended(RouterPruebaConexionModal, { props: { router: router(2), open: false } })
         await vista.setProps({ open: true })
         await esperar(() => expect(cuerpo().querySelector('[data-chequeo="api"]')).not.toBeNull())
-        const api = cuerpo().querySelector('[data-chequeo="api"]')?.textContent ?? ''
-        expect(api).toContain('Falla')
-        expect(api).toContain('Qué revisar: El router no responde')
+        const api = cuerpo().querySelector('[data-chequeo="api"]')!
+        expect(api.textContent).toContain('Falla')
+        expect(api.textContent).toContain('El router no tiene certificado en www-ssl')
+        const comandos = api.querySelector('[data-prueba="comandos-routeros"]')?.textContent ?? ''
+        expect(comandos.split('\n')).toHaveLength(5)
+        expect(comandos).toContain('/certificate sign argosisp-api ca=argos-ca')
+        expect(comandos).toContain('subject-alt-name=IP:10.20.0.1')
+        expect(api.querySelector('[data-prueba="copiar-comandos"]')).not.toBeNull()
+        // El error crudo de OpenSSL no se ve hasta abrir «Detalle técnico».
+        expect(api.textContent).not.toContain('SSL alert number 40')
+        api.querySelector<HTMLElement>('[data-prueba="abrir-detalle-tecnico"]')!.click()
+        await esperar(() => expect(api.querySelector('[data-prueba="detalle-tecnico"]')?.textContent).toContain('SSL alert number 40'))
         expect(cuerpo().querySelector('[data-chequeo="equipo"]')?.textContent).toContain('No se pudo comprobar')
         expect(cuerpo().querySelector('[data-prueba="prueba-resumen"]')?.textContent).toMatch(/chequeos? fall/)
+    })
+
+    it('separarComandos: líneas con / y comandos en la frase después de «:», «(» o «luego»', () => {
+        expect(separarComandos('Sin las políticas. En el router: /user group set argosisp-api policy=read,write,api,rest-api')).toEqual({
+            texto: 'Sin las políticas. En el router: /user group set argosisp-api policy=read,write,api,rest-api',
+            comandos: ['/user group set argosisp-api policy=read,write,api,rest-api'],
+        })
+        expect(separarComandos('Apagado. En el router: /ip service set www-ssl disabled=no y revisa que /ip firewall filter acepte el 443').comandos).toEqual(['/ip service set www-ssl disabled=no'])
+        expect(separarComandos('firmado con ca=argos-ca (/certificate add x key-usage=a,b,tls-server, luego /certificate sign argosisp-api ca=argos-ca)').comandos)
+            .toEqual(['/certificate add x key-usage=a,b,tls-server', '/certificate sign argosisp-api ca=argos-ca'])
+        expect(separarComandos('Sin certificado:\n/certificate sign argos-ca')).toEqual({ texto: 'Sin certificado:', comandos: ['/certificate sign argos-ca'] })
+        expect(separarComandos('El router no responde').comandos).toEqual([])
+    })
+
+    it('editar conexión: una api_ca que no es CA marca el campo con lo que hay que revisar', async () => {
+        const vista = await mountSuspended(RouterConexion, { props: { router: router(1), open: true } })
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="router-ca-accion"]')).not.toBeNull())
+        pulsar('[data-prueba="router-ca-accion"] [value="reemplazar"]')
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="router-ca"]')).not.toBeNull())
+        const ca = cuerpo().querySelector<HTMLTextAreaElement>('textarea[data-prueba="router-ca"], [data-prueba="router-ca"] textarea')!
+        ca.value = PEM_NO_CA
+        ca.dispatchEvent(new Event('input', { bubbles: true }))
+        await flushPromises()
+        pulsar('[data-prueba="router-conexion-guardar"]')
+        await esperar(() => expect(cuerpo().textContent).toContain('no es una CA'))
+        expect(vista.emitted('actualizado')).toBeUndefined()
+        expect(bd.routers.find(r => r.id === 1)?.tiene_api_ca).toBe(false)
     })
 
     it('reconciliar: 202 encolado y, si ya hay una en curso, encolado false', async () => {

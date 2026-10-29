@@ -22,6 +22,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.quitar_limite': 'Límite de velocidad quitado',
     'servicios.retirar': 'Servicio retirado',
     'servicios.activar_instalacion': 'Instalación activada',
+    'servicios.sincronizar_router': 'Servicio sincronizado con el router',
     'servicios.desconectar': 'Sesión PPPoE desconectada',
     'servicios.ver_credenciales': 'Credenciales PPPoE consultadas',
     'servicios.cambiar_empresa': 'Servicio pasado a otra empresa',

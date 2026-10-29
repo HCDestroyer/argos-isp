@@ -52,17 +52,21 @@ export function consejoChequeo(chequeo: Chequeo): string | null {
         case 'tunel':
             return 'Revisa que el router tenga internet y que el script de conexión se haya ejecutado completo («argosisp: listo»). Si dijo «FALTA un paso», usa «Pegar clave pública». En el servidor, el puerto UDP de WireGuard debe estar abierto.'
         case 'api':
+            // El `detalle` de la API ya explica la causa y trae los comandos de RouterOS
+            // (`diagnostico_routeros.ts`); aquí solo lo que se hace desde el panel.
             switch (chequeo.motivo) {
                 case 'sin_credenciales':
                     return 'Faltan el usuario y la clave de la API: escríbelos en «Editar» o ejecuta el script de conexión, que los crea.'
                 case 'credenciales':
-                    return 'El router rechazó el usuario o la clave: revisa que coincidan con los del router y que el grupo del usuario tenga la política rest-api.'
-                case 'certificado':
-                    return 'El certificado HTTPS del router no es de confianza: vuelve a ejecutar el script de conexión (registra su CA) o carga la CA en «Conexión de la API».'
-                case 'respuesta':
-                    return 'El router respondió algo inesperado: revisa que el servicio www-ssl esté activo y que la URL de la API apunte al router correcto.'
+                    return 'Si cambiaste la clave en el router, usa «Editar» para guardar la misma aquí.'
+                case 'certificado_no_confiable':
+                    return 'La CA se pega en «Conexión de la API» de este router, o ahí mismo se apaga «Verificar el certificado TLS».'
+                case 'certificado_proposito':
+                    return 'En «Conexión de la API» va el certificado de la CA (argos-ca), no el del servicio.'
+                case 'protocolo':
+                    return 'La URL de la API se corrige en «Conexión de la API».'
                 default:
-                    return 'El router no responde: revisa que esté encendido, el túnel o la red hasta él, el puerto de la API (www-ssl, 443 por defecto) y que el firewall del router permita la IP de Argos.'
+                    return null
             }
         case 'equipo':
             return 'ArgosIsp necesita RouterOS 7: actualiza el router.'
@@ -71,6 +75,37 @@ export function consejoChequeo(chequeo: Chequeo): string | null {
         default:
             return null
     }
+}
+
+/**
+ * Separa el `detalle` de la API en el texto y los comandos de RouterOS que trae, para mostrarlos en
+ * un bloque que se pueda copiar. Son comandos las líneas que empiezan con `/` y los que van en la
+ * misma frase después de «:», «(» o «luego» (`… En el router: /user group set …`), hasta « y », «, »
+ * seguida de otra frase, «)» o el final.
+ */
+export function separarComandos(detalle: string): { texto: string, comandos: string[] } {
+    const lineas = detalle.split('\n')
+    const comandos = lineas.filter(linea => linea.trim().startsWith('/')).map(linea => linea.trim())
+    const texto = lineas.filter(linea => !linea.trim().startsWith('/')).join('\n').trim()
+    for (const coincidencia of texto.matchAll(/(?:: |\(|luego )(\/[a-z][\w-]*(?: [^\s()]*[^\s(),])+?)(?= y |, luego |\)|$)/g)) {
+        const comando = coincidencia[1]?.trim()
+        if (comando && !comandos.includes(comando)) {
+            comandos.push(comando)
+        }
+    }
+    return { texto, comandos }
+}
+
+/** El error crudo de Node u OpenSSL (`datos.error_tecnico`), solo para soporte. */
+export function errorTecnico(chequeo: Chequeo): string | null {
+    const valor = chequeo.datos?.error_tecnico
+    return typeof valor === 'string' && valor !== '' ? valor : null
+}
+
+/** 422 de `POST /servicios/:id/sincronizar-router`, en lenguaje simple. */
+export const ERRORES_SINCRONIZAR_ROUTER: Record<string, { titulo: string, ayuda: string }> = {
+    servicio_pendiente_instalacion: { titulo: 'Todavía no hay nada que sincronizar', ayuda: 'El servicio está pendiente de instalación: su cola y su configuración se crean en el router al usar «Activar instalación».' },
+    router_sin_api: { titulo: 'Argos no puede hablar con ese router', ayuda: 'El router está inactivo o no tiene usuario y clave de la API REST. Actívalo o cárgalos en la ficha del router (o genera su script de conexión) y vuelve a intentar.' },
 }
 
 /** Datos del equipo del chequeo `equipo` (versión, modelo, uptime y CPU), si vinieron. */
