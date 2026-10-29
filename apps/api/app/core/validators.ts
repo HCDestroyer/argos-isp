@@ -1078,3 +1078,6 @@ export const definirAdicionalesPlanValidator = vine.compile(
             .meta({ description: 'Lista completa (reemplaza la anterior); [] la vacía' }),
     }),
 )
+
+/** `DELETE /servicios/:id?version=` (decisión del PM, 29 oct; `contratos/eliminar.md`). */
+export const eliminarServicioValidator = vine.compile(vine.object({ version: versionEsperada() }))

@@ -226,6 +226,24 @@ export interface CatalogoEventos {
      * capacidad del enlace (`routers.editar`). `de`/`a` iguales si solo cambió la capacidad. A2
      * ejecuta el cambio en el router (padres, árbol, PCQ) por lotes.
      */
+    /**
+     * Servicio eliminado porque nunca se usó (decisión del PM, 29 oct; `contratos/eliminar.md`).
+     * La fila de `core.servicios` ya no existe: RouterOS borra lo que le haya creado, Iris lo quita.
+     */
+    'servicio.eliminado': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+    }
+    /**
+     * Router eliminado sin historial (`contratos/eliminar.md`). FreeRADIUS regenera sus clientes y
+     * el agente WireGuard borra el peer. `empresa_id` = `empresa_sugerida_id` (o null).
+     */
+    'router.eliminado': {
+        router_id: number
+        empresa_id: number | null
+    }
     'router.control_cambiado': {
         router_id: number
         de: 'simple' | 'arbol_pcq'
@@ -1010,6 +1028,8 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'servicio.eliminado',
+    'router.eliminado',
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',

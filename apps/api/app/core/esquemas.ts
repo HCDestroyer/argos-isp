@@ -1032,3 +1032,25 @@ export const EmpresaResumen = definirEsquema(
     'EmpresaResumen',
     objeto({ id, nombre_comercial: texto, nit: nulable(texto), logo_url: nulable(texto) }),
 )
+
+/** Lo que impide eliminar un servicio o un router (`contratos/eliminar.md`). */
+export const MotivoEliminacion = definirEsquema(
+    'MotivoEliminacion',
+    objeto({
+        codigo: { ...texto, description: 'facturas, sesiones, servicios, routeros…' },
+        cantidad: entero,
+        mensaje: { ...texto, description: '«tiene 3 facturas»' },
+    }),
+)
+
+export const Eliminable = definirEsquema(
+    'Eliminable',
+    objeto({
+        eliminable: {
+            ...booleano,
+            description:
+                'true: nunca se usó y el panel ofrece «Eliminar»; false: solo «Retirar» (o desactivar)',
+        },
+        motivos: lista(MotivoEliminacion),
+    }),
+)

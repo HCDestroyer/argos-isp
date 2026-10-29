@@ -376,3 +376,6 @@ export const desconectarSesionValidator = vine.compile(
 
 /** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
 export const vistaPreviaControlValidator = vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) }))
+
+/** `DELETE /routers/:id?version=` (`contratos/eliminar.md`). */
+export const eliminarRouterValidator = vine.compile(vine.object({ version: versionEsperada() }))

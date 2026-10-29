@@ -36,6 +36,8 @@ import { exigirAlcance } from '#core/acl'
 import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
+import EliminarServicio from '#core/actions/eliminar_servicio'
+import { servicioEliminable } from '#core/eliminacion'
 import ActivarInstalacionServicio from '#core/actions/activar_instalacion_servicio'
 import { rechazarSiPendiente } from '#core/instalacion'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
@@ -133,6 +135,7 @@ import {
     CampoPersonalizado,
     RolBase,
     rolesBase,
+    Eliminable,
 } from '#core/esquemas'
 
 /** Pone la cookie del panel y arma `SesionPanel` (mismo cuerpo que `POST /auth/sesion`). */
@@ -965,6 +968,43 @@ const servicios: Ruta[] = [
         'Retirar servicio (libera IPs)',
         (entrada, ctx) => new RetirarServicio().execute(entrada, ctx.contextoAccion()),
     ),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/eliminable',
+        operacion: 'serviciosEliminable',
+        resumen: '¿Se puede eliminar el servicio? (nunca se usó) y, si no, qué lo impide',
+        descripcion:
+            'Para que el panel muestre «Eliminar» (eliminable) o «Retirar». Contrato `contratos/eliminar.md`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: { status: 200, descripcion: 'Si es eliminable y los motivos', esquema: Eliminable },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id) // 404 si no existe
+            return servicioEliminable(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'delete',
+        ruta: '/servicios/:id',
+        operacion: 'serviciosEliminar',
+        resumen: 'Eliminar un servicio que nunca se usó (si tiene historial: 422, retíralo)',
+        descripcion:
+            'Solo admin. Con facturas, pagos, asientos, DTE, sesiones, inventario u otro historial responde 422 ' +
+            '`servicio_con_historial` con `errors[]` (qué lo impide). Libera IPs y prefijos, deja la lápida AAA y ' +
+            'emite `servicio.eliminado`. Contrato `contratos/eliminar.md`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.eliminar',
+        query: v.eliminarServicioValidator,
+        idempotente: true,
+        versionada: true,
+        respuesta: { status: 204, descripcion: 'Servicio eliminado' },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            await new EliminarServicio().execute({ id, version: query.version }, ctx.contextoAccion())
+        },
+    }),
     definirRuta({
         metodo: 'post',
         ruta: '/servicios/:id/activar-instalacion',
