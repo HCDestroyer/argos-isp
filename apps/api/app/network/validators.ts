@@ -3,6 +3,7 @@ import { reglasPaginacion } from '#shared/paginacion'
 import { conMensajes, MENSAJE_VERSION } from '#shared/mensajes_validacion'
 import {
     cidrV4,
+    coordenadasEnRango,
     dinero,
     empresaSugerida,
     empresasConsulta,
@@ -80,6 +81,13 @@ const credencialRouter = (descripcion: string) =>
         .optional()
         .meta({ description: `${descripcion}. Vacía o null = sin credencial` })
 
+/** Ubicación del router para factibilidad (Iris 0.3.1); null la quita. */
+const coordenadasRouter = () =>
+    coordenadasEnRango().nullable().optional().meta({
+        description:
+            'Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180; 6 decimales); null la quita',
+    })
+
 const zonaRouter = () =>
     idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
 
@@ -100,6 +108,7 @@ const camposRouter = {
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
     empresa_sugerida_id: empresaSugerida(),
     zona_id: zonaRouter(),
+    coordenadas: coordenadasRouter(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -117,6 +126,8 @@ const MENSAJES_ROUTER = {
     'nas_ip.required':
         'La IP del NAS es obligatoria: es la IP con la que el router habla con RADIUS y a la que se envían los CoA',
     'nas_ip.ipAddress': 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1',
+    'coordenadas.regex':
+        'Las coordenadas van como "latitud,longitud" en grados decimales, por ejemplo 14.6349,-90.5069 (latitud entre −90 y 90, longitud entre −180 y 180)',
 }
 
 export const crearRouterValidator = conMensajes(vine.compile(vine.object(camposRouter)), MENSAJES_ROUTER)
@@ -149,6 +160,7 @@ export const editarRouterValidator = conMensajes(
             modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
             empresa_sugerida_id: empresaSugerida(),
             zona_id: zonaRouter(),
+            coordenadas: coordenadasRouter(),
             capacidad_bajada_kbps: capacidad(),
             capacidad_subida_kbps: capacidad(),
             ...camposConexionApi,

@@ -61,6 +61,8 @@ export interface DatosRouter {
     empresa_sugerida_id?: number | null
     /** zona del router (opcional) */
     zona_id?: number | null
+    /** ubicación `"lat,lng"` (Iris 0.3.1); se guarda en `latitud`/`longitud`; null la quita */
+    coordenadas?: string | null
     activo?: boolean
 }
 
@@ -74,6 +76,16 @@ export interface EntradaCrearRouter extends DatosRouter {
     nas_ip: string
 }
 
+/** `"lat,lng"` → columnas `latitud`/`longitud` (null quita las dos). El validador ya revisó el rango. */
+export function latitudLongitud(coordenadas: string | null): {
+    latitud: string | null
+    longitud: string | null
+} {
+    if (coordenadas === null) return { latitud: null, longitud: null }
+    const [latitud, longitud] = coordenadas.split(',').map((parte) => parte.trim())
+    return { latitud: latitud!, longitud: longitud! }
+}
+
 /** Nunca se guarda una credencial vacía cifrada. */
 const CREDENCIALES = new Set(['api_password', 'radius_secret'])
 
@@ -85,6 +97,10 @@ export function columnasRouter(datos: DatosRouter): Record<string, unknown> {
     const columnas: Record<string, unknown> = {}
     for (const [clave, valor] of Object.entries(datos)) {
         if (valor === undefined) continue
+        if (clave === 'coordenadas') {
+            Object.assign(columnas, latitudLongitud(valor as string | null))
+            continue
+        }
         if (CREDENCIALES.has(clave) && valor === '') continue
         columnas[clave] =
             clave === 'api_password' || clave === 'radius_secret'
@@ -135,7 +151,7 @@ export async function avisarRadius(t: Transaccion, router: RouterVista, cambiado
     })
 }
 
-/** Alta de un router MikroTik (NAS RADIUS y API REST). */
+/** Alta de un router MikroTik (NAS RADIUS y API REST), con su ubicación opcional (`coordenadas`). */
 export default class CrearRouter extends DomainAction<EntradaCrearRouter, RouterVista> {
     readonly nombre = 'routers.crear'
 

@@ -97,9 +97,17 @@ export const Router = definirEsquema(
                     'Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; ' +
                     'opcional en el esquema hasta que las fixtures del panel la traigan',
             },
+            coordenadas: {
+                ...nulable(texto),
+                pattern: '^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$',
+                description:
+                    'Ubicación del router "lat,lng" en grados decimales (hasta 6 decimales, sin ceros de sobra), ' +
+                    'el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre ' +
+                    'la envía; opcional en el esquema hasta que las fixtures del panel la traigan',
+            },
             ...auditable,
         },
-        ['zona_id'],
+        ['zona_id', 'coordenadas'],
     ),
 )
 

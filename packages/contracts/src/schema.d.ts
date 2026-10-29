@@ -16843,6 +16843,8 @@ export interface components {
             ultimo_contacto: string | null;
             /** @description Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
             zona_id?: number | null;
+            /** @description Ubicación del router "lat,lng" en grados decimales (hasta 6 decimales, sin ceros de sobra), el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
+            coordenadas?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -48900,6 +48902,8 @@ export interface operations {
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
                     zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180; 6 decimales); null la quita */
+                    coordenadas?: string | null;
                     /**
                      * @description simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad
                      * @enum {string}
@@ -49044,6 +49048,8 @@ export interface operations {
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
                     zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180; 6 decimales); null la quita */
+                    coordenadas?: string | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
