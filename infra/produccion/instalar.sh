@@ -433,6 +433,21 @@ ARGOSISP_WIREGUARD=$WIREGUARD
 ARGOSISP_WG_RED=$WG_RED
 ARGOSISP_WG_PUERTO=$WG_PUERTO
 ARGOSISP_WG_ENDPOINT=$WG_ENDPOINT
+# Script de conexión con «configuración de servicio» (PPPoE, perfiles y corte): datos de TU red de
+# clientes, sin valor por defecto. Si faltan, el panel los lista y el script solo de conexión sirve
+# igual. Qué va en cada una: infra/produccion/.env.example. El portal sale de DOMINIO_PORTAL.
+ROUTERS_SERVICIO_WAN_INTERFAZ=
+ROUTERS_SERVICIO_PPP_LOCAL_V4=
+ROUTERS_SERVICIO_POOL_V4_RANGOS=
+ROUTERS_SERVICIO_CLIENTES_V4=
+ROUTERS_SERVICIO_CLIENTES_V6=
+ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO=
+ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO=
+ROUTERS_SERVICIO_PORTAL_V4=
+ROUTERS_SERVICIO_PORTAL_V6=
+ROUTERS_SERVICIO_WALLED_GARDEN=
+ROUTERS_SERVICIO_DNS_V4=
+ROUTERS_SERVICIO_DNS_V6=
 
 # RADIUS: IP del servidor por la que llegan los MikroTik. Con WireGuard, la .1 del túnel (no se
 # publica hacia internet); sin él, la IP de la LAN de los routers (0.0.0.0 = todas)

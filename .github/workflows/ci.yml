@@ -170,6 +170,10 @@ jobs:
         run: |
           node infra/mikrotik/armar.mjs --verificar
           node --test infra/mikrotik/render.test.mjs
+          # La imagen de la API copia lo que lee el render (la prueba con la imagen va en distribucion)
+          grep -q '^COPY .*infra/mikrotik/variables.json /app/mikrotik/' apps/api/Dockerfile
+          grep -q '^COPY .*infra/mikrotik/plantillas/ /app/mikrotik/plantillas/' apps/api/Dockerfile
+          grep -q '^ENV ROUTERS_MIKROTIK_DIR=/app/mikrotik' apps/api/Dockerfile
 
       # Servidor WireGuard: peer por evento, handshake y estado a la API (falsa), contenedor → router
       # por el túnel con origen .1, firewall del túnel (solo RADIUS), rotación (infra/wireguard/probar.sh)
