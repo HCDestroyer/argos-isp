@@ -5,7 +5,7 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
+import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import type { ServicioFacturable } from '#billing/configuracion'
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
@@ -126,6 +126,12 @@ export interface DatosEvaluacion {
     deuda: { pendiente: Dec; vencida: Dec; total_pendientes: Dec; pagado_pendientes: Dec; vencidas: number }
     /** lo que cubriría la promesa: las facturas vencidas con saldo (su total = `deuda.vencida`) */
     cobertura: Cobertura
+    /**
+     * Abono inicial (`abonoDeServicio`): `abonado` = pagos aplicados a facturas ya vencidas desde
+     * su vencimiento, en la mora actual. La base del porcentaje es lo vencido antes de los
+     * abonos: `cobertura.monto + abonado`.
+     */
+    abono: { abonado: Dec }
     /** inicio del servicio (YYYY-MM-DD) */
     inicio: string
     /** inicio del periodo actual y de la siguiente facturación (YYYY-MM-DD) */
@@ -137,6 +143,16 @@ export interface DatosEvaluacion {
     resueltas: EstadoPromesa[]
     /** cuándo venció la última promesa incumplida */
     ultima_incumplida: Date | null
+}
+
+/** Base del abono inicial: lo vencido hoy más lo ya abonado a facturas vencidas (antes de los abonos). */
+export function baseAbono(datos: Pick<DatosEvaluacion, 'cobertura' | 'abono'>): Dec {
+    return datos.cobertura.monto.plus(datos.abono.abonado)
+}
+
+/** Abono inicial exigido: `abono_inicial_pct` de la base, redondeado a 2 decimales al final. */
+export function abonoRequerido(datos: Pick<DatosEvaluacion, 'cobertura' | 'abono' | 'reglas'>): Dec {
+    return redondear(baseAbono(datos).times(datos.reglas.abono_inicial_pct).div(100))
 }
 
 const PLURAL = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
@@ -331,18 +347,19 @@ export function evaluarReglas(
     }
 
     if (reglas.abono_inicial_pct > 0) {
-        const requerido = datos.deuda.total_pendientes.times(reglas.abono_inicial_pct).div(100)
-        const ok = datos.deuda.pagado_pendientes.gte(requerido)
+        const requerido = abonoRequerido(datos)
+        const abonado = datos.abono.abonado
+        const ok = abonado.gte(requerido)
         if (
             revisar({
                 regla: 'abono_inicial_pct',
                 ok,
-                valor: aTexto(datos.deuda.pagado_pendientes),
+                valor: aTexto(abonado),
                 limite: aTexto(requerido),
                 origen: 'general',
                 detalle: ok
-                    ? `Abonó Q${aTexto(datos.deuda.pagado_pendientes)} (${reglas.abono_inicial_pct}% = Q${aTexto(requerido)})`
-                    : `Debe abonar el ${reglas.abono_inicial_pct}% de la deuda (Q${aTexto(requerido)}) antes de prometer; lleva Q${aTexto(datos.deuda.pagado_pendientes)}`,
+                    ? `Abonó Q${aTexto(abonado)} (${reglas.abono_inicial_pct}% de Q${aTexto(baseAbono(datos))} vencidos = Q${aTexto(requerido)})`
+                    : `Debe abonar el ${reglas.abono_inicial_pct}% de la deuda vencida (Q${aTexto(requerido)} de Q${aTexto(baseAbono(datos))}) antes de prometer; lleva Q${aTexto(abonado)}`,
             })
         ) {
             return fin('rechazada', 'abono_inicial_pct', evaluadas.at(-1)!.detalle)
@@ -542,6 +559,36 @@ export async function coberturaDeServicio(
     return { monto, facturas }
 }
 
+/**
+ * Lo abonado a la deuda vencida actual (base del abono inicial, decisión del líder 29 oct): pagos
+ * vigentes aplicados a facturas del servicio **después de que vencieron** (`vencida_en`), a partir
+ * de que empezó la mora actual = el vencimiento más antiguo de las facturas vencidas que aún tienen
+ * saldo. Cuenta aunque el pago haya saldado una factura completa. No cuentan los adelantos a
+ * facturas que todavía no vencían ni los pagos de moras anteriores ya saldadas.
+ */
+export async function abonoDeServicio(cliente: QueryClientContract, servicioId: number): Promise<Dec> {
+    const inicio = (await cliente
+        .from('billing.facturas')
+        .where('servicio_id', servicioId)
+        .where('estado', 'vencida')
+        .whereRaw('total > pagado')
+        .select(cliente.raw('min(coalesce(vencida_en, emitida_en)) as desde'))
+        .first()) as { desde: Date | null } | null
+    if (!inicio?.desde) return CERO
+    const fila = (await cliente
+        .from('billing.pagos_aplicaciones as a')
+        .join('billing.pagos as p', 'p.id', 'a.pago_id')
+        .join('billing.facturas as f', 'f.id', 'a.factura_id')
+        .where('f.servicio_id', servicioId)
+        .where('p.estado', 'registrado')
+        .whereNotNull('f.vencida_en')
+        .whereRaw('a.created_at >= f.vencida_en')
+        .where('a.created_at', '>=', inicio.desde)
+        .select(cliente.raw('coalesce(sum(a.monto), 0)::text as abonado'))
+        .first()) as { abonado: string }
+    return dec(fila.abonado)
+}
+
 export async function datosEvaluacion(
     cliente: QueryClientContract,
     servicio: ServicioFacturable,
@@ -588,6 +635,7 @@ export async function datosEvaluacion(
         reglas: config.reglas_promesa,
         deuda: await deudaDeServicio(cliente, servicio.id),
         cobertura: await coberturaDeServicio(cliente, servicio.id),
+        abono: { abonado: await abonoDeServicio(cliente, servicio.id) },
         inicio: servicio.inicio,
         periodo_actual: actual?.periodo ?? null,
         siguiente_facturacion: siguiente,
