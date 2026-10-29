@@ -93,7 +93,7 @@ jobs:
           - { imagen: backup, dockerfile: infra/backups/Dockerfile, contexto: . }
           - { imagen: wireguard, dockerfile: infra/wireguard/Dockerfile, contexto: . }
           # La oficial freeradius/freeradius-server solo existe para amd64 (infra/freeradius)
-          - { imagen: freeradius, dockerfile: infra/freeradius/Dockerfile, contexto: infra/freeradius }
+          - { imagen: freeradius, dockerfile: infra/freeradius/Dockerfile, contexto: . }
     steps:
       - uses: actions/checkout@v5
         with:

@@ -348,7 +348,7 @@ jobs:
       - name: Imagen freeradius
         uses: docker/build-push-action@v6
         with:
-          context: infra/freeradius
+          context: .
           file: infra/freeradius/Dockerfile
           load: true
           tags: ${{ env.REGISTRO }}/argosisp-freeradius:0.0.1

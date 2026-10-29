@@ -439,6 +439,11 @@ services:
       DB_PASSWORD: ${DB_APP_PASSWORD}
       DB_DATABASE: argosisp
       AAA_CLIENTS_DIR: /radius-clientes
+      # Clientes por evento (A2, contratos/conexion-routers.md §6.4): con router.conexion_* (y al
+      # arrancar) regenera clients.d y avisa a freeradius por el FIFO .recargar. 0 = solo
+      # `argosisp radius-clientes`, que sigue sirviendo de respaldo manual.
+      AAA_CLIENTES_EVENTOS: ${AAA_CLIENTES_EVENTOS:-1}
+      AAA_NODO: aaa
     volumes:
       - aaa-datos:/var/lib/argosisp-aaa
       - radius-clientes:/radius-clientes
@@ -499,6 +504,9 @@ services:
   freeradius:
     image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-freeradius:${ARGOSISP_VERSION}
     restart: unless-stopped
+    # recargar.sh (A2, en la imagen): corre `freeradius -f -l stdout` y lo reinicia cuando aaa
+    # regenera clients.d. El FIFO funciona aunque el volumen esté montado de solo lectura.
+    entrypoint: [/usr/local/bin/argosisp-recargar.sh]
     command: [-l, stdout]
     environment:
       TZ: UTC
