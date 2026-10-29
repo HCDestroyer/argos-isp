@@ -49,8 +49,8 @@ export function bloqueoEfectivo(vigentes: BloqueosEmpresa['vigentes'], tipo: Tip
     return fechas.length ? fechas.sort().at(-1) ?? null : null
 }
 
-const motivo = z.string().trim().min(3, 'El motivo es obligatorio (mínimo 3 caracteres)').max(500, 'Hasta 500 caracteres')
-const fecha = z.string().trim().regex(FECHA, 'Fecha inválida (AAAA-MM-DD)')
+const motivo = z.string().trim().min(3, 'Escribe el motivo (al menos 3 caracteres)').max(500, 'Hasta 500 caracteres')
+const fecha = z.string().trim().regex(FECHA, 'Elige una fecha válida (AAAA-MM-DD)')
 
 /** Bloquear o avanzar un tipo (`POST /libro/bloqueos`): solo avanza, no futuro, nunca antes del duro. */
 export function esquemaBloquear(vigentes: BloqueosEmpresa['vigentes'], hoy: string) {
@@ -88,7 +88,7 @@ export function esquemaDesbloquear(vigentes: BloqueosEmpresa['vigentes']) {
         }
         const actual = vigentes[d.tipo]
         if (!FECHA.test(d.hasta)) {
-            ctx.addIssue({ code: 'custom', path: ['hasta'], message: 'Fecha inválida (AAAA-MM-DD)' })
+            ctx.addIssue({ code: 'custom', path: ['hasta'], message: 'Elige una fecha válida (AAAA-MM-DD)' })
         }
         else if (actual && d.hasta >= actual) {
             ctx.addIssue({ code: 'custom', path: ['hasta'], message: `Debe ser anterior al vigente (${actual})` })

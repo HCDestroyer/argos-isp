@@ -539,7 +539,46 @@ const cambiarEmpresa: ManejadorFixture = (solicitud) => {
     return { status: 200, cuerpo: vista(despues) }
 }
 
+/**
+ * `POST /servicios/:id/sincronizar-router` (`servicios.sincronizar_router`, A1): en RB-Centro la
+ * primera vez corrige la cola y la address-list y después responde `ya_estaba_bien`; CCR-Mixco no
+ * tiene certificado en www-ssl (200 con `error`); un router inactivo o sin API → 422 `router_sin_api`.
+ */
+function sincronizarRouter(solicitud: SolicitudFixture): ReturnType<ManejadorFixture> {
+    const servicio = bd.servicios.find(s => s.id === idDe(solicitud))
+    if (!servicio) {
+        return noEncontrado('el servicio')
+    }
+    if (servicio.estado === 'pendiente_instalacion') {
+        return problemaTipado(422, 'servicio_pendiente_instalacion', 'Servicio pendiente de instalación', 'El servicio está pendiente de instalación: no tiene nada en el router hasta que se active la instalación (Activar instalación crea su configuración en el router)')
+    }
+    const router = bd.routers.find(r => r.id === servicio.router_id)
+    if (!router || !router.activo) {
+        return problemaTipado(422, 'router_sin_api', 'Router sin API', 'El router del servicio está inactivo: Argos no le envía comandos. Actívalo en su ficha')
+    }
+    if (!router.api_usuario || !router.tiene_api_password) {
+        return problemaTipado(422, 'router_sin_api', 'Router sin API', `Argos no controla el router ${router.nombre} por la API: le falta el usuario y la clave de la API REST. Cárgalos en la ficha del router o genera su script de conexión`)
+    }
+    const base = { servicio_id: servicio.id, router_id: router.id }
+    if (router.id === 2) {
+        return { status: 200, cuerpo: { ...base, cambios: [], ya_estaba_bien: false, avisos: [], error: { motivo: 'sin_certificado', detalle: 'El router no tiene certificado en www-ssl, así que no puede hacer HTTPS. En el router (New Terminal):\n/certificate add name=argos-ca common-name=argos-ca key-usage=key-cert-sign,crl-sign days-valid=3650\n/certificate sign argos-ca' } } satisfies Schema<'SincronizacionServicio'> }
+    }
+    const yaSincronizado = bd.acciones.some(a => a.accion === 'servicios.sincronizar_router' && a.entidad_id === servicio.id)
+    const cambios: Schema<'SincronizacionServicio'>['cambios'] = yaSincronizado
+        ? []
+        : [
+                { router_id: router.id, ruta: '/queue/simple', comment: `argosisp:servicio:${servicio.id}`, accion: 'actualizado' },
+                { router_id: router.id, ruta: '/ip/firewall/address-list', comment: `argosisp:servicio:${servicio.id}`, accion: 'creado', duplicados: 1 },
+            ]
+    if (cambios.length) {
+        registrarAccion(solicitud, 'servicios.sincronizar_router', { tipo: 'servicio', id: servicio.id }, {})
+    }
+    const avisos = servicio.estado === 'suspendido' ? ['El servicio está suspendido: queda en la address-list de corte hasta que se reactive'] : []
+    return { status: 200, cuerpo: { ...base, cambios, ya_estaba_bien: cambios.length === 0, avisos, error: null } satisfies Schema<'SincronizacionServicio'> }
+}
+
 export const rutasServicios: RutasFixture = {
+    'POST /api/v1/servicios/:id/sincronizar-router': conPermiso('servicios.sincronizar_router', conIdempotencia(sincronizarRouter)),
     'POST /api/v1/servicios/:id/activar-instalacion': conPermiso('servicios.activar_instalacion', conIdempotenciaObligatoria(activarInstalacion)),
     'POST /api/v1/servicios/:id/cambiar-empresa': conPermiso('servicios.cambiar_empresa', conIdempotencia(cambiarEmpresa)),
     'GET /api/v1/servicios': conPermiso('servicios.ver', (solicitud) => {

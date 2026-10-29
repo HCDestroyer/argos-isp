@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/HCDestroyer/argos-isp/compare/v1.2.0...v1.3.0) (2026-10-29)
+
+
+### Funcionalidades
+
+* **integraciones:** conector Iris, webhooks Argos → Iris y bienvenida al activar la instalación ([#179](https://github.com/HCDestroyer/argos-isp/issues/179)) ([00c46f9](https://github.com/HCDestroyer/argos-isp/commit/00c46f9c1d11082c3f7e9b470f6900abad3c0af8))
+* **network:** script de conexión con WireGuard, probar conexión, reconciliar y sincronizar servicio ([#181](https://github.com/HCDestroyer/argos-isp/issues/181)) ([8914141](https://github.com/HCDestroyer/argos-isp/commit/891414157ecce348f71d44f093bfda2e0c3d85cb))
+* **web:** observaciones del PM — alta de servicio, caja, modales, campos obligatorios, textos, pools e IPv6 ([#180](https://github.com/HCDestroyer/argos-isp/issues/180)) ([beca227](https://github.com/HCDestroyer/argos-isp/commit/beca227b9b2c84b67ddbbed676303ac508bc07a7))
+
+
+### Correcciones
+
+* **billing:** observaciones del auditor sobre pendiente de instalación ([#178](https://github.com/HCDestroyer/argos-isp/issues/178)) ([f437d8c](https://github.com/HCDestroyer/argos-isp/commit/f437d8c4fa0080154d80e3e81d102fec143c1df4))
+* **portal:** textos para el cliente sin notas internas y campos obligatorios con su motivo ([#177](https://github.com/HCDestroyer/argos-isp/issues/177)) ([d402a6b](https://github.com/HCDestroyer/argos-isp/commit/d402a6b11db5a905422360604f11a37fd2d04e83))
+
 ## [1.2.0](https://github.com/HCDestroyer/argos-isp/compare/v1.1.0...v1.2.0) (2026-10-28)
 
 

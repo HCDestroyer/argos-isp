@@ -679,7 +679,7 @@ const clientes: Ruta[] = [
         resumen: 'Clientes de los que es responsable de pago',
         descripcion:
             'Dependientes con su número de servicios no retirados y el estado resumido. ' +
-            'El cobro (A4) muestra sus facturas debajo del pagador.',
+            'El panel de cobro muestra sus facturas debajo del pagador.',
         etiqueta: 'clientes',
         permiso: 'clientes.ver',
         query: v.listarDependientesValidator,

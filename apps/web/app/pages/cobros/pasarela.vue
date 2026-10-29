@@ -34,7 +34,7 @@ const DIFERENCIAS: Record<ConciliacionPasarela['diferencias'][number]['tipo'], s
 
 /* Conciliar un día */
 const esquema = z.object({
-    fecha: z.string().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Fecha inválida'),
+    fecha: z.string().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Elige una fecha válida (día, mes y año)'),
 })
 const estado = reactive<z.input<typeof esquema>>({ fecha: '' })
 const abierto = ref(false)

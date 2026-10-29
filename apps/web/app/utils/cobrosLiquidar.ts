@@ -44,7 +44,7 @@ export function esquemaProveedorCobro(hoy: string, desdeActual: string | null = 
         nombre: z.string().trim().min(2, 'El nombre lleva al menos 2 caracteres').max(80, 'Máximo 80 caracteres'),
         desde: z.string()
             .trim()
-            .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor >= hoy || valor === desdeActual, 'La fecha de corte no puede ser anterior a hoy'),
         cuenta_id: z.number({ message: 'Elige el banco donde liquida' }).int().positive().nullable()
             .refine(valor => valor !== null, 'Elige el banco donde liquida'),
@@ -121,10 +121,10 @@ export function netoDe(bruto: string, comision: string): Decimal | null {
  */
 export function esquemaLiquidacion(hoy: string) {
     return z.object({
-        referencia: z.string().trim().min(1, 'La referencia de la liquidación es obligatoria').max(120, 'Máximo 120 caracteres'),
+        referencia: z.string().trim().min(1, 'Escribe la referencia de la liquidación (la del reporte del proveedor)').max(120, 'Máximo 120 caracteres'),
         fecha: z.string()
             .trim()
-            .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha del depósito no puede ser futura'),
         bruto: z.string().trim().regex(MONTO_SIGNO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 150.00 o -50.00)'),
         comision: montoTexto(),
