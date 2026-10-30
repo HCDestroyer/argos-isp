@@ -111,7 +111,7 @@ x-api-env: &api-env
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
   # /portal/quien-soy: confiar en X-Forwarded-For solo si la conexión viene de la red de compose
   # (el portal reenvía /api/v1/portal/** y agrega la IP del cliente al final de la cadena).
-  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
+  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-${COMPOSE_SUBNET_V4:-172.30.0.0/24},${COMPOSE_SUBNET_V6:-fd00:a6:30::/64}}
   PORTAL_CABECERA_IP: x-forwarded-for
   # Cookie de sesión del portal con Secure: auto (si llegó por HTTPS) o siempre (producción, con el
   # portal por HTTPS: docker-compose.portal-https.yml la pone en siempre).

@@ -12,6 +12,10 @@
 
 {
 	{$PROXY_TLS_GLOBAL}
+	# TLS sin SNI (Nginx Proxy Manager se conecta así por defecto: proxy_ssl_server_name off): sin
+	# esto Caddy responde `tlsv1 alert internal error` y NPM da 502. Con default_sni entrega el
+	# certificado de DOMINIO_PORTAL (CA interna o Let's Encrypt); el sitio sigue saliendo del Host.
+	default_sni {$DOMINIO_PORTAL}
 	auto_https disable_redirects
 	# Confianza solo en el reenvío interno: en :80/:443 un cliente que entra por docker-proxy llega
 	# con la IP de la puerta de enlace de la red (dentro de RED_INTERNA_V4) y no debe poder fijar
