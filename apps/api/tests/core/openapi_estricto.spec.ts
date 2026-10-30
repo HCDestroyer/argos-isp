@@ -37,6 +37,9 @@ const OPCIONALES: Record<string, string[]> = {
     Plan: ['warnings'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],
+    // nuevo el 28 oct (editar router): la API siempre lo envía; obligatorio cuando las fixtures del
+    // panel (`apps/web/fixtures/routers`, A4) lo traigan (fila en `a1.md`)
+    Router: ['zona_id'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {

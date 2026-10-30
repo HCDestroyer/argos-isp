@@ -38,9 +38,9 @@ test.group('ACL y endpoints sin implementar', () => {
         assert.instanceOf(error, NoImplementado)
         assert.deepEqual((error as NoImplementado).toJSON(), {
             type: 'urn:argosisp:problema:no_implementado',
-            title: 'No implementado',
+            title: 'Operación no disponible',
             status: 501,
-            detail: 'La operación pruebaSinHandler aún no está implementada',
+            detail: 'Esta operación no está disponible en este servidor. Si la necesitas, avisa al administrador del sistema',
         })
     })
 

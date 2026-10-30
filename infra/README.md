@@ -155,6 +155,8 @@ Redis no se respalda: las colas y streams se reconstruyen (el relay vuelve a pub
 
 ## Proxy público y webhook de la pasarela
 
+Perfil `wireguard` (`COMPOSE_PROFILES=lab,wireguard`; en producción `ARGOSISP_WIREGUARD=1`): servidor WireGuard de los routers en la red del host (`wg-argos`, la `.1` de `ARGOSISP_WG_RED`) y `wireguard-agente`, que aplica los peers que registra el script de conexión. Con el túnel, `RADIUS_BIND_IP` es la `.1`. Ruteo, firewall y prueba (`infra/wireguard/probar.sh`) en `infra/wireguard/README.md`; el script del router en `infra/mikrotik/README.md`, «Conectar un router».
+
 Perfil `publico`: Caddy con TLS delante de la API y del panel; el webhook de la pasarela pasa con el cuerpo crudo (la firma HMAC va sobre él). Configuración, puertos y prueba en `infra/proxy/README.md`. Variables de la pasarela (`PASARELA_PROVEEDOR`, `PASARELA_FALSA_SECRETO`, `PASARELA_URL_PUBLICA`) en `infra/.env.example`; la imagen de la API corre en producción, así que sin `PASARELA_PROVEEDOR` no hay pasarela (503).
 
 ## Walled garden

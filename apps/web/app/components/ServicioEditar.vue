@@ -140,6 +140,7 @@ async function recargar() {
                 <UFormField
                     v-if="puede('planes.ver')"
                     name="plan_id"
+                    required
                     label="Plan"
                     description="Planes disponibles en este router."
                 >

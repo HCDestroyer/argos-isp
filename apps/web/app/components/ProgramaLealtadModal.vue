@@ -139,6 +139,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPrograma>) {
                         v-if="estado.vence"
                         label="Vencen a los"
                         name="vencimiento_meses"
+                        required
                     >
                         <UInputNumber
                             v-model="estado.vencimiento_meses"

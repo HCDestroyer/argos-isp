@@ -45,6 +45,12 @@ COPY --from=build --chown=node:node /out /app
 COPY --chown=node:node apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
 # "Qué cambió" de GET /api/v1/version (app/monitoreo/version.ts)
 COPY --chown=node:node CHANGELOG.md /app/CHANGELOG.md
+# Script de conexión de routers (app/network/conexion/render.ts, contratos/conexion-routers.md §6.2):
+# patrones y plantillas armadas de infra/mikrotik. Sin ellos, GET /routers/:id/script-conexion
+# responde 503 plantillas_no_disponibles. Las piezas no hacen falta: las plantillas ya vienen armadas.
+COPY --chown=node:node infra/mikrotik/variables.json /app/mikrotik/variables.json
+COPY --chown=node:node infra/mikrotik/plantillas/ /app/mikrotik/plantillas/
+ENV ROUTERS_MIKROTIK_DIR=/app/mikrotik
 # Versión de la imagen (workflow imagenes.yml): la API la expone en GET /api/v1/version y
 # `argosisp actualizar` la compara con la publicada. Va al final para no invalidar la caché del build.
 ARG ARGOSISP_VERSION=desarrollo

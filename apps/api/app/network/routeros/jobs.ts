@@ -2,7 +2,7 @@ import { Queue, Worker, type Job, type RedisOptions } from 'bullmq'
 import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
-import { contextoSistema } from '#shared/contexto'
+import { contextoSistema, type Actor } from '#shared/contexto'
 import ReconciliarRouterOS, { type ResultadoReconciliar } from '#network/routeros/actions/reconciliar_router'
 import { routerDispatcher, routersConServiciosSinPppoe } from '#network/routeros/consultas'
 import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
@@ -18,6 +18,7 @@ import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions
  * | `reconciliar` | 15 min (`ROUTEROS_RECONCILIAR_CADA_MS`) | Reconcilia todos los routers con servicios sin PPPoE (red de seguridad) |
  * | `sondear` | 5 min (`ROUTEROS_SONDEO_CADA_MS`, por defecto `AAA_INTERIM_SEGUNDOS`; 0 = apagado) | `GET /system/resource` a los routers con API sin contacto reciente (`Router.en_linea`) |
  * | `cambiar_control` | por evento (`router.control_cambiado`) | Cambio de modo de control por lotes (`cambio_control.ts`); `jobId` = el evento |
+ * | `reconciliar_router` | a pedido (`POST /routers/:id/reconciliar`) | Reconcilia un router (`motivo: manual`); `jobId` = `reconciliar-<router_id>`: mientras uno espera, otro pedido no encola otro |
  *
  * Lock: concurrencia 1 y un advisory lock de Postgres por job (si otra instancia lo tiene, el
  * disparo se omite); cada router además se serializa con el lock de las acciones. Los jobs solo
@@ -170,6 +171,50 @@ export async function encolarCambioControl(entrada: EntradaCambioControl): Promi
     })
 }
 
+export interface DatosReconciliarManual {
+    router_id: number
+    actor: Actor
+    request_id: string
+}
+
+export function idJobReconciliar(routerId: number): string {
+    return `reconciliar-${routerId}`
+}
+
+/**
+ * Encola la reconciliación manual de un router (`routers.reconciliar`). Mismo worker (concurrencia
+ * 1) y mismo lock por router que la periódica. Si ya hay una esperando o en curso, no se encola
+ * otra: devuelve la existente (`encolado: false`). El job se borra al terminar, así el siguiente
+ * pedido vuelve a encolar.
+ */
+export async function encolarReconciliacion(
+    datos: DatosReconciliarManual,
+): Promise<{ job_id: string; encolado: boolean }> {
+    colaCambios ??= new Queue(NOMBRE_COLA_ROUTEROS, { connection: conexion(), prefix: prefijo() })
+    const jobId = idJobReconciliar(datos.router_id)
+    const existente = await colaCambios.getJob(jobId)
+    if (existente && !(await existente.isCompleted()) && !(await existente.isFailed())) {
+        return { job_id: jobId, encolado: false }
+    }
+    if (existente) await existente.remove()
+    await colaCambios.add('reconciliar_router', datos, { jobId, removeOnComplete: true, removeOnFail: true })
+    return { job_id: jobId, encolado: true }
+}
+
+/** Corre una reconciliación manual encolada, con el actor y el request id de quien la pidió. */
+export function ejecutarReconciliacionManual(
+    datos: DatosReconciliarManual,
+    opciones: OpcionesDispatcher = {},
+): Promise<ResultadoReconciliar> {
+    return new ReconciliarRouterOS({
+        clientes: opciones.clientes ?? fabricaPorDefecto,
+        red: opciones.red,
+    }).execute(
+        { router_id: datos.router_id, motivo: 'manual' },
+        { actor: datos.actor, canal: 'worker', requestId: datos.request_id },
+    )
+}
+
 export async function cerrarColaCambios(): Promise<void> {
     await colaCambios?.close()
     colaCambios = null
@@ -179,7 +224,9 @@ export function crearWorkerRouterOS(opciones: { prefijo?: string } = {}) {
     const procesar = (job: Job) =>
         job.name === 'cambiar_control'
             ? ejecutarCambioControl(job.data as EntradaCambioControl)
-            : ejecutarCronRouterOS(job.name)
+            : job.name === 'reconciliar_router'
+              ? ejecutarReconciliacionManual(job.data as DatosReconciliarManual)
+              : ejecutarCronRouterOS(job.name)
     const worker = new Worker(NOMBRE_COLA_ROUTEROS, procesar, {
         connection: conexion(),
         prefix: prefijo(opciones.prefijo),

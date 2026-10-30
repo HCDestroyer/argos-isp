@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import EvaluacionPromesa from '~/components/EvaluacionPromesa.vue'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 function enDias(dias: number): string {
     return finDiaGuatemala(sumarDiasFecha(hoyGuatemala(), dias))
@@ -11,11 +12,14 @@ function enDias(dias: number): string {
 
 describe('tarea 13 · promesas', () => {
     beforeEach(() => {
+        // Las promesas vencen a pocos días: sin fecha fija, a fin de mes caen en la siguiente facturación.
+        fijarHoyFixtures()
         reiniciarFixtures()
         sesionFixture('fixture-admin')
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
     })
 
