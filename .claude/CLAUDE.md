@@ -152,9 +152,9 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | Evento | Emite | Payload |
 | --- | --- | --- |
 | `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
-| `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id; router: router_id, empresa_id. Solo sin historial (`contratos/eliminar.md`); con historial se retira |
+| `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id, user_ppp (o null; nunca la contraseña); router: router_id, empresa_id (con túnel sale antes `router.conexion_eliminada`). Solo sin historial (`contratos/eliminar.md`); con historial se retira |
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo (`instalacion` al activar un `pendiente_instalacion`) |
-| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`); motivo y plan_temporal_id (opcionales, solo con un plan temporal) |
+| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`); motivo (opcional: `plan_temporal` con plan_temporal_id, o `union_routers` al unir routers duplicados, que no desconecta) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `servicio.adicional_agregado` / `servicio.adicional_cambiado` / `servicio.adicional_quitado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, modalidad; agregado: origen, primer_periodo, bloqueo; cambiado: campos[], modalidad_anterior; quitado: origen, motivo. Nunca la credencial (`contratos/adicionales.md`) |
 | `adicional.bloqueado` / `adicional.desbloqueado` | núcleo | servicio_id, cliente_id, empresa_id, asignacion_id, adicional_id, identificador, modalidad, estado_servicio, motivo (`contratos/adicionales.md`) |
@@ -172,10 +172,12 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
 | `notificaciones.config_cambiada` | notify | configuracion_id, empresa_id (null = global), campos[] |
 | `sesion.desconexion_solicitada` | network | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, motivo |
+| `sesion.velocidad_solicitada` | network (sincronizar plan) | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, estado, rate_limit, motivo (CoA de velocidad, nunca Disconnect) |
 | `coa.fallido` | coa | servicio_id (o null), nas_ip, tipo (coa/disconnect), error |
 | `aaa.caido` / `aaa.recuperado` | network (vigía) | nodo, desde, hasta (recuperado), ultimo_error |
 | `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, empresa_id, cliente_id, pago_id, motivo |
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
+| `router.estrategia_cambiada` | núcleo (control de velocidad) | router_id, plan_id (null = la del router), de, a, capas[] (aplicacion, padre, tipo_cola, extras), reconectar, motivo (`contratos/control-velocidad.md`) |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `router.conexion_generada` / `router.conexion_registrada` / `router.conexion_rotada` / `router.conexion_eliminada` | núcleo (conexión WireGuard) | router_id, empresa_id; generada: actor; registrada: ip_tunel. Nunca claves ni secretos (`contratos/conexion-routers.md`) |
 | `router.radius_cambiado` | núcleo | router_id, empresa_id, campos[] (`nas_ip`, `radius_secret`; nunca el valor); al crear, editar o registrar el túnel. Lo consume `aaa` para regenerar los clientes de FreeRADIUS |
@@ -221,7 +223,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `inventario.equipo_por_recuperar` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac |
 | `inventario.existencia_minima` | inventario | empresa_id, producto_id, bodega_id (o null), cantidad, minimo |
 | `inventario.conteo_cerrado` | inventario | conteo_id, empresa_id, bodega_id, faltante, sobrante, lineas |
-| `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
+| `cliente.actualizado` | núcleo | cliente_id, empresa_id, empresas[], campos[] (nombre, tipo, codigo, nit_cui, tipo_documento_fiscal, telefono, movil, direccion, coordenadas, zona_id; solo nombres, nunca valores) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
 | `horus.estado_seguridad_cambiado` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, estado, estado_anterior, hallazgos_abiertos |
