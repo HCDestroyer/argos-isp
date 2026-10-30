@@ -106,13 +106,17 @@ esperar_version() {
 # la API) responde y la sirve api-portal: su X-Request-Id aparece en el log de acceso de api-portal
 # (app/middleware/request_id_middleware.ts) y no en el de api.
 servida_por_api_portal() {
-    local rid="$1" _
+    # Los registros se leen a una variable antes de buscar: con pipefail, `logs | grep -q` falla al
+    # azar cuando grep sale en la primera coincidencia y docker compose recibe SIGPIPE.
+    local rid="$1" logs_portal logs_api _
     for _ in 1 2 3 4 5; do
-        cli compose logs --no-color api-portal 2> /dev/null | grep -q "$rid" && break
+        logs_portal="$(cli compose logs --no-color api-portal 2> /dev/null || true)"
+        grep -q "$rid" <<< "$logs_portal" && break
         sleep 1
     done
-    cli compose logs --no-color api-portal | grep -q "$rid" || fallar "la petición $rid no pasó por api-portal"
-    if cli compose logs --no-color api | grep -q "$rid"; then fallar "la petición $rid la sirvió api"; fi
+    grep -q "$rid" <<< "$logs_portal" || fallar "la petición $rid no pasó por api-portal"
+    logs_api="$(cli compose logs --no-color api 2> /dev/null || true)"
+    if grep -q "$rid" <<< "$logs_api"; then fallar "la petición $rid la sirvió api"; fi
 }
 
 probar_api_portal() {
