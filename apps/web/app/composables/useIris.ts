@@ -53,5 +53,21 @@ export function useIris() {
         return resolver(api.GET('/api/v1/integraciones/iris/envios/resumen'))
     }
 
-    return { conector, guardar, generarEnlace, tokens, generarToken, revocarToken, envios, resumenEnvios }
+    /**
+     * `GET /integraciones/iris/autorizar/vista-previa?iris=` (`iris.configurar`): origen normalizado,
+     * si es conocido y las empresas que verá Iris. Sin auditoría. 422 `iris_origen_invalido`.
+     */
+    function vistaPreviaAutorizacion(iris: string): Promise<Resultado<VistaPreviaAutorizacionIris>> {
+        return resolver(api.GET('/api/v1/integraciones/iris/autorizar/vista-previa', { params: { query: { iris } } }))
+    }
+
+    /**
+     * `POST /integraciones/iris/autorizar` (`iris.configurar`, auditada como `iris.autorizar`): crea
+     * el código de conexión ligado al `code_challenge` y devuelve `redirigir_a` (todo en el fragmento).
+     */
+    function autorizar(datos: DatosAutorizarIris): Promise<Resultado<AutorizacionIris>> {
+        return resolver(api.POST('/api/v1/integraciones/iris/autorizar', { body: datos }))
+    }
+
+    return { conector, guardar, generarEnlace, tokens, generarToken, revocarToken, envios, resumenEnvios, vistaPreviaAutorizacion, autorizar }
 }

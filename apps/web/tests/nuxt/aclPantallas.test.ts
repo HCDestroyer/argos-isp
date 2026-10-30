@@ -287,7 +287,9 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
         const sinPermiso = PAGINAS
             // Sin permiso a propósito: login, autologin desde Horus (`sso/entrar`), la explicación del
             // enlace de conexión (`conectar`) y "Mi cuenta" (`perfil`, cualquier usuario con sesión).
-            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|sso\/entrar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
+            // «Conectar con un botón» (`integraciones/iris/autorizar`) comprueba `iris.configurar` con
+            // `puede()` y lo dice en su propia pantalla, sin menú y sin redirigir a Iris.
+            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|sso\/entrar|integraciones\/iris\/autorizar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
             .filter(archivo => !permisoDePagina(leer(archivo)))
             .map(relativo)
         expect(sinPermiso).toEqual([])

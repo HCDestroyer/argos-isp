@@ -13,7 +13,6 @@ import { lista } from '#shared/openapi/esquemas'
 import { Prohibido } from '#shared/errores'
 import { urlPublicaApi } from '#integraciones/horus/panel'
 import { hashCodigo } from '#integraciones/horus/actions/generar_enlace_horus'
-import { canjearEnlaceValidator } from '#integraciones/horus/validators'
 import { ResolucionIpsHorus, TicketSsoEmitido, TokenApi } from '#core/esquemas'
 import * as v from '#core/validators'
 import ResolverIps from '#core/actions/resolver_ips'
@@ -26,14 +25,18 @@ import ConfigurarIris from '#integraciones/iris/actions/configurar_iris'
 import GenerarEnlaceIris from '#integraciones/iris/actions/generar_enlace_iris'
 import CanjearEnlaceIris from '#integraciones/iris/actions/canjear_enlace_iris'
 import AbrirEnIris from '#integraciones/iris/actions/abrir_en_iris'
+import AutorizarIris from '#integraciones/iris/actions/autorizar_iris'
+import { vistaPreviaAutorizacionIris } from '#integraciones/iris/autorizacion'
 import { estadoConectorIris, verConectorIris } from '#integraciones/iris/configuracion'
 import * as vi from '#integraciones/iris/validators'
 import {
+    AutorizacionIris,
     CanjeConexionIris,
     ConectorIris,
     EnlaceConexionIris,
     EstadoConectorIris,
     TicketIris,
+    VistaPreviaAutorizacionIris,
 } from '#integraciones/iris/esquemas'
 
 const TokenIrisCreado = definirEsquema(
@@ -101,6 +104,40 @@ const iris: Ruta[] = [
         handler: (ctx) => new GenerarEnlaceIris().execute({ base_url: baseArgos(ctx) }, ctx.contextoAccion()),
     }),
     definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/iris/autorizar/vista-previa',
+        operacion: 'irisAutorizarVistaPrevia',
+        resumen: 'Conectar con un botón: qué Iris pide conectarse y qué empresas verá',
+        descripcion:
+            'Contrato Iris §1.4 paso 3, para la pantalla `/integraciones/iris/autorizar` del panel. Normaliza ' +
+            '`iris` a `https://host[:puerto]`; `origen_conocido` dice si es el del conector Iris o está en ' +
+            '`ARGOSISP_IRIS_ORIGENES` (si no, el admin escribe el dominio para confirmar). `empresas[]` y ' +
+            '`alcance_global`, iguales a los del canje. 422 `iris_origen_invalido`.',
+        etiqueta: 'integraciones',
+        permiso: 'iris.configurar',
+        query: vi.vistaPreviaAutorizarIrisValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaAutorizacionIris },
+        handler: (_ctx, { query }) => vistaPreviaAutorizacionIris(query.iris),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/iris/autorizar',
+        operacion: 'irisAutorizar',
+        resumen: 'Conectar con un botón: aprobar la conexión que Iris pidió (state + PKCE S256)',
+        descripcion:
+            'Contrato Iris §1.4 paso 4. Crea el mismo código de conexión de §1.3 (15 min, un uso; anula los ' +
+            'anteriores sin usar), ligado al `code_challenge` y al origen de Iris, y responde `redirigir_a` = ' +
+            '`<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=<API_PUBLIC_URL>&state=…`. Origen ' +
+            'desconocido (ni el conector ni `ARGOSISP_IRIS_ORIGENES`) exige `confirmar_origen` igual a su host. ' +
+            '422 `iris_origen_invalido`, `iris_origen_no_confirmado` y `code_challenge_invalido`.',
+        etiqueta: 'integraciones',
+        permiso: 'iris.configurar',
+        cuerpo: vi.autorizarIrisValidator,
+        respuesta: { status: 200, descripcion: 'URL de vuelta a Iris', esquema: AutorizacionIris },
+        handler: (ctx, { cuerpo }) =>
+            new AutorizarIris().execute({ ...cuerpo, base_url: baseArgos(ctx) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
         metodo: 'post',
         ruta: '/integraciones/iris/conexion/canjear',
         operacion: 'irisEnlaceCanjear',
@@ -111,11 +148,13 @@ const iris: Ruta[] = [
             '`atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor ' +
             'de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 ' +
             '`enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida ' +
-            'antes de vencer recibe la misma respuesta.',
+            'antes de vencer recibe la misma respuesta. Responde además `panel_url` (`PANEL_URL_PUBLICA`). ' +
+            'Un código de «Conectar con un botón» (§1.4) exige `code_verifier`: si falta o no coincide, 401 ' +
+            '`codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide.',
         etiqueta: 'integraciones',
         seguridad: 'publico',
         permiso: null,
-        cuerpo: canjearEnlaceValidator,
+        cuerpo: vi.canjearEnlaceIrisValidator,
         respuesta: {
             status: 200,
             descripcion: 'Credenciales de Argos para Iris',
@@ -129,6 +168,7 @@ const iris: Ruta[] = [
                     base_url: cuerpo.base_url,
                     token: cuerpo.token,
                     webhook: cuerpo.webhook,
+                    code_verifier: cuerpo.code_verifier ?? null,
                 },
                 ctx.contextoAccion('webhook'),
             ),
