@@ -23,6 +23,9 @@ export interface RateLimits {
     reuso: number
     /** `control_velocidad` del router (`simple` si el registro no lo trae) */
     control_velocidad: 'simple' | 'arbol_pcq'
+    /** Estrategia por capas (`velocidad.aplicacion` y `velocidad.grupo`); null en registros anteriores */
+    aplicacion: string | null
+    grupo: string | null
 }
 
 export type ResultadoRateLimits = { ok: true; valor: RateLimits } | { ok: false; error: string }
@@ -48,6 +51,7 @@ export function rateLimitsDeRegistro(datos: unknown, servicioId: number): RateLi
         eliminado?: unknown
         control_velocidad?: unknown
         plan?: Record<string, unknown>
+        velocidad?: { aplicacion?: unknown; grupo?: unknown } | null
     }
     if (r.eliminado === true || Number(r.servicio_id) !== servicioId) return null
     const rate = r.plan?.rate_limit
@@ -60,6 +64,8 @@ export function rateLimitsDeRegistro(datos: unknown, servicioId: number): RateLi
         rate_limit_limitado: limitado,
         reuso: Number.isInteger(reuso) && reuso >= 1 ? reuso : 1,
         control_velocidad: r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+        aplicacion: typeof r.velocidad?.aplicacion === 'string' ? r.velocidad.aplicacion : null,
+        grupo: typeof r.velocidad?.grupo === 'string' ? r.velocidad.grupo : null,
     }
 }
 

@@ -11,7 +11,12 @@ import meCajeroJson from './me.cajero.json'
  * `pnpm contracts:build`. El cajero es una persona de prueba con permisos explícitos (los de su rol
  * base): las pruebas de menú comprueban exactamente qué ve.
  */
-const TODOS = PERMISOS_CONTRATO.map(permiso => permiso.nombre)
+/**
+ * Permisos de contratos ya escritos cuyo código todavía no está en el OpenAPI
+ * (`contratos/control-velocidad.md` §5). Se quitan de aquí cuando `packages/contracts` los traiga.
+ */
+export const PERMISOS_PENDIENTES = ['planes.sincronizar'].filter(nombre => !PERMISOS_CONTRATO.some(permiso => permiso.nombre === nombre))
+const TODOS = [...PERMISOS_CONTRATO.map(permiso => permiso.nombre), ...PERMISOS_PENDIENTES]
 
 export const meAdmin: Schema<'Me'> = { ...meAdminJson, permisos: TODOS }
 export const loginAdmin = { ...loginAdminJson, usuario: meAdmin }

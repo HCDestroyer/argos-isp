@@ -403,7 +403,7 @@ curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/
 
 ## Control de velocidad (`simple` y `arbol_pcq`)
 
-Contrato: `.claude/integration/contratos/velocidad.md`.
+Contratos: `.claude/integration/contratos/velocidad.md` (fórmulas) y `.claude/integration/contratos/control-velocidad.md` (estrategia por capas: los modos `simple` y `arbol_pcq` son atajos de la sección «Estrategias por capas»).
 
 ### FastTrack excluido para clientes con colas
 
@@ -453,6 +453,32 @@ Una cola simple por servicio: la dinámica de PPPoE (`Mikrotik-Rate-Limit` desde
 - Un servicio limitado pasa a la lista `argosisp-plan-<id>-limitado`; nunca se edita el PCQ del plan para un cliente.
 - `/queue type` no tiene comentario, así que el script borra por nombre solo los `argosisp-plan-<arbolPlanId>-*` del ejemplo.
 - En un router que ArgosIsp maneja en `arbol_pcq`, pon `arbolEjemplo false`: ArgosIsp crea sus padres y planes con la acción `routers.cambiar_control_velocidad` (A2).
+
+### Estrategias por capas (semana 4)
+
+Un router combina formas de control por tipo de conexión (PPPoE, IP estática, DHCP fija) y por plan: ya no hace falta registrar el mismo MikroTik dos veces. Lo que ArgosIsp crea por la API REST según la estrategia (todo con `comment = argosisp:…`):
+
+| Estrategia | Objetos |
+| --- | --- |
+| `radius_rate_limit` | Nada propio por cliente (la cola dinámica `<pppoe-…>` la crea RouterOS con `Mikrotik-Rate-Limit`); con padre o tipo de cola, el perfil `plan-<id>` con `parent-queue` y `queue-type` |
+| `perfil_ppp` | Perfil `plan-<id>` con `rate-limit` (y `parent-queue` / `queue-type` si toca) |
+| `cola_simple` | `argosisp-servicio-<id>` por servicio WISP, con `queue=` si el tipo no es `default` |
+| `pcq_plan` | `/queue type argosisp-plan-<id>[-limitado]-pcq-{subida,bajada}` y `/queue simple argosisp-plan-<id>-pcq[-limitado]` con los clientes en el `target` |
+| `arbol_pcq` | Lo del ejemplo de arriba (tipos, árbol, mangle y address-lists) |
+| Padre `por_router` / `jerarquico` | `/queue simple argosisp-router` (`comment = argosisp:router`, `max-limit` = capacidad del router); en `jerarquico`, los padres de plan cuelgan de él. En el árbol, los globales `argosisp-global-*` |
+| Tipo de cola `sfq` / `fq_codel` / `cake` | `/queue type argosisp-sfq` / `argosisp-fq-codel` / `argosisp-cake` (`fq_codel` y `cake` solo RouterOS 7) |
+
+Notas de RouterOS 7 (verificar en el laboratorio, `docs/laboratorio/validacion-fisica.md` §4):
+
+- `Mikrotik-Rate-Limit` no lleva padre: la cola dinámica cuelga del `parent-queue` del perfil que nombra `Mikrotik-Group`.
+- Un CoA no cambia el perfil ni el padre de una sesión viva; sí su `Mikrotik-Rate-Limit`. Por eso cambiar de estrategia no desconecta: la sesión conserva su estructura hasta reconectar y recibe la velocidad nueva por CoA.
+- Una cola simple no acepta una address-list como `target`: `pcq_plan` lleva las direcciones de los clientes en el `target`.
+
+### Corte que mantiene ArgosIsp (igual que este script)
+
+El reconciliador deja en cada router con API, sea cual sea la estrategia, lo mismo que las secciones 4, 7, 8 y 9 de `lab.rsc` para el corte, **con los mismos comentarios**: la lista de interfaces y el perfil `suspendido`, las address-lists `suspendidos`, `argos-portal`, `argos-dns`, `argos-walled` y `argos-clientes`, los saltos `argosisp:top corte …` y `Filter-Id de RADIUS/CoA`, la excepción de FastTrack (si la estrategia la pide), las cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y el NAT `argos-corte-nat`. Si `lab.rsc` ya corrió, la reconciliación no cambia nada; si la reconciliación corrió antes, reaplicar `lab.rsc` deja lo mismo. Los saltos se mueven al inicio de su tabla con `move` (antes de FastTrack). Lo que solo pone este script (CoA desde aaa, DNS solo interno, WireGuard, NAT de salida) no lo toca.
+
+La configuración del portal y del walled garden sale del servidor (`ROUTERS_SERVICIO_PORTAL_V4`, `_PORTAL_FQDN`, `_WALLED_GARDEN`, … o `PORTAL_URL_PUBLICA`). El chequeo `corte` de «Probar conexión» (`GET /api/v1/routers/:id/diagnostico-corte`) dice qué falta y si el router llega al portal (`/tool fetch`); «Reconciliar ahora» (`POST /api/v1/routers/:id/reconciliar`) lo crea.
 
 ## Usuario de la API REST y HTTPS
 

@@ -20,16 +20,23 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
     await page.locator('[data-prueba="acciones-router-1"]').click()
     await page.getByRole('menuitem', { name: /Probar conexión/ }).click()
     let modal = page.getByRole('dialog', { name: /Probar conexión/ })
-    await expect(modal.locator('[data-prueba="prueba-resumen"]')).toContainText('Todo en orden')
+    // RB-Centro todavía no tiene las reglas de corte (A2): ese es el único chequeo que falla.
+    await expect(modal.locator('[data-prueba="prueba-resumen"]')).toContainText('Un chequeo falló')
+    await expect(modal.locator('[data-chequeo="corte"] [data-prueba="corte-limites"]')).toContainText('HTTPS (443) no se redirige')
     await expect(modal.locator('[data-prueba="prueba-equipo"]')).toContainText('RB5009UG+S+')
     await expect(modal.locator('[data-chequeo="radius"]')).toContainText('secreto no verificado')
     await modal.getByRole('button', { name: 'Cerrar' }).first().click()
     await expect(modal).toBeHidden()
 
-    // Reconciliar ahora: 202, se avisa que quedó encolado.
+    // Reconciliar ahora: vista previa, confirmar y 202 (se avisa que quedó encolado).
     await page.locator('[data-prueba="acciones-router-1"]').click()
     await page.getByRole('menuitem', { name: /Reconciliar ahora/ }).click()
-    await expect(page.getByText('Reconciliando RB-Centro', { exact: true })).toBeVisible()
+    modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
+    await expect(modal.locator('[data-prueba="reconciliar-grupo-corte"]')).toBeVisible()
+    await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
+    await expect(modal.locator('[data-prueba="reconciliar-encolado"]')).toContainText('Reconciliando RB-Centro')
+    await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
+    await expect(modal).toBeHidden()
 
     // Script de conexión: avisa que lleva claves, se genera y trae los pasos.
     await conexion.locator('[data-prueba="abrir-script"]').click()

@@ -1,5 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { diagnosticoCorte } from './estrategias'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion } from '../comun'
 
@@ -118,6 +119,15 @@ function prueba(router: Schema<'Router'>): Schema<'PruebaConexion'> {
             { clave: 'equipo', ok: true, ms: 0, datos: { version: '7.24.5 (stable)', modelo: 'RB5009UG+S+', uptime: '12d4h31m', cpu_pct: 7 }, detalle: 'RouterOS 7.24.5 (stable) · RB5009UG+S+ · encendido 12d4h31m · CPU 7 %' },
             { clave: 'radius', ok: true, ms: 18, datos: { direcciones: ['10.255.0.1'], esperadas: ['10.255.0.1'], secreto_verificado: false }, detalle: 'RADIUS hacia 10.255.0.1. El secreto no se pudo verificar (el usuario de la API no puede leerlo sin la política sensitive)' },
         )
+        // A2 (§10.2): con la API respondiendo, el chequeo `corte` con el diagnóstico completo.
+        const corte = diagnosticoCorte(router)
+        chequeos.push({
+            clave: 'corte',
+            ok: corte.ok,
+            ms: 210,
+            detalle: corte.ok ? 'Un suspendido de este router ve la página de corte.' : `Un suspendido de este router no vería la página de corte: ${corte.problemas.map(p => p.mensaje).join(' ')}`,
+            corte,
+        })
     }
     else if (!router.api_usuario || !router.tiene_api_password) {
         chequeos.push(
@@ -183,6 +193,10 @@ export const rutasConexionRouters: RutasFixture = {
         const encolado = !reciente
         if (encolado) {
             registrarAccion(solicitud, 'routers.reconciliar', { tipo: 'router', id: router.id }, {})
+            // El worker la aplica al momento en los fixtures: la vista previa y el corte quedan limpios.
+            if (router.api_usuario && router.tiene_api_password && !bd.routersSinRespuesta.includes(router.id)) {
+                bd.routersReconciliados = [...new Set([...bd.routersReconciliados, router.id])]
+            }
         }
         return { status: 202, cuerpo: { router_id: router.id, job_id: `reconciliar-${router.id}`, encolado } satisfies Schema<'ReconciliacionEncolada'> }
     }),

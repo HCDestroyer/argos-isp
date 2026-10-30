@@ -71,6 +71,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'redes.migrar': 'Red IPv4 movida a otro router',
     'planes.crear': 'Plan creado',
     'planes.editar': 'Plan editado',
+    'planes.sincronizar': 'Plan sincronizado con la red (velocidad nueva sin desconectar)',
     'plantillas.crear': 'Plantilla de facturación creada',
     'plantillas.editar': 'Plantilla de facturación editada',
     'plantillas.retirar': 'Plantilla de facturación retirada',

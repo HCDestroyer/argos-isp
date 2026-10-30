@@ -132,8 +132,17 @@ export async function insertarSesion(
     const { rows } = (await consulta(
         t,
         `INSERT INTO network.sesiones (servicio_id, router_id, nas_ip, acct_session_id, user_ppp, ipv4,
-             prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin, bytes_in, bytes_out, causa_fin)
-         VALUES (?, ?, ?::inet, ?, ?, ?::inet, network(?::inet)::cidr, network(?::inet)::cidr, ?, ?, ?, ?, ?)
+             prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin, bytes_in, bytes_out, causa_fin,
+             estrategia_velocidad)
+         VALUES (?, ?, ?::inet, ?, ?, ?::inet, network(?::inet)::cidr, network(?::inet)::cidr, ?, ?, ?, ?, ?,
+             -- Con qué estrategia de velocidad entró (contratos/control-velocidad.md §4): la conserva
+             -- hasta reconectar aunque cambie la del router o la del plan.
+             (SELECT jsonb_build_object('router', r.estrategia_velocidad, 'control', r.control_velocidad,
+                                        'plan', pr.estrategia_velocidad)
+                FROM core.servicios s
+                JOIN network.routers r ON r.id = s.router_id
+                LEFT JOIN network.planes_routers pr ON pr.plan_id = s.plan_id AND pr.router_id = s.router_id
+               WHERE s.id = ?))
          ON CONFLICT (nas_ip, acct_session_id) DO NOTHING
          RETURNING ${COLUMNAS}`,
         [
@@ -150,6 +159,7 @@ export async function insertarSesion(
             r.bytes_in,
             r.bytes_out,
             datos.causaFin ?? null,
+            ctx.servicioId,
         ],
     )) as { rows: FilaSesion[] }
     return rows[0] ?? null

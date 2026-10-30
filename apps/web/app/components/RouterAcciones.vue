@@ -3,8 +3,8 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 
 /**
  * Acciones de un router en un solo menú, cada una con su permiso: Editar (`routers.editar`), Probar
- * conexión (`routers.probar_conexion`), Reconciliar ahora (`routers.reconciliar`, 202 con
- * `encolado`), Conexión de la API, Control de velocidad y Script de conexión
+ * conexión (`routers.probar_conexion`), Reconciliar ahora (`routers.reconciliar`: vista previa y
+ * después 202 con `encolado`, en `RouterReconciliarModal`), Conexión de la API, Control de velocidad y Script de conexión
  * (`routers.generar_script`). Con `conEditar`, «Editar» también va como botón a la vista (ficha).
  */
 const props = withDefaults(defineProps<{
@@ -22,8 +22,6 @@ const emit = defineEmits<{
     probado: []
 }>()
 
-const toast = useToast()
-
 const { puede } = usePermisos()
 
 const editarAbierto = ref(false)
@@ -32,30 +30,13 @@ const velocidadAbierta = ref(false)
 
 const pruebaAbierta = ref(false)
 const scriptAbierto = ref(false)
-const reconciliando = ref(false)
-
-/**
- * Reconciliar ahora: la API encola el trabajo (202). Con `encolado: false` ya había uno en curso:
- * no es un error. El resultado se ve en los eventos de red del router.
- */
-async function reconciliar() {
-    reconciliando.value = true
-    const resultado = await useRouters().reconciliar(props.router.id)
-    reconciliando.value = false
-    if (!resultado.ok) {
-        toast.add({ title: 'No se pudo reconciliar', description: resultado.problema.detail ?? resultado.problema.title, color: 'error', icon: 'i-lucide-circle-x' })
-        return
-    }
-    toast.add(resultado.data.encolado
-        ? { title: `Reconciliando ${props.router.nombre}`, description: 'ArgosIsp revisa el router y corrige lo que no coincida (colas, cortes, leases). El resultado queda en los eventos de red.', color: 'info', icon: 'i-lucide-refresh-cw' }
-        : { title: 'Ya hay una reconciliación en curso', description: 'Espera a que termine; el resultado queda en los eventos de red.', color: 'neutral', icon: 'i-lucide-clock' })
-}
+const reconciliarAbierto = ref(false)
 
 const items = computed<DropdownMenuItem[][]>(() => [
     [
         ...(puede('routers.editar') ? [{ label: 'Editar', icon: 'i-lucide-pencil', onSelect: () => { editarAbierto.value = true } }] : []),
         ...(puede('routers.probar_conexion') ? [{ label: 'Probar conexión', icon: 'i-lucide-activity', description: 'Túnel, API, equipo y RADIUS', onSelect: () => { pruebaAbierta.value = true } }] : []),
-        ...(puede('routers.reconciliar') ? [{ label: 'Reconciliar ahora', icon: 'i-lucide-refresh-cw', description: 'Corrige en el router lo que no coincide', disabled: reconciliando.value, onSelect: () => { void reconciliar() } }] : []),
+        ...(puede('routers.reconciliar') ? [{ label: 'Reconciliar ahora', icon: 'i-lucide-refresh-cw', description: 'Ver qué corrige y corregirlo', onSelect: () => { reconciliarAbierto.value = true } }] : []),
     ],
     [
         { label: 'Conexión de la API', icon: 'i-lucide-plug', description: 'URL, puerto, TLS, DHCP e interfaz', onSelect: () => { conexionAbierta.value = true } },
@@ -120,6 +101,11 @@ function alActualizar(router: RouterNas) {
             v-model:open="pruebaAbierta"
             :router="props.router"
             @probado="emit('probado')"
+        />
+        <RouterReconciliarModal
+            v-if="puede('routers.reconciliar')"
+            v-model:open="reconciliarAbierto"
+            :router="props.router"
         />
         <RouterScriptModal
             v-if="puede('routers.generar_script')"
