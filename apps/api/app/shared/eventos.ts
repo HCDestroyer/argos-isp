@@ -115,15 +115,31 @@ interface PayloadSesion {
 }
 
 /**
- * Campos de `core.clientes` que emiten `cliente.actualizado`: los que Horus muestra (`nombre`,
- * `tipo`, `codigo`) y la identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`).
+ * Campos de identidad del cliente: los que Horus muestra (`nombre`, `tipo`, `codigo`) y la
+ * identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`). Son los únicos que el
+ * conector Horus reenvía (contrato Horus §2.3).
  */
-export const CAMPOS_CLIENTE_ACTUALIZADO = [
+export const CAMPOS_CLIENTE_IDENTIDAD = [
     'nombre',
     'tipo',
     'codigo',
     'nit_cui',
     'tipo_documento_fiscal',
+] as const
+
+/**
+ * Campos de `core.clientes` que emiten `cliente.actualizado`: los de identidad y, desde el contrato
+ * Iris 0.3.1, los de contacto y ubicación de la instantánea de Iris (§2.2): `telefono`, `movil`,
+ * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`. El evento lleva solo los nombres, nunca los
+ * valores.
+ */
+export const CAMPOS_CLIENTE_ACTUALIZADO = [
+    ...CAMPOS_CLIENTE_IDENTIDAD,
+    'telefono',
+    'movil',
+    'direccion',
+    'coordenadas',
+    'zona_id',
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
@@ -413,8 +429,11 @@ export interface CatalogoEventos {
     /**
      * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
      * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
-     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar). Sin `empresa_id`: el
-     * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
+     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar); y, para la
+     * instantánea de Iris (contrato Iris 0.3.1 §2.2), `telefono`, `movil`, `direccion`,
+     * `coordenadas` y `zona_id`. Solo nombres de campos, nunca valores. Sin `empresa_id`: el cliente
+     * no es de una empresa, sus servicios sí. Lo consumen los workers de webhooks a Horus (solo los
+     * campos de identidad; sin ellos no envía) y a Iris (todos) (A6).
      */
     'cliente.actualizado': {
         cliente_id: number

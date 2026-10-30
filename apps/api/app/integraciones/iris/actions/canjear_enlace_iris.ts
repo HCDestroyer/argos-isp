@@ -6,6 +6,9 @@ import { generarSecretoWebhook } from '#integraciones/horus/firma'
 import { EnlaceVencido } from '#integraciones/horus/errores'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import RevocarTokenIris from '#core/actions/revocar_token_iris'
+import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
+import { usuarioIris } from '#core/integraciones_iris'
+import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import {
     FORMATO_TOKEN_IRIS,
     RUTA_RECEPTOR_IRIS,
@@ -33,6 +36,43 @@ export interface SalidaCanjearEnlaceIris {
     /** receptor de Argos para webhooks de Iris (reservado) y su secreto */
     webhook: { url: string; secreto: string }
     conector_id: string
+    /**
+     * true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después;
+     * false: solo las de `empresas` (asignadas a mano en Argos). Contrato Iris 0.3.1.
+     */
+    alcance_global: boolean
+    /** empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
+    empresas: EmpresaDelAlcance[]
+}
+
+export interface EmpresaDelAlcance {
+    id: number
+    /** nombre comercial */
+    nombre: string
+    /** NIT sin guiones; null si la empresa aún no lo tiene */
+    nit: string | null
+}
+
+/** Empresas activas que ve el usuario (por su alcance), con nombre comercial y NIT. */
+export async function empresasDelAlcance(
+    usuarioId: number,
+    trx: TransactionClientContract,
+): Promise<{ alcance_global: boolean; empresas: EmpresaDelAlcance[] }> {
+    const alcance = await alcanceEmpresasDeUsuario(usuarioId, trx)
+    if (alcance.empresas.length === 0) return { alcance_global: alcance.alcanceGlobal, empresas: [] }
+    const filas = (await trx
+        .from('core.empresas')
+        .whereIn('id', alcance.empresas)
+        .orderBy('id', 'asc')
+        .select('id', 'nombre_comercial', 'nit')) as Array<{
+        id: number
+        nombre_comercial: string
+        nit: string | null
+    }>
+    return {
+        alcance_global: alcance.alcanceGlobal,
+        empresas: filas.map((f) => ({ id: Number(f.id), nombre: f.nombre_comercial, nit: f.nit })),
+    }
 }
 
 /**
@@ -46,6 +86,8 @@ export interface SalidaCanjearEnlaceIris {
  * - El conector queda **apagado** hasta que un administrador lo encienda. Todo en una transacción.
  * - La MISMA petición repetida antes de que el enlace venza recibe la misma respuesta (guardada
  *   cifrada) sin emitir otro token; cualquier otra con un código usado → 410.
+ * - Informa las empresas del alcance del token (`empresas[]` con `id`, `nombre` y `nit`, y
+ *   `alcance_global`), para que Iris sepa de qué empresas recibirá datos (contrato Iris 0.3.1).
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
@@ -80,7 +122,12 @@ export default class CanjearEnlaceIris extends DomainAction<
         if (enlace.usado_en) {
             if (enlace.peticion_sha256 !== peticion || !enlace.respuesta_cifrada) throw new EnlaceVencido()
             t.anotarAuditoria({ repeticion: true })
-            return JSON.parse(descifrar(enlace.respuesta_cifrada)) as SalidaCanjearEnlaceIris
+            const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as SalidaCanjearEnlaceIris
+            if (guardada.empresas) return guardada
+            // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
+            const usuarioId = await usuarioIris(t.trx)
+            if (usuarioId === null) return { ...guardada, alcance_global: false, empresas: [] }
+            return { ...guardada, ...(await empresasDelAlcance(usuarioId, t.trx)) }
         }
 
         const errores = validarDatosDeIris(input)
@@ -108,6 +155,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             token: emitido.token,
             webhook: { url: `${enlace.base_url}${RUTA_RECEPTOR_IRIS}`, secreto: secretoEntrada },
             conector_id: despues.conector_id,
+            ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
         }
         await t.trx
             .from('integraciones.iris_enlaces')

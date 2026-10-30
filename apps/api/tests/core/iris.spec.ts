@@ -370,9 +370,16 @@ test.group('integraciones · iris', (group) => {
             const pedido = simulado.de(RUTA_TICKETS_IRIS)[0]!
             assert.equal(pedido.cabeceras.authorization, `Bearer ${TOKEN_IRIS}`)
             assert.deepEqual(pedido.json, {
-                usuario: { id_externo: `u-${usuario.id}`, correo: usuario.email, nombre: usuario.nombre },
+                usuario: {
+                    id_externo: `u-${usuario.id}`,
+                    correo: usuario.email,
+                    nombre: usuario.nombre,
+                    correo_verificado: false,
+                },
                 destino,
             })
+            // Argos no verifica correos: viaja siempre false, nunca ausente ni true (Iris 0.3.1 §1.3)
+            assert.strictEqual(pedido.json.usuario.correo_verificado, false)
 
             simulado.responder(RUTA_TICKETS_IRIS, () => ({
                 status: 201,

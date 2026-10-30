@@ -7,6 +7,7 @@
 |
 */
 import { Env } from '@adonisjs/core/env'
+import { validarClaveAaaPpp } from '#shared/clave_aaa_ppp'
 
 export default await Env.create(new URL('../', import.meta.url), {
     NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
@@ -141,8 +142,11 @@ export default await Env.create(new URL('../', import.meta.url), {
     |----------------------------------------------------------
     */
     INTERNAL_TOKEN: Env.schema.string(),
-    /** 32 bytes en base64: cifra pass_ppp y secretos de routers (formato v1, la comparten aaa y coa) */
-    AAA_PPP_KEY: Env.schema.string.optional(),
+    /**
+     * 32 bytes en base64: cifra pass_ppp, secretos de routers y de integraciones (formato v1, la
+     * comparten aaa y coa). Obligatoria: sin ella la API no arranca (`#shared/clave_aaa_ppp`).
+     */
+    AAA_PPP_KEY: validarClaveAaaPpp,
     ACCESS_TOKEN_EXPIRA: Env.schema.string.optional(),
     CORS_ORIGINS: Env.schema.string.optional(),
     /** `Secure` de la cookie de sesión del panel; `false` solo en desarrollo (`app/core/auth/sesion_panel.ts`). */
