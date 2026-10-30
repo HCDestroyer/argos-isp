@@ -41,11 +41,9 @@ const items = computed<DropdownMenuItem[][]>(() => [
     [
         { label: 'Conexión de la API', icon: 'i-lucide-plug', description: 'URL, puerto, TLS, DHCP e interfaz', onSelect: () => { conexionAbierta.value = true } },
         { label: 'Control de velocidad', icon: 'i-lucide-gauge', description: 'Capacidad y modo de colas', onSelect: () => { velocidadAbierta.value = true } },
-        // Un router sin RADIUS no admite el script (422 `script_requiere_radius`): deshabilitado con su motivo.
+        // Sin RADIUS el script sale en su variante sin `/radius` ni CoA (`contratos/conexion-routers.md` §7).
         ...(puede('routers.generar_script')
-            ? [esSinRadius(props.router)
-                    ? { label: 'Script de conexión', icon: 'i-lucide-file-code-2', description: 'No disponible sin RADIUS', disabled: true }
-                    : { label: 'Script de conexión', icon: 'i-lucide-file-code-2', description: 'Conectar el router por WireGuard', onSelect: () => { scriptAbierto.value = true } }]
+            ? [{ label: 'Script de conexión', icon: 'i-lucide-file-code-2', description: esSinRadius(props.router) ? 'Túnel y API, sin RADIUS' : 'Conectar el router por WireGuard', onSelect: () => { scriptAbierto.value = true } }]
             : []),
     ],
 ])

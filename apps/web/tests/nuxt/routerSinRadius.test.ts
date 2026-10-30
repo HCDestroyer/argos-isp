@@ -195,17 +195,26 @@ describe('router sin RADIUS', () => {
     })
 
     describe('script de conexión (RouterConexionSeccion)', () => {
-        it('deshabilitado con su motivo en un router sin RADIUS; la API responde 422 script_requiere_radius', async () => {
-            const router = routerSinRadius(94)
+        it('habilitado en un router sin RADIUS, con su texto; la API entrega la variante sin RADIUS (también al rotar)', async () => {
+            const router = routerSinRadius(94, { tiene_radius_secret: false })
             bd.routers.push(router)
+            bd.conexionesRouter.push({ router_id: router.id, estado: 'conectado', ip_tunel: '10.255.0.94', public_key: 'kH3sZ0pR1m9bQyU5wT8xVv2cLgN4dJf6aE7iO0rS1tA=', ultimo_handshake: '2026-10-29T15:58:30.000Z', handshake_reciente: true, registrado_en: '2026-10-20T16:00:00.000Z', routeros_version: '7.24.5 (stable)', token_vence: null, version: 1 })
             const wrapper = await mountSuspended(enApp(RouterConexionSeccion, { router }))
-            await esperar(() => expect(wrapper.find('[data-prueba="script-sin-radius"]').exists()).toBe(true))
-            expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeDefined()
-            expect(wrapper.find('[data-prueba="script-sin-radius"]').text()).toContain('el script de conexión configura RADIUS y CoA')
+            await esperar(() => expect(wrapper.find('[data-prueba="abrir-rotar"]').exists()).toBe(true))
+            expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeUndefined()
+            expect(wrapper.find('[data-prueba="abrir-rotar"]').attributes('disabled')).toBeUndefined()
+            expect(wrapper.find('[data-prueba="script-sin-radius"]').text()).toBe('Este router no usa RADIUS: el script conecta el túnel y la API, y deja use-radius=no.')
+            expect(wrapper.text()).not.toContain('No disponible')
 
+            // Sin secreto RADIUS no hay 422: el secreto solo se exige con RADIUS.
             const resultado = await useRouters().scriptConexion(router.id, {})
-            expect(resultado.ok).toBe(false)
-            expect(!resultado.ok && esScriptRequiereRadius(resultado.problema)).toBe(true)
+            expect(resultado.ok).toBe(true)
+            if (resultado.ok) {
+                expect(resultado.data).toContain('use-radius=no')
+                expect(resultado.data).not.toContain('/radius add')
+            }
+            const rotado = await useRouters().rotarConexion(router.id, {})
+            expect(rotado.ok).toBe(true)
         })
 
         it('con RADIUS el botón sigue habilitado', async () => {
@@ -213,6 +222,8 @@ describe('router sin RADIUS', () => {
             await esperar(() => expect(wrapper.find('[data-prueba="abrir-script"]').exists()).toBe(true))
             expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeUndefined()
             expect(wrapper.find('[data-prueba="script-sin-radius"]').exists()).toBe(false)
+            const resultado = await useRouters().scriptConexion(1, {})
+            expect(resultado.ok && resultado.data).toContain('use-radius=yes')
         })
     })
 

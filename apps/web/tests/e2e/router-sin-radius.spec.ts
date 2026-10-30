@@ -4,7 +4,7 @@ import { entrar, ir } from './ayudas'
 /**
  * Router sin RADIUS (A1, `modo_seguridad = 'api'`), en escritorio y teléfono: el alta no pide la IP
  * del NAS ni el secreto, la ficha y la lista lo marcan «Sin RADIUS» y explican PPPoE con secrets
- * locales, y el script de conexión queda deshabilitado con su motivo. Un servicio PPPoE en ese router
+ * locales, y el script de conexión sale en su variante sin RADIUS. Un servicio PPPoE en ese router
  * (`contratos/pppoe-local.md`) se da de alta con la ayuda del secret local y su ficha muestra la
  * sesión «Por sondeo», sin NAS ni consumo. En modo fixtures se navega por la SPA (sin `page.goto`
  * después de entrar).
@@ -40,9 +40,18 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(page.locator('[data-prueba="router-modo-seguridad"]')).toHaveText('Sin RADIUS')
     await expect(page.locator('[data-prueba="router-pppoe-sin-radius"]')).toContainText('PPPoE va con secrets locales')
     await expect(page.locator('[data-prueba="router-pppoe-sin-radius"]')).toContainText('cada minuto')
+    // Script de conexión en su variante sin RADIUS (túnel y API, `use-radius=no`).
     const conexion = page.locator('[data-prueba="conexion-router"]')
-    await expect(conexion.locator('[data-prueba="abrir-script"]')).toBeDisabled()
-    await expect(conexion.locator('[data-prueba="script-sin-radius"]')).toContainText('el script de conexión configura RADIUS y CoA')
+    await expect(conexion.locator('[data-prueba="abrir-script"]')).toBeEnabled()
+    await expect(conexion.locator('[data-prueba="script-sin-radius"]')).toContainText('el script conecta el túnel y la API, y deja use-radius=no')
+    await conexion.locator('[data-prueba="abrir-script"]').click()
+    const script = page.getByRole('dialog', { name: /^Script de conexión/ })
+    await expect(script).toContainText('Sin RADIUS: deja use-radius=no.')
+    await script.locator('[data-prueba="script-generar"]').click()
+    await expect(script.locator('[data-prueba="script-listo"]')).toBeVisible()
+    await expect(script.locator('[data-prueba="script-texto"] textarea, textarea[data-prueba="script-texto"]').first()).toHaveValue(/use-radius=no/)
+    await script.getByRole('button', { name: 'Cerrar' }).first().click()
+    await expect(script).toBeHidden()
 
     // Una red IPv4 para las IP de los servicios.
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')

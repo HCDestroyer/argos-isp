@@ -10,7 +10,8 @@ import type { Problem, Schema } from '@argosisp/contracts'
  *   de datos ni cambios al instante (el perfil nuevo rige al reconectar) y sesiones leídas por sondeo
  *   de `/ppp/active` cada minuto (`Sesion.origen = 'sondeo'`). PPPoE exige las credenciales de la API
  *   (422 `pppoe_local_requiere_api`). `nas_ip` y `radius_secret` son opcionales (la API devuelve
- *   `nas_ip: null`) y no admite el script de conexión (422 `script_requiere_radius`).
+ *   `nas_ip: null`). El script de conexión sale en su variante sin RADIUS (túnel y API, sin `/radius`
+ *   ni CoA, `use-radius=no`; `contratos/conexion-routers.md` §7).
  */
 export type ModoSeguridad = Schema<'Router'>['modo_seguridad']
 
@@ -73,7 +74,8 @@ export function pppoeSinCredencialesApi(router: Pick<Schema<'Router'>, 'modo_seg
     return esSinRadius(router) && !tieneCredencialesApi(router)
 }
 
-export const MENSAJE_SCRIPT_SIN_RADIUS = 'Este router no usa RADIUS y el script de conexión configura RADIUS y CoA en el equipo. Cámbialo a RADIUS para usar el script, o configura a mano el acceso a su API REST.'
+/** Junto al script de conexión de un router `api` (sugerencia de A1, `a1.md` del 30 oct). */
+export const MENSAJE_SCRIPT_SIN_RADIUS = 'Este router no usa RADIUS: el script conecta el túnel y la API, y deja use-radius=no.'
 
 /** Mensaje de la IP del NAS cuando falta en un router con RADIUS (espejo de `MENSAJE_NAS_IP_REQUERIDA`). */
 export const MENSAJE_NAS_REQUERIDA = 'La IP del NAS es obligatoria con RADIUS. Si el router no usa RADIUS (todo por la API REST), elige «Sin RADIUS».'
@@ -102,10 +104,6 @@ function codigo(problema: Problem | null | undefined): string | null {
 /** 422 `pppoe_local_requiere_api` (`errors[0].field = router_id`): router `api` sin credenciales. */
 export function esPppoeLocalRequiereApi(problema: Problem | null | undefined): boolean {
     return codigo(problema) === 'pppoe_local_requiere_api'
-}
-
-export function esScriptRequiereRadius(problema: Problem | null | undefined): boolean {
-    return codigo(problema) === 'script_requiere_radius'
 }
 
 export interface ServiciosPppoeEnRouter {
