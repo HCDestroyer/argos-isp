@@ -13,6 +13,8 @@ import {
     lineasAsiento,
     servicioCortado,
     unicoBd,
+    AHORA_PROMESAS,
+    diasDespues,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -175,12 +177,14 @@ test.group('billing · pago de terceros', () => {
             ['facturas.1'],
         )
 
+        // instante fijo: a dos días del reloj real chocaría con la siguiente facturación el 30 y 31
         const promesa = await new CrearPromesaPago().execute(
             {
                 servicio_id: familiar.servicioId,
-                vence_en: new Date(Date.now() + 2 * 86_400_000),
+                vence_en: diasDespues(2),
                 monto: '300.00',
                 canal: 'operador',
+                ahora: AHORA_PROMESAS,
             },
             contextoPrueba(),
         )
