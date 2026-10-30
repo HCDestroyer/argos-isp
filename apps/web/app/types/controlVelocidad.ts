@@ -24,7 +24,6 @@ export type MatrizControlVelocidad = Schema<'MatrizControlVelocidad'>
 export type VistaPreviaEstrategia = Schema<'VistaPreviaEstrategia'>
 export type SincronizacionPlan = Schema<'SincronizacionPlan'>
 export type VistaPreviaReconciliar = Schema<'VistaPreviaReconciliar'>
-export type ResultadoReconciliacion = Schema<'ResultadoReconciliacion'>
 export type DiagnosticoCorte = Schema<'DiagnosticoCorte'>
 
 export type DatosVistaPreviaEstrategia = paths['/api/v1/routers/{id}/vista-previa-estrategia']['post']['requestBody']['content']['application/json']

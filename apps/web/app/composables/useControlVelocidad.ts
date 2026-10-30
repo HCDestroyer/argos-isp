@@ -1,8 +1,10 @@
-import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosVistaPreviaEstrategia, DiagnosticoCorte, MatrizControlVelocidad, ResultadoReconciliacion, SincronizacionPlan, VistaPreviaEstrategia, VistaPreviaReconciliar } from '~/types/controlVelocidad'
+import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosVistaPreviaEstrategia, MatrizControlVelocidad, SincronizacionPlan, VistaPreviaEstrategia, VistaPreviaReconciliar } from '~/types/controlVelocidad'
 
 /**
- * Control de velocidad por capas, «Sincronizar plan», «Reconciliar ahora» y el chequeo del corte
- * (`contratos/control-velocidad.md` §9, A2). Todo tipado desde `packages/contracts`.
+ * Control de velocidad por capas, «Sincronizar plan» y la vista previa de «Reconciliar ahora»
+ * (`contratos/control-velocidad.md` §9, A2). Todo tipado desde `packages/contracts`. La
+ * reconciliación en sí es `useRouters().reconciliar` (202, `ReconciliacionEncolada`) y el chequeo
+ * del corte llega dentro de «Probar conexión» (`ChequeoConexion.corte`).
  */
 export function useControlVelocidad() {
     const api = useApi()
@@ -38,20 +40,10 @@ export function useControlVelocidad() {
         }))
     }
 
-    /** `GET /routers/:id/vista-previa-reconciliar` (`routeros.reconciliar`): lee el router, no escribe. */
+    /** `GET /routers/:id/vista-previa-reconciliar` (`routers.reconciliar`): lee el router, no escribe. */
     function vistaPreviaReconciliar(routerId: number): Promise<Resultado<VistaPreviaReconciliar>> {
         return resolver(api.GET('/api/v1/routers/{id}/vista-previa-reconciliar', { params: { path: { id: routerId } } }))
     }
 
-    /** `POST /routers/:id/reconciliar` («Reconciliar ahora», `routeros.reconciliar`). */
-    function reconciliar(routerId: number, claveIdempotencia: string): Promise<Resultado<ResultadoReconciliacion>> {
-        return resolver(api.POST('/api/v1/routers/{id}/reconciliar', { params: { path: { id: routerId }, header: { 'Idempotency-Key': claveIdempotencia } } }))
-    }
-
-    /** `GET /routers/:id/diagnostico-corte` (`routers.ver`): el chequeo `corte` de «Probar conexión». */
-    function diagnosticoCorte(routerId: number): Promise<Resultado<DiagnosticoCorte>> {
-        return resolver(api.GET('/api/v1/routers/{id}/diagnostico-corte', { params: { path: { id: routerId } } }))
-    }
-
-    return { matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar, vistaPreviaReconciliar, reconciliar, diagnosticoCorte }
+    return { matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar, vistaPreviaReconciliar }
 }

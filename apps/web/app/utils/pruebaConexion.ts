@@ -15,6 +15,7 @@ export const ETIQUETAS_CHEQUEO: Record<Chequeo['clave'], string> = {
     api: 'API del router',
     equipo: 'Datos del equipo',
     radius: 'RADIUS',
+    corte: 'Corte de suspendidos',
 }
 
 export const ESTADOS_TUNEL: Record<EstadoTunel, { etiqueta: string, color: Color, icono: string, descripcion: string }> = {
@@ -72,6 +73,9 @@ export function consejoChequeo(chequeo: Chequeo): string | null {
             return 'ArgosIsp necesita RouterOS 7: actualiza el router.'
         case 'radius':
             return 'Vuelve a ejecutar el script de conexión: deja /radius apuntando a Argos con el secreto correcto.'
+        case 'corte':
+            // Cada paso del corte trae su qué hacer y sus comandos (`RouterDiagnosticoCorte`).
+            return chequeo.corte ? 'Abajo está cada paso del corte con qué hacer y los comandos para el router.' : null
         default:
             return null
     }

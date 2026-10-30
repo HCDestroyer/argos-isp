@@ -249,9 +249,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterVelocidad.vue'], exentos: { 'components/RouterVelocidad.vue': ['routers.ver'] } },
     'EstrategiaPlanModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/PlanRouters.vue'] },
     'SincronizarPlanModal.vue': { permisos: ['planes.sincronizar'], desde: ['components/PlanRouters.vue', 'pages/planes/[id].vue'] },
-    'RouterReconciliarModal.vue': { permisos: ['routeros.reconciliar'], desde: ['components/RouterVelocidad.vue', 'components/RouterChequeoCorte.vue'] },
-    // El chequeo del corte va en «Conexión», que se abre desde la lista de routers (`routers.ver`).
-    'RouterChequeoCorte.vue': { permisos: ['routers.ver'], desde: ['components/RouterConexion.vue'], exentos: { 'components/RouterConexion.vue': ['routers.ver'] } },
+    // «Reconciliar ahora» con vista previa: desde el menú del router, «Velocidad» y el chequeo del corte de «Probar conexión».
+    'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterVelocidad.vue', 'components/RouterPruebaConexionModal.vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },

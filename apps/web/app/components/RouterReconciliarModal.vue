@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 import type { TableColumn } from '@nuxt/ui'
-import type { ResultadoReconciliacion, VistaPreviaReconciliar } from '~/types/controlVelocidad'
+import type { VistaPreviaReconciliar } from '~/types/controlVelocidad'
 
 /**
- * «Reconciliar ahora» (`routeros.reconciliar`, `contratos/control-velocidad.md` §9–§10): primero la
- * vista previa (`GET /routers/:id/vista-previa-reconciliar`, lee el router sin escribir) con lo que
- * se crea, cambia, mueve y borra por grupo (servicio, velocidad, corte); al confirmar,
- * `POST /routers/:id/reconciliar` con `Idempotency-Key` y su resultado. Si el router no responde o
- * no tiene credenciales, se ve el error de la API y «Reintentar». Quien lo abre comprueba el permiso.
+ * «Reconciliar ahora» con vista previa (`routers.reconciliar`, `contratos/control-velocidad.md` §9–§10):
+ * primero `GET /routers/:id/vista-previa-reconciliar` (lee el router sin escribir) con lo que se
+ * crea, cambia, mueve y borra por grupo (servicio, velocidad, corte); al confirmar,
+ * `POST /routers/:id/reconciliar`, que encola el trabajo (202 `ReconciliacionEncolada`; con
+ * `encolado: false` ya había uno en curso, no es un error). Si el router no responde o no tiene
+ * credenciales, se ve el error de la API y «Reintentar». Quien lo abre comprueba el permiso.
  */
 const props = defineProps<{
     router: Pick<RouterNas, 'id' | 'nombre'>
@@ -17,18 +18,15 @@ const props = defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
-    reconciliado: [resultado: ResultadoReconciliacion]
+    reconciliado: [resultado: ReconciliacionEncolada]
 }>()
-
-const toast = useToast()
 
 const vista = shallowRef<VistaPreviaReconciliar | null>(null)
 const cargando = ref(false)
 const problemaVista = ref<Problem | null>(null)
 const aplicando = ref(false)
 const problema = ref<Problem | null>(null)
-const resultado = shallowRef<ResultadoReconciliacion | null>(null)
-let clave = nuevaClaveIdempotencia()
+const resultado = shallowRef<ReconciliacionEncolada | null>(null)
 
 type Cambio = VistaPreviaReconciliar['cambios'][number]
 
@@ -38,7 +36,6 @@ const GRUPOS: Record<Cambio['grupo'], { etiqueta: string, icono: string }> = {
     servicio: { etiqueta: 'Servicios', icono: 'i-lucide-user' },
 }
 const ACCIONES: Record<Cambio['accion'], string> = { crear: 'Crea', actualizar: 'Cambia', mover: 'Mueve', borrar: 'Borra' }
-const HECHOS: Record<ResultadoReconciliacion['correcciones'][number]['accion'], string> = { creado: 'Creado', actualizado: 'Cambiado', movido: 'Movido', borrado: 'Borrado' }
 
 const numero = { class: { th: 'w-0 text-right', td: 'w-0 text-right tabular-nums' } }
 const columnas: TableColumn<VistaPreviaReconciliar['menus'][number]>[] = [
@@ -67,7 +64,6 @@ watch(abierto, (valor) => {
         vista.value = null
         resultado.value = null
         problema.value = null
-        clave = nuevaClaveIdempotencia()
         void cargar()
     }
 }, { immediate: true })
@@ -75,23 +71,14 @@ watch(abierto, (valor) => {
 async function reconciliar() {
     aplicando.value = true
     problema.value = null
-    const respuesta = await useControlVelocidad().reconciliar(props.router.id, clave)
+    const respuesta = await useRouters().reconciliar(props.router.id)
     aplicando.value = false
     if (!respuesta.ok) {
         problema.value = respuesta.problema
-        clave = nuevaClaveIdempotencia()
         return
     }
     resultado.value = respuesta.data
     emit('reconciliado', respuesta.data)
-    if (!respuesta.data.error) {
-        toast.add({
-            title: `${props.router.nombre}: reconciliado`,
-            description: respuesta.data.correcciones.length ? `${respuesta.data.correcciones.length} ${respuesta.data.correcciones.length === 1 ? 'objeto corregido' : 'objetos corregidos'} en el router.` : 'El router ya estaba como Argos lo espera.',
-            icon: 'i-lucide-circle-check',
-            color: 'success',
-        })
-    }
 }
 </script>
 
@@ -121,60 +108,23 @@ async function reconciliar() {
                 />
                 <template v-else-if="resultado">
                     <UAlert
-                        v-if="resultado.error"
-                        color="error"
+                        v-if="resultado.encolado"
+                        color="info"
                         variant="subtle"
-                        icon="i-lucide-circle-x"
-                        title="El router no se pudo reconciliar"
-                        :description="resultado.error"
-                        :actions="[{ label: 'Reintentar', icon: 'i-lucide-rotate-cw', color: 'error', variant: 'outline', loading: aplicando, onClick: reconciliar }]"
-                        data-prueba="reconciliar-resultado-error"
+                        icon="i-lucide-refresh-cw"
+                        :title="`Reconciliando ${router.nombre}`"
+                        description="El worker aplica en el router lo que viste en la vista previa, por su API. El resultado de cada comando queda en los eventos de red del router."
+                        data-prueba="reconciliar-encolado"
                     />
                     <UAlert
                         v-else
-                        color="success"
+                        color="neutral"
                         variant="subtle"
-                        icon="i-lucide-circle-check"
-                        :title="resultado.correcciones.length ? `${resultado.correcciones.length} ${resultado.correcciones.length === 1 ? 'objeto corregido' : 'objetos corregidos'}` : 'Nada que corregir'"
-                        :description="`${resultado.servicios.toLocaleString('es-GT')} servicios revisados.`"
-                        data-prueba="reconciliar-resultado"
+                        icon="i-lucide-clock"
+                        title="Ya hay una reconciliación en curso"
+                        description="No se encoló otra: espera a que termine. El resultado queda en los eventos de red del router."
+                        data-prueba="reconciliar-en-curso"
                     />
-                    <ul
-                        v-if="resultado.correcciones.length"
-                        class="flex flex-col divide-y divide-default surface-card"
-                    >
-                        <li
-                            v-for="(correccion, indice) in resultado.correcciones"
-                            :key="indice"
-                            class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                        >
-                            <span class="min-w-0 break-all font-mono text-xs">{{ correccion.ruta }} · {{ correccion.comment }}</span>
-                            <UBadge
-                                :label="HECHOS[correccion.accion]"
-                                color="neutral"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </li>
-                    </ul>
-                    <UAlert
-                        v-if="resultado.errores_velocidad.length || resultado.avisos.length"
-                        color="warning"
-                        variant="subtle"
-                        icon="i-lucide-triangle-alert"
-                        title="Revisa"
-                    >
-                        <template #description>
-                            <ul class="mt-1 flex list-disc flex-col gap-1 pl-5">
-                                <li
-                                    v-for="(texto, indice) in [...resultado.errores_velocidad, ...resultado.avisos]"
-                                    :key="indice"
-                                >
-                                    {{ texto }}
-                                </li>
-                            </ul>
-                        </template>
-                    </UAlert>
                 </template>
                 <template v-else-if="vista">
                     <UAlert

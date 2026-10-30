@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
-import { MATRIZ } from '~~/fixtures/routers/estrategias'
+import { MATRIZ, diagnosticoCorte } from '~~/fixtures/routers/estrategias'
 import { estrategiaSimple } from '~~/fixtures/routers/estrategiasDatos'
 import { UApp } from '#components'
 import EstrategiaVelocidadEditor from '~/components/EstrategiaVelocidadEditor.vue'
 import EstrategiaVelocidadModal from '~/components/EstrategiaVelocidadModal.vue'
 import SincronizarPlanModal from '~/components/SincronizarPlanModal.vue'
-import RouterChequeoCorte from '~/components/RouterChequeoCorte.vue'
+import RouterPruebaConexionModal from '~/components/RouterPruebaConexionModal.vue'
+import RouterDiagnosticoCorte from '~/components/RouterDiagnosticoCorte.vue'
 import RouterReconciliarModal from '~/components/RouterReconciliarModal.vue'
 import type { EstrategiasRouter } from '~/types/controlVelocidad'
 import { esperar } from '../ayudas/esperar'
@@ -161,20 +162,23 @@ describe('control de velocidad por capas', () => {
         await esperar(() => expect(document.body.querySelector('[data-router="2"]')?.closest('tr')?.textContent).toContain('Al día'))
     })
 
-    it('reconciliar ahora: vista previa por grupo, confirmar y quedar sin cambios', async () => {
+    it('reconciliar ahora: vista previa por grupo, confirmar (202) y quedar sin cambios', async () => {
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterReconciliarModal, { router: { id: 1, nombre: 'RB-Centro' }, open: true }) }) })
         await mountSuspended(conApp)
         await esperar(() => expect(enBody('reconciliar-menus')).not.toBeNull())
         expect(enBody('reconciliar-grupo-corte')?.textContent).toContain('argosisp:top corte')
         expect(enBody('reconciliar-grupo-velocidad')?.textContent).toContain('argosisp:plan:2')
         enBody('reconciliar-confirmar')?.click()
-        await esperar(() => expect(enBody('reconciliar-resultado')?.textContent).toContain('4 objetos corregidos'))
-        expect(bd.acciones.at(-1)).toMatchObject({ accion: 'routeros.reconciliar' })
+        await esperar(() => expect(enBody('reconciliar-encolado')?.textContent).toContain('Reconciliando RB-Centro'))
+        expect(bd.acciones.at(-1)).toMatchObject({ accion: 'routers.reconciliar' })
         const despues = await useControlVelocidad().vistaPreviaReconciliar(1)
         expect(despues.ok && despues.data.cambios).toEqual([])
+        // Otra antes de un minuto: `encolado: false`, no es un error.
+        const otra = await useRouters().reconciliar(1)
+        expect(otra.ok && otra.data.encolado).toBe(false)
     })
 
-    it('reconciliar ahora: el router sin API o que no responde muestra el error de la API, sin confirmar', async () => {
+    it('reconciliar ahora: el router que no responde muestra el error de la API, sin confirmar', async () => {
         bd.routersSinRespuesta = [2]
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterReconciliarModal, { router: { id: 2, nombre: 'CCR-Mixco' }, open: true }) }) })
         await mountSuspended(conApp)
@@ -184,32 +188,52 @@ describe('control de velocidad por capas', () => {
         expect(enBody('reconciliar-confirmar')?.hasAttribute('disabled')).toBe(true)
     })
 
-    it('probar el corte: cada problema con su paso a seguir; «Reconciliar ahora» lo deja listo', async () => {
-        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterChequeoCorte, { router: { id: 1, nombre: 'RB-Centro' } }) }) })
-        const vista = await mountSuspended(conApp)
-        await vista.find('[data-prueba="probar-corte"]').trigger('click')
-        await esperar(() => expect(vista.find('[data-prueba="corte-faltan_reglas"]').exists()).toBe(true))
-        expect(vista.find('[data-prueba="corte-faltan_reglas"]').text()).toContain('Reconciliar ahora» lo deja como debe estar')
-        expect(vista.find('[data-prueba="corte-reglas_desordenadas"]').exists()).toBe(true)
-        await vista.find('[data-prueba="corte-reconciliar"]').trigger('click')
+    it('probar conexión trae el chequeo de corte: pasos, comandos copiables, límites y «Reconciliar ahora»', async () => {
+        const abierto = ref(false)
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterPruebaConexionModal, { 'router': router(1), 'open': abierto.value, 'onUpdate:open': (v: boolean) => (abierto.value = v) }) }) })
+        await mountSuspended(conApp)
+        abierto.value = true
+        await esperar(() => expect(enBody('diagnostico-corte')).not.toBeNull())
+        const corte = document.body.querySelector('[data-chequeo="corte"]')
+        expect(corte?.textContent).toContain('Corte de suspendidos')
+        expect(corte?.querySelector('[data-corte="reglas"]')?.textContent).toContain('Reconciliar ahora» lo deja como debe estar')
+        expect(corte?.querySelector('[data-corte="reglas"] [data-prueba="comandos-routeros"]')?.textContent).toContain('/ip firewall nat add')
+        expect(corte?.querySelector('[data-corte="sesiones_suspendidas"] [data-prueba="comandos-routeros"]')?.textContent).toContain('/ppp active remove [find address=')
+        expect(enBody('corte-limites')?.textContent).toContain('HTTPS (443) no se redirige')
+        expect(enBody('corte-portal')?.textContent).toContain('http://203.0.113.10:80/corte')
+        enBody('corte-reconciliar')?.click()
         await esperar(() => expect(enBody('reconciliar-confirmar')?.hasAttribute('disabled')).toBe(false))
         enBody('reconciliar-confirmar')?.click()
-        await esperar(() => expect(vista.find('[data-prueba="corte-ok"]').exists()).toBe(true))
+        await esperar(() => expect(enBody('reconciliar-encolado')).not.toBeNull())
 
-        const mixco = await useControlVelocidad().diagnosticoCorte(2)
-        expect(mixco.ok && mixco.data.problemas).toEqual([expect.objectContaining({ codigo: 'portal_inalcanzable', reconciliar: false })])
-        const bodega = await useControlVelocidad().diagnosticoCorte(3)
-        expect(bodega.ok && bodega.data.problemas[0]?.codigo).toBe('sin_api')
+        // Después de reconciliar, el corte de RB-Centro queda en verde (los límites se siguen viendo).
+        const despues = await useRouters().probarConexion(1)
+        const chequeo = despues.ok ? despues.data.chequeos.find(c => c.clave === 'corte') : undefined
+        expect(chequeo?.corte).toMatchObject({ ok: true, suspendidos: { fuera_de_lista: 0 } })
+        expect(chequeo?.corte?.limites.length).toBe(2)
     })
 
-    it('probar el corte: si la API falla se ve el error con «Reintentar», sin un «listo» inventado', async () => {
-        simularFalla('GET /api/v1/routers/:id/diagnostico-corte', 500)
-        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterChequeoCorte, { router: { id: 1, nombre: 'RB-Centro' } }) }) })
+    it('diagnóstico del corte: lo que «Reconciliar ahora» no arregla dice qué hacer y no ofrece el botón', async () => {
+        const corte = diagnosticoCorte(bd.routers[1]!)
+        expect(corte.problemas).toContainEqual(expect.objectContaining({ codigo: 'portal_inalcanzable', reconciliar: false }))
+        expect(corte.problemas.every(p => !p.reconciliar)).toBe(true)
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterDiagnosticoCorte, { corte }) }) })
         const vista = await mountSuspended(conApp)
-        await vista.find('[data-prueba="probar-corte"]').trigger('click')
-        await esperar(() => expect(vista.find('[data-prueba="corte-error"]').exists()).toBe(true))
-        expect(vista.text()).toContain('Reintentar')
-        expect(vista.find('[data-prueba="corte-ok"]').exists()).toBe(false)
+        expect(vista.find('[data-corte="portal_http"]').text()).toContain('El router no llega al portal')
+        expect(vista.find('[data-prueba="corte-reconciliar"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="corte-limites"]').exists()).toBe(true)
+        const bodega = diagnosticoCorte(bd.routers[2]!)
+        expect(bodega.problemas[0]?.codigo).toBe('sin_api')
+    })
+
+    it('probar conexión: si la API falla se ve el error con «Reintentar», sin un corte inventado', async () => {
+        simularFalla('POST /api/v1/routers/:id/probar-conexion', 500)
+        const abierto = ref(false)
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterPruebaConexionModal, { 'router': router(1), 'open': abierto.value, 'onUpdate:open': (v: boolean) => (abierto.value = v) }) }) })
+        await mountSuspended(conApp)
+        abierto.value = true
+        await esperar(() => expect(document.body.querySelector('[data-prueba="prueba-conexion"]')?.textContent).toContain('Reintentar'))
+        expect(enBody('diagnostico-corte')).toBeNull()
     })
 
     it('sincronizar pide planes.sincronizar', async () => {

@@ -1,6 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import type { DiagnosticoCorte, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, ResultadoReconciliacion, SincronizacionPlan, TipoConexionVelocidad, VistaPreviaEstrategia, VistaPreviaReconciliar } from '../../app/types/controlVelocidad'
+import type { DiagnosticoCorte, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, SincronizacionPlan, TipoConexionVelocidad, VistaPreviaEstrategia, VistaPreviaReconciliar } from '../../app/types/controlVelocidad'
 import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } from '../../app/types/controlVelocidad'
 import { MATRIZ } from './estrategiasDatos'
 import { bd } from '../bd'
@@ -394,7 +394,7 @@ function sincronizar(solicitud: SolicitudFixture, planId: number): RespuestaFixt
 
 const SIN_API = 'El router no tiene usuario y clave de la API REST: complétalos en «Conexión» o genera el script de conexión'
 const NO_RESPONDE = 'El router no respondió a la API REST (timeout de 10 s): revisa el túnel o la dirección de la API'
-const PORTAL = 'http://portal.argos.test/corte'
+const PORTAL = 'https://portal.argos.test'
 
 /** Lo que «Reconciliar ahora» encontraría en el router, mientras no se haya reconciliado. */
 function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'] {
@@ -431,28 +431,73 @@ function vistaReconciliar(router: Router): VistaPreviaReconciliar {
     }
 }
 
-function diagnostico(router: Router): DiagnosticoCorte {
-    const vacio = { router_id: router.id, faltan: [], portal: { url: PORTAL, alcanzable: null, detalle: null } }
+/** Límites del corte (§10.3): el panel los muestra siempre. */
+const LIMITES = [
+    'HTTPS (443) no se redirige: el router corta con un reset TCP y el navegador muestra «no se puede conectar». La página aparece al abrir un sitio http:// o con la detección de portal cautivo del teléfono o la computadora.',
+    'IPv6 no se redirige: al suspendido solo se le deja DNS, el portal y el walled garden. Si su equipo prefiere IPv6, la página aparece cuando el navegador cae a IPv4.',
+]
+
+/**
+ * `diagnosticoCorte()` de A2 (§10.2) con datos de muestra: RB-Centro sin las reglas de corte hasta
+ * «Reconciliar ahora» (y con sus suspendidos PPPoE fuera de la lista); CCR-Mixco con el portal
+ * inalcanzable; RB-Bodega sin API. También lo devuelve «Probar conexión» en el chequeo `corte`.
+ */
+export function diagnosticoCorte(router: Router): DiagnosticoCorte {
+    const destino = 'http://203.0.113.10:80/corte'
+    const portal: DiagnosticoCorte['portal'] = { url: PORTAL, fqdn: 'portal.argos.test', ipv4: '203.0.113.10', origen: 'dns', destino_nat: destino, alcanzable: null, http_status: null, detalle: null }
+    const vacio = { router_id: router.id, chequeos: [], faltan: [], portal, suspendidos: { total: 0, fuera_de_lista: 0, ejemplos: [] }, limites: LIMITES }
     if (!router.tiene_api_password || !router.api_usuario) {
-        return { ...vacio, ok: false, problemas: [{ codigo: 'sin_api', mensaje: SIN_API, reconciliar: false }] }
+        return { ...vacio, ok: false, problemas: [{ codigo: 'sin_api', mensaje: SIN_API, reconciliar: false, comandos: [] }] }
     }
     if (bd.routersSinRespuesta.includes(router.id)) {
-        return { ...vacio, ok: false, problemas: [{ codigo: 'router_no_responde', mensaje: NO_RESPONDE, reconciliar: false }] }
+        return { ...vacio, ok: false, problemas: [{ codigo: 'router_no_responde', mensaje: NO_RESPONDE, reconciliar: false, comandos: [] }] }
     }
+    const reconciliado = bd.routersReconciliados.includes(router.id)
+    const suspendidos = bd.servicios.filter(s => s.router_id === router.id && s.estado === 'suspendido' && s.ipv4)
+    const fuera = reconciliado ? [] : suspendidos.filter(s => (s.tipo_conexion ?? 'pppoe') === 'pppoe')
     const faltan: DiagnosticoCorte['faltan'] = pendientesReconciliar(router).filter(c => c.grupo === 'corte').map(c => ({ ruta: c.ruta, clave: c.clave, accion: c.accion }))
-    const problemas: DiagnosticoCorte['problemas'] = []
-    if (faltan.some(f => f.accion === 'crear')) {
-        problemas.push({ codigo: 'faltan_reglas', mensaje: 'Faltan las reglas de corte: genera el script de conexión con «incluir configuración de servicio» o usa «Reconciliar ahora»', reconciliar: true })
-    }
-    if (faltan.some(f => f.accion === 'mover')) {
-        problemas.push({ codigo: 'reglas_desordenadas', mensaje: 'Las reglas de corte están detrás de FastTrack o de «accept established»: «Reconciliar ahora» las sube al inicio', reconciliar: true })
-    }
     const alcanzable = router.id !== 2
-    if (!alcanzable) {
-        problemas.push({ codigo: 'portal_inalcanzable', mensaje: `El router no llega al portal en ${PORTAL}: revisa que el servidor sea alcanzable desde la red del router; si Argos corre en WSL, activa el modo de red mirrored`, reconciliar: false })
+    const chequeos: DiagnosticoCorte['chequeos'] = [
+        { clave: 'lista_suspendidos', ok: true, codigo: null, detalle: suspendidos.length ? 'La address-list suspendidos existe.' : 'No hay suspendidos con IP en este router: la lista no hace falta todavía.', comandos: [], reconciliar: false },
+        faltan.length
+            ? {
+                    clave: 'reglas',
+                    ok: false,
+                    codigo: 'faltan_reglas',
+                    detalle: 'Faltan reglas de corte en filter y NAT: sin ellas un suspendido navega normal.',
+                    comandos: [
+                        '/ip firewall filter add chain=forward src-address-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte: suspendidos a argos-corte"',
+                        `/ip firewall nat add chain=dstnat src-address-list=suspendidos protocol=tcp dst-port=80 action=dst-nat to-addresses=203.0.113.10 to-ports=80 comment="argosisp: corte-nat HTTP a /corte"`,
+                    ],
+                    reconciliar: true,
+                }
+            : { clave: 'reglas', ok: true, codigo: null, detalle: 'Las reglas de corte están, activas y en orden.', comandos: [], reconciliar: false },
+        alcanzable
+            ? { clave: 'portal_http', ok: true, codigo: null, detalle: `El router llega a ${destino} (HTTP 200).`, comandos: [], reconciliar: false }
+            : { clave: 'portal_http', ok: false, codigo: 'portal_inalcanzable', detalle: `El router no llega al portal en ${destino}: revisa que el servidor sea alcanzable desde la red del router; si Argos corre en WSL, activa el modo de red mirrored.`, comandos: [`/tool fetch url="${destino}" output=none`], reconciliar: false },
+        fuera.length
+            ? { clave: 'sesiones_suspendidas', ok: false, codigo: 'suspendidos_fuera_de_lista', detalle: `${fuera.length} de ${suspendidos.length} suspendidos no están en la lista suspendidos: navegan sin corte. Sus sesiones PPPoE deben reconectar con el perfil suspendido.`, comandos: fuera.slice(0, 12).map(s => `/ppp active remove [find address=${s.ipv4}]`), reconciliar: false }
+            : { clave: 'sesiones_suspendidas', ok: true, codigo: null, detalle: suspendidos.length ? 'Todos los suspendidos están en la lista.' : 'No hay suspendidos con IP en este router.', comandos: [], reconciliar: false },
+        { clave: 'fasttrack', ok: true, codigo: null, detalle: 'Los saltos de corte van antes de FastTrack.', comandos: [], reconciliar: false },
+        { clave: 'perfil_suspendido', ok: true, codigo: null, detalle: 'El perfil suspendido pone sus sesiones en la lista suspendidos.', comandos: [], reconciliar: false },
+        { clave: 'walled_garden', ok: true, codigo: null, detalle: 'argos-portal y argos-walled tienen el portal y la pasarela.', comandos: [], reconciliar: false },
+    ]
+    const problemas: DiagnosticoCorte['problemas'] = chequeos
+        .filter((c): c is Chequeo & { codigo: NonNullable<Chequeo['codigo']> } => c.ok === false && c.codigo !== null)
+        .map(c => ({ codigo: c.codigo, mensaje: c.detalle, reconciliar: c.reconciliar, comandos: c.comandos }))
+    return {
+        router_id: router.id,
+        ok: problemas.length === 0,
+        chequeos,
+        problemas,
+        faltan,
+        portal: { ...portal, alcanzable, http_status: alcanzable ? 200 : null, detalle: alcanzable ? null : 'failure: connection timeout (203.0.113.10)' },
+        suspendidos: { total: suspendidos.length, fuera_de_lista: fuera.length, ejemplos: fuera.slice(0, 5).map(s => ({ servicio_id: s.id, tipo_conexion: s.tipo_conexion ?? 'pppoe', ipv4: s.ipv4 ?? '' })) },
+        limites: LIMITES,
     }
-    return { router_id: router.id, ok: problemas.length === 0, problemas, faltan, portal: { url: PORTAL, alcanzable, detalle: alcanzable ? null : 'failure: connection timeout (portal.argos.test)' } }
 }
+
+type Chequeo = DiagnosticoCorte['chequeos'][number]
 
 function routerDe(solicitud: SolicitudFixture): Router | undefined {
     return bd.routers.find(r => r.id === idDe(solicitud))
@@ -561,39 +606,14 @@ export const rutasEstrategias: RutasFixture = {
         return id === null ? noEncontrado('el plan') : sincronizar(solicitud, id)
     })),
 
-    'GET /api/v1/routers/:id/vista-previa-reconciliar': conPermiso('routeros.reconciliar', (solicitud) => {
+    'GET /api/v1/routers/:id/vista-previa-reconciliar': conPermiso('routers.reconciliar', (solicitud) => {
         const router = routerDe(solicitud)
         return router ? { status: 200, cuerpo: vistaReconciliar(router) } : noEncontrado('el router')
     }),
 
-    'POST /api/v1/routers/:id/reconciliar': conPermiso('routeros.reconciliar', conIdempotencia((solicitud) => {
-        const router = routerDe(solicitud)
-        if (!router) {
-            return noEncontrado('el router')
-        }
-        const vista = vistaReconciliar(router)
-        const accion = { crear: 'creado', actualizar: 'actualizado', borrar: 'borrado', mover: 'movido' } as const
-        const resultado: ResultadoReconciliacion = {
-            router_id: router.id,
-            servicios: serviciosDelRouter(router.id).length,
-            correcciones: vista.cambios.map(c => ({ ruta: c.ruta, comment: c.clave, accion: accion[c.accion] })),
-            avisos: vista.avisos,
-            error: vista.error,
-            errores_velocidad: [],
-        }
-        if (!vista.error) {
-            bd.routersReconciliados = [...bd.routersReconciliados, router.id]
-        }
-        // Como la API: solo deja fila si corrigió algo o falló.
-        if (resultado.correcciones.length || resultado.error) {
-            registrarAccion(solicitud, 'routeros.reconciliar', { tipo: 'router', id: router.id }, { motivo: 'manual' })
-        }
-        return { status: 200, cuerpo: resultado }
-    })),
-
     'GET /api/v1/routers/:id/diagnostico-corte': conPermiso('routers.ver', (solicitud) => {
         const router = routerDe(solicitud)
-        return router ? { status: 200, cuerpo: diagnostico(router) } : noEncontrado('el router')
+        return router ? { status: 200, cuerpo: diagnosticoCorte(router) } : noEncontrado('el router')
     }),
 }
 

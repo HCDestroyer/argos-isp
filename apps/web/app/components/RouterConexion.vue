@@ -6,8 +6,7 @@ import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
  * Conexión del panel con la API REST de RouterOS (`contratos/routeros.md`): URL, verificación
  * TLS, CA propia en PEM, servidor DHCP de `dhcp_fija` e interfaz del ARP del amarre IP-MAC.
  * `PUT /routers/:id` (`routers.editar`) con `version`; 409 con "Recargar". La CA nunca se muestra
- * de vuelta: solo se sabe si hay una, y se reemplaza o se quita. Abajo, el chequeo del corte de
- * «Probar conexión» (`RouterChequeoCorte`, A2) con el paso a seguir si falla.
+ * de vuelta: solo se sabe si hay una, y se reemplaza o se quita.
  */
 const props = defineProps<{
     router: RouterNas
@@ -206,18 +205,6 @@ async function guardar(evento: FormSubmitEvent<SalidaConexionRouter>) {
                     data-prueba="router-conexion-error"
                 />
             </UForm>
-            <section
-                class="mt-6 flex flex-col gap-3 border-t border-default pt-6"
-                aria-labelledby="titulo-probar-corte"
-            >
-                <h3
-                    id="titulo-probar-corte"
-                    class="text-sm font-medium text-highlighted"
-                >
-                    Probar conexión · corte
-                </h3>
-                <RouterChequeoCorte :router="actual" />
-            </section>
         </template>
 
         <template #footer>

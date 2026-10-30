@@ -164,7 +164,7 @@ function alCambiarEstrategia(router: RouterNas) {
                             {{ actual.routeros_version ? `RouterOS ${actual.routeros_version}` : 'Versión de RouterOS desconocida: se lee al reconciliar o al probar la conexión.' }}
                         </p>
                         <UButton
-                            v-if="puede('routeros.reconciliar')"
+                            v-if="puede('routers.reconciliar')"
                             label="Reconciliar ahora"
                             icon="i-lucide-refresh-cw"
                             color="neutral"
@@ -301,10 +301,9 @@ function alCambiarEstrategia(router: RouterNas) {
                 @actualizado="alCambiarEstrategia"
             />
             <RouterReconciliarModal
-                v-if="puede('routeros.reconciliar')"
+                v-if="puede('routers.reconciliar')"
                 v-model:open="reconciliarAbierto"
                 :router="actual"
-                @reconciliado="recargarRouter"
             />
         </template>
     </USlideover>
