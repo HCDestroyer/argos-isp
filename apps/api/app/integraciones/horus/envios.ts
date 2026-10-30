@@ -1,5 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import type { EventoEntrante } from '#shared/eventos_bus'
+import { CAMPOS_CLIENTE_IDENTIDAD } from '#shared/eventos'
 import { configHorus, type ConfigHorus } from '#integraciones/horus/configuracion'
 import {
     entregarPendientesDe,
@@ -128,8 +129,13 @@ export async function payloadParaHorus(evento: string, p: Payload): Promise<Payl
         }
         case 'cliente.actualizado': {
             const clienteId = entero(p.cliente_id)
-            if (!clienteId) return null
-            return { cliente_id: clienteId, campos: Array.isArray(p.campos) ? p.campos : [] }
+            // Horus solo muestra la identidad: teléfono, dirección, coordenadas o zona (Iris 0.3.1)
+            // no le cambian nada y no se le envían.
+            const campos = (Array.isArray(p.campos) ? p.campos : []).filter((c): c is string =>
+                (CAMPOS_CLIENTE_IDENTIDAD as readonly unknown[]).includes(c),
+            )
+            if (!clienteId || campos.length === 0) return null
+            return { cliente_id: clienteId, campos }
         }
         case 'servicio.config_cambiada': {
             const servicioId = entero(p.servicio_id)

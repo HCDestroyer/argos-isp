@@ -1013,10 +1013,11 @@ const servicios: Ruta[] = [
         resumen: 'Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)',
         descripcion:
             'Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa ' +
-            '`iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija ' +
-            '`instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. ' +
-            '422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre ' +
-            'uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.',
+            '`iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta). `version` es opcional: si ' +
+            'viene y no coincide, 409 `conflicto_version`. Fija `instalado_en` (o ahora) y emite ' +
+            '`servicio.estado_cambiado` con `motivo: instalacion` y el origen. 409 `servicio_no_pendiente` si ' +
+            'el servicio ya no está `pendiente_instalacion` (una clave nueva sobre uno ya activo; se revisa antes ' +
+            'que la versión; de negocio, no se reintenta); 422 en `instalado_en` si es futura o anterior al alta.',
         etiqueta: 'servicios',
         permiso: 'servicios.activar_instalacion',
         cuerpo: v.activarInstalacionValidator,

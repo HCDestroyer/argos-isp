@@ -3657,7 +3657,7 @@ export interface paths {
         put?: never;
         /**
          * Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)
-         * @description Crea, la primera vez, el usuario técnico "Iris" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Opcionalmente restringido a routers o zonas. No revoca los anteriores.
+         * @description Crea, la primera vez, el usuario técnico "Iris" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Su alcance son las empresas del usuario Iris (o global), nunca zonas ni routers: `routers`/`zonas` no vacíos, o roles del usuario con alcance por zona o router, responden 422 `usuario_tecnico_solo_empresas` (contrato Iris 0.3.1 §1). No revoca los anteriores.
          */
         post: operations["irisGenerarToken"];
         delete?: never;
@@ -8620,7 +8620,7 @@ export interface paths {
         put?: never;
         /**
          * Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)
-         * @description Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.
+         * @description Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta). `version` es opcional: si viene y no coincide, 409 `conflicto_version`. Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 409 `servicio_no_pendiente` si el servicio ya no está `pendiente_instalacion` (una clave nueva sobre uno ya activo; se revisa antes que la versión; de negocio, no se reintenta); 422 en `instalado_en` si es futura o anterior al alta.
          */
         post: operations["serviciosActivarInstalacion"];
         delete?: never;
@@ -10629,6 +10629,16 @@ export interface components {
                 secreto: string;
             };
             conector_id: string;
+            /** @description true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1) */
+            alcance_global: boolean;
+            /** @description Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
+            empresas: {
+                id: number;
+                /** @description Nombre comercial */
+                nombre: string;
+                /** @description NIT sin guiones; null si la empresa aún no lo tiene */
+                nit: string | null;
+            }[];
         };
         CanjeLealtad: {
             id: number;
@@ -17235,6 +17245,8 @@ export interface components {
             ultimo_contacto: string | null;
             /** @description Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
             zona_id?: number | null;
+            /** @description Ubicación del router "lat,lng" en grados decimales, sin espacios, el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
+            coordenadas?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -32743,9 +32755,9 @@ export interface operations {
             content: {
                 "application/json": {
                     nombre?: string;
-                    /** @description Restringe el token a servicios de estos routers */
+                    /** @description No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas) */
                     routers?: number[];
-                    /** @description Restringe el token a clientes de estas zonas */
+                    /** @description No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas) */
                     zonas?: number[];
                 };
             };
@@ -49615,6 +49627,8 @@ export interface operations {
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
                     zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita */
+                    coordenadas?: string | null;
                     /**
                      * @description simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad
                      * @enum {string}
@@ -49759,6 +49773,8 @@ export interface operations {
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
                     zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita */
+                    coordenadas?: string | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
@@ -51848,8 +51864,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description version leída; si cambió responde 409 */
-                    version: number;
+                    /** @description Opcional: si viene y no coincide, 409 conflicto_version. Sin ella protegen la máquina de estados (solo sale de pendiente_instalacion; si no, 409 servicio_no_pendiente) y la Idempotency-Key */
+                    version?: number;
                     /**
                      * Format: date-time
                      * @description Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio

@@ -146,20 +146,21 @@ test.group('Horus · A3 código de cliente estable', () => {
 })
 
 test.group('Horus · A2 evento cliente.actualizado', () => {
-    test('se emite por outbox al cambiar nombre o tipo, no por otros campos', async ({ assert }) => {
+    test('se emite por outbox al cambiar nombre o tipo, no por el correo', async ({ assert }) => {
         const ctx = contextoPrueba()
         const cliente = await new CrearCliente().execute({ nombre: unico('Cliente') }, ctx)
         assert.isNull(await ultimoEventoCliente(cliente.id))
 
-        const telefono = await new EditarCliente().execute(
-            { id: cliente.id, version: cliente.version, telefono: '4444-0000' },
+        // el correo no lo muestra nadie fuera de Argos (teléfono y dirección sí: Iris 0.3.1)
+        const correo = await new EditarCliente().execute(
+            { id: cliente.id, version: cliente.version, email: `${unico('c')}@ejemplo.gt` },
             ctx,
         )
         assert.isNull(await ultimoEventoCliente(cliente.id))
 
         const nombre = unico('Nuevo nombre')
         const renombrado = await new EditarCliente().execute(
-            { id: cliente.id, version: telefono.version, nombre, tipo: 'empresa' },
+            { id: cliente.id, version: correo.version, nombre, tipo: 'empresa' },
             ctx,
         )
         const evento = await ultimoEventoCliente(cliente.id)

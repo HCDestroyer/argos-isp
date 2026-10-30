@@ -511,6 +511,46 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
         }
     })
 
+    test('cliente.actualizado con teléfono, dirección y coordenadas (Iris 0.3.1) se reenvía con sus campos', async ({
+        assert,
+    }) => {
+        const iris = await new HorusSimulado().iniciar()
+        try {
+            iris.responder(RECEPTOR, () => ({ status: 200 }))
+            await fijarConector(iris.url)
+            const clienteId = await crearCliente()
+            await crearServicio(clienteId)
+            const fila = await db.from('core.clientes').where('id', clienteId).first()
+            await new EditarCliente().execute(
+                {
+                    id: clienteId,
+                    version: fila.version,
+                    telefono: '2222-0101',
+                    direccion: 'Mixco, zona 4',
+                    coordenadas: '14.63,-90.60',
+                },
+                contextoPrueba(),
+            )
+            const ev = await db
+                .from('audit.outbox')
+                .where('evento', 'cliente.actualizado')
+                .whereRaw("(payload->>'cliente_id')::bigint = ?", [clienteId])
+                .first()
+            await consumidor.procesar({ id: ev.id, evento: ev.evento, payload: ev.payload })
+            await entregarPendientesIris()
+            const recibido = iris.de(RECEPTOR)[0]!.json
+            assert.deepEqual(recibido.payload, {
+                cliente_id: clienteId,
+                empresa_id: 1,
+                empresas: [1],
+                campos: ['telefono', 'direccion', 'coordenadas'],
+            })
+            assert.notInclude(JSON.stringify(recibido), '2222-0101')
+        } finally {
+            await iris.detener()
+        }
+    })
+
     test('cliente.actualizado real de A1 (EditarCliente) llega a Iris', async ({ assert }) => {
         const iris = await new HorusSimulado().iniciar()
         try {

@@ -49,6 +49,8 @@ export interface RouterVista {
     empresa_sugerida_id: number | null
     /** zona del router (opcional; no cambia el alcance del ACL) */
     zona_id: number | null
+    /** ubicación `"lat,lng"` (`network.routers.coordenadas`); null = sin ubicar */
+    coordenadas: string | null
     activo: boolean
     /** null = ninguna fuente periódica lo mide (`app/network/contacto_router.ts`) */
     en_linea: boolean | null
@@ -107,6 +109,7 @@ const COLUMNAS_ROUTER = [
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
     'empresa_sugerida_id',
     'zona_id',
+    'coordenadas',
     'activo',
     'version',
     'created_at',

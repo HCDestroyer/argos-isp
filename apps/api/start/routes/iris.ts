@@ -207,11 +207,12 @@ const iris: Ruta[] = [
         resumen: 'Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)',
         descripcion:
             'Crea, la primera vez, el usuario técnico "Iris" y su rol `integracion_iris` con los permisos del ' +
-            'contrato Iris §1.1 que existen en Argos. Opcionalmente restringido a routers o zonas. No revoca ' +
-            'los anteriores.',
+            'contrato Iris §1.1 que existen en Argos. Su alcance son las empresas del usuario Iris (o global), ' +
+            'nunca zonas ni routers: `routers`/`zonas` no vacíos, o roles del usuario con alcance por zona o ' +
+            'router, responden 422 `usuario_tecnico_solo_empresas` (contrato Iris 0.3.1 §1). No revoca los anteriores.',
         etiqueta: 'integraciones',
         permiso: 'iris.generar_token',
-        cuerpo: v.generarTokenHorusValidator,
+        cuerpo: v.generarTokenIrisValidator,
         respuesta: { status: 201, descripcion: 'Token generado', esquema: TokenIrisCreado },
         handler: (ctx, { cuerpo }) => new GenerarTokenIris().execute(cuerpo, ctx.contextoAccion()),
     }),

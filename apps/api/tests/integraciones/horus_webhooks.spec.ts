@@ -258,6 +258,38 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
         }
     })
 
+    test('cliente.actualizado: Horus recibe solo los campos de identidad; sin ellos no se le envía (Iris 0.3.1)', async ({
+        assert,
+    }) => {
+        const horus = await new HorusSimulado().iniciar()
+        try {
+            horus.responder('/receptor', () => ({ status: 200 }))
+            await fijarConector({
+                url_base: horus.url,
+                webhook_salida_url: `${horus.url}/receptor`,
+                webhook_salida_secreto: SECRETO_SALIDA,
+            })
+            const clienteId = await crearCliente()
+            // solo contacto y ubicación (lo que pide Iris): a Horus no le cambia nada
+            await evento('cliente.actualizado', {
+                cliente_id: clienteId,
+                campos: ['telefono', 'direccion', 'coordenadas', 'zona_id'],
+            })
+            assert.lengthOf(await db.from('integraciones.horus_envios'), 0)
+            // mezclado: solo la identidad
+            await evento('cliente.actualizado', {
+                cliente_id: clienteId,
+                campos: ['nombre', 'telefono', 'movil'],
+            })
+            await entregarPendientes()
+            const cuerpos = horus.de('/receptor').map((p) => p.json)
+            assert.lengthOf(cuerpos, 1)
+            assert.deepEqual(cuerpos[0].payload, { cliente_id: clienteId, campos: ['nombre'] })
+        } finally {
+            await horus.detener()
+        }
+    })
+
     test('un envío recién registrado sale en la entrega inmediata (reloj de la base, no el de Node)', async ({
         assert,
     }) => {

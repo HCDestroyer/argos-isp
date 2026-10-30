@@ -243,7 +243,7 @@ test.group('Servicios · pendiente de instalación', (group) => {
         assert.deepEqual(ok.body().planta, { slot: '1', potencia_dbm: '-60.00' })
     })
 
-    test('Idempotency-Key: el reintento devuelve lo mismo; una clave nueva da 422 servicio_no_pendiente', async ({
+    test('Idempotency-Key: el reintento devuelve lo mismo; una clave nueva da 409 servicio_no_pendiente', async ({
         client,
         assert,
     }) => {
@@ -256,14 +256,67 @@ test.group('Servicios · pendiente de instalación', (group) => {
         assert.equal(b.header('idempotent-replayed'), 'true')
         assert.lengthOf(await eventosEstado(s.id), 1)
 
-        const c = await estado(activar(client, token, s.id, { version: s.version }, unico('otra')), 422)
+        const c = await estado(activar(client, token, s.id, { version: s.version }, unico('otra')), 409)
         assert.equal(c.body().type, 'urn:argosisp:problema:servicio_no_pendiente')
+        assert.equal(c.body().status, 409)
         // aun con la versión actual: el servicio ya no está pendiente
         const d = await estado(
             activar(client, token, s.id, { version: a.body().version }, unico('otra')),
-            422,
+            409,
         )
         assert.equal(d.body().type, 'urn:argosisp:problema:servicio_no_pendiente')
+        // y sin versión (cola de Iris con otra clave): el mismo 409, nada se repite
+        const e = await estado(activar(client, token, s.id, {}, unico('otra')), 409)
+        assert.equal(e.body().type, 'urn:argosisp:problema:servicio_no_pendiente')
+        assert.lengthOf(await eventosEstado(s.id), 1)
+    })
+
+    test('sin version (Iris 0.3.1): activa aunque el servicio cambió; el reintento con la misma clave repite la respuesta', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['soporte'])
+        const s = await crearPendiente(client, token)
+        // Iris encola con la version leída; mientras tanto alguien edita el servicio (version + 1)
+        await db
+            .from('core.servicios')
+            .where('id', s.id)
+            .update({ version: db.knexRawQuery('version + 1') })
+        const clave = `iris:instalacion:${unico('ord')}`
+        const cuerpo = { origen_tipo: 'iris_orden', origen_id: unico('orden') }
+        const a = await estado(activar(client, token, s.id, cuerpo, clave), 200)
+        assert.equal(a.body().estado, 'activo')
+        assert.equal(a.body().version, s.version + 2)
+        assert.isNotNull(a.body().instalado_en)
+
+        // los mismos bytes con la misma clave: la respuesta guardada, sin otro evento
+        const b = await estado(activar(client, token, s.id, cuerpo, clave), 200)
+        assert.deepEqual(b.body(), a.body())
+        assert.equal(b.header('idempotent-replayed'), 'true')
+        assert.lengthOf(await eventosEstado(s.id), 1)
+
+        const auditoria = await db
+            .from('audit.acciones')
+            .where({ accion: 'servicios.activar_instalacion', entidad_tipo: 'servicio', entidad_id: s.id })
+            .where('resultado', 'ok')
+        assert.lengthOf(auditoria, 1)
+    })
+
+    test('con version vieja sigue respondiendo 409 conflicto_version (no se activa)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['soporte'])
+        const s = await crearPendiente(client, token)
+        await db
+            .from('core.servicios')
+            .where('id', s.id)
+            .update({ version: db.knexRawQuery('version + 1') })
+        const r = await estado(activar(client, token, s.id, { version: s.version }, unico('k')), 409)
+        assert.equal(r.body().type, 'urn:argosisp:problema:conflicto_version')
+        const fila = await db.from('core.servicios').where('id', s.id).firstOrFail()
+        assert.equal(fila.estado, 'pendiente_instalacion')
+        assert.lengthOf(await eventosEstado(s.id), 0)
     })
 
     test('sin Idempotency-Key: 400; versión vieja: 409; fechas futura o anterior al alta: 422', async ({

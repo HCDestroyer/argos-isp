@@ -3,6 +3,11 @@ import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { generarTokenApi } from '#core/auth/token_api_guard'
 import { verToken, type TokenApiVista } from '#core/consultas/acl'
 import type { AlcancesToken } from '#core/acl'
+import {
+    CODIGO_SOLO_EMPRESAS,
+    rechazarAlcanceDeRed,
+    usuarioSoloEmpresas,
+} from '#core/alcance_usuario_tecnico'
 
 export interface EntradaCrearTokenApi {
     usuario_id: number
@@ -19,7 +24,8 @@ export interface SalidaCrearTokenApi {
 /**
  * Crea un token de API para un usuario (integraciones, agentes de IA). Se guarda solo su sha256;
  * el valor se devuelve una única vez. `alcances.permisos` recorta los permisos del usuario y
- * `routers`/`zonas`/`cajas` restringen su alcance.
+ * `routers`/`zonas`/`cajas` restringen su alcance, salvo en el usuario técnico de Iris, que solo
+ * tiene alcance por empresas (422 `usuario_tecnico_solo_empresas`).
  */
 export default class CrearTokenApi extends DomainAction<EntradaCrearTokenApi, SalidaCrearTokenApi> {
     readonly nombre = 'tokens.crear'
@@ -33,6 +39,21 @@ export default class CrearTokenApi extends DomainAction<EntradaCrearTokenApi, Sa
         if (!usuario) throw new NoEncontrado(`El usuario ${input.usuario_id} no existe`)
 
         const alcances = input.alcances ?? {}
+        // Usuario técnico de Iris: sin `routers` ni `zonas` (contrato Iris 0.3.1 §1)
+        const tecnico = await usuarioSoloEmpresas(t.trx, input.usuario_id)
+        if (tecnico) {
+            const deRed = (['routers', 'zonas'] as const).filter((c) => (alcances[c]?.length ?? 0) > 0)
+            if (deRed.length > 0) {
+                rechazarAlcanceDeRed(
+                    tecnico,
+                    deRed.map((c) => ({
+                        field: `alcances.${c}`,
+                        rule: CODIGO_SOLO_EMPRESAS,
+                        message: `Un token de ${tecnico} no se restringe por ${c}: su alcance es el de sus empresas`,
+                    })),
+                )
+            }
+        }
         if (alcances.permisos) {
             const conocidos = new Set(
                 (

@@ -24,7 +24,8 @@ export interface SalidaAbrirEnIris {
 /**
  * `iris.abrir`: "Ver en Iris" (Argos es el origen del autologin, contrato Iris §1.3 → Horus §1.5).
  * El **servidor** de Argos pide el ticket a Iris con el `iris_pat_` guardado, con el usuario de la
- * sesión (`id_externo` = `u-<id>`, correo y nombre) y el destino (`ticket`, `orden` o `prospecto`,
+ * sesión (`id_externo` = `u-<id>`, correo, nombre y `correo_verificado: false`, porque Argos no
+ * verifica correos; contrato Iris 0.3.1 §1.3) y el destino (`ticket`, `orden` o `prospecto`,
  * ids de Iris), y devuelve al panel solo la URL. El navegador nunca pide el ticket; Iris aplica su
  * propio ACL al entrar. Auditada (quién y a qué recurso).
  *
@@ -63,6 +64,9 @@ export default class AbrirEnIris extends DomainAction<EntradaAbrirEnIris, Salida
                         id_externo: `u-${usuarioId}`,
                         correo: usuario?.email ?? null,
                         nombre: usuario?.nombre ?? null,
+                        // Argos no verifica correos (contrato Iris 0.3.1 §1.3): con false, Iris no
+                        // vincula por su cuenta y el vínculo lo hace un admin de Iris
+                        correo_verificado: false,
                     },
                     destino: { tipo: input.destino.tipo, id_externo: String(input.destino.id_externo) },
                 }),
