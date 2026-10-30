@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import Decimal from 'decimal.js'
 
 definePageMeta({ permiso: 'servicios.ver' })
 
@@ -28,8 +27,6 @@ const promesas = shallowRef<Promesa[]>([])
 const cargandoPromesas = ref(false)
 const problemaPromesas = ref<Problem | null>(null)
 const promesaAbierta = ref(false)
-/** Lo pendiente del servicio (estado de cuenta), para sugerir el monto de la promesa. */
-const pendienteServicio = ref<string | null>(null)
 
 const accionAbierta = ref(false)
 const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
@@ -187,25 +184,8 @@ async function cargarPromesas() {
     problemaPromesas.value = resultado.ok ? null : resultado.problema
 }
 
-async function cargarPendiente(actual: Servicio) {
-    pendienteServicio.value = null
-    if (!puede('clientes.estado_cuenta')) {
-        return
-    }
-    const resultado = await useClientes().estadoCuenta(actual.cliente_id)
-    if (!resultado.ok) {
-        return
-    }
-    const pendiente = resultado.data.facturas_pendientes
-        .filter(f => f.servicio_id === actual.id)
-        .reduce((suma, f) => suma.plus(saldoFactura(f)), new Decimal(0))
-    pendienteServicio.value = pendiente.gt(0) ? pendiente.toFixed(2) : null
-}
-
+/** La promesa cubre todo lo vencido: el modal lee qué facturas y cuánto (simulación de A3). */
 function abrirPromesa() {
-    if (servicio.value) {
-        void cargarPendiente(servicio.value)
-    }
     promesaAbierta.value = true
 }
 
@@ -823,6 +803,10 @@ onMounted(cargar)
                                 {{ formatearQuetzales(promesa.monto) }} · vence {{ formatearFechaHora(promesa.vence_en) }}
                             </span>
                             <span class="text-xs text-muted">Promesa #{{ promesa.id }} · {{ CANALES_PROMESA[promesa.canal] }} · {{ formatearFechaHora(promesa.created_at) }}</span>
+                            <PromesaCumplimiento
+                                :promesa="promesa"
+                                class="my-1"
+                            />
                             <EvaluacionPromesa
                                 :promesa="promesa"
                                 compacta
@@ -869,7 +853,6 @@ onMounted(cargar)
             <PromesaCrearModal
                 v-model:open="promesaAbierta"
                 :servicio="servicio"
-                :sugerido="pendienteServicio"
                 @creada="alCrearPromesa"
             />
 

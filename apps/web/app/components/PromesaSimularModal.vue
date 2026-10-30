@@ -4,8 +4,10 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Simulador de promesas (`POST /promesas/simular`, `promesas.ver`): evalúa todas las reglas de la
- * plantilla para un servicio, monto, fecha y canal sin crear nada. Muestra regla por regla qué
- * aplica y por qué, y después ofrece "Crear con estos datos" (`POST /promesas`, `promesas.crear`).
+ * plantilla para un servicio, fecha y canal sin crear nada. Sin monto: la promesa cubre todo lo
+ * vencido (decisión del PM, 29 oct) y la simulación dice qué facturas, el total, el abono inicial y
+ * la fecha límite. Muestra regla por regla qué aplica y por qué, y después ofrece "Crear con estos
+ * datos" (`POST /promesas`, `promesas.crear`).
  */
 const props = withDefaults(defineProps<{
     /** Servicio ya elegido (ficha del servicio); sin él se elige cliente y servicio. */
@@ -27,7 +29,7 @@ const { puede } = usePermisos()
 const hoy = hoyGuatemala()
 const formulario = useTemplateRef('formulario')
 
-const estado = reactive<EntradaSimulacion>({ servicio_id: 0, monto: '', vence: '', canal: 'operador' })
+const estado = reactive<EntradaSimulacion>({ servicio_id: 0, vence: '', canal: 'operador' })
 const simulando = ref(false)
 const problema = ref<Problem | null>(null)
 const simulacion = shallowRef<SimulacionPromesa | null>(null)
@@ -76,7 +78,7 @@ watch(abierto, (valor) => {
     if (!valor) {
         return
     }
-    Object.assign(estado, { servicio_id: props.servicio?.id ?? 0, monto: '', vence: '', canal: puede('promesas.aprobar') ? 'supervisor' : 'operador' })
+    Object.assign(estado, { servicio_id: props.servicio?.id ?? 0, vence: '', canal: puede('promesas.aprobar') ? 'supervisor' : 'operador' })
     if (!props.servicio) {
         clienteElegido.value = props.clienteInicial
         clienteId.value = props.clienteInicial?.id ?? 0
@@ -88,7 +90,7 @@ watch(abierto, (valor) => {
 }, { immediate: true })
 
 // Cambiar un dato invalida la simulación: crear solo con lo que se simuló.
-watch(() => [estado.servicio_id, estado.monto, estado.vence, estado.canal], () => {
+watch(() => [estado.servicio_id, estado.vence, estado.canal], () => {
     if (simulacion.value && !creada.value) {
         simulacion.value = null
         problemaCreacion.value = null
@@ -115,8 +117,11 @@ async function simular(evento: FormSubmitEvent<SalidaSimulacion>) {
 const decision = computed(() => (simulacion.value ? DECISIONES[decisionSimulacion(simulacion.value.resultado)] : null))
 const creable = computed(() => simulacion.value !== null && puede('promesas.crear') && creableDesdeSimulacion(simulacion.value))
 const validacionesFallidas = computed(() => simulacion.value?.validaciones.filter(v => !v.ok) ?? [])
+const cobertura = computed(() => (simulacion.value ? coberturaDeSimulacion(simulacion.value) : null))
+/** Lo que impide crear sin importar la fecha (nada vencido, falta el abono); la promesa abierta ya sale en validaciones. */
+const motivoCobertura = computed(() => (simulacion.value && !validacionesFallidas.value.length ? motivoNoCreable(simulacion.value) : null))
 
-/** Crea con exactamente el monto, el vencimiento y el canal simulados (los que eligió la API si se dejaron vacíos). */
+/** Crea con exactamente el vencimiento y el canal simulados (los que eligió la API si se dejaron vacíos); el monto lo calcula la API. */
 async function crear() {
     const datos = simulacion.value
     if (!datos || !creable.value || (datos.canal !== 'operador' && datos.canal !== 'supervisor')) {
@@ -124,7 +129,7 @@ async function crear() {
     }
     creando.value = true
     problemaCreacion.value = null
-    const resultado = await usePromesas().crear({ servicio_id: datos.servicio_id, monto: datos.monto, vence_en: datos.vence_en, canal: datos.canal }, clave)
+    const resultado = await usePromesas().crear({ servicio_id: datos.servicio_id, vence_en: datos.vence_en, canal: datos.canal }, clave)
     creando.value = false
     if (!resultado.ok) {
         problemaCreacion.value = resultado.problema
@@ -160,6 +165,7 @@ async function crear() {
                         size="sm"
                     />
                 </p>
+                <PromesaCumplimiento :promesa="creada" />
                 <EvaluacionPromesa :promesa="creada" />
             </div>
 
@@ -204,23 +210,11 @@ async function crear() {
                         </UFormField>
                     </template>
 
-                    <div class="grid gap-4 sm:grid-cols-3">
-                        <UFormField
-                            label="Monto"
-                            name="monto"
-                            help="Vacío: la deuda pendiente."
-                        >
-                            <UInput
-                                v-model="estado.monto"
-                                inputmode="decimal"
-                                placeholder="Deuda pendiente"
-                                class="w-full"
-                            >
-                                <template #leading>
-                                    <span class="text-sm text-muted">Q</span>
-                                </template>
-                            </UInput>
-                        </UFormField>
+                    <p class="text-xs text-muted">
+                        La promesa cubre todo lo vencido del servicio: el monto lo calcula Argos.
+                    </p>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
                         <UFormField
                             label="Pagará a más tardar"
                             name="vence"
@@ -284,6 +278,11 @@ async function crear() {
                         </p>
                     </div>
 
+                    <PromesaCobertura
+                        v-if="cobertura"
+                        :cobertura="cobertura"
+                    />
+
                     <UAlert
                         v-if="validacionesFallidas.length"
                         color="error"
@@ -302,27 +301,14 @@ async function crear() {
                         description="La promesa quedaría activa pero no reactivaría el servicio: un operador lo suspendió."
                     />
 
-                    <dl class="grid grid-cols-2 gap-3 rounded-lg bg-elevated p-3 text-sm sm:grid-cols-4">
+                    <dl class="grid grid-cols-2 gap-3 rounded-lg bg-elevated p-3 text-sm sm:grid-cols-3">
                         <DatoFicha
                             etiqueta="Deuda pendiente"
                             :valor="formatearQuetzales(simulacion.deuda.pendiente)"
                         />
                         <DatoFicha
-                            etiqueta="Vencida"
-                            :valor="`${formatearQuetzales(simulacion.deuda.vencida)} (${simulacion.deuda.facturas_vencidas})`"
-                        />
-                        <DatoFicha
-                            etiqueta="Último día posible"
-                            :valor="formatearFecha(simulacion.limites.fecha_maxima)"
-                        />
-                        <DatoFicha
                             etiqueta="Promesas del periodo"
                             :valor="cupoPeriodo(simulacion.limites)"
-                        />
-                        <DatoFicha
-                            v-if="!abonoFaltante(simulacion.limites).isZero()"
-                            etiqueta="Abono que falta"
-                            :valor="formatearQuetzales(abonoFaltante(simulacion.limites))"
                         />
                         <DatoFicha
                             v-if="simulacion.historial.cumplimiento_pct !== null"
@@ -381,8 +367,11 @@ async function crear() {
                         class="text-xs text-muted"
                         data-prueba="simulacion-no-creable"
                     >
-                        <template v-if="simulacion.resultado === 'rechazada'">
-                            Con estos datos la promesa se rechazaría: cambia la fecha, el monto o el canal y vuelve a simular.
+                        <template v-if="motivoCobertura">
+                            {{ motivoCobertura }}
+                        </template>
+                        <template v-else-if="simulacion.resultado === 'rechazada'">
+                            Con estos datos la promesa se rechazaría: cambia la fecha o el canal y vuelve a simular.
                         </template>
                         <template v-else>
                             Desde el panel se crean promesas con canal Operador o Supervisor; las del portal y la IA las crea el cliente o el agente.

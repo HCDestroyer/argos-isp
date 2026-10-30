@@ -268,6 +268,11 @@ onMounted(async () => {
                                 · {{ CANALES_PROMESA[row.original.canal] }}
                             </span>
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
+                            <PromesaCumplimiento
+                                :promesa="row.original"
+                                compacta
+                                class="sm:hidden"
+                            />
                             <!-- En teléfono, estado, evaluación y "Aprobar" van en la misma celda. -->
                             <div class="mt-1 flex flex-col gap-1 whitespace-normal sm:hidden">
                                 <UBadge
@@ -325,7 +330,14 @@ onMounted(async () => {
                     </template>
 
                     <template #monto-cell="{ row }">
-                        <span class="tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                        <div class="flex flex-col items-end gap-0.5 whitespace-normal">
+                            <span class="tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                            <PromesaCumplimiento
+                                :promesa="row.original"
+                                compacta
+                                class="max-w-48 text-right"
+                            />
+                        </div>
                     </template>
 
                     <template #estado-cell="{ row }">

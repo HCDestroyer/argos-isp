@@ -4,7 +4,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { aplicarBloqueoPorEstado } from '../adicionales/rutas'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken } from '../comun'
-import { evaluarPromesa } from './simulador'
+import { coberturaDeServicio, evaluarPromesa } from './simulador'
 
 type Promesa = Schema<'Promesa'>
 type Canal = Promesa['canal']
@@ -93,7 +93,29 @@ function cerrar(solicitud: SolicitudFixture, estado: 'rechazada' | 'cancelada', 
         }
     }
     registrarAccion(solicitud, `promesas.${accion}`, { tipo: 'promesa', id: promesa.id }, { motivo: texto })
-    return { status: 200, cuerpo: promesa }
+    return { status: 200, cuerpo: conSaldosDeHoy(promesa) }
+}
+
+/**
+ * Como `verPromesa` (A3): las facturas que cubre con su saldo de hoy (`0.00` si ya no está
+ * pendiente) y su estado actual. Con la regla `monto` (legado) la lista va vacía.
+ */
+function conSaldosDeHoy(promesa: Promesa): Promesa {
+    if (promesa.regla_cumplimiento !== 'facturas' || !promesa.facturas?.length) {
+        return promesa
+    }
+    return {
+        ...promesa,
+        facturas: promesa.facturas.map((cubierta) => {
+            const factura = bd.facturas.find(f => f.id === cubierta.factura_id)
+            if (!factura) {
+                return cubierta
+            }
+            const pendiente = factura.estado === 'emitida' || factura.estado === 'parcial' || factura.estado === 'vencida'
+            const saldo = pendiente ? new Decimal(factura.total).minus(factura.pagado) : new Decimal(0)
+            return { ...cubierta, saldo: saldo.toFixed(2), estado: factura.estado }
+        }),
+    }
 }
 
 function usuario(solicitud: SolicitudFixture): number | null {
@@ -114,6 +136,7 @@ export const rutasPromesas: RutasFixture = {
             .filter(p => cliente === undefined || p.cliente_id === cliente)
             .filter(p => !estado || p.estado === estado)
             .sort((a, b) => b.id - a.id)
+            .map(conSaldosDeHoy)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
 
@@ -131,8 +154,9 @@ export const rutasPromesas: RutasFixture = {
         else if (vence.getTime() <= Date.now()) {
             errores.push({ field: 'vence_en', message: 'La promesa debe vencer en el futuro', rule: 'after' })
         }
-        if (typeof cuerpo.monto !== 'string' || !MONTO.test(cuerpo.monto) || new Decimal(cuerpo.monto).lte(0)) {
-            errores.push({ field: 'monto', message: 'El monto debe ser mayor que cero, con hasta 2 decimales', rule: 'regex' })
+        // `monto` es obsoleto y se ignora (la promesa cubre todo lo vencido); el validador solo revisa su forma.
+        if (cuerpo.monto !== undefined && (typeof cuerpo.monto !== 'string' || !MONTO.test(cuerpo.monto))) {
+            errores.push({ field: 'monto', message: 'El monto debe tener hasta 2 decimales', rule: 'regex' })
         }
         if (cuerpo.canal !== undefined && !esCanal(cuerpo.canal)) {
             errores.push({ field: 'canal', message: 'Canal inválido', rule: 'enum' })
@@ -152,14 +176,9 @@ export const rutasPromesas: RutasFixture = {
             return problemaCodigo(409, 'promesa_abierta', 'Promesa abierta', `El servicio ${servicio.id} ya tiene la promesa ${abierta.id} ${abierta.estado === 'activa' ? 'activa' : 'pendiente de aprobación'}`)
         }
         const canal = esCanal(cuerpo.canal) ? cuerpo.canal : 'operador'
-        const monto = new Decimal(String(cuerpo.monto))
-        const pendiente = bd.facturas
-            .filter(f => f.servicio_id === servicio.id && (f.estado === 'emitida' || f.estado === 'vencida' || f.estado === 'parcial'))
-            .reduce((suma, f) => suma.plus(f.total).minus(f.pagado), new Decimal(0))
-        if (pendiente.gt(0) && monto.gt(pendiente)) {
-            return datosInvalidos([{ field: 'monto', message: `El monto supera la deuda pendiente del servicio (Q${pendiente.toFixed(2)})`, rule: 'monto_maximo' }])
-        }
-        const evaluacion = evaluarPromesa(servicio, canal, vence, monto)
+        // Como `CrearPromesaPago` (29 oct): el monto es el total vencido y la promesa guarda sus facturas.
+        const cobertura = coberturaDeServicio(servicio.id)
+        const evaluacion = evaluarPromesa(servicio, canal, vence)
         const estado: Promesa['estado'] = evaluacion.resultado === 'aprobada' ? 'activa' : evaluacion.resultado
         const momento = ahora()
         const nueva: Promesa = {
@@ -168,7 +187,9 @@ export const rutasPromesas: RutasFixture = {
             servicio_id: servicio.id,
             cliente_id: servicio.cliente_id,
             vence_en: vence.toISOString(),
-            monto: monto.toFixed(2),
+            monto: cobertura.monto.toFixed(2),
+            regla_cumplimiento: 'facturas',
+            facturas: cobertura.facturas.map(f => ({ ...f, saldo: f.monto, estado: 'vencida' })),
             estado,
             canal,
             aprobada_por: null,
@@ -181,7 +202,7 @@ export const rutasPromesas: RutasFixture = {
         if (estado === 'activa') {
             activarPorPromesa(servicio.id)
         }
-        registrarAccion(solicitud, 'promesas.crear', { tipo: 'promesa', id: nueva.id }, { servicio_id: servicio.id, vence_en: nueva.vence_en, monto: nueva.monto, canal })
+        registrarAccion(solicitud, 'promesas.crear', { tipo: 'promesa', id: nueva.id }, { servicio_id: servicio.id, vence_en: nueva.vence_en, canal })
         return { status: 201, cuerpo: nueva }
     })),
 
@@ -205,7 +226,7 @@ export const rutasPromesas: RutasFixture = {
         })
         activarPorPromesa(promesa.servicio_id)
         registrarAccion(solicitud, 'promesas.aprobar', { tipo: 'promesa', id: promesa.id }, { nota: typeof nota === 'string' ? nota : null })
-        return { status: 200, cuerpo: promesa }
+        return { status: 200, cuerpo: conSaldosDeHoy(promesa) }
     })),
 
     'POST /api/v1/promesas/:id/rechazar': conPermiso('promesas.rechazar', conIdempotencia(solicitud => cerrar(solicitud, 'rechazada', ['pendiente_aprobacion'], 'rechazar'))),
