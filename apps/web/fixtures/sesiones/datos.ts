@@ -29,6 +29,7 @@ export function nuevaSesion(id: number, servicio: Servicio, inicio: string): Ses
         bytes_in: 0,
         bytes_out: 0,
         causa_fin: null,
+        origen: 'accounting',
     }
 }
 

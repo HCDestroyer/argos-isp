@@ -21,6 +21,8 @@ import {
 import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
+import { reconciliarSecrets, sesionesQuitadas } from '#network/routeros/pppoe_local'
+import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
     aplicarCorte,
     aplicarEstado,
@@ -72,6 +74,8 @@ export interface ResultadoReconciliar {
      * que hubiera queda como está) y se emitió `routeros.fallido`. null si no hubo problema.
      */
     error_portal: string | null
+    /** Secrets PPPoE que el router rechazó (`contratos/pppoe-local.md` §2); cada uno con `routeros.fallido` */
+    errores_secrets: string[]
 }
 
 /**
@@ -105,7 +109,8 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             salida.correcciones.length > 0 ||
             salida.error !== null ||
             salida.errores_velocidad.length > 0 ||
-            salida.error_portal !== null
+            salida.error_portal !== null ||
+            salida.errores_secrets.length > 0
         )
     }
 
@@ -122,6 +127,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             colas_simples: null,
             errores_velocidad: [],
             error_portal: null,
+            errores_secrets: [],
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
         const router = await routerDispatcher(input.router_id, t.trx, this.#red)
@@ -240,6 +246,29 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     salida.correcciones.push(
                         ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
                     )
+                }
+                // Secrets PPPoE (`contratos/pppoe-local.md` §7): después de los perfiles a los que
+                // apuntan y antes de borrar los que sobran.
+                if (router.con_credenciales) {
+                    const { correcciones, avisos, fallidos } = await reconciliarSecrets(
+                        cliente,
+                        input.router_id,
+                        router.red.modo_seguridad ?? 'radius',
+                        todos,
+                        ctx,
+                    )
+                    salida.correcciones.push(...correcciones)
+                    salida.avisos.push(...avisos)
+                    await cerrarSesionesQuitadas(t, input.router_id, sesionesQuitadas(correcciones))
+                    for (const f of fallidos) {
+                        salida.errores_secrets.push(`servicio ${f.servicio_id}: ${f.error}`)
+                        await t.emit('routeros.fallido', {
+                            servicio_id: f.servicio_id,
+                            router_id: input.router_id,
+                            operacion: f.operacion,
+                            error: f.error,
+                        })
+                    }
                 }
                 if (velocidad && !(await enTransicion(input.router_id))) {
                     const despues = await leerVelocidadRouter(cliente)

@@ -625,7 +625,10 @@ export const Sesion = definirEsquema(
         id,
         servicio_id: nulable(id),
         router_id: nulable(id),
-        nas_ip: texto,
+        nas_ip: {
+            ...nulable(texto),
+            description: 'IP del NAS; null solo en una sesión de sondeo de un router sin RADIUS y sin nas_ip',
+        },
         acct_session_id: texto,
         user_ppp: texto,
         ipv4: nulable(texto),
@@ -636,6 +639,11 @@ export const Sesion = definirEsquema(
         bytes_in: entero,
         bytes_out: entero,
         causa_fin: nulable(texto),
+        origen: {
+            ...enumerado(['accounting', 'sondeo']),
+            description:
+                '`accounting`: RADIUS (con contadores). `sondeo`: router sin RADIUS, abierta y cerrada por el sondeo de /ppp/active, sin consumo (bytes en 0)',
+        },
     }),
 )
 
@@ -1302,7 +1310,7 @@ export const SincronizacionServicio = definirEsquema(
                     router_id: id,
                     ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
                     comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
-                    accion: enumerado(['creado', 'actualizado', 'borrado']),
+                    accion: enumerado(['creado', 'actualizado', 'borrado', 'desconectado']),
                     duplicados: entero,
                 },
                 ['duplicados'],

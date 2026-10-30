@@ -63,6 +63,7 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/ip/dhcp-server/lease': { requeridas: ['address', 'mac-address'], unicas: [['mac-address', 'server']] },
     '/ip/arp': { requeridas: ['address', 'interface'], unicas: [['address', 'interface']] },
     '/ppp/profile': { requeridas: ['name'], unicas: [['name']] },
+    '/ppp/secret': { requeridas: ['name'], unicas: [['name']] },
     '/ip/firewall/filter': { requeridas: ['chain'], unicas: [] },
     '/ip/firewall/nat': { requeridas: ['chain'], unicas: [] },
     '/ipv6/firewall/filter': { requeridas: ['chain'], unicas: [] },
@@ -177,6 +178,11 @@ export class RouterOSFalso {
      * RouterOS 7: `400` con `failure: Status 404, File not found` (`'404, File not found'`…).
      */
     readonly respuestasFetch = new Map<string, string>()
+    /**
+     * Usuario de la API sin la política `sensitive`: `GET /ppp/secret` no devuelve `password` (como
+     * RouterOS). Por defecto la devuelve.
+     */
+    ocultarPassword = false
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -371,6 +377,15 @@ export class RouterOSFalso {
             return this.#json(res, 200, [{ status: 'finished', downloaded: '1', total: '1', duration: '1s' }])
         }
 
+        // `/ppp active remove`: el único borrado en un menú de solo lectura (PPPoE sin RADIUS).
+        if (metodo === 'DELETE' && camino.startsWith('/ppp/active/')) {
+            const activas = this.lectura('/ppp/active')
+            const indice = activas.findIndex((o) => o['.id'] === decodeURIComponent(camino.slice(12)))
+            if (indice < 0) return this.#error(res, 404, 'Not Found', 'no such item')
+            activas.splice(indice, 1)
+            res.writeHead(204).end()
+            return
+        }
         const soloLectura = RUTAS_LECTURA.find((r) => camino === r)
         if (soloLectura && metodo === 'GET') {
             const filtros = [...url.searchParams.entries()]
@@ -400,13 +415,15 @@ export class RouterOSFalso {
         if (id !== null && indice < 0) return this.#error(res, 404, 'Not Found', 'no such item')
 
         if (metodo === 'GET') {
-            if (id !== null) return this.#json(res, 200, tabla[indice])
+            const ver = (o: ObjetoRouterOS): ObjetoRouterOS => {
+                if (ruta !== '/ppp/secret' || !this.ocultarPassword) return o
+                const resto: ObjetoRouterOS = { ...o }
+                delete resto.password
+                return resto
+            }
+            if (id !== null) return this.#json(res, 200, ver(tabla[indice]!))
             const filtros = [...url.searchParams.entries()]
-            return this.#json(
-                res,
-                200,
-                tabla.filter((o) => filtros.every(([k, v]) => o[k] === v)),
-            )
+            return this.#json(res, 200, tabla.filter((o) => filtros.every(([k, v]) => o[k] === v)).map(ver))
         }
         if (metodo === 'DELETE' && id !== null) {
             const enUso = this.#enUso(ruta, tabla[indice]!)
@@ -483,6 +500,9 @@ export class RouterOSFalso {
         ) {
             return `input does not match any value of kind`
         }
+        if (ruta === '/ppp/secret' && props.profile && !existe('/ppp/profile', props.profile)) {
+            return `input does not match any value of profile`
+        }
         if (ruta === '/ppp/profile' && props['parent-queue'] && props['parent-queue'] !== 'none') {
             if (!existe('/queue/simple', props['parent-queue'])) {
                 return `input does not match any value of parent-queue`
@@ -512,6 +532,9 @@ export class RouterOSFalso {
             if (this.tabla('/ppp/profile').some((o) => o['parent-queue'] === nombre)) {
                 return 'queue is used by ppp profile'
             }
+        }
+        if (ruta === '/ppp/profile' && this.tabla('/ppp/secret').some((o) => o.profile === nombre)) {
+            return 'profile is used by ppp secret'
         }
         if (ruta === '/queue/tree' && this.tabla('/queue/tree').some((o) => o.parent === nombre)) {
             return 'queue has children'

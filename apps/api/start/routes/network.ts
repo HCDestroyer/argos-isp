@@ -822,7 +822,8 @@ const sesiones: Ruta[] = [
         operacion: 'sesionesDesconectar',
         resumen: 'Desconectar sesión (Disconnect-Request al NAS)',
         descripcion:
-            'Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y ' +
+            'Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión (en una ' +
+            'sesión de sondeo de un router sin RADIUS, el dispatcher de RouterOS la quita de /ppp/active y la cierra) y ' +
             'registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. ' +
             '404 si no existe, 409 si ya terminó.',
         etiqueta: 'sesiones',

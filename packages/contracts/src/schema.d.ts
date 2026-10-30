@@ -9321,7 +9321,7 @@ export interface paths {
         put?: never;
         /**
          * Desconectar sesión (Disconnect-Request al NAS)
-         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
+         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión (en una sesión de sondeo de un router sin RADIUS, el dispatcher de RouterOS la quita de /ppp/active y la cierra) y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
          */
         post: operations["sesionesDesconectar"];
         delete?: never;
@@ -17813,7 +17813,8 @@ export interface components {
             id: number;
             servicio_id: number | null;
             router_id: number | null;
-            nas_ip: string;
+            /** @description IP del NAS; null solo en una sesión de sondeo de un router sin RADIUS y sin nas_ip */
+            nas_ip: string | null;
             acct_session_id: string;
             user_ppp: string;
             ipv4: string | null;
@@ -17826,6 +17827,11 @@ export interface components {
             bytes_in: number;
             bytes_out: number;
             causa_fin: string | null;
+            /**
+             * @description `accounting`: RADIUS (con contadores). `sondeo`: router sin RADIUS, abierta y cerrada por el sondeo de /ppp/active, sin consumo (bytes en 0)
+             * @enum {string}
+             */
+            origen: "accounting" | "sondeo";
         };
         SesionIniciada: {
             /** @description Token Bearer opaco */
@@ -17952,7 +17958,7 @@ export interface components {
                 /** @description `argosisp:servicio:<id>` o `argosisp:plan:<id>` */
                 comment: string;
                 /** @enum {string} */
-                accion: "creado" | "actualizado" | "borrado";
+                accion: "creado" | "actualizado" | "borrado" | "desconectado";
                 duplicados?: number;
             }[];
             /** @description Nada que corregir y el router respondió */

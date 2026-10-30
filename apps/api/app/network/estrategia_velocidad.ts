@@ -532,6 +532,16 @@ export interface EntradaValidacion {
     capacidad_subida_kbps: number | null
     /** clases activas del perfil de QoS del router (para el costo, regla 11); sin ella no se revisa */
     qos_clases?: number
+    /**
+     * `network.routers.modo_seguridad` (ausente = `radius`). Sin RADIUS (`api`) PPPoE va con secrets
+     * locales (`contratos/pppoe-local.md` §5): solo `perfil_ppp` (con cualquier padre) o `arbol_pcq`.
+     */
+    modo_seguridad?: 'radius' | 'api'
+    /**
+     * Con `false`, la regla `pppoe_sin_radius` solo revisa las excepciones de plan (al cambiar la de
+     * un plan, la estrategia del router no cambia y se aplica como `perfil_ppp`, `estrategiaLocal`).
+     */
+    revisar_router_sin_radius?: boolean
     /** prefijo de los `field` de la estrategia del router (por defecto `estrategia_velocidad`) */
     campoRouter?: string
     /** prefijo de los `field` de la excepción de un plan (por defecto `planes.<id>`) */
@@ -565,6 +575,22 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
     for (const tipo of TIPOS_CONEXION) {
         errores.push(...problemasDe(entrada.estrategias[tipo], tipo, `${campoRouter}.${tipo}`, version))
     }
+    // Regla 12: sin RADIUS no hay `Mikrotik-Rate-Limit` ni direcciones de la sesión al conectar.
+    const sinRadius = (e: Pick<Estrategia, 'aplicacion'>, campo: string) => {
+        if (entrada.modo_seguridad !== 'api') return
+        if (e.aplicacion !== 'radius_rate_limit' && e.aplicacion !== 'pcq_plan') return
+        errores.push({
+            field: `${campo}.aplicacion`,
+            rule: 'pppoe_sin_radius',
+            message:
+                e.aplicacion === 'radius_rate_limit'
+                    ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
+                    : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp o arbol_pcq',
+        })
+    }
+    if (entrada.revisar_router_sin_radius !== false) {
+        sinRadius(entrada.estrategias.pppoe, `${campoRouter}.pppoe`)
+    }
     for (const plan of entrada.planes) {
         if (!plan.excepcion) continue
         for (const tipo of TIPOS_CONEXION) {
@@ -573,6 +599,9 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
             // La parcial se revisa resuelta (una aplicación del plan con el tipo de cola del router).
             const efectiva = estrategiaEfectiva(entrada.estrategias, plan.excepcion, tipo)
             errores.push(...problemasDe(efectiva, tipo, `${campoPlan(plan.plan_id)}.${tipo}`, version))
+            if (tipo === 'pppoe' && parcial.aplicacion) {
+                sinRadius(efectiva, `${campoPlan(plan.plan_id)}.pppoe`)
+            }
         }
     }
     if (errores.length > 0) return { errores: dedupe(errores), advertencias }
@@ -809,6 +838,11 @@ export function matrizControlVelocidad() {
             {
                 rule: 'qos_costo',
                 mensaje: `como máximo ${QOS_MAX_HOJAS} hojas de QoS por router (planes con qos × 4 × clases)`,
+            },
+            {
+                rule: 'pppoe_sin_radius',
+                mensaje:
+                    'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre) o arbol_pcq',
             },
         ],
         advertencias: [

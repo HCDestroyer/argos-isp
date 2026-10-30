@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { exigirRadiusParaPppoe } from '#network/modo_seguridad'
+import { exigirPppoeAdmitido } from '#network/modo_seguridad'
 import { cifrar } from '#shared/cifrado'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
 import { verServicio, type ModoIpv6, type ServicioVista, type TipoConexion } from '#core/consultas/servicios'
@@ -160,7 +160,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         })
         validarModoIpv6(plan, modo, input)
         // un router sin RADIUS (`modo_seguridad = 'api'`) no admite PPPoE (`#network/modo_seguridad`)
-        await exigirRadiusParaPppoe(t.trx, input.router_id, tipo)
+        await exigirPppoeAdmitido(t.trx, input.router_id, tipo)
 
         let userPpp: string | null = null
         let passPpp: string | null = null

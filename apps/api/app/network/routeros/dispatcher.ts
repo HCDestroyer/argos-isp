@@ -12,6 +12,7 @@ import type {
 } from '#network/routeros/cliente'
 import { clienteDeRouter, type RouterApi } from '#network/routeros/router'
 import { contactoRouterOS } from '#network/sesiones/contacto'
+import { limpiarCredenciales } from '#network/sesiones/eventos_red'
 import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
@@ -42,6 +43,10 @@ import {
 /**
  * Cada escritura en el router queda en `audit.red` en el acto, fuera de la transacción de la
  * acción: la escritura ya ocurrió en el equipo aunque la acción se revierta después.
+ *
+ * Credenciales como `***` antes de escribir (`limpiarCredenciales`): el `password` de un
+ * `/ppp/secret` (PPPoE sin RADIUS, `contratos/pppoe-local.md` §8) viaja en las propiedades del PUT o
+ * del PATCH, en el objeto que devuelve el router y en `antes`; nunca llega a `audit.red`.
  */
 export const bitacoraRed: Bitacora = {
     async registrar(fila: FilaRouterOS) {
@@ -49,8 +54,8 @@ export const bitacoraRed: Bitacora = {
             tipo: fila.tipo,
             router_id: fila.router_id,
             servicio_id: fila.servicio_id,
-            comando: JSON.stringify(fila.comando),
-            respuesta: JSON.stringify(fila.respuesta),
+            comando: JSON.stringify(limpiarCredenciales(fila.comando)),
+            respuesta: JSON.stringify(limpiarCredenciales(fila.respuesta)),
             ok: fila.ok,
         })
     },
@@ -119,6 +124,8 @@ export function perfilSuspendido(): PerfilSuspendidoRed {
     return {
         rateLimit: env.get('ROUTEROS_SUSPENDIDO_RATE_LIMIT') ?? '256k/256k',
         addressList: env.get('ROUTEROS_SUSPENDIDO_ADDRESS_LIST') ?? 'suspendidos',
+        // El mismo perfil de corte que crea el reconciliador (`corte_router.ts`) y que manda `aaa`.
+        perfil: process.env.AAA_SUSPENDIDO_GRUPO?.trim() || 'suspendido',
     }
 }
 
@@ -166,11 +173,14 @@ export async function enTransicion(routerId: number): Promise<boolean> {
 }
 
 export interface Cambio {
-    ruta: RutaRouterOS
+    /** `/ppp/active`: una sesión quitada para que tome el secret o el perfil nuevo (PPPoE sin RADIUS) */
+    ruta: RutaRouterOS | '/ppp/active'
     comment: string
-    accion: 'creado' | 'actualizado' | 'borrado' | 'movido'
+    accion: 'creado' | 'actualizado' | 'borrado' | 'movido' | 'desconectado'
     /** Objetos duplicados borrados además del cambio */
     duplicados?: number
+    /** `/ppp/active` quitada (PPPoE sin RADIUS): su `acct_session_id` de sondeo */
+    acct_session_id?: string
 }
 
 /**

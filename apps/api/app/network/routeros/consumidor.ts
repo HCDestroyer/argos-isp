@@ -2,6 +2,7 @@ import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
 import { contextoSistema } from '#shared/contexto'
 import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
+import DesconectarSesionLocal from '#network/routeros/actions/desconectar_sesion_local'
 import type { OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { encolarPrefijo } from '#network/routeros/prefijos'
 import { encolarCambioControl } from '#network/routeros/jobs'
@@ -16,6 +17,7 @@ const EVENTOS_SERVICIO = new Set([
     'servicio.creado',
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
+    'servicio.eliminado',
     'asignacion.cambiada',
 ])
 
@@ -39,6 +41,10 @@ const EVENTOS_SERVICIO = new Set([
  *   el corte y la estrategia sin esperar al ciclo periódico.
  * - `router.control_cambiado` con cambio de modo → job `cambiar_control` (por lotes, `cambio_control.ts`);
  *   si solo cambió la capacidad → reconciliar el router (padres globales del árbol).
+ * - PPPoE sin RADIUS (`contratos/pppoe-local.md`): los `servicio.*` (también `servicio.eliminado`)
+ *   aplican el secret; `sesion.desconexion_solicitada` con `origen: 'sondeo'` → `DesconectarSesionLocal`
+ *   (`/ppp active remove`; las de accounting son de `coa`); `router.radius_cambiado` con
+ *   `modo_seguridad` en `campos` → reconciliar el router (crea o borra los secrets).
  * - Un router caído no hace lanzar: la acción emite `routeros.fallido` y el job `recuperar` lo
  *   repone. Solo un error de Postgres lanza (el evento se reintenta).
  */
@@ -68,7 +74,9 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             evento === 'router.control_cambiado' ||
             evento === 'router.estrategia_cambiada' ||
             evento === 'qos.config_cambiada' ||
-            evento === 'router.conexion_registrada'
+            evento === 'router.conexion_registrada' ||
+            evento === 'router.radius_cambiado' ||
+            evento === 'sesion.desconexion_solicitada'
         )
     }
 
@@ -84,10 +92,37 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             )
             return
         }
+        if (evento.evento === 'sesion.desconexion_solicitada') {
+            // Solo las de sondeo (router sin RADIUS): las de accounting son de `coa`.
+            const sesionId = Number(evento.payload.sesion_id)
+            if (evento.payload.origen !== 'sondeo' || !Number.isInteger(sesionId) || sesionId <= 0) return
+            await new DesconectarSesionLocal(opciones).execute(
+                {
+                    sesion_id: sesionId,
+                    motivo: typeof evento.payload.motivo === 'string' ? evento.payload.motivo : null,
+                    evento_id: String(evento.id),
+                },
+                ctx,
+            )
+            return
+        }
+        if (evento.evento === 'router.radius_cambiado') {
+            // Cambio de modo (`radius` ↔ `api`): secrets, perfiles y corte del router en el modo nuevo.
+            const routerId = Number(evento.payload.router_id)
+            const campos = Array.isArray(evento.payload.campos) ? evento.payload.campos : []
+            if (!campos.includes('modo_seguridad') || !Number.isInteger(routerId) || routerId <= 0) return
+            await new ReconciliarRouterOS(opciones).execute(
+                { router_id: routerId, motivo: 'control', evento_id: String(evento.id) },
+                ctx,
+            )
+            return
+        }
         if (evento.evento === 'sesion.iniciada') {
             // Sin /56 en el accounting (modo radius_pool): se pregunta al router en unos segundos.
+            // Las de sondeo ya traen el del binding (o lo completa el siguiente sondeo).
             const { nas_ip: nasIp, acct_session_id: acct, prefijos_v6: prefijos } = evento.payload
             if (
+                evento.payload.origen !== 'sondeo' &&
                 typeof nasIp === 'string' &&
                 typeof acct === 'string' &&
                 evento.payload.servicio_id !== null &&

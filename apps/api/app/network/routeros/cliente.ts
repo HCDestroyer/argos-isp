@@ -35,6 +35,8 @@ export const RUTAS = [
     '/ip/dhcp-server/lease',
     '/ip/arp',
     '/ppp/profile',
+    // PPPoE sin RADIUS (contratos/pppoe-local.md): un secret por servicio, `comment = argosisp:servicio:<id>`
+    '/ppp/secret',
     // Corte (contratos/control-velocidad.md §10): reglas, NAT y lista de interfaces de los suspendidos
     '/ip/firewall/filter',
     '/ip/firewall/nat',
@@ -348,6 +350,25 @@ export class ClienteRouterOS {
         return Array.isArray(lista) ? (lista as Array<Record<string, string>>) : []
     }
 
+    /**
+     * Quita una sesión PPP activa (`/ppp active remove`, `DELETE /rest/ppp/active/<id>`): el cliente
+     * reconecta y toma el secret y el perfil vigentes (`contratos/pppoe-local.md` §4). Es el único
+     * borrado permitido en un menú de solo lectura; queda en `audit.red` como cualquier escritura.
+     * Una sesión que ya no existe (404) cuenta como hecha.
+     */
+    async desconectarPpp(id: string, ctx: ContextoRed = {}): Promise<void> {
+        await this.#conReintentos(async (intento) => {
+            try {
+                await this.#escribir('DELETE', '/ppp/active' as never, id, null, ctx, intento, {
+                    desconexion: true,
+                })
+            } catch (e) {
+                if (e instanceof RouterOSSolicitud && e.status === 404) return
+                throw e
+            }
+        })
+    }
+
     async borrarPorId(ruta: RutaRouterOS, id: string, ctx: ContextoRed = {}): Promise<void> {
         await this.#conReintentos((intento) => this.#borrarId(ruta, { '.id': id }, ctx, intento))
     }
@@ -406,9 +427,13 @@ export class ClienteRouterOS {
         propiedades: Propiedades | null,
         ctx: ContextoRed,
         intento: number,
-        extra: { antes?: unknown; comando?: string; diagnostico?: boolean } = {},
+        extra: { antes?: unknown; comando?: string; diagnostico?: boolean; desconexion?: boolean } = {},
     ): Promise<ObjetoRouterOS> {
-        if (extra.diagnostico) {
+        if (extra.desconexion) {
+            if (ruta !== ('/ppp/active' as string) || metodo !== 'DELETE') {
+                throw new Error(`desconexión no permitida: ${metodo} ${ruta}`)
+            }
+        } else if (extra.diagnostico) {
             if (!(COMANDOS as readonly string[]).includes(ruta)) {
                 throw new Error(`comando no permitido: ${ruta}`)
             }
