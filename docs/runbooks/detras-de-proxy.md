@@ -63,7 +63,12 @@ Crea uno por dominio: `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>`. L
 | SSL | Certificado de Let's Encrypt pedido en NPM. **Force SSL** y HTTP/2 activados en `panel.` y `api.`; en `portal.` **sin Force SSL**, porque `/entrar` y `/cuenta` ya redirigen a HTTPS desde Caddy y el resto del portal tiene que poder abrirse por HTTP (portal cautivo) |
 
 - **Host original.** Caddy decide el sitio por el `Host` (`panel.`, `api.` o `portal.`). NPM lo manda tal cual por defecto (`proxy_set_header Host $host`); no lo cambies en "Custom locations" ni en "Advanced". Con otro proxy, configúralo igual (en nginx, `proxy_set_header Host $host;`).
-- **SNI.** NPM se conecta a Caddy por TLS sin SNI y sin verificar el certificado (la CA interna de Caddy). Caddy responde igual y enruta por el `Host`; está probado. Si prefieres mandar el SNI, agrega en "Advanced": `proxy_ssl_server_name on; proxy_ssl_name $host;`.
+- **SNI.** NPM se conecta a Caddy por TLS **sin SNI** (`proxy_ssl_server_name off`, su valor por defecto) y sin verificar el certificado (la CA interna de Caddy). Desde la versión 1.4.1, Caddy responde a un saludo sin SNI con el certificado de `DOMINIO_API` (`default_sni` en `config/Caddyfile`) y enruta por el `Host` igual que siempre. **Hasta la 1.4.0 no:** Caddy corta el saludo con `tlsv1 alert internal error` y NPM da 502 (ver Problemas). En cualquier versión puedes mandar el SNI agregando en "Advanced" de cada Proxy Host:
+
+  ```nginx
+  proxy_ssl_server_name on;
+  proxy_ssl_name $host;
+  ```
 - **Encabezados de IP.** NPM manda `X-Forwarded-For` y `X-Real-IP` por defecto; no los quites.
 
 ## 4. Página de corte (MikroTik)
@@ -108,7 +113,8 @@ curl -s https://portal.<dominio>/api/v1/portal/quien-soy     # lo mismo, pasando
 | --- | --- |
 | `quien-soy` devuelve la IP de NPM (o `172.30.0.1`) | Falta esa IP en `ARGOSISP_PROXIES_CONFIABLES`, o el `.env` no se aplicó: edítalo y corre `sudo argosisp levantar` |
 | Caddy no arranca después de editar el `.env` (`parsing CIDR expression`) | La lista lleva comas o una entrada mal escrita. Sepárala con espacios: `ARGOSISP_PROXIES_CONFIABLES="172.30.0.1/32 192.0.2.10"` |
-| 502 en NPM | Scheme en `http`, puerto distinto de 8443 o `127.0.0.1` como destino. Revisa la tabla del paso 3. `curl -kI https://<IP del servidor>:8443 -H 'Host: panel.<dominio>'` desde el host de NPM debe responder |
+| 502 en NPM y, desde el host de NPM, `curl -kI https://<IP del servidor>:8443 -H 'Host: panel.<dominio>'` da `curl: (35) … tlsv1 alert internal error` (con `--resolve panel.<dominio>:8443:<IP del servidor> https://panel.<dominio>:8443` sí responde) | Argos ≤ 1.4.0: Caddy no acepta TLS sin SNI y NPM se conecta sin SNI. Actualiza (`sudo argosisp actualizar`) o, mientras tanto, en "Advanced" de cada Proxy Host de NPM pon `proxy_ssl_server_name on; proxy_ssl_name $host;` (paso 3, SNI) |
+| 502 en NPM (el `curl` sin SNI sí responde) | Scheme en `http`, puerto distinto de 8443 o `127.0.0.1` como destino. Revisa la tabla del paso 3. `curl -kI https://<IP del servidor>:8443 -H 'Host: panel.<dominio>'` desde el host de NPM debe responder |
 | Bucle de redirecciones en el panel o la API | El Proxy Host va en `http` al 8080: cámbialo a `https` y 8443 |
 | El suspendido no ve `/corte` | El dst-nat apunta a NPM o al 80. Debe ir a `<IP de Argos>:8080` (paso 4) |
 | "el puerto TCP 80 ya está en uso" al instalar | Faltan `ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443` en el comando |
@@ -118,6 +124,7 @@ curl -s https://portal.<dominio>/api/v1/portal/quien-soy     # lo mismo, pasando
 `infra/ci/probar-detras-de-proxy.sh` (en CI, junto a las pruebas del proxy) levanta el Caddyfile de producción con una pata en una red de "NPM" de confianza y otra en una red cualquiera, delante de un eco que aplica la misma regla que la API (`apps/api/app/portal/ip_origen.ts`). La prueba comprueba lo siguiente:
 
 - Desde NPM la API ve la IP de `X-Forwarded-For`, de `X-Real-IP` o una IPv6, en los tres dominios, en el webhook y en `/corte`, y por TLS sin SNI.
+- TLS sin SNI de verdad (node manda el `Host` como SNI si no se le quita; hasta la 1.4.0 la prueba lo mandaba y por eso no vio el fallo), a la IP del contenedor y al puerto publicado en `127.0.0.1`, como entra NPM en producción: Caddy entrega el certificado de `DOMINIO_API` y cada dominio llega a su servicio por el `Host`.
 - Un `X-Forwarded-For` falso que el cliente le mandó a NPM se ignora.
 - Desde otra red, la API ve el socket aunque la petición traiga encabezados.
 - Sin la variable, nada cambia.
