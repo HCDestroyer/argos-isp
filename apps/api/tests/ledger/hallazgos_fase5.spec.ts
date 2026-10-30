@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { verActivo } from '#ledger/activos'
@@ -32,7 +33,7 @@ async function activoDepreciado(ctx: ContextoAccion, empresaId: number) {
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('H20'),
+            numero: await unicoBd('H20'),
             fecha_documento: haceMeses(6, 5),
             condicion: 'credito',
             retenciones: [],
@@ -191,7 +192,7 @@ test.group('Fase 5 · hallazgos H19 y H20', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 retenciones: [],

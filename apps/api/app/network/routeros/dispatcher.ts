@@ -16,6 +16,15 @@ import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
 import type { RutaRouterOS } from '#network/routeros/cliente'
+import { RUTAS_ORDENADAS, type Propiedades } from '#network/routeros/cliente'
+import {
+    movimientos,
+    normalizarDireccion,
+    ordenDeseado,
+    type EstadoCorte,
+    type ResolverIPv4,
+} from '#network/routeros/corte_router'
+import type { Estrategia } from '#network/estrategia_velocidad'
 import {
     claveTexto,
     MENUS_VELOCIDAD,
@@ -92,6 +101,8 @@ export type FabricaClientes = (router: RouterApi, opciones?: { sinContacto?: boo
 export interface OpcionesDispatcher {
     clientes?: FabricaClientes
     red?: PredeterminadosRed
+    /** DNS para el FQDN del portal (`configCorteResuelta`); por defecto `getaddrinfo` */
+    resolver?: ResolverIPv4
 }
 
 export const fabricaPorDefecto: FabricaClientes = (router, opciones = {}) =>
@@ -157,7 +168,7 @@ export async function enTransicion(routerId: number): Promise<boolean> {
 export interface Cambio {
     ruta: RutaRouterOS
     comment: string
-    accion: 'creado' | 'actualizado' | 'borrado'
+    accion: 'creado' | 'actualizado' | 'borrado' | 'movido'
     /** Objetos duplicados borrados además del cambio */
     duplicados?: number
 }
@@ -299,3 +310,195 @@ export async function limpiarVelocidad(
 
 /** Espacio de los advisory locks por router (`pg_advisory_xact_lock(LOCK_ROUTEROS, router_id)`). */
 export const LOCK_ROUTEROS = 4102
+
+/*
+|--------------------------------------------------------------------------
+| Corte y FastTrack (objetos de nivel router, `corte_router.ts`)
+|--------------------------------------------------------------------------
+*/
+
+/** Lo que se leyó del router para el corte (un `listar` por menú). */
+export type LecturaCorte = Map<RutaRouterOS, ObjetoRouterOS[]>
+
+export const MENUS_CORTE = [
+    '/interface/list',
+    '/ppp/profile',
+    '/ip/firewall/address-list',
+    '/ipv6/firewall/address-list',
+    ...RUTAS_ORDENADAS,
+] as const satisfies readonly RutaRouterOS[]
+
+export async function leerCorteRouter(cliente: ClienteRouterOS): Promise<LecturaCorte> {
+    const lectura: LecturaCorte = new Map()
+    for (const ruta of MENUS_CORTE) lectura.set(ruta, await cliente.listar(ruta))
+    return lectura
+}
+
+/** Un cambio pendiente del corte (vista previa) o hecho (con `aplicarCorte`). */
+export interface CambioCorte {
+    ruta: RutaRouterOS
+    clave: string
+    accion: 'crear' | 'actualizar' | 'borrar' | 'mover'
+    propiedades?: Propiedades
+    id?: string
+    destino?: string
+}
+
+const esLabEntrada = (o: ObjetoRouterOS) => (o.comment ?? '').startsWith('argosisp: ')
+
+/**
+ * Qué falta, qué difiere y qué sobra del corte en el router, sin escribir (lo usa la vista previa y el
+ * diagnóstico). El orden de las reglas se calcula como si lo que falta ya estuviera al final.
+ */
+export function planCorte(estado: EstadoCorte, lectura: LecturaCorte): CambioCorte[] {
+    const cambios: CambioCorte[] = []
+    for (const n of estado.nombrados) {
+        const actual = (lectura.get(n.ruta) ?? []).find((o) => o.name === n.name && o.dynamic !== 'true')
+        if (!actual) {
+            cambios.push({ ruta: n.ruta, clave: n.name, accion: 'crear', propiedades: n.propiedades })
+        } else if (Object.keys(diferencias(n.propiedades, actual)).length > 0) {
+            cambios.push({
+                ruta: n.ruta,
+                clave: n.name,
+                accion: 'actualizar',
+                propiedades: n.propiedades,
+                id: actual['.id'],
+            })
+        }
+    }
+    for (const ruta of ['/ip/firewall/address-list', '/ipv6/firewall/address-list'] as const) {
+        const tabla = (lectura.get(ruta) ?? []).filter((o) => o.dynamic !== 'true')
+        const deseadas = estado.entradas.filter((e) => e.ruta === ruta)
+        const clave = (list: string, address: string) => `${list}|${normalizarDireccion(address)}`
+        const existentes = new Map(tabla.map((o) => [clave(o.list ?? '', o.address ?? ''), o]))
+        for (const e of deseadas) {
+            const actual = existentes.get(clave(e.list, e.address))
+            const props = { list: e.list, address: e.address, comment: e.comment, disabled: 'no' }
+            if (!actual) {
+                cambios.push({ ruta, clave: `${e.list} ${e.address}`, accion: 'crear', propiedades: props })
+            } else if (esLabEntrada(actual) && (actual.comment !== e.comment || actual.disabled === 'true')) {
+                cambios.push({
+                    ruta,
+                    clave: `${e.list} ${e.address}`,
+                    accion: 'actualizar',
+                    propiedades: { comment: e.comment, disabled: 'no' },
+                    id: actual['.id'],
+                })
+            }
+        }
+        const quedan = new Set(deseadas.map((e) => clave(e.list, e.address)))
+        for (const o of tabla) {
+            const delGrupo = estado.grupos.some(
+                (g) => g.ruta === ruta && g.list === o.list && g.comment === o.comment,
+            )
+            if (delGrupo && !quedan.has(clave(o.list ?? '', o.address ?? ''))) {
+                cambios.push({ ruta, clave: `${o.list} ${o.address}`, accion: 'borrar', id: o['.id'] })
+            }
+        }
+    }
+    for (const ruta of RUTAS_ORDENADAS) {
+        const tabla = (lectura.get(ruta) ?? []).filter((o) => o.dynamic !== 'true')
+        const reglas = estado.reglas.filter((r) => r.ruta === ruta)
+        const porComment = new Map(tabla.map((o) => [o.comment ?? '', o]))
+        const simulada = [...tabla]
+        let n = 0
+        for (const r of reglas) {
+            const actual = porComment.get(r.comment)
+            if (!actual) {
+                cambios.push({
+                    ruta,
+                    clave: r.comment,
+                    accion: 'crear',
+                    propiedades: { ...r.propiedades, comment: r.comment },
+                })
+                simulada.push({ '.id': `nueva-${n++}`, comment: r.comment, ...r.propiedades })
+            } else if (Object.keys(diferencias(r.propiedades, actual)).length > 0) {
+                cambios.push({
+                    ruta,
+                    clave: r.comment,
+                    accion: 'actualizar',
+                    propiedades: r.propiedades,
+                    id: actual['.id'],
+                })
+            }
+        }
+        const deseadas = new Set(reglas.map((r) => r.comment))
+        const propias = estado.propias.get(ruta) ?? new Set<string>()
+        const sobran = tabla.filter(
+            (o) =>
+                propias.has(o.comment ?? '') &&
+                !deseadas.has(o.comment ?? '') &&
+                !estado.conservar.has(o.comment ?? ''),
+        )
+        const sinSobrantes = simulada.filter((o) => !sobran.includes(o))
+        for (const m of movimientos(sinSobrantes, ordenDeseado(sinSobrantes, reglas))) {
+            const comment = sinSobrantes.find((o) => o['.id'] === m.id)?.comment ?? m.id
+            cambios.push({ ruta, clave: comment, accion: 'mover', id: m.id, destino: m.destino })
+        }
+        for (const o of sobran) {
+            cambios.push({ ruta, clave: o.comment ?? o['.id'], accion: 'borrar', id: o['.id'] })
+        }
+    }
+    return cambios
+}
+
+/**
+ * Deja el corte como pide `estado`, en orden seguro: crea y corrige (la lista de interfaces y el
+ * perfil antes que las reglas que los usan), mueve las reglas a su lugar (los saltos `argosisp:top`
+ * antes de FastTrack y de `accept established,related`) y al final borra lo que sobra. Cada comando
+ * queda en `audit.red`.
+ */
+export async function aplicarCorte(
+    cliente: ClienteRouterOS,
+    estado: EstadoCorte,
+    lectura: LecturaCorte,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const hechos: Cambio[] = []
+    const plan = planCorte(estado, lectura)
+    const cambio = (c: CambioCorte, accion: Cambio['accion']) =>
+        hechos.push({ ruta: c.ruta, comment: c.clave, accion })
+    for (const c of plan.filter((x) => x.accion === 'crear' || x.accion === 'actualizar')) {
+        if (c.ruta === '/interface/list' || c.ruta === '/ppp/profile') {
+            await cliente.asegurarPor(c.ruta, { name: c.clave }, c.propiedades!, ctx)
+        } else if (c.accion === 'crear') {
+            await cliente.crear(c.ruta, c.propiedades!, ctx)
+        } else {
+            await cliente.actualizar(c.ruta, c.id!, c.propiedades!, ctx)
+        }
+        cambio(c, c.accion === 'crear' ? 'creado' : 'actualizado')
+    }
+    // Orden: se vuelve a leer cada tabla con las reglas nuevas (ya con su `.id`).
+    for (const ruta of RUTAS_ORDENADAS) {
+        const reglas = estado.reglas.filter((r) => r.ruta === ruta)
+        const propias = estado.propias.get(ruta) ?? new Set<string>()
+        const deseadas = new Set(reglas.map((r) => r.comment))
+        const leida = await cliente.listar(ruta)
+        const tabla = leida.filter(
+            (o) =>
+                !(
+                    propias.has(o.comment ?? '') &&
+                    !deseadas.has(o.comment ?? '') &&
+                    !estado.conservar.has(o.comment ?? '')
+                ),
+        )
+        for (const m of movimientos(tabla, ordenDeseado(tabla, reglas))) {
+            await cliente.mover(ruta, m.id, m.destino, ctx)
+            hechos.push({
+                ruta,
+                comment: tabla.find((o) => o['.id'] === m.id)?.comment ?? m.id,
+                accion: 'movido',
+            })
+        }
+    }
+    for (const c of plan.filter((x) => x.accion === 'borrar')) {
+        await cliente.borrarPorId(c.ruta, c.id!, ctx)
+        cambio(c, 'borrado')
+    }
+    return hechos
+}
+
+/** ¿Alguna estrategia del router (o de un plan en él) pide excluir de FastTrack a los clientes? */
+export function pideFasttrack(estrategias: Estrategia[]): boolean {
+    return estrategias.some((e) => e.extras.excluir_fasttrack)
+}

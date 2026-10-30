@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal } from '#tests/ayudas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import RegistrarPago from '#billing/actions/registrar_pago'
@@ -17,7 +17,7 @@ import {
     servicioEn,
     servicioFacturado,
 } from '#tests/contabilidad/ayudas_contabilidad'
-import { generar } from '#tests/billing/ayudas_billing'
+import { generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { hacerAgenteRetencion, haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
@@ -132,7 +132,7 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
                 cliente_id: s.clienteId,
                 metodo: 'deposito',
                 monto: '149.76',
-                referencia: unico('B'),
+                referencia: await unicoBd('B'),
                 cuenta_bancaria_id: e.cuentas.get(e.B)!,
                 retenciones: [{ codigo: 'RET_IVA_TAR_COMB', numero: 'T-9', monto: '0.24' }],
             },
@@ -182,7 +182,7 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
                 },
                 e.ctx,
             )
-        const compra = await nueva(unico('F'))
+        const compra = await nueva(await unicoBd('F'))
         assert.deepEqual(
             compra.retenciones.map((r) => [r.impuesto_codigo, r.monto]),
             [['RET_IVA_ESP_C', '90.00']],
@@ -201,7 +201,7 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
             ),
         )
         assert.equal(otraVez.codigo, 'constancia_registrada')
-        const otra = await nueva(unico('F'))
+        const otra = await nueva(await unicoBd('F'))
         const mismoNumero = await errorDe(
             new RegistrarConstanciaEmitida().execute(
                 { compra_id: otra.id, impuesto_codigo: 'RET_IVA_ESP_C', numero: '2026-000123' },

@@ -252,6 +252,23 @@ export interface CatalogoEventos {
         motivo: string | null
     }
     /**
+     * Cambió la estrategia de control de velocidad de un router o de un plan en él
+     * (`routers.cambiar_control_velocidad`, `contratos/control-velocidad.md` §4). A2 la ejecuta por
+     * lotes sin cortar (crear → mover → borrar); `aaa-cache` reescribe `aaa:user:*` del router o del plan.
+     */
+    'router.estrategia_cambiada': {
+        router_id: number
+        /** null = la estrategia del router; un id = la excepción de ese plan en el router */
+        plan_id: number | null
+        /** Del router: `{ pppoe, ip_estatica, dhcp_fija }` completas; de un plan: la parcial o null */
+        de: Record<string, unknown> | null
+        a: Record<string, unknown> | null
+        capas: Array<'aplicacion' | 'padre' | 'tipo_cola' | 'extras'>
+        /** Disconnect por lotes a las sesiones PPPoE (opcional; por defecto conservan lo anterior) */
+        reconectar: boolean
+        motivo: string | null
+    }
+    /**
      * Se generó un script de conexión del router (`routers.generar_script`, también al rotar):
      * nuevo token de registro, el anterior deja de valer (`contratos/conexion-routers.md`). Nunca
      * lleva el token, la clave de la API ni el secreto RADIUS.
@@ -373,6 +390,21 @@ export interface CatalogoEventos {
         nas_ip: string
         acct_session_id: string
         user_ppp: string
+        motivo: string
+    }
+    /**
+     * Sincronizar plan (`planes.sincronizar`, `contratos/control-velocidad.md` §5): `coa` manda un CoA
+     * (nunca Disconnect) con `Mikrotik-Rate-Limit = rate_limit` si la sesión sigue abierta y el servicio
+     * sigue en `estado`.
+     */
+    'sesion.velocidad_solicitada': {
+        sesion_id: number
+        servicio_id: number
+        nas_ip: string
+        acct_session_id: string
+        user_ppp: string
+        estado: 'activo' | 'limitado'
+        rate_limit: string
         motivo: string
     }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
@@ -1074,6 +1106,7 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'router.estrategia_cambiada',
     'router.conexion_generada',
     'router.conexion_registrada',
     'router.conexion_rotada',
@@ -1084,6 +1117,7 @@ export const EVENTOS = [
     'sesion.terminada',
     'servicio.caidas_repetidas',
     'sesion.desconexion_solicitada',
+    'sesion.velocidad_solicitada',
     'coa.fallido',
     'routeros.fallido',
     'aaa.caido',

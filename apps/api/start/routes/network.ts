@@ -69,6 +69,7 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
+import velocidad from '#start/routes/velocidad'
 import {
     ConexionRouter,
     PeersWireguard,
@@ -794,13 +795,16 @@ const conexion: Ruta[] = [
         metodo: 'post',
         ruta: '/routers/:id/probar-conexion',
         operacion: 'routersProbarConexion',
-        resumen: 'Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)',
+        resumen: 'Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)',
         descripcion:
             'Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake ' +
             'en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, ' +
             '`motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, ' +
             'uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara ' +
-            'solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, ' +
+            'solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, ' +
+            'reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, ' +
+            'suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). ' +
+            'Cada GET queda en `audit.red`; si la API responde, ' +
             'actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.',
         etiqueta: 'routers',
         permiso: 'routers.probar_conexion',
@@ -979,4 +983,5 @@ const conexion: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...conexion, ...planes, ...sesiones, ...red]
+// A2: control de velocidad por capas, sincronizar plan y corte (`start/routes/velocidad.ts`).
+export default [...routers, ...conexion, ...planes, ...sesiones, ...red, ...velocidad]

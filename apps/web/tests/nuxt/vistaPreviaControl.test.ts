@@ -1,14 +1,9 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
-import { bd } from '~~/fixtures/bd'
-import RouterVelocidad from '~/components/RouterVelocidad.vue'
 import RouterVistaPreviaControl from '~/components/RouterVistaPreviaControl.vue'
-import { esperar } from '../ayudas/esperar'
-
-const RUTA = 'GET /api/v1/routers/:id/vista-previa-control'
 
 /** Respuesta de la API real (`argosisp_test_a4web` + `pnpm demo:datos`), recortada a un plan. */
 const VISTA_REAL: Schema<'VistaPreviaControl'> = {
@@ -30,17 +25,6 @@ const VISTA_REAL: Schema<'VistaPreviaControl'> = {
     ],
     actualizar: [],
     borrar: [],
-}
-
-function boton(prueba: string): HTMLButtonElement | null {
-    return document.body.querySelector<HTMLButtonElement>(`[data-prueba="${prueba}"]`)
-}
-
-async function abrirConfirmacion(router: Schema<'Router'>) {
-    const wrapper = await mountSuspended(RouterVelocidad, { props: { router, open: true } })
-    await esperar(() => expect(boton('abrir-cambio-control')).not.toBeNull())
-    boton('abrir-cambio-control')?.click()
-    return wrapper
 }
 
 describe('semana 3 · vista previa del cambio de modo del router', () => {
@@ -109,43 +93,5 @@ describe('semana 3 · vista previa del cambio de modo del router', () => {
         const wrapper = await mountSuspended(RouterVistaPreviaControl, { props: { vista: vacia } })
         expect(wrapper.find('[data-prueba="vista-sin-cambios"]').exists()).toBe(true)
         expect(wrapper.find('[data-prueba="vista-menus"]').exists()).toBe(false)
-    })
-
-    it('antes de confirmar abre la vista previa con la advertencia de desconexiones y luego cambia el modo', async () => {
-        const router = bd.routers[0]
-        expect(router).toBeDefined()
-        if (!router) {
-            return
-        }
-        const wrapper = await abrirConfirmacion(router)
-        await esperar(() => expect(document.body.querySelector('[data-prueba="vista-previa-control"]')).not.toBeNull())
-        const aviso = document.body.querySelector('[data-prueba="aviso-desconexiones"]')?.textContent ?? ''
-        expect(aviso).toMatch(/Se desconectarán \d+ sesi(ón|ones) PPPoE/)
-        expect(boton('confirmar-cambio-control')?.disabled).toBe(false)
-
-        boton('confirmar-cambio-control')?.click()
-        await esperar(() => expect(bd.routers[0]?.control_velocidad).toBe('arbol_pcq'))
-        wrapper.unmount()
-    })
-
-    it('si la vista previa falla: error con "Reintentar", sin cifras y sin poder confirmar', async () => {
-        const router = bd.routers[0]
-        if (!router) {
-            return
-        }
-        simularFalla(RUTA, 500)
-        const wrapper = await abrirConfirmacion(router)
-        await esperar(() => expect(document.body.querySelector('[data-prueba="vista-error"]')).not.toBeNull())
-        expect(document.body.querySelector('[data-prueba="vista-previa-control"]')).toBeNull()
-        expect(document.body.textContent).not.toContain('Sesiones a desconectar')
-        expect(boton('confirmar-cambio-control')?.disabled).toBe(true)
-
-        bd.fallas = {}
-        const reintentar = [...document.body.querySelectorAll<HTMLButtonElement>('[data-prueba="vista-error"] button')].find(b => b.textContent?.includes('Reintentar'))
-        reintentar?.click()
-        await esperar(() => expect(document.body.querySelector('[data-prueba="vista-previa-control"]')).not.toBeNull())
-        expect(boton('confirmar-cambio-control')?.disabled).toBe(false)
-        expect(bd.routers[0]?.control_velocidad).toBe('simple')
-        wrapper.unmount()
     })
 })

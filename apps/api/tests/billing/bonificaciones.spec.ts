@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { generar } from '#tests/billing/ayudas_billing'
+import { generar, unicoBd } from '#tests/billing/ayudas_billing'
 import {
     errorDe,
     lineas,
@@ -58,7 +58,10 @@ test.group('Facturación · bonificaciones (nunca una factura de Q0)', (group) =
 
         const primera = await generar(s.servicioId, '2026-11-01')
         assert.include(primera, { generadas: 1, bonificadas: 1 })
-        const [b] = await db.from('billing.bonificaciones').where('servicio_id', s.servicioId)
+        const [b] = await db
+            .from('billing.bonificaciones')
+            .where('servicio_id', s.servicioId)
+            .orderBy('id', 'asc')
         assert.include(b, {
             clave_unica: `${s.servicioId}-2026-10-01`,
             origen: 'mes_gratis',
@@ -126,14 +129,14 @@ test.group('Facturación · bonificaciones (nunca una factura de Q0)', (group) =
                 reglas_snapshot: '{}',
             }),
         )
-        await assert.rejects(() =>
+        await assert.rejects(async () =>
             db.table('billing.facturas').insert({
                 empresa_id: e.B,
                 cliente_id: s.clienteId,
                 servicio_id: s.servicioId,
                 tipo: 'servicio',
                 periodo: '2026-12-01',
-                clave_unica: unico('cero'),
+                clave_unica: await unicoBd('cero'),
                 vence_en: '2026-12-06',
                 estado: 'pagada',
                 subtotal: '0.00',

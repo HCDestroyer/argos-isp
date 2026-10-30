@@ -13,6 +13,7 @@ import {
     generar,
     lineasAsiento,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -81,7 +82,12 @@ test.group('billing · ciclo completo', () => {
                 .post('/api/v1/pagos')
                 .bearerToken(token)
                 .header('Idempotency-Key', unico('cobro'))
-                .json({ cliente_id: clienteId, metodo: 'caja', monto: '150.00', referencia: unico('rec') }),
+                .json({
+                    cliente_id: clienteId,
+                    metodo: 'caja',
+                    monto: '150.00',
+                    referencia: await unicoBd('rec'),
+                }),
             201,
         )
         assert.deepEqual(primera.body().servicios[0], {
@@ -103,7 +109,7 @@ test.group('billing · ciclo completo', () => {
                     cliente_id: clienteId,
                     metodo: 'deposito',
                     monto: '150.00',
-                    referencia: unico('boleta'),
+                    referencia: await unicoBd('boleta'),
                     cuenta_bancaria_id: cuenta.id,
                 }),
             201,

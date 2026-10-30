@@ -1,34 +1,55 @@
 import {
     formatoKbps,
     limitesPadrePlan,
+    rateLimitServicio,
     type ControlVelocidad,
     type LimitesPadre,
     type VelocidadPlan,
 } from '#network/velocidad'
+import {
+    COMMENT_PADRE_ROUTER,
+    conNivelPlan,
+    conNivelRouter,
+    familia,
+    kindTipoHoja,
+    NOMBRE_PADRE_ROUTER,
+    nombrePadrePlan,
+    nombreTipoHoja,
+    padreCliente,
+    velocidadConExtras,
+    type Estrategia,
+    type EstrategiasRouter,
+    type Familia,
+    type TipoCola,
+} from '#network/estrategia_velocidad'
 import type { ObjetoRouterOS, Propiedades, RutaRouterOS } from '#network/routeros/cliente'
 import { normalizarValor } from '#network/routeros/normalizar'
 
 /**
- * Estado deseado del control de velocidad de un router (`contratos/velocidad.md`): los objetos por
- * plan y por router, no los de cada servicio (esos están en `estado_deseado.ts`). Función pura: con
- * lo que dice Postgres (planes del router, servicios que cuentan) y lo que se leyó del router (perfil
- * PPP base, colas dinámicas de PPPoE), qué debe existir.
+ * Estado deseado del control de velocidad de un router (`contratos/control-velocidad.md`): los
+ * objetos por plan y por router, no los de cada servicio (esos están en `estado_deseado.ts`). Función
+ * pura: con lo que dice Postgres (grupos de plan × familia, de `planesDeRouter`) y lo que se leyó del
+ * router (perfil PPP base, colas dinámicas de PPPoE), qué debe existir.
  *
- * Modo `simple` con reuso (plan con `reuso > 1` efectivo en el router):
+ * Familia de colas simples (`radius_rate_limit`, `perfil_ppp`, `cola_simple`, `pcq_plan`):
  *
- * | Menú | Clave | Propiedades |
+ * | Menú | Clave | Cuándo |
  * | --- | --- | --- |
- * | `/queue/simple` | `comment = argosisp:plan:<id>` | `name = argosisp-plan-<id>`, `max-limit` y `limit-at` de `limitesPadrePlan(plan, activos)`, prioridad del plan, `target` = las hijas |
- * | `/ppp/profile` | `comment = argosisp:plan:<id>` | `name = plan-<id>`, `parent-queue = argosisp-plan-<id>` y lo del perfil `default` (pools, DNS, IPv6) |
+ * | `/queue/type` `argosisp-sfq` / `-fq-codel` / `-cake` | `name` | Alguna hoja usa ese `tipo_cola` |
+ * | `/queue/type` `argosisp-plan-<id>[-limitado]-pcq-<sentido>` | `name` | Plan con `pcq_plan` |
+ * | `/queue/simple` `argosisp-router` | `comment = argosisp:router` | Algo usa `por_router` o `jerarquico` |
+ * | `/queue/simple` `argosisp-plan-<id>` | `comment = argosisp:plan:<id>` | `por_plan` con reuso > 1, o `jerarquico` |
+ * | `/queue/simple` `argosisp-plan-<id>-pcq[-limitado]` | `comment = argosisp:plan:<id>:pcq[:limitado]` | Plan con `pcq_plan` |
+ * | `/ppp/profile` `plan-<id>` | `comment = argosisp:plan:<id>` | PPPoE con padre, `tipo_cola` propio o `perfil_ppp` |
  *
- * - Las colas WISP del plan llevan `parent = argosisp-plan-<id>` (`estado_deseado.ts`) y las de
- *   PPPoE cuelgan del padre por el perfil (`aaa` manda `Mikrotik-Group = plan-<id>`).
- * - `activos` = servicios del plan en el router que no están suspendidos ni retirados.
- * - `target` del padre = los `target` de sus hijas (colas WISP deseadas y colas dinámicas de PPPoE
- *   que el router ya puso bajo el padre). Un padre con un `target` amplio (la red de clientes)
- *   capturaría el tráfico de clientes de otros planes; sin hijas se usa `TARGET_SIN_HIJAS`.
- * - El padre existe mientras el plan tenga servicios no retirados en el router o colas dinámicas
- *   colgando de él; un perfil PPP nunca apunta a una cola que no existe.
+ * Familia árbol (`arbol_pcq`): tipos PCQ, nodos globales (con `por_router`/`jerarquico`), nodos del
+ * plan y mangle, como hasta ahora.
+ *
+ * - `target` de cada cola padre = los `target` de sus hijas (colas WISP, colas `-pcq`, padres de plan y
+ *   colas dinámicas de PPPoE que el router ya puso bajo ella). Un `target` amplio capturaría el
+ *   tráfico de clientes de otros planes; sin hijas se usa `TARGET_SIN_HIJAS`.
+ * - Un padre o perfil con colas dinámicas colgando no se borra (sesiones conectadas antes de un
+ *   cambio): se conserva hasta que reconectan.
  */
 
 export const PREFIJO_COMMENT_PLAN = 'argosisp:plan:'
@@ -70,9 +91,9 @@ export function commentPlan(planId: number): string {
     return `${PREFIJO_COMMENT_PLAN}${planId}`
 }
 
-/** `name` de la cola padre del plan (modo `simple`). */
+/** `name` de la cola padre del plan (familia de colas simples). */
 export function nombrePadre(planId: number): string {
-    return `argosisp-plan-${planId}`
+    return nombrePadrePlan(planId)
 }
 
 /** `name` del perfil PPP del plan (`Mikrotik-Group` que manda `aaa`). */
@@ -87,35 +108,63 @@ export function planDeComment(comment: string | undefined): number | null {
     return Number.isInteger(id) && id > 0 ? id : null
 }
 
-/** ¿El plan lleva cola padre en modo `simple`? (reuso efectivo en el router > 1) */
+/**
+ * ¿El plan lleva cola padre en modo `simple`? (reuso efectivo > 1). Se conserva por compatibilidad
+ * con el modo obsoleto; el dispatcher usa `conNivelPlan` de la estrategia.
+ */
 export function conPadreSimple(control: ControlVelocidad, velocidad: Pick<VelocidadPlan, 'reuso'>): boolean {
     return control === 'simple' && velocidad.reuso > 1
 }
 
 export interface RouterVelocidad {
     router_id: number
+    /** Derivado de `estrategias` (obsoleto) */
     control: ControlVelocidad
+    estrategias: EstrategiasRouter
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
+    /** Versión de RouterOS leída del router (null = no se sabe) */
+    routeros_version: string | null
 }
 
-/** Un plan con servicios (no retirados) en el router. */
+/** Colas WISP (`cola_simple`) que cuelgan de un padre. */
+export interface HijasWisp {
+    /** `name` del padre (`argosisp-plan-<id>` o `argosisp-router`) */
+    padre: string
+    targets: string[]
+    limit_at_kbps: { subida: number; bajada: number }
+}
+
+/** Clientes de la cola PCQ del plan (`pcq_plan`). */
+export interface PcqPlan {
+    estrategia: Estrategia
+    activo: string[]
+    limitado: string[]
+}
+
+/** Un plan con servicios en el router, en una familia de colas (grupo de `planesDeRouter`). */
 export interface PlanRouter {
     plan_id: number
-    /** Velocidad efectiva en el router (plantilla + `planes_routers`) */
+    familia: Familia
+    /** Velocidad efectiva en el router (plantilla + `planes_routers`), sin extras */
     velocidad: VelocidadPlan
-    /** Servicios no retirados del plan en el router (de cualquier tipo) */
+    /** Estrategia del grupo: la de lo que cuelga de un padre (padre y extras son los mismos, regla 6) */
+    estrategia: Estrategia
+    /** Servicios no retirados del plan en el grupo (de cualquier tipo) */
     servicios: number
-    /** Los que cuentan para el padre: ni suspendidos ni retirados (activos + limitados) */
+    /** Los que cuentan para el padre del plan (ni suspendidos ni retirados y bajo el padre) */
     activos: number
-    /** Solo en estado `activo` (hijo del plan en `arbol_pcq`) */
+    /** Árbol: en estado `activo` y en estado `limitado` */
     en_activo: number
-    /** Solo en estado `limitado` (hijo del plan limitado en `arbol_pcq`) */
     en_limitado: number
-    /** `target` de las colas WISP del plan que cuelgan del padre (activas y limitadas) */
-    targets_wisp: string[]
-    /** Σ `limit-at` de esas colas WISP (kbps) */
-    limit_at_wisp_kbps: { subida: number; bajada: number }
+    /** Colas WISP del plan con padre */
+    hijas: HijasWisp[]
+    /** Cola PCQ del plan, si algún tipo usa `pcq_plan` */
+    pcq: PcqPlan | null
+    /** Estrategia PPPoE que necesita el perfil `plan-<id>`, o null */
+    perfil: Estrategia | null
+    /** Tipos de cola de las hojas (sin `default` ni `pcq`) */
+    tipos_hoja: TipoCola[]
 }
 
 /**
@@ -131,7 +180,7 @@ export function kbpsPar(valor: string | undefined): { subida: number; bajada: nu
 /** Regla de oro del contrato que el router no cumpliría (`routeros.fallido` con el detalle). */
 export interface ErrorReglaOro {
     plan_id: number | null
-    regla: 'limit_at_hijos' | 'limit_at_global' | 'ipv6'
+    regla: 'limit_at_hijos' | 'limit_at_global' | 'limit_at_router' | 'ipv6'
     detalle: string
 }
 
@@ -170,17 +219,22 @@ export type MenuVelocidad = (typeof MENUS_VELOCIDAD)[number]
 export type LecturaVelocidad = Map<MenuVelocidad, ObjetoRouterOS[]>
 
 /**
- * Tipos de cola PCQ de ArgosIsp. `/queue/type` no tiene `comment`: se identifican por nombre. El
- * plan `0` es el ejemplo de `lab.rsc` (ningún plan real tiene id 0) y no se toca.
+ * Tipos de cola de ArgosIsp. `/queue/type` no tiene `comment`: se identifican por nombre. El plan `0`
+ * es el ejemplo de `lab.rsc` (ningún plan real tiene id 0) y no se toca.
  */
-const NOMBRE_TIPO = /^argosisp-plan-[1-9]\d*-(?:limitado-)?(?:bajada|subida)$/
+const NOMBRE_TIPO =
+    /^(?:argosisp-plan-[1-9]\d*-(?:limitado-)?(?:pcq-)?(?:bajada|subida)|argosisp-(?:sfq|fq-codel|cake))$/
 
 /** ¿Es un objeto del control de velocidad que ArgosIsp administra en ese menú? */
 export function esObjetoVelocidad(ruta: MenuVelocidad, objeto: ObjetoRouterOS): boolean {
     if (objeto.dynamic === 'true') return false
     if (ruta === '/queue/type') return NOMBRE_TIPO.test(objeto.name ?? '')
     const comment = objeto.comment ?? ''
-    return comment.startsWith(PREFIJO_COMMENT_PLAN) || comment.startsWith(PREFIJO_COMMENT_GLOBAL)
+    return (
+        comment.startsWith(PREFIJO_COMMENT_PLAN) ||
+        comment.startsWith(PREFIJO_COMMENT_GLOBAL) ||
+        comment === COMMENT_PADRE_ROUTER
+    )
 }
 
 export type Sentido = 'bajada' | 'subida'
@@ -202,6 +256,20 @@ export function listaPlan(planId: number, limitado: boolean): string {
 /** Nombre del tipo PCQ, del nodo del árbol y de la marca de paquete: `argosisp-plan-<id>[-limitado]-<sentido>`. */
 export function nombreNodo(planId: number, limitado: boolean, sentido: Sentido): string {
     return `${listaPlan(planId, limitado)}-${sentido}`
+}
+
+/** Cola PCQ del plan (`pcq_plan`): `argosisp-plan-<id>-pcq[-limitado]`. */
+export function nombreColaPcq(planId: number, limitado: boolean): string {
+    return `argosisp-plan-${planId}-pcq${limitado ? '-limitado' : ''}`
+}
+
+export function commentColaPcq(planId: number, limitado: boolean): string {
+    return `${commentPlan(planId)}:pcq${limitado ? ':limitado' : ''}`
+}
+
+/** Tipo PCQ de la cola del plan: `argosisp-plan-<id>[-limitado]-pcq-<sentido>`. */
+export function nombreTipoPcq(planId: number, limitado: boolean, sentido: Sentido): string {
+    return `${listaPlan(planId, limitado)}-pcq-${sentido}`
 }
 
 function commentNodo(planId: number, limitado: boolean, sentido: Sentido): string {
@@ -266,6 +334,10 @@ function prefijosV6(targets: string[]): string[] {
 }
 
 const dobles = (n: number) => `${n}/${n}`
+const sumar = (a: { subida: number; bajada: number }, b: { subida: number; bajada: number }) => ({
+    subida: a.subida + b.subida,
+    bajada: a.bajada + b.bajada,
+})
 
 /**
  * Sin servicios que cuenten, el padre no garantiza nada: `limit-at = CIR × 0 = 0` (el `max-limit`
@@ -277,131 +349,333 @@ function sinGarantiaVacio(limites: LimitesPadre, activos: number): LimitesPadre 
     return { ...limites, limit_at: '0/0', limit_at_kbps: { subida: 0, bajada: 0 } }
 }
 
+/** Nombres de padres de ArgosIsp (`argosisp-plan-<id>`, `argosisp-router`) → clave de su cola. */
+function comentarioDePadre(nombre: string): string | null {
+    if (nombre === NOMBRE_PADRE_ROUTER) return COMMENT_PADRE_ROUTER
+    const id = /^argosisp-plan-(\d+)$/.exec(nombre)?.[1]
+    return id ? commentPlan(Number(id)) : null
+}
+
 export function estadoVelocidadRouter(
     router: RouterVelocidad,
     planes: PlanRouter[],
     lectura: LecturaVelocidad,
 ): EstadoVelocidad {
-    const presentes: ObjetoVelocidad[] = []
+    const simple = estadoSimple(
+        router,
+        planes.filter((p) => p.familia === 'simple'),
+        lectura,
+    )
+    const arbol = estadoArbol(
+        router,
+        planes.filter((p) => p.familia === 'arbol'),
+    )
+    // Los tipos de cola van antes que las colas que los usan; el árbol al final.
+    const tipos = simple.presentes.filter((o) => o.ruta === '/queue/type')
+    const resto = simple.presentes.filter((o) => o.ruta !== '/queue/type')
+    return {
+        presentes: [...tipos, ...resto, ...arbol.presentes],
+        avisos: [...simple.avisos, ...arbol.avisos],
+        conservar: [...simple.conservar, ...arbol.conservar],
+        errores: [...simple.errores, ...arbol.errores],
+    }
+}
+
+/** Familia de colas simples: tipos de hoja, PCQ por plan, padre del router, padres de plan, colas PCQ y perfiles. */
+function estadoSimple(
+    router: RouterVelocidad,
+    planes: PlanRouter[],
+    lectura: LecturaVelocidad,
+): EstadoVelocidad {
+    const tipos: ObjetoVelocidad[] = []
+    const colasPlan: ObjetoVelocidad[] = []
+    const colasPcq: ObjetoVelocidad[] = []
+    const perfiles: ObjetoVelocidad[] = []
     const avisos: string[] = []
     const conservar: string[] = []
     const errores: ErrorReglaOro[] = []
-    if (router.control === 'arbol_pcq') {
-        // Padres de `simple` con sesiones PPPoE todavía colgando (cambio de modo en curso): quedan
-        // hasta que la sesión reconecte; los borra el `sesion.terminada` de la última.
-        const arbol = estadoArbol(router, planes)
-        for (const nombre of hijasDinamicas(lectura).keys()) {
-            const id = /^argosisp-plan-(\d+)$/.exec(nombre)?.[1]
-            if (!id) continue
-            arbol.conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(Number(id)) })}`)
-            arbol.conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(Number(id)) })}`)
+    const dinamicas = hijasDinamicas(lectura)
+    const limitAtDin = limitAtDinamicas(lectura)
+    const base = perfilBase(lectura)
+
+    // Tipos de cola de las hojas (sfq, fq_codel, cake).
+    const hojas = new Set(planes.flatMap((p) => p.tipos_hoja))
+    for (const tipo of [...hojas].sort()) {
+        const nombre = nombreTipoHoja(tipo)
+        const kind = kindTipoHoja(tipo)
+        if (nombre && kind) {
+            tipos.push({ ruta: '/queue/type', clave: { name: nombre }, propiedades: { kind } })
         }
-        return arbol
     }
 
-    const dinamicas = hijasDinamicas(lectura)
-    const base = perfilBase(lectura)
+    // Hijas del padre del router: { targets, limit-at }.
+    const delRouter = { targets: [] as string[], limitAt: { subida: 0, bajada: 0 }, hay: false }
+    const sumarAlRouter = (targets: string[], limitAt: { subida: number; bajada: number }) => {
+        delRouter.targets.push(...targets)
+        delRouter.limitAt = sumar(delRouter.limitAt, limitAt)
+    }
+
+    // Planes con padre propio y planes que solo tienen sesiones viejas colgando.
     const conDinamicas = new Set(
         [...dinamicas.keys()]
             .map((nombre) => /^argosisp-plan-(\d+)$/.exec(nombre)?.[1])
             .filter((id): id is string => id !== undefined)
             .map(Number),
     )
-    const padres = new Map<number, PlanRouter | null>()
-    for (const plan of planes) {
-        if (conPadreSimple(router.control, plan.velocidad)) padres.set(plan.plan_id, plan)
-    }
-    // Un plan sin servicios aquí pero con sesiones colgando del padre: el padre queda (sin activos).
-    for (const id of conDinamicas) if (!padres.has(id)) padres.set(id, null)
+    const porId = new Map(planes.map((p) => [p.plan_id, p]))
 
-    const colas: ObjetoVelocidad[] = []
-    const perfiles: ObjetoVelocidad[] = []
-    for (const [planId, plan] of [...padres].sort((a, b) => a[0] - b[0])) {
-        const nombre = nombrePadre(planId)
-        const targets = [...new Set([...(plan?.targets_wisp ?? []), ...(dinamicas.get(nombre) ?? [])])]
-        if (!plan) {
-            // Sin datos del plan en este router no se recalcula: se conserva tal cual está.
-            avisos.push(`plan ${planId}: sin servicios en el router pero con sesiones bajo ${nombre}`)
-            conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(planId) })}`)
-            conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(planId) })}`)
-            continue
+    for (const plan of [...planes].sort((a, b) => a.plan_id - b.plan_id)) {
+        const id = plan.plan_id
+        const e = plan.estrategia
+        const vel = velocidadConExtras(plan.velocidad, e.extras)
+        const nivelPlan = conNivelPlan(e, vel.reuso)
+        if (
+            conNivelRouter(e) ||
+            (plan.pcq && conNivelRouter(plan.pcq.estrategia)) ||
+            (plan.perfil && conNivelRouter(plan.perfil))
+        ) {
+            delRouter.hay = true
         }
-        const limites = sinGarantiaVacio(limitesPadrePlan(plan.velocidad, plan.activos), plan.activos)
-        // Regla de oro: Σ limit-at de las hijas (WISP deseadas + dinámicas de PPPoE) ≤ max-limit del padre.
-        const dinamico = limitAtDinamicas(lectura).get(nombre) ?? { subida: 0, bajada: 0 }
-        const hijas = {
-            subida: plan.limit_at_wisp_kbps.subida + dinamico.subida,
-            bajada: plan.limit_at_wisp_kbps.bajada + dinamico.bajada,
+
+        // Cola PCQ del plan: hija del padre del plan, del router o suelta.
+        const pcqTargets: { targets: string[]; padre: string } = { targets: [], padre: 'none' }
+        if (plan.pcq) {
+            const ep = plan.pcq.estrategia
+            const vp = velocidadConExtras(plan.velocidad, ep.extras)
+            const padre = padreCliente(ep, id, vp.reuso)
+            for (const limitado of [false, true]) {
+                const v = limitado
+                    ? {
+                          ...vp,
+                          bajada_kbps: vp.bajada_limitada_kbps,
+                          subida_kbps: vp.subida_limitada_kbps,
+                          rafaga_bajada_kbps: null,
+                          rafaga_subida_kbps: null,
+                      }
+                    : vp
+                for (const sentido of SENTIDOS) {
+                    tipos.push({
+                        ruta: '/queue/type',
+                        clave: { name: nombreTipoPcq(id, limitado, sentido) },
+                        propiedades: tipoPcq(v, sentido),
+                    })
+                }
+                const targets = limitado ? plan.pcq.limitado : plan.pcq.activo
+                pcqTargets.targets.push(...targets)
+                colasPcq.push({
+                    ruta: '/queue/simple',
+                    clave: { comment: commentColaPcq(id, limitado) },
+                    propiedades: {
+                        name: nombreColaPcq(id, limitado),
+                        target: targets.length > 0 ? targets.join(',') : TARGET_SIN_HIJAS,
+                        queue: `${nombreTipoPcq(id, limitado, 'subida')}/${nombreTipoPcq(id, limitado, 'bajada')}`,
+                        'max-limit': '0/0',
+                        'limit-at': '0/0',
+                        priority: dobles(v.prioridad),
+                        parent: padre,
+                        disabled: 'no',
+                    },
+                })
+            }
+            pcqTargets.padre = padre
+            if (padre === NOMBRE_PADRE_ROUTER) sumarAlRouter(pcqTargets.targets, { subida: 0, bajada: 0 })
         }
-        const sobre = excede(hijas, limites.max_limit_kbps)
-        // Regla de oro: el target IPv6 de cada hija también está en el del padre.
-        const faltanV6 = prefijosV6([...plan.targets_wisp, ...(dinamicas.get(nombre) ?? [])]).filter(
-            (p) => !targets.includes(p),
+        // Colas WISP que cuelgan directo del router.
+        for (const h of plan.hijas) {
+            if (h.padre === NOMBRE_PADRE_ROUTER) sumarAlRouter(h.targets, h.limit_at_kbps)
+        }
+
+        // Padre del plan.
+        const nombre = nombrePadre(id)
+        if (nivelPlan || conDinamicas.has(id)) {
+            const hijasWisp = plan.hijas.filter((h) => h.padre === nombre)
+            const targetsWisp = hijasWisp.flatMap((h) => h.targets)
+            const pcqAqui = pcqTargets.padre === nombre ? pcqTargets.targets : []
+            const targets = [...new Set([...targetsWisp, ...pcqAqui, ...(dinamicas.get(nombre) ?? [])])]
+            if (!nivelPlan) {
+                // Ya no lleva padre, pero hay sesiones viejas colgando: se conserva hasta que reconecten.
+                avisos.push(`plan ${id}: sin padre en la estrategia vigente pero con sesiones bajo ${nombre}`)
+                conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
+                conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+            } else {
+                const limites = sinGarantiaVacio(limitesPadrePlan(vel, plan.activos), plan.activos)
+                const hijas = sumar(
+                    hijasWisp.reduce((t, h) => sumar(t, h.limit_at_kbps), { subida: 0, bajada: 0 }),
+                    limitAtDin.get(nombre) ?? { subida: 0, bajada: 0 },
+                )
+                const sobre = excede(hijas, limites.max_limit_kbps)
+                const faltanV6 = prefijosV6([...targetsWisp, ...(dinamicas.get(nombre) ?? [])]).filter(
+                    (p) => !targets.includes(p),
+                )
+                if (sobre.length > 0 || faltanV6.length > 0) {
+                    for (const d of sobre) {
+                        errores.push({
+                            plan_id: id,
+                            regla: 'limit_at_hijos',
+                            detalle:
+                                `plan ${id}: la suma de limit-at de las hijas en ${d} (${hijas[d]} kbps) supera el ` +
+                                `max-limit del padre ${nombre} (${limites.max_limit_kbps[d]} kbps)`,
+                        })
+                    }
+                    if (faltanV6.length > 0) {
+                        errores.push({
+                            plan_id: id,
+                            regla: 'ipv6',
+                            detalle: `plan ${id}: el target del padre no incluye ${faltanV6.join(', ')}`,
+                        })
+                    }
+                    conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
+                    conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+                    continue
+                }
+                const parent = e.padre === 'jerarquico' ? NOMBRE_PADRE_ROUTER : 'none'
+                if (parent === NOMBRE_PADRE_ROUTER) sumarAlRouter(targets, limites.limit_at_kbps)
+                colasPlan.push({
+                    ruta: '/queue/simple',
+                    clave: { comment: commentPlan(id) },
+                    propiedades: {
+                        name: nombre,
+                        target: targets.length > 0 ? targets.join(',') : TARGET_SIN_HIJAS,
+                        'max-limit': limites.max_limit,
+                        'limit-at': limites.limit_at,
+                        priority: dobles(limites.prioridad),
+                        'burst-limit': '0/0',
+                        'burst-threshold': '0/0',
+                        'burst-time': '0s/0s',
+                        parent,
+                        disabled: 'no',
+                    },
+                })
+            }
+        }
+
+        // Perfil PPP del plan.
+        if (plan.perfil) {
+            const ep = plan.perfil
+            const vp = velocidadConExtras(plan.velocidad, ep.extras)
+            const padre = padreCliente(ep, id, vp.reuso)
+            const tipo = nombreTipoHoja(ep.tipo_cola)
+            perfiles.push({
+                ruta: '/ppp/profile',
+                clave: { comment: commentPlan(id) },
+                propiedades: {
+                    ...base,
+                    name: nombrePerfil(id),
+                    ...(padre !== 'none' ? { 'parent-queue': padre } : {}),
+                    ...(tipo ? { 'queue-type': tipo } : {}),
+                    ...(ep.aplicacion === 'perfil_ppp'
+                        ? { 'rate-limit': rateLimitServicio(vp, 'activo') }
+                        : {}),
+                },
+            })
+        }
+    }
+
+    // Planes sin servicios en el router pero con sesiones colgando del padre: se conserva tal cual.
+    for (const id of conDinamicas) {
+        if (porId.has(id)) continue
+        avisos.push(`plan ${id}: sin servicios en el router pero con sesiones bajo ${nombrePadre(id)}`)
+        conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
+        conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+        delRouter.targets.push(...(dinamicas.get(nombrePadre(id)) ?? []))
+    }
+
+    // Padre del router (techo del enlace).
+    const colasRouter: ObjetoVelocidad[] = []
+    const dinRouter = dinamicas.get(NOMBRE_PADRE_ROUTER) ?? []
+    if (delRouter.hay || dinRouter.length > 0) {
+        const targets = [...new Set([...delRouter.targets, ...dinRouter])]
+        const techo = { subida: router.capacidad_subida_kbps, bajada: router.capacidad_bajada_kbps }
+        const hijas = sumar(
+            delRouter.limitAt,
+            limitAtDin.get(NOMBRE_PADRE_ROUTER) ?? { subida: 0, bajada: 0 },
         )
-        if (sobre.length > 0 || faltanV6.length > 0) {
+        const sobre = (['subida', 'bajada'] as const).filter((d) => techo[d] !== null && hijas[d] > techo[d]!)
+        if (sobre.length > 0) {
             for (const d of sobre) {
                 errores.push({
-                    plan_id: planId,
-                    regla: 'limit_at_hijos',
+                    plan_id: null,
+                    regla: 'limit_at_router',
                     detalle:
-                        `plan ${planId}: la suma de limit-at de las hijas en ${d} (${hijas[d]} kbps) supera el ` +
-                        `max-limit del padre ${nombre} (${limites.max_limit_kbps[d]} kbps)`,
+                        `la suma de limit-at bajo ${NOMBRE_PADRE_ROUTER} en ${d} (${hijas[d]} kbps) supera la ` +
+                        `capacidad del enlace (${techo[d]} kbps)`,
                 })
             }
-            if (faltanV6.length > 0) {
-                errores.push({
-                    plan_id: planId,
-                    regla: 'ipv6',
-                    detalle: `plan ${planId}: el target del padre no incluye ${faltanV6.join(', ')}`,
-                })
-            }
-            conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(planId) })}`)
-            conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(planId) })}`)
-            continue
+            conservar.push(`/queue/simple|${claveTexto({ comment: COMMENT_PADRE_ROUTER })}`)
+        } else if (!delRouter.hay) {
+            avisos.push(
+                `sin padre del router en la estrategia vigente pero con sesiones bajo ${NOMBRE_PADRE_ROUTER}`,
+            )
+            conservar.push(`/queue/simple|${claveTexto({ comment: COMMENT_PADRE_ROUTER })}`)
+        } else {
+            colasRouter.push({
+                ruta: '/queue/simple',
+                clave: { comment: COMMENT_PADRE_ROUTER },
+                propiedades: {
+                    name: NOMBRE_PADRE_ROUTER,
+                    target: targets.length > 0 ? targets.join(',') : TARGET_SIN_HIJAS,
+                    'max-limit': `${formatoKbps(techo.subida ?? 0)}/${formatoKbps(techo.bajada ?? 0)}`,
+                    'limit-at': '0/0',
+                    priority: '8/8',
+                    'burst-limit': '0/0',
+                    'burst-threshold': '0/0',
+                    'burst-time': '0s/0s',
+                    parent: 'none',
+                    disabled: 'no',
+                },
+            })
         }
-        colas.push({
-            ruta: '/queue/simple',
-            clave: { comment: commentPlan(planId) },
-            propiedades: {
-                name: nombre,
-                target: targets.length > 0 ? targets.join(',') : TARGET_SIN_HIJAS,
-                'max-limit': limites.max_limit,
-                'limit-at': limites.limit_at,
-                priority: dobles(limites.prioridad),
-                'burst-limit': '0/0',
-                'burst-threshold': '0/0',
-                'burst-time': '0s/0s',
-                parent: 'none',
-                disabled: 'no',
-            },
-        })
-        perfiles.push({
-            ruta: '/ppp/profile',
-            clave: { comment: commentPlan(planId) },
-            propiedades: { ...base, name: nombrePerfil(planId), 'parent-queue': nombre },
-        })
     }
-    presentes.push(...colas, ...perfiles)
-    return { presentes, avisos, conservar, errores }
+    // Un plan con error de regla de oro no se escribe: si su padre cuelga del router, el router queda igual.
+    return {
+        presentes: [...dedupeTipos(tipos), ...colasRouter, ...colasPlan, ...colasPcq, ...perfiles],
+        avisos,
+        conservar,
+        errores,
+    }
+}
+
+function dedupeTipos(tipos: ObjetoVelocidad[]): ObjetoVelocidad[] {
+    const vistos = new Set<string>()
+    return tipos.filter((t) => {
+        const k = claveTexto(t.clave)
+        if (vistos.has(k)) return false
+        vistos.add(k)
+        return true
+    })
+}
+
+/** Propiedades de un tipo PCQ por sentido, con ráfaga si la velocidad la trae. */
+function tipoPcq(vel: VelocidadPlan, sentido: Sentido): Propiedades {
+    const bajada = sentido === 'bajada'
+    const mir = bajada ? vel.bajada_kbps : vel.subida_kbps
+    const rafaga = bajada ? vel.rafaga_bajada_kbps : vel.rafaga_subida_kbps
+    const props: Propiedades = {
+        kind: 'pcq',
+        'pcq-rate': formatoKbps(mir),
+        'pcq-classifier': bajada ? 'dst-address' : 'src-address',
+        ...(bajada ? { 'pcq-dst-address6-mask': '64' } : { 'pcq-src-address6-mask': '64' }),
+    }
+    if (rafaga !== null) {
+        props['pcq-burst-rate'] = formatoKbps(rafaga)
+        props['pcq-burst-threshold'] = formatoKbps(Math.floor((mir * vel.rafaga_umbral_pct) / 100))
+        props['pcq-burst-time'] = `${vel.rafaga_segundos}s`
+    }
+    return props
 }
 
 /**
- * Modo `arbol_pcq` (`contratos/velocidad.md`, "Modo arbol_pcq"), en orden de creación:
+ * Familia árbol (`arbol_pcq`, `contratos/velocidad.md`, "Modo arbol_pcq"), en orden de creación:
  *
  * 1. `/queue/type` por plan y sentido: `argosisp-plan-<id>[-limitado]-<sentido>`, `kind = pcq`,
- *    `pcq-rate` = MIR (o el limitado), clasificador `dst-address` (bajada) / `src-address` (subida)
- *    y máscara /64 en IPv6 (un cliente = un /64, no una dirección).
+ *    `pcq-rate` = MIR (o el limitado), clasificador `dst-address` (bajada) / `src-address` (subida),
+ *    máscara /64 en IPv6, y ráfaga PCQ si el extra está encendido.
  * 2. `/queue/tree` globales `argosisp-global-bajada|subida` (`parent = global`, `max-limit` =
- *    capacidad del enlace; 0 = sin techo).
- * 3. `/queue/tree` por plan y sentido, hijos del global: `packet-mark` y `queue` = el tipo PCQ,
- *    `max-limit` / `limit-at` de `limitesPadrePlan(plan, activos)` y la prioridad del plan. El plan
- *    limitado tiene su propio nodo, con la velocidad limitada y sus servicios limitados.
- * 4. Mangle IPv4 e IPv6 (`chain = forward`, `mark-packet`, `passthrough = no`): destino en la lista
- *    del plan → marca de bajada; origen → marca de subida.
- *
- * Las listas (`argosisp-plan-<id>[-limitado]`) las llena el dispatcher por servicio
- * (`estado_deseado.ts`): IPv4, /64 y /56 de cada servicio activo o limitado. Sin colas simples
- * por servicio (salvo el WISP suspendido, como la dinámica del PPPoE suspendido).
+ *    capacidad del enlace; 0 = sin techo), solo con padre `por_router` o `jerarquico`.
+ * 3. `/queue/tree` por plan y sentido: hijos del global (o de `global` sin nivel de router). Con nivel
+ *    de plan (`por_plan`, `jerarquico`) `max-limit` = `MIR × activos / reuso`; si no, 0 (el tope por
+ *    cliente lo pone el PCQ). `limit-at` = CIR × activos con garantizado y un padre.
+ * 4. Mangle IPv4 e IPv6 (`chain = forward`, `mark-packet`, `passthrough = no`).
  */
 function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVelocidad {
     const tipos: ObjetoVelocidad[] = []
@@ -409,27 +683,40 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
     const nodos: ObjetoVelocidad[] = []
     const mangles: ObjetoVelocidad[] = []
     const capacidad = { bajada: router.capacidad_bajada_kbps, subida: router.capacidad_subida_kbps }
-    for (const sentido of SENTIDOS) {
-        globales.push({
-            ruta: '/queue/tree',
-            clave: { comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` },
-            propiedades: {
-                name: nombreGlobal(sentido),
-                parent: 'global',
-                'max-limit': formatoKbps(capacidad[sentido] ?? 0),
-                disabled: 'no',
-            },
-        })
+    // El techo existe si la estrategia del router lo pide (aunque no haya planes) o algún plan lo usa.
+    const conGlobal =
+        Object.values(router.estrategias).some(
+            (e) => familia(e.aplicacion) === 'arbol' && conNivelRouter(e),
+        ) || planes.some((p) => conNivelRouter(p.estrategia))
+    if (conGlobal) {
+        for (const sentido of SENTIDOS) {
+            globales.push({
+                ruta: '/queue/tree',
+                clave: { comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` },
+                propiedades: {
+                    name: nombreGlobal(sentido),
+                    parent: 'global',
+                    'max-limit': formatoKbps(capacidad[sentido] ?? 0),
+                    disabled: 'no',
+                },
+            })
+        }
     }
     for (const plan of [...planes].sort((a, b) => a.plan_id - b.plan_id)) {
+        const e = plan.estrategia
+        const base = velocidadConExtras(plan.velocidad, e.extras)
+        const agrega = conNivelPlan(e, base.reuso)
+        const conPadre = e.padre !== 'ninguno'
         for (const limitado of [false, true]) {
             const vel = limitado
                 ? {
-                      ...plan.velocidad,
-                      bajada_kbps: plan.velocidad.bajada_limitada_kbps,
-                      subida_kbps: plan.velocidad.subida_limitada_kbps,
+                      ...base,
+                      bajada_kbps: base.bajada_limitada_kbps,
+                      subida_kbps: base.subida_limitada_kbps,
+                      rafaga_bajada_kbps: null,
+                      rafaga_subida_kbps: null,
                   }
-                : plan.velocidad
+                : base
             const cuenta = limitado ? plan.en_limitado : plan.en_activo
             const limites = sinGarantiaVacio(limitesPadrePlan(vel, cuenta), cuenta)
             const lista = listaPlan(plan.plan_id, limitado)
@@ -439,23 +726,18 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
                 tipos.push({
                     ruta: '/queue/type',
                     clave: { name: nombre },
-                    propiedades: {
-                        kind: 'pcq',
-                        'pcq-rate': formatoKbps(bajada ? vel.bajada_kbps : vel.subida_kbps),
-                        'pcq-classifier': bajada ? 'dst-address' : 'src-address',
-                        ...(bajada ? { 'pcq-dst-address6-mask': '64' } : { 'pcq-src-address6-mask': '64' }),
-                    },
+                    propiedades: tipoPcq(vel, sentido),
                 })
                 nodos.push({
                     ruta: '/queue/tree',
                     clave: { comment: commentNodo(plan.plan_id, limitado, sentido) },
                     propiedades: {
                         name: nombre,
-                        parent: nombreGlobal(sentido),
+                        parent: conNivelRouter(e) ? nombreGlobal(sentido) : 'global',
                         'packet-mark': nombre,
                         queue: nombre,
-                        'max-limit': formatoKbps(limites.max_limit_kbps[sentido]),
-                        'limit-at': formatoKbps(limites.limit_at_kbps[sentido]),
+                        'max-limit': agrega ? formatoKbps(limites.max_limit_kbps[sentido]) : '0',
+                        'limit-at': conPadre ? formatoKbps(limites.limit_at_kbps[sentido]) : '0',
                         priority: String(limites.prioridad),
                         disabled: 'no',
                     },
@@ -481,7 +763,7 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
     const errores: ErrorReglaOro[] = []
     for (const sentido of SENTIDOS) {
         const techo = capacidad[sentido]
-        if (techo === null) continue
+        if (techo === null || !conGlobal) continue
         const suma = nodos
             .filter((n) => n.propiedades.parent === nombreGlobal(sentido))
             .reduce((total, n) => total + kbpsPar(n.propiedades['limit-at']).subida, 0)
@@ -500,15 +782,27 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
         const conservar = [...tipos, ...globales, ...nodos, ...mangles].map(
             (o) => `${o.ruta}|${claveTexto(o.clave)}`,
         )
+        // También los globales que existan aunque esta vez no hagan falta.
+        for (const sentido of SENTIDOS) {
+            conservar.push(`/queue/tree|${claveTexto({ comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` })}`)
+        }
         return { presentes: [], avisos: [], conservar, errores }
     }
     return { presentes: [...tipos, ...globales, ...nodos, ...mangles], avisos: [], conservar: [], errores }
 }
 
+/** Orden de borrado dentro de un menú: hojas, después padres de plan, al final los del router/global. */
+function profundidad(objeto: ObjetoRouterOS): number {
+    const comment = objeto.comment ?? ''
+    if (comment === COMMENT_PADRE_ROUTER || comment.startsWith(PREFIJO_COMMENT_GLOBAL)) return 2
+    if (/^argosisp:plan:\d+$/.test(comment)) return 1
+    return 0
+}
+
 /**
  * Objetos de velocidad que hay en el router y no deben estar, en orden de borrado (perfiles antes
- * que la cola a la que apuntan). Un padre que todavía tiene colas dinámicas colgando no se borra
- * (`estadoVelocidadRouter` lo conserva).
+ * que la cola a la que apuntan, colas PCQ antes que el padre del plan y este antes que el del router).
+ * Un padre que todavía tiene colas dinámicas colgando no se borra (`estadoVelocidadRouter` lo conserva).
  */
 export function sobrantesVelocidad(
     estado: EstadoVelocidad,
@@ -518,6 +812,14 @@ export function sobrantesVelocidad(
         ...estado.presentes.map((o) => `${o.ruta}|${claveTexto(o.clave)}`),
         ...estado.conservar,
     ])
+    // Un padre de plan conservado mantiene también al padre del router del que cuelga.
+    const simples = lectura.get('/queue/simple') ?? []
+    for (const clave of [...deseadas]) {
+        const comment = /^\/queue\/simple\|comment=(.+)$/.exec(clave)?.[1]
+        const cola = comment ? simples.find((o) => o.comment === comment) : undefined
+        const padre = cola?.parent ? comentarioDePadre(cola.parent) : null
+        if (padre) deseadas.add(`/queue/simple|${claveTexto({ comment: padre })}`)
+    }
     const salida: Array<{ ruta: MenuVelocidad; objeto: ObjetoRouterOS }> = []
     for (const ruta of MENUS_VELOCIDAD) {
         const sobran = (lectura.get(ruta) ?? []).filter((objeto) => {
@@ -526,9 +828,9 @@ export function sobrantesVelocidad(
                 ruta === '/queue/type' ? { name: objeto.name! } : { comment: objeto.comment! }
             return !deseadas.has(`${ruta}|${claveTexto(clave)}`)
         })
-        // En el árbol, los nodos de plan antes que los globales de los que cuelgan.
-        const global = (o: ObjetoRouterOS) => (o.comment?.startsWith(PREFIJO_COMMENT_GLOBAL) ? 1 : 0)
-        for (const objeto of sobran.sort((a, b) => global(a) - global(b))) salida.push({ ruta, objeto })
+        for (const objeto of sobran.sort((a, b) => profundidad(a) - profundidad(b))) {
+            salida.push({ ruta, objeto })
+        }
     }
     return salida
 }

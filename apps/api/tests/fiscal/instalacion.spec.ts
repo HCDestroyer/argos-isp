@@ -14,7 +14,7 @@ import { hoyFiscal } from '#fiscal/comun'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { registrarInstaladorLocalizacion } from '#core/localizacion'
-import { verificadorNit } from '#core/nit_cui'
+import { nitUnico } from '#tests/ledger/ayudas_compras'
 import { instaladorFiscal, tieneDocumentosFiscales } from '#fiscal/instalador_localizacion'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import { conteos, empresaInstalada, esquemas, eventos, exigirCampos } from '#tests/fiscal/ayudas_fiscal'
@@ -265,18 +265,15 @@ test.group('Localización fiscal · instalación', (group) => {
         assert,
     }) => {
         const { token } = await usuarioConRoles(['admin'])
-        const cuerpoNit = String(Math.floor(1_000_000 + Math.random() * 8_999_999))
+        const nit = await nitUnico('core.empresas')
         const creada = await estado(
-            client
-                .post('/api/v1/empresas')
-                .bearerToken(token)
-                .json({
-                    nit: `${cuerpoNit}${verificadorNit(cuerpoNit)}`,
-                    razon_social: 'Fiscal de Prueba, S.A.',
-                    nombre_comercial: 'Fiscal de Prueba',
-                    regimen_isr: 'retencion_definitiva',
-                    codigo_establecimiento: 4,
-                }),
+            client.post('/api/v1/empresas').bearerToken(token).json({
+                nit,
+                razon_social: 'Fiscal de Prueba, S.A.',
+                nombre_comercial: 'Fiscal de Prueba',
+                regimen_isr: 'retencion_definitiva',
+                codigo_establecimiento: 4,
+            }),
             201,
         )
         const empresaId = creada.body().id as number

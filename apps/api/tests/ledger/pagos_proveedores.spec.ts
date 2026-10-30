@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { saldoProveedor } from '#ledger/proveedores'
@@ -33,7 +34,7 @@ async function compraCredito(
         {
             proveedor_id: proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: fecha,
             condicion: 'credito',
             vence_en: vence ?? null,

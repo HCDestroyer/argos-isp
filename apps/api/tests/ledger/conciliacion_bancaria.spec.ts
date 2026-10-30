@@ -1,8 +1,8 @@
 import type { Assert } from '@japa/assert'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { cuentaBancariaPrueba } from '#tests/billing/ayudas_billing'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { cuentaBancariaPrueba, unicoBd } from '#tests/billing/ayudas_billing'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
 import LiquidarCobros from '#ledger/actions/liquidar_cobros'
@@ -45,7 +45,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
         const hoy = hoyGuatemala()
         const banco = e.banco.get(e.B)!
         const s = await servicioFacturado(e.B, '2026-10-01', { instalacion: '2026-07-01' })
-        const boleta = unico('DEP')
+        const boleta = await unicoBd('DEP')
         const pago = await new RegistrarPago().execute(
             {
                 cliente_id: s.clienteId,
@@ -77,7 +77,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
                 metodo: 'pasarela',
                 pasarela: 'falsa',
                 monto: '100.00',
-                referencia: unico('PAS'),
+                referencia: await unicoBd('PAS'),
                 empresa_id: e.B,
             },
             e.ctx,

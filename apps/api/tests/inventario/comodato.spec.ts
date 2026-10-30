@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
@@ -47,7 +48,7 @@ async function comprarOnus(
         {
             proveedor_id: proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: datos.fecha ?? haceMeses(0),
             condicion: 'credito',
             lineas: [
@@ -87,6 +88,7 @@ async function eventos(nombre: string, unidadId: number) {
         .from('audit.outbox')
         .where('evento', nombre)
         .whereRaw(`payload->>'unidad_id' = ?`, [String(unidadId)])
+        .orderBy('id', 'asc')
 }
 
 test.group('Inventario · fase B', (group) => {
@@ -98,7 +100,7 @@ test.group('Inventario · fase B', (group) => {
         const e = await prepararEmpresasGt()
         const onu = await productoEn(e.B, e.ctx, { nombre: 'ONU GPON', tipo: 'equipo', seguimiento: 'serie' })
         const bodega = await bodegaEn(e.B, e.ctx)
-        const series = [unico('ZTEG'), unico('ZTEG'), unico('ZTEG')]
+        const series = [await unicoBd('ZTEG'), await unicoBd('ZTEG'), await unicoBd('ZTEG')]
         const compra = await comprarOnus(e.B, e.ctx, {
             producto_id: onu.id,
             bodega_id: bodega.id,
@@ -192,7 +194,7 @@ test.group('Inventario · fase B', (group) => {
         const compra = await comprarOnus(e.B, e.ctx, {
             producto_id: onu.id,
             bodega_id: bodega.id,
-            series: [unico('S'), unico('S')],
+            series: [await unicoBd('S'), await unicoBd('S')],
         })
         const [a, b] = await unidadesDeCompra(compra.id)
         const { servicioId } = await servicioEn(e.B)
@@ -235,7 +237,7 @@ test.group('Inventario · fase B', (group) => {
         const otra = await comprarOnus(e.B, e.ctx, {
             producto_id: onu.id,
             bodega_id: bodega.id,
-            series: [unico('S')],
+            series: [await unicoBd('S')],
         })
         const [c] = await unidadesDeCompra(otra.id)
         const retirado = await errorDe(
@@ -265,7 +267,7 @@ test.group('Inventario · fase B', (group) => {
         const e = await prepararEmpresasGt()
         const onu = await productoEn(e.B, e.ctx, { tipo: 'equipo', seguimiento: 'serie' })
         const bodega = await bodegaEn(e.B, e.ctx)
-        const series = [unico('S'), unico('S')]
+        const series = [await unicoBd('S'), await unicoBd('S')]
         const compra = await comprarOnus(e.B, e.ctx, { producto_id: onu.id, bodega_id: bodega.id, series })
         const [a] = await unidadesDeCompra(compra.id)
         const { servicioId } = await servicioEn(e.B)
@@ -279,7 +281,7 @@ test.group('Inventario · fase B', (group) => {
         const otra = await comprarOnus(e.B, e.ctx, {
             producto_id: onu.id,
             bodega_id: bodega.id,
-            series: [unico('S')],
+            series: [await unicoBd('S')],
         })
         await new AnularCompra().execute({ compra_id: otra.id, motivo: 'factura equivocada' }, e.ctx)
         const [anulada] = await unidadesDeCompra(otra.id)
@@ -301,7 +303,7 @@ test.group('Inventario · fase B', (group) => {
         })
         const bodega = await bodegaEn(e.B, e.ctx)
         const otraBodega = await bodegaEn(e.B, e.ctx)
-        const serie = unico('RT')
+        const serie = await unicoBd('RT')
         const inicial = await new CargarSaldoInicial().execute(
             {
                 producto_id: router.id,
@@ -332,7 +334,7 @@ test.group('Inventario · fase B', (group) => {
                 {
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('F'),
+                    numero: await unicoBd('F'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     lineas: [
@@ -343,7 +345,7 @@ test.group('Inventario · fase B', (group) => {
                             cantidad: 2,
                             producto_id: router.id,
                             bodega_id: bodega.id,
-                            unidades: [{ mac: 'AABBCC001122' }, { serie: unico('RT') }],
+                            unidades: [{ mac: 'AABBCC001122' }, { serie: await unicoBd('RT') }],
                         },
                     ],
                 },
@@ -356,7 +358,7 @@ test.group('Inventario · fase B', (group) => {
                 {
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('F'),
+                    numero: await unicoBd('F'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     lineas: [
@@ -446,7 +448,7 @@ test.group('Inventario · fase B', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 lineas: [
@@ -463,12 +465,12 @@ test.group('Inventario · fase B', (group) => {
             },
             e.ctx,
         )
-        const ncre = (lineas: unknown[], referencia = compra.id) =>
+        const ncre = async (lineas: unknown[], referencia = compra.id) =>
             new RegistrarCompra().execute(
                 {
                     proveedor_id: proveedor.id,
                     tipo_documento: 'NCRE',
-                    numero: unico('NC'),
+                    numero: await unicoBd('NC'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     compra_referencia_id: referencia,
@@ -532,7 +534,7 @@ test.group('Inventario · fase B', (group) => {
         const conOnus = await comprarOnus(e.B, e.ctx, {
             producto_id: onu.id,
             bodega_id: bodega.id,
-            series: [unico('S'), unico('S')],
+            series: [await unicoBd('S'), await unicoBd('S')],
             proveedorId: proveedor.id,
         })
         const [x] = await unidadesDeCompra(conOnus.id)
@@ -665,7 +667,7 @@ test.group('Inventario · fase B', (group) => {
             {
                 producto_id: onu.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('V') },
+                unidad: { serie: await unicoBd('V') },
                 costo_total: '120.00',
                 fecha: '2014-02-05',
             },

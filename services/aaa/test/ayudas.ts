@@ -38,6 +38,7 @@ export function servicio(
         estado: 'activo',
         router_id: 1,
         control_velocidad: 'simple',
+        velocidad: null,
         plan: {
             id: 1,
             subida_kbps: 5120,

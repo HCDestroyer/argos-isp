@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -234,7 +235,7 @@ test.group('Inventario · origen Iris (pedido A3)', (group) => {
             {
                 producto_id: onu.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('ZTEG') },
+                unidad: { serie: await unicoBd('ZTEG') },
                 costo_total: '300.00',
             },
             e.ctx,

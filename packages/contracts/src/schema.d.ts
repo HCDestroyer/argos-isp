@@ -6560,6 +6560,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estrategia de velocidad propia de un plan en un router (o quitarla con null)
+         * @description Parcial por tipo de conexión: cada capa ausente o null hereda la del router. Valida la matriz con todo el router (422), guarda en `planes_routers` (la crea si el plan no estaba implementado) y emite `router.estrategia_cambiada` con `plan_id`. `version` de la implementación si ya existe.
+         */
+        post: operations["planesEstrategiaVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/planes/{id}/sincronizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sincronizar un plan con la red (sin desconectar)
+         * @description Reescribe `aaa:user:*` de sus servicios, pide CoA con la velocidad nueva a las sesiones PPPoE vivas (`radius_rate_limit` o `perfil_ppp`; nunca Disconnect) y reconcilia cada router (colas, padres, perfiles, PCQ). `?router_id=` lo limita a un router. Devuelve el resumen por router; un router que no responde no frena a los demás. Lo mismo corre solo al editar la velocidad del plan.
+         */
+        post: operations["planesSincronizar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/planes/vista-previa": {
         parameters: {
             query?: never;
@@ -7643,6 +7683,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/red/control-velocidad/matriz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capas del control de velocidad y qué combina con qué
+         * @description Aplicación, padre, tipo de cola y extras, con los tipos de conexión y de cola que admite cada aplicación, las reglas de la matriz (las mismas que dan 422) y los atajos `simple` y `arbol_pcq`.
+         */
+        get: operations["redControlVelocidadMatriz"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/red/eventos": {
         parameters: {
             query?: never;
@@ -8112,6 +8172,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/cambiar-estrategia-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar la estrategia de control de velocidad del router (por tipo de conexión)
+         * @description Valida la matriz (422 con el porqué), cambia el campo y emite `router.estrategia_cambiada`; el worker de RouterOS lo aplica por lotes sin cortar (crea lo nuevo, mueve, borra lo viejo). Las sesiones PPPoE vivas reciben CoA de velocidad y conservan lo demás hasta reconectar, salvo `reconectar: true`. Sin cambios: 200 sin evento. 409 si la `version` no coincide.
+         */
+        post: operations["routersCambiarEstrategiaVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/conexion": {
         parameters: {
             query?: never;
@@ -8166,6 +8246,26 @@ export interface paths {
          * @description Invalida el peer (borra la clave pública registrada, vuelve a `pendiente`, emite `router.conexion_rotada`) y responde el script nuevo como `GET /routers/:id/script-conexion` (mismos `?admin=` e `?incluir=`). La IP del túnel no cambia.
          */
         post: operations["routersConexionRotar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/diagnostico-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ¿Un suspendido de este router ve la página de corte?
+         * @description El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), `sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y `walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 no se redirigen.
+         */
+        get: operations["routersDiagnosticoCorte"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8277,8 +8377,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)
-         * @description Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.
+         * Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)
+         * @description Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.
          */
         post: operations["routersProbarConexion"];
         delete?: never;
@@ -8377,6 +8477,46 @@ export interface paths {
          * @description Calcula, con los datos vigentes y sin tocar el router, los objetos que el cambio a `a` crea, corrige y borra (colas, árbol, PCQ, mangle, address-lists, perfiles PPP), los lotes y las sesiones PPPoE que reciben Disconnect. Con `a` igual al modo actual, todo vacío. 404 si el router no existe.
          */
         get: operations["routersVistaPreviaControl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/vista-previa-estrategia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa de un cambio de estrategia de velocidad (no escribe)
+         * @description Con la estrategia propuesta del router y, opcional, excepciones de planes: qué se crea, cambia y borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el router. 422 con `errors[]` si la combinación no es válida.
+         */
+        post: operations["routersVistaPreviaEstrategia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/vista-previa-reconciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué haría «Reconciliar ahora» (lee el router, no escribe)
+         * @description Compara el router con su estado deseado: servicios, velocidad (colas, árbol, PCQ, perfiles) y corte (reglas, listas, perfil suspendido, orden de los saltos). `error` si el router no responde.
+         */
+        get: operations["routersVistaPreviaReconciliar"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10609,8 +10749,11 @@ export interface components {
             historial?: components["schemas"]["CheckCierre"][];
         };
         ChequeoConexion: {
-            /** @enum {string} */
-            clave: "tunel" | "api" | "equipo" | "radius";
+            /**
+             * @description `corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)
+             * @enum {string}
+             */
+            clave: "tunel" | "api" | "equipo" | "radius" | "corte";
             /** @description null = no se pudo comprobar (falló otro chequeo antes) */
             ok: boolean | null;
             /** @description Explicación en lenguaje simple; nunca trae secretos */
@@ -10625,6 +10768,8 @@ export interface components {
             datos?: {
                 [key: string]: unknown;
             } | null;
+            /** @description Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites */
+            corte?: components["schemas"]["DiagnosticoCorte"] | null;
         };
         CierreAnual: {
             id: number;
@@ -11986,6 +12131,75 @@ export interface components {
             pagado_pendientes: components["schemas"]["Dinero"];
             facturas_vencidas: number;
         };
+        DiagnosticoCorte: {
+            router_id: number;
+            /** @description Un suspendido de este router ve la página de corte (todo en verde) */
+            ok: boolean;
+            chequeos: {
+                /**
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden
+                 * @enum {string}
+                 */
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden";
+                /** @description null: no se pudo comprobar */
+                ok: boolean | null;
+                /**
+                 * @description null si salió bien
+                 * @enum {string|null}
+                 */
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | null;
+                /** @description Qué se vio y qué hacer, en lenguaje simple */
+                detalle: string;
+                /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
+                comandos: string[];
+                /** @description «Reconciliar ahora» lo arregla */
+                reconciliar: boolean;
+            }[];
+            problemas: {
+                /** @enum {string} */
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack";
+                /** @description Qué falla y qué hacer, en lenguaje simple */
+                mensaje: string;
+                /** @description «Reconciliar ahora» lo arregla */
+                reconciliar: boolean;
+                comandos: string[];
+            }[];
+            faltan: {
+                ruta: string;
+                clave: string;
+                /** @enum {string} */
+                accion: "crear" | "actualizar" | "borrar" | "mover";
+            }[];
+            portal: {
+                /** @description PORTAL_URL_PUBLICA (la que ve el cliente) */
+                url: string | null;
+                fqdn: string | null;
+                /** @description IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe */
+                ipv4: string | null;
+                /** @enum {string|null} */
+                origen: "variable" | "url" | "dns" | null;
+                /** @description http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado) */
+                destino_nat: string | null;
+                /** @description null: no se probó (sin destino) */
+                alcanzable: boolean | null;
+                http_status: number | null;
+                detalle: string | null;
+            };
+            suspendidos: {
+                /** @description Suspendidos con IPv4 (PPPoE con sesión abierta o WISP) */
+                total: number;
+                /** @description Cuántos no están en la address-list: navegan sin corte */
+                fuera_de_lista: number;
+                ejemplos: {
+                    servicio_id: number;
+                    /** @enum {string} */
+                    tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    ipv4: string;
+                }[];
+            };
+            /** @description Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre */
+            limites: string[];
+        };
         Diario: {
             id: number;
             empresa_id: number;
@@ -12680,6 +12894,38 @@ export interface components {
                 al_dia: boolean;
             } | null;
         };
+        EstrategiasRouter: {
+            pppoe: components["schemas"]["EstrategiaVelocidad"];
+            ip_estatica: components["schemas"]["EstrategiaVelocidad"];
+            dhcp_fija: components["schemas"]["EstrategiaVelocidad"];
+        };
+        EstrategiaVelocidad: {
+            /**
+             * @description Capa 1: cómo se limita a cada cliente
+             * @enum {string}
+             */
+            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+            /**
+             * @description Capa 2: agregación
+             * @enum {string}
+             */
+            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+            /**
+             * @description Capa 3: cola de las hojas o del PCQ
+             * @enum {string}
+             */
+            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+            extras: {
+                /** @description burst-* del plan (en PCQ: pcq-burst-*) */
+                rafaga: boolean;
+                /** @description priority del plan (1–8); false = 8 */
+                prioridad: boolean;
+                /** @description limit-at (CIR); false = 0 */
+                garantizado: boolean;
+                /** @description Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack */
+                excluir_fasttrack: boolean;
+            };
+        };
         EvaluacionPromesa: {
             /** @enum {string} */
             resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
@@ -12793,6 +13039,50 @@ export interface components {
             reglas_promesa?: {
                 [key: string]: unknown;
             };
+        };
+        ExcepcionEstrategia: {
+            pppoe?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
+            ip_estatica?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
+            dhcp_fija?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
         };
         ExistenciaInventario: {
             id: number;
@@ -13569,6 +13859,42 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        MatrizControlVelocidad: {
+            aplicaciones: {
+                /** @enum {string} */
+                valor: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                /** @enum {string} */
+                familia: "simple" | "arbol";
+                tipos_conexion: ("pppoe" | "ip_estatica" | "dhcp_fija")[];
+                tipos_cola: ("default" | "sfq" | "pcq" | "fq_codel" | "cake")[];
+                /** @description La velocidad de una sesión viva cambia por CoA */
+                coa_en_vivo: boolean;
+            }[];
+            tipos_cola: {
+                /** @enum {string} */
+                valor: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                routeros_minimo: string | null;
+            }[];
+            padres: {
+                /** @enum {string} */
+                valor: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+            }[];
+            extras: {
+                /** @enum {string} */
+                valor: "rafaga" | "prioridad" | "garantizado" | "excluir_fasttrack";
+                por_defecto: boolean;
+            }[];
+            reglas: {
+                /** @description El mismo `rule` de los errores 422 */
+                rule: string;
+                mensaje: string;
+            }[];
+            advertencias: string[];
+            atajos: {
+                simple: components["schemas"]["EstrategiasRouter"];
+                arbol_pcq: components["schemas"]["EstrategiasRouter"];
+            };
+        };
         Mayor: {
             cuenta: components["schemas"]["Cuenta"];
             saldo_inicial: components["schemas"]["Dinero"];
@@ -13873,7 +14199,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -14366,6 +14692,8 @@ export interface components {
             rafaga_segundos: number | null;
             /** @description null = hereda del plan */
             prioridad: number | null;
+            /** @description Estrategia propia del plan en este router, parcial por tipo de conexión; null = hereda la del router */
+            estrategia_velocidad: components["schemas"]["ExcepcionEstrategia"] | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -16817,10 +17145,14 @@ export interface components {
             /** @enum {string} */
             modo_seguridad: "radius" | "api";
             /**
-             * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
+             * @description Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple
              * @enum {string}
              */
             control_velocidad: "simple" | "arbol_pcq";
+            /** @description Estrategia de control de velocidad por tipo de conexión (contratos/control-velocidad.md) */
+            estrategia_velocidad: components["schemas"]["EstrategiasRouter"];
+            /** @description Versión de RouterOS leída de /system/resource; null = no se sabe */
+            routeros_version: string | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
             capacidad_bajada_kbps: number | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
@@ -17138,6 +17470,25 @@ export interface components {
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
+        };
+        SincronizacionPlan: {
+            plan_id: number;
+            /** @description Servicios PPPoE del plan cuyo aaa:user:* se reescribe */
+            aaa_reescritos: number;
+            routers: {
+                router_id: number;
+                nombre: string;
+                servicios: number;
+                /** @description Sesiones PPPoE vivas a las que se pidió CoA con la velocidad nueva (sin desconectar) */
+                sesiones_actualizadas: number;
+                /** @description Sesiones abiertas sin CoA (PCQ del plan, suspendidas o con otra estrategia) */
+                sesiones_sin_coa: number;
+                /** @description Objetos que el reconciliador creó, corrigió o borró */
+                colas_cambiadas: number;
+                /** @description false: el router no tiene API (solo RADIUS) */
+                reconciliado: boolean;
+                errores: string[];
+            }[];
         };
         SincronizacionServicio: {
             servicio_id: number;
@@ -17777,6 +18128,66 @@ export interface components {
                 nombre: string | null;
             }[];
         };
+        VistaPreviaEstrategia: {
+            router_id: number;
+            /** @description false: la combinación no es válida (ver errores) */
+            valida: boolean;
+            errores: {
+                /** @description Capa con el problema, p. ej. estrategia_velocidad.ip_estatica.aplicacion */
+                field: string;
+                /** @description aplicacion_tipo, tipo_cola, version, familia_router, plan_consistente, familia_plan o enum */
+                rule: string;
+                /** @description El porqué, en lenguaje simple */
+                message: string;
+            }[];
+            advertencias: {
+                /** @description sin_techo, reuso_dedicado, sin_padre_prioridad, fasttrack, version_desconocida o fuera_del_techo */
+                regla: string;
+                mensaje: string;
+            }[];
+            de: components["schemas"]["EstrategiasRouter"];
+            a: components["schemas"]["EstrategiasRouter"];
+            planes: {
+                plan_id: number;
+                de: components["schemas"]["ExcepcionEstrategia"] | null;
+                a: components["schemas"]["ExcepcionEstrategia"] | null;
+            }[];
+            crear: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            actualizar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            borrar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            menus: {
+                ruta: string;
+                crear: number;
+                actualizar: number;
+                borrar: number;
+            }[];
+            /** @description Servicios cuya estrategia cambia */
+            servicios: number;
+            /** @description Lotes de 50 servicios en que el worker los migra */
+            lotes: number;
+            /** @description Sesiones PPPoE vivas que reciben el rate-limit nuevo por CoA */
+            sesiones_coa: number;
+            /** @description Sesiones PPPoE que conservan lo anterior hasta reconectar por su cuenta */
+            sesiones_conservan: number;
+            /** @description Solo con reconectar: sesiones que reciben Disconnect */
+            sesiones_a_desconectar: number;
+            orden: ("preparar" | "lotes" | "terminar")[];
+        };
         VistaPreviaPlantilla: {
             evento: string;
             /** @enum {string} */
@@ -17809,6 +18220,27 @@ export interface components {
             ultimo_prefijo: string;
             /** @description Pool existente con el que se traslaparía (no se podría crear); null si no hay */
             traslapa_con: string | null;
+        };
+        VistaPreviaReconciliar: {
+            router_id: number;
+            cambios: {
+                ruta: string;
+                clave: string;
+                /** @enum {string} */
+                accion: "crear" | "actualizar" | "borrar" | "mover";
+                /** @enum {string} */
+                grupo: "servicio" | "velocidad" | "corte";
+            }[];
+            menus: {
+                ruta: string;
+                crear: number;
+                actualizar: number;
+                borrar: number;
+                mover: number;
+            }[];
+            avisos: string[];
+            /** @description El router no respondió o no tiene credenciales */
+            error: string | null;
         };
         VistaPreviaVelocidad: {
             /** @description Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override) */
@@ -43728,6 +44160,191 @@ export interface operations {
             };
         };
     };
+    planesEstrategiaVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                routerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version?: number;
+                    estrategia_velocidad?: {
+                        pppoe?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                        ip_estatica?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                        dhcp_fija?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                    } | null;
+                    motivo?: string;
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Implementación con la estrategia */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    planesSincronizar: {
+        parameters: {
+            query?: {
+                router_id?: number;
+            };
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por router */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SincronizacionPlan"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.sincronizar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     planesVistaPrevia: {
         parameters: {
             query?: never;
@@ -47456,6 +48073,44 @@ export interface operations {
             };
         };
     };
+    redControlVelocidadMatriz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matriz */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrizControlVelocidad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     redEventosListar: {
         parameters: {
             query?: {
@@ -48671,7 +49326,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -48729,7 +49384,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -49212,6 +49867,127 @@ export interface operations {
             };
         };
     };
+    routersCambiarEstrategiaVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    estrategia_velocidad: {
+                        pppoe: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        ip_estatica: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        dhcp_fija: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                    };
+                    motivo?: string;
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Router con la estrategia nueva */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Router"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     routersConexion: {
         parameters: {
             query?: never;
@@ -49380,6 +50156,55 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersDiagnosticoCorte: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diagnóstico */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticoCorte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -50145,6 +50970,202 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersVistaPreviaEstrategia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    estrategia_velocidad?: {
+                        pppoe: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        ip_estatica: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        dhcp_fija: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                    };
+                    planes?: {
+                        plan_id: number;
+                        estrategia_velocidad?: {
+                            pppoe?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                            ip_estatica?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                            dhcp_fija?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                        } | null;
+                    }[];
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaEstrategia"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersVistaPreviaReconciliar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaReconciliar"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.reconciliar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -52871,7 +53892,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
