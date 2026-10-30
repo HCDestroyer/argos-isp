@@ -2,13 +2,14 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEmpresaFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
-import { bancoId, crearPlantillaFila, eventosDe, generar } from '#tests/billing/ayudas_billing'
+import { bancoId, crearPlantillaFila, eventosDe, generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoPendienteServicio } from '#billing/facturas'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import { hoyGuatemala } from '#ledger/fechas'
 
 /**
  * Multiempresa en billing y ledger (`contratos/multiempresa.md`): cada documento financiero es de
@@ -88,7 +89,7 @@ async function cajaAbierta(client: any, token: string, empresaId: number): Promi
             .post('/api/v1/cajas')
             .bearerToken(token)
             .header('X-Empresa-Id', String(empresaId))
-            .json({ nombre: unico('Caja') }),
+            .json({ nombre: await unicoBd('Caja') }),
         201,
     )
     await estado(
@@ -113,6 +114,12 @@ async function afirmarCuadrePorEmpresa(assert: any) {
     assert.deepEqual(resultado.rows, [], 'hay empresas con el libro descuadrado')
     await afirmarLibroCuadrado(assert)
 }
+
+/**
+ * Fin de los rangos de los reportes del libro: hoy (al pedirlo), no una fecha fija. Las facturas se
+ * asientan con el reloj real; con `hasta: '2026-12-31'`, desde enero de 2027 quedaban fuera.
+ */
+const HASTA_HOY = () => hoyGuatemala()
 
 test.group('Multiempresa · billing y ledger', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
@@ -201,7 +208,11 @@ test.group('Multiempresa · billing y ledger', (group) => {
                 .post('/api/v1/cuentas-bancarias')
                 .bearerToken(global)
                 .header('X-Empresa-Id', String(e.B))
-                .json({ banco_id: await bancoId(), numero: unico('900'), alias: unico('Cobros B') }),
+                .json({
+                    banco_id: await bancoId(),
+                    numero: await unicoBd('900'),
+                    alias: await unicoBd('Cobros B'),
+                }),
             201,
         )
         assert.equal(cuentaB.body().empresa_id, e.B)
@@ -214,7 +225,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
                     metodo: 'deposito',
                     monto: '150.00',
                     cuenta_bancaria_id: cuentaB.body().id,
-                    referencia: unico('boleta'),
+                    referencia: await unicoBd('boleta'),
                 }),
             201,
         )
@@ -408,7 +419,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
                 .bearerToken(token)
                 .json({
                     banco_id: await bancoId(),
-                    numero: unico('901'),
+                    numero: await unicoBd('901'),
                     alias: unico('B'),
                     empresa_id: e.B,
                 }),
@@ -423,7 +434,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
                     metodo: 'deposito',
                     monto: '150.00',
                     cuenta_bancaria_id: cuentaB.body().id,
-                    referencia: unico('boleta'),
+                    referencia: await unicoBd('boleta'),
                     facturas: [e.facturasA[0]!.id],
                 }),
             422,
@@ -440,7 +451,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
                     metodo: 'deposito',
                     monto: '10.00',
                     cuenta_bancaria_id: cuentaB.body().id,
-                    referencia: unico('boleta'),
+                    referencia: await unicoBd('boleta'),
                 }),
             201,
         )
@@ -549,7 +560,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const resultados = await estado(
             client
                 .get('/api/v1/libro/estado-resultados')
-                .qs({ desde: '2026-09-01', hasta: '2026-12-31' })
+                .qs({ desde: '2026-09-01', hasta: HASTA_HOY() })
                 .bearerToken(soloB),
             200,
         )
@@ -619,7 +630,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const iva = await estado(
             client
                 .get('/api/v1/reportes/iva')
-                .qs({ desde: '2026-09-01', hasta: '2026-12-31' })
+                .qs({ desde: '2026-09-01', hasta: HASTA_HOY() })
                 .bearerToken(soloB),
             200,
         )
@@ -653,7 +664,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const deB = await new RegistrarSaldoInicial().execute(
             {
                 origen: 'pruebamulti',
-                id_externo: unico('si'),
+                id_externo: await unicoBd('si'),
                 cliente_id: soloB,
                 monto: '80.00',
                 fecha: '2026-10-01',
@@ -670,7 +681,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const explicita = await new RegistrarSaldoInicial().execute(
             {
                 origen: 'pruebamulti',
-                id_externo: unico('si'),
+                id_externo: await unicoBd('si'),
                 cliente_id: e.clienteId,
                 monto: '-20.00',
                 fecha: '2026-10-01',
@@ -696,7 +707,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const activa = await new RegistrarSaldoInicial().execute(
             {
                 origen: 'pruebamulti',
-                id_externo: unico('si'),
+                id_externo: await unicoBd('si'),
                 cliente_id: e.clienteId,
                 monto: '5.00',
                 fecha: '2026-10-01',

@@ -1,8 +1,10 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { errorDe, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
@@ -25,9 +27,26 @@ import type { ContextoAccion } from '#shared/contexto'
  * por usuario, auditado y sin tocar nada contable.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (2026-10-20, mediodía en Guatemala), no la fecha real: con `HOY` tomado al importar el
+ * archivo, una corrida que cruzaba la medianoche de Guatemala (06:00 UTC) o el fin de mes comparaba
+ * contra el día anterior, y en enero las cifras «del año» caían en otro. Cada prueba fija
+ * `relojFiscal` en `AHORA` (setup) y lleva sus ventas a `HOY` (`llevarFacturasA`), porque el libro
+ * las fecha con el reloj real.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
+
+async function ventaDelMes(empresaId: number, precio: string) {
+    const s = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        HOY,
+    )
+    return s
+}
 
 async function parametro(ctx: ContextoAccion, empresaId: number, clave: string, valor: unknown) {
     await new EditarParametro().execute(
@@ -50,6 +69,9 @@ async function consejosDe(empresaId: number, usuarioId: number | null = null) {
 
 test.group('Fase 8 · consejos fiscales', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()
@@ -60,13 +82,13 @@ test.group('Fase 8 · consejos fiscales', (group) => {
     }) => {
         const e = await prepararEmpresasGt()
         await parametro(e.ctx, e.B, 'inicio_libros', '2026-01-01')
-        await servicioFacturado(e.B, `${MES}-01`, { precio: '56000.00', instalacion: `${MES}-01` })
+        await ventaDelMes(e.B, '56000.00')
         const proveedor = await proveedorEn(e.B, e.ctx)
         await new RegistrarCompra().execute(
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('D'),
+                numero: await unicoBd('D'),
                 fecha_documento: HOY,
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Enlace de tránsito', total: '11200.00' }],
@@ -140,7 +162,7 @@ test.group('Fase 8 · consejos fiscales', (group) => {
     }) => {
         const e = await prepararEmpresasGt()
         await parametro(e.ctx, e.B, 'inicio_libros', '2026-01-01')
-        await servicioFacturado(e.B, `${MES}-01`, { precio: '224.00', instalacion: `${MES}-01` })
+        await ventaDelMes(e.B, '224.00')
         relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
         const d = await new CalcularDeclaracion().execute(
             { empresa_id: e.B, impuesto: 'iva_mensual', periodo: MES },

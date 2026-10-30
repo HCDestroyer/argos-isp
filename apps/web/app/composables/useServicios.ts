@@ -143,5 +143,20 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion, sincronizarRouter }
+    /** `GET /servicios/:id/eliminable` (`servicios.ver`): si nunca se usó y, si no, los motivos. */
+    function eliminable(id: number): Promise<Resultado<Eliminable>> {
+        return resolver(api.GET('/api/v1/servicios/{id}/eliminable', { params: { path: { id } } }))
+    }
+
+    /**
+     * `DELETE /servicios/:id?version=N` (`servicios.eliminar`, solo admin): 204; la IPv4 y los
+     * prefijos quedan libres. 409 si otra sesión lo cambió; 422 `servicio_con_historial`.
+     */
+    function eliminar(id: number, version: number, claveIdempotencia: string): Promise<Resultado<null>> {
+        return resolverSinCuerpo(api.DELETE('/api/v1/servicios/{id}', {
+            params: { path: { id }, query: { version }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { eliminable, eliminar, listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion, sincronizarRouter }
 }

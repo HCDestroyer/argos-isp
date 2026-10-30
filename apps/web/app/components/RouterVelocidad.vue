@@ -4,10 +4,10 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import * as z from 'zod'
 
 /**
- * Control de velocidad de un router (`contratos/velocidad.md`): capacidad del enlace
- * (`PUT /routers/:id`, `routers.editar`, con `version`) y modo de colas `simple` / `arbol_pcq`
- * con su acción explícita (`POST /routers/:id/cambiar-control-velocidad`, solo admin), con una
- * confirmación que explica qué implica el cambio. Muestra el rate-limit efectivo de cada plan.
+ * Control de velocidad de un router: capacidad del enlace (`PUT /routers/:id`, `routers.editar`,
+ * con `version`), el resumen de la estrategia por capas de cada tipo de conexión y el editor
+ * (`EstrategiaVelocidadModal`, `routers.cambiar_control_velocidad`, `contratos/control-velocidad.md`).
+ * Muestra el rate-limit efectivo de cada plan.
  */
 const props = defineProps<{
     router: RouterNas
@@ -23,8 +23,6 @@ const toast = useToast()
 const { puede } = usePermisos()
 
 const actual = shallowRef<RouterNas>(props.router)
-const control = computed<ControlVelocidad>(() => actual.value.control_velocidad ?? (actual.value.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple'))
-const otro = computed<ControlVelocidad>(() => (control.value === 'simple' ? 'arbol_pcq' : 'simple'))
 
 /* Capacidad del enlace. */
 const esquemaCapacidad = z.object({
@@ -60,7 +58,6 @@ async function recargarRouter() {
         capacidad.capacidad_bajada_kbps = resultado.data.capacidad_bajada_kbps ?? null
         capacidad.capacidad_subida_kbps = resultado.data.capacidad_subida_kbps ?? null
         problemaCapacidad.value = null
-        problemaCambio.value = null
     }
 }
 
@@ -93,71 +90,18 @@ async function guardarCapacidad(evento: FormSubmitEvent<DatosCapacidad>) {
     toast.add({ title: 'Capacidad guardada', description: `${actual.value.nombre}: el techo de la cola padre global se actualiza en el router.`, icon: 'i-lucide-circle-check', color: 'success' })
 }
 
-/* Cambio de modo. */
-const confirmando = ref(false)
-const motivo = ref('')
-const cambiando = ref(false)
-const problemaCambio = ref<Problem | null>(null)
+/*
+ * Control de velocidad por capas (`contratos/control-velocidad.md`): se edita en
+ * `EstrategiaVelocidadModal` con vista previa; aquí solo el resumen por tipo de conexión.
+ */
+const estrategias = computed(() => estrategiasDeRouter(actual.value))
+const editorAbierto = ref(false)
+const reconciliarAbierto = ref(false)
 
-/* Vista previa del cambio (A2): se pide al abrir la confirmación y sin ella no se confirma. */
-const vistaPrevia = shallowRef<VistaPreviaControl | null>(null)
-const problemaVista = ref<Problem | null>(null)
-const cargandoVista = ref(false)
-
-async function cargarVistaPrevia() {
-    cargandoVista.value = true
-    problemaVista.value = null
-    const destino = otro.value
-    const resultado = await useRouters().vistaPreviaControl(actual.value.id, destino)
-    cargandoVista.value = false
-    vistaPrevia.value = resultado.ok && resultado.data.a === destino ? resultado.data : null
-    problemaVista.value = resultado.ok ? null : resultado.problema
+function alCambiarEstrategia(router: RouterNas) {
+    actual.value = router
+    emit('actualizado', router)
 }
-
-/** El modo cambió desde que se pidió la vista previa (409 al confirmar): releer el router y la vista. */
-async function recargarCambio() {
-    await recargarRouter()
-    await cargarVistaPrevia()
-}
-
-function abrirCambio() {
-    motivo.value = ''
-    problemaCambio.value = null
-    vistaPrevia.value = null
-    confirmando.value = true
-    void cargarVistaPrevia()
-}
-
-async function cambiar() {
-    cambiando.value = true
-    problemaCambio.value = null
-    const datos: CambioControlVelocidad = { version: actual.value.version, control_velocidad: otro.value }
-    if (motivo.value.trim()) {
-        datos.motivo = motivo.value.trim()
-    }
-    const resultado = await useRouters().cambiarControlVelocidad(actual.value.id, datos)
-    cambiando.value = false
-    if (!resultado.ok) {
-        problemaCambio.value = resultado.problema
-        return
-    }
-    actual.value = resultado.data
-    confirmando.value = false
-    emit('actualizado', resultado.data)
-    toast.add({ title: `${actual.value.nombre}: ${CONTROLES_VELOCIDAD[control.value].etiqueta}`, description: 'El dispatcher aplica el cambio por lotes en el router.', icon: 'i-lucide-circle-check', color: 'success' })
-}
-
-/** Qué se crea y qué se borra al pasar de un modo al otro (`contratos/velocidad.md`). */
-const implicaciones = computed(() => (otro.value === 'arbol_pcq'
-    ? [
-            'El árbol de colas usa la capacidad del enlace como techo global y un hijo por plan con su reuso y su garantía.',
-            'PPPoE deja de usar el rate-limit de RADIUS para su cola: el tráfico se marca con mangle y listas por servicio.',
-            'FastTrack debe quedar desactivado para el tráfico de clientes; sin eso las colas no se aplican.',
-        ]
-    : [
-            'Cada servicio vuelve a su cola simple (la dinámica de PPPoE con el rate-limit de RADIUS, una estática en WISP).',
-            'Con más de unos cientos de clientes por router, las colas simples cargan el CPU: el monitoreo avisa desde ~1000.',
-        ]))
 </script>
 
 <template>
@@ -177,38 +121,58 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                         id="titulo-control"
                         class="text-sm font-medium text-highlighted"
                     >
-                        Modo de colas
+                        Control de velocidad
                     </h3>
-                    <div class="surface-card flex flex-col gap-2 p-4">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <UBadge
-                                :label="CONTROLES_VELOCIDAD[control].etiqueta"
-                                :icon="CONTROLES_VELOCIDAD[control].icono"
-                                color="neutral"
-                                variant="subtle"
-                                data-prueba="control-actual"
-                            />
-                            <span class="font-mono text-xs text-muted">{{ control }}</span>
-                        </div>
-                        <p class="text-sm text-muted">
-                            {{ CONTROLES_VELOCIDAD[control].descripcion }}
+                    <div class="surface-card flex flex-col gap-3 p-4">
+                        <ul
+                            class="flex flex-col gap-2"
+                            data-prueba="control-actual"
+                        >
+                            <li
+                                v-for="tipo in TIPOS_CONEXION_VELOCIDAD"
+                                :key="tipo"
+                                class="flex flex-col"
+                                :data-tipo="tipo"
+                            >
+                                <span class="text-xs text-muted">{{ ETIQUETAS_TIPO_CONEXION[tipo] }}</span>
+                                <span class="text-sm text-highlighted">{{ resumenEstrategia(estrategias[tipo]) }}</span>
+                            </li>
+                        </ul>
+                        <p class="text-xs text-muted">
+                            Cada plan puede tener su excepción en este router (Planes → ficha del plan → Routers).
                         </p>
                         <UButton
                             v-if="puede('routers.cambiar_control_velocidad')"
-                            :label="CONTROLES_VELOCIDAD[otro].cambiarA"
-                            :icon="CONTROLES_VELOCIDAD[otro].icono"
-                            color="warning"
+                            label="Editar control de velocidad"
+                            icon="i-lucide-sliders-horizontal"
+                            color="neutral"
                             variant="outline"
                             class="self-start"
                             data-prueba="abrir-cambio-control"
-                            @click="abrirCambio"
+                            @click="editorAbierto = true"
                         />
                         <p
                             v-else
                             class="text-xs text-muted"
                         >
-                            Solo un administrador cambia el modo de colas.
+                            Solo un administrador cambia el control de velocidad.
                         </p>
+                        <p
+                            class="text-xs text-muted"
+                            data-prueba="routeros-version"
+                        >
+                            {{ actual.routeros_version ? `RouterOS ${actual.routeros_version}` : 'Versión de RouterOS desconocida: se lee al reconciliar o al probar la conexión.' }}
+                        </p>
+                        <UButton
+                            v-if="puede('routers.reconciliar')"
+                            label="Reconciliar ahora"
+                            icon="i-lucide-refresh-cw"
+                            color="neutral"
+                            variant="outline"
+                            class="self-start"
+                            data-prueba="abrir-reconciliar"
+                            @click="reconciliarAbierto = true"
+                        />
                     </div>
                 </section>
 
@@ -330,95 +294,17 @@ const implicaciones = computed(() => (otro.value === 'arbol_pcq'
                 </section>
             </div>
 
-            <UModal
-                v-model:open="confirmando"
-                :title="`${CONTROLES_VELOCIDAD[otro].cambiarA} · ${actual.nombre}`"
-                :dismissible="!cambiando"
-                :ui="{ content: 'sm:max-w-2xl' }"
-            >
-                <template #body>
-                    <div class="flex flex-col gap-4">
-                        <p class="text-sm text-muted">
-                            Vista previa calculada por la API con los datos vigentes; el router no se toca hasta confirmar.
-                        </p>
-                        <ProblemaAlerta
-                            v-if="problemaVista"
-                            :problema="problemaVista"
-                            :reintentar="cargarVistaPrevia"
-                            :reintentando="cargandoVista"
-                            data-prueba="vista-error"
-                        />
-                        <div
-                            v-else-if="cargandoVista || !vistaPrevia"
-                            class="flex flex-col gap-2"
-                            data-prueba="vista-cargando"
-                        >
-                            <USkeleton class="h-16 w-full" />
-                            <USkeleton class="h-32 w-full" />
-                        </div>
-                        <RouterVistaPreviaControl
-                            v-else
-                            :vista="vistaPrevia"
-                        />
-                        <UAlert
-                            color="warning"
-                            variant="subtle"
-                            icon="i-lucide-triangle-alert"
-                            title="Qué implica el modo nuevo"
-                        >
-                            <template #description>
-                                <ul class="mt-1 flex list-disc flex-col gap-1 pl-4">
-                                    <li
-                                        v-for="linea in implicaciones"
-                                        :key="linea"
-                                    >
-                                        {{ linea }}
-                                    </li>
-                                </ul>
-                            </template>
-                        </UAlert>
-                        <p class="text-sm text-muted">
-                            El cambio se aplica por lotes y es reversible: se puede volver al modo anterior con esta misma acción. Mientras se aplica, los clientes pueden notar un corte breve de velocidad.
-                        </p>
-                        <UFormField
-                            label="Motivo"
-                            help="Opcional; queda en la bitácora."
-                        >
-                            <UTextarea
-                                v-model="motivo"
-                                :rows="2"
-                                placeholder="Ej.: el router ya pasa de 800 clientes"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <ProblemaAlerta
-                            v-if="problemaCambio"
-                            :problema="problemaCambio"
-                            :reintentar="problemaCambio.status === 409 ? recargarCambio : undefined"
-                            data-prueba="cambio-error"
-                        />
-                    </div>
-                </template>
-                <template #footer>
-                    <div class="flex w-full justify-end gap-2">
-                        <UButton
-                            label="Cancelar"
-                            color="neutral"
-                            variant="ghost"
-                            :disabled="cambiando"
-                            @click="confirmando = false"
-                        />
-                        <UButton
-                            :label="CONTROLES_VELOCIDAD[otro].cambiarA"
-                            color="warning"
-                            :loading="cambiando"
-                            :disabled="!vistaPrevia || cargandoVista"
-                            data-prueba="confirmar-cambio-control"
-                            @click="cambiar"
-                        />
-                    </div>
-                </template>
-            </UModal>
+            <EstrategiaVelocidadModal
+                v-if="puede('routers.cambiar_control_velocidad')"
+                v-model:open="editorAbierto"
+                :router="actual"
+                @actualizado="alCambiarEstrategia"
+            />
+            <RouterReconciliarModal
+                v-if="puede('routers.reconciliar')"
+                v-model:open="reconciliarAbierto"
+                :router="actual"
+            />
         </template>
     </USlideover>
 </template>

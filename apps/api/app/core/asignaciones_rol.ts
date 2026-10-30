@@ -1,6 +1,12 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import type { TipoAlcance } from '#core/acl'
+import {
+    CODIGO_SOLO_EMPRESAS,
+    esAlcanceDeRed,
+    rechazarAlcanceDeRed,
+    usuarioSoloEmpresas,
+} from '#core/alcance_usuario_tecnico'
 
 /**
  * Pieza común de `crearUsuario` y `editarUsuario`: valida y reemplaza las asignaciones de rol
@@ -33,6 +39,23 @@ export async function reemplazarAsignaciones(
     usuarioId: number,
     asignaciones: AsignacionRolEntrada[],
 ): Promise<void> {
+    // El usuario técnico de Iris solo admite alcance por empresas (contrato Iris 0.3.1 §1).
+    const tecnico = await usuarioSoloEmpresas(trx, usuarioId)
+    if (tecnico) {
+        const deRed = asignaciones.flatMap((a, indice) =>
+            esAlcanceDeRed(a.alcance_tipo)
+                ? [
+                      {
+                          field: `roles.${indice}.alcance_tipo`,
+                          rule: CODIGO_SOLO_EMPRESAS,
+                          message: `${tecnico} no admite roles con alcance por ${a.alcance_tipo}: acótalo por empresas`,
+                      },
+                  ]
+                : [],
+        )
+        if (deRed.length > 0) rechazarAlcanceDeRed(tecnico, deRed)
+    }
+
     const errores: ErrorCampo[] = []
     const roleIds = [...new Set(asignaciones.map((a) => a.role_id))]
     const existentes = new Set(

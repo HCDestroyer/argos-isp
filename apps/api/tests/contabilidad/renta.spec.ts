@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
@@ -12,9 +13,8 @@ import AnularPagoDeclaracion from '#fiscal/actions/anular_pago_declaracion'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import CerrarEjercicio from '#ledger/actions/cerrar_ejercicio'
-
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { relojFiscal } from '#fiscal/comun'
 
 /**
  * Auditor contable · ISR, ISO, retenciones y anulación del pago de declaraciones (fase 7 PR C;
@@ -24,6 +24,14 @@ import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
  * con `afirmarLibro`; aquí el inv. 23 y lo nuevo del 22 con violaciones fabricadas en una transacción
  * que se revierte.
  */
+
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: el pago de la declaración valida su fecha
+ * contra `relojFiscal`. `HOY` ya no se toma al importar el archivo (una corrida que cruzaba la
+ * medianoche de Guatemala mezclaba dos días); cada prueba fija `relojFiscal` en `AHORA`.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 
 async function fabricado(empresas: number[], paso: (trx: TransactionClientContract) => Promise<void>) {
     const trx = await db.transaction()
@@ -96,7 +104,14 @@ async function iso(
 }
 
 test.group('Auditor contable · ISR, ISO y pagos de declaraciones', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
+    group.each.teardown(async () => {
+        relojFiscal.ahora = original
+        await soloEmpresaPrincipal()
+    })
 
     test('inv. 23: ISO sin origen, acreditado de más o fuera de su ventana, 1.1.08 sin respaldo y cierre anual distinto de la declaración; inv. 22 del ISR', async ({
         assert,

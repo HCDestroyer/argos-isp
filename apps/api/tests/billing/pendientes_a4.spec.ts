@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, nuevaCaja } from '#tests/ledger/ayudas_libro'
-import { facturasDe, servicioCortado } from '#tests/billing/ayudas_billing'
+import { facturasDe, servicioCortado, unicoBd } from '#tests/billing/ayudas_billing'
 import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
 import { plantillaPorDefectoId } from '#billing/plantillas'
@@ -274,7 +274,7 @@ test.group('billing · pendientes de A4', () => {
         assert,
     }) => {
         const primera = await new CrearPlantilla().execute(
-            { nombre: unico('Defecto A'), ciclo: 'dia_fijo', dia: 1, por_defecto: true },
+            { nombre: await unicoBd('Defecto A'), ciclo: 'dia_fijo', dia: 1, por_defecto: true },
             contextoPrueba(),
         )
         assert.isTrue(primera.por_defecto)
@@ -285,7 +285,7 @@ test.group('billing · pendientes de A4', () => {
             client
                 .post('/api/v1/plantillas-facturacion')
                 .bearerToken(token)
-                .json({ nombre: unico('Defecto B'), ciclo: 'aniversario', por_defecto: true }),
+                .json({ nombre: await unicoBd('Defecto B'), ciclo: 'aniversario', por_defecto: true }),
             201,
         )
         assert.isTrue(segunda.body().por_defecto)

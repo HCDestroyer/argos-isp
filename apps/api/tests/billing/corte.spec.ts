@@ -54,24 +54,40 @@ test.group('billing · cron de corte', () => {
     })
 
     test('POST /facturas/corte manual por servicio ignora la hora si se pide', async ({ client, assert }) => {
+        // Respetar la hora solo se ve antes de la hora de corte: con el reloj real, a las 23:59 de
+        // Guatemala la primera llamada ya cortaba. La regla se prueba en un instante fijo (el día propio
+        // de este archivo, a mediodía); un corte manual no registra `cortes_ejecutados`.
         const { servicioId } = await escenario({ plantilla: { hora_corte: '23:59' } })
         await generar(servicioId, '2026-10-01')
-        const { token } = await usuarioConRoles(['contabilidad'])
-
-        const respetando = await estado(
-            client.post('/api/v1/facturas/corte').bearerToken(token).json({ servicio_id: servicioId }),
-            200,
+        const mediodia = A_LAS('12:00')
+        const respetando = await new EjecutarCorte().execute(
+            { servicio_id: servicioId, ahora: mediodia },
+            contextoPrueba(),
         )
-        assert.containSubset(respetando.body(), { horas: ['*'], evaluados: 1 })
-        const ignorando = await estado(
+        assert.containSubset(respetando, { horas: ['*'], evaluados: 1, cambiados: 0 })
+        assert.isAbove(respetando.vencimiento!.vencidas, 0)
+        assert.equal(await estadoServicio(servicioId), 'activo')
+        const ignorando = await new EjecutarCorte().execute(
+            { servicio_id: servicioId, ignorar_hora: true, ahora: mediodia },
+            contextoPrueba(),
+        )
+        assert.containSubset(ignorando, { horas: ['*'], evaluados: 1, cambiados: 1 })
+        assert.equal(await estadoServicio(servicioId), 'suspendido')
+
+        // el endpoint: con ignorar_hora corta a cualquier hora del día real
+        const otro = await escenario({ plantilla: { hora_corte: '23:59' } })
+        await generar(otro.servicioId, '2026-10-01')
+        const { token } = await usuarioConRoles(['contabilidad'])
+        const respuesta = await estado(
             client
                 .post('/api/v1/facturas/corte')
                 .bearerToken(token)
-                .json({ servicio_id: servicioId, ignorar_hora: true }),
+                .json({ servicio_id: otro.servicioId, ignorar_hora: true }),
             200,
         )
-        assert.containSubset(ignorando.body(), { evaluados: 1, cambiados: 1 })
-        assert.equal(await estadoServicio(servicioId), 'suspendido')
+        assert.containSubset(respuesta.body(), { horas: ['*'], evaluados: 1, cambiados: 1 })
+        assert.equal(await estadoServicio(otro.servicioId), 'suspendido')
+        await afirmarLibroCuadrado(assert)
     })
 })
 

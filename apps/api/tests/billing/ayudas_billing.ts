@@ -1,7 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, unico } from '#tests/ayudas'
 import { crearClienteFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
-import { normalizarReglasPromesa } from '#billing/reglas_promesa'
+import { normalizarReglasPromesa, type ReglasPromesaParciales } from '#billing/reglas_promesa'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
@@ -11,6 +11,33 @@ import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
  * Escenarios de facturación: plantilla + plan + cliente + servicio insertados directo (las
  * acciones de A1 ya tienen sus pruebas). Todo con nombres únicos: ledger y audit no se truncan.
  */
+
+/**
+ * Número que nunca se repite en esta base: el siguiente valor de la secuencia de `tabla.id` (misma
+ * idea que A6 en `tests/notify/ayudas_notify.ts`). Las secuencias de Postgres no retroceden (ni con
+ * rollback) y las comparten todas las conexiones y procesos. `unico()` (8 hex al azar) no lo
+ * garantiza contra una restricción `UNIQUE`: ya hizo fallar una suite completa.
+ */
+export async function siguienteDeSecuencia(tabla: string): Promise<number> {
+    const r = await db.rawQuery('SELECT nextval(pg_get_serial_sequence(?, ?)) AS n', [tabla, 'id'])
+    return Number(r.rows[0].n)
+}
+
+/**
+ * Texto único en la base para una columna con restricción `UNIQUE` (número de documento, referencia,
+ * boleta, serie, SKU, id externo, nombre de plantilla, caja o bodega…): `<prefijo>-<n>` con `n` de
+ * la secuencia de `tabla` (por defecto la de `audit.outbox`, que solo crece). Para lo que no choca
+ * con ninguna restricción (nombres de clientes, textos) basta `unico()`.
+ */
+export async function unicoBd(prefijo: string, tabla = 'audit.outbox'): Promise<string> {
+    return `${prefijo}-${await siguienteDeSecuencia(tabla)}`
+}
+
+/** `unicoBd` en mayúsculas (series, códigos y NIT que la base normaliza a mayúsculas). */
+export async function unicoBdMayusculas(prefijo: string, tabla?: string): Promise<string> {
+    const valor = await unicoBd(prefijo, tabla)
+    return valor.toUpperCase()
+}
 
 export interface OpcionesEscenario {
     precio?: string
@@ -32,7 +59,7 @@ export async function crearPlantillaFila(campos: Record<string, unknown> = {}): 
     const [fila] = (await db
         .table('billing.plantillas_facturacion')
         .insert({
-            nombre: unico('Plantilla'),
+            nombre: await unicoBd('Plantilla', 'billing.plantillas_facturacion'),
             ciclo: 'dia_fijo',
             dia: 1,
             prorrateo: true,
@@ -134,6 +161,31 @@ export async function servicioCortado(opciones: OpcionesEscenario = {}): Promise
     return datos
 }
 
+/**
+ * Instante fijo coherente con `servicioCortado` (septiembre y octubre de 2026 vencidas al 2026-10-07):
+ * el 13 de octubre de 2026 a las 08:00 de Guatemala. Para las acciones que aceptan `ahora`
+ * (`CrearPromesaPago`, `simularPromesa`, `limitesPromesa`, `IncumplirPromesas`…): así la prueba no
+ * depende del día real. Con el reloj real, una promesa a `Date.now() + 2 días` creada el 30 o el 31
+ * del mes vence el día 1, que es la siguiente facturación, y `no_exceder_siguiente_facturacion` la
+ * rechaza (con razón).
+ */
+export const AHORA_PROMESAS = new Date('2026-10-13T08:00:00-06:00')
+
+/** `n` días después de `desde` (por defecto `AHORA_PROMESAS`). */
+export function diasDespues(n: number, desde: Date = AHORA_PROMESAS): Date {
+    return new Date(desde.getTime() + n * 86_400_000)
+}
+
+/**
+ * `reglas_promesa` (JSON) para las pruebas que crean promesas por HTTP, donde el instante es el real y
+ * no se puede fijar: las reglas por defecto (más `reglas`) sin el tope de la siguiente facturación,
+ * la única regla que depende del día del mes (ver `AHORA_PROMESAS`). Las pruebas de esa regla la
+ * dejan encendida y fijan su `ahora`.
+ */
+export function reglasPromesaSinTopeFacturacion(reglas: ReglasPromesaParciales = {}): string {
+    return JSON.stringify(normalizarReglasPromesa({ ...reglas, no_exceder_siguiente_facturacion: false }))
+}
+
 /** Id de un banco del catálogo por nombre. */
 export async function bancoId(nombre = 'Banrural'): Promise<number> {
     const fila = await db.from('billing.bancos').where('nombre', nombre).select('id').firstOrFail()
@@ -146,7 +198,7 @@ export async function cuentaBancariaPrueba(banco = 'Banrural', empresaId = 1) {
     return new CrearCuentaBancaria().execute(
         {
             banco_id: await bancoId(banco),
-            numero: unico('300'),
+            numero: await unicoBd('300', 'billing.cuentas_bancarias'),
             alias: unico('Recaudación'),
             empresa_id: empresaId,
         },

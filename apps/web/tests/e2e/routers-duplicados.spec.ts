@@ -44,6 +44,8 @@ test('aviso de duplicados en Routers, unir con vista previa y nadie se desconect
     await unir.click()
     await expect(page.getByText('«RB-Centro PCQ» quedó unido a «RB-Centro»').first()).toBeVisible()
     await expect(aviso).toHaveCount(0)
+    // El absorbido queda desactivado: pasa a «Inactivos», enlazado al que quedó.
+    await page.locator('[data-prueba="vista-routers"]').getByRole('tab', { name: 'Inactivos' }).click()
     await expect(page.locator('[data-prueba="unido-4"]')).toHaveText('Unido a RB-Centro')
 })
 

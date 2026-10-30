@@ -89,7 +89,8 @@ nada; `block`: `consumption`, `health` o `security`), como fija el contrato.
   `horus.hallazgo_resuelto`, `horus.estado_seguridad_cambiado`, `horus.router_estado_cambiado`,
   `horus.servicio_infra_cambiado` (payloads en `app/shared/eventos.ts` y `contratos/eventos.md`).
 - **Consume (grupo `horus`):** `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada`,
-  `cliente.actualizado` (A1), `servicio.estado_cambiado` y, desde el contrato 1.7.0,
+  `cliente.actualizado` (A1; solo los campos de identidad, `CAMPOS_CLIENTE_IDENTIDAD`: si solo
+  cambiaron teléfono, dirección, coordenadas o zona no se envía), `servicio.estado_cambiado` y, desde el contrato 1.7.0,
   `servicio.config_cambiada` (solo si cambian `plan` o `empresa`) → webhooks a Horus;
   `horus.config_cambiada`.
 - **notify** (grupo `notify`, `ConsumidorAlertas`): alerta al chat del equipo por hallazgos `high`

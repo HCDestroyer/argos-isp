@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, TabsItem } from '@nuxt/ui'
 
 /**
  * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
@@ -12,7 +12,26 @@ definePageMeta({ permiso: 'routers.ver' })
 
 useHead({ title: 'Routers · ArgosIsp' })
 
-const lista = usePaginacionCursor(cursor => useRouters().listar({}, cursor))
+const route = useRoute()
+const router = useRouter()
+
+/**
+ * «Activos» (por defecto) e «Inactivos» (`?activo=false` de la API; en la URL del panel
+ * `?vista=inactivos`): un router desactivado no se mezcla con los que están en uso.
+ */
+type VistaRouters = 'activos' | 'inactivos'
+const vista = ref<VistaRouters>(route.query.vista === 'inactivos' ? 'inactivos' : 'activos')
+const itemsVista: TabsItem[] = [
+    { label: 'Activos', value: 'activos', icon: 'i-lucide-router' },
+    { label: 'Inactivos', value: 'inactivos', icon: 'i-lucide-circle-pause' },
+]
+
+const lista = usePaginacionCursor(cursor => useRouters().listar({ activo: vista.value === 'activos' }, cursor))
+
+watch(vista, async (valor) => {
+    await router.replace({ query: valor === 'inactivos' ? { vista: 'inactivos' } : {} })
+    await lista.recargar()
+})
 const { puede } = usePermisos()
 const toast = useToast()
 const altaAbierta = ref(false)
@@ -48,10 +67,21 @@ function alUnir() {
     void lista.recargar()
 }
 
-/** Nombre del router al que se unió uno absorbido (si está en la página). */
+/**
+ * Nombres de los routers ya vistos en cualquier vista: el absorbido queda inactivo («Inactivos») y
+ * el que quedó sigue en «Activos», así que no están en la misma página.
+ */
+const nombres = reactive(new Map<number, string>())
+watch(() => lista.filas.value, (filas) => {
+    for (const fila of filas) {
+        nombres.set(fila.id, fila.nombre)
+    }
+}, { immediate: true })
+
+/** Nombre del router al que se unió uno absorbido (si ya se vio en la lista). */
 function unidoA(router: RouterNas): string {
-    const destino = lista.filas.value.find(r => r.id === router.unido_a_id)
-    return destino ? `Unido a ${destino.nombre}` : `Unido al router ${router.unido_a_id}`
+    const destino = typeof router.unido_a_id === 'number' ? nombres.get(router.unido_a_id) : undefined
+    return destino ? `Unido a ${destino}` : `Unido al router ${router.unido_a_id}`
 }
 
 function alActualizar() {
@@ -87,6 +117,14 @@ onMounted(() => void lista.recargar())
 
         <div class="flex flex-col gap-4">
             <RoutersDuplicadosAviso @unido="alUnir" />
+            <UTabs
+                v-model="vista"
+                :items="itemsVista"
+                :content="false"
+                size="sm"
+                class="self-start"
+                data-prueba="vista-routers"
+            />
             <ProblemaAlerta
                 v-if="lista.problema.value"
                 :problema="lista.problema.value"

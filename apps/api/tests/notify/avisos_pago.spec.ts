@@ -6,14 +6,8 @@ import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import RegistrarComprobante from '#billing/actions/registrar_comprobante'
 import AprobarComprobante from '#billing/actions/aprobar_comprobante'
 import RegistrarPago from '#billing/actions/registrar_pago'
-import { CanalFalso, ColaFalsa } from '#tests/notify/ayudas_notify'
-import {
-    bancoId,
-    cuentaBancariaPrueba,
-    eventosDe,
-    facturasDe,
-    servicioCortado,
-} from '#tests/billing/ayudas_billing'
+import { CanalFalso, ColaFalsa, cuentaBancariaUnica } from '#tests/notify/ayudas_notify'
+import { bancoId, eventosDe, facturasDe, servicioCortado } from '#tests/billing/ayudas_billing'
 
 /**
  * Avisos de comprobantes y de pagos de terceros (día 4, tanda 2). Los eventos salen de las
@@ -56,7 +50,7 @@ function enviosDe(clienteId: number) {
 }
 
 async function subirComprobante(clienteId: number, servicioId: number, referencia = unico('boleta')) {
-    const cuenta = await cuentaBancariaPrueba()
+    const cuenta = await cuentaBancariaUnica()
     return new RegistrarComprobante().execute(
         {
             cliente_id: clienteId,
@@ -188,7 +182,7 @@ test.group('notify · avisos de comprobantes y pagos de terceros', (group) => {
         await conCorreo(otro.clienteId)
         const [septiembreF, octubreF] = await facturasDe(familiar.servicioId)
         const [septiembreO] = await facturasDe(otro.servicioId)
-        const cuenta = await cuentaBancariaPrueba()
+        const cuenta = await cuentaBancariaUnica()
 
         const pago = await new RegistrarPago().execute(
             {
@@ -246,7 +240,7 @@ test.group('notify · avisos de comprobantes y pagos de terceros', (group) => {
         await conCorreo(pagador.clienteId)
         await conCorreo(familiar.clienteId)
         const [septiembreF] = await facturasDe(familiar.servicioId)
-        const cuenta = await cuentaBancariaPrueba()
+        const cuenta = await cuentaBancariaUnica()
         const pago = await new RegistrarPago().execute(
             {
                 cliente_id: pagador.clienteId,

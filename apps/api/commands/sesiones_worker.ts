@@ -7,6 +7,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * `sesion.iniciada` / `sesion.terminada`. Proceso aparte en el docker-compose (A6).
  * Además corre el cron de sesiones colgadas (cola `sesiones-cron`, `colgadas.ts`; con lock, se
  * pueden tener varias réplicas). `--sin-cron` lo apaga en esta réplica.
+ * Y consume el grupo `sesiones` del bus (`servicio.eliminado` → Disconnect de una sesión que haya
+ * quedado viva; `sesiones/consumidor.ts`). `--sin-eventos` lo apaga en esta réplica.
  * Lógica en `app/network/sesiones`.
  */
 export default class SesionesWorker extends BaseCommand {
@@ -23,6 +25,9 @@ export default class SesionesWorker extends BaseCommand {
 
     @flags.boolean({ description: 'No correr el cron de sesiones colgadas en esta réplica', default: false })
     declare sinCron: boolean
+
+    @flags.boolean({ description: 'No consumir el grupo sesiones del bus en esta réplica', default: false })
+    declare sinEventos: boolean
 
     async run() {
         const { crearWorkerAccounting } = await import('#network/sesiones/cola')
@@ -43,7 +48,21 @@ export default class SesionesWorker extends BaseCommand {
             }
         }
 
+        let ejecutor: { detener(): Promise<void> } | null = null
+        if (!this.sinEventos) {
+            const { EjecutorGrupo } = await import('#shared/eventos_bus')
+            const { ConsumidorSesiones, GRUPO_SESIONES } = await import('#network/sesiones/consumidor')
+            const grupo = new EjecutorGrupo({
+                grupo: GRUPO_SESIONES,
+                consumidores: [new ConsumidorSesiones()],
+            })
+            grupo.iniciar()
+            ejecutor = grupo
+            this.logger.info(`sesiones:worker consumiendo el grupo ${GRUPO_SESIONES} de ${grupo.stream}`)
+        }
+
         const terminar = async () => {
+            await ejecutor?.detener()
             await worker.close()
             await cron?.close()
             await colaCron?.close()

@@ -8,10 +8,16 @@
 #      privada nunca sale del router).
 #   2. Crea la CA y el certificado de www-ssl, el grupo "argosisp-api" con el mínimo de permisos
 #      (read, write, api, rest-api) y el usuario "argosisp-api", que solo entra desde ArgosIsp.
-#   3. Se registra en ArgosIsp con el token y agrega el servidor como peer del túnel.
+#   3. Se registra en ArgosIsp con el token y agrega el servidor como peer del túnel. Solo si el
+#      registro responde OK pone en www-ssl el certificado firmado por argosisp-ca (si falla, muestra
+#      la CA para pegarla en el panel y deja el certificado que ArgosIsp ya conoce).
 #   4. Configura RADIUS y CoA hacia ArgosIsp por el túnel.
-#   5. Apaga los servicios que no se usan y deja la gestión (www-ssl, Winbox, SSH) solo por el túnel
-#      y desde las IPs de administración. No toca el tráfico de los clientes.
+#   5. Solo si el registro respondió OK y el túnel tiene handshake: apaga los servicios que no se
+#      usan y deja la gestión (www-ssl, Winbox, SSH) solo por el túnel, desde las IPs de
+#      administración y desde la IP de la sesión que corre el script. Si algo falló, la gestión se
+#      queda como estaba y el script dice qué falló y cómo reintentar. No toca a los clientes.
+#
+# Si aun así quedaste fuera: infra/mikrotik/rescate-gestion.rsc (por MAC-Winbox o por consola).
 #
 # Cómo usarlo: Winbox → Files → arrastra el archivo; luego New Terminal y
 #   /import file-name=argosisp-conexion.rsc verbose=yes
@@ -59,11 +65,18 @@
 :local apiNombre "{{api_nombre}}"
 :local apiIp $wgIp
 :local apiCaNombre "ArgosIsp CA del router {{router_id}}"
-:local apiSoloHttps true
+# IP con que ArgosIsp llega hoy al router (host de api_url antes del túnel; vacía si no hay): va
+# también en el SAN del certificado de www-ssl, que así sirve por los dos caminos mientras se migra.
+:local apiIpAnterior "{{api_ip_anterior}}"
+# www, api y api-ssl los apaga C4 (solo con el túnel arriba); el certificado se decide tras el
+# registro (C3) y www-ssl no cambia su address= hasta C4.
+:local apiSoloHttps false
+:local apiCertificar false
+:local apiWwwDesde ""
 
 # --- Gestión ---
-# IPs o redes de los administradores (lista argosisp-admin). Vacío = gestión solo por el túnel
-# (y MAC-Winbox en la red local).
+# IPs o redes de los administradores (lista argosisp-admin). Vacío = gestión solo por el túnel, por
+# la IP de la sesión que corre el script y por MAC-Winbox en la red local.
 :local adminIps [:toarray "{{admin_ips}}"]
 
 # ============================================================================
@@ -74,6 +87,6 @@
 :if ($rosMayor < 7) do={ :error ("argosisp: hace falta RouterOS 7 (este router tiene " . $rosVersion . ")") }
 :put ("argosisp: RouterOS " . $rosVersion . ", router " . $routerId . ", script del " . $generadoEn)
 :if ([:len $adminIps] = 0) do={
-    :put "argosisp: AVISO sin IPs de administración: Winbox y SSH quedarán solo por el túnel y por MAC-Winbox en la red local"
+    :put "argosisp: AVISO sin IPs de administración: Winbox y SSH quedarán solo por el túnel, por la IP de esta sesión y por MAC-Winbox en la red local"
 }
 

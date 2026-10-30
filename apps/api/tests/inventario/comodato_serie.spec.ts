@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -40,7 +41,7 @@ test.group('Inventario · comodato por serie', (group) => {
     }) => {
         const e = await prepararEmpresasGt()
         const cabecera = { 'X-Empresa-Id': String(e.B) }
-        const serie = unico('zteg').toUpperCase()
+        const serie = await unicoBdMayusculas('zteg')
         const unidadId = await onuConSerie(e.B, e.ctx, serie)
         const { clienteId } = await servicioEn(e.B)
         const servicioId = await crearServicioFila({
@@ -76,8 +77,8 @@ test.group('Inventario · comodato por serie', (group) => {
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const serieB = unico('ZTEG').toUpperCase()
-        const serieC = unico('ZTEG').toUpperCase()
+        const serieB = await unicoBdMayusculas('ZTEG')
+        const serieC = await unicoBdMayusculas('ZTEG')
         const unidadB = await onuConSerie(e.B, e.ctx, serieB)
         await onuConSerie(e.C, e.ctx, serieC)
         const { servicioId } = await servicioEn(e.B)

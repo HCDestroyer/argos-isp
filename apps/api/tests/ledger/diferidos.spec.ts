@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -35,7 +36,7 @@ test.group('Fase 5 · diferidos', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('S'),
+                numero: await unicoBd('S'),
                 fecha_documento: haceMeses(2, 3),
                 condicion: 'credito',
                 retenciones: [],
@@ -73,7 +74,7 @@ test.group('Fase 5 · diferidos', (group) => {
                 {
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('S'),
+                    numero: await unicoBd('S'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     lineas: [
@@ -141,7 +142,7 @@ test.group('Fase 5 · diferidos', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('L'),
+                numero: await unicoBd('L'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 retenciones: [],

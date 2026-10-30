@@ -21,6 +21,7 @@ import {
     eventosDe,
     lineasAsiento,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -40,14 +41,14 @@ function contextoPortal(): ContextoAccion {
     return { actor: { tipo: 'sistema', id: null }, canal: 'portal', requestId: randomUUID() }
 }
 
-function subir(
+async function subir(
     datos: Partial<EntradaRegistrarComprobante> & Pick<EntradaRegistrarComprobante, 'cliente_id'>,
 ) {
     return new RegistrarComprobante().execute(
         {
             metodo: 'deposito',
             cuenta_bancaria_id: 0,
-            referencia: unico('boleta'),
+            referencia: await unicoBd('boleta'),
             monto: '300.00',
             fecha_deposito: '2026-10-08',
             canal: 'portal',
@@ -175,7 +176,7 @@ test.group('billing · comprobantes de depósito', () => {
         const { clienteId, servicioId } = await servicioCortado()
         const cuenta = await cuentaBancariaPrueba()
         const origen = await bancoId('BAM')
-        const referencia = unico('trf')
+        const referencia = await unicoBd('trf')
         const comprobante = await subir({
             cliente_id: clienteId,
             servicio_id: servicioId,
@@ -306,7 +307,7 @@ test.group('billing · comprobantes de depósito', () => {
             .where('id', clienteId)
             .update({ email: `${unico('c')}@prueba.local` })
         const cuenta = await cuentaBancariaPrueba()
-        const referencia = unico('boleta')
+        const referencia = await unicoBd('boleta')
         const comprobante = await subir({ cliente_id: clienteId, cuenta_bancaria_id: cuenta.id, referencia })
         const { token: contador, usuario } = await usuarioConRoles(['contabilidad'])
         const { token: lectura } = await usuarioConRoles(['lectura'])
@@ -471,7 +472,7 @@ test.group('billing · comprobantes de depósito', () => {
         const { clienteId } = await servicioCortado()
         const cuenta = await cuentaBancariaPrueba()
         const otraCuenta = await cuentaBancariaPrueba('BAM')
-        const referencia = unico('boleta')
+        const referencia = await unicoBd('boleta')
 
         await subir({ cliente_id: clienteId, cuenta_bancaria_id: cuenta.id, referencia })
         assert.equal(
@@ -493,7 +494,7 @@ test.group('billing · comprobantes de depósito', () => {
         await subir({ cliente_id: clienteId, cuenta_bancaria_id: cuenta.id, referencia, metodo: 'remesa' })
 
         // ya registrada como pago por el cajero
-        const pagada = unico('boleta')
+        const pagada = await unicoBd('boleta')
         await new RegistrarPago().execute(
             {
                 cliente_id: clienteId,

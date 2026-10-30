@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
@@ -28,7 +29,7 @@ async function compraDeActivo(ctx: ContextoAccion, proveedorId: number, extra: R
         {
             proveedor_id: proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('A'),
+            numero: await unicoBd('A'),
             fecha_documento: haceMeses(3, 5),
             condicion: 'credito',
             retenciones: [],

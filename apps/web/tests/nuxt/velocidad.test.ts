@@ -128,7 +128,7 @@ describe('semana 2 · formularios de velocidad', () => {
         expect(efectivos.ok && efectivos.data[0]?.rate_limit).toBe('5M/10M 0/0 0/0 0/0 8 5M/10M')
     })
 
-    it('el panel del router ofrece cambiar el modo solo con routers.cambiar_control_velocidad', async () => {
+    it('el panel del router resume la estrategia por tipo y ofrece editarla solo con routers.cambiar_control_velocidad', async () => {
         const routers = await useRouters().listar()
         const router = routers.ok ? routers.data.data[0] : undefined
         expect(router).toBeDefined()
@@ -136,7 +136,8 @@ describe('semana 2 · formularios de velocidad', () => {
             return
         }
         const admin = await mountSuspended(RouterVelocidad, { props: { router, open: true } })
-        await esperar(() => expect(document.body.querySelector('[data-prueba="control-actual"]')?.textContent).toContain('Colas simples'))
+        await esperar(() => expect(document.body.querySelector('[data-prueba="control-actual"] [data-tipo="pppoe"]')?.textContent).toContain('RADIUS por sesión · Por plan · Por defecto'))
+        expect(document.body.querySelector('[data-prueba="control-actual"] [data-tipo="ip_estatica"]')?.textContent).toContain('Cola simple por API')
         expect(document.body.querySelector('[data-prueba="abrir-cambio-control"]')).not.toBeNull()
         admin.unmount()
         document.body.innerHTML = ''
@@ -145,7 +146,7 @@ describe('semana 2 · formularios de velocidad', () => {
         const tecnico = await mountSuspended(RouterVelocidad, { props: { router, open: true } })
         await esperar(() => expect(document.body.querySelector('[data-prueba="control-actual"]')).not.toBeNull())
         expect(document.body.querySelector('[data-prueba="abrir-cambio-control"]')).toBeNull()
-        expect(document.body.textContent).toContain('Solo un administrador cambia el modo de colas.')
+        expect(document.body.textContent).toContain('Solo un administrador cambia el control de velocidad.')
         tecnico.unmount()
     })
 })

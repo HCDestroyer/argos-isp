@@ -1,4 +1,5 @@
 import hash from '@adonisjs/core/services/hash'
+import { exigirRolesSinAlcanceDeRed } from '#core/alcance_usuario_tecnico'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
@@ -59,6 +60,8 @@ export default class EditarUsuario extends DomainAction<EntradaEditarUsuario, Us
 
         const rolesAntes = await asignacionesActuales(t.trx, input.id)
         if (input.roles !== undefined) await reemplazarAsignaciones(t.trx, input.id, input.roles)
+        // con otro correo puede volverse el usuario técnico de Iris: sus roles no pueden ser de red
+        else if (cambios.email !== undefined) await exigirRolesSinAlcanceDeRed(t.trx, input.id)
 
         if (input.password !== undefined || input.activo === false) {
             await t.trx.from('core.auth_access_tokens').where('tokenable_id', input.id).delete()

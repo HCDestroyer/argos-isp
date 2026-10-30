@@ -1,7 +1,15 @@
 import type { Almacen, SesionActiva } from './almacen.ts'
 import { descifrar } from './cifrado.ts'
 import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
-import { decidir, EVENTOS_COA, leerDesconexion, leerEvento, type Decision } from './decision.ts'
+import {
+    decidir,
+    decidirVelocidad,
+    EVENTOS_COA,
+    leerDesconexion,
+    leerEvento,
+    leerVelocidad,
+    type Decision,
+} from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
 import type { MetricasCoa } from './metricas.ts'
 
@@ -75,6 +83,7 @@ export class Dispatcher {
 
     async procesar(entrada: EventoEntrante): Promise<ResultadoProcesar> {
         if (entrada.evento === 'sesion.desconexion_solicitada') return this.#desconectar(entrada)
+        if (entrada.evento === 'sesion.velocidad_solicitada') return this.#velocidad(entrada)
         const evento = leerEvento(entrada.evento, entrada.payload)
         if (!evento) return { decision: null, sesiones: [] }
         const eventoId = String(entrada.id)
@@ -170,6 +179,33 @@ export class Dispatcher {
             razon: evento.motivo ? `manual: ${evento.motivo}` : 'manual',
         }
         const resultado = await this.#enviarASesion(entrada, eventoId, sesion.servicio_id, sesion, decision)
+        return { decision, sesiones: [resultado] }
+    }
+
+    /**
+     * Sincronizar plan: CoA con el rate-limit nuevo a esa sesión si sigue abierta y el servicio sigue
+     * en el estado del evento. Nunca Disconnect.
+     */
+    async #velocidad(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        const evento = leerVelocidad(entrada.payload)
+        const eventoId = String(entrada.id)
+        const sesion = await this.#op.almacen.sesionAbierta(evento.sesion_id)
+        const decision: Decision = sesion
+            ? decidirVelocidad(evento, await this.#op.almacen.servicio(evento.servicio_id))
+            : { accion: 'nada', razon: 'la sesión ya terminó' }
+        if (decision.accion === 'nada' || !sesion) {
+            this.#op.log.info(
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    sesion_id: evento.sesion_id,
+                    razon: decision.razon,
+                },
+                'coa: nada que enviar',
+            )
+            return { decision, sesiones: [] }
+        }
+        const resultado = await this.#enviarASesion(entrada, eventoId, evento.servicio_id, sesion, decision)
         return { decision, sesiones: [resultado] }
     }
 

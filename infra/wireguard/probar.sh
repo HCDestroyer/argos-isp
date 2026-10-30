@@ -13,7 +13,9 @@
 #   2. hay handshake y la API recibe la clave del servidor y el último handshake del peer;
 #   3. un contenedor de la red de compose llega al router por el túnel y sale con origen .1;
 #   4. el router llega a RADIUS en la .1 y a nada más del host (firewall del túnel);
-#   5. rotar (lista vacía + router.conexion_rotada) quita el peer.
+#   5. eliminar otro router (router.eliminado, dos veces) quita solo su peer: el túnel del primero
+#      sigue arriba con su handshake (wg syncconf no lo recrea);
+#   6. rotar (lista vacía + router.conexion_rotada) quita el peer.
 set -Eeuo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -124,8 +126,11 @@ docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 1 evento router.conex
     payload "{\"router_id\":7,\"empresa_id\":1,\"ip_tunel\":\"$IP_ROUTER\"}" request_id '' > /dev/null
 esperar 20 "peer en wg show" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$ROUTER_PUB.*$IP_ROUTER/32'"
 [ "$(docker exec "$P-servidor" wg show "$IFACE" peers | grep -c .)" = 1 ] || fallar "se aplicaron peers inválidos"
-docker logs "$P-agente" 2>&1 | grep -q 'router 8: public_key inválida' || fallar "no avisó la clave inválida"
-docker logs "$P-agente" 2>&1 | grep -q 'router 9: ip_tunel' || fallar "no avisó la IP fuera de la red"
+# Los logs se leen completos antes de buscar: con pipefail, `docker logs | grep -q` falla al azar
+# (grep sale al primer acierto y docker logs muere por SIGPIPE).
+LOGS_AGENTE="$(docker logs "$P-agente" 2>&1)"
+grep -q 'router 8: public_key inválida' <<< "$LOGS_AGENTE" || fallar "no avisó la clave inválida"
+grep -q 'router 9: ip_tunel' <<< "$LOGS_AGENTE" || fallar "no avisó la IP fuera de la red"
 
 paso "2. Handshake y estado en la API"
 esperar 30 "handshake" docker exec "$P-router" ping -c1 -W1 "$IP_SRV"
@@ -149,7 +154,27 @@ if docker exec "$P-router" sh -c "curl -s -m 3 -o /dev/null http://$IP_SRV:$PUER
     fallar "el router llegó a otro puerto del host por el túnel"
 fi
 
-paso "5. Rotar: lista vacía + router.conexion_rotada quita el peer"
+paso "5. router.eliminado (repetido) quita solo el peer del router eliminado"
+OTRO_PUB="$(docker exec "$P-router" sh -c 'wg genkey | wg pubkey')"
+printf '{"data":[{"router_id":7,"public_key":"%s","ip_tunel":"%s"},{"router_id":11,"public_key":"%s","ip_tunel":"10.254.0.4"}]}' \
+    "$ROUTER_PUB" "$IP_ROUTER" "$OTRO_PUB" > "$TMP/peers.json"
+docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 3 evento router.conexion_registrada \
+    payload '{"router_id":11,"empresa_id":null,"ip_tunel":"10.254.0.4"}' request_id '' > /dev/null
+esperar 20 "peer del router 11" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$OTRO_PUB.*10.254.0.4/32'"
+handshake_7() { docker exec "$P-servidor" wg show "$IFACE" latest-handshakes | awk -v k="$ROUTER_PUB" '$1 == k {print $2}'; }
+[ "$(handshake_7)" -gt 0 ] || fallar "el router 7 no tenía handshake antes de eliminar el 11"
+echo "{\"data\":[{\"router_id\":7,\"public_key\":\"$ROUTER_PUB\",\"ip_tunel\":\"$IP_ROUTER\"}]}" > "$TMP/peers.json"
+for i in 4 5; do # el bus puede entregar dos veces: reconciliar es idempotente
+    docker exec "$P-redis" redis-cli XADD argos:eventos '*' id "$i" evento router.eliminado \
+        payload '{"router_id":11,"empresa_id":null}' request_id '' > /dev/null
+done
+esperar 20 "peer del router 11 quitado" sh -c "! docker exec $P-servidor wg show $IFACE peers | grep -q '$OTRO_PUB'"
+docker exec "$P-servidor" wg show "$IFACE" allowed-ips | grep -q "$ROUTER_PUB.*$IP_ROUTER/32" ||
+    fallar "router.eliminado quitó también el peer del router 7"
+[ "$(handshake_7)" -gt 0 ] || fallar "el peer del router 7 se recreó (perdió su handshake)"
+docker exec "$P-router" ping -c1 -W2 "$IP_SRV" > /dev/null || fallar "el túnel del router 7 se cortó"
+
+paso "6. Rotar: lista vacía + router.conexion_rotada quita el peer"
 echo '{"data":[]}' > "$TMP/peers.json"
 docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 2 evento router.conexion_rotada payload '{"router_id":7}' request_id '' > /dev/null
 esperar 20 "peer quitado" sh -c "! docker exec $P-servidor wg show $IFACE peers | grep -q ."

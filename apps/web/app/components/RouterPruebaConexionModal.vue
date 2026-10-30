@@ -3,7 +3,8 @@ import type { Problem } from '@argosisp/contracts'
 
 /**
  * «Probar conexión» (`POST /routers/:id/probar-conexion`, `routers.probar_conexion`): al abrir corre
- * los chequeos de túnel, API, equipo y RADIUS y muestra cada uno con icono + texto + color, el
+ * los chequeos de túnel, API, equipo, RADIUS y corte (A2: `corte` trae el `DiagnosticoCorte` con cada
+ * paso, sus comandos y «Reconciliar ahora» si lo arregla) y muestra cada uno con icono + texto + color, el
  * tiempo, los datos del equipo (versión, modelo, encendido, CPU) y, si falla, qué revisar. La API
  * responde 200 aunque el router esté caído; al terminar avisa al padre para refrescar la ficha.
  */
@@ -17,7 +18,9 @@ const emit = defineEmits<{
     probado: [prueba: PruebaConexion]
 }>()
 
+const { puede } = usePermisos()
 const prueba = shallowRef<PruebaConexion | null>(null)
+const reconciliarAbierto = ref(false)
 const problema = ref<Problem | null>(null)
 const probando = ref(false)
 
@@ -59,7 +62,7 @@ const resumen = computed(() => {
     <UModal
         v-model:open="abierto"
         :title="`Probar conexión · ${router.nombre}`"
-        description="Comprueba el túnel, la API del router, el equipo y RADIUS. No cambia nada en el router."
+        description="Comprueba el túnel, la API del router, el equipo, RADIUS y el corte de suspendidos. No cambia nada en el router."
         :ui="{ content: 'sm:max-w-xl' }"
     >
         <template #body>
@@ -162,6 +165,12 @@ const resumen = computed(() => {
                                 />
                                 <span>Qué revisar: {{ consejoChequeo(chequeo) }}</span>
                             </p>
+                            <RouterDiagnosticoCorte
+                                v-if="chequeo.clave === 'corte' && chequeo.corte"
+                                :corte="chequeo.corte"
+                                class="mt-2"
+                                @reconciliar="reconciliarAbierto = true"
+                            />
                         </li>
                     </ul>
                 </template>
@@ -185,4 +194,9 @@ const resumen = computed(() => {
             </div>
         </template>
     </UModal>
+    <RouterReconciliarModal
+        v-if="puede('routers.reconciliar')"
+        v-model:open="reconciliarAbierto"
+        :router="router"
+    />
 </template>

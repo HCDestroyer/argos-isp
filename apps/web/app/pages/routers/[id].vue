@@ -56,6 +56,87 @@ async function refrescar() {
     await seccionConexion.value?.cargar()
 }
 
+const { puede } = usePermisos()
+const toast = useToast()
+
+/**
+ * Eliminar sin historial (`contratos/eliminar.md`): con `routers.eliminar` (admin) se pregunta si
+ * se puede; si nunca se usó, «Eliminar», y si no, los motivos y «Desactivar» (`PUT` con
+ * `activo: false`, `routers.editar`). Un router inactivo se vuelve a activar igual.
+ */
+const puedeEliminar = computed(() => puede('routers.eliminar'))
+const eliminable = shallowRef<Eliminable | null>(null)
+const problemaEliminable = ref<Problem | null>(null)
+const eliminarAbierto = ref(false)
+const liberaRouter = ref<string[]>([])
+
+async function cargarEliminable() {
+    const actual = nas.value
+    if (!actual || !puedeEliminar.value) {
+        eliminable.value = null
+        return
+    }
+    problemaEliminable.value = null
+    const resultado = await useRouters().eliminable(actual.id)
+    eliminable.value = resultado.ok ? resultado.data : null
+    problemaEliminable.value = resultado.ok ? null : resultado.problema
+}
+
+watch(() => [nas.value?.id, nas.value?.version], () => void cargarEliminable())
+
+/** Lo que se libera: sus redes IPv4 y sus bloques IPv6 con sus pools (los planes se conservan). */
+async function abrirEliminar() {
+    const actual = nas.value
+    if (!actual) {
+        return
+    }
+    // Sin `redes.ver` / `ipv6.ver` no se listan: se dice en general.
+    const [redes, bloques] = await Promise.all([
+        puede('redes.ver') ? useRouters().redesIpv4(actual.id) : null,
+        puede('ipv6.ver') ? useRouters().ipv6Bloques(actual.id) : null,
+    ])
+    liberaRouter.value = [
+        `NAS ${actual.nas_ip}`,
+        ...(redes?.ok ? redes.data.map(r => `Red IPv4 ${r.cidr}`) : ['Sus redes IPv4']),
+        ...(bloques?.ok ? bloques.data.map(b => `Bloque IPv6 ${b.prefijo} con sus pools`) : ['Sus bloques y pools IPv6']),
+        'Los planes no se borran: solo deja de estar en ellos',
+    ]
+    eliminarAbierto.value = true
+}
+
+function alEliminar() {
+    toast.add({ title: `${nas.value?.nombre ?? 'Router'} eliminado`, description: 'Sus redes y pools quedaron libres.', icon: 'i-lucide-trash-2', color: 'success' })
+    void navigateTo('/routers')
+}
+
+const cambiarActivoAbierto = ref(false)
+const cambiandoActivo = ref(false)
+const problemaActivo = ref<Problem | null>(null)
+
+async function cambiarActivo() {
+    const actual = nas.value
+    if (!actual) {
+        return
+    }
+    cambiandoActivo.value = true
+    problemaActivo.value = null
+    const resultado = await useRouters().editar(actual.id, { version: actual.version, activo: !actual.activo })
+    cambiandoActivo.value = false
+    if (!resultado.ok) {
+        problemaActivo.value = resultado.problema
+        return
+    }
+    nas.value = resultado.data
+    cambiarActivoAbierto.value = false
+    toast.add({ title: resultado.data.activo ? `${resultado.data.nombre} activado` : `${resultado.data.nombre} desactivado`, icon: 'i-lucide-circle-check', color: 'success' })
+}
+
+watch(cambiarActivoAbierto, (valor) => {
+    if (valor) {
+        problemaActivo.value = null
+    }
+})
+
 const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
 
 const control = computed(() => {
@@ -176,6 +257,55 @@ const control = computed(() => {
                     :valor="control.etiqueta"
                 />
             </dl>
+
+            <div
+                v-if="puede('routers.editar') || puedeEliminar"
+                class="mt-6 flex flex-col gap-2 border-t border-default pt-4"
+                data-prueba="router-baja"
+            >
+                <ProblemaAlerta
+                    v-if="problemaEliminable"
+                    :problema="problemaEliminable"
+                    :reintentar="cargarEliminable"
+                />
+                <div class="flex flex-wrap items-center gap-2">
+                    <UButton
+                        v-if="puedeEliminar && eliminable?.eliminable"
+                        label="Eliminar"
+                        icon="i-lucide-trash-2"
+                        color="error"
+                        variant="outline"
+                        data-prueba="eliminar-router"
+                        @click="abrirEliminar"
+                    />
+                    <UButton
+                        v-if="puede('routers.editar') && !eliminable?.eliminable"
+                        :label="nas.activo ? 'Desactivar' : 'Activar'"
+                        :icon="nas.activo ? 'i-lucide-circle-pause' : 'i-lucide-circle-play'"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="cambiar-activo-router"
+                        @click="cambiarActivoAbierto = true"
+                    />
+                </div>
+                <p
+                    v-if="puedeEliminar && eliminable?.eliminable"
+                    class="text-xs text-muted"
+                >
+                    Nunca se usó: se puede borrar del todo.
+                </p>
+                <p
+                    v-else-if="puedeEliminar && eliminable"
+                    class="flex items-start gap-1.5 text-xs text-muted"
+                    data-prueba="no-eliminable"
+                >
+                    <UIcon
+                        name="i-lucide-history"
+                        class="mt-0.5 size-3.5 shrink-0"
+                    />
+                    <span>{{ textoNoEliminable('router', eliminable.motivos, !nas.activo) }}</span>
+                </p>
+            </div>
         </section>
         <RouterConexionSeccion
             v-if="nas"
@@ -189,5 +319,57 @@ const control = computed(() => {
             :router-id="nas.id"
             class="mx-auto mt-6 w-full max-w-4xl"
         />
+
+        <EliminarRegistroModal
+            v-if="nas && puedeEliminar && eliminable?.eliminable"
+            :id="nas.id"
+            v-model:open="eliminarAbierto"
+            tipo="router"
+            :nombre="nas.nombre"
+            :version="nas.version"
+            :libera="liberaRouter"
+            @eliminado="alEliminar"
+            @recargar="cargar"
+        />
+
+        <UModal
+            v-if="nas && puede('routers.editar')"
+            v-model:open="cambiarActivoAbierto"
+            :title="nas.activo ? `Desactivar ${nas.nombre}` : `Activar ${nas.nombre}`"
+            :description="nas.activo ? 'Argos deja de enviarle comandos. Su historial se conserva y lo encuentras en «Inactivos» de la lista de routers.' : 'Argos vuelve a enviarle comandos y aparece en la lista de routers activos.'"
+            :dismissible="!cambiandoActivo"
+        >
+            <template #body>
+                <ProblemaAlerta
+                    v-if="problemaActivo"
+                    :problema="problemaActivo"
+                    :reintentar="problemaActivo.status === 409 ? cargar : undefined"
+                />
+                <p
+                    v-else
+                    class="text-sm text-muted"
+                >
+                    {{ nas.activo ? 'Puedes volver a activarlo cuando quieras.' : 'Revisa que el router esté en línea antes de activarlo.' }}
+                </p>
+            </template>
+            <template #footer>
+                <div class="flex w-full justify-end gap-2">
+                    <UButton
+                        label="Cancelar"
+                        color="neutral"
+                        variant="ghost"
+                        :disabled="cambiandoActivo"
+                        @click="cambiarActivoAbierto = false"
+                    />
+                    <UButton
+                        :label="nas.activo ? 'Desactivar' : 'Activar'"
+                        :color="nas.activo ? 'warning' : 'primary'"
+                        :loading="cambiandoActivo"
+                        data-prueba="confirmar-activo-router"
+                        @click="cambiarActivo"
+                    />
+                </div>
+            </template>
+        </UModal>
     </PanelPagina>
 </template>

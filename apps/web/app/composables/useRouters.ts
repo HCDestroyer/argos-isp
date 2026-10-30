@@ -27,6 +27,8 @@ export type PruebaConexion = Schema<'PruebaConexion'>
 export type ChequeoConexion = Schema<'ChequeoConexion'>
 export type ReconciliacionEncolada = Schema<'ReconciliacionEncolada'>
 export type OpcionesScript = NonNullable<paths['/api/v1/routers/{id}/script-conexion']['get']['parameters']['query']>
+/** `GET …/eliminable` (`contratos/eliminar.md` §1): si se puede eliminar y por qué no. */
+export type Eliminable = Schema<'Eliminable'>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -181,5 +183,20 @@ export function useRouters() {
         }))
     }
 
-    return { duplicados, unir, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    /** `GET /routers/:id/eliminable` (`routers.ver`): si nunca se usó y, si no, los motivos. */
+    function eliminable(id: number): Promise<Resultado<Eliminable>> {
+        return resolver(api.GET('/api/v1/routers/{id}/eliminable', { params: { path: { id } } }))
+    }
+
+    /**
+     * `DELETE /routers/:id?version=N` (`routers.eliminar`, solo admin): 204. 409 si otra sesión lo
+     * cambió; 422 `router_con_historial` con los motivos en `errors[]`.
+     */
+    function eliminar(id: number, version: number, claveIdempotencia: string): Promise<Resultado<null>> {
+        return resolverSinCuerpo(api.DELETE('/api/v1/routers/{id}', {
+            params: { path: { id }, query: { version }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

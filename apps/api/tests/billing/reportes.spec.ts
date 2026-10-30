@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, nuevaCaja, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { crearEmpresaFila, crearZonaFila } from '#tests/core/fabricas'
 import {
@@ -8,7 +8,9 @@ import {
     bancoId,
     eventosDe,
     facturasDe,
+    reglasPromesaSinTopeFacturacion,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
@@ -29,7 +31,14 @@ import { carteraVencida, ivaDelPeriodo } from '#billing/reportes/reportes'
  */
 
 const CORTE = '2026-10-16'
-const MES = hoyGuatemala().slice(0, 7)
+// Día de la prueba, tomado al empezar cada prueba (`tomarDia` en el setup de cada grupo), nunca al
+// importar el archivo: Japa importa todos los archivos al arrancar y una corrida que cruza la
+// medianoche de Guatemala (06:00 UTC) o el fin de mes comparaba contra el día anterior, mientras la app
+// (`hoyGuatemala()`, `relojFiscal`) ya leía el siguiente.
+let MES = ''
+function tomarDia() {
+    MES = hoyGuatemala().slice(0, 7)
+}
 
 /** Σ (debe − haber) de las cuentas cuyo código empieza con `prefijo`, filtrado por asientos. */
 async function netoLibro(
@@ -65,6 +74,7 @@ async function saldoCxcDeEmpresa(empresaId: number): Promise<string> {
 }
 
 test.group('billing · reportes', (group) => {
+    group.each.setup(tomarDia)
     group.each.teardown(() => soloEmpresaPrincipal())
 
     test('cartera vencida por antigüedad: tramos, agrupación por zona y router, cuadre con CxC', async ({
@@ -164,7 +174,7 @@ test.group('billing · reportes', (group) => {
                 cliente_id: datos.clienteId,
                 metodo: 'transferencia',
                 monto: '80.00',
-                referencia: unico('t'),
+                referencia: await unicoBd('t'),
                 cuenta_bancaria_id: cuenta.id,
                 banco_origen_id: await bancoId(),
             },
@@ -251,7 +261,11 @@ test.group('billing · reportes', (group) => {
         // cierre con faltante: la diferencia es el asiento cierre_caja
         const cajaId = await nuevaCaja()
         await new AbrirCaja().execute({ caja_id: cajaId, fondo_inicial: '100.00' }, contextoPrueba())
-        const datos = await servicioCortado()
+        // la promesa del reporte va con el reloj real (se agrupa por el mes de hoy): sin el tope de la
+        // siguiente facturación, que el 30 y 31 rechaza la promesa a dos días (`AHORA_PROMESAS`)
+        const datos = await servicioCortado({
+            plantilla: { reglas_promesa: reglasPromesaSinTopeFacturacion() },
+        })
         await new RegistrarPago().execute(
             { cliente_id: datos.clienteId, metodo: 'caja', monto: '150.00', caja_id: cajaId },
             contextoPrueba(),

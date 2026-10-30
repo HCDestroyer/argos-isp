@@ -98,6 +98,10 @@ interface BaseFixtures {
     routers: Schema<'Router'>[]
     /** Secreto RADIUS en claro por router (solo fixtures; `routers.unir` los compara). */
     secretosRadius: Record<number, string | null>
+    /** Routers que ya pasaron por «Reconciliar ahora» (A2): su vista previa y su chequeo del corte quedan limpios. */
+    routersReconciliados: number[]
+    /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
+    routersSinRespuesta: number[]
     /** Conexión WireGuard de cada router (`contratos/conexion-routers.md`). */
     conexionesRouter: Schema<'ConexionRouter'>[]
     redesIpv4: Schema<'RedIpv4'>[]
@@ -291,6 +295,8 @@ function inicial(): BaseFixtures {
         zonas,
         routers,
         secretosRadius,
+        routersReconciliados: [],
+        routersSinRespuesta: [],
         conexionesRouter,
         redesIpv4,
         ipv6Bloques,

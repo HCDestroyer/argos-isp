@@ -11,20 +11,21 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 
 ## 2. Activar la instalación
 
-`POST /api/v1/servicios/:id/activar-instalacion` con el permiso `servicios.activar_instalacion`, `Idempotency-Key` y `version`.
+`POST /api/v1/servicios/:id/activar-instalacion` con el permiso `servicios.activar_instalacion`, `Idempotency-Key` y, opcional, `version`.
 
 ```
-{ "version": 3, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"?,
+{ "version": 3?, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"?,
   "planta": { "caja": "…"?, "puerto": "…"?, "olt": "…"?, "slot": "…"?, "pon": "…"?, "potencia_dbm": "-19.40"? }? }
 → 200 Servicio (estado activo, instalado_en)
-→ 409 version · 422 servicio_no_pendiente (estado distinto de pendiente_instalacion)
+→ 409 conflicto_version (solo si llega version) · 409 servicio_no_pendiente (estado distinto de pendiente_instalacion)
 ```
 
 - **Efectos:**
     - pasa el servicio de `pendiente_instalacion` a `activo` y fija `core.servicios.instalado_en`, que es `instalado_en` o, si no viene, `now()`;
     - emite `servicio.estado_cambiado` con `de = pendiente_instalacion`, `a = activo` y `motivo = instalacion`;
     - refresca Redis AAA y RouterOS como cualquier cambio de estado.
-- **Reintento:** con la misma `Idempotency-Key` devuelve la misma respuesta. Una clave nueva sobre un servicio ya activo devuelve 422 `servicio_no_pendiente` (se revisa antes que la `version`, así no llega un 409). Sin la cabecera: 400 `idempotency_key_requerida`.
+- **`version` opcional** (decisión del líder, 29 oct, contrato Iris 0.3.1): Iris reintenta desde su cola con los mismos bytes y la misma `Idempotency-Key`, así que una `version` leída al encolar queda vieja. Si llega y no coincide: 409 `conflicto_version`, como siempre (el panel la manda). Si no llega, la acción se protege sola: bloquea la fila (`FOR UPDATE`) y solo sale de `pendiente_instalacion`.
+- **Reintento:** con la misma `Idempotency-Key` y los mismos bytes devuelve la misma respuesta (`Idempotent-Replayed: true`) y no emite otro evento. Una clave nueva (o una petición sin clave guardada) sobre un servicio que ya no está pendiente devuelve **409 `servicio_no_pendiente`** (`title`: «El servicio no está pendiente de instalación»; `detail` con el estado actual). Se revisa antes que la `version`, así llega el motivo real y no un `conflicto_version`. Es de negocio: no se reintenta (en Iris, solo `409 idempotencia_en_curso` se reintenta). No es un 200 idempotente porque el estado actual puede ser otro (`suspendido`, `retirado`) y la `planta` o el `instalado_en` de esa petición no se guardarían. Sin la cabecera: 400 `idempotency_key_requerida`.
 - **Fecha:** `instalado_en` no puede ser futura ni anterior a la creación del servicio (422 en `instalado_en`). Se toleran 5 minutos de reloj adelantado; un instante dentro de esa tolerancia se guarda como la hora de Argos. Si `fecha_instalacion` estaba vacía, toma el día de `instalado_en` en Guatemala.
 - **Permiso:** `servicios.activar_instalacion` lo tienen `admin`, `soporte` (que ya reactiva) y `tecnico` (que ya crea servicios e instala), y el usuario técnico «Iris».
 - **Transiciones prohibidas:** sobre un pendiente, suspender, reactivar, limitar, quitar límite, desconectar, programar un plan temporal y la transición de `evaluarEstadoServicio` (`CambiarEstadoServicio`) responden 422 `servicio_pendiente_instalacion`. Editarlo (plan, router, IPs) y cambiarlo de empresa sí se puede.

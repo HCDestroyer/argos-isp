@@ -42,6 +42,9 @@ function alGuardar(actualizado: Plan) {
 
 watch(planId, () => void cargar())
 onMounted(cargar)
+
+/** «Sincronizar plan» en todos sus routers (`planes.sincronizar`). */
+const sincronizarAbierto = ref(false)
 </script>
 
 <template>
@@ -51,6 +54,17 @@ onMounted(cargar)
         icono="i-lucide-gauge"
     >
         <template #acciones>
+            <UButton
+                v-if="plan && puede('planes.sincronizar')"
+                label="Sincronizar plan"
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="outline"
+                :ui="{ label: 'hidden sm:inline' }"
+                aria-label="Sincronizar plan"
+                data-prueba="sincronizar-plan"
+                @click="sincronizarAbierto = true"
+            />
             <UButton
                 v-if="plan && puede('planes.editar')"
                 label="Editar"
@@ -157,6 +171,11 @@ onMounted(cargar)
             v-model:open="editando"
             :plan="plan"
             @guardado="alGuardar"
+        />
+        <SincronizarPlanModal
+            v-if="plan && puede('planes.sincronizar')"
+            v-model:open="sincronizarAbierto"
+            :plan="plan"
         />
     </PanelPagina>
 </template>

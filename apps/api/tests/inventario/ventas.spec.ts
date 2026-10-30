@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { errorDe, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -51,7 +52,7 @@ test.group('Inventario · fase C · venta', (group) => {
             {
                 producto_id: router.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('RT') },
+                unidad: { serie: await unicoBd('RT') },
                 costo_total: '250.00',
             },
             e.ctx,

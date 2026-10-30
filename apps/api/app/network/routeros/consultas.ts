@@ -1,7 +1,26 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
-import { leerVelocidad, rateLimitServicio, velocidadEfectiva } from '#network/velocidad'
+import {
+    leerVelocidad,
+    rateLimitServicio,
+    velocidadEfectiva,
+    type ControlVelocidad,
+} from '#network/velocidad'
+import {
+    conNivelPlan,
+    familia,
+    necesitaPerfil,
+    padreCliente,
+    velocidadConExtras,
+    type Estrategia,
+    controlDerivado,
+    estrategiaDeCopia,
+    estrategiaEfectiva,
+    estrategiasDeFila,
+    leerEstrategias,
+    leerExcepcion,
+} from '#network/estrategia_velocidad'
 import type { RouterApi } from '#network/routeros/router'
 import {
     propiedadesCola,
@@ -10,7 +29,7 @@ import {
     type TipoConexion,
 } from '#network/routeros/estado_deseado'
 import {
-    conPadreSimple,
+    estadoVelocidadRouter,
     kbpsPar,
     type PlanRouter,
     type RouterVelocidad,
@@ -32,7 +51,13 @@ interface FilaServicio {
     prefijos_v6: string[] | null
     mac: string | null
     amarre_ip_mac: boolean
-    sesion: { ipv4: string | null; enlace: string | null; delegado: string | null } | null
+    sesion: {
+        ipv4: string | null
+        enlace: string | null
+        delegado: string | null
+        inicio?: string
+        estrategia?: unknown
+    } | null
     [campo: string]: unknown
 }
 
@@ -40,6 +65,7 @@ function consultaServicios(cliente: QueryClientContract) {
     return cliente
         .from('core.servicios as s')
         .join('network.planes as p', 'p.id', 's.plan_id')
+        .join('network.routers as r', 'r.id', 's.router_id')
         .leftJoin('network.planes_routers as pr', (j) =>
             j.on('pr.plan_id', '=', 's.plan_id').andOn('pr.router_id', '=', 's.router_id'),
         )
@@ -70,6 +96,9 @@ function consultaServicios(cliente: QueryClientContract) {
             'pr.rafaga_umbral_pct as pr_rafaga_umbral_pct',
             'pr.rafaga_segundos as pr_rafaga_segundos',
             'pr.prioridad as pr_prioridad',
+            'r.control_velocidad',
+            'r.estrategia_velocidad',
+            'pr.estrategia_velocidad as pr_estrategia_velocidad',
             cliente.raw(
                 `(SELECT host(a.ip) FROM network.ipv4_asignaciones a
                    WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
@@ -83,12 +112,24 @@ function consultaServicios(cliente: QueryClientContract) {
             cliente.raw(
                 // Sesión PPPoE abierta más reciente: sus direcciones van a las listas del árbol.
                 `(SELECT jsonb_build_object('ipv4', host(ses.ipv4), 'enlace', ses.prefijo_enlace_v6::text,
-                                            'delegado', ses.prefijo_delegado_v6::text)
+                                            'delegado', ses.prefijo_delegado_v6::text,
+                                            'inicio', ses.inicio,
+                                            'estrategia', ses.estrategia_velocidad)
                     FROM network.sesiones ses
                    WHERE ses.servicio_id = s.id AND ses.fin IS NULL
                    ORDER BY ses.inicio DESC, ses.id DESC LIMIT 1) AS sesion`,
             ),
         )
+}
+
+/** Estrategias del router y excepción del plan en él, de una fila con esas columnas. */
+export function estrategiaDeFila(fila: Record<string, unknown>, tipo: TipoConexion): Estrategia {
+    const control: ControlVelocidad = fila.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple'
+    return estrategiaEfectiva(
+        estrategiasDeFila(fila.estrategia_velocidad, control),
+        leerExcepcion(fila.pr_estrategia_velocidad),
+        tipo,
+    )
 }
 
 function aServicio(fila: FilaServicio): ServicioRed {
@@ -102,9 +143,17 @@ function aServicio(fila: FilaServicio): ServicioRed {
         rafaga_segundos: fila.pr_rafaga_segundos as number | null,
         prioridad: fila.pr_prioridad as number | null,
     }
+    const estrategia = estrategiaDeFila(fila, fila.tipo_conexion)
     return {
         servicio_id: Number(fila.servicio_id),
         estado: fila.estado,
+        estrategia,
+        estrategia_pppoe: estrategiaDeFila(fila, 'pppoe'),
+        // Una sesión PPPoE conserva la estrategia con la que entró hasta reconectar (control-velocidad.md §4).
+        estrategia_sesion:
+            fila.tipo_conexion === 'pppoe' && fila.sesion
+                ? (estrategiaDeCopia(fila.sesion.estrategia) ?? estrategia)
+                : null,
         tipo_conexion: fila.tipo_conexion,
         router_id: Number(fila.router_id),
         plan_id: Number(fila.plan_id),
@@ -112,7 +161,9 @@ function aServicio(fila: FilaServicio): ServicioRed {
         prefijos_v6: fila.prefijos_v6 ?? [],
         mac: fila.mac,
         amarre_ip_mac: Boolean(fila.amarre_ip_mac),
-        sesion: fila.sesion ?? null,
+        sesion: fila.sesion
+            ? { ipv4: fila.sesion.ipv4, enlace: fila.sesion.enlace, delegado: fila.sesion.delegado }
+            : null,
         velocidad: velocidadEfectiva(plan, excepcion),
     }
 }
@@ -161,48 +212,122 @@ export async function serviciosVigentesDeRouter(
     return filas.map(aServicio)
 }
 
+/** Estrategia con la que está limitado hoy un servicio: la de su sesión PPPoE abierta, o la vigente. */
+export function estrategiaVigente(s: ServicioRed): Estrategia {
+    return s.tipo_conexion === 'pppoe' && s.estrategia_sesion ? s.estrategia_sesion : s.estrategia
+}
+
+/** Targets de un servicio en una cola: IPv4 y prefijo delegado (WISP) o las direcciones de la sesión (PPPoE). */
+function targetsServicio(s: ServicioRed): string[] {
+    if (s.tipo_conexion === 'pppoe') {
+        if (!s.sesion) return []
+        return [s.sesion.ipv4 ? `${s.sesion.ipv4}/32` : null, s.sesion.enlace, s.sesion.delegado].filter(
+            (t): t is string => t !== null,
+        )
+    }
+    return s.ipv4 ? [`${s.ipv4}/32`, ...s.prefijos_v6] : []
+}
+
 /**
- * Planes con servicios vigentes en el router, para `estadoVelocidadRouter`: velocidad efectiva,
- * cuántos cuentan para el padre (ni suspendidos ni retirados) y los `target` de las colas WISP que
- * cuelgan de él. Las sesiones PPPoE no hacen falta: sus colas dinámicas se leen del router.
+ * Grupos (plan × familia de colas) con servicios vigentes en el router, para `estadoVelocidadRouter`:
+ * velocidad efectiva, cuántos cuentan para el padre, colas WISP hijas, clientes de la cola PCQ y el
+ * perfil PPP que necesita el plan.
+ *
+ * Cada servicio cuenta en el grupo de la estrategia con la que está limitado hoy (`estrategiaVigente`:
+ * una sesión PPPoE de antes del último cambio, la anterior), y además hace existir el grupo de su
+ * estrategia vigente: lo nuevo se crea antes de que reconecte (`contratos/control-velocidad.md` §4).
+ * Las sesiones PPPoE no hacen falta para las colas dinámicas: se leen del router.
  */
-export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
-    const planes = new Map<number, PlanRouter>()
-    for (const s of servicios) {
-        if (s.estado === 'retirado' || s.estado === 'pendiente_instalacion') continue
-        let plan = planes.get(s.plan_id)
-        if (!plan) {
-            plan = {
+export function planesDeRouter(_router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
+    const grupos = new Map<string, PlanRouter>()
+    const grupo = (s: ServicioRed, e: Estrategia): PlanRouter => {
+        const fam = familia(e.aplicacion)
+        const clave = `${s.plan_id}|${fam}`
+        let g = grupos.get(clave)
+        if (!g) {
+            g = {
                 plan_id: s.plan_id,
+                familia: fam,
                 velocidad: s.velocidad,
+                estrategia: e,
                 servicios: 0,
                 activos: 0,
                 en_activo: 0,
                 en_limitado: 0,
-                targets_wisp: [],
-                limit_at_wisp_kbps: { subida: 0, bajada: 0 },
+                hijas: [],
+                pcq: null,
+                perfil: null,
+                tipos_hoja: [],
             }
-            planes.set(s.plan_id, plan)
+            grupos.set(clave, g)
         }
-        plan.servicios++
-        if (s.estado === 'suspendido') continue
-        plan.activos++
-        if (s.estado === 'limitado') plan.en_limitado++
-        else plan.en_activo++
-        if (s.tipo_conexion !== 'pppoe' && s.ipv4 && conPadreSimple(router.control, s.velocidad)) {
-            plan.targets_wisp.push(`${s.ipv4}/32`, ...s.prefijos_v6)
-            // `limit-at` de la cola WISP (el mismo que arma `estado_deseado.ts`), para la regla de oro.
-            const limitAt = kbpsPar(propiedadesCola(rateLimitServicio(s.velocidad, s.estado))['limit-at']!)
-            plan.limit_at_wisp_kbps.subida += limitAt.subida
-            plan.limit_at_wisp_kbps.bajada += limitAt.bajada
+        // Representa al grupo lo que cuelga de un padre (padre y extras iguales por la regla 6).
+        if (g.estrategia.padre === 'ninguno' && e.padre !== 'ninguno' && e.aplicacion !== 'pcq_plan') {
+            g.estrategia = e
         }
+        if (e.tipo_cola !== 'default' && e.tipo_cola !== 'pcq' && !g.tipos_hoja.includes(e.tipo_cola)) {
+            g.tipos_hoja.push(e.tipo_cola)
+        }
+        if (e.aplicacion === 'pcq_plan' && !g.pcq) g.pcq = { estrategia: e, activo: [], limitado: [] }
+        return g
     }
-    return [...planes.values()].sort((a, b) => a.plan_id - b.plan_id)
+    for (const s of servicios) {
+        if (s.estado === 'retirado' || s.estado === 'pendiente_instalacion') continue
+        const actual = s.estrategia
+        const vigente = estrategiaVigente(s)
+        grupo(s, actual)
+        // El perfil `plan-<id>` lo pide la estrategia PPPoE del plan en el router (aunque el plan aún no
+        // tenga servicios PPPoE, como hasta ahora); si ya no lo necesita, el de las sesiones viejas.
+        let nuevo: PlanRouter | null = null
+        if (necesitaPerfil(s.estrategia_pppoe, s.plan_id, s.velocidad.reuso)) {
+            nuevo = grupo(s, s.estrategia_pppoe)
+            nuevo.perfil = s.estrategia_pppoe
+        }
+        const g = grupo(s, vigente)
+        if (
+            s.tipo_conexion === 'pppoe' &&
+            !g.perfil &&
+            !nuevo?.perfil &&
+            necesitaPerfil(vigente, s.plan_id, s.velocidad.reuso)
+        ) {
+            g.perfil = vigente
+        }
+        g.servicios++
+        if (s.estado === 'suspendido') continue
+        const vel = velocidadConExtras(s.velocidad, vigente.extras)
+        if (g.familia === 'arbol') {
+            g.activos++
+            if (s.estado === 'limitado') g.en_limitado++
+            else g.en_activo++
+            continue
+        }
+        if (conNivelPlan(vigente, vel.reuso)) g.activos++
+        if (vigente.aplicacion === 'pcq_plan') {
+            const pcq = g.pcq ?? (g.pcq = { estrategia: vigente, activo: [], limitado: [] })
+            pcq[s.estado === 'limitado' ? 'limitado' : 'activo'].push(...targetsServicio(s))
+            continue
+        }
+        if (vigente.aplicacion !== 'cola_simple' || !s.ipv4) continue
+        const padre = padreCliente(vigente, s.plan_id, vel.reuso)
+        if (padre === 'none') continue
+        // `limit-at` de la cola WISP (el mismo que arma `estado_deseado.ts`), para la regla de oro.
+        const limitAt = kbpsPar(propiedadesCola(rateLimitServicio(vel, s.estado))['limit-at']!)
+        let hijas = g.hijas.find((h) => h.padre === padre)
+        if (!hijas) {
+            hijas = { padre, targets: [], limit_at_kbps: { subida: 0, bajada: 0 } }
+            g.hijas.push(hijas)
+        }
+        hijas.targets.push(...targetsServicio(s))
+        hijas.limit_at_kbps.subida += limitAt.subida
+        hijas.limit_at_kbps.bajada += limitAt.bajada
+    }
+    return [...grupos.values()].sort((a, b) => a.plan_id - b.plan_id || a.familia.localeCompare(b.familia))
 }
 
-/** ¿El router necesita objetos de velocidad (árbol, o algún plan con padre)? */
+/** ¿El router necesita objetos de velocidad (árbol, padres, colas PCQ, perfiles o tipos de cola)? */
 export function necesitaVelocidad(router: RouterVelocidad, planes: PlanRouter[]): boolean {
-    return router.control === 'arbol_pcq' || planes.some((p) => conPadreSimple(router.control, p.velocidad))
+    const estado = estadoVelocidadRouter(router, planes, new Map())
+    return estado.presentes.length > 0 || estado.conservar.length > 0 || estado.errores.length > 0
 }
 
 /**
@@ -278,6 +403,8 @@ interface FilaRouterDispatcher {
     dhcp_servidor: string | null
     interfaz_clientes: string | null
     control_velocidad: string
+    estrategia_velocidad: unknown
+    routeros_version: string | null
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
 }
@@ -309,6 +436,8 @@ export async function routerDispatcher(
             'r.dhcp_servidor',
             'r.interfaz_clientes',
             'r.control_velocidad',
+            'r.estrategia_velocidad',
+            'r.routeros_version',
             'r.capacidad_bajada_kbps',
             'r.capacidad_subida_kbps',
         )
@@ -316,7 +445,11 @@ export async function routerDispatcher(
     if (!r) return null
     const texto = (v: string | null) => (v !== null && v !== '' ? v : null)
     const kbps = (v: number | null) => (v === null ? null : Number(v))
-    const control = r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple'
+    const estrategias = estrategiasDeFila(
+        r.estrategia_velocidad,
+        r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+    )
+    const control = controlDerivado(estrategias)
     return {
         activo: r.activo,
         nombre: r.nombre,
@@ -346,9 +479,67 @@ export async function routerDispatcher(
         velocidad: {
             router_id: Number(r.id),
             control,
+            estrategias,
+            routeros_version: texto(r.routeros_version),
             capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
             capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
         },
         con_credenciales: texto(r.api_usuario) !== null && texto(r.api_password) !== null,
     }
+}
+
+/** Redes IPv4 de clientes del router (`argos-clientes`, exclusión de FastTrack). */
+export async function redesV4DeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<string[]> {
+    const filas = (await cliente
+        .from('network.redes_ipv4')
+        .where('router_id', routerId)
+        .orderBy('id')
+        .select(cliente.raw('cidr::text AS cidr'))) as Array<{ cidr: string }>
+    return filas.map((f) => f.cidr)
+}
+
+/** Estrategias en uso en el router: las suyas por tipo y las efectivas de sus servicios. */
+export function estrategiasEnUso(router: RouterVelocidad, servicios: ServicioRed[]): Estrategia[] {
+    return [...Object.values(router.estrategias), ...servicios.map((s) => s.estrategia)]
+}
+
+/**
+ * Firma de la estrategia vigente de un router (o de la excepción de un plan en él): la lleva el job
+ * del cambio para saber si otro cambio posterior lo superó. Misma forma que `firmaDeEvento`.
+ */
+export async function firmaEstrategia(
+    routerId: number,
+    planId: number | null,
+    cliente: QueryClientContract = db.connection(),
+): Promise<string> {
+    if (planId === null) {
+        const r = (await cliente
+            .from('network.routers')
+            .where('id', routerId)
+            .select('estrategia_velocidad', 'control_velocidad')
+            .first()) as { estrategia_velocidad: unknown; control_velocidad: string } | null
+        return JSON.stringify(
+            r
+                ? estrategiasDeFila(
+                      r.estrategia_velocidad,
+                      r.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+                  )
+                : null,
+        )
+    }
+    const pr = (await cliente
+        .from('network.planes_routers')
+        .where('router_id', routerId)
+        .where('plan_id', planId)
+        .select('estrategia_velocidad')
+        .first()) as { estrategia_velocidad: unknown } | null
+    return JSON.stringify(leerExcepcion(pr?.estrategia_velocidad))
+}
+
+/** Firma del destino de un `router.estrategia_cambiada` (comparable con `firmaEstrategia`). */
+export function firmaDeEvento(planId: number | null, a: unknown): string {
+    return JSON.stringify(planId === null ? leerEstrategias(a) : leerExcepcion(a))
 }
