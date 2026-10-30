@@ -774,6 +774,20 @@ export const estadoWireguardValidator = vine.compile(
     }),
 )
 
+/** `GET /routers/duplicados` (`contratos/routers.md` §2): con `router_id`, solo su grupo. */
+export const duplicadosRoutersValidator = vine.compile(
+    vine.object({ router_id: vine.number().withoutDecimals().positive().optional() }),
+)
+
+/** `POST /routers/:id/unir` (`contratos/routers.md` §3): `version` del router que queda. */
+export const unirRoutersValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        absorber_id: vine.number().withoutDecimals().positive(),
+        simular: vine.boolean().optional(),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Control de velocidad por capas (A2, `contratos/control-velocidad.md`)

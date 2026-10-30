@@ -24,6 +24,7 @@ import {
  * - Controles para pruebas: `caer()` / `levantar()` (puerto cerrado → ECONNREFUSED, mismo puerto al
  *   volver), `fallar(n, status)` (las próximas n peticiones responden ese status), `retrasoMs`,
  *   `tabla(ruta)` para leer o tocar el estado a mano, y `peticiones` con todo lo recibido.
+ * - `serial` / `softwareId`: identidad del equipo en `/system/routerboard` y `/system/license`.
  */
 
 export interface PeticionRecibida {
@@ -163,6 +164,10 @@ export class RouterOSFalso {
     readonly password: string
     readonly peticiones: PeticionRecibida[] = []
     retrasoMs = 0
+    /** `serial-number` de `/system/routerboard`; null = sin RouterBOARD (CHR) */
+    serial: string | null = null
+    /** `software-id` de `/system/license` (CHR); null = no lo informa */
+    softwareId: string | null = null
     /** `version` de `/system/resource` (para probar CAKE y fq_codel con RouterOS 6) */
     version = '7.24.5 (stable)'
     /** Hosts (o IPs) que el router alcanza con `/tool/fetch` y `/ping`; vacío = todos */
@@ -319,6 +324,23 @@ export class RouterOSFalso {
                 uptime: '1d',
                 'cpu-load': '3',
             })
+        }
+        // Identidad del equipo (`identificar`): un CHR no trae `serial-number` en `/system/routerboard`.
+        if (camino === '/system/routerboard' && metodo === 'GET') {
+            return this.#json(
+                res,
+                200,
+                this.serial
+                    ? { routerboard: 'true', 'serial-number': this.serial }
+                    : { routerboard: 'false' },
+            )
+        }
+        if (camino === '/system/license' && metodo === 'GET') {
+            return this.#json(
+                res,
+                200,
+                this.softwareId ? { 'software-id': this.softwareId, level: 'p1' } : {},
+            )
         }
         // Diagnóstico: `/tool/fetch` (`url`, `output=none`) y `/ping` (`address`, `count`).
         if ((camino === '/tool/fetch' || camino === '/ping') && metodo === 'POST') {

@@ -1,9 +1,10 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
-import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO } from './datos'
+import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO, SIN_UNION } from './datos'
+import { extremoApi, routerDuplicado, rutasDuplicados } from './duplicados'
 import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
 import { estrategiaDeControl } from './estrategiasDatos'
@@ -110,6 +111,9 @@ function capacidadValida(valor: unknown): boolean {
 }
 
 export const rutasRouters: RutasFixture = {
+    // Antes de `/routers/:id`: la primera ruta que coincide responde.
+    ...rutasDuplicados,
+
     'GET /api/v1/routers': conPermiso('routers.ver', (solicitud) => {
         const activo = solicitud.query.get('activo')
         // Multiempresa (A1): sin empresa sugerida, sugeridos para la empresa o con servicios de ella.
@@ -154,6 +158,23 @@ export const rutasRouters: RutasFixture = {
         }
         if (errores.length) {
             return datosInvalidos(errores)
+        }
+        // Como `exigirSinDuplicado` (A1): solo lo que cambia (API, nas_ip) o reactivar, que revisa todo.
+        const despues = {
+            id: router.id,
+            host: typeof cuerpo.host === 'string' ? cuerpo.host.trim() : router.host,
+            api_url: 'api_url' in cuerpo ? (typeof cuerpo.api_url === 'string' && cuerpo.api_url.trim() ? cuerpo.api_url.trim() : null) : router.api_url ?? null,
+            nas_ip: typeof cuerpo.nas_ip === 'string' ? cuerpo.nas_ip.trim() : router.nas_ip,
+            serial: router.serial ?? null,
+        }
+        const activo = typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo
+        const reactiva = activo && !router.activo
+        if (reactiva && router.unido_a_id) {
+            return problemaTipado(422, 'router_unido', 'Regla de negocio', `El router está unido al router ${router.unido_a_id}: es el mismo equipo y no se reactiva`)
+        }
+        const duplicado = routerDuplicado(despues, { api: activo && (reactiva || extremoApi(despues) !== extremoApi(router)), nas_ip: despues.nas_ip !== router.nas_ip, serial: reactiva })
+        if (duplicado) {
+            return duplicado
         }
         const capacidad = (campo: 'capacidad_bajada_kbps' | 'capacidad_subida_kbps') => (campo in cuerpo ? (cuerpo[campo] as number | null) : router[campo] ?? null)
         const conexion = <K extends 'api_url' | 'api_tls_verificar' | 'dhcp_servidor' | 'interfaz_clientes'>(campo: K): Schema<'Router'>[K] => {
@@ -265,10 +286,15 @@ export const rutasRouters: RutasFixture = {
             ...(nombre.length < 2 ? [{ field: 'nombre', message: 'El nombre debe tener al menos 2 caracteres', rule: 'minLength' }] : []),
             ...(!host ? [{ field: 'host', message: 'El host es obligatorio', rule: 'required' }] : []),
             ...(!IPV4.test(nas) ? [{ field: 'nas_ip', message: 'El NAS debe ser una IPv4', rule: 'ipAddress' }] : []),
-            ...(bd.routers.some(r => r.nas_ip === nas) ? [{ field: 'nas_ip', message: 'Ya hay un router con esa IP de NAS', rule: 'unique' }] : []),
         ]
         if (errores.length) {
             return datosInvalidos(errores)
+        }
+        // 409 `router_duplicado` (A1): la misma API que un router activo o la misma nas_ip que cualquiera.
+        const apiUrl = typeof cuerpo.api_url === 'string' && cuerpo.api_url.trim() ? cuerpo.api_url.trim() : null
+        const duplicado = routerDuplicado({ host, api_url: apiUrl, nas_ip: nas, serial: null }, { api: cuerpo.activo !== false, nas_ip: true, serial: false })
+        if (duplicado) {
+            return duplicado
         }
         const control = cuerpo.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple'
         const creado = ahora()
@@ -289,7 +315,7 @@ export const rutasRouters: RutasFixture = {
             capacidad_subida_kbps: null,
             modo_velocidad: control === 'arbol_pcq' ? 'pcq' : 'simple',
             activo: cuerpo.activo !== false,
-            api_url: null,
+            api_url: apiUrl,
             api_tls_verificar: cuerpo.api_tls_verificar !== false,
             // Como la API: el PEM nunca sale; `***` solo si se cargó una CA.
             tiene_api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0,
@@ -298,6 +324,9 @@ export const rutasRouters: RutasFixture = {
             empresa_sugerida_id: null,
             zona_id: typeof cuerpo.zona_id === 'number' ? cuerpo.zona_id : null,
             ...SIN_CONTACTO,
+            // Sin serial hasta que el sondeo lo lea; sin unión.
+            serial: null,
+            ...SIN_UNION,
             version: 1,
             created_at: creado,
             updated_at: creado,

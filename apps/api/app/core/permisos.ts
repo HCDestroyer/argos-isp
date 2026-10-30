@@ -68,6 +68,8 @@ export const PERMISOS = {
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin',
+    'routers.unir':
+        'Unir dos registros del mismo MikroTik: servicios, redes, pools, planes y sesiones pasan al que queda; solo admin',
     'routers.generar_script':
         'Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token',
     'routers.rotar_conexion':

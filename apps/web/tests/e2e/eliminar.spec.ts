@@ -10,12 +10,12 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
     const tabla = page.locator('[data-prueba="tabla-routers"]')
-    await expect(tabla.getByRole('link', { name: 'RB-Centro' })).toBeVisible()
+    await expect(tabla.getByRole('link', { name: 'RB-Centro', exact: true })).toBeVisible()
     await expect(tabla.getByRole('link', { name: /RB-Bodega/ })).toHaveCount(0)
 
     await page.locator('[data-prueba="vista-routers"]').getByRole('tab', { name: 'Inactivos' }).click()
     await expect(page).toHaveURL(/vista=inactivos/)
-    await expect(tabla.getByRole('link', { name: 'RB-Centro' })).toHaveCount(0)
+    await expect(tabla.getByRole('link', { name: 'RB-Centro', exact: true })).toHaveCount(0)
     await tabla.getByRole('link', { name: /RB-Bodega/ }).click()
     await expect(page).toHaveURL(/\/routers\/3$/)
 
@@ -28,7 +28,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
     await expect(page).toHaveURL(/\/routers$/)
     await expect(page.getByText('RB-Bodega (respaldo) eliminado', { exact: true })).toBeVisible()
 
-    await tabla.getByRole('link', { name: 'RB-Centro' }).click()
+    await tabla.getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
     await expect(page.locator('[data-prueba="no-eliminable"]')).toContainText('No se puede eliminar: tiene 22 servicios y 41 sesiones PPPoE. Puedes desactivarlo.')
     await expect(page.locator('[data-prueba="eliminar-router"]')).toHaveCount(0)
@@ -66,7 +66,7 @@ test('servicio: «Retirados» aparte, el motivo de no eliminar y eliminar uno re
     await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await alta.getByRole('radio', { name: /RB-Centro/ }).click()
+    await alta.getByRole('radio', { name: /^RB-Centro(?! PCQ)/ }).click()
     await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // Conexión → Red y PPPoE → Instalación y cobro → Resumen.
     for (let i = 0; i < 3; i++) {

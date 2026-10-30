@@ -215,6 +215,9 @@ export interface CatalogoEventos {
      * `motivo: 'plan_temporal'` (lealtad, aditivo): inicio, fin o cancelación de un plan temporal
      * (`core.servicios_planes_temporales`, `plan_temporal_id`); llega con `campos: ['plan']` y se
      * aplica como cualquier cambio de plan (CoA de velocidad, sin cortar la sesión).
+     * `motivo: 'union_routers'` (aditivo, `contratos/routers.md`): `routers.unir` pasó el servicio al
+     * router que queda, que es **el mismo equipo**; llega con `campos: ['router']`, las direcciones no
+     * cambian y la sesión no se corta (el NAS es el mismo). RouterOS lo aplica como siempre.
      */
     'servicio.config_cambiada': {
         servicio_id: number
@@ -223,7 +226,7 @@ export interface CatalogoEventos {
             'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac' | 'empresa'
         >
         empresa_anterior_id?: number
-        motivo?: 'plan_temporal'
+        motivo?: 'plan_temporal' | 'union_routers'
         plan_temporal_id?: number
     }
     /**
