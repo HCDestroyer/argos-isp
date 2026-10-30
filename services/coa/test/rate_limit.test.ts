@@ -115,6 +115,8 @@ describe('FuenteRedisApi', () => {
                 rate_limit_limitado: '1M/2M 0/0 0/0 0/0 4 256k/512k',
                 reuso: 4,
                 control_velocidad: 'simple',
+                aplicacion: null,
+                grupo: null,
             },
         })
         assert.equal(api.pedidos.length, 0)
@@ -178,7 +180,17 @@ describe('FuenteRedisApi', () => {
             rate_limit_limitado: '1M/2M 0/0 0/0 0/0 4 256k/512k',
             reuso: 4,
             control_velocidad: 'arbol_pcq',
+            aplicacion: null,
+            grupo: null,
         })
+        // Con la estrategia por capas (control-velocidad.md §7) trae la aplicación y el perfil.
+        const conVelocidad = {
+            ...registro(),
+            velocidad: { aplicacion: 'perfil_ppp', grupo: 'plan-3', rate_limit: false, rate_limit_limitado: true },
+        }
+        const r = rateLimitsDeRegistro(conVelocidad, 101)!
+        assert.equal(r.aplicacion, 'perfil_ppp')
+        assert.equal(r.grupo, 'plan-3')
     })
 })
 

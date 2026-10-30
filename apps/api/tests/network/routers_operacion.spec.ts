@@ -128,7 +128,8 @@ test.group('Routers · probar conexión', (group) => {
             200,
         )
         const cuerpo = r.body()
-        assert.isTrue(cuerpo.ok)
+        // El router falso no tiene el corte puesto: el chequeo `corte` (A2) sale en rojo y con él `ok`.
+        assert.isFalse(cuerpo.ok)
         assert.deepEqual(
             cuerpo.chequeos.map((c: { clave: string; ok: boolean }) => [c.clave, c.ok]),
             [
@@ -136,8 +137,12 @@ test.group('Routers · probar conexión', (group) => {
                 ['api', true],
                 ['equipo', true],
                 ['radius', true],
+                ['corte', false],
             ],
         )
+        const corte = cuerpo.chequeos.find((c: { clave: string }) => c.clave === 'corte')
+        assert.isArray(corte.corte.chequeos)
+        assert.lengthOf(corte.corte.limites, 3)
         const equipo = cuerpo.chequeos.find((c: { clave: string }) => c.clave === 'equipo')
         assert.deepEqual(equipo.datos, {
             version: '7.24.5 (stable)',

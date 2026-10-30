@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Problema } from '#shared/errores'
@@ -263,7 +264,7 @@ test.group('registrarAsiento', () => {
         const [inactiva] = (await db
             .insertQuery()
             .table('ledger.cuentas')
-            .insert({ codigo: unico('9.8'), nombre: 'Inactiva', tipo: 'activo', activa: false })
+            .insert({ codigo: await unicoBd('9.8'), nombre: 'Inactiva', tipo: 'activo', activa: false })
             .returning('id')) as Array<{ id: number }>
 
         const insertar = (cuentaId: number) =>

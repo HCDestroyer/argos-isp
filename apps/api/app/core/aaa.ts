@@ -13,6 +13,14 @@ import {
     velocidadEfectiva,
     type ControlVelocidad,
 } from '#network/velocidad'
+import {
+    estrategiaEfectiva,
+    estrategiasDeFila,
+    leerExcepcion,
+    velocidadAaa,
+    velocidadConExtras,
+    type VelocidadAaa,
+} from '#network/estrategia_velocidad'
 
 /**
  * Registro de autorización RADIUS de un `user_ppp` (tarea 9). Contrato con A2 en
@@ -59,8 +67,13 @@ export interface RegistroAaa {
     pass_ppp: string
     estado: EstadoServicioConPendiente
     router_id: number
-    /** `network.routers.control_velocidad` del router del servicio */
+    /** `network.routers.control_velocidad` del router del servicio (derivado, obsoleto) */
     control_velocidad: ControlVelocidad
+    /**
+     * Cómo se limita el servicio según la estrategia PPPoE del router y del plan
+     * (`contratos/control-velocidad.md` §7): perfil (`Mikrotik-Group`) y si va `Mikrotik-Rate-Limit`.
+     */
+    velocidad: VelocidadAaa
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
@@ -104,6 +117,8 @@ interface FilaAaa {
     rate_limit_override: string | null
     profile_ppp: string | null
     control_velocidad: ControlVelocidad
+    estrategia_velocidad: unknown
+    pr_estrategia_velocidad: unknown
     reuso: number
     garantizado_pct: number | null
     rafaga_bajada_kbps: number | null
@@ -156,6 +171,8 @@ function consultaBase(cliente: QueryClientContract) {
             'pr.rate_limit_override',
             'pr.profile_ppp',
             'r.control_velocidad',
+            'r.estrategia_velocidad',
+            'pr.estrategia_velocidad as pr_estrategia_velocidad',
             'p.reuso',
             cliente.raw('p.garantizado_pct::float8 AS garantizado_pct'),
             'p.rafaga_bajada_kbps',
@@ -220,6 +237,12 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         prioridad: f.pr_prioridad,
     })
 
+    // Estrategia PPPoE del router y del plan (`contratos/control-velocidad.md`): los extras apagados
+    // quitan ráfaga, prioridad o garantizado de la cadena; `velocidad` dice qué atributos manda `aaa`.
+    const estrategias = estrategiasDeFila(f.estrategia_velocidad, f.control_velocidad)
+    const estrategia = estrategiaEfectiva(estrategias, leerExcepcion(f.pr_estrategia_velocidad), 'pppoe')
+    const conExtras = velocidadConExtras(velocidad, estrategia.extras)
+
     return {
         servicio_id: Number(f.servicio_id),
         version: Number(f.version),
@@ -227,7 +250,8 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         pass_ppp: f.pass_ppp,
         estado: f.estado,
         router_id: Number(f.router_id),
-        control_velocidad: f.control_velocidad,
+        control_velocidad: estrategia.aplicacion === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+        velocidad: velocidadAaa(estrategia, Number(f.plan_id), velocidad.reuso, nulo(f.profile_ppp)),
         plan: {
             id: Number(f.plan_id),
             subida_kbps: f.subida_kbps,
@@ -236,8 +260,8 @@ function aRegistro(f: FilaAaa): RegistroAaa {
             bajada_limitada_kbps: f.bajada_limitada_kbps,
             rate_limit_override: nulo(f.rate_limit_override),
             profile_ppp: nulo(f.profile_ppp),
-            rate_limit: rateLimitServicio(velocidad, 'activo'),
-            rate_limit_limitado: rateLimitServicio(velocidad, 'limitado'),
+            rate_limit: rateLimitServicio(conExtras, 'activo'),
+            rate_limit_limitado: rateLimitServicio(conExtras, 'limitado'),
             reuso: velocidad.reuso,
         },
         ipv4,
@@ -462,10 +486,20 @@ export async function escribirLapidaAaa(userPpp: string, servicioId: number, ver
 export type ObjetivoAaa =
     | { servicioId: number }
     | { planId: number; routerId?: number }
+    /** Todos los servicios de un router (cambió su estrategia de control de velocidad) */
+    | { routerId: number }
     | { lapida: { userPpp: string; servicioId: number; version: number } }
 
 async function idsDeObjetivo(objetivo: ObjetivoAaa): Promise<number[]> {
     if ('servicioId' in objetivo) return [objetivo.servicioId]
+    if (!('planId' in objetivo) && 'routerId' in objetivo) {
+        const filas = (await db
+            .from('core.servicios')
+            .where('router_id', objetivo.routerId)
+            .whereNot('estado', 'retirado')
+            .select('id')) as Array<{ id: number }>
+        return filas.map((f) => Number(f.id))
+    }
     if ('planId' in objetivo) {
         const filas = (await db
             .from('core.servicios')

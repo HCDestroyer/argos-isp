@@ -16,25 +16,40 @@
 :local srvEndpoint $wgServidorEndpoint
 :local srvPuerto $wgServidorPuerto
 :local registrado false
+# Qué paso falló (para el AVISO del final): se fija antes de cada paso y queda el del que falló.
+:local motivoRegistro ""
 :do {
+    :set motivoRegistro "este RouterOS no tiene :serialize/:deserialize (RouterOS viejo, p. ej. 7.12)"
     :local aJson [:parse ":return [:serialize to=json value=\$1]"]
     :local deJson [:parse ":return [:deserialize from=json value=\$1]"]
     :local cuerpo [$aJson ({"token"=$token; "public_key"=$wgPub; "routeros_version"=$rosVersion; "api_ca"=$caPem})]
+    :set motivoRegistro ("ArgosIsp no respondió OK en " . $argosUrl . " (sin internet o DNS, token ya usado o vencido: 410, o su certificado no se pudo verificar)")
     :local r [/tool fetch url=($argosUrl . "/api/v1/routers/conexion/registrar") http-method=post \
         http-header-field="Content-Type: application/json,Accept: application/json" http-data=$cuerpo \
         output=user as-value check-certificate=$fetchVerificar]
+    :set motivoRegistro "la respuesta de ArgosIsp no es la esperada"
     :local d [$deJson ($r->"data")]
     :local s ($d->"servidor")
     :if ([:len ($s->"public_key")] != 44) do={ :error "respuesta sin servidor.public_key" }
-    :if (($d->"ip_tunel") != $wgIp) do={ :error ("ArgosIsp asignó " . ($d->"ip_tunel") . " y el script trae " . $wgIp . ": genera el script de nuevo") }
+    :if (($d->"ip_tunel") != $wgIp) do={
+        :set motivoRegistro ("ArgosIsp asignó " . ($d->"ip_tunel") . " y el script trae " . $wgIp . ": genera el script de nuevo")
+        :error "ip_tunel distinta"
+    }
     :set srvPub ($s->"public_key")
     :set srvEndpoint ($s->"endpoint")
     :set srvPuerto [:tonum ($s->"puerto")]
     :set registrado true
+    :set motivoRegistro ""
     :put "argosisp: registrado en ArgosIsp"
 } on-error={
-    :put "argosisp: AVISO no se pudo registrar (sin internet, token usado o vencido, certificado no verificado o RouterOS sin :deserialize). Se usan los datos del servidor que trae el script."
+    :put ("argosisp: AVISO no se pudo registrar: " . $motivoRegistro . ". Se usan los datos del servidor que trae el script; la gestión y el certificado de www-ssl no se cambian.")
 }
+
+# Certificado de www-ssl (comun-certificado.rsc, la pieza que sigue): con el registro OK ArgosIsp ya
+# guardó argosisp-ca; sin registro solo si www-ssl no tenía certificado o ya usaba argosisp-www
+# (firmado por la misma CA). Un certificado ajeno (p. ej. el del administrador) se queda.
+:local wwwActual [:tostr [/ip service get www-ssl certificate]]
+:set apiCertificar ($registrado || $wwwActual = "" || $wwwActual = "none" || $wwwActual = "argosisp-www")
 
 :local wgPeer [/interface wireguard peers find where interface=$wgIf comment~"^argosisp:conexion"]
 :if ([:len $wgPeer] = 0) do={

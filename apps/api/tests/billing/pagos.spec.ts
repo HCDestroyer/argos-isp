@@ -16,6 +16,7 @@ import {
     generar,
     lineasAsiento,
     cuentaBancariaPrueba,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 const RUTA = '/api/v1/pagos'
@@ -91,7 +92,7 @@ test.group('billing · registrarPago', () => {
         assert,
     }) => {
         const { servicioId, clienteId } = await cortado()
-        const pago = await pagar(clienteId, '350.00', { referencia: unico('boleta') })
+        const pago = await pagar(clienteId, '350.00', { referencia: await unicoBd('boleta') })
         await afirmarLibroCuadrado(assert)
 
         assert.deepEqual(
@@ -135,7 +136,7 @@ test.group('billing · registrarPago', () => {
             metodo: 'deposito',
             facturas: [octubre!.id],
             cuenta_bancaria_id: cuenta.id,
-            referencia: unico('boleta'),
+            referencia: await unicoBd('boleta'),
         })
         assert.containSubset(pago.aplicaciones, [{ factura_id: octubre!.id, monto: '150.00' }])
         assert.isNull(pago.caja_id)
@@ -248,7 +249,7 @@ test.group('billing · pagos (API)', () => {
     }) => {
         const { clienteId } = await cortado()
         const { token } = await usuarioConRoles(['cajero'])
-        const referencia = unico('rec')
+        const referencia = await unicoBd('rec')
         const cuerpo = { cliente_id: clienteId, metodo: 'caja', monto: '300.00', referencia }
         const clave = unico('idem')
 

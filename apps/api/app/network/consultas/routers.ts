@@ -5,6 +5,7 @@ import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacio
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
+import { estrategiasDeFila, type EstrategiasRouter } from '#network/estrategia_velocidad'
 import { sqlContactoRouter } from '#network/contacto_router'
 import { sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
 import { sinCampos } from '#network/consultas/ipv6'
@@ -25,6 +26,10 @@ export interface RouterVista {
     modo_seguridad: 'radius' | 'api'
     /** cola simple por servicio o árbol con PCQ por plan (`contratos/velocidad.md`) */
     control_velocidad: ControlVelocidad
+    /** estrategia de control de velocidad por tipo de conexión (`contratos/control-velocidad.md`) */
+    estrategia_velocidad: EstrategiasRouter
+    /** versión de RouterOS leída del router (`/system/resource`); null = no se sabe */
+    routeros_version: string | null
     /** techo del padre global; null = sin techo */
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
@@ -90,6 +95,8 @@ const COLUMNAS_ROUTER = [
     db.raw('host(nas_ip) AS nas_ip'),
     'modo_seguridad',
     'control_velocidad',
+    'estrategia_velocidad',
+    'routeros_version',
     'capacidad_bajada_kbps',
     'capacidad_subida_kbps',
     'api_url',
@@ -132,7 +139,16 @@ export async function listarRouters(
                 ),
         ),
     )
-    return paginar<RouterVista>(consulta, filtros)
+    const pagina = await paginar<RouterVista>(consulta, filtros)
+    return { ...pagina, data: pagina.data.map(conEstrategia) }
+}
+
+/** La estrategia de la vista con la misma regla que el dispatcher (`estrategiasDeFila`). */
+function conEstrategia(fila: RouterVista): RouterVista {
+    return {
+        ...fila,
+        estrategia_velocidad: estrategiasDeFila(fila.estrategia_velocidad, fila.control_velocidad),
+    }
 }
 
 export async function verRouter(
@@ -145,7 +161,7 @@ export async function verRouter(
         .select(columnasRouter())
         .first()) as RouterVista | null
     if (!fila) throw new NoEncontrado(`El router ${id} no existe`)
-    return fila
+    return conEstrategia(fila)
 }
 
 const COLUMNAS_RED = [

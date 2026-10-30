@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -50,12 +51,12 @@ test.group('Fase 8 · bloques del libro y sus consejos', (group) => {
             regimen_isr: 'utilidades',
         })
         const conNit = await proveedorEn(e.B, e.ctx, { regimen_isr: 'utilidades' })
-        const compra = (proveedor: number, total: string) =>
+        const compra = async (proveedor: number, total: string) =>
             new RegistrarCompra().execute(
                 {
                     proveedor_id: proveedor,
                     tipo_documento: 'FACT',
-                    numero: unico('D'),
+                    numero: await unicoBd('D'),
                     fecha_documento: HOY,
                     condicion: 'credito',
                     lineas: [{ descripcion: 'Servicio', total }],

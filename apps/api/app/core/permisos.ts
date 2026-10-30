@@ -67,7 +67,7 @@ export const PERMISOS = {
         'Eliminar un router que nunca se usó (sin servicios, sesiones ni comandos enviados); solo admin',
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
-        'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
+        'Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin',
     'routers.generar_script':
         'Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token',
     'routers.rotar_conexion':
@@ -87,6 +87,8 @@ export const PERMISOS = {
     'planes.ver': 'Ver planes',
     'planes.crear': 'Crear planes',
     'planes.editar': 'Editar planes e implementaciones por router',
+    'planes.sincronizar':
+        'Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers',
     'sesiones.ver': 'Ver sesiones PPPoE',
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
     'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
@@ -464,6 +466,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'ipv6.editar',
             'ipv6.migrar',
             'planes.ver',
+            'planes.sincronizar',
             'sesiones.ver',
             'sesiones.desconectar',
             'red.ver',

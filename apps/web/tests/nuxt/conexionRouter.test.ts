@@ -42,6 +42,8 @@ describe('conexión del router', () => {
     }
 
     it('probar conexión: cada chequeo con su estado, los datos del equipo y RADIUS sin verificar como neutral', async () => {
+        // Con el corte ya reconciliado (A2): todos los chequeos en verde.
+        bd.routersReconciliados = [1]
         const vista = await mountSuspended(RouterPruebaConexionModal, { props: { router: router(1), open: false } })
         await vista.setProps({ open: true })
         await esperar(() => expect(cuerpo().querySelector('[data-prueba="prueba-resumen"]')).not.toBeNull())

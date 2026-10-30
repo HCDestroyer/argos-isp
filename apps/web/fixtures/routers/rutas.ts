@@ -6,6 +6,7 @@ import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
 import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO } from './datos'
 import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
+import { estrategiaDeControl } from './estrategiasDatos'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -222,6 +223,8 @@ export const rutasRouters: RutasFixture = {
         Object.assign(router, {
             control_velocidad: cuerpo.control_velocidad,
             modo_velocidad: cuerpo.control_velocidad === 'arbol_pcq' ? 'pcq' : 'simple',
+            // El atajo escribe también la estrategia equivalente (§6).
+            estrategia_velocidad: estrategiaDeControl(cuerpo.control_velocidad),
             version: router.version + 1,
             updated_at: ahora(),
         })
@@ -279,6 +282,9 @@ export const rutasRouters: RutasFixture = {
             nas_ip: nas,
             modo_seguridad: cuerpo.modo_seguridad === 'api' ? 'api' : 'radius',
             control_velocidad: control,
+            // Como `CrearRouter` (A2): la estrategia del atajo; sin versión hasta que la API responda.
+            estrategia_velocidad: estrategiaDeControl(control),
+            routeros_version: null,
             capacidad_bajada_kbps: null,
             capacidad_subida_kbps: null,
             modo_velocidad: control === 'arbol_pcq' ? 'pcq' : 'simple',

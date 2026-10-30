@@ -70,6 +70,24 @@ export interface ServicioActual {
     /** Del mismo registro: reuso efectivo del plan y `control_velocidad` del router */
     reuso?: number
     control_velocidad?: 'simple' | 'arbol_pcq'
+    /**
+     * Estrategia por capas del registro (`contratos/control-velocidad.md` §7): `aplicacion` y el
+     * `Mikrotik-Group` que entrega `aaa`. null/ausente en registros anteriores (se usa lo de arriba).
+     */
+    aplicacion?: string | null
+    grupo?: string | null
+}
+
+/** Sin cola por sesión: la velocidad la pone el PCQ del plan (cola o árbol), no un CoA. */
+function sinColaPorSesion(servicio: ServicioActual): boolean {
+    if (servicio.aplicacion) return servicio.aplicacion === 'arbol_pcq' || servicio.aplicacion === 'pcq_plan'
+    return servicio.control_velocidad === 'arbol_pcq'
+}
+
+/** El perfil PPP depende del plan (`plan-<id>`): solo se asigna al conectar. */
+function perfilDelPlan(servicio: ServicioActual): boolean {
+    if (servicio.aplicacion) return Boolean(servicio.grupo?.startsWith('plan-'))
+    return servicio.control_velocidad === 'simple' && (servicio.reuso ?? 1) > 1
 }
 
 export type AtributosCoa = Record<string, string>
@@ -104,11 +122,12 @@ export function rateLimitDe(servicio: ServicioActual): string | null {
 
 /** CoA de velocidad del estado actual, o el error si no hay cadena de A1. */
 function coaVelocidad(servicio: ServicioActual, razon: string): Decision {
-    if (servicio.control_velocidad === 'arbol_pcq') {
-        // Sin cola por sesión: el dispatcher de RouterOS mueve sus direcciones entre las listas del plan.
+    if (sinColaPorSesion(servicio)) {
+        // Sin cola por sesión: el dispatcher de RouterOS mueve sus direcciones entre las listas o
+        // colas del plan.
         return {
             accion: 'nada',
-            razon: `${razon}: router en arbol_pcq (lo aplica el dispatcher de RouterOS)`,
+            razon: `${razon}: ${servicio.aplicacion ?? 'arbol_pcq'} (lo aplica el dispatcher de RouterOS)`,
         }
     }
     const rate = rateLimitDe(servicio)
@@ -173,7 +192,7 @@ export function decidir(
             razon: `plan cambiado con el servicio ${servicio.estado}: se aplica al reconectar`,
         }
     }
-    if (servicio.control_velocidad === 'simple' && (servicio.reuso ?? 1) > 1) {
+    if (perfilDelPlan(servicio)) {
         // El perfil PPP (`Mikrotik-Group = plan-<id>`, con la cola padre) solo se asigna al conectar.
         return {
             accion: 'disconnect',
@@ -194,10 +213,25 @@ export interface EventoDesconexion {
     motivo: string
 }
 
+/**
+ * Cambio de velocidad de una sesión viva (`planes.sincronizar`, `contratos/control-velocidad.md` §5):
+ * la API ya calculó el `Mikrotik-Rate-Limit`; `coa` manda un CoA (nunca Disconnect) si la sesión sigue
+ * abierta y el servicio sigue en `estado`.
+ */
+export interface EventoVelocidad {
+    evento: 'sesion.velocidad_solicitada'
+    sesion_id: number
+    servicio_id: number
+    estado: 'activo' | 'limitado'
+    rate_limit: string
+    motivo: string
+}
+
 export const EVENTOS_COA = [
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
     'sesion.desconexion_solicitada',
+    'sesion.velocidad_solicitada',
 ] as const
 
 /** Payload que no cumple el catálogo: el consumidor lo confirma y lo descarta (reintentar no sirve). */
@@ -221,6 +255,40 @@ export function leerDesconexion(payload: unknown): EventoDesconexion {
                 ? null
                 : idPositivo(p.servicio_id, 'servicio_id'),
         motivo: typeof p.motivo === 'string' ? p.motivo : '',
+    }
+}
+
+/** Valida el payload de `sesion.velocidad_solicitada`. */
+export function leerVelocidad(payload: unknown): EventoVelocidad {
+    if (typeof payload !== 'object' || payload === null) throw new EventoInvalido('payload inválido')
+    const p = payload as Record<string, unknown>
+    if (p.estado !== 'activo' && p.estado !== 'limitado') throw new EventoInvalido('estado inválido')
+    if (typeof p.rate_limit !== 'string' || p.rate_limit.trim() === '') {
+        throw new EventoInvalido('rate_limit inválido')
+    }
+    return {
+        evento: 'sesion.velocidad_solicitada',
+        sesion_id: idPositivo(p.sesion_id, 'sesion_id'),
+        servicio_id: idPositivo(p.servicio_id, 'servicio_id'),
+        estado: p.estado,
+        rate_limit: p.rate_limit,
+        motivo: typeof p.motivo === 'string' ? p.motivo : '',
+    }
+}
+
+/**
+ * Qué hacer con `sesion.velocidad_solicitada`: CoA con el rate-limit del evento, o nada si el servicio
+ * ya no está en ese estado (ese cambio trae su propio CoA) o va por PCQ.
+ */
+export function decidirVelocidad(evento: EventoVelocidad, servicio: ServicioActual | null): Decision {
+    if (!servicio) return { accion: 'nada', razon: 'servicio inexistente' }
+    if (servicio.estado !== evento.estado) {
+        return { accion: 'nada', razon: `evento superado: el servicio ya está ${servicio.estado}` }
+    }
+    return {
+        accion: 'coa',
+        razon: evento.motivo ? `velocidad: ${evento.motivo}` : 'velocidad: sincronizar plan',
+        atributos: { 'Mikrotik-Rate-Limit': evento.rate_limit },
     }
 }
 
