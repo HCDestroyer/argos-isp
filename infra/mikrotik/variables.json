@@ -44,6 +44,10 @@
       "patron": "^[A-Za-z0-9.-]{1,253}$",
       "descripcion": "CN y SAN DNS del certificado de www-ssl, p. ej. router-12.argosisp"
     },
+    "api_ip_anterior": {
+      "patron": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:]*)?$",
+      "descripcion": "IP con que ArgosIsp llega hoy al router (host de network.routers.api_url si es una IP distinta de la del túnel; vacía si no): va también en el SAN del certificado de www-ssl"
+    },
     "admin_ips": {
       "patron": "^([0-9A-Fa-f.:/]+(,[0-9A-Fa-f.:/]+)*)?$",
       "descripcion": "?admin= del endpoint: IPs o redes de la lista argosisp-admin (vacío = solo por el túnel)"

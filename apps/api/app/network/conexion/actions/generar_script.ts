@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrar, descifrar } from '#shared/cifrado'
@@ -28,6 +29,22 @@ export interface EntradaGenerarScript {
 export interface ScriptConexion {
     script: string
     nombre_archivo: string
+}
+
+/**
+ * IP con que Argos llega hoy al router: el host de `api_url` si es una IP distinta de la del túnel
+ * (vacía si no hay `api_url` o es un nombre). El script la suma al SAN del certificado de `www-ssl`
+ * para que sirva por los dos caminos mientras se migra al túnel (`contratos/conexion-routers.md` §6.2).
+ */
+function ipApiAnterior(apiUrl: string | null, ipTunel: string): string {
+    if (!apiUrl) return ''
+    let host: string
+    try {
+        host = new URL(apiUrl).hostname.replace(/^\[|\]$/g, '')
+    } catch {
+        return ''
+    }
+    return isIP(host) && host !== ipTunel ? host : ''
 }
 
 /** El patrón de `radius_secret` en `variables.json` (16 a 128 ASCII imprimibles, sin espacio). */
@@ -128,6 +145,7 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
                 api_password: claveApi,
                 api_nombre: `router-${routerId}.argosisp`,
                 admin_ips: (input.admin ?? []).join(','),
+                api_ip_anterior: ipApiAnterior(router.api_url, despues.ip_tunel),
                 ...servicio,
             },
             variablesMikrotik(),

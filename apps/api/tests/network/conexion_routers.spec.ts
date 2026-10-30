@@ -309,6 +309,30 @@ test.group('Conexión de routers · API', (group) => {
         )
     })
 
+    test('el script lleva en apiIpAnterior la IP con que Argos llega hoy al router (SAN de www-ssl)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['tecnico'])
+        const porIp = await routerRadius({ api_url: 'https://192.168.88.1:8443' })
+        assert.equal(extraer(await generar(client, token, porIp), 'apiIpAnterior'), '192.168.88.1')
+        const porIpv6 = await routerRadius({ api_url: 'https://[2001:db8::7]' })
+        assert.equal(extraer(await generar(client, token, porIpv6), 'apiIpAnterior'), '2001:db8::7')
+        // un nombre o sin api_url: vacía (el SAN lleva solo la IP del túnel)
+        const porNombre = await routerRadius({ api_url: 'https://mk:8443' })
+        assert.equal(extraer(await generar(client, token, porNombre), 'apiIpAnterior'), '')
+        const sinUrl = await routerRadius()
+        assert.equal(extraer(await generar(client, token, sinUrl), 'apiIpAnterior'), '')
+        // ya en el túnel: la misma IP no se repite
+        const script = await generar(client, token, porIp)
+        const ipTunel = extraer(script, 'wgIp')
+        await db
+            .from('network.routers')
+            .where('id', porIp)
+            .update({ api_url: `https://${ipTunel}` })
+        assert.equal(extraer(await generar(client, token, porIp), 'apiIpAnterior'), '')
+    })
+
     test('registro: la clave de otro router da 409 y hay límite por IP (429)', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
         const publica = clave()
