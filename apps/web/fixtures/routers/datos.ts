@@ -11,6 +11,8 @@ const empresa = { empresa_sugerida_id: null }
 export const SIN_CONTACTO = { en_linea: null, ultimo_contacto: null }
 // Duplicados (A1, `contratos/routers.md`): serial que leyó el sondeo y unión; la API siempre los envía.
 export const SIN_UNION = { unido_a_id: null }
+// QoS por clases (A2, `contratos/qos.md`): null = el perfil predeterminado; la API siempre lo envía.
+export const QOS_PREDETERMINADO = { qos_perfil_id: null }
 
 export const routers: Schema<'Router'>[] = [
     {
@@ -18,6 +20,7 @@ export const routers: Schema<'Router'>[] = [
         nombre: 'RB-Centro',
         serial: 'HE0812ABC9',
         ...SIN_UNION,
+        ...QOS_PREDETERMINADO,
         host: '10.10.0.1',
         api_usuario: 'argos',
         tiene_api_password: true,
@@ -43,6 +46,7 @@ export const routers: Schema<'Router'>[] = [
         nombre: 'CCR-Mixco',
         serial: 'D4E2071F3B11',
         ...SIN_UNION,
+        ...QOS_PREDETERMINADO,
         host: '10.20.0.1',
         api_usuario: 'argos',
         tiene_api_password: true,
@@ -69,6 +73,7 @@ export const routers: Schema<'Router'>[] = [
         nombre: 'RB-Bodega (respaldo)',
         serial: null,
         ...SIN_UNION,
+        ...QOS_PREDETERMINADO,
         host: '10.30.0.1',
         api_usuario: null,
         tiene_api_password: false,
@@ -96,6 +101,7 @@ export const routers: Schema<'Router'>[] = [
         nombre: 'RB-Centro PCQ',
         serial: 'HE0812ABC9',
         ...SIN_UNION,
+        ...QOS_PREDETERMINADO,
         host: '10.10.0.1',
         api_usuario: 'argos',
         tiene_api_password: true,

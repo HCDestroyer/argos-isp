@@ -13181,7 +13181,6 @@ export interface components {
              * @enum {string}
              */
             tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
-            /** @description Además `qos` (boolean, por defecto false): prioridad por clases en el árbol (contratos/qos.md); la API siempre lo envía */
             extras: {
                 /** @description burst-* del plan (en PCQ: pcq-burst-*) */
                 rafaga: boolean;
@@ -13191,6 +13190,8 @@ export interface components {
                 garantizado: boolean;
                 /** @description Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack */
                 excluir_fasttrack: boolean;
+                /** @description Prioridad por clases dentro del plan (contratos/qos.md): solo arbol_pcq y con excluir_fasttrack; por defecto false */
+                qos: boolean;
             };
         };
         EvaluacionPromesa: {

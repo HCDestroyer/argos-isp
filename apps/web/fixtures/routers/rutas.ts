@@ -3,7 +3,7 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
-import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO, SIN_UNION } from './datos'
+import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, QOS_PREDETERMINADO, SIN_CONTACTO, SIN_UNION } from './datos'
 import { extremoApi, routerDuplicado, rutasDuplicados } from './duplicados'
 import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
@@ -327,6 +327,7 @@ export const rutasRouters: RutasFixture = {
             // Sin serial hasta que el sondeo lo lea; sin unión.
             serial: null,
             ...SIN_UNION,
+            ...QOS_PREDETERMINADO,
             version: 1,
             created_at: creado,
             updated_at: creado,

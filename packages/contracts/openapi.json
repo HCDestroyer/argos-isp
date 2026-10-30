@@ -84688,7 +84688,8 @@
               "rafaga",
               "prioridad",
               "garantizado",
-              "excluir_fasttrack"
+              "excluir_fasttrack",
+              "qos"
             ],
             "properties": {
               "rafaga": {
@@ -84706,9 +84707,12 @@
               "excluir_fasttrack": {
                 "type": "boolean",
                 "description": "Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack"
+              },
+              "qos": {
+                "type": "boolean",
+                "description": "Prioridad por clases dentro del plan (contratos/qos.md): solo arbol_pcq y con excluir_fasttrack; por defecto false"
               }
-            },
-            "description": "Además `qos` (boolean, por defecto false): prioridad por clases en el árbol (contratos/qos.md); la API siempre lo envía"
+            }
           }
         }
       },

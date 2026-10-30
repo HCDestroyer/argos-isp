@@ -313,6 +313,13 @@ const control = computed(() => {
             :router="nas"
             class="mx-auto mt-6 w-full max-w-4xl"
         />
+        <RouterQos
+            v-if="nas && puede('qos.ver')"
+            :router="nas"
+            class="mx-auto mt-6 w-full max-w-4xl"
+            @actualizado="nas = $event"
+            @recargar="cargar"
+        />
         <RouterDireccionamiento
             v-if="nas"
             :key="lecturas"

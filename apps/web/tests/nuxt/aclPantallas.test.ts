@@ -273,6 +273,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ServicioAltaFormulario.vue': { permisos: ['servicios.crear'], desde: ['pages/servicios/nuevo.vue', 'components/ServicioAltaSlideover.vue'], exentos: { 'components/ServicioAltaSlideover.vue': ['servicios.crear'] } },
     'ServicioAltaSlideover.vue': { permisos: ['servicios.crear'], desde: ['pages/clientes/[id]/index.vue'] },
     // Alta desde la lista (`clientes.crear`) y edición desde la ficha (`clientes.editar`).
+    // QoS por clases (`contratos/qos.md`, A2): los modales con `qos.gestionar`; la sección de la ficha del router con `qos.ver`.
+    'QosClaseModal.vue': { permisos: ['qos.gestionar'], desde: ['pages/red/qos/[id].vue'] },
+    'QosPerfilModal.vue': { permisos: ['qos.gestionar'], desde: ['pages/red/qos/index.vue', 'pages/red/qos/[id].vue'] },
+    'RouterQos.vue': { permisos: ['qos.ver'], desde: ['pages/routers/[id].vue'] },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 

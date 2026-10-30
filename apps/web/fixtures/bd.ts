@@ -51,6 +51,7 @@ import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
+import { clasesQos, perfilesQos, type ClaseQosFixture, type PerfilQosFila } from './qos/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
@@ -111,6 +112,9 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     /** Implementación de cada plan en un router (`GET /planes/:id/routers`). */
     implementacionesPlan: Schema<'PlanRouter'>[]
+    /** QoS por clases (A2, `contratos/qos.md`): perfiles (sin clases) y sus clases. */
+    qosPerfiles: PerfilQosFila[]
+    qosClases: ClaseQosFixture[]
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
     cambios: Schema<'CambioAuditoria'>[]
@@ -298,6 +302,8 @@ function inicial(): BaseFixtures {
         routersReconciliados: [],
         routersSinRespuesta: [],
         conexionesRouter,
+        qosPerfiles: perfilesQos,
+        qosClases: clasesQos,
         redesIpv4,
         ipv6Bloques,
         ipv6Pools,
