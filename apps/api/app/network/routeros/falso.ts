@@ -264,7 +264,12 @@ export class RouterOSFalso {
         const camino = url.pathname.slice('/rest'.length)
 
         if (camino === '/system/resource' && metodo === 'GET') {
-            return this.#json(res, 200, { 'board-name': 'falso', version: '7.24.5 (stable)', uptime: '1d' })
+            return this.#json(res, 200, {
+                'board-name': 'falso',
+                version: '7.24.5 (stable)',
+                uptime: '1d',
+                'cpu-load': '3',
+            })
         }
         // Identidad del equipo (`identificar`): un CHR no trae `serial-number` en `/system/routerboard`.
         if (camino === '/system/routerboard' && metodo === 'GET') {

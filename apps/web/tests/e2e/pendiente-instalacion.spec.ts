@@ -10,26 +10,30 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
 
-    await page.getByRole('link', { name: 'Nuevo cliente' }).click()
-    await expect(page).toHaveURL(/\/clientes\/nuevo/)
+    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
+    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
+    await expect(altaCliente).toBeVisible()
     await page.getByLabel('Nombre', { exact: true }).fill('Ramiro Instalación Pendiente')
     await page.getByLabel('Teléfono').fill('5555-4321')
     await page.getByRole('button', { name: 'Crear cliente' }).click()
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
 
-    await page.getByRole('link', { name: 'Nuevo servicio' }).first().click()
-    await expect(page).toHaveURL(/\/servicios\/nuevo\?cliente=\d+/)
+    // El alta del servicio se abre en un panel lateral de la ficha: no se sale del cliente.
+    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
+    await expect(alta).toBeVisible()
     await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
-    for (let i = 0; i < 4; i++) {
-        await page.getByRole('button', { name: 'Siguiente' }).click()
+    for (let i = 0; i < 2; i++) {
+        await alta.getByRole('button', { name: 'Siguiente' }).click()
     }
-    // Paso «Facturación»: nace pendiente de instalación.
-    await page.getByRole('switch', { name: 'Pendiente de instalación' }).click()
-    await page.getByRole('button', { name: 'Siguiente' }).click()
+    // Paso «Instalación y cobro»: nace pendiente de instalación.
+    await alta.getByRole('switch', { name: 'Pendiente de instalación' }).click()
+    await alta.getByRole('button', { name: 'Siguiente' }).click()
     await expect(page.locator('[data-prueba="resumen-estado-inicial"]')).toContainText('Pendiente de instalación')
     await page.getByRole('button', { name: 'Crear servicio' }).click()
 
+    await expect(alta).toBeHidden()
     await expect(page).toHaveURL(/\/clientes\/\d+\?tab=servicios/)
     const enlace = page.getByRole('link', { name: /^ramiro\./ })
     await expect(enlace).toBeVisible()

@@ -20,6 +20,13 @@ export type GrupoRoutersDuplicados = Schema<'GrupoRoutersDuplicados'>
 export type RouterDuplicado = GrupoRoutersDuplicados['routers'][number]
 export type UnionRouters = Schema<'UnionRouters'>
 export type DatosUnirRouters = paths['/api/v1/routers/{id}/unir']['post']['requestBody']['content']['application/json']
+export type DireccionamientoRouter = Schema<'DireccionamientoRouter'>
+export type OcupacionPool = Schema<'OcupacionPool'>
+export type ConexionRouter = Schema<'ConexionRouter'>
+export type PruebaConexion = Schema<'PruebaConexion'>
+export type ChequeoConexion = Schema<'ChequeoConexion'>
+export type ReconciliacionEncolada = Schema<'ReconciliacionEncolada'>
+export type OpcionesScript = NonNullable<paths['/api/v1/routers/{id}/script-conexion']['get']['parameters']['query']>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -79,6 +86,47 @@ export function useRouters() {
         return resolver(api.POST('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } }, body: datos }))
     }
 
+    /**
+     * `GET /routers/:id/direccionamiento` (`routers.ver`): redes con su ocupación, bloques con sus
+     * pools, totales por familia y qué recibe un servicio nuevo de cada plan (`contratos/pools.md` §2).
+     */
+    function direccionamiento(id: number): Promise<Resultado<DireccionamientoRouter>> {
+        return resolver(api.GET('/api/v1/routers/{id}/direccionamiento', { params: { path: { id } } }))
+    }
+
+    /** `GET /routers/:id/conexion` (`routers.ver`): estado del túnel WireGuard (`contratos/conexion-routers.md`). */
+    function conexion(id: number): Promise<Resultado<ConexionRouter>> {
+        return resolver(api.GET('/api/v1/routers/{id}/conexion', { params: { path: { id } } }))
+    }
+
+    /**
+     * `GET /routers/:id/script-conexion?admin=&incluir=` (`routers.generar_script`): el `.rsc` en texto.
+     * Lleva secretos: no se guarda en ningún estado persistente. Cada generación invalida el token anterior.
+     */
+    function scriptConexion(id: number, opciones: OpcionesScript): Promise<Resultado<string>> {
+        return resolver(api.GET('/api/v1/routers/{id}/script-conexion', { params: { path: { id }, query: opciones }, parseAs: 'text' }))
+    }
+
+    /** `POST /routers/:id/conexion/rotar` (`routers.rotar_conexion`): invalida el peer y devuelve el script nuevo. */
+    function rotarConexion(id: number, opciones: OpcionesScript): Promise<Resultado<string>> {
+        return resolver(api.POST('/api/v1/routers/{id}/conexion/rotar', { params: { path: { id }, query: opciones }, parseAs: 'text' }))
+    }
+
+    /** `POST /routers/:id/conexion/clave` (`routers.conexion_clave`): clave pública pegada a mano (RouterOS sin `:serialize`). */
+    function pegarClave(id: number, publicKey: string): Promise<Resultado<ConexionRouter>> {
+        return resolver(api.POST('/api/v1/routers/{id}/conexion/clave', { params: { path: { id } }, body: { public_key: publicKey } }))
+    }
+
+    /** `POST /routers/:id/probar-conexion` (`routers.probar_conexion`): 200 aunque el router esté caído. */
+    function probarConexion(id: number): Promise<Resultado<PruebaConexion>> {
+        return resolver(api.POST('/api/v1/routers/{id}/probar-conexion', { params: { path: { id } } }))
+    }
+
+    /** `POST /routers/:id/reconciliar` (`routers.reconciliar`): 202; `encolado: false` = ya había una en curso. */
+    function reconciliar(id: number): Promise<Resultado<ReconciliacionEncolada>> {
+        return resolver(api.POST('/api/v1/routers/{id}/reconciliar', { params: { path: { id } } }))
+    }
+
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } } }))
     }
@@ -133,5 +181,5 @@ export function useRouters() {
         }))
     }
 
-    return { duplicados, unir, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    return { duplicados, unir, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

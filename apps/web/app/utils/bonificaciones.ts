@@ -111,7 +111,7 @@ export function totalCargoUnico(lineas: readonly { cantidad: string, precio_unit
 }
 
 export const esquemaCargoUnico = z.object({
-    vence_en: z.string().trim().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Fecha inválida'),
+    vence_en: z.string().trim().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Elige una fecha válida (día, mes y año)'),
     lineas: z.array(esquemaLineaCargo).min(1, 'Al menos una línea').max(50, 'Hasta 50 líneas'),
     motivo_sin_costo_id: z.number().int().positive().nullable(),
     motivo_sin_costo_texto: z.string().trim().max(500, 'Hasta 500 caracteres'),

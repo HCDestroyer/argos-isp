@@ -95,6 +95,20 @@ describe('routers duplicados y unión', () => {
         expect(bodega.ok && bodega.data).toMatchObject({ serial: null, unido_a_id: null })
     })
 
+    it('edición: 409 al llevar el host o la nas_ip a otro router y 422 al reactivar uno unido', async () => {
+        const api = useRouters()
+        const host = await api.editar(2, { version: 1, host: '10.10.0.1' })
+        expect(!host.ok && host.problema).toMatchObject({ status: 409, type: 'urn:argosisp:problema:router_duplicado' })
+        const nas = await api.editar(2, { version: 1, nas_ip: '10.10.0.2' })
+        expect(!nas.ok && nas.problema.errors?.[0]?.field).toBe('nas_ip')
+        // Editar otra cosa de un duplicado que ya existía no choca: se puede seguir editando hasta unirlo.
+        const nombre = await api.editar(4, { version: 1, nombre: 'RB-Centro PCQ (viejo)' })
+        expect(nombre.ok).toBe(true)
+        await api.unir(1, { version: 1, absorber_id: 4 }, nuevaClaveIdempotencia())
+        const reactivar = await api.editar(4, { version: bd.routers.find(r => r.id === 4)?.version ?? 0, activo: true })
+        expect(!reactivar.ok && esRouterUnido(reactivar.problema)).toBe(true)
+    })
+
     it('simular no cambia nada; unir mueve redes y planes, desactiva y deja unido_a_id', async () => {
         const api = useRouters()
         const vista = await api.unir(1, { version: 1, absorber_id: 4, simular: true })

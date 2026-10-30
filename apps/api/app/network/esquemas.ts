@@ -15,6 +15,7 @@ import {
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { MOTIVOS_API } from '#network/diagnostico_routeros'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -104,39 +105,276 @@ export const Router = definirEsquema(
                     'Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. ' +
                     'La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan',
             },
+            zona_id: {
+                ...nulable(id),
+                description:
+                    'Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; ' +
+                    'opcional en el esquema hasta que las fixtures del panel la traigan',
+            },
             ...auditable,
         },
-        ['serial', 'unido_a_id'],
+        ['serial', 'unido_a_id', 'zona_id'],
     ),
 )
+
+const numero: EsquemaJson = { type: 'number' }
+
+export const OcupacionPool = definirEsquema('OcupacionPool', {
+    ...objeto({
+        total: { ...entero, minimum: 0, description: 'IPv4: hosts utilizables. IPv6: prefijos que caben' },
+        asignadas: { ...entero, minimum: 0, description: 'En uso por servicios' },
+        libres: { ...entero, minimum: 0, description: 'Las que el sistema todavía puede entregar' },
+        reservadas: {
+            ...entero,
+            minimum: 0,
+            description:
+                'No se entregan: IPv4, el gateway y las que quedan fuera del rango; IPv6, las ocupadas por prefijos de otro tamaño (estáticos)',
+        },
+        porcentaje: {
+            ...numero,
+            minimum: 0,
+            maximum: 100,
+            description: 'asignadas / (asignadas + libres) × 100, con un decimal',
+        },
+    }),
+    description: 'Ocupación del pool (contratos/pools.md §2); total = asignadas + libres + reservadas',
+})
 
 export const RedIpv4 = definirEsquema(
     'RedIpv4',
     objeto({
         id,
         router_id: id,
+        nombre: nulable(texto),
         cidr: texto,
-        gateway: nulable(texto),
+        gateway: { ...nulable(texto), description: 'Puerta de enlace de los clientes; nunca se asigna' },
         tipo: enumerado(['estatico', 'pool']),
+        rango_inicio: {
+            ...nulable(texto),
+            description: 'Primera IP que se entrega a servicios; null = toda la red',
+        },
+        rango_fin: {
+            ...nulable(texto),
+            description: 'Última IP que se entrega a servicios; null = toda la red',
+        },
+        dns_primario: nulable(texto),
+        dns_secundario: nulable(texto),
+        ocupacion: OcupacionPool,
         ...auditable,
     }),
 )
 
 export const Ipv6Bloque = definirEsquema(
     'Ipv6Bloque',
-    objeto({ id, router_id: id, prefijo: texto, ...auditable }),
+    objeto({
+        id,
+        router_id: id,
+        nombre: nulable(texto),
+        proveedor: { ...nulable(texto), description: 'Proveedor que asignó el bloque' },
+        prefijo: texto,
+        espacio: {
+            ...objeto({
+                pools: { ...entero, minimum: 0 },
+                porcentaje_en_pools: {
+                    ...numero,
+                    description: 'Parte del bloque ya repartida en pools, con un decimal',
+                },
+            }),
+            description: 'Cuánto del bloque está repartido en pools',
+        },
+        ...auditable,
+    }),
 )
+
+const atributoRadius: EsquemaJson = {
+    ...enumerado(['Framed-IPv6-Prefix', 'Delegated-IPv6-Prefix']),
+    description: 'Atributo RADIUS con el que viaja el prefijo (enlace: Framed; delegación: Delegated)',
+}
+
+/** Qué recibe cada servicio de un pool IPv6 (también en la vista previa). */
+const camposEntregaPool = {
+    atributo_radius: atributoRadius,
+    redes_lan_por_cliente: {
+        ...entero,
+        minimum: 1,
+        description: '/64 que el router del cliente puede repartir en su LAN (1 en un pool de enlace)',
+    },
+    clientes_maximos: { ...entero, minimum: 1, description: 'Servicios que caben en el pool' },
+    primer_prefijo: { ...texto, description: 'Lo que recibe el primer servicio' },
+    segundo_prefijo: nulable(texto),
+    ultimo_prefijo: texto,
+}
+
+export const EntregaPoolIpv6 = definirEsquema('EntregaPoolIpv6', objeto(camposEntregaPool))
 
 export const Ipv6Pool = definirEsquema(
     'Ipv6Pool',
     objeto({
         id,
         bloque_id: id,
+        router_id: id,
+        nombre: nulable(texto),
+        prefijo: texto,
+        tipo: {
+            ...enumerado(['enlace', 'delegacion']),
+            description:
+                'enlace: un /64 por servicio para la conexión PPPoE; delegacion: el prefijo que el router del cliente reparte en su red',
+        },
+        tamano_entrega: { type: 'integer', enum: [64, 56, 48] },
+        nombre_en_router: {
+            ...nulable(texto),
+            description: 'Nombre del pool en RouterOS (modo radius_pool)',
+        },
+        ocupacion: OcupacionPool,
+        entrega: EntregaPoolIpv6,
+        ...auditable,
+    }),
+)
+
+export const VistaPreviaPoolIpv6 = definirEsquema(
+    'VistaPreviaPoolIpv6',
+    objeto({
         prefijo: texto,
         tipo: enumerado(['enlace', 'delegacion']),
         tamano_entrega: { type: 'integer', enum: [64, 56, 48] },
-        nombre_en_router: nulable(texto),
-        ...auditable,
+        ...camposEntregaPool,
+        traslapa_con: {
+            ...nulable(texto),
+            description: 'Pool existente con el que se traslaparía (no se podría crear); null si no hay',
+        },
+    }),
+)
+
+export const VistaPreviaBloqueIpv6 = definirEsquema(
+    'VistaPreviaBloqueIpv6',
+    objeto({
+        prefijo: texto,
+        tamano_delegado: { type: 'integer', enum: [64, 56, 48] },
+        clientes: {
+            ...entero,
+            minimum: 1,
+            description:
+                'Servicios que caben con la división sugerida (un /64 de enlace y un delegado cada uno)',
+        },
+        redes_lan_por_cliente: {
+            ...entero,
+            minimum: 1,
+            description: '/64 que cada cliente reparte en su LAN',
+        },
+        pools_sugeridos: lista(
+            objeto({
+                tipo: enumerado(['enlace', 'delegacion']),
+                prefijo: texto,
+                tamano_entrega: { type: 'integer', enum: [64, 56, 48] },
+                clientes: { ...entero, minimum: 1 },
+            }),
+        ),
+        ejemplos: lista(
+            objeto({
+                servicio: { ...entero, minimum: 1, description: '1 = el primer servicio' },
+                prefijo_enlace: texto,
+                prefijo_delegado: texto,
+            }),
+        ),
+        traslapa_con: {
+            ...nulable(texto),
+            description: 'Bloque existente con el que se traslaparía (no se podría crear); null si no hay',
+        },
+    }),
+)
+
+const asignacionesServicio = (descripcion: string): EsquemaJson => ({
+    ...objeto({
+        router_id: id,
+        ipv4: nulable(texto),
+        prefijo_enlace_v6: nulable(texto),
+        prefijo_delegado_v6: nulable(texto),
+    }),
+    description: descripcion,
+})
+
+export const MigracionPools = definirEsquema(
+    'MigracionPools',
+    objeto({
+        router_origen_id: id,
+        router_destino_id: id,
+        redes_ipv4: lista(RedIpv4),
+        bloques_ipv6: lista(Ipv6Bloque),
+        servicios: {
+            ...lista(
+                objeto({
+                    servicio_id: id,
+                    user_ppp: nulable(texto),
+                    antes: asignacionesServicio('Router y direcciones antes de migrar'),
+                    despues: asignacionesServicio('Router y direcciones después de migrar'),
+                }),
+            ),
+            description: 'Servicios que pasaron (o pasarían, con simular) al router de destino',
+        },
+        simulado: { ...booleano, description: 'true = vista previa: no se guardó nada' },
+    }),
+)
+
+const AvisoDireccionamiento = objeto({
+    codigo: enumerado([
+        'sin_ipv4',
+        'sin_ipv4_libres',
+        'sin_pool_enlace',
+        'sin_pool_delegacion',
+        'sin_prefijos_enlace_libres',
+        'sin_prefijos_delegados_libres',
+    ]),
+    mensaje: texto,
+})
+
+export const DireccionamientoRouter = definirEsquema(
+    'DireccionamientoRouter',
+    objeto({
+        router_id: id,
+        redes_ipv4: lista(RedIpv4),
+        bloques_ipv6: lista({
+            allOf: [Ipv6Bloque, objeto({ pools: lista(Ipv6Pool) })],
+        }),
+        ocupacion: objeto({
+            ipv4: OcupacionPool,
+            ipv6: lista(
+                objeto({
+                    tipo: enumerado(['enlace', 'delegacion']),
+                    tamano_entrega: { type: 'integer', enum: [64, 56, 48] },
+                    ocupacion: OcupacionPool,
+                }),
+            ),
+        }),
+        planes: {
+            ...lista(
+                objeto({
+                    plan_id: id,
+                    nombre: texto,
+                    dual_stack: enumerado(['ambos', 'v4', 'v6']),
+                    ipv4: objeto({
+                        origen: {
+                            ...enumerado(['redes', 'pool_router', 'ninguna']),
+                            description:
+                                'redes: IP fija de las redes del router; pool_router: la asigna el router (Framed-Pool); ninguna: plan solo IPv6 o sin origen',
+                        },
+                        pool: nulable(texto),
+                        libres: nulable(entero),
+                    }),
+                    ipv6: nulable(
+                        objeto({
+                            prefijo_enlace: { type: 'integer', enum: [64] },
+                            prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+                            redes_lan_por_cliente: { ...entero, minimum: 1 },
+                            enlaces_libres: { ...entero, minimum: 0 },
+                            delegados_libres: { ...entero, minimum: 0 },
+                        }),
+                    ),
+                    avisos: lista(AvisoDireccionamiento),
+                }),
+            ),
+            description:
+                'Qué recibe un servicio nuevo de cada plan disponible en el router (modo IPv6 radius_servicio)',
+        },
     }),
 )
 
@@ -552,5 +790,139 @@ export const UnionRouters = definirEsquema(
         },
         router: Router,
         absorbido: Router,
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+export const ConexionRouter = definirEsquema(
+    'ConexionRouter',
+    objeto({
+        router_id: id,
+        estado: {
+            ...enumerado(['sin_configurar', 'pendiente', 'conectado']),
+            description:
+                'sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los ' +
+                'últimos 3 min; conectado: handshake de menos de 3 min',
+        },
+        ip_tunel: { ...nulable(texto), description: 'IP del router en el túnel (/32 de ARGOSISP_WG_RED)' },
+        public_key: { ...nulable(texto), description: 'Clave pública WireGuard del router (no es secreta)' },
+        ultimo_handshake: nulable(instante),
+        handshake_reciente: {
+            ...booleano,
+            description: 'Hubo handshake en los últimos 180 s (el túnel está vivo)',
+        },
+        registrado_en: nulable(instante),
+        routeros_version: { ...nulable(texto), description: 'La que informó el router al registrarse' },
+        token_vence: {
+            ...nulable(instante),
+            description: 'Vencimiento del token del último script; null si ya se usó o no hay',
+        },
+        version: { ...entero, description: '0 sin configurar' },
+    }),
+)
+
+export const RegistroConexion = definirEsquema(
+    'RegistroConexion',
+    objeto({
+        router_id: id,
+        ip_tunel: {
+            ...texto,
+            description: 'IP /32 del router en el túnel (el script la compara con la suya)',
+        },
+        servidor: objeto({
+            public_key: { ...texto, description: 'Clave pública del servidor WireGuard' },
+            endpoint: { ...texto, description: 'ARGOSISP_WG_ENDPOINT' },
+            puerto: entero,
+            ip: { ...texto, description: 'IP del servidor en el túnel (RADIUS, CoA, API)' },
+        }),
+    }),
+)
+
+export const PeerWireguard = definirEsquema(
+    'PeerWireguard',
+    objeto({ router_id: id, public_key: texto, ip_tunel: texto }),
+)
+
+export const PeersWireguard = definirEsquema('PeersWireguard', objeto({ data: lista(PeerWireguard) }))
+
+export const ChequeoConexion = definirEsquema(
+    'ChequeoConexion',
+    objeto(
+        {
+            clave: enumerado(['tunel', 'api', 'equipo', 'radius']),
+            ok: {
+                ...nulable(booleano),
+                description: 'null = no se pudo comprobar (falló otro chequeo antes)',
+            },
+            detalle: { ...texto, description: 'Explicación en lenguaje simple; nunca trae secretos' },
+            ms: entero,
+            motivo: {
+                ...nulable(enumerado(MOTIVOS_API)),
+                description:
+                    'Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), ' +
+                    'certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra ' +
+                    'un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta',
+            },
+            datos: {
+                ...nulable(jsonLibre),
+                description:
+                    '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; ' +
+                    'si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)',
+            },
+        },
+        ['motivo', 'datos'],
+    ),
+)
+
+export const PruebaConexion = definirEsquema(
+    'PruebaConexion',
+    objeto({
+        router_id: id,
+        ok: { ...booleano, description: 'Todos los chequeos salieron bien' },
+        probado_en: instante,
+        chequeos: lista(ChequeoConexion),
+    }),
+)
+
+export const ReconciliacionEncolada = definirEsquema(
+    'ReconciliacionEncolada',
+    objeto({
+        router_id: id,
+        job_id: texto,
+        encolado: {
+            ...booleano,
+            description: 'false: ya había una esperando o en curso (no se encoló otra)',
+        },
+    }),
+)
+
+export const SincronizacionServicio = definirEsquema(
+    'SincronizacionServicio',
+    objeto({
+        servicio_id: id,
+        router_id: id,
+        cambios: lista(
+            objeto(
+                {
+                    router_id: id,
+                    ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
+                    comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
+                    accion: enumerado(['creado', 'actualizado', 'borrado']),
+                    duplicados: entero,
+                },
+                ['duplicados'],
+            ),
+        ),
+        ya_estaba_bien: { ...booleano, description: 'Nada que corregir y el router respondió' },
+        avisos: lista(texto),
+        error: {
+            ...nulable(objeto({ motivo: enumerado(MOTIVOS_API), detalle: texto })),
+            description: 'El router no respondió o rechazó un comando (lenguaje simple); null si todo bien',
+        },
     }),
 )

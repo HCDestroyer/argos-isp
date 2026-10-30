@@ -21,7 +21,7 @@ const TAMANO_MAXIMO = 1024 * 1024
 
 const invalido = (errores: Errores): RespuestaFixture => problemaTipado(422, 'validacion', 'Datos inválidos', 'Los datos enviados no son válidos', errores)
 const regla = (codigo: string, detalle: string): RespuestaFixture => problemaTipado(422, codigo, 'Regla de negocio', detalle)
-const versionCambiada = (id: number): RespuestaFixture => problemaTipado(409, 'conflicto_version', 'Conflicto de versión', `core.anuncios ${id} fue modificado por otra sesión; recarga y vuelve a intentar`)
+const versionCambiada = (id: number): RespuestaFixture => problemaTipado(409, 'conflicto_version', 'Conflicto de versión', `El anuncio ${id} cambió en otra sesión; recarga y vuelve a intentar`)
 
 /** `vigente` al momento de responder, como `vigenteAhora` de la API. */
 function vista(anuncio: Anuncio): Anuncio {

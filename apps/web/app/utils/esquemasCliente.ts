@@ -31,7 +31,7 @@ function textoOpcional(maximo: number) {
  */
 export function esquemaClienteCon(campos: Schema<'CampoPersonalizado'>[]) {
     return z.object({
-        nombre: z.string('El nombre es obligatorio')
+        nombre: z.string('Escribe el nombre')
             .trim()
             .min(2, 'Escribe al menos 2 caracteres')
             .max(200, 'Máximo 200 caracteres'),

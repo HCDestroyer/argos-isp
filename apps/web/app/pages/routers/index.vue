@@ -3,9 +3,8 @@ import type { TableColumn } from '@nuxt/ui'
 
 /**
  * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
- * de velocidad y la capacidad del enlace. "Velocidad" abre el
- * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
- * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). "Nuevo router" (`routers.crear`);
+ * de velocidad y la capacidad del enlace. Cada fila lleva «Editar» y el menú de acciones del
+ * router (`RouterAcciones`: conexión de la API, control de velocidad…). "Nuevo router" (`routers.crear`);
  * redes IPv4 y bloques y pools IPv6 en la ficha de cada router. Arriba, el aviso de routers
  * duplicados (el mismo MikroTik registrado dos veces) con «Unir» (`contratos/routers.md`).
  */
@@ -45,20 +44,6 @@ function capacidad(router: RouterNas): string {
     return `${bajada ? formatearVelocidad(bajada) : 'sin techo'} / ${subida ? formatearVelocidad(subida) : 'sin techo'}`
 }
 
-const seleccionado = shallowRef<RouterNas | null>(null)
-const velocidadAbierta = ref(false)
-const conexionAbierta = ref(false)
-
-function abrir(router: RouterNas) {
-    seleccionado.value = router
-    velocidadAbierta.value = true
-}
-
-function abrirConexion(router: RouterNas) {
-    seleccionado.value = router
-    conexionAbierta.value = true
-}
-
 function alUnir() {
     void lista.recargar()
 }
@@ -69,8 +54,7 @@ function unidoA(router: RouterNas): string {
     return destino ? `Unido a ${destino.nombre}` : `Unido al router ${router.unido_a_id}`
 }
 
-function alActualizar(router: RouterNas) {
-    seleccionado.value = router
+function alActualizar() {
     void lista.recargar()
 }
 
@@ -174,30 +158,12 @@ onMounted(() => void lista.recargar())
                         <span class="text-sm">{{ capacidad(row.original) }}</span>
                     </template>
                     <template #acciones-cell="{ row }">
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                label="Conexión"
-                                icon="i-lucide-plug"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :ui="{ label: 'hidden sm:inline' }"
-                                :aria-label="`Conexión de ${row.original.nombre}`"
-                                :data-prueba="`conexion-router-${row.original.id}`"
-                                @click="abrirConexion(row.original)"
-                            />
-                            <UButton
-                                label="Velocidad"
-                                icon="i-lucide-gauge"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :ui="{ label: 'hidden sm:inline' }"
-                                :aria-label="`Velocidad de ${row.original.nombre}`"
-                                :data-prueba="`velocidad-router-${row.original.id}`"
-                                @click="abrir(row.original)"
-                            />
-                        </div>
+                        <RouterAcciones
+                            :router="row.original"
+                            con-editar
+                            tamano="sm"
+                            @actualizado="alActualizar"
+                        />
                     </template>
                     <template #empty>
                         <UEmpty
@@ -223,18 +189,6 @@ onMounted(() => void lista.recargar())
         <RouterAltaModal
             v-model:open="altaAbierta"
             @creado="alCrear"
-        />
-        <RouterVelocidad
-            v-if="seleccionado"
-            v-model:open="velocidadAbierta"
-            :router="seleccionado"
-            @actualizado="alActualizar"
-        />
-        <RouterConexion
-            v-if="seleccionado"
-            v-model:open="conexionAbierta"
-            :router="seleccionado"
-            @actualizado="alActualizar"
         />
     </PanelPagina>
 </template>

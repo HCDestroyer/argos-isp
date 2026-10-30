@@ -157,6 +157,30 @@ jobs:
           COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal \
             docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
           docker compose -f infra/produccion/docker-compose.nodo-portal.yml --env-file infra/produccion/nodo-portal.env.example config --quiet
+          # WireGuard de los routers (perfil wireguard; contratos/conexion-routers.md)
+          COMPOSE_PROFILES=lab,wireguard docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
+          COMPOSE_PROFILES=wireguard ARGOSISP_WIREGUARD=1 RADIUS_BIND_IP=10.255.0.1 \
+            docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
+          COMPOSE_PROFILES=wireguard docker compose -f infra/produccion/docker-compose.produccion.yml \
+            --env-file infra/produccion/.env.example config --services | grep -qx wireguard-agente
+
+      # Scripts de RouterOS (infra/mikrotik): lab.rsc y plantillas armados desde sus piezas, variables,
+      # escape de secretos y llaves balanceadas. El /import real se prueba en CHR (README de mikrotik).
+      - name: Plantillas de RouterOS (armado y render)
+        run: |
+          node infra/mikrotik/armar.mjs --verificar
+          node --test infra/mikrotik/render.test.mjs
+          # La imagen de la API copia lo que lee el render (la prueba con la imagen va en distribucion)
+          grep -q '^COPY .*infra/mikrotik/variables.json /app/mikrotik/' apps/api/Dockerfile
+          grep -q '^COPY .*infra/mikrotik/plantillas/ /app/mikrotik/plantillas/' apps/api/Dockerfile
+          grep -q '^ENV ROUTERS_MIKROTIK_DIR=/app/mikrotik' apps/api/Dockerfile
+
+      # Servidor WireGuard: peer por evento, handshake y estado a la API (falsa), contenedor → router
+      # por el túnel con origen .1, firewall del túnel (solo RADIUS), rotación (infra/wireguard/probar.sh)
+      - name: Servidor WireGuard (prueba de humo)
+        run: |
+          shellcheck infra/wireguard/*.sh
+          infra/wireguard/probar.sh
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
@@ -324,7 +348,7 @@ jobs:
       - name: Imagen freeradius
         uses: docker/build-push-action@v6
         with:
-          context: infra/freeradius
+          context: .
           file: infra/freeradius/Dockerfile
           load: true
           tags: ${{ env.REGISTRO }}/argosisp-freeradius:0.0.1

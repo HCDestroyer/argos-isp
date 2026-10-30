@@ -201,7 +201,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
             data-prueba="migracion-routers"
         >
             <p class="max-w-3xl text-sm text-muted">
-                Sigue a un router mientras pasa al nuevo servidor RADIUS (<span class="font-mono">aaa</span>): desde cuándo,
+                Sigue a un router mientras pasa al nuevo servidor RADIUS: desde cuándo,
                 quién ya volvió a conectarse, quién no, y qué respondieron los equipos a los CoA, Disconnect y comandos que fallaron.
             </p>
 
@@ -244,7 +244,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                                 name="i-lucide-calendar-check"
                                 class="size-4"
                             />
-                            Paso al nuevo aaa
+                            Paso al nuevo servidor RADIUS
                         </h3>
                         <div
                             v-if="migracion.estado === 'ok' && puede('routers.marcar_migrado')"
@@ -301,7 +301,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
                     class="text-sm text-muted"
                     data-prueba="migracion-sin-fecha"
                 >
-                    Marca desde cuándo el router apunta al nuevo aaa para contar quién se conectó y quién no.
+                    Marca desde cuándo el router apunta al nuevo servidor RADIUS para contar quién se conectó y quién no.
                 </p>
                 <MigracionLectura
                     v-else-if="resumen.estado !== 'ok'"
@@ -500,7 +500,7 @@ function plural(cantidad: number, singular: string, varios: string): string {
 
         <UModal
             v-model:open="marcarAbierto"
-            :title="desmarcando ? 'Desmarcar la migración' : 'Marcar el paso al nuevo aaa'"
+            :title="desmarcando ? 'Desmarcar la migración' : 'Marcar el paso al nuevo servidor RADIUS'"
             :description="desmarcando ? 'Vuelta atrás: el router queda sin fecha de migración. No toca el router ni las sesiones.' : 'Desde cuándo este router usa el nuevo servidor RADIUS. No toca el router ni las sesiones.'"
             :dismissible="!guardando"
         >

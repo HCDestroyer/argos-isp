@@ -76,7 +76,7 @@ export function formatearPorcentaje(valor: string): string {
 
 /* Programa. */
 
-function fechaOpcional(mensaje = 'Fecha inválida') {
+function fechaOpcional(mensaje = 'Elige una fecha válida (día, mes y año)') {
     return z.string().trim().refine(valor => valor === '' || FECHA.test(valor), mensaje)
 }
 
@@ -86,7 +86,7 @@ function fechaOpcional(mensaje = 'Fecha inválida') {
  * vencimiento), aviso de 0 a 365 días, mínimo de canje ≥ 0 y términos hasta 20 000 caracteres.
  */
 export const esquemaPrograma = z.object({
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(120, 'Máximo 120 caracteres'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
     valor_punto: z.string().trim().regex(MONTO, 'Q por punto con hasta 2 decimales (ej. 0.10)'),
     diferimiento: z.boolean(),
     canje_esperado_pct: z.string()

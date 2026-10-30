@@ -8,9 +8,16 @@ import type { TableColumn } from '@nuxt/ui'
 const props = withDefaults(defineProps<{
     servicios: Servicio[]
     cargando?: boolean
+    /** Muestra «Agregar servicio» en el estado vacío (abre el alta en la misma ficha). */
+    puedeAgregar?: boolean
 }>(), {
     cargando: false,
+    puedeAgregar: false,
 })
+
+const emit = defineEmits<{
+    agregar: []
+}>()
 
 const { puede, enlace } = usePermisos()
 const { conSelector: porEmpresa } = useEmpresaActiva()
@@ -152,6 +159,7 @@ onMounted(async () => {
                         title="Sin servicios"
                         description="Este cliente todavía no tiene servicios de internet."
                         variant="naked"
+                        :actions="puedeAgregar ? [{ label: 'Agregar servicio', icon: 'i-lucide-plus', onClick: () => emit('agregar') }] : []"
                     />
                 </template>
             </UTable>

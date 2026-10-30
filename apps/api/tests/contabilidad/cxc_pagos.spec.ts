@@ -212,13 +212,28 @@ test.group('Auditor contable · CxC, pagos, notas, promesas y mora (3, 5, 9)', (
         await new VencerFacturas().execute({ hasta: '2026-10-16', servicio_id: a.servicioId }, e.ctx)
         await new VencerFacturas().execute({ hasta: '2026-10-16', servicio_id: b.servicioId }, e.ctx)
         const inicio = await contarAsientos([e.B])
-        const vence = DateTime.now().plus({ days: 3 }).toJSDate()
+        // instante fijo dentro del periodo de octubre: la promesa vence antes de la siguiente
+        // facturación (2026-11-01) sea cual sea la fecha real; con `now()` fallaba a fin de mes
+        const ahora = DateTime.fromISO('2026-10-20T12:00:00', { zone: 'America/Guatemala' })
+        const vence = ahora.plus({ days: 3 }).toJSDate()
         const pa = await new CrearPromesaPago().execute(
-            { servicio_id: a.servicioId, vence_en: vence, monto: '150.00', canal: 'operador' },
+            {
+                servicio_id: a.servicioId,
+                vence_en: vence,
+                monto: '150.00',
+                canal: 'operador',
+                ahora: ahora.toJSDate(),
+            },
             e.ctx,
         )
         const pb = await new CrearPromesaPago().execute(
-            { servicio_id: b.servicioId, vence_en: vence, monto: '150.00', canal: 'operador' },
+            {
+                servicio_id: b.servicioId,
+                vence_en: vence,
+                monto: '150.00',
+                canal: 'operador',
+                ahora: ahora.toJSDate(),
+            },
             e.ctx,
         )
         assert.equal(await contarAsientos([e.B]), inicio)
@@ -243,7 +258,7 @@ test.group('Auditor contable · CxC, pagos, notas, promesas y mora (3, 5, 9)', (
         assert.equal(await contarAsientos([e.B]), conPago)
         const cumplida = await db.from('billing.promesas').where('id', pa.id).firstOrFail()
         assert.equal(cumplida.estado, 'cumplida')
-        await new IncumplirPromesas().execute({ ahora: DateTime.now().plus({ days: 10 }).toJSDate() }, e.ctx)
+        await new IncumplirPromesas().execute({ ahora: ahora.plus({ days: 10 }).toJSDate() }, e.ctx)
         const incumplida = await db.from('billing.promesas').where('id', pb.id).firstOrFail()
         assert.equal(incumplida.estado, 'incumplida')
         assert.equal(await contarAsientos([e.B]), conPago)
