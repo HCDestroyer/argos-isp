@@ -53,14 +53,31 @@ export async function expandirGrupos(contenedor: Locator): Promise<void> {
     }
 }
 
+/** Espera a que `elemento` deje de moverse (misma caja en dos lecturas seguidas). */
+async function esperarQuieto(elemento: Locator): Promise<void> {
+    let anterior = ''
+    await expect.poll(async () => {
+        const caja = JSON.stringify(await elemento.boundingBox())
+        const quieto = caja === anterior && caja !== 'null'
+        anterior = caja
+        return quieto
+    }, { intervals: [100] }).toBe(true)
+}
+
 /** Va a una sección por el menú lateral. */
 export async function ir(page: Page, seccion: string, url: RegExp): Promise<void> {
     const contenedor = await menu(page)
     const enlace = contenedor.getByRole('link', { name: seccion, exact: true })
+    // Los grupos se abren con animación: con el menú largo, un enlace del final (Integraciones)
+    // seguía bajando mientras Playwright lo llevaba a la vista y el clic caía en otro lado.
+    await esperarQuieto(enlace)
+    await enlace.scrollIntoViewIfNeeded()
+    await esperarQuieto(enlace)
     const antes = await enlace.boundingBox()
     await enlace.click()
     try {
-        await expect(page).toHaveURL(url)
+        // Con el servidor de desarrollo, la primera visita a una página la compila (varios segundos).
+        await expect(page).toHaveURL(url, { timeout: 20_000 })
     }
     catch (error) {
         // Sin reintento: si el clic no navegó, la falla dice qué había en pantalla (menú del
