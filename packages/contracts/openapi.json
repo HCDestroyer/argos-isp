@@ -27213,7 +27213,7 @@
       "get": {
         "operationId": "internoWireguardPeers",
         "summary": "Peers WireGuard vigentes (wireguard-agente)",
-        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.",
+        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista).",
         "tags": [
           "interno"
         ],
@@ -57977,6 +57977,7 @@
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
+                        "routers.eliminar",
                         "routers.generar_script",
                         "routers.marcar_migrado",
                         "routers.probar_conexion",
@@ -57992,6 +57993,7 @@
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.editar_adicional",
+                        "servicios.eliminar",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -58317,6 +58319,7 @@
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
+                        "routers.eliminar",
                         "routers.generar_script",
                         "routers.marcar_migrado",
                         "routers.probar_conexion",
@@ -58332,6 +58335,7 @@
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.editar_adicional",
+                        "servicios.eliminar",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -59151,6 +59155,111 @@
           }
         },
         "x-permiso": "routers.editar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "routersEliminar",
+        "summary": "Eliminar un router que nunca se usó (si tiene historial: 422, desactívalo)",
+        "description": "Solo admin. Con servicios (también retirados), sesiones, historial, asignaciones en sus redes, comandos enviados al equipo, bodegas o alcances responde 422 `router_con_historial` con `errors[]`. Borra sus redes IPv4, bloques y pools IPv6, `planes_routers` y su conexión, y emite `router.eliminado`. Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "description": "version leída; si cambió responde 409",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Router eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.eliminar",
         "x-implementado": true
       }
     },
@@ -60001,6 +60110,79 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DireccionamientoRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/eliminable": {
+      "get": {
+        "operationId": "routersEliminable",
+        "summary": "¿Se puede eliminar el router? (nunca se usó) y, si no, qué lo impide",
+        "description": "Para que el panel muestre «Eliminar» o «Desactivar». Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Si es eliminable y los motivos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Eliminable"
                 }
               }
             }
@@ -63019,6 +63201,111 @@
         },
         "x-permiso": "servicios.editar",
         "x-implementado": true
+      },
+      "delete": {
+        "operationId": "serviciosEliminar",
+        "summary": "Eliminar un servicio que nunca se usó (si tiene historial: 422, retíralo)",
+        "description": "Solo admin. Con facturas, pagos, asientos, DTE, sesiones, inventario u otro historial responde 422 `servicio_con_historial` con `errors[]` (qué lo impide). Libera IPs y prefijos, deja la lápida AAA y emite `servicio.eliminado`. Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "description": "version leída; si cambió responde 409",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Servicio eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.eliminar",
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/activar-instalacion": {
@@ -64614,6 +64901,79 @@
           }
         },
         "x-permiso": "servicios.desconectar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/eliminable": {
+      "get": {
+        "operationId": "serviciosEliminable",
+        "summary": "¿Se puede eliminar el servicio? (nunca se usó) y, si no, qué lo impide",
+        "description": "Para que el panel muestre «Eliminar» (eliminable) o «Retirar». Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Si es eliminable y los motivos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Eliminable"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -67324,6 +67684,7 @@
                             "routers.conexion_clave",
                             "routers.crear",
                             "routers.editar",
+                            "routers.eliminar",
                             "routers.generar_script",
                             "routers.marcar_migrado",
                             "routers.probar_conexion",
@@ -67339,6 +67700,7 @@
                             "servicios.desconectar",
                             "servicios.editar",
                             "servicios.editar_adicional",
+                            "servicios.eliminar",
                             "servicios.limitar",
                             "servicios.programar_plan_temporal",
                             "servicios.quitar_adicional",
@@ -80899,6 +81261,25 @@
           }
         }
       },
+      "Eliminable": {
+        "type": "object",
+        "required": [
+          "eliminable",
+          "motivos"
+        ],
+        "properties": {
+          "eliminable": {
+            "type": "boolean",
+            "description": "true: nunca se usó y el panel ofrece «Eliminar»; false: solo «Retirar» (o desactivar)"
+          },
+          "motivos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MotivoEliminacion"
+            }
+          }
+        }
+      },
       "EmisionLibro": {
         "type": "object",
         "required": [
@@ -86974,6 +87355,27 @@
           }
         }
       },
+      "MotivoEliminacion": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "cantidad",
+          "mensaje"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "facturas, sesiones, servicios, routeros…"
+          },
+          "cantidad": {
+            "type": "integer"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "«tiene 3 facturas»"
+          }
+        }
+      },
       "MotivoSinCosto": {
         "type": "object",
         "required": [
@@ -87904,6 +88306,7 @@
           "routers.conexion_clave",
           "routers.crear",
           "routers.editar",
+          "routers.eliminar",
           "routers.generar_script",
           "routers.marcar_migrado",
           "routers.probar_conexion",
@@ -87919,6 +88322,7 @@
           "servicios.desconectar",
           "servicios.editar",
           "servicios.editar_adicional",
+          "servicios.eliminar",
           "servicios.limitar",
           "servicios.programar_plan_temporal",
           "servicios.quitar_adicional",
@@ -88137,6 +88541,7 @@
           "Pegar a mano la clave pública WireGuard de un router",
           "Crear routers",
           "Editar routers y sus credenciales",
+          "Eliminar un router que nunca se usó (sin servicios, sesiones ni comandos enviados); solo admin",
           "Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token",
           "Marcar cuándo un router pasó al nuevo RADIUS (aaa)",
           "Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)",
@@ -88152,6 +88557,7 @@
           "Desconectar la sesión PPPoE de un servicio",
           "Editar servicios (plan, router, IPs, datos)",
           "Editar un adicional de un servicio (modalidad, identificador, credencial, precio)",
+          "Eliminar un servicio que nunca se usó (sin facturas, pagos, sesiones ni otro historial); solo admin",
           "Limitar la velocidad de servicios",
           "Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)",
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
@@ -100432,6 +100838,7 @@
               "routers.conexion_clave",
               "routers.crear",
               "routers.editar",
+              "routers.eliminar",
               "routers.generar_script",
               "routers.marcar_migrado",
               "routers.probar_conexion",
@@ -100447,6 +100854,7 @@
               "servicios.desconectar",
               "servicios.editar",
               "servicios.editar_adicional",
+              "servicios.eliminar",
               "servicios.limitar",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",

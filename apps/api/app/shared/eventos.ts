@@ -242,6 +242,26 @@ export interface CatalogoEventos {
      * capacidad del enlace (`routers.editar`). `de`/`a` iguales si solo cambió la capacidad. A2
      * ejecuta el cambio en el router (padres, árbol, PCQ) por lotes.
      */
+    /**
+     * Servicio eliminado porque nunca se usó (decisión del PM, 29 oct; `contratos/eliminar.md`).
+     * La fila de `core.servicios` ya no existe: RouterOS borra lo que le haya creado, Iris lo quita.
+     */
+    'servicio.eliminado': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+        /** usuario PPPoE que tenía (null si no era PPPoE); nunca la contraseña */
+        user_ppp: string | null
+    }
+    /**
+     * Router eliminado sin historial (`contratos/eliminar.md`). FreeRADIUS regenera sus clientes y
+     * el agente WireGuard borra el peer. `empresa_id` = `empresa_sugerida_id` (o null).
+     */
+    'router.eliminado': {
+        router_id: number
+        empresa_id: number | null
+    }
     'router.control_cambiado': {
         router_id: number
         de: 'simple' | 'arbol_pcq'
@@ -296,9 +316,9 @@ export interface CatalogoEventos {
         ip_tunel: string
     }
     /**
-     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`;
-     * no hay borrado de routers). El `wireguard-agente` quita su peer (contrato §6.3). Al reactivarlo
-     * se emite otra vez `router.conexion_registrada`.
+     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`,
+     * o se eliminó sin historial, `routers.eliminar`). El `wireguard-agente` quita su peer (contrato
+     * §6.3). Al reactivarlo se emite otra vez `router.conexion_registrada`.
      */
     'router.conexion_eliminada': {
         router_id: number
@@ -1106,6 +1126,8 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'servicio.eliminado',
+    'router.eliminado',
     'router.estrategia_cambiada',
     'router.conexion_generada',
     'router.conexion_registrada',

@@ -32,6 +32,8 @@ export const PERMISOS = {
     'servicios.limitar': 'Limitar la velocidad de servicios',
     'servicios.quitar_limite': 'Quitar el límite de velocidad',
     'servicios.retirar': 'Retirar servicios',
+    'servicios.eliminar':
+        'Eliminar un servicio que nunca se usó (sin facturas, pagos, sesiones ni otro historial); solo admin',
     'servicios.sincronizar_router':
         'Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió',
     'servicios.activar_instalacion':
@@ -61,6 +63,8 @@ export const PERMISOS = {
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
     'routers.editar': 'Editar routers y sus credenciales',
+    'routers.eliminar':
+        'Eliminar un router que nunca se usó (sin servicios, sesiones ni comandos enviados); solo admin',
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin',

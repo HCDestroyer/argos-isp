@@ -61,7 +61,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 | Archivo | Qué hace |
 | --- | --- |
-| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar` y `servicio.caidas_repetidas` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado` y `router.eliminado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
 | `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
 | `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
 
@@ -72,3 +72,12 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   empresa: se usan las de los servicios no retirados del cliente (`empresas[]`, y `empresa_id` = la
   primera), recortadas al alcance. Un cambio de empresa (`campos: ['empresa']`) sale si la nueva o
   la anterior está en el alcance.
+- **Eliminados** (`contratos/eliminar.md` §A6, espejo `iris.md` 0.3.1): `servicio.eliminado`
+  (`servicio_id`, `empresa_id`, `cliente_id`, `router_id`) y `router.eliminado` (`router_id`,
+  `empresa_id` o null) se arman solo con el payload del evento: la fila ya no existe y no se busca.
+  Iris quita su instantánea. Un `router.eliminado` sin empresa (router compartido) llega a
+  cualquier conector, como `GET /routers` muestra esos routers a cualquier alcance; con empresa,
+  solo si está en el alcance.
+- **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
+  `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
+  queda null si el evento no lo trae); Iris lo trata como «no existe».

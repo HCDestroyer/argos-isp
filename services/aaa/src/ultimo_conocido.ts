@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Redis } from 'ioredis'
-import { parsearRegistro, type RegistroAaa } from './servicio.ts'
+import { esLapida, parsearRegistro, type RegistroAaa, type ServicioAaa } from './servicio.ts'
 
 /**
  * Último perfil conocido de cada `user_ppp`: lo que `aaa` usa en **modo degradado**, cuando ni Redis
@@ -70,6 +70,20 @@ export class UltimoConocido {
     /** La API dijo que el usuario no existe (404): no se acepta en modo degradado. */
     olvidar(userPpp: string): void {
         this.#registros.delete(userPpp)
+    }
+
+    /**
+     * Baja definitiva (`servicio.eliminado`, `router.eliminado`; `bajas.ts`): olvida los registros
+     * (no lápidas) que cumplen `predicado`. Devuelve cuántos olvidó.
+     */
+    olvidarDonde(predicado: (registro: ServicioAaa) => boolean): number {
+        let n = 0
+        for (const [userPpp, { registro }] of this.#registros) {
+            if (esLapida(registro) || !predicado(registro)) continue
+            this.#registros.delete(userPpp)
+            n++
+        }
+        return n
     }
 
     obtener(userPpp: string): Conocido | null {

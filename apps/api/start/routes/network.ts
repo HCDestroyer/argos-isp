@@ -9,6 +9,9 @@ import * as v from '#network/validators'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import CrearRouter from '#network/actions/crear_router'
 import EditarRouter from '#network/actions/editar_router'
+import EliminarRouter from '#network/actions/eliminar_router'
+import { routerEliminable } from '#network/eliminacion'
+import { Eliminable } from '#core/esquemas'
 import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
 import { listarRedesIpv4, listarRouters, verRouter } from '#network/consultas/routers'
@@ -173,6 +176,44 @@ const routers: Ruta[] = [
         handler: (ctx, { cuerpo, params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
             return new EditarRouter().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/eliminable',
+        operacion: 'routersEliminable',
+        resumen: '¿Se puede eliminar el router? (nunca se usó) y, si no, qué lo impide',
+        descripcion: 'Para que el panel muestre «Eliminar» o «Desactivar». Contrato `contratos/eliminar.md`.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Si es eliminable y los motivos', esquema: Eliminable },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const router = await verRouter(id) // 404 si no existe
+            return routerEliminable(id, router.nas_ip)
+        },
+    }),
+    definirRuta({
+        metodo: 'delete',
+        ruta: '/routers/:id',
+        operacion: 'routersEliminar',
+        resumen: 'Eliminar un router que nunca se usó (si tiene historial: 422, desactívalo)',
+        descripcion:
+            'Solo admin. Con servicios (también retirados), sesiones, historial, asignaciones en sus redes, comandos ' +
+            'enviados al equipo, bodegas o alcances responde 422 `router_con_historial` con `errors[]`. Borra sus ' +
+            'redes IPv4, bloques y pools IPv6, `planes_routers` y su conexión, y emite `router.eliminado`. ' +
+            'Contrato `contratos/eliminar.md`.',
+        etiqueta: 'routers',
+        permiso: 'routers.eliminar',
+        query: v.eliminarRouterValidator,
+        idempotente: true,
+        versionada: true,
+        respuesta: { status: 204, descripcion: 'Router eliminado' },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            await new EliminarRouter().execute({ id, version: query.version }, ctx.contextoAccion())
         },
     }),
     definirRuta({
@@ -955,7 +996,8 @@ const conexion: Ruta[] = [
         descripcion:
             'Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel ' +
             '(`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con ' +
-            '`router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.',
+            '`router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` ' +
+            '(un router eliminado ya no tiene fila de conexión: su peer sale de la lista).',
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,

@@ -65,6 +65,9 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
 test('router sin secreto RADIUS: el script explica qué falta', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
+    // RB-Bodega es el router de respaldo, inactivo: se lista en «Inactivos» (`contratos/eliminar.md`).
+    await page.locator('[data-prueba="vista-routers"]').getByRole('tab', { name: 'Inactivos' }).click()
+    await expect(page).toHaveURL(/vista=inactivos/)
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: /RB-Bodega/ }).click()
     const conexion = page.locator('[data-prueba="conexion-router"]')
     await expect(conexion.locator('[data-prueba="estado-tunel"]')).toHaveText('Sin configurar')

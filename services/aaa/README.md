@@ -171,6 +171,17 @@ Cuando un router se registra por el túnel (`contratos/conexion-routers.md` §6.
 - Por evento, sin TTL ni sondeo. Sin `recargar.sh` (FreeRADIUS de antes) el aviso queda en `sin_lector` y hace falta `argosisp radius-clientes`.
 - `argosisp radius-clientes` queda para regenerar a mano (p. ej. con FreeRADIUS sin `recargar.sh`).
 
+### Bajas definitivas (`contratos/eliminar.md`)
+
+Con el mismo grupo `radius-clientes:<nodo>` (y `AAA_CLIENTES_EVENTOS=1`), `aaa` atiende los borrados de A1 (solo registros sin historial):
+
+- **`router.eliminado`** (`router_id`, `empresa_id`): regenera los clientes como con los demás eventos de router; la fila ya no está en `network.routers`, así que `router-<id>.conf` se borra y FreeRADIUS se recarga (`recargar.sh`). Además deja como lápida toda clave `aaa:user:*` con ese `router_id` (no debería haber: un router con servicios, aun retirados, no se puede eliminar) y la olvida del último perfil conocido.
+- **`servicio.eliminado`** (`servicio_id`, …): A1 ya escribe la lápida en `aaa:user:<user_ppp>`; si esa escritura falló (Redis caído tras el COMMIT), `aaa` reemplaza el registro completo con ese `servicio_id` por la lápida (`version + 1`, como la de A1) y olvida el servicio del último perfil conocido de su nodo, para que el modo degradado tampoco lo acepte. No toca `clients.d`.
+- Lápida y no `DEL` (`contratos/aaa.md`). El reemplazo es atómico (Lua: solo si la clave sigue con el valor leído; si A1 escribió entre medio, gana A1). Recorre `aaa:user:*` con `SCAN` (los borrados son raros). Sin TTL.
+- Idempotente: una segunda entrega encuentra lápidas y nada en memoria. Un payload sin id válido se confirma sin efecto. Si Redis o Postgres fallan, no confirma y reintenta.
+- Código en `src/bajas.ts` (`aplicarBaja`) y `src/clientes/consumidor.ts`; pruebas en `test/bajas.test.ts`.
+- Una sesión viva de un servicio eliminado (no debería existir) la desconecta la API: grupo `sesiones` de `node ace sesiones:worker` → `sesion.desconexion_solicitada` → `coa` (`apps/api/app/network/sesiones/README.md`).
+
 ## Prueba con `radtest` contra FreeRADIUS en Docker (tarea 3)
 
 El MikroTik físico no estuvo disponible para A2; se probó con FreeRADIUS 3.2.10 real (config de este repo) → `rlm_rest` → `aaa` con fixtures, y `radtest` PAP y CHAP desde dentro del contenedor. Automatizado en `test/freeradius.test.ts` (corre con `pnpm --filter @argosisp/aaa test` si hay Docker; `AAA_PRUEBAS_DOCKER=0` la omite). El contenedor alcanza a `aaa` por `host.docker.internal` (host-gateway), sin `--network host` ni puertos 1812/1813 publicados.

@@ -9,6 +9,7 @@ import { UltimoConocido } from './ultimo_conocido.ts'
 import { ConsumidorClientes } from './clientes/consumidor.ts'
 import { escribirClientes, leerRouters } from './clientes/generar.ts'
 import { avisarRecarga } from './clientes/recarga.ts'
+import { aplicarBaja } from './bajas.ts'
 
 const config = leerConfig()
 const clave = claveDesdeEntorno(config.claveSecretos)
@@ -87,7 +88,7 @@ app.log.info(
     'aaa listo',
 )
 
-// Clientes de FreeRADIUS por evento (router.conexion_*): conexión de Redis propia (XREADGROUP
+// Clientes de FreeRADIUS y bajas por evento (router.conexion_*, router.radius_cambiado, *.eliminado): conexión de Redis propia (XREADGROUP
 // bloquea) y un pool de Postgres de una conexión, como `pnpm aaa:clients`.
 let clientes: { consumidor: ConsumidorClientes; redis: Redis; pool: pg.Pool } | undefined
 if (config.clientes.activo) {
@@ -109,6 +110,9 @@ if (config.clientes.activo) {
                 excluirNasIps: c.excluirNasIps,
             }),
         recargar: (motivo) => avisarRecarga(c.dir, motivo),
+        // servicio.eliminado / router.eliminado: lápida en Redis y fuera del último perfil conocido.
+        bajas: (criterio) =>
+            aplicarBaja({ redis: redisEventos, prefijo: config.redis.prefijo, ultimoConocido }, criterio),
         log: {
             info: (o, m) => app.log.info(o, m),
             warn: (o, m) => app.log.warn(o, m),

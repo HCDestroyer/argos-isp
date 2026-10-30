@@ -21,6 +21,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.limitar': 'Velocidad limitada',
     'servicios.quitar_limite': 'Límite de velocidad quitado',
     'servicios.retirar': 'Servicio retirado',
+    'servicios.eliminar': 'Servicio eliminado (sin historial)',
     'servicios.activar_instalacion': 'Instalación activada',
     'servicios.sincronizar_router': 'Servicio sincronizado con el router',
     'servicios.desconectar': 'Sesión PPPoE desconectada',
@@ -65,6 +66,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routers.registrar_estado_wireguard': 'Estado del túnel WireGuard informado',
     'routers.probar_conexion': 'Conexión del router probada',
     'routers.reconciliar': 'Reconciliación del router pedida',
+    'routers.eliminar': 'Router eliminado (sin historial)',
     'routers.exportar_secrets_emergencia': 'Secrets PPPoE de emergencia exportados',
     'redes.crear': 'Red IPv4 creada',
     'redes.editar': 'Red IPv4 editada',
@@ -303,6 +305,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
     'sesiones.desconectar': 'Desconexión de sesión solicitada',
+    'sesiones.desconectar_eliminado': 'Sesión del servicio eliminado desconectada',
     // Inventario (A3)
     'bodegas.crear': 'Bodega creada',
     'bodegas.editar': 'Bodega editada',

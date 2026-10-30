@@ -149,6 +149,9 @@ export const rutasRouters: RutasFixture = {
         if (typeof cuerpo.zona_id === 'number' && !bd.zonas.some(z => z.id === cuerpo.zona_id)) {
             errores.push({ field: 'zona_id', message: `La zona ${cuerpo.zona_id} no existe`, rule: 'exists' })
         }
+        if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
+            errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -170,6 +173,7 @@ export const rutasRouters: RutasFixture = {
             tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
             tiene_radius_secret: cuerpo.quitar_radius_secret === true ? false : (typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') || router.tiene_radius_secret,
             zona_id: 'zona_id' in cuerpo ? (cuerpo.zona_id as number | null) : (router.zona_id ?? null),
+            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
             activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
