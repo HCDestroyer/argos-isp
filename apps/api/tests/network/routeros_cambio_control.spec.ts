@@ -137,7 +137,13 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
         ] as const) {
             salida[ruta] = falso
                 .tabla(ruta)
-                .filter((o) => o.dynamic !== 'true' && o.name !== 'default')
+                // El corte (`argosisp: …`) lo deja el último paso y no depende del modo.
+                .filter(
+                    (o) =>
+                        o.dynamic !== 'true' &&
+                        o.name !== 'default' &&
+                        !(o.comment ?? '').startsWith('argosisp: '),
+                )
                 .map((o) => `${o.comment ?? o.name}|${o.parent ?? ''}|${o.list ?? ''}`)
                 .sort()
         }

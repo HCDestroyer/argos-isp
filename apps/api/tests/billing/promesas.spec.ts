@@ -11,7 +11,12 @@ import RegistrarPago from '#billing/actions/registrar_pago'
 import { ConsumidorBilling } from '#billing/consumidor'
 import { evaluarReglas, type DatosEvaluacion } from '#billing/promesas'
 import { normalizarReglasPromesa } from '#billing/reglas_promesa'
-import { estadoServicio, eventosDe, servicioCortado } from '#tests/billing/ayudas_billing'
+import {
+    estadoServicio,
+    eventosDe,
+    reglasPromesaSinTopeFacturacion,
+    servicioCortado,
+} from '#tests/billing/ayudas_billing'
 
 /**
  * Tarea 10: promesas de pago. El servicio de prueba tiene septiembre y octubre vencidas
@@ -309,9 +314,10 @@ test.group('billing · promesas: aprobación y endpoints', () => {
         client,
         assert,
     }) => {
-        const reglas = JSON.stringify(
-            normalizarReglasPromesa({ canales: { operador: { requiere_aprobacion: true } } }),
-        )
+        // promesas por HTTP (reloj real): sin el tope de la siguiente facturación (`AHORA_PROMESAS`)
+        const reglas = reglasPromesaSinTopeFacturacion({
+            canales: { operador: { requiere_aprobacion: true } },
+        })
         const { servicioId } = await servicioCortado({ plantilla: { reglas_promesa: reglas } })
         const { token: cajero } = await usuarioConRoles(['cajero'])
         const { token: contador, usuario } = await usuarioConRoles(['contabilidad'])

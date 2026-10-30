@@ -37,6 +37,38 @@ export interface PlanAaa {
 /** `network.routers.control_velocidad` (`contratos/velocidad.md`); `simple` si el registro no lo trae. */
 export type ControlVelocidad = 'simple' | 'arbol_pcq'
 
+/**
+ * Cómo se limita el servicio según la estrategia por capas (`contratos/control-velocidad.md` §7).
+ * null en registros anteriores: `aaa` decide como antes, por `control_velocidad` y `reuso`.
+ */
+export interface VelocidadAaa {
+    aplicacion: 'radius_rate_limit' | 'perfil_ppp' | 'cola_simple' | 'pcq_plan' | 'arbol_pcq'
+    /** `Mikrotik-Group` en activo y limitado (null = ninguno) */
+    grupo: string | null
+    /** ¿Manda `Mikrotik-Rate-Limit` en activo? ¿y en limitado? */
+    rate_limit: boolean
+    rate_limit_limitado: boolean
+}
+
+const APLICACIONES = ['radius_rate_limit', 'perfil_ppp', 'cola_simple', 'pcq_plan', 'arbol_pcq'] as const
+
+function velocidad(v: unknown): VelocidadAaa | null {
+    if (v === null || v === undefined) return null
+    if (!esObj(v)) throw new ErrorContrato('velocidad debe ser objeto o null')
+    if (typeof v.aplicacion !== 'string' || !(APLICACIONES as readonly string[]).includes(v.aplicacion)) {
+        throw new ErrorContrato(`velocidad.aplicacion debe ser una de ${APLICACIONES.join(', ')}`)
+    }
+    if (typeof v.rate_limit !== 'boolean' || typeof v.rate_limit_limitado !== 'boolean') {
+        throw new ErrorContrato('velocidad.rate_limit y velocidad.rate_limit_limitado deben ser boolean')
+    }
+    return {
+        aplicacion: v.aplicacion as VelocidadAaa['aplicacion'],
+        grupo: textoONulo(v, 'grupo', 'velocidad.'),
+        rate_limit: v.rate_limit,
+        rate_limit_limitado: v.rate_limit_limitado,
+    }
+}
+
 export type Ipv4Aaa = { modo: 'estatico'; ip: string } | { modo: 'pool'; pool: string } | null
 
 export type Ipv6Aaa =
@@ -54,6 +86,8 @@ export interface ServicioAaa {
     estado: EstadoServicio
     router_id: number
     control_velocidad: ControlVelocidad
+    /** Estrategia por capas; null en registros anteriores */
+    velocidad: VelocidadAaa | null
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
@@ -151,6 +185,7 @@ export function parsearRegistro(v: unknown): RegistroAaa {
         estado: estado as EstadoServicio,
         router_id: entero(v, 'router_id', ''),
         control_velocidad: v.control_velocidad === 'arbol_pcq' ? 'arbol_pcq' : 'simple',
+        velocidad: velocidad(v.velocidad),
         plan: {
             id: entero(plan, 'id', 'plan.'),
             subida_kbps: entero(plan, 'subida_kbps', 'plan.'),

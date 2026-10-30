@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
@@ -29,7 +30,7 @@ async function importar(
     return new ImportarFacturaPendiente().execute(
         {
             origen: 'prueba_apertura',
-            id_externo: unico('f'),
+            id_externo: await unicoBd('f'),
             cliente_id: clienteId,
             empresa_id: empresaId,
             cargo_unico: true,
@@ -77,7 +78,7 @@ test.group('Libro · cierre de los saldos de apertura (§23)', (group) => {
         await new RegistrarSaldoInicial().execute(
             {
                 origen: 'prueba_apertura',
-                id_externo: unico('s'),
+                id_externo: await unicoBd('s'),
                 cliente_id: clienteB,
                 empresa_id: e.B,
                 monto: '-20.00',
@@ -157,7 +158,7 @@ test.group('Libro · cierre de los saldos de apertura (§23)', (group) => {
         await new RegistrarSaldoInicial().execute(
             {
                 origen: 'prueba_apertura',
-                id_externo: unico('s'),
+                id_externo: await unicoBd('s'),
                 cliente_id: cliente,
                 empresa_id: e.B,
                 monto: '-75.00',

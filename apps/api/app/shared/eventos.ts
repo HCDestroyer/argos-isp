@@ -115,15 +115,31 @@ interface PayloadSesion {
 }
 
 /**
- * Campos de `core.clientes` que emiten `cliente.actualizado`: los que Horus muestra (`nombre`,
- * `tipo`, `codigo`) y la identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`).
+ * Campos de identidad del cliente: los que Horus muestra (`nombre`, `tipo`, `codigo`) y la
+ * identificación del receptor FEL (`nit_cui`, `tipo_documento_fiscal`). Son los únicos que el
+ * conector Horus reenvía (contrato Horus §2.3).
  */
-export const CAMPOS_CLIENTE_ACTUALIZADO = [
+export const CAMPOS_CLIENTE_IDENTIDAD = [
     'nombre',
     'tipo',
     'codigo',
     'nit_cui',
     'tipo_documento_fiscal',
+] as const
+
+/**
+ * Campos de `core.clientes` que emiten `cliente.actualizado`: los de identidad y, desde el contrato
+ * Iris 0.3.1, los de contacto y ubicación de la instantánea de Iris (§2.2): `telefono`, `movil`,
+ * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`. El evento lleva solo los nombres, nunca los
+ * valores.
+ */
+export const CAMPOS_CLIENTE_ACTUALIZADO = [
+    ...CAMPOS_CLIENTE_IDENTIDAD,
+    'telefono',
+    'movil',
+    'direccion',
+    'coordenadas',
+    'zona_id',
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
@@ -226,6 +242,26 @@ export interface CatalogoEventos {
      * capacidad del enlace (`routers.editar`). `de`/`a` iguales si solo cambió la capacidad. A2
      * ejecuta el cambio en el router (padres, árbol, PCQ) por lotes.
      */
+    /**
+     * Servicio eliminado porque nunca se usó (decisión del PM, 29 oct; `contratos/eliminar.md`).
+     * La fila de `core.servicios` ya no existe: RouterOS borra lo que le haya creado, Iris lo quita.
+     */
+    'servicio.eliminado': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+        /** usuario PPPoE que tenía (null si no era PPPoE); nunca la contraseña */
+        user_ppp: string | null
+    }
+    /**
+     * Router eliminado sin historial (`contratos/eliminar.md`). FreeRADIUS regenera sus clientes y
+     * el agente WireGuard borra el peer. `empresa_id` = `empresa_sugerida_id` (o null).
+     */
+    'router.eliminado': {
+        router_id: number
+        empresa_id: number | null
+    }
     'router.control_cambiado': {
         router_id: number
         de: 'simple' | 'arbol_pcq'
@@ -233,6 +269,23 @@ export interface CatalogoEventos {
         capacidad_bajada_kbps: number | null
         capacidad_subida_kbps: number | null
         campos: Array<'control_velocidad' | 'capacidad'>
+        motivo: string | null
+    }
+    /**
+     * Cambió la estrategia de control de velocidad de un router o de un plan en él
+     * (`routers.cambiar_control_velocidad`, `contratos/control-velocidad.md` §4). A2 la ejecuta por
+     * lotes sin cortar (crear → mover → borrar); `aaa-cache` reescribe `aaa:user:*` del router o del plan.
+     */
+    'router.estrategia_cambiada': {
+        router_id: number
+        /** null = la estrategia del router; un id = la excepción de ese plan en el router */
+        plan_id: number | null
+        /** Del router: `{ pppoe, ip_estatica, dhcp_fija }` completas; de un plan: la parcial o null */
+        de: Record<string, unknown> | null
+        a: Record<string, unknown> | null
+        capas: Array<'aplicacion' | 'padre' | 'tipo_cola' | 'extras'>
+        /** Disconnect por lotes a las sesiones PPPoE (opcional; por defecto conservan lo anterior) */
+        reconectar: boolean
         motivo: string | null
     }
     /**
@@ -263,9 +316,9 @@ export interface CatalogoEventos {
         ip_tunel: string
     }
     /**
-     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`;
-     * no hay borrado de routers). El `wireguard-agente` quita su peer (contrato §6.3). Al reactivarlo
-     * se emite otra vez `router.conexion_registrada`.
+     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`,
+     * o se eliminó sin historial, `routers.eliminar`). El `wireguard-agente` quita su peer (contrato
+     * §6.3). Al reactivarlo se emite otra vez `router.conexion_registrada`.
      */
     'router.conexion_eliminada': {
         router_id: number
@@ -359,6 +412,21 @@ export interface CatalogoEventos {
         user_ppp: string
         motivo: string
     }
+    /**
+     * Sincronizar plan (`planes.sincronizar`, `contratos/control-velocidad.md` §5): `coa` manda un CoA
+     * (nunca Disconnect) con `Mikrotik-Rate-Limit = rate_limit` si la sesión sigue abierta y el servicio
+     * sigue en `estado`.
+     */
+    'sesion.velocidad_solicitada': {
+        sesion_id: number
+        servicio_id: number
+        nas_ip: string
+        acct_session_id: string
+        user_ppp: string
+        estado: 'activo' | 'limitado'
+        rate_limit: string
+        motivo: string
+    }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
     'coa.fallido': { servicio_id: number | null; nas_ip: string; tipo: 'coa' | 'disconnect'; error: string }
     /**
@@ -381,8 +449,11 @@ export interface CatalogoEventos {
     /**
      * Cambiaron datos del cliente que muestran otros sistemas (contrato Horus §2.3): `nombre`,
      * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
-     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar). Sin `empresa_id`: el
-     * cliente no es de una empresa, sus servicios sí. Lo consume el worker de webhooks a Horus (A6).
+     * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar); y, para la
+     * instantánea de Iris (contrato Iris 0.3.1 §2.2), `telefono`, `movil`, `direccion`,
+     * `coordenadas` y `zona_id`. Solo nombres de campos, nunca valores. Sin `empresa_id`: el cliente
+     * no es de una empresa, sus servicios sí. Lo consumen los workers de webhooks a Horus (solo los
+     * campos de identidad; sin ellos no envía) y a Iris (todos) (A6).
      */
     'cliente.actualizado': {
         cliente_id: number
@@ -1055,6 +1126,9 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'servicio.eliminado',
+    'router.eliminado',
+    'router.estrategia_cambiada',
     'router.conexion_generada',
     'router.conexion_registrada',
     'router.conexion_rotada',
@@ -1065,6 +1139,7 @@ export const EVENTOS = [
     'sesion.terminada',
     'servicio.caidas_repetidas',
     'sesion.desconexion_solicitada',
+    'sesion.velocidad_solicitada',
     'coa.fallido',
     'routeros.fallido',
     'aaa.caido',

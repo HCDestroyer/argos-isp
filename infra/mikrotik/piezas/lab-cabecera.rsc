@@ -148,6 +148,11 @@
 :local apiCaNombre "ArgosIsp lab CA"
 # Apagar www (HTTP en claro), api (8728) y api-ssl (8729): ArgosIsp solo usa la API REST por www-ssl
 :local apiSoloHttps true
+# Certificado de www-ssl (comun-certificado.rsc): en el laboratorio siempre, con www-ssl solo desde
+# apiDesde. apiIpAnterior: otra IP para el SAN (vacía = solo apiIp).
+:local apiCertificar true
+:local apiIpAnterior ""
+:local apiWwwDesde $apiDesde
 
 # --- WireGuard opcional hacia el servidor (si el servidor no está en la LAN del router) ---
 :local wgHabilitar false

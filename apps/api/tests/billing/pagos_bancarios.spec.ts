@@ -8,6 +8,7 @@ import {
     escenario,
     generar,
     lineasAsiento,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -40,7 +41,7 @@ test.group('billing · bancos y cuentas bancarias', () => {
     }) => {
         const { token: contador } = await usuarioConRoles(['contabilidad'])
         const { token: cajero } = await usuarioConRoles(['cajero'])
-        const numero = unico('3011')
+        const numero = await unicoBd('3011')
         const cuerpo = { banco_id: await bancoId('Banco Industrial'), numero, alias: 'Recaudación' }
 
         await estado(client.post('/api/v1/cuentas-bancarias').bearerToken(cajero).json(cuerpo), 403)
@@ -116,15 +117,20 @@ test.group('billing · pagos bancarios', () => {
         const origen = await bancoId('Banco G&T Continental')
 
         const casos = [
-            { metodo: 'deposito', cuenta_bancaria_id: cuenta.id, referencia: unico('boleta') },
+            { metodo: 'deposito', cuenta_bancaria_id: cuenta.id, referencia: await unicoBd('boleta') },
             {
                 metodo: 'transferencia',
                 cuenta_bancaria_id: cuenta.id,
                 banco_origen_id: origen,
-                referencia: unico('trf'),
+                referencia: await unicoBd('trf'),
             },
-            { metodo: 'ach', cuenta_bancaria_id: otra.id, banco_origen_id: origen, referencia: unico('ach') },
-            { metodo: 'remesa', cuenta_bancaria_id: otra.id, referencia: unico('MTCN') },
+            {
+                metodo: 'ach',
+                cuenta_bancaria_id: otra.id,
+                banco_origen_id: origen,
+                referencia: await unicoBd('ach'),
+            },
+            { metodo: 'remesa', cuenta_bancaria_id: otra.id, referencia: await unicoBd('MTCN') },
         ]
         for (const caso of casos) {
             const respuesta = await estado(
@@ -153,6 +159,7 @@ test.group('billing · pagos bancarios', () => {
                 .from('audit.outbox')
                 .where('evento', 'pago.registrado')
                 .whereRaw(`(payload->>'pago_id')::bigint = ?`, [pago.id])
+                .orderBy('id', 'asc')
             assert.equal(evento.payload.metodo, caso.metodo)
             await afirmarLibroCuadrado(assert)
         }
@@ -205,7 +212,7 @@ test.group('billing · pagos bancarios', () => {
             ['cuenta_bancaria_id', 'banco_origen_id'],
         )
 
-        const referencia = unico('trf')
+        const referencia = await unicoBd('trf')
         const base = { metodo: 'transferencia', banco_origen_id: origen, referencia }
         await estado(pagar({ ...base, cuenta_bancaria_id: cuenta.id }), 201)
         const repetida = await estado(pagar({ ...base, cuenta_bancaria_id: cuenta.id }), 409)

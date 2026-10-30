@@ -18,9 +18,10 @@ export interface EntradaEditarCliente extends DatosCliente {
  * alta (`columnasCliente`); el diff de `tipo_documento_fiscal` y `nit_cui_invalido` queda en
  * `audit.cambios`.
  *
- * Si cambia el nombre, el tipo, el código, el NIT/CUI o el tipo de documento emite
- * `cliente.actualizado` (`cliente_id`, `campos[]`) para los sistemas que muestran al cliente
- * (Horus refresca sus identidades) o lo usan como receptor (FEL).
+ * Si cambia el nombre, el tipo, el código, el NIT/CUI, el tipo de documento, el teléfono, el
+ * móvil, la dirección, las coordenadas o la zona emite `cliente.actualizado` (`cliente_id`,
+ * `campos[]`, solo los nombres) para los sistemas que muestran al cliente (Horus refresca sus
+ * identidades; Iris, su instantánea) o lo usan como receptor (FEL).
  */
 export default class EditarCliente extends DomainAction<EntradaEditarCliente, ClienteVista> {
     readonly nombre = 'clientes.editar'

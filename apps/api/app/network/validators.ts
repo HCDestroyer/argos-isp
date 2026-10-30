@@ -3,6 +3,7 @@ import { reglasPaginacion } from '#shared/paginacion'
 import { conMensajes, MENSAJE_VERSION } from '#shared/mensajes_validacion'
 import {
     cidrV4,
+    coordenadasEnRango,
     dinero,
     empresaSugerida,
     empresasConsulta,
@@ -13,6 +14,7 @@ import {
     versionEsperada,
 } from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
+import { APLICACIONES, PADRES, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
@@ -80,6 +82,13 @@ const credencialRouter = (descripcion: string) =>
         .optional()
         .meta({ description: `${descripcion}. Vacía o null = sin credencial` })
 
+/** Ubicación del router para factibilidad (Iris 0.3.1); null la quita. */
+const coordenadasRouter = () =>
+    coordenadasEnRango().nullable().optional().meta({
+        description:
+            'Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita',
+    })
+
 const zonaRouter = () =>
     idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
 
@@ -100,6 +109,7 @@ const camposRouter = {
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
     empresa_sugerida_id: empresaSugerida(),
     zona_id: zonaRouter(),
+    coordenadas: coordenadasRouter(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -117,6 +127,8 @@ const MENSAJES_ROUTER = {
     'nas_ip.required':
         'La IP del NAS es obligatoria: es la IP con la que el router habla con RADIUS y a la que se envían los CoA',
     'nas_ip.ipAddress': 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1',
+    'coordenadas.regex':
+        'Las coordenadas van como "latitud,longitud" en grados decimales, por ejemplo 14.6349,-90.5069 (latitud entre −90 y 90, longitud entre −180 y 180)',
 }
 
 export const crearRouterValidator = conMensajes(vine.compile(vine.object(camposRouter)), MENSAJES_ROUTER)
@@ -149,6 +161,7 @@ export const editarRouterValidator = conMensajes(
             modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
             empresa_sugerida_id: empresaSugerida(),
             zona_id: zonaRouter(),
+            coordenadas: coordenadasRouter(),
             capacidad_bajada_kbps: capacidad(),
             capacidad_subida_kbps: capacidad(),
             ...camposConexionApi,
@@ -659,6 +672,9 @@ export const desconectarSesionValidator = conMensajes(
     },
 )
 
+/** `DELETE /routers/:id?version=` (`contratos/eliminar.md`). */
+export const eliminarRouterValidator = vine.compile(vine.object({ version: versionEsperada() }))
+
 /** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
 export const vistaPreviaControlValidator = conMensajes(
     vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) })),
@@ -757,3 +773,97 @@ export const estadoWireguardValidator = vine.compile(
         generado_en: instanteIso().nullable().optional(),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Control de velocidad por capas (A2, `contratos/control-velocidad.md`)
+|--------------------------------------------------------------------------
+*/
+
+const extrasEstrategia = () =>
+    vine.object({
+        rafaga: vine.boolean(),
+        prioridad: vine.boolean(),
+        garantizado: vine.boolean(),
+        excluir_fasttrack: vine.boolean(),
+    })
+
+const estrategiaCompleta = () =>
+    vine.object({
+        aplicacion: vine.enum(APLICACIONES),
+        padre: vine.enum(PADRES),
+        tipo_cola: vine.enum(TIPOS_COLA),
+        extras: extrasEstrategia(),
+    })
+
+const estrategiaParcial = () =>
+    vine
+        .object({
+            aplicacion: vine.enum(APLICACIONES).nullable().optional(),
+            padre: vine.enum(PADRES).nullable().optional(),
+            tipo_cola: vine.enum(TIPOS_COLA).nullable().optional(),
+            extras: vine
+                .object({
+                    rafaga: vine.boolean().nullable().optional(),
+                    prioridad: vine.boolean().nullable().optional(),
+                    garantizado: vine.boolean().nullable().optional(),
+                    excluir_fasttrack: vine.boolean().nullable().optional(),
+                })
+                .nullable()
+                .optional(),
+        })
+        .nullable()
+        .optional()
+
+const estrategiasRouter = () =>
+    vine.object({
+        pppoe: estrategiaCompleta(),
+        ip_estatica: estrategiaCompleta(),
+        dhcp_fija: estrategiaCompleta(),
+    })
+
+const excepcionEstrategia = () =>
+    vine
+        .object({
+            pppoe: estrategiaParcial(),
+            ip_estatica: estrategiaParcial(),
+            dhcp_fija: estrategiaParcial(),
+        })
+        .nullable()
+
+const reconectar = () =>
+    vine.boolean().optional().meta({
+        description:
+            'Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar',
+    })
+
+export const cambiarEstrategiaVelocidadValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        estrategia_velocidad: estrategiasRouter(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const estrategiaPlanRouterValidator = vine.compile(
+    vine.object({
+        version: versionEsperada().optional(),
+        estrategia_velocidad: excepcionEstrategia(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const vistaPreviaEstrategiaValidator = vine.compile(
+    vine.object({
+        estrategia_velocidad: estrategiasRouter().optional(),
+        planes: vine
+            .array(vine.object({ plan_id: idEntidad(), estrategia_velocidad: excepcionEstrategia() }))
+            .maxLength(500)
+            .optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const sincronizarPlanValidator = vine.compile(vine.object({ router_id: idEntidad().optional() }))

@@ -1,6 +1,7 @@
 import type { Redis } from 'ioredis'
 import { huboCambio, type ResultadoGeneracion } from './generar.ts'
 import type { ResultadoAviso } from './recarga.ts'
+import type { CriterioBaja, ResultadoBaja } from '../bajas.ts'
 
 /**
  * Clientes de FreeRADIUS por evento (`contratos/conexion-routers.md` §6.4): cuando un router se
@@ -17,6 +18,11 @@ import type { ResultadoAviso } from './recarga.ts'
  *   Una rotación que no cambia `nas_ip` ni secret no reinicia nada.
  * - Un lote con varios eventos regenera una sola vez. Se confirma (XACK) después de regenerar; si
  *   falla (Postgres caído), no se confirma y se reintenta con espera creciente.
+ * - Bajas definitivas (`contratos/eliminar.md`): `router.eliminado` regenera igual (el router ya no
+ *   está en `network.routers`, así que su `router-<id>.conf` se borra y FreeRADIUS se recarga) y,
+ *   con `bajas`, deja como lápida las claves `aaa:user:*` con ese `router_id`. `servicio.eliminado`
+ *   (con `bajas`) deja como lápida la clave del servicio si A1 no alcanzó a escribirla y olvida el
+ *   servicio del último perfil conocido de este nodo (`bajas.ts`). Las dos son idempotentes.
  * - Sin TTL ni sondeo: solo eventos y el arranque.
  */
 
@@ -26,7 +32,12 @@ export const EVENTOS_CLIENTES = [
     'router.conexion_eliminada',
     // A1, al crear o editar un router con cambios en `nas_ip` o `radius_secret`
     'router.radius_cambiado',
+    // A1, al eliminar un router sin historial (`contratos/eliminar.md`)
+    'router.eliminado',
 ] as const
+
+/** Bajas definitivas que invalidan la autorización en caché (`bajas.ts`). */
+export const EVENTOS_BAJA = ['servicio.eliminado', 'router.eliminado'] as const
 
 export interface LogClientes {
     info(obj: object, msg: string): void
@@ -43,6 +54,8 @@ export interface OpcionesConsumidorClientes {
     regenerar: () => Promise<ResultadoGeneracion>
     /** Avisa a FreeRADIUS que relea los clientes. */
     recargar: (motivo: string) => Promise<ResultadoAviso>
+    /** Invalida la autorización en caché de un servicio o router eliminado (`aplicarBaja`). */
+    bajas?: (criterio: CriterioBaja) => Promise<ResultadoBaja>
     log: LogClientes
     bloqueoMs?: number
     lote?: number
@@ -50,18 +63,37 @@ export interface OpcionesConsumidorClientes {
 
 type Entrada = [id: string, campos: string[]]
 
-function evento(campos: string[]): string {
-    for (let i = 0; i + 1 < campos.length; i += 2) if (campos[i] === 'evento') return campos[i + 1] ?? ''
+function campo(campos: string[], nombre: string): string {
+    for (let i = 0; i + 1 < campos.length; i += 2) if (campos[i] === nombre) return campos[i + 1] ?? ''
     return ''
 }
 
+function evento(campos: string[]): string {
+    return campo(campos, 'evento')
+}
+
+/** Id entero > 0 del payload, o null si falta o no es válido (el evento se confirma sin efecto). */
+function idPayload(campos: string[], nombre: string): number | null {
+    try {
+        const payload = JSON.parse(campo(campos, 'payload') || '{}') as Record<string, unknown>
+        const id = Number(payload?.[nombre])
+        return Number.isInteger(id) && id > 0 ? id : null
+    } catch {
+        return null
+    }
+}
+
 export class ConsumidorClientes {
-    readonly #op: Required<OpcionesConsumidorClientes>
+    readonly #op: Required<Omit<OpcionesConsumidorClientes, 'bajas'>>
     #activo = false
     #bucle: Promise<void> | null = null
 
+    readonly #bajas: OpcionesConsumidorClientes['bajas']
+
     constructor(opciones: OpcionesConsumidorClientes) {
-        this.#op = { bloqueoMs: 5000, lote: 50, ...opciones }
+        const { bajas, ...resto } = opciones
+        this.#op = { bloqueoMs: 5000, lote: 50, ...resto }
+        this.#bajas = bajas
     }
 
     async asegurarGrupo(): Promise<void> {
@@ -100,7 +132,23 @@ export class ConsumidorClientes {
         const aplicados = entradas
             .map(([, campos]) => evento(campos))
             .filter((e) => (EVENTOS_CLIENTES as readonly string[]).includes(e))
-        if (aplicados.length > 0) await this.aplicar(aplicados.join(','))
+        if (aplicados.length > 0) await this.aplicar([...new Set(aplicados)].join(','))
+        if (this.#bajas) {
+            for (const [id, campos] of entradas) {
+                const e = evento(campos)
+                if (!(EVENTOS_BAJA as readonly string[]).includes(e)) continue
+                const n = idPayload(campos, e === 'servicio.eliminado' ? 'servicio_id' : 'router_id')
+                if (n === null) {
+                    this.#op.log.warn({ evento: e, stream_id: id }, 'baja sin id válido; se ignora')
+                    continue
+                }
+                const criterio: CriterioBaja = e === 'servicio.eliminado' ? { servicioId: n } : { routerId: n }
+                const r = await this.#bajas(criterio)
+                if (!aplicados.includes(e)) aplicados.push(e)
+                if (r.lapidas.length > 0 || r.olvidados > 0)
+                    this.#op.log.info({ evento: e, ...criterio, ...r }, 'autorización en caché invalidada')
+            }
+        }
         if (entradas.length > 0) await redis.xack(stream, grupo, ...entradas.map(([id]) => id))
         return aplicados
     }

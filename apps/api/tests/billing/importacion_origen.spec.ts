@@ -9,7 +9,7 @@ import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
 import { claveImportacion } from '#billing/importacion'
 import { verFactura } from '#billing/facturas'
-import { escenario } from '#tests/billing/ayudas_billing'
+import { escenario, unicoBd } from '#tests/billing/ayudas_billing'
 
 /**
  * Importación neutral respecto al origen (decisión del PM, semana 3): `origen` es texto libre
@@ -54,7 +54,7 @@ test.group('billing · importación por origen', () => {
         assert,
     }) => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-07-01' })
-        const id = unico('123')
+        const id = await unicoBd('123')
 
         // facturas: mismo id, distinto origen y periodo → dos facturas
         const deSmart = await new ImportarFacturaPendiente().execute(
@@ -189,7 +189,7 @@ test.group('billing · importación por origen', () => {
 
     test('la base exige origen con id_externo y unicidad por (origen, id_externo)', async ({ assert }) => {
         const { clienteId } = await escenario()
-        const id = unico('dup')
+        const id = await unicoBd('dup')
         const pago = (origen: string | null, clave: string) => ({
             cliente_id: clienteId,
             metodo: 'deposito',

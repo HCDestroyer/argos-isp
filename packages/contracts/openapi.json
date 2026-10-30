@@ -26497,7 +26497,7 @@
       "post": {
         "operationId": "irisGenerarToken",
         "summary": "Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)",
-        "description": "Crea, la primera vez, el usuario técnico \"Iris\" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Opcionalmente restringido a routers o zonas. No revoca los anteriores.",
+        "description": "Crea, la primera vez, el usuario técnico \"Iris\" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Su alcance son las empresas del usuario Iris (o global), nunca zonas ni routers: `routers`/`zonas` no vacíos, o roles del usuario con alcance por zona o router, responden 422 `usuario_tecnico_solo_empresas` (contrato Iris 0.3.1 §1). No revoca los anteriores.",
         "tags": [
           "integraciones"
         ],
@@ -26527,7 +26527,7 @@
                       "type": "integer",
                       "minimum": 1
                     },
-                    "description": "Restringe el token a servicios de estos routers"
+                    "description": "No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)"
                   },
                   "zonas": {
                     "type": "array",
@@ -26535,7 +26535,7 @@
                       "type": "integer",
                       "minimum": 1
                     },
-                    "description": "Restringe el token a clientes de estas zonas"
+                    "description": "No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)"
                   }
                 },
                 "required": [],
@@ -27213,7 +27213,7 @@
       "get": {
         "operationId": "internoWireguardPeers",
         "summary": "Peers WireGuard vigentes (wireguard-agente)",
-        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.",
+        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista).",
         "tags": [
           "interno"
         ],
@@ -47686,6 +47686,589 @@
         "x-implementado": true
       }
     },
+    "/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad": {
+      "post": {
+        "operationId": "planesEstrategiaVelocidad",
+        "summary": "Estrategia de velocidad propia de un plan en un router (o quitarla con null)",
+        "description": "Parcial por tipo de conexión: cada capa ausente o null hereda la del router. Valida la matriz con todo el router (422), guarda en `planes_routers` (la crea si el plan no estaba implementado) y emite `router.estrategia_cambiada` con `plan_id`. `version` de la implementación si ya existe.",
+        "tags": [
+          "planes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "routerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "estrategia_velocidad": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "pppoe": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "aplicacion": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "radius_rate_limit",
+                                  "perfil_ppp",
+                                  "cola_simple",
+                                  "pcq_plan",
+                                  "arbol_pcq"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "padre": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ninguno",
+                                  "por_plan",
+                                  "por_router",
+                                  "jerarquico"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tipo_cola": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "sfq",
+                                  "pcq",
+                                  "fq_codel",
+                                  "cake"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "extras": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "rafaga": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "prioridad": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "garantizado": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "excluir_fasttrack": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "ip_estatica": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "aplicacion": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "radius_rate_limit",
+                                  "perfil_ppp",
+                                  "cola_simple",
+                                  "pcq_plan",
+                                  "arbol_pcq"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "padre": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ninguno",
+                                  "por_plan",
+                                  "por_router",
+                                  "jerarquico"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tipo_cola": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "sfq",
+                                  "pcq",
+                                  "fq_codel",
+                                  "cake"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "extras": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "rafaga": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "prioridad": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "garantizado": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "excluir_fasttrack": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "dhcp_fija": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "aplicacion": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "radius_rate_limit",
+                                  "perfil_ppp",
+                                  "cola_simple",
+                                  "pcq_plan",
+                                  "arbol_pcq"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "padre": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ninguno",
+                                  "por_plan",
+                                  "por_router",
+                                  "jerarquico"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tipo_cola": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "sfq",
+                                  "pcq",
+                                  "fq_codel",
+                                  "cake"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "extras": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "rafaga": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "prioridad": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "garantizado": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "excluir_fasttrack": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "reconectar": {
+                    "description": "Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Implementación con la estrategia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/planes/{id}/sincronizar": {
+      "post": {
+        "operationId": "planesSincronizar",
+        "summary": "Sincronizar un plan con la red (sin desconectar)",
+        "description": "Reescribe `aaa:user:*` de sus servicios, pide CoA con la velocidad nueva a las sesiones PPPoE vivas (`radius_rate_limit` o `perfil_ppp`; nunca Disconnect) y reconcilia cada router (colas, padres, perfiles, PCQ). `?router_id=` lo limita a un router. Devuelve el resumen por router; un router que no responde no frena a los demás. Lo mismo corre solo al editar la velocidad del plan.",
+        "tags": [
+          "planes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen por router",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SincronizacionPlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso planes.sincronizar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "planes.sincronizar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/planes/vista-previa": {
       "post": {
         "operationId": "planesVistaPrevia",
@@ -54488,6 +55071,58 @@
         "x-implementado": true
       }
     },
+    "/api/v1/red/control-velocidad/matriz": {
+      "get": {
+        "operationId": "redControlVelocidadMatriz",
+        "summary": "Capas del control de velocidad y qué combina con qué",
+        "description": "Aplicación, padre, tipo de cola y extras, con los tipos de conexión y de cola que admite cada aplicación, las reglas de la matriz (las mismas que dan 422) y los atajos `simple` y `arbol_pcq`.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matriz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatrizControlVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/eventos": {
       "get": {
         "operationId": "redEventosListar",
@@ -57314,6 +57949,7 @@
                         "pagos.ver",
                         "planes.crear",
                         "planes.editar",
+                        "planes.sincronizar",
                         "planes.ver",
                         "plantillas.crear",
                         "plantillas.editar",
@@ -57342,6 +57978,7 @@
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
+                        "routers.eliminar",
                         "routers.generar_script",
                         "routers.marcar_migrado",
                         "routers.probar_conexion",
@@ -57357,6 +57994,7 @@
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.editar_adicional",
+                        "servicios.eliminar",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -57653,6 +58291,7 @@
                         "pagos.ver",
                         "planes.crear",
                         "planes.editar",
+                        "planes.sincronizar",
                         "planes.ver",
                         "plantillas.crear",
                         "plantillas.editar",
@@ -57681,6 +58320,7 @@
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
+                        "routers.eliminar",
                         "routers.generar_script",
                         "routers.marcar_migrado",
                         "routers.probar_conexion",
@@ -57696,6 +58336,7 @@
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.editar_adicional",
+                        "servicios.eliminar",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
                         "servicios.quitar_adicional",
@@ -58064,6 +58705,14 @@
                     "minimum": 1,
                     "description": "Zona del router (opcional); 422 si no existe"
                   },
+                  "coordenadas": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?(?:90(?:\\.0+)?|[1-8]?\\d(?:\\.\\d{1,15})?), ?-?(?:180(?:\\.0+)?|(?:1[0-7]\\d|[1-9]?\\d)(?:\\.\\d{1,15})?)$",
+                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita"
+                  },
                   "control_velocidad": {
                     "type": "string",
                     "enum": [
@@ -58366,6 +59015,14 @@
                     "minimum": 1,
                     "description": "Zona del router (opcional); 422 si no existe"
                   },
+                  "coordenadas": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?(?:90(?:\\.0+)?|[1-8]?\\d(?:\\.\\d{1,15})?), ?-?(?:180(?:\\.0+)?|(?:1[0-7]\\d|[1-9]?\\d)(?:\\.\\d{1,15})?)$",
+                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita"
+                  },
                   "capacidad_bajada_kbps": {
                     "type": [
                       "integer",
@@ -58500,6 +59157,111 @@
         },
         "x-permiso": "routers.editar",
         "x-implementado": true
+      },
+      "delete": {
+        "operationId": "routersEliminar",
+        "summary": "Eliminar un router que nunca se usó (si tiene historial: 422, desactívalo)",
+        "description": "Solo admin. Con servicios (también retirados), sesiones, historial, asignaciones en sus redes, comandos enviados al equipo, bodegas o alcances responde 422 `router_con_historial` con `errors[]`. Borra sus redes IPv4, bloques y pools IPv6, `planes_routers` y su conexión, y emite `router.eliminado`. Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "description": "version leída; si cambió responde 409",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Router eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.eliminar",
+        "x-implementado": true
       }
     },
     "/api/v1/routers/{id}/cambiar-control-velocidad": {
@@ -58566,6 +59328,336 @@
         "responses": {
           "200": {
             "description": "Router con el control nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Router"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/cambiar-estrategia-velocidad": {
+      "post": {
+        "operationId": "routersCambiarEstrategiaVelocidad",
+        "summary": "Cambiar la estrategia de control de velocidad del router (por tipo de conexión)",
+        "description": "Valida la matriz (422 con el porqué), cambia el campo y emite `router.estrategia_cambiada`; el worker de RouterOS lo aplica por lotes sin cortar (crea lo nuevo, mueve, borra lo viejo). Las sesiones PPPoE vivas reciben CoA de velocidad y conservan lo demás hasta reconectar, salvo `reconectar: true`. Sin cambios: 200 sin evento. 409 si la `version` no coincide.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "estrategia_velocidad": {
+                    "type": "object",
+                    "properties": {
+                      "pppoe": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "ip_estatica": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "dhcp_fija": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "reconectar": {
+                    "description": "Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version",
+                  "estrategia_velocidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Router con la estrategia nueva",
             "content": {
               "application/json": {
                 "schema": {
@@ -58912,6 +60004,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/diagnostico-corte": {
+      "get": {
+        "operationId": "routersDiagnosticoCorte",
+        "summary": "¿Un suspendido de este router ve la página de corte?",
+        "description": "El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), `sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y `walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 no se redirigen.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diagnóstico",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticoCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/direccionamiento": {
       "get": {
         "operationId": "routersDireccionamiento",
@@ -58946,6 +60111,79 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DireccionamientoRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/eliminable": {
+      "get": {
+        "operationId": "routersEliminable",
+        "summary": "¿Se puede eliminar el router? (nunca se usó) y, si no, qué lo impide",
+        "description": "Para que el panel muestre «Eliminar» o «Desactivar». Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Si es eliminable y los motivos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Eliminable"
                 }
               }
             }
@@ -59464,8 +60702,8 @@
     "/api/v1/routers/{id}/probar-conexion": {
       "post": {
         "operationId": "routersProbarConexion",
-        "summary": "Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)",
-        "description": "Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.",
+        "summary": "Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)",
+        "description": "Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.",
         "tags": [
           "routers"
         ],
@@ -60128,6 +61366,743 @@
           }
         },
         "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/vista-previa-estrategia": {
+      "post": {
+        "operationId": "routersVistaPreviaEstrategia",
+        "summary": "Vista previa de un cambio de estrategia de velocidad (no escribe)",
+        "description": "Con la estrategia propuesta del router y, opcional, excepciones de planes: qué se crea, cambia y borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el router. 422 con `errors[]` si la combinación no es válida.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estrategia_velocidad": {
+                    "type": "object",
+                    "properties": {
+                      "pppoe": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "ip_estatica": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "dhcp_fija": {
+                        "type": "object",
+                        "properties": {
+                          "aplicacion": {
+                            "type": "string",
+                            "enum": [
+                              "radius_rate_limit",
+                              "perfil_ppp",
+                              "cola_simple",
+                              "pcq_plan",
+                              "arbol_pcq"
+                            ]
+                          },
+                          "padre": {
+                            "type": "string",
+                            "enum": [
+                              "ninguno",
+                              "por_plan",
+                              "por_router",
+                              "jerarquico"
+                            ]
+                          },
+                          "tipo_cola": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "sfq",
+                              "pcq",
+                              "fq_codel",
+                              "cake"
+                            ]
+                          },
+                          "extras": {
+                            "type": "object",
+                            "properties": {
+                              "rafaga": {
+                                "type": "boolean"
+                              },
+                              "prioridad": {
+                                "type": "boolean"
+                              },
+                              "garantizado": {
+                                "type": "boolean"
+                              },
+                              "excluir_fasttrack": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "rafaga",
+                              "prioridad",
+                              "garantizado",
+                              "excluir_fasttrack"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "aplicacion",
+                          "padre",
+                          "tipo_cola",
+                          "extras"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "planes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "plan_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "estrategia_velocidad": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "pppoe": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "aplicacion": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "radius_rate_limit",
+                                        "perfil_ppp",
+                                        "cola_simple",
+                                        "pcq_plan",
+                                        "arbol_pcq"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "padre": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "ninguno",
+                                        "por_plan",
+                                        "por_router",
+                                        "jerarquico"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "tipo_cola": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "sfq",
+                                        "pcq",
+                                        "fq_codel",
+                                        "cake"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "extras": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "rafaga": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "prioridad": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "garantizado": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "excluir_fasttrack": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "ip_estatica": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "aplicacion": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "radius_rate_limit",
+                                        "perfil_ppp",
+                                        "cola_simple",
+                                        "pcq_plan",
+                                        "arbol_pcq"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "padre": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "ninguno",
+                                        "por_plan",
+                                        "por_router",
+                                        "jerarquico"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "tipo_cola": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "sfq",
+                                        "pcq",
+                                        "fq_codel",
+                                        "cake"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "extras": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "rafaga": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "prioridad": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "garantizado": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "excluir_fasttrack": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "dhcp_fija": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "aplicacion": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "radius_rate_limit",
+                                        "perfil_ppp",
+                                        "cola_simple",
+                                        "pcq_plan",
+                                        "arbol_pcq"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "padre": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "ninguno",
+                                        "por_plan",
+                                        "por_router",
+                                        "jerarquico"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "tipo_cola": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "default",
+                                        "sfq",
+                                        "pcq",
+                                        "fq_codel",
+                                        "cake"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "extras": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "rafaga": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "prioridad": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "garantizado": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "excluir_fasttrack": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "plan_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500
+                  },
+                  "reconectar": {
+                    "description": "Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar",
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaEstrategia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/vista-previa-reconciliar": {
+      "get": {
+        "operationId": "routersVistaPreviaReconciliar",
+        "summary": "Qué haría «Reconciliar ahora» (lee el router, no escribe)",
+        "description": "Compara el router con su estado deseado: servicios, velocidad (colas, árbol, PCQ, perfiles) y corte (reglas, listas, perfil suspendido, orden de los saltos). `error` si el router no responde.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaReconciliar"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.reconciliar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.reconciliar",
         "x-implementado": true
       }
     },
@@ -61227,13 +63202,118 @@
         },
         "x-permiso": "servicios.editar",
         "x-implementado": true
+      },
+      "delete": {
+        "operationId": "serviciosEliminar",
+        "summary": "Eliminar un servicio que nunca se usó (si tiene historial: 422, retíralo)",
+        "description": "Solo admin. Con facturas, pagos, asientos, DTE, sesiones, inventario u otro historial responde 422 `servicio_con_historial` con `errors[]` (qué lo impide). Libera IPs y prefijos, deja la lápida AAA y emite `servicio.eliminado`. Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "description": "version leída; si cambió responde 409",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Servicio eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.eliminar",
+        "x-implementado": true
       }
     },
     "/api/v1/servicios/{id}/activar-instalacion": {
       "post": {
         "operationId": "serviciosActivarInstalacion",
         "summary": "Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)",
-        "description": "Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.",
+        "description": "Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta). `version` es opcional: si viene y no coincide, 409 `conflicto_version`. Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 409 `servicio_no_pendiente` si el servicio ya no está `pendiente_instalacion` (una clave nueva sobre uno ya activo; se revisa antes que la versión; de negocio, no se reintenta); 422 en `instalado_en` si es futura o anterior al alta.",
         "tags": [
           "servicios"
         ],
@@ -61277,7 +63357,7 @@
                   "version": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "version leída; si cambió responde 409"
+                    "description": "Opcional: si viene y no coincide, 409 conflicto_version. Sin ella protegen la máquina de estados (solo sale de pendiente_instalacion; si no, 409 servicio_no_pendiente) y la Idempotency-Key"
                   },
                   "instalado_en": {
                     "type": "string",
@@ -61334,9 +63414,7 @@
                     "description": "Referencia de planta de la instalación (la envía Iris): solo lectura, no se valida contra nada"
                   }
                 },
-                "required": [
-                  "version"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -62824,6 +64902,79 @@
           }
         },
         "x-permiso": "servicios.desconectar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/eliminable": {
+      "get": {
+        "operationId": "serviciosEliminable",
+        "summary": "¿Se puede eliminar el servicio? (nunca se usó) y, si no, qué lo impide",
+        "description": "Para que el panel muestre «Eliminar» (eliminable) o «Retirar». Contrato `contratos/eliminar.md`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Si es eliminable y los motivos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Eliminable"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -65505,6 +67656,7 @@
                             "pagos.ver",
                             "planes.crear",
                             "planes.editar",
+                            "planes.sincronizar",
                             "planes.ver",
                             "plantillas.crear",
                             "plantillas.editar",
@@ -65533,6 +67685,7 @@
                             "routers.conexion_clave",
                             "routers.crear",
                             "routers.editar",
+                            "routers.eliminar",
                             "routers.generar_script",
                             "routers.marcar_migrado",
                             "routers.probar_conexion",
@@ -65548,6 +67701,7 @@
                             "servicios.desconectar",
                             "servicios.editar",
                             "servicios.editar_adicional",
+                            "servicios.eliminar",
                             "servicios.limitar",
                             "servicios.programar_plan_temporal",
                             "servicios.quitar_adicional",
@@ -71805,7 +73959,9 @@
         "required": [
           "token",
           "webhook",
-          "conector_id"
+          "conector_id",
+          "alcance_global",
+          "empresas"
         ],
         "properties": {
           "token": {
@@ -71829,6 +73985,39 @@
           },
           "conector_id": {
             "type": "string"
+          },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre",
+                "nit"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string",
+                  "description": "Nombre comercial"
+                },
+                "nit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "NIT sin guiones; null si la empresa aún no lo tiene"
+                }
+              }
+            },
+            "description": "Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1)"
           }
         }
       },
@@ -72472,8 +74661,10 @@
               "tunel",
               "api",
               "equipo",
-              "radius"
-            ]
+              "radius",
+              "corte"
+            ],
+            "description": "`corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)"
           },
           "ok": {
             "type": [
@@ -72515,6 +74706,17 @@
             ],
             "additionalProperties": true,
             "description": "`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)"
+          },
+          "corte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticoCorte"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites"
           }
         }
       },
@@ -77701,6 +79903,305 @@
           }
         }
       },
+      "DiagnosticoCorte": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "ok",
+          "chequeos",
+          "problemas",
+          "faltan",
+          "portal",
+          "suspendidos",
+          "limites"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "Un suspendido de este router ve la página de corte (todo en verde)"
+          },
+          "chequeos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "ok",
+                "codigo",
+                "detalle",
+                "comandos",
+                "reconciliar"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string",
+                  "enum": [
+                    "lista_suspendidos",
+                    "reglas",
+                    "portal_http",
+                    "sesiones_suspendidas",
+                    "fasttrack",
+                    "perfil_suspendido",
+                    "walled_garden"
+                  ],
+                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden"
+                },
+                "ok": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "null: no se pudo comprobar"
+                },
+                "codigo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "sin_api",
+                    "router_no_responde",
+                    "faltan_reglas",
+                    "reglas_desactivadas",
+                    "reglas_distintas",
+                    "reglas_desordenadas",
+                    "falta_lista_suspendidos",
+                    "falta_perfil_suspendido",
+                    "walled_garden",
+                    "portal_sin_configurar",
+                    "portal_sin_ipv4",
+                    "portal_inalcanzable",
+                    "portal_sin_corte",
+                    "suspendidos_fuera_de_lista",
+                    "fasttrack"
+                  ],
+                  "description": "null si salió bien"
+                },
+                "detalle": {
+                  "type": "string",
+                  "description": "Qué se vio y qué hacer, en lenguaje simple"
+                },
+                "comandos": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta"
+                },
+                "reconciliar": {
+                  "type": "boolean",
+                  "description": "«Reconciliar ahora» lo arregla"
+                }
+              }
+            }
+          },
+          "problemas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "mensaje",
+                "reconciliar",
+                "comandos"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "enum": [
+                    "sin_api",
+                    "router_no_responde",
+                    "faltan_reglas",
+                    "reglas_desactivadas",
+                    "reglas_distintas",
+                    "reglas_desordenadas",
+                    "falta_lista_suspendidos",
+                    "falta_perfil_suspendido",
+                    "walled_garden",
+                    "portal_sin_configurar",
+                    "portal_sin_ipv4",
+                    "portal_inalcanzable",
+                    "portal_sin_corte",
+                    "suspendidos_fuera_de_lista",
+                    "fasttrack"
+                  ]
+                },
+                "mensaje": {
+                  "type": "string",
+                  "description": "Qué falla y qué hacer, en lenguaje simple"
+                },
+                "reconciliar": {
+                  "type": "boolean",
+                  "description": "«Reconciliar ahora» lo arregla"
+                },
+                "comandos": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "faltan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "accion"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string"
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "crear",
+                    "actualizar",
+                    "borrar",
+                    "mover"
+                  ]
+                }
+              }
+            }
+          },
+          "portal": {
+            "type": "object",
+            "required": [
+              "url",
+              "fqdn",
+              "ipv4",
+              "origen",
+              "destino_nat",
+              "alcanzable",
+              "http_status",
+              "detalle"
+            ],
+            "properties": {
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "PORTAL_URL_PUBLICA (la que ve el cliente)"
+              },
+              "fqdn": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ipv4": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe"
+              },
+              "origen": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "variable",
+                  "url",
+                  "dns"
+                ]
+              },
+              "destino_nat": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado)"
+              },
+              "alcanzable": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "null: no se probó (sin destino)"
+              },
+              "http_status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "detalle": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "suspendidos": {
+            "type": "object",
+            "required": [
+              "total",
+              "fuera_de_lista",
+              "ejemplos"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "description": "Suspendidos con IPv4 (PPPoE con sesión abierta o WISP)"
+              },
+              "fuera_de_lista": {
+                "type": "integer",
+                "description": "Cuántos no están en la address-list: navegan sin corte"
+              },
+              "ejemplos": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "servicio_id",
+                    "tipo_conexion",
+                    "ipv4"
+                  ],
+                  "properties": {
+                    "servicio_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "tipo_conexion": {
+                      "type": "string",
+                      "enum": [
+                        "pppoe",
+                        "ip_estatica",
+                        "dhcp_fija"
+                      ]
+                    },
+                    "ipv4": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "limites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre"
+          }
+        }
+      },
       "Diario": {
         "type": "object",
         "required": [
@@ -78762,6 +81263,25 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "Eliminable": {
+        "type": "object",
+        "required": [
+          "eliminable",
+          "motivos"
+        ],
+        "properties": {
+          "eliminable": {
+            "type": "boolean",
+            "description": "true: nunca se usó y el panel ofrece «Eliminar»; false: solo «Retirar» (o desactivar)"
+          },
+          "motivos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MotivoEliminacion"
+            }
           }
         }
       },
@@ -80584,6 +83104,95 @@
           }
         }
       },
+      "EstrategiasRouter": {
+        "type": "object",
+        "required": [
+          "pppoe",
+          "ip_estatica",
+          "dhcp_fija"
+        ],
+        "properties": {
+          "pppoe": {
+            "$ref": "#/components/schemas/EstrategiaVelocidad"
+          },
+          "ip_estatica": {
+            "$ref": "#/components/schemas/EstrategiaVelocidad"
+          },
+          "dhcp_fija": {
+            "$ref": "#/components/schemas/EstrategiaVelocidad"
+          }
+        }
+      },
+      "EstrategiaVelocidad": {
+        "type": "object",
+        "required": [
+          "aplicacion",
+          "padre",
+          "tipo_cola",
+          "extras"
+        ],
+        "properties": {
+          "aplicacion": {
+            "type": "string",
+            "enum": [
+              "radius_rate_limit",
+              "perfil_ppp",
+              "cola_simple",
+              "pcq_plan",
+              "arbol_pcq"
+            ],
+            "description": "Capa 1: cómo se limita a cada cliente"
+          },
+          "padre": {
+            "type": "string",
+            "enum": [
+              "ninguno",
+              "por_plan",
+              "por_router",
+              "jerarquico"
+            ],
+            "description": "Capa 2: agregación"
+          },
+          "tipo_cola": {
+            "type": "string",
+            "enum": [
+              "default",
+              "sfq",
+              "pcq",
+              "fq_codel",
+              "cake"
+            ],
+            "description": "Capa 3: cola de las hojas o del PCQ"
+          },
+          "extras": {
+            "type": "object",
+            "required": [
+              "rafaga",
+              "prioridad",
+              "garantizado",
+              "excluir_fasttrack"
+            ],
+            "properties": {
+              "rafaga": {
+                "type": "boolean",
+                "description": "burst-* del plan (en PCQ: pcq-burst-*)"
+              },
+              "prioridad": {
+                "type": "boolean",
+                "description": "priority del plan (1–8); false = 8"
+              },
+              "garantizado": {
+                "type": "boolean",
+                "description": "limit-at (CIR); false = 0"
+              },
+              "excluir_fasttrack": {
+                "type": "boolean",
+                "description": "Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack"
+              }
+            }
+          }
+        }
+      },
       "EvaluacionPromesa": {
         "type": "object",
         "required": [
@@ -81008,6 +83617,261 @@
           }
         },
         "additionalProperties": false
+      },
+      "ExcepcionEstrategia": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "pppoe": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "aplicacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "radius_rate_limit",
+                  "perfil_ppp",
+                  "cola_simple",
+                  "pcq_plan",
+                  "arbol_pcq",
+                  null
+                ]
+              },
+              "padre": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "ninguno",
+                  "por_plan",
+                  "por_router",
+                  "jerarquico",
+                  null
+                ]
+              },
+              "tipo_cola": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "default",
+                  "sfq",
+                  "pcq",
+                  "fq_codel",
+                  "cake",
+                  null
+                ]
+              },
+              "extras": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [],
+                "properties": {
+                  "rafaga": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "prioridad": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "garantizado": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "excluir_fasttrack": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "ip_estatica": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "aplicacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "radius_rate_limit",
+                  "perfil_ppp",
+                  "cola_simple",
+                  "pcq_plan",
+                  "arbol_pcq",
+                  null
+                ]
+              },
+              "padre": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "ninguno",
+                  "por_plan",
+                  "por_router",
+                  "jerarquico",
+                  null
+                ]
+              },
+              "tipo_cola": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "default",
+                  "sfq",
+                  "pcq",
+                  "fq_codel",
+                  "cake",
+                  null
+                ]
+              },
+              "extras": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [],
+                "properties": {
+                  "rafaga": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "prioridad": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "garantizado": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "excluir_fasttrack": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "dhcp_fija": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "aplicacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "radius_rate_limit",
+                  "perfil_ppp",
+                  "cola_simple",
+                  "pcq_plan",
+                  "arbol_pcq",
+                  null
+                ]
+              },
+              "padre": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "ninguno",
+                  "por_plan",
+                  "por_router",
+                  "jerarquico",
+                  null
+                ]
+              },
+              "tipo_cola": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "default",
+                  "sfq",
+                  "pcq",
+                  "fq_codel",
+                  "cake",
+                  null
+                ]
+              },
+              "extras": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [],
+                "properties": {
+                  "rafaga": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "prioridad": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "garantizado": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "excluir_fasttrack": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "ExistenciaInventario": {
         "type": "object",
@@ -83982,6 +86846,192 @@
           }
         }
       },
+      "MatrizControlVelocidad": {
+        "type": "object",
+        "required": [
+          "aplicaciones",
+          "tipos_cola",
+          "padres",
+          "extras",
+          "reglas",
+          "advertencias",
+          "atajos"
+        ],
+        "properties": {
+          "aplicaciones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "valor",
+                "familia",
+                "tipos_conexion",
+                "tipos_cola",
+                "coa_en_vivo"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "radius_rate_limit",
+                    "perfil_ppp",
+                    "cola_simple",
+                    "pcq_plan",
+                    "arbol_pcq"
+                  ]
+                },
+                "familia": {
+                  "type": "string",
+                  "enum": [
+                    "simple",
+                    "arbol"
+                  ]
+                },
+                "tipos_conexion": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ]
+                  }
+                },
+                "tipos_cola": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "sfq",
+                      "pcq",
+                      "fq_codel",
+                      "cake"
+                    ]
+                  }
+                },
+                "coa_en_vivo": {
+                  "type": "boolean",
+                  "description": "La velocidad de una sesión viva cambia por CoA"
+                }
+              }
+            }
+          },
+          "tipos_cola": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "valor",
+                "routeros_minimo"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "default",
+                    "sfq",
+                    "pcq",
+                    "fq_codel",
+                    "cake"
+                  ]
+                },
+                "routeros_minimo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "padres": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "valor"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "ninguno",
+                    "por_plan",
+                    "por_router",
+                    "jerarquico"
+                  ]
+                }
+              }
+            }
+          },
+          "extras": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "valor",
+                "por_defecto"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "rafaga",
+                    "prioridad",
+                    "garantizado",
+                    "excluir_fasttrack"
+                  ]
+                },
+                "por_defecto": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "rule",
+                "mensaje"
+              ],
+              "properties": {
+                "rule": {
+                  "type": "string",
+                  "description": "El mismo `rule` de los errores 422"
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "advertencias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "atajos": {
+            "type": "object",
+            "required": [
+              "simple",
+              "arbol_pcq"
+            ],
+            "properties": {
+              "simple": {
+                "$ref": "#/components/schemas/EstrategiasRouter"
+              },
+              "arbol_pcq": {
+                "$ref": "#/components/schemas/EstrategiasRouter"
+              }
+            }
+          }
+        }
+      },
       "Mayor": {
         "type": "object",
         "required": [
@@ -84391,6 +87441,27 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "MotivoEliminacion": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "cantidad",
+          "mensaje"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "facturas, sesiones, servicios, routeros…"
+          },
+          "cantidad": {
+            "type": "integer"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "«tiene 3 facturas»"
           }
         }
       },
@@ -85295,6 +88366,7 @@
           "pagos.ver",
           "planes.crear",
           "planes.editar",
+          "planes.sincronizar",
           "planes.ver",
           "plantillas.crear",
           "plantillas.editar",
@@ -85323,6 +88395,7 @@
           "routers.conexion_clave",
           "routers.crear",
           "routers.editar",
+          "routers.eliminar",
           "routers.generar_script",
           "routers.marcar_migrado",
           "routers.probar_conexion",
@@ -85338,6 +88411,7 @@
           "servicios.desconectar",
           "servicios.editar",
           "servicios.editar_adicional",
+          "servicios.eliminar",
           "servicios.limitar",
           "servicios.programar_plan_temporal",
           "servicios.quitar_adicional",
@@ -85527,6 +88601,7 @@
           "Ver pagos",
           "Crear planes",
           "Editar planes e implementaciones por router",
+          "Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers",
           "Ver planes",
           "Crear plantillas de facturación",
           "Editar plantillas de facturación",
@@ -85551,10 +88626,11 @@
           "Crear roles",
           "Editar roles y sus permisos",
           "Ver roles y permisos",
-          "Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin",
+          "Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin",
           "Pegar a mano la clave pública WireGuard de un router",
           "Crear routers",
           "Editar routers y sus credenciales",
+          "Eliminar un router que nunca se usó (sin servicios, sesiones ni comandos enviados); solo admin",
           "Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token",
           "Marcar cuándo un router pasó al nuevo RADIUS (aaa)",
           "Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)",
@@ -85570,6 +88646,7 @@
           "Desconectar la sesión PPPoE de un servicio",
           "Editar servicios (plan, router, IPs, datos)",
           "Editar un adicional de un servicio (modalidad, identificador, credencial, precio)",
+          "Eliminar un servicio que nunca se usó (sin facturas, pagos, sesiones ni otro historial); solo admin",
           "Limitar la velocidad de servicios",
           "Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)",
           "Dar de baja un adicional de un servicio (con fecha; no se borra)",
@@ -87427,6 +90504,7 @@
           "rafaga_umbral_pct",
           "rafaga_segundos",
           "prioridad",
+          "estrategia_velocidad",
           "version",
           "created_at",
           "updated_at"
@@ -87531,6 +90609,17 @@
               "null"
             ],
             "description": "null = hereda del plan"
+          },
+          "estrategia_velocidad": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExcepcionEstrategia"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estrategia propia del plan en este router, parcial por tipo de conexión; null = hereda la del router"
           },
           "version": {
             "type": "integer",
@@ -97848,6 +100937,7 @@
               "pagos.ver",
               "planes.crear",
               "planes.editar",
+              "planes.sincronizar",
               "planes.ver",
               "plantillas.crear",
               "plantillas.editar",
@@ -97876,6 +100966,7 @@
               "routers.conexion_clave",
               "routers.crear",
               "routers.editar",
+              "routers.eliminar",
               "routers.generar_script",
               "routers.marcar_migrado",
               "routers.probar_conexion",
@@ -97891,6 +100982,7 @@
               "servicios.desconectar",
               "servicios.editar",
               "servicios.editar_adicional",
+              "servicios.eliminar",
               "servicios.limitar",
               "servicios.programar_plan_temporal",
               "servicios.quitar_adicional",
@@ -98030,6 +101122,7 @@
               "ipv6.editar",
               "ipv6.migrar",
               "ipv6.ver",
+              "planes.sincronizar",
               "planes.ver",
               "red.ver",
               "redes.crear",
@@ -98244,6 +101337,8 @@
           "nas_ip",
           "modo_seguridad",
           "control_velocidad",
+          "estrategia_velocidad",
+          "routeros_version",
           "capacidad_bajada_kbps",
           "capacidad_subida_kbps",
           "api_url",
@@ -98299,7 +101394,18 @@
               "simple",
               "arbol_pcq"
             ],
-            "description": "simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)"
+            "description": "Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple"
+          },
+          "estrategia_velocidad": {
+            "$ref": "#/components/schemas/EstrategiasRouter",
+            "description": "Estrategia de control de velocidad por tipo de conexión (contratos/control-velocidad.md)"
+          },
+          "routeros_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Versión de RouterOS leída de /system/resource; null = no se sabe"
           },
           "capacidad_bajada_kbps": {
             "type": [
@@ -98386,6 +101492,14 @@
             ],
             "minimum": 1,
             "description": "Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
+          },
+          "coordenadas": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$",
+            "description": "Ubicación del router \"lat,lng\" en grados decimales, sin espacios, el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
           },
           "version": {
             "type": "integer",
@@ -99456,6 +102570,74 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
+          }
+        }
+      },
+      "SincronizacionPlan": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "aaa_reescritos",
+          "routers"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "aaa_reescritos": {
+            "type": "integer",
+            "description": "Servicios PPPoE del plan cuyo aaa:user:* se reescribe"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "router_id",
+                "nombre",
+                "servicios",
+                "sesiones_actualizadas",
+                "sesiones_sin_coa",
+                "colas_cambiadas",
+                "reconciliado",
+                "errores"
+              ],
+              "properties": {
+                "router_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "servicios": {
+                  "type": "integer"
+                },
+                "sesiones_actualizadas": {
+                  "type": "integer",
+                  "description": "Sesiones PPPoE vivas a las que se pidió CoA con la velocidad nueva (sin desconectar)"
+                },
+                "sesiones_sin_coa": {
+                  "type": "integer",
+                  "description": "Sesiones abiertas sin CoA (PCQ del plan, suspendidas o con otra estrategia)"
+                },
+                "colas_cambiadas": {
+                  "type": "integer",
+                  "description": "Objetos que el reconciliador creó, corrigió o borró"
+                },
+                "reconciliado": {
+                  "type": "boolean",
+                  "description": "false: el router no tiene API (solo RADIUS)"
+                },
+                "errores": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -102092,6 +105274,260 @@
           }
         }
       },
+      "VistaPreviaEstrategia": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "valida",
+          "errores",
+          "advertencias",
+          "de",
+          "a",
+          "planes",
+          "crear",
+          "actualizar",
+          "borrar",
+          "menus",
+          "servicios",
+          "lotes",
+          "sesiones_coa",
+          "sesiones_conservan",
+          "sesiones_a_desconectar",
+          "orden"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "valida": {
+            "type": "boolean",
+            "description": "false: la combinación no es válida (ver errores)"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "rule",
+                "message"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "Capa con el problema, p. ej. estrategia_velocidad.ip_estatica.aplicacion"
+                },
+                "rule": {
+                  "type": "string",
+                  "description": "aplicacion_tipo, tipo_cola, version, familia_router, plan_consistente, familia_plan o enum"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "El porqué, en lenguaje simple"
+                }
+              }
+            }
+          },
+          "advertencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "regla",
+                "mensaje"
+              ],
+              "properties": {
+                "regla": {
+                  "type": "string",
+                  "description": "sin_techo, reuso_dedicado, sin_padre_prioridad, fasttrack, version_desconocida o fuera_del_techo"
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "de": {
+            "$ref": "#/components/schemas/EstrategiasRouter"
+          },
+          "a": {
+            "$ref": "#/components/schemas/EstrategiasRouter"
+          },
+          "planes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "plan_id",
+                "de",
+                "a"
+              ],
+              "properties": {
+                "plan_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "de": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExcepcionEstrategia"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "a": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExcepcionEstrategia"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "crear": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "actualizar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "borrar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "nombre"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "`comment` del objeto (o `name` en `/queue/type`)"
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "menus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "crear",
+                "actualizar",
+                "borrar"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "crear": {
+                  "type": "integer"
+                },
+                "actualizar": {
+                  "type": "integer"
+                },
+                "borrar": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "servicios": {
+            "type": "integer",
+            "description": "Servicios cuya estrategia cambia"
+          },
+          "lotes": {
+            "type": "integer",
+            "description": "Lotes de 50 servicios en que el worker los migra"
+          },
+          "sesiones_coa": {
+            "type": "integer",
+            "description": "Sesiones PPPoE vivas que reciben el rate-limit nuevo por CoA"
+          },
+          "sesiones_conservan": {
+            "type": "integer",
+            "description": "Sesiones PPPoE que conservan lo anterior hasta reconectar por su cuenta"
+          },
+          "sesiones_a_desconectar": {
+            "type": "integer",
+            "description": "Solo con reconectar: sesiones que reciben Disconnect"
+          },
+          "orden": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "preparar",
+                "lotes",
+                "terminar"
+              ]
+            }
+          }
+        }
+      },
       "VistaPreviaPlantilla": {
         "type": "object",
         "required": [
@@ -102206,6 +105642,102 @@
               "null"
             ],
             "description": "Pool existente con el que se traslaparía (no se podría crear); null si no hay"
+          }
+        }
+      },
+      "VistaPreviaReconciliar": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "cambios",
+          "menus",
+          "avisos",
+          "error"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cambios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "accion",
+                "grupo"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string"
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "crear",
+                    "actualizar",
+                    "borrar",
+                    "mover"
+                  ]
+                },
+                "grupo": {
+                  "type": "string",
+                  "enum": [
+                    "servicio",
+                    "velocidad",
+                    "corte"
+                  ]
+                }
+              }
+            }
+          },
+          "menus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "crear",
+                "actualizar",
+                "borrar",
+                "mover"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "crear": {
+                  "type": "integer"
+                },
+                "actualizar": {
+                  "type": "integer"
+                },
+                "borrar": {
+                  "type": "integer"
+                },
+                "mover": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "El router no respondió o no tiene credenciales"
           }
         }
       },

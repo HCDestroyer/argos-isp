@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import type { ExcepcionEstrategia } from '#network/estrategia_velocidad'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
@@ -56,6 +57,12 @@ export interface PlanRouterVista {
     rafaga_umbral_pct: number | null
     rafaga_segundos: number | null
     prioridad: number | null
+    /**
+     * Estrategia de control de velocidad propia del plan en este router, parcial por tipo de conexión
+     * (`contratos/control-velocidad.md` §2); null = hereda la del router. Se cambia con
+     * `POST /planes/:id/routers/:router_id/estrategia-velocidad`.
+     */
+    estrategia_velocidad: ExcepcionEstrategia | null
     version: number
     created_at: string
     updated_at: string
@@ -112,6 +119,7 @@ const COLUMNAS_PLAN_ROUTER = [
     'rafaga_umbral_pct',
     'rafaga_segundos',
     'prioridad',
+    'estrategia_velocidad',
     'version',
     'created_at',
     'updated_at',

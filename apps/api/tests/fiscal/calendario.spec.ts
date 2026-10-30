@@ -1,16 +1,16 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { errorDe, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { eventos, esquemas, exigirCampos } from '#tests/fiscal/ayudas_fiscal'
 import { relojFiscal } from '#fiscal/comun'
-import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import AnularCompra from '#ledger/actions/anular_compra'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
-import { unico } from '#tests/ayudas'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import GenerarCalendario from '#fiscal/actions/generar_calendario'
@@ -35,6 +35,22 @@ import type { ContextoAccion } from '#shared/contexto'
  */
 
 const SIN_FERIADOS = new Set<string>()
+
+/**
+ * Lleva el reverso del asiento de una compra a `fecha` (mismo patrón que `llevarFacturasA` del
+ * auditor): `AnularCompra` revierte con la fecha real de hoy.
+ */
+async function llevarReversoA(compraId: number, fecha: string) {
+    await db.transaction(async (trx) => {
+        await trx.rawQuery('ALTER TABLE ledger.asientos DISABLE TRIGGER USER')
+        await trx.rawQuery(
+            `UPDATE ledger.asientos SET fecha = ?
+              WHERE reversa_de IN (SELECT id FROM ledger.asientos WHERE origen_tipo = 'compra' AND origen_id = ?)`,
+            [fecha, compraId],
+        )
+        await trx.rawQuery('ALTER TABLE ledger.asientos ENABLE TRIGGER USER')
+    })
+}
 
 async function obligaciones(empresaId: number) {
     return (await db
@@ -243,7 +259,7 @@ test.group('Fase 7 · calendario fiscal: generación y conciliación', (group) =
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: '2026-10-05',
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Mantenimiento de red', total: '112.00' }],
@@ -359,6 +375,9 @@ test.group('Fase 7 · calendario fiscal: generación y conciliación', (group) =
 
         // anular la compra revierte la retención en el mismo mes: la de ISR de octubre ya no aplica
         await new AnularCompra().execute({ compra_id: compra.id, motivo: 'Factura duplicada' }, e.ctx)
+        // el reverso lleva la fecha real de hoy: desde noviembre caería en otro mes y la retención de
+        // octubre seguiría (bien, por fecha contable); la prueba es la anulación dentro de octubre
+        await llevarReversoA(compra.id, '2026-10-20')
         const sinRetencion = await new GenerarCalendario().execute({ empresa_id: e.B }, e.ctx)
         assert.equal(sinRetencion.sin_aplicar, 1)
         assert.deepEqual(
@@ -503,6 +522,8 @@ test.group('Fase 7 · alertas fiscales', (group) => {
     test('fiscal.limite_pc: umbral más alto alcanzado, una vez por año; solo pequeño contribuyente', async ({
         assert,
     }) => {
+        // día fijo, no el real: las ventas se fechan con el reloj real y en enero ya serían de otro año
+        const hoy = '2026-10-20'
         const e = await prepararEmpresasGt()
         await regimenInicial(e.ctx, e.B, 'pequeno_contribuyente')
         await regimenInicial(e.ctx, e.C, 'utilidades')
@@ -517,9 +538,15 @@ test.group('Fase 7 · alertas fiscales', (group) => {
                 },
                 e.ctx,
             )
-            await servicioFacturado(empresaId, '2026-10-01', { precio: '210.00', instalacion: '2026-10-01' })
+            const s = await servicioFacturado(empresaId, '2026-10-01', {
+                precio: '210.00',
+                instalacion: '2026-10-01',
+            })
+            await llevarFacturasA(
+                s.facturas.map((f) => f.id),
+                hoy,
+            )
         }
-        const hoy = hoyGuatemala()
         const anio = Number(hoy.slice(0, 4))
         const r = await new EmitirAlertasFiscales().execute({ hoy }, e.ctx)
         assert.isAtLeast(r.limite_pc, 1)
@@ -530,7 +557,14 @@ test.group('Fase 7 · alertas fiscales', (group) => {
         const repetida = await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
         assert.equal(repetida.limite_pc, 0)
 
-        await servicioFacturado(e.B, '2026-10-01', { precio: '50.00', instalacion: '2026-10-01' })
+        const otra = await servicioFacturado(e.B, '2026-10-01', {
+            precio: '50.00',
+            instalacion: '2026-10-01',
+        })
+        await llevarFacturasA(
+            otra.facturas.map((f) => f.id),
+            hoy,
+        )
         await new EmitirAlertasFiscales().execute({ empresa_id: e.B, hoy }, e.ctx)
         const limites = await eventos('fiscal.limite_pc', 'empresa_id', e.B)
         assert.deepEqual(

@@ -20,8 +20,23 @@ Pedido del PM (28 oct): conectar un MikroTik a Argos con un script generado desd
 - Aceptar desde `wg-argos`: www-ssl (REST), winbox y ssh solo si están en la lista `argosisp-admin`, y 3799/udp desde la IP del servidor.
 - Apagar los servicios que no se usan: `telnet`, `ftp`, `www`, `api`, `api-ssl`, `bandwidth-server`, MAC-Telnet (`/tool mac-server allowed-interface-list=none`) y `romon`. MAC-Winbox se deja: solo funciona en la red local y evita que el técnico quede fuera. Los que quedan (`www-ssl`, `winbox`, `ssh`) llevan `address=` la red del túnel más `argosisp-admin` (`address=` en todas las 7.x; desde 7.17 se muestra como `available-from`).
 - El puerto UDP de WireGuard del router no se abre: el router inicia el túnel (keepalive 25 s) y las respuestas entran como conexión establecida.
-- La lista `argosisp-admin` (IPs de los administradores) es opcional y se llena desde el panel. Vacía significa gestión solo por el túnel.
+- La lista `argosisp-admin` (IPs de los administradores) es opcional y se llena desde el panel. Vacía significa gestión solo por el túnel, por las IPs de las sesiones abiertas al correr el script y por MAC-Winbox.
 - Nunca bloquear al cliente final: estas reglas solo tocan los puertos de gestión del propio router.
+
+**Nunca dejar fuera al administrador** (bug de la 1.3.0, #181; corrección en `a6/script-sin-encierro`):
+- La restricción (servicios apagados, `address=` de `www-ssl`/`winbox`/`ssh` y reglas `argosisp:gestion`, las de drop incluidas) se aplica **solo si** el registro respondió OK **y** el peer del túnel tiene handshake (espera hasta 40 s). Si algo falla, no se toca nada de la gestión (ni se borra la de una ejecución anterior): el script imprime `AVISO la gestión NO se restringió`, qué falló (registro con su motivo, o túnel sin handshake) y cómo reintentar (corregir, generar un script nuevo y correrlo).
+- Siempre conserva el acceso desde las IPs de las **sesiones abiertas** (`/user active`, menos `argosisp-api`): entran en `argosisp-admin` (IPv4) y en el `address=` de los servicios (IPv4 e IPv6). RouterOS no marca cuál es la sesión que corre el script, por eso se conservan todas las que tienen IP; una de MAC-Winbox o de consola no tiene IP, y para esa queda MAC-Winbox, que el script nunca apaga.
+- Re-ejecución: C1 ya no borra la gestión anterior; C4 la rehace (borra y crea, sin drop en medio) solo si esta vez todo funcionó. Con el token ya usado, el registro da 410 y la gestión se queda como estaba.
+- `/ip service` se direcciona por nombre (`/ip service set ssh …`), nunca con `[find where name=…]`: en 7.2x las conexiones abiertas aparecen como entradas dinámicas con el mismo nombre y `set`/`get` sobre ellas fallan.
+- **Rescate** (`infra/mikrotik/rescate-gestion.rsc`, por MAC-Winbox o consola): deshace solo lo `argosisp:gestion`:
+
+```
+/ip firewall filter remove [find where comment~"^argosisp:gestion"]
+/ip firewall address-list remove [find where list="argosisp-admin"]
+/ip service set www-ssl address=""
+/ip service set winbox address=""
+/ip service set ssh address=""
+```
 
 **En el servidor:** públicos solo 80/443 (Caddy) y el puerto UDP de WireGuard. RADIUS (1812/1813) se publica en `RADIUS_BIND_IP`, que con WireGuard es la `.1` del túnel. Postgres y Redis nunca. `argosisp estado` avisa si encuentra otro puerto expuesto.
 
@@ -55,12 +70,14 @@ Pedido del PM (28 oct): conectar un MikroTik a Argos con un script generado desd
 ### 6.1 Registro (A1 implementa, el script de A6 lo llama)
 
 - Petición del router (JSON, `Content-Type: application/json`): `{ token, public_key, routeros_version, api_ca }`. `api_ca` es el PEM de la CA propia del router (`argosisp-ca.crt`) o vacío; Argos lo guarda en `network.routers.api_ca` con `api_tls_verificar = true`, `api_url = https://<ip_tunel>` y `api_usuario = argosisp-api` (el certificado de `www-ssl` lleva `IP:<ip_tunel>` en el SAN).
+- **Certificado de `www-ssl`:** `argosisp-www`, firmado por `argosisp-ca`, con SAN `DNS:<api_nombre>,IP:<ip_tunel>` más `IP:<api_ip_anterior>` (la IP con que Argos llegaba antes, §6.2): sirve por los dos caminos mientras se migra. El script lo pone en `www-ssl` solo si el registro respondió OK (Argos ya guardó la CA) o si `www-ssl` no tenía certificado o ya usaba `argosisp-www`; un certificado ajeno (p. ej. `argos-api` de una CA del administrador que Argos ya verifica) se queda y nunca se borra (solo se borran `argosisp-www` y su temporal `argosisp-www-nuevo`). Al regenerar, `www-ssl` pasa al nuevo antes de borrar el viejo. Si el registro falla, el script imprime la CA y el paso para pegarla en el panel (ficha del router → Acciones → Conexión de la API → CA propia (PEM)).
 - Respuesta `200`: `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`. El script compara `ip_tunel` con la que trae y se detiene si difieren. Token vencido, usado o de otro router → `410` (`application/problem+json`).
 - Si el registro falla (sin internet, 410, RouterOS sin `:serialize`/`:deserialize` o sin raíces de confianza para verificar HTTPS), el script aplica todo lo demás con los datos del servidor que ya trae y muestra la clave pública para `POST /routers/:id/conexion/clave`. Probado: 7.24.5 se registra; 7.16.2 se registra solo con la CA de Argos importada (no trae `builtin-trust-store`); 7.12.1 no tiene `:serialize` y cae a la clave pegada.
 
 ### 6.2 Script (plantillas de A6, render de A1)
 
 - Plantillas armadas desde `infra/mikrotik/piezas`: `infra/mikrotik/plantillas/conexion.rsc.tpl` y, con `?incluir=servicio`, `conexion-servicio.rsc.tpl` (mismas piezas que `lab.rsc`, sin copia).
+- `api_ip_anterior` (grupo `conexion`): el host de `network.routers.api_url` si es una IP distinta de `ip_tunel`; vacía si no hay `api_url`, es un nombre o ya es la del túnel (`generar_script.ts`). Va al SAN del certificado.
 - Variables `{{nombre}}` con su patrón en `infra/mikrotik/variables.json`: grupo `conexion` siempre y `servicio` con `?incluir=servicio`. El render (referencia: `infra/mikrotik/render.mjs`) exige todas, valida el patrón, escapa `\ " $ ?` y rechaza caracteres de control. `wg_servidor_public_key` es la que publicó el agente (§6.3) y `wg_servidor_endpoint` / `wg_servidor_puerto` salen de `ARGOSISP_WG_ENDPOINT` / `ARGOSISP_WG_PUERTO` (variables de entorno de la API, junto con `ARGOSISP_WIREGUARD` y `ARGOSISP_WG_RED`).
 - Las plantillas son ASCII y sin comentarios dentro del bloque, para pegarlas en New Terminal.
 
@@ -70,7 +87,7 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 
 - `GET /api/v1/internal/wireguard/peers` → `{ data: [{ router_id, public_key, ip_tunel }] }`, todos los vigentes, sin paginar. El agente reconcilia la lista completa (no aplica diferencias).
 - `POST /api/v1/internal/wireguard/estado` → `204`, cuerpo `{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake (ISO o null), endpoint, rx_bytes, tx_bytes }], generado_en }`. Llega cuando cambia algo, como mucho cada 60 s y al menos cada 10 min. Argos guarda la clave del servidor y `ultimo_handshake` por router sin auditoría por fila (telemetría, como el Interim-Update); `conectado` = handshake de menos de 3 min. El cambio pendiente ↔ conectado sí es un hecho (A1 decide si emite evento).
-- Eventos que escucha el agente (grupo `wireguard`): `router.conexion_registrada`, `router.conexion_rotada` y **`router.conexion_eliminada`** (propuesta de A6: al borrar o retirar un router con túnel, para quitar su peer; `{ router_id, empresa_id }`). El grupo se crea en `$`: lo anterior lo cubre la reconciliación al arrancar.
+- Eventos que escucha el agente (grupo `wireguard`): `router.conexion_registrada`, `router.conexion_rotada`, **`router.conexion_eliminada`** (propuesta de A6: al borrar o retirar un router con túnel, para quitar su peer; `{ router_id, empresa_id }`) y `router.eliminado` (router sin historial borrado con su conexión; `contratos/eliminar.md` §8.2: el peer sale de la lista y su /32 queda libre). El grupo se crea en `$`: lo anterior lo cubre la reconciliación al arrancar.
 
 ### 6.4 RADIUS y CoA por el túnel
 
@@ -95,6 +112,6 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 - La clave nueva de `argosisp-api` se guarda cifrada como pendiente al generar y pasa a `api_password` cuando el router se registra con ese script (un script generado y no ejecutado no corta la API).
 - `?incluir=servicio`: el grupo `servicio` de `variables.json` sale del entorno de la API (`ROUTERS_SERVICIO_<NOMBRE>`; `pppoe_interfaz` de `interfaz_clientes` del router). Nunca se inventan rangos: si falta alguno, 422 `servicio_incompleto` con la lista.
 - Render: port de `render.mjs` en `apps/api/app/network/conexion/render.ts`, con espejo de `render.test.mjs`. Los archivos se leen de `ROUTERS_MIKROTIK_DIR` (imagen) o de `infra/mikrotik`.
-- `router.conexion_eliminada { router_id, empresa_id }`: al desactivar un router con túnel (no hay borrado de routers); al reactivarlo, otra vez `router.conexion_registrada`. Un router inactivo no sale en los peers.
+- `router.conexion_eliminada { router_id, empresa_id }`: al desactivar un router con túnel o al eliminarlo sin historial (`contratos/eliminar.md`, junto con `router.eliminado`); al reactivarlo, otra vez `router.conexion_registrada`. Un router inactivo no sale en los peers.
 - El cambio `pendiente` ↔ `conectado` no emite evento (nadie lo consume): queda en `audit.cambios`.
 - `router.radius_cambiado { router_id, empresa_id, campos[] }` (`campos` ⊂ `nas_ip`, `radius_secret`; nunca el secreto): sale al crear un router, al editar alguno de esos dos campos y al registrarse por el túnel (cambia `nas_ip`). A2 lo escucha para regenerar el cliente de FreeRADIUS.

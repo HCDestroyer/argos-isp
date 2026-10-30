@@ -155,7 +155,7 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
         )
     })
 
-    test('opera los diez menús administrados', async ({ assert }) => {
+    test('opera los quince menús administrados', async ({ assert }) => {
         const c = cliente(falso)
         const props: Record<RutaRouterOS, Record<string, string>> = {
             '/queue/simple': { target: '10.0.0.1/32', 'max-limit': '1M/2M' },
@@ -188,6 +188,27 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
             },
             // `parent-queue` debe nombrar una cola simple que exista (el falso lo valida como RouterOS)
             '/ppp/profile': { name: 'plan-1', 'local-address': '10.0.0.1' },
+            '/ip/firewall/filter': {
+                chain: 'argos-corte',
+                action: 'accept',
+                'dst-address-list': 'argos-portal',
+            },
+            '/ip/firewall/nat': {
+                chain: 'argos-corte-nat',
+                action: 'return',
+                'dst-address-list': 'argos-portal',
+            },
+            '/ipv6/firewall/filter': {
+                chain: 'argos-corte',
+                action: 'accept',
+                'dst-address-list': 'argos-portal',
+            },
+            '/ipv6/firewall/nat': {
+                chain: 'argos-corte-nat',
+                action: 'return',
+                'dst-address-list': 'argos-portal',
+            },
+            '/interface/list': { name: 'suspendidos' },
         }
         for (const ruta of RUTAS) {
             const comment = `argosisp:prueba:${ruta}`

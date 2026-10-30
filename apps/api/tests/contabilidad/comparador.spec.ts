@@ -24,7 +24,14 @@ import CerrarEjercicio from '#ledger/actions/cerrar_ejercicio'
  * 7 % del art. 46, 25 %, ISO 1 %). Una empresa no ve las cifras de otra y nada se escribe.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: el comparador lee `relojFiscal` y la facturación
+ * fecha con el reloj real. Con `HOY` tomado al importar el archivo, una corrida que cruzaba la
+ * medianoche de Guatemala (06:00 UTC) mezclaba dos días, y en diciembre y enero los «dos últimos meses terminados» y los 12 meses de C salían de la ventana del escenario. Cada prueba fija `relojFiscal` en
+ * `AHORA` y lleva a `HOY` lo que el libro fecha con el reloj real.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const ULTIMO = DateTime.fromISO(`${MES}-01`).minus({ days: 1 })
 const MES_1 = ULTIMO.toFormat('yyyy-MM') // último mes terminado
@@ -44,10 +51,10 @@ async function parametro(e: EmpresasGt, empresaId: number, clave: string, valor:
     )
 }
 
-/** Factura de un servicio llevada (con su asiento) a `fecha`. */
+/** Factura de un servicio llevada (con su asiento) a `fecha` (sin fecha: `HOY`, el mes en curso). */
 async function ventaEn(empresaId: number, precio: string, fecha: string | null) {
     const v = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
-    if (fecha) await llevarFacturasA([v.facturas[0]!.id], fecha)
+    await llevarFacturasA([v.facturas[0]!.id], fecha ?? HOY)
     return v
 }
 
@@ -240,6 +247,9 @@ async function escenario() {
 
 test.group('Auditor contable · comparador de regímenes', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()

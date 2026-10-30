@@ -19,7 +19,8 @@ import {
 import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
 
 /**
- * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los siete eventos, firma HMAC `v1=`,
+ * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los nueve eventos (con los eliminados
+ * de `contratos/eliminar.md`), firma HMAC `v1=`,
  * id estable y deduplicación, reintentos a 1 min, 5 min, 30 min, 2 h y 12 h, fallos visibles en
  * el panel, conector apagado, alcance de empresas del usuario técnico y nada de secretos. Iris es
  * un servidor HTTP local.
@@ -87,7 +88,7 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
         }
     })
 
-    test('los siete eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
+    test('los nueve eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
         assert,
     }) => {
         const iris = await new HorusSimulado().iniciar()
@@ -163,6 +164,18 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 umbral: 5,
                 ventana_minutos: 120,
                 causas: { 'Lost-Carrier': 4, 'User-Request': 1 },
+                ...extra,
+            })
+            ids['servicio.eliminado'] = await evento('servicio.eliminado', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                cliente_id: clienteId,
+                router_id: s.router_id,
+                ...extra,
+            })
+            ids['router.eliminado'] = await evento('router.eliminado', {
+                router_id: s.router_id,
+                empresa_id: 1,
                 ...extra,
             })
             // un evento que no es de §2.3 no va a Iris
@@ -247,6 +260,16 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 umbral: 5,
                 ventana_minutos: 120,
                 causas: { 'Lost-Carrier': 4, 'User-Request': 1 },
+            })
+            assert.deepEqual(porEvento.get('servicio.eliminado')!.json.payload, {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                cliente_id: clienteId,
+                router_id: Number(s.router_id),
+            })
+            assert.deepEqual(porEvento.get('router.eliminado')!.json.payload, {
+                router_id: Number(s.router_id),
+                empresa_id: 1,
             })
             assert.containsSubset(porEvento.get('asignacion.cambiada')!.json.payload, {
                 ipv4: ['100.70.0.9'],
@@ -483,6 +506,46 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
             await db.from('core.usuarios').where('id', tecnico).update({ activo: false })
             await evento('servicio.estado_cambiado', estadoDe(enLa2, empresa2))
             assert.lengthOf(await db.from('integraciones.iris_envios'), 3)
+        } finally {
+            await iris.detener()
+        }
+    })
+
+    test('cliente.actualizado con teléfono, dirección y coordenadas (Iris 0.3.1) se reenvía con sus campos', async ({
+        assert,
+    }) => {
+        const iris = await new HorusSimulado().iniciar()
+        try {
+            iris.responder(RECEPTOR, () => ({ status: 200 }))
+            await fijarConector(iris.url)
+            const clienteId = await crearCliente()
+            await crearServicio(clienteId)
+            const fila = await db.from('core.clientes').where('id', clienteId).first()
+            await new EditarCliente().execute(
+                {
+                    id: clienteId,
+                    version: fila.version,
+                    telefono: '2222-0101',
+                    direccion: 'Mixco, zona 4',
+                    coordenadas: '14.63,-90.60',
+                },
+                contextoPrueba(),
+            )
+            const ev = await db
+                .from('audit.outbox')
+                .where('evento', 'cliente.actualizado')
+                .whereRaw("(payload->>'cliente_id')::bigint = ?", [clienteId])
+                .first()
+            await consumidor.procesar({ id: ev.id, evento: ev.evento, payload: ev.payload })
+            await entregarPendientesIris()
+            const recibido = iris.de(RECEPTOR)[0]!.json
+            assert.deepEqual(recibido.payload, {
+                cliente_id: clienteId,
+                empresa_id: 1,
+                empresas: [1],
+                campos: ['telefono', 'direccion', 'coordenadas'],
+            })
+            assert.notInclude(JSON.stringify(recibido), '2222-0101')
         } finally {
             await iris.detener()
         }

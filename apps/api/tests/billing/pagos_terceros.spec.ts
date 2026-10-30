@@ -12,6 +12,9 @@ import {
     facturasDe,
     lineasAsiento,
     servicioCortado,
+    unicoBd,
+    AHORA_PROMESAS,
+    diasDespues,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -35,7 +38,7 @@ test.group('billing · pago de terceros', () => {
         const cuenta = await cuentaBancariaPrueba()
         const { token } = await usuarioConRoles(['cajero'])
         const { token: contador } = await usuarioConRoles(['contabilidad'])
-        const referencia = unico('trf')
+        const referencia = await unicoBd('trf')
         const cuerpo = {
             cliente_id: pagador.clienteId,
             metodo: 'transferencia',
@@ -174,12 +177,14 @@ test.group('billing · pago de terceros', () => {
             ['facturas.1'],
         )
 
+        // instante fijo: a dos días del reloj real chocaría con la siguiente facturación el 30 y 31
         const promesa = await new CrearPromesaPago().execute(
             {
                 servicio_id: familiar.servicioId,
-                vence_en: new Date(Date.now() + 2 * 86_400_000),
+                vence_en: diasDespues(2),
                 monto: '300.00',
                 canal: 'operador',
+                ahora: AHORA_PROMESAS,
             },
             contextoPrueba(),
         )

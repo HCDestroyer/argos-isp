@@ -30,6 +30,7 @@ const VALORES: Record<string, string> = {
     api_password: 'ClaveApi$0123456789abcdefghijklmnopq',
     api_nombre: 'router-12.argosisp',
     admin_ips: '203.0.113.7,198.51.100.0/24',
+    api_ip_anterior: '192.168.88.1',
     pppoe_interfaz: 'ether2',
     wan_interfaz: 'ether1',
     ppp_local_v4: '10.10.0.1',

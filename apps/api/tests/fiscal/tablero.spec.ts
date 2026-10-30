@@ -1,8 +1,10 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
@@ -27,7 +29,15 @@ import type { ContextoAccion } from '#shared/contexto'
  * nada: cada prueba termina en `afirmarLibro`.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (2026-10-20, mediodía en Guatemala), no la fecha real: el tablero lee `relojFiscal` y
+ * el libro fecha las ventas con el reloj real (`hoyGuatemala()`). Con `HOY` tomado al importar el
+ * archivo, una corrida que cruzaba la medianoche de Guatemala (06:00 UTC) comparaba contra el día
+ * anterior: el libro «hasta HOY» no traía la venta que el tablero sí contaba. Cada prueba fija
+ * `relojFiscal` en `AHORA` (setup) y `venta` lleva sus facturas a `HOY` (`llevarFacturasA`).
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
 const DESPUES = DateTime.fromISO(`${MES}-01`).plus({ months: 2 }).toFormat('yyyy-MM')
@@ -51,8 +61,13 @@ async function parametro(
     )
 }
 
-function venta(empresaId: number, precio: string) {
-    return servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+async function venta(empresaId: number, precio: string) {
+    const s = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        HOY,
+    )
+    return s
 }
 
 async function compra(ctx: ContextoAccion, empresaId: number, total: string) {
@@ -61,7 +76,7 @@ async function compra(ctx: ContextoAccion, empresaId: number, total: string) {
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('D'),
+            numero: await unicoBd('D'),
             fecha_documento: HOY,
             condicion: 'credito',
             lineas: [{ descripcion: 'Enlace de tránsito', total }],
@@ -79,6 +94,9 @@ const datos = (b: Bloque) => b.datos as Record<string, any>
 
 test.group('Fase 8 · tablero fiscal', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()

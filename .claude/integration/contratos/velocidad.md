@@ -1,5 +1,7 @@
 # Contrato: control de velocidad (simple queue, queue tree con PCQ y reuso)
 
+> **Semana 4:** el modo por router (`simple` | `arbol_pcq`) pasó a ser una estrategia por capas que se combina por tipo de conexión y por plan: `contratos/control-velocidad.md`. Las fórmulas y reglas de oro de este contrato siguen vigentes; `control_velocidad` queda derivado y obsoleto.
+
 Decisión del PM (día 4): el control de velocidad se configura **por router** y aplica igual a PPPoE y a WISP (`ip_estatica`, `dhcp_fija`). El plan define velocidades, garantía, ráfaga, prioridad y **reuso** (sobresuscripción `1:N`); ArgosIsp traduce eso a colas de RouterOS 7 con buenas prácticas.
 
 ## Datos

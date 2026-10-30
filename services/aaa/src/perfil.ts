@@ -43,8 +43,18 @@ function rateLimit(subidaKbps: number, bajadaKbps: number): string {
  * (`apps/api/app/network/routeros/velocidad_router.ts`); si no, el `profile_ppp` del router.
  */
 export function grupoDe(servicio: ServicioAaa): string | null {
+    // Estrategia por capas (`contratos/control-velocidad.md` §7): el perfil lo calcula A1.
+    if (servicio.velocidad) return servicio.velocidad.grupo
     if (servicio.control_velocidad === 'simple' && servicio.plan.reuso > 1) return `plan-${servicio.plan.id}`
     return servicio.plan.profile_ppp
+}
+
+/** ¿Va `Mikrotik-Rate-Limit` en ese estado? (`perfil_ppp` activo, `pcq_plan` y `arbol_pcq`: no) */
+function conRateLimit(servicio: ServicioAaa, estado: 'activo' | 'limitado'): boolean {
+    if (servicio.velocidad) {
+        return estado === 'activo' ? servicio.velocidad.rate_limit : servicio.velocidad.rate_limit_limitado
+    }
+    return servicio.control_velocidad !== 'arbol_pcq'
 }
 
 export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): ResultadoPerfil {
@@ -83,10 +93,10 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
         case 'pendiente_instalacion':
             throw new Error(`un servicio ${servicio.estado} no tiene perfil: se rechaza antes`)
     }
-    // `arbol_pcq`: sin cola simple por servicio. La velocidad la ponen el PCQ y el árbol del plan,
-    // con las direcciones de la sesión en `argosisp-plan-<id>[-limitado]` (dispatcher de RouterOS).
-    // El suspendido conserva su rate-limit mínimo (no está en las listas del plan).
-    if (servicio.control_velocidad === 'arbol_pcq' && servicio.estado !== 'suspendido') {
+    // `arbol_pcq` y `pcq_plan`: sin cola por sesión (la velocidad la ponen el PCQ y la cola o el árbol
+    // del plan, con las direcciones de la sesión; dispatcher de RouterOS). `perfil_ppp` activo: el
+    // rate-limit vive en el perfil `plan-<id>`. El suspendido conserva su rate-limit mínimo.
+    if ((servicio.estado === 'activo' || servicio.estado === 'limitado') && !conRateLimit(servicio, servicio.estado)) {
         delete reply['Mikrotik-Rate-Limit']
     }
 

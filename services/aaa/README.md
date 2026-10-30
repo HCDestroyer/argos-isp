@@ -54,6 +54,8 @@ Reuso en modo `simple` (`contratos/velocidad.md`): con `plan.reuso > 1` y `contr
 
 En `arbol_pcq` (`control_velocidad` del registro) el activo y el limitado no reciben `Mikrotik-Rate-Limit` ni el grupo del plan: no hay cola simple por sesión; el PCQ y el árbol del plan limitan las direcciones de la sesión, que el dispatcher de RouterOS pone en `argosisp-plan-<id>[-limitado]`. El suspendido conserva su perfil completo.
 
+**Estrategia por capas (semana 4, `contratos/control-velocidad.md` §7):** si el registro trae `velocidad` (`aplicacion`, `grupo`, `rate_limit`, `rate_limit_limitado`), manda: `Mikrotik-Group = velocidad.grupo` en activo y limitado, y `Mikrotik-Rate-Limit` solo si `velocidad.rate_limit` (activo) o `velocidad.rate_limit_limitado` (limitado) es `true`. Así `perfil_ppp` activo solo lleva el grupo (el rate-limit vive en el perfil), y `pcq_plan` y `arbol_pcq` no llevan rate-limit. Sin `velocidad` (registro anterior), lo de arriba. El suspendido no cambia.
+
 El suspendido conserva su IPv4 y sus prefijos (A5 lo identifica por IP en la página de corte). El perfil sale de lo verificado en RouterOS 7.24.5 (`infra/mikrotik/README.md`): `Mikrotik-Group` aplica el perfil de corte completo al conectar (address-list e interface-list IPv4/IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva, así el router queda igual en ambos caminos. Se configuran con `AAA_SUSPENDIDO_*`.
 
 ## Modo degradado (semana 3, piloto)
@@ -168,6 +170,17 @@ Cuando un router se registra por el túnel (`contratos/conexion-routers.md` §6.
 - Si algún archivo cambió, avisa a FreeRADIUS por el FIFO `clients.d/.recargar` (`src/clientes/recarga.ts`; oculto, el `$INCLUDE` lo salta). FreeRADIUS 3.2 lee los clientes solo al arrancar (un HUP no los relee), así que su contenedor corre `freeradius/recargar.sh` como entrypoint: tiene el FIFO abierto y, con cada aviso, valida (`freeradius -C`) y reinicia `radiusd` (~1 s sin RADIUS; el router reintenta). Si la configuración no valida, sigue con la anterior y lo dice en el log. Una rotación que no cambia `nas_ip` ni secret no reinicia nada.
 - Por evento, sin TTL ni sondeo. Sin `recargar.sh` (FreeRADIUS de antes) el aviso queda en `sin_lector` y hace falta `argosisp radius-clientes`.
 - `argosisp radius-clientes` queda para regenerar a mano (p. ej. con FreeRADIUS sin `recargar.sh`).
+
+### Bajas definitivas (`contratos/eliminar.md`)
+
+Con el mismo grupo `radius-clientes:<nodo>` (y `AAA_CLIENTES_EVENTOS=1`), `aaa` atiende los borrados de A1 (solo registros sin historial):
+
+- **`router.eliminado`** (`router_id`, `empresa_id`): regenera los clientes como con los demás eventos de router; la fila ya no está en `network.routers`, así que `router-<id>.conf` se borra y FreeRADIUS se recarga (`recargar.sh`). Además deja como lápida toda clave `aaa:user:*` con ese `router_id` (no debería haber: un router con servicios, aun retirados, no se puede eliminar) y la olvida del último perfil conocido.
+- **`servicio.eliminado`** (`servicio_id`, …): A1 ya escribe la lápida en `aaa:user:<user_ppp>`; si esa escritura falló (Redis caído tras el COMMIT), `aaa` reemplaza el registro completo con ese `servicio_id` por la lápida (`version + 1`, como la de A1) y olvida el servicio del último perfil conocido de su nodo, para que el modo degradado tampoco lo acepte. No toca `clients.d`.
+- Lápida y no `DEL` (`contratos/aaa.md`). El reemplazo es atómico (Lua: solo si la clave sigue con el valor leído; si A1 escribió entre medio, gana A1). Recorre `aaa:user:*` con `SCAN` (los borrados son raros). Sin TTL.
+- Idempotente: una segunda entrega encuentra lápidas y nada en memoria. Un payload sin id válido se confirma sin efecto. Si Redis o Postgres fallan, no confirma y reintenta.
+- Código en `src/bajas.ts` (`aplicarBaja`) y `src/clientes/consumidor.ts`; pruebas en `test/bajas.test.ts`.
+- Una sesión viva de un servicio eliminado (no debería existir) la desconecta la API: grupo `sesiones` de `node ace sesiones:worker` → `sesion.desconexion_solicitada` → `coa` (`apps/api/app/network/sesiones/README.md`).
 
 ## Prueba con `radtest` contra FreeRADIUS en Docker (tarea 3)
 

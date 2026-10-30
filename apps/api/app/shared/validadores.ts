@@ -58,6 +58,23 @@ export const coordenadas = () =>
         .regex(/^-?\d+(\.\d+)?, ?-?\d+(\.\d+)?$/)
         .meta({ description: 'Latitud y longitud: "14.6349,-90.5069"' })
 
+const LATITUD = String.raw`-?(?:90(?:\.0+)?|[1-8]?\d(?:\.\d{1,15})?)`
+const LONGITUD = String.raw`-?(?:180(?:\.0+)?|(?:1[0-7]\d|[1-9]?\d)(?:\.\d{1,15})?)`
+
+/**
+ * "lat,lng" en grados decimales con rango válido (latitud −90…90, longitud −180…180). Mismo formato
+ * que `coordenadas` de clientes y servicios; lo usan los routers (contrato Iris 0.3.1).
+ */
+export const coordenadasEnRango = () =>
+    vine
+        .string()
+        .trim()
+        .regex(new RegExp(`^${LATITUD}, ?${LONGITUD}$`))
+        .meta({
+            description:
+                'Latitud y longitud en grados decimales: "14.6349,-90.5069" (latitud −90…90, longitud −180…180)',
+        })
+
 /** Empresa sugerida para los servicios nuevos (zona o router); `null` la quita. */
 export const empresaSugerida = () =>
     vine.number().withoutDecimals().min(1).nullable().optional().meta({

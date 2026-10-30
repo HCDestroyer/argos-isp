@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
-import { servicioCortado } from '#tests/billing/ayudas_billing'
+import { AHORA_PROMESAS, diasDespues, servicioCortado } from '#tests/billing/ayudas_billing'
 import { normalizarReglasPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import { limitesPromesa, simularPromesa } from '#billing/simulador_promesas'
@@ -114,13 +114,16 @@ test.group('billing · simulador de promesas', () => {
                 ),
             },
         })
-        const porDefecto = await simularPromesa({ servicio_id: datos.servicioId, canal: 'operador' })
+        // instante fijo: la promesa por defecto (mañana) y la de dos días no chocan con la siguiente
+        // facturación el 30 o 31 del mes (`AHORA_PROMESAS`)
+        const ahora = AHORA_PROMESAS
+        const porDefecto = await simularPromesa({ servicio_id: datos.servicioId, canal: 'operador', ahora })
         assert.equal(porDefecto.resultado, 'aprobada')
         assert.isNull(porDefecto.regla)
         assert.equal(porDefecto.monto, '300.00')
         assert.equal(porDefecto.resultado_creacion, 'aprobada')
 
-        const portal = await simularPromesa({ servicio_id: datos.servicioId, canal: 'portal' })
+        const portal = await simularPromesa({ servicio_id: datos.servicioId, canal: 'portal', ahora })
         assert.equal(portal.resultado, 'pendiente_aprobacion')
         assert.equal(portal.regla, 'requiere_aprobacion')
         assert.equal(portal.limites.plazo_max_dias, 3)
@@ -131,7 +134,8 @@ test.group('billing · simulador de promesas', () => {
             servicio_id: datos.servicioId,
             canal: 'operador',
             monto: '999.00',
-            vence_en: new Date(Date.now() - DIA),
+            vence_en: diasDespues(-1, ahora),
+            ahora,
         })
         assert.equal(invalida.resultado_creacion, 'error')
         assert.equal(invalida.monto, '300.00')
@@ -144,13 +148,14 @@ test.group('billing · simulador de promesas', () => {
         await new CrearPromesaPago().execute(
             {
                 servicio_id: datos.servicioId,
-                vence_en: new Date(Date.now() + 2 * DIA),
+                vence_en: diasDespues(2, ahora),
                 monto: '100.00',
                 canal: 'operador',
+                ahora,
             },
             contextoPrueba(),
         )
-        const conAbierta = await simularPromesa({ servicio_id: datos.servicioId, canal: 'operador' })
+        const conAbierta = await simularPromesa({ servicio_id: datos.servicioId, canal: 'operador', ahora })
         assert.equal(conAbierta.resultado_creacion, 'error')
         assert.include(
             conAbierta.validaciones.find((v) => v.regla === 'promesa_abierta'),
@@ -158,10 +163,10 @@ test.group('billing · simulador de promesas', () => {
         )
 
         // límites para el portal (A5)
-        const limites = await limitesPromesa(datos.servicioId, 'portal')
+        const limites = await limitesPromesa(datos.servicioId, 'portal', ahora)
         assert.equal(limites.plazo_max_dias, 3)
         assert.isTrue(limites.fecha_maxima < (limites.siguiente_facturacion ?? '9999-12-31'))
-        assert.isTrue(limites.fecha_maxima > hoyGuatemala())
+        assert.isTrue(limites.fecha_maxima > hoyGuatemala(ahora))
 
         // permiso promesas.ver; el técnico no lo tiene
         const { token } = await usuarioConRoles(['tecnico'])

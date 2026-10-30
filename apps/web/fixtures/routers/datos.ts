@@ -1,4 +1,5 @@
 import type { Schema } from '@argosisp/contracts'
+import { estrategiaArbol, estrategiaSimple } from './estrategiasDatos'
 
 const creado = '2026-09-01T15:00:00.000Z'
 const meta = { version: 1, created_at: creado, updated_at: creado }
@@ -20,6 +21,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.10.0.1',
         modo_seguridad: 'radius',
         control_velocidad: 'simple',
+        // Control por capas (A2): migrado de «simple», RouterOS 7 leído por la reconciliación.
+        estrategia_velocidad: estrategiaSimple(),
+        routeros_version: '7.24.5 (stable)',
         capacidad_bajada_kbps: null,
         capacidad_subida_kbps: null,
         modo_velocidad: 'simple',
@@ -40,6 +44,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.20.0.1',
         modo_seguridad: 'radius',
         control_velocidad: 'arbol_pcq',
+        // Migrado de «árbol PCQ»; RouterOS 6 (sin fq_codel ni CAKE).
+        estrategia_velocidad: estrategiaArbol(),
+        routeros_version: '6.49.10 (long-term)',
         capacidad_bajada_kbps: 1_000_000,
         capacidad_subida_kbps: 500_000,
         modo_velocidad: 'pcq',
@@ -61,6 +68,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.30.0.1',
         modo_seguridad: 'radius',
         control_velocidad: 'simple',
+        // Nunca respondió a la API: sin versión conocida (`routeros_version` null, el valor por defecto).
+        estrategia_velocidad: estrategiaSimple(),
+        routeros_version: null,
         capacidad_bajada_kbps: null,
         capacidad_subida_kbps: null,
         modo_velocidad: 'simple',

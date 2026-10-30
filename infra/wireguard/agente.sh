@@ -4,10 +4,14 @@
 # Puente entre la API y el servidor WireGuard (que corre en la red del host y no ve la red de
 # compose):
 #   1. Al arrancar y al recibir `router.conexion_registrada` / `router.conexion_rotada` /
-#      `router.conexion_eliminada` (grupo `wireguard` del stream argos:eventos) pide la lista
-#      completa de peers a la API (GET internal/wireguard/peers) y escribe /estado/peers/peers.conf.
-#      El servidor la aplica con `wg syncconf`. Reconciliar siempre la lista completa hace que un
-#      evento repetido o perdido no deje peers de más ni de menos.
+#      `router.conexion_eliminada` / `router.eliminado` (grupo `wireguard` del stream argos:eventos)
+#      pide la lista completa de peers a la API (GET internal/wireguard/peers) y escribe
+#      /estado/peers/peers.conf. El servidor la aplica con `wg syncconf`, que quita o agrega solo lo
+#      que cambió (los demás túneles no se cortan). Reconciliar siempre la lista completa hace que
+#      un evento repetido o perdido no deje peers de más ni de menos.
+#      `router.eliminado` (contratos/eliminar.md): el router ya no existe y su fila de
+#      network.routers_conexion se borró con él, así que su peer no vuelve en la lista y su /32 del
+#      túnel queda libre para el siguiente router (la asigna la API, no este agente).
 #   2. Manda a la API la clave pública del servidor y el último handshake de cada peer
 #      (POST internal/wireguard/estado) cuando cambian, como mucho cada ARGOSISP_WG_ESTADO_CADA_S.
 #
@@ -26,7 +30,7 @@ RED="${ARGOSISP_WG_RED:-10.255.0.0/16}"
 ESTADO_DIR="${WG_ESTADO_DIR:-/estado}"
 ESTADO_CADA_S="${ARGOSISP_WG_ESTADO_CADA_S:-60}"
 BLOQUEO_MS="${WG_BLOQUEO_MS:-30000}"
-EVENTOS_RE='^router\.conexion_(registrada|rotada|eliminada)$'
+EVENTOS_RE='^router\.(conexion_(registrada|rotada|eliminada)|eliminado)$'
 
 log() { printf '%s wireguard-agente: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 morir() {

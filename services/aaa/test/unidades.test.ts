@@ -91,6 +91,53 @@ describe('perfil RADIUS por estado', () => {
     })
 })
 
+describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
+    const conRate = (s: ServicioAaa) => {
+        s.plan.rate_limit = '5M/20M 0/0 0/0 0/0 8 5M/20M'
+        s.plan.rate_limit_limitado = '1M/2M 0/0 0/0 0/0 8 1M/2M'
+        return s
+    }
+
+    it('perfil_ppp activo: solo Mikrotik-Group (el rate-limit vive en el perfil)', () => {
+        const s = conRate(servicio({ user_ppp: 'p' }))
+        s.velocidad = { aplicacion: 'perfil_ppp', grupo: 'plan-1', rate_limit: false, rate_limit_limitado: true }
+        const { reply } = construirReply(s, PERFIL)
+        assert.equal(reply['Mikrotik-Group'], 'plan-1')
+        assert.equal(reply['Mikrotik-Rate-Limit'], undefined)
+    })
+
+    it('perfil_ppp limitado: Mikrotik-Group y el rate-limit limitado (RADIUS gana sobre el perfil)', () => {
+        const s = conRate(servicio({ user_ppp: 'p', estado: 'limitado' }))
+        s.velocidad = { aplicacion: 'perfil_ppp', grupo: 'plan-1', rate_limit: false, rate_limit_limitado: true }
+        const { reply } = construirReply(s, PERFIL)
+        assert.equal(reply['Mikrotik-Group'], 'plan-1')
+        assert.equal(reply['Mikrotik-Rate-Limit'], '1M/2M 0/0 0/0 0/0 8 1M/2M')
+    })
+
+    it('pcq_plan: sin cola por sesión; el suspendido conserva su rate-limit mínimo', () => {
+        const s = conRate(servicio({ user_ppp: 'q' }))
+        s.velocidad = { aplicacion: 'pcq_plan', grupo: null, rate_limit: false, rate_limit_limitado: false }
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Rate-Limit'], undefined)
+        s.estado = 'suspendido'
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Rate-Limit'], PERFIL.suspendido.rateLimit)
+    })
+
+    it('radius_rate_limit con padre por router: grupo plan-<id> aunque el reuso sea 1', () => {
+        const s = conRate(servicio({ user_ppp: 'r' }))
+        s.velocidad = { aplicacion: 'radius_rate_limit', grupo: 'plan-1', rate_limit: true, rate_limit_limitado: true }
+        const { reply } = construirReply(s, PERFIL)
+        assert.equal(reply['Mikrotik-Group'], 'plan-1')
+        assert.equal(reply['Mikrotik-Rate-Limit'], '5M/20M 0/0 0/0 0/0 8 5M/20M')
+    })
+
+    it('el contrato acepta velocidad y rechaza una aplicación desconocida', () => {
+        const base = JSON.parse(JSON.stringify(servicio({ user_ppp: 'x' }))) as Record<string, unknown>
+        const v = { aplicacion: 'pcq_plan', grupo: null, rate_limit: false, rate_limit_limitado: false }
+        assert.deepEqual((parsearRegistro({ ...base, velocidad: v }) as ServicioAaa).velocidad, v)
+        assert.throws(() => parsearRegistro({ ...base, velocidad: { ...v, aplicacion: 'magia' } }), ErrorContrato)
+    })
+})
+
 describe('contrato del registro', () => {
     it('acepta el servicio completo y la lápida', () => {
         const s = servicio({ user_ppp: 'ok' })

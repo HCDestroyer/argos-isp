@@ -6,6 +6,7 @@ import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
 import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO } from './datos'
 import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
+import { estrategiaDeControl } from './estrategiasDatos'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -148,6 +149,9 @@ export const rutasRouters: RutasFixture = {
         if (typeof cuerpo.zona_id === 'number' && !bd.zonas.some(z => z.id === cuerpo.zona_id)) {
             errores.push({ field: 'zona_id', message: `La zona ${cuerpo.zona_id} no existe`, rule: 'exists' })
         }
+        if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
+            errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -169,6 +173,7 @@ export const rutasRouters: RutasFixture = {
             tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
             tiene_radius_secret: cuerpo.quitar_radius_secret === true ? false : (typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') || router.tiene_radius_secret,
             zona_id: 'zona_id' in cuerpo ? (cuerpo.zona_id as number | null) : (router.zona_id ?? null),
+            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
             activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
@@ -218,6 +223,8 @@ export const rutasRouters: RutasFixture = {
         Object.assign(router, {
             control_velocidad: cuerpo.control_velocidad,
             modo_velocidad: cuerpo.control_velocidad === 'arbol_pcq' ? 'pcq' : 'simple',
+            // El atajo escribe también la estrategia equivalente (§6).
+            estrategia_velocidad: estrategiaDeControl(cuerpo.control_velocidad),
             version: router.version + 1,
             updated_at: ahora(),
         })
@@ -275,6 +282,9 @@ export const rutasRouters: RutasFixture = {
             nas_ip: nas,
             modo_seguridad: cuerpo.modo_seguridad === 'api' ? 'api' : 'radius',
             control_velocidad: control,
+            // Como `CrearRouter` (A2): la estrategia del atajo; sin versión hasta que la API responda.
+            estrategia_velocidad: estrategiaDeControl(control),
+            routeros_version: null,
             capacidad_bajada_kbps: null,
             capacidad_subida_kbps: null,
             modo_velocidad: control === 'arbol_pcq' ? 'pcq' : 'simple',

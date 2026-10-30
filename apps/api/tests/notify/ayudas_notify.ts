@@ -3,8 +3,9 @@ import db from '@adonisjs/lucid/services/db'
 import type { CanalNotificacion } from '#shared/eventos'
 import { ErrorCanal, type Canal, type EstadoEntrega, type ResultadoEnvio } from '#notify/canales/canal'
 import type { ColaEnvios } from '#notify/cola'
-import { unico } from '#tests/ayudas'
-import { ipUnica } from '#tests/core/fabricas'
+import { contextoPrueba, unico } from '#tests/ayudas'
+import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
+import { bancoId } from '#tests/billing/ayudas_billing'
 
 /**
  * Datos y dobles de prueba de notify. Los datos de núcleo y facturación se insertan directo
@@ -17,6 +18,50 @@ import { ipUnica } from '#tests/core/fabricas'
  * no avisa al pagador (`avisos_pago.ts`) y la prueba no encuentra el envío.
  */
 export const PAGO_SIN_COMPROBANTE = 1_999_999_999
+
+/**
+ * Número que nunca se repite en esta base: el siguiente valor de la secuencia de `tabla.id`. Las
+ * secuencias de Postgres no retroceden (ni con rollback) y las comparten todas las conexiones, así
+ * que vale entre corridas, entre procesos y entre suites que usan la misma base a la vez. Un sufijo
+ * aleatorio o un contador por proceso no lo garantizan: las tablas no se truncan entre corridas.
+ */
+export async function siguienteDeSecuencia(tabla: string): Promise<number> {
+    const r = await db.rawQuery('SELECT nextval(pg_get_serial_sequence(?, ?)) AS n', [tabla, 'id'])
+    return Number(r.rows[0].n)
+}
+
+/**
+ * Primer id de un bloque de 1000 ids de evento simulados, propio en la base: `9e12 + n·1000` con `n`
+ * de la secuencia de `audit.outbox`. No choca con otra prueba (ni de otra suite que use la base a la
+ * vez) ni con un evento real (los ids reales del outbox quedan muy por debajo de 9e12).
+ */
+export async function bloqueIdsEvento(): Promise<number> {
+    return 9_000_000_000_000 + (await siguienteDeSecuencia('audit.outbox')) * 1000
+}
+
+/** `nas_ip` única en la base (UNIQUE en `network.routers`): 10.200.0.0 a 10.249.255.255. */
+export async function nasIpUnica(): Promise<string> {
+    const n = await siguienteDeSecuencia('network.routers')
+    return `10.${200 + (Math.floor(n / 65536) % 50)}.${Math.floor(n / 256) % 256}.${n % 256}`
+}
+
+/**
+ * Cuenta bancaria con número único en la base (UNIQUE `banco_id, numero`), por la acción de A3. El
+ * `unico()` de `cuentaBancariaPrueba` es aleatorio y, con las cuentas que se acumulan en la base de
+ * integración, chocó en una suite completa.
+ */
+export async function cuentaBancariaUnica(banco = 'Banrural', empresaId = 1) {
+    const n = await siguienteDeSecuencia('billing.cuentas_bancarias')
+    return new CrearCuentaBancaria().execute(
+        {
+            banco_id: await bancoId(banco),
+            numero: `NT-${n}-${randomUUID().slice(0, 4)}`,
+            alias: `Recaudación notify ${n}`,
+            empresa_id: empresaId,
+        },
+        contextoPrueba(),
+    )
+}
 
 export interface DatosCliente {
     nombre?: string
@@ -40,7 +85,7 @@ export async function crearCliente(datos: DatosCliente = {}): Promise<number> {
 
 /** `empresaId` por defecto es la principal (1): con varias empresas activas el trigger exige una. */
 export async function crearServicio(clienteId: number, plan = unico('Plan'), empresaId = 1): Promise<number> {
-    const nasIp = ipUnica()
+    const nasIp = await nasIpUnica()
     const [router] = (await db
         .table('network.routers')
         .insert({ nombre: unico('Router'), host: '10.0.0.1', nas_ip: nasIp })
