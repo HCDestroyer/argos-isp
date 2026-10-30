@@ -217,6 +217,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioSincronizarRouterModal.vue': { permisos: ['servicios.sincronizar_router'], desde: ['pages/servicios/[id].vue'] },
     'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioSesiones.vue': { permisos: ['sesiones.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },
     'SorteoFormulario.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/index.vue', 'pages/lealtad/sorteos/[id].vue'] },

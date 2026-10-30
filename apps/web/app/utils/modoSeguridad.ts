@@ -5,10 +5,12 @@ import type { Problem, Schema } from '@argosisp/contracts'
  *
  * - `radius` (por defecto): PPPoE por RADIUS y CoA, más `ip_estatica` / `dhcp_fija` por la API REST.
  *   La IP del NAS es obligatoria.
- * - `api`: router sin RADIUS. Solo `ip_estatica` y `dhcp_fija`, que Argos configura, limita y corta
- *   por la API REST de RouterOS. `nas_ip` y `radius_secret` son opcionales (la API devuelve
- *   `nas_ip: null`), no admite PPPoE (422 `pppoe_requiere_radius`) ni el script de conexión
- *   (422 `script_requiere_radius`).
+ * - `api`: router sin RADIUS. Todo por la API REST de RouterOS: `ip_estatica` y `dhcp_fija` con colas y
+ *   listas, y PPPoE con un `/ppp/secret` local por servicio (`contratos/pppoe-local.md`): sin consumo
+ *   de datos ni cambios al instante (el perfil nuevo rige al reconectar) y sesiones leídas por sondeo
+ *   de `/ppp/active` cada minuto (`Sesion.origen = 'sondeo'`). PPPoE exige las credenciales de la API
+ *   (422 `pppoe_local_requiere_api`). `nas_ip` y `radius_secret` son opcionales (la API devuelve
+ *   `nas_ip: null`) y no admite el script de conexión (422 `script_requiere_radius`).
  */
 export type ModoSeguridad = Schema<'Router'>['modo_seguridad']
 
@@ -22,8 +24,8 @@ export const MODOS_SEGURIDAD: Record<ModoSeguridad, { etiqueta: string, opcion: 
     },
     api: {
         etiqueta: 'Sin RADIUS',
-        opcion: 'Sin RADIUS (solo API: IP estática y DHCP fija)',
-        descripcion: 'Sin PPPoE. Argos configura, limita y corta cada servicio con la API REST de RouterOS. No pide IP del NAS ni secreto RADIUS.',
+        opcion: 'Sin RADIUS (todo por la API REST)',
+        descripcion: 'Argos configura, limita y corta cada servicio con la API REST de RouterOS; PPPoE va como secrets locales, sin consumo de datos. No pide IP del NAS ni secreto RADIUS.',
         icono: 'i-lucide-plug',
         color: 'info',
     },
@@ -46,13 +48,35 @@ export function hostYNas(router: { host: string, nas_ip?: string | null, modo_se
     return router.nas_ip ? `${router.host} · NAS ${router.nas_ip}` : `${router.host} · sin RADIUS`
 }
 
-/** Mismo texto que `MENSAJE_PPPOE_REQUIERE_RADIUS` de A1. */
-export const MENSAJE_PPPOE_SIN_RADIUS = 'Este router no usa RADIUS: PPPoE necesita RADIUS. Usa IP estática o DHCP fija, o cambia el router a RADIUS'
+/** Ayuda del tipo PPPoE en un router sin RADIUS (`contratos/pppoe-local.md`). */
+export const AYUDA_PPPOE_SIN_RADIUS = 'Sin RADIUS: el usuario se crea como secret en el MikroTik; sin consumo de datos ni cambios al instante.'
+
+/**
+ * Cómo funciona PPPoE en un router `api` (ficha del router): secrets locales, sesiones por sondeo
+ * cada minuto y sin consumo.
+ */
+export const PPPOE_EN_ROUTER_SIN_RADIUS = 'PPPoE va con secrets locales que Argos crea por la API; las sesiones se leen de /ppp/active cada minuto y no hay consumo de datos. Un cambio de plan o de estado quita la sesión y rige al reconectar.'
+
+/** Texto del panel para el 422 `pppoe_local_requiere_api` (el `detail` de la API queda debajo). */
+export const MENSAJE_PPPOE_LOCAL_REQUIERE_API = 'El router no tiene credenciales de la API: agrégalas en la ficha del router.'
+
+/** Al pasar un router de `api` a `radius` (`contratos/pppoe-local.md` §9). */
+export const AVISO_SIN_RADIUS_A_RADIUS = 'El reconciliador borra los secrets PPPoE que Argos creó en el router (los puestos a mano no se tocan). Las sesiones vivas siguen hasta caerse y reconectan por RADIUS: antes de guardar, configura /radius en el router y usa «Probar conexión».'
+
+/** Si el router tiene usuario y contraseña de la API (lo que necesita PPPoE sin RADIUS). */
+export function tieneCredencialesApi(router: Pick<Schema<'Router'>, 'api_usuario' | 'tiene_api_password'> | null | undefined): boolean {
+    return Boolean(router?.api_usuario && router.tiene_api_password)
+}
+
+/** PPPoE en un router sin RADIUS que no tiene credenciales de la API: la API respondería 422. */
+export function pppoeSinCredencialesApi(router: Pick<Schema<'Router'>, 'modo_seguridad' | 'api_usuario' | 'tiene_api_password'> | null | undefined): boolean {
+    return esSinRadius(router) && !tieneCredencialesApi(router)
+}
 
 export const MENSAJE_SCRIPT_SIN_RADIUS = 'Este router no usa RADIUS y el script de conexión configura RADIUS y CoA en el equipo. Cámbialo a RADIUS para usar el script, o configura a mano el acceso a su API REST.'
 
 /** Mensaje de la IP del NAS cuando falta en un router con RADIUS (espejo de `MENSAJE_NAS_IP_REQUERIDA`). */
-export const MENSAJE_NAS_REQUERIDA = 'La IP del NAS es obligatoria con RADIUS. Si el router no usa RADIUS (solo IP estática o DHCP fija), elige «Sin RADIUS».'
+export const MENSAJE_NAS_REQUERIDA = 'La IP del NAS es obligatoria con RADIUS. Si el router no usa RADIUS (todo por la API REST), elige «Sin RADIUS».'
 
 export const PATRON_IPV4_NAS = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 
@@ -75,8 +99,9 @@ function codigo(problema: Problem | null | undefined): string | null {
     return problema?.type.startsWith(prefijo) ? problema.type.slice(prefijo.length) : null
 }
 
-export function esPppoeRequiereRadius(problema: Problem | null | undefined): boolean {
-    return codigo(problema) === 'pppoe_requiere_radius'
+/** 422 `pppoe_local_requiere_api` (`errors[0].field = router_id`): router `api` sin credenciales. */
+export function esPppoeLocalRequiereApi(problema: Problem | null | undefined): boolean {
+    return codigo(problema) === 'pppoe_local_requiere_api'
 }
 
 export function esScriptRequiereRadius(problema: Problem | null | undefined): boolean {

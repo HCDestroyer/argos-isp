@@ -165,6 +165,7 @@ const puedeAplicar = computed(() => vista.value?.valida && (!reconectar.value ||
                         :version="version"
                         :router="estrategiasDeRouter(router)"
                         :errores="errores"
+                        :sin-radius="esSinRadius(router)"
                     />
                 </template>
                 <template v-else-if="vista">

@@ -70,7 +70,7 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         accion: 'desconectar',
         etiqueta: 'Desconectar sesión',
         confirmar: 'Desconectar sesión',
-        efecto: 'Se envía un Disconnect al router; el equipo del cliente vuelve a conectarse solo.',
+        efecto: 'Se cierra la sesión en el router (Disconnect por RADIUS o, sin RADIUS, quitándola de /ppp/active por la API); el equipo del cliente vuelve a conectarse solo.',
         icono: 'i-lucide-unplug',
         color: 'neutral',
         permiso: 'servicios.desconectar',
@@ -108,7 +108,7 @@ export function accionDisponible(
     if (!accion.desde.includes(servicio.estado)) {
         return false
     }
-    // Sin PPPoE no hay sesión RADIUS que desconectar.
+    // Sin PPPoE no hay sesión PPP que desconectar.
     if (accion.accion === 'desconectar' && (servicio.tipo_conexion ?? 'pppoe') !== 'pppoe') {
         return false
     }

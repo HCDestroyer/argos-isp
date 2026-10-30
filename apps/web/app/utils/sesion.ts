@@ -1,3 +1,5 @@
+import type { Schema } from '@argosisp/contracts'
+
 const UNIDADES = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
 /** `7412000000` → `7.4 GB` (base 1000, como los contadores de RouterOS). */
@@ -50,4 +52,53 @@ export function faltaParaTopeSesion(expiraMaxEn: string | null, ahora: Date = ne
         return null
     }
     return falta
+}
+
+/*
+| Sesiones PPPoE (`Sesion`): por accounting de RADIUS (con contadores) o por sondeo de `/ppp/active`
+| en un router sin RADIUS (`origen = 'sondeo'`, `contratos/pppoe-local.md` §6): sin consumo (bytes en
+| 0, no se muestran) y `nas_ip` puede ser null.
+*/
+type SesionPppoe = Pick<Schema<'Sesion'>, 'origen' | 'nas_ip' | 'bytes_in' | 'bytes_out' | 'causa_fin'>
+
+export const SIN_CONSUMO_SONDEO = '— (sin RADIUS no hay consumo)'
+
+/** Distintivo de una sesión leída por sondeo. */
+export const DISTINTIVO_SONDEO = {
+    etiqueta: 'Por sondeo',
+    icono: 'i-lucide-radar',
+    color: 'info' as const,
+    explicacion: 'Router sin RADIUS: Argos lee /ppp/active cada minuto. El inicio y el fin se ven en el siguiente sondeo y no hay consumo de datos.',
+}
+
+export function esSesionPorSondeo(sesion: Pick<Schema<'Sesion'>, 'origen'>): boolean {
+    return sesion.origen === 'sondeo'
+}
+
+/** IP del NAS de la sesión, o «—» si no hay (sondeo de un router sin `nas_ip`). */
+export function textoNasSesion(sesion: Pick<Schema<'Sesion'>, 'nas_ip'>): string {
+    return sesion.nas_ip ?? '—'
+}
+
+/** Consumo «7.4 GB ↓ / 904 MB ↑»; en una de sondeo, que no hay (los bytes vienen en 0). */
+export function textoConsumoSesion(sesion: SesionPppoe): string {
+    return esSesionPorSondeo(sesion) ? SIN_CONSUMO_SONDEO : `${formatearBytes(sesion.bytes_in)} ↓ / ${formatearBytes(sesion.bytes_out)} ↑`
+}
+
+/** Causas de fin con texto propio; las demás (`Lost-Carrier`, `User-Request`…) se muestran tal cual. */
+const CAUSAS_FIN: Record<string, string> = {
+    'sondeo_sin_sesion': 'Ya no estaba en el router',
+    'sin_interim': 'Cerrada sin noticias del router',
+    'Sesion-Reemplazada': 'Reemplazada por una sesión nueva',
+}
+
+/** Texto de `causa_fin`; `Admin-Reset` en una de sondeo es el `/ppp active remove` de Argos. */
+export function textoCausaFin(sesion: Pick<Schema<'Sesion'>, 'origen' | 'causa_fin'>): string | null {
+    if (!sesion.causa_fin) {
+        return null
+    }
+    if (sesion.causa_fin === 'Admin-Reset' && esSesionPorSondeo(sesion)) {
+        return 'Desconectada por ArgosIsp'
+    }
+    return CAUSAS_FIN[sesion.causa_fin] ?? sesion.causa_fin
 }
