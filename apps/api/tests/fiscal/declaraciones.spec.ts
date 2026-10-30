@@ -72,13 +72,23 @@ function venta(empresaId: number, mes: string, precio: string) {
     return servicioFacturado(empresaId, `${mes}-01`, { precio, instalacion: `${mes}-01` })
 }
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+// Día de la prueba, tomado al empezar cada prueba (`tomarDia` en el setup de cada grupo), nunca al
+// importar el archivo: Japa importa todos los archivos al arrancar y una corrida que cruza la
+// medianoche de Guatemala (06:00 UTC) o el fin de mes comparaba contra el día anterior, mientras la app
+// (`hoyGuatemala()`, `relojFiscal`) ya leía el siguiente.
+let HOY = ''
 /** mes en curso (las facturas y compras de las pruebas se registran hoy) */
-const MES = HOY.slice(0, 7)
-const FIN = DateTime.fromISO(`${MES}-01`).endOf('month').toISODate()!
-const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
-
-const DESPUES = DateTime.fromISO(`${MES}-01`).plus({ months: 2 }).toFormat('yyyy-MM')
+let MES = ''
+let FIN = ''
+let SIGUIENTE = ''
+let DESPUES = ''
+function tomarDia() {
+    HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+    MES = HOY.slice(0, 7)
+    FIN = DateTime.fromISO(`${MES}-01`).endOf('month').toISODate()!
+    SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
+    DESPUES = DateTime.fromISO(`${MES}-01`).plus({ months: 2 }).toFormat('yyyy-MM')
+}
 const reloj = (mes: string) => (relojFiscal.ahora = () => new Date(`${mes}-05T18:00:00Z`))
 const mesTras = (mes: string) => DateTime.fromISO(`${mes}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
 
@@ -94,6 +104,7 @@ const calcular = (
     )
 
 test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original
@@ -463,6 +474,7 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
 })
 
 test.group('Fase 7 · cascada de remanentes (H34)', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original
@@ -583,6 +595,7 @@ test.group('Fase 7 · cascada de remanentes (H34)', (group) => {
 })
 
 test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original
@@ -688,6 +701,7 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
 })
 
 test.group('Fase 7 · declaraciones por la API', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original

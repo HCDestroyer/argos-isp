@@ -38,12 +38,24 @@ import type { ContextoAccion } from '#shared/contexto'
  * `afirmarLibro` (los invariantes del auditor).
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
-const MES = HOY.slice(0, 7)
-const FIN = DateTime.fromISO(`${MES}-01`).endOf('month').toISODate()!
-const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
-const TRIMESTRE = Math.floor((Number(MES.slice(5, 7)) - 1) / 3) + 1
-const INICIO_TRIMESTRE = `${MES.slice(0, 4)}-${String(TRIMESTRE * 3 - 2).padStart(2, '0')}-01`
+// Día de la prueba, tomado al empezar cada prueba (`tomarDia` en el setup de cada grupo), nunca al
+// importar el archivo: Japa importa todos los archivos al arrancar y una corrida que cruza la
+// medianoche de Guatemala (06:00 UTC) o el fin de mes comparaba contra el día anterior, mientras la app
+// (`hoyGuatemala()`, `relojFiscal`) ya leía el siguiente.
+let HOY = ''
+let MES = ''
+let FIN = ''
+let SIGUIENTE = ''
+let TRIMESTRE = 0
+let INICIO_TRIMESTRE = ''
+function tomarDia() {
+    HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+    MES = HOY.slice(0, 7)
+    FIN = DateTime.fromISO(`${MES}-01`).endOf('month').toISODate()!
+    SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
+    TRIMESTRE = Math.floor((Number(MES.slice(5, 7)) - 1) / 3) + 1
+    INICIO_TRIMESTRE = `${MES.slice(0, 4)}-${String(TRIMESTRE * 3 - 2).padStart(2, '0')}-01`
+}
 
 async function parametro(ctx: ContextoAccion, empresaId: number, clave: string, valor: unknown) {
     await new EditarParametro().execute(
@@ -157,6 +169,7 @@ async function tokenConPermisos(permisos: string[]): Promise<string> {
 }
 
 test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original
@@ -451,6 +464,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
 })
 
 test.group('Fase 7 · ISO, ISR trimestral y anual con el cierre anual', (group) => {
+    group.each.setup(tomarDia)
     group.each.teardown(() => soloEmpresaPrincipal())
     group.each.timeout(240_000)
 
@@ -649,6 +663,7 @@ test.group('Fase 7 · ISO, ISR trimestral y anual con el cierre anual', (group) 
 })
 
 test.group('Fase 7 · PR C por la API', (group) => {
+    group.each.setup(tomarDia)
     const original = relojFiscal.ahora
     group.each.teardown(async () => {
         relojFiscal.ahora = original

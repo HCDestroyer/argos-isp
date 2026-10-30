@@ -1,7 +1,6 @@
 import { test } from '@japa/runner'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { normalizarReglasPromesa } from '#billing/reglas_promesa'
-import { servicioCortado } from '#tests/billing/ayudas_billing'
+import { reglasPromesaSinTopeFacturacion, servicioCortado } from '#tests/billing/ayudas_billing'
 import { construirOpenApi } from '#shared/openapi/documento'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import CumplirPromesa from '#billing/actions/cumplir_promesa'
@@ -111,9 +110,11 @@ test.group('billing · contrato de resultado_evaluacion', (group) => {
         }
         const { token: cajero } = await usuarioConRoles(['cajero'])
         const { token: admin } = await usuarioConRoles(['admin'])
+        // promesas por HTTP con el reloj real: sin el tope de la siguiente facturación (`AHORA_PROMESAS`)
+        const sinTope = { plantilla: { reglas_promesa: reglasPromesaSinTopeFacturacion() } }
 
         // aprobada → cancelada
-        const a = await servicioCortado()
+        const a = await servicioCortado(sinTope)
         const aprobada = await crear(client, cajero, a.servicioId)
         assert.equal(aprobada.body().estado, 'activa')
         assert.isNull(aprobada.body().resultado_evaluacion.regla)
@@ -128,16 +129,16 @@ test.group('billing · contrato de resultado_evaluacion', (group) => {
         revisar(cancelada.body(), 'cancelada')
 
         // rechazada: la regla exacta que falló
-        const b = await servicioCortado()
+        const b = await servicioCortado(sinTope)
         const rechazada = await crear(client, cajero, b.servicioId, 60)
         assert.equal(rechazada.body().estado, 'rechazada')
         assert.equal(rechazada.body().resultado_evaluacion.regla, 'plazo_max_dias')
         revisar(rechazada.body(), 'rechazada')
 
         // pendiente → aprobada por el supervisor; otra pendiente → rechazada por el supervisor
-        const reglas = JSON.stringify(
-            normalizarReglasPromesa({ canales: { operador: { requiere_aprobacion: true } } }),
-        )
+        const reglas = reglasPromesaSinTopeFacturacion({
+            canales: { operador: { requiere_aprobacion: true } },
+        })
         const c = await servicioCortado({ plantilla: { reglas_promesa: reglas } })
         const pendiente = await crear(client, cajero, c.servicioId)
         assert.equal(pendiente.body().resultado_evaluacion.regla, 'requiere_aprobacion')
@@ -164,7 +165,7 @@ test.group('billing · contrato de resultado_evaluacion', (group) => {
         revisar(rechazadaSup.body(), 'rechazada por el supervisor')
 
         // cumplida (cierre con pagado y deuda_vencida)
-        const e = await servicioCortado()
+        const e = await servicioCortado(sinTope)
         const activa = await crear(client, cajero, e.servicioId)
         await new RegistrarPago().execute(
             { cliente_id: e.clienteId, metodo: 'agente', monto: '300.00' },
