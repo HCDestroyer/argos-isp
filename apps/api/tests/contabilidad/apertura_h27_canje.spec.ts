@@ -36,7 +36,7 @@ import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
 import AnularFactura from '#billing/actions/anular_factura'
 import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
-import { cuentaBancariaPrueba, servicioCortado } from '#tests/billing/ayudas_billing'
+import { cuentaBancariaPrueba, servicioCortado, unicoBd } from '#tests/billing/ayudas_billing'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import CrearPremio from '#lealtad/actions/crear_premio'
 import Canjear from '#lealtad/actions/canjear'
@@ -79,7 +79,7 @@ async function importar(
     const r = await new ImportarFacturaPendiente().execute(
         {
             origen: 'auditoria',
-            id_externo: unico('f'),
+            id_externo: await unicoBd('f'),
             cliente_id: cliente,
             empresa_id: empresaId,
             cargo_unico: true,
@@ -150,7 +150,7 @@ test.group('Auditor contable · cierre de los saldos de apertura (§23)', (group
         await new RegistrarSaldoInicial().execute(
             {
                 origen: 'auditoria',
-                id_externo: unico('s'),
+                id_externo: await unicoBd('s'),
                 cliente_id: await crearClienteFila(),
                 empresa_id: e.B,
                 monto: '-35.50',
@@ -163,7 +163,7 @@ test.group('Auditor contable · cierre de los saldos de apertura (§23)', (group
             {
                 historico: true,
                 origen: 'auditoria',
-                id_externo: unico('p'),
+                id_externo: await unicoBd('p'),
                 cliente_id: cliente,
                 metodo: 'deposito',
                 monto: '100.00',
@@ -487,7 +487,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
         assert,
     }) => {
         const datos = await servicioCortado()
-        const checkout = `ch_${unico('a')}`
+        const checkout = `ch_${await unicoBd('a')}`
         await conRecurrente(checkout, 30000, async () => {
             const cobro = await new CrearCobroPasarela().execute(
                 { cliente_id: datos.clienteId },
@@ -501,7 +501,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
                     amount_in_cents: centavos,
                     details: { fee: 1050 },
                 },
-                `msg_${unico('u')}`,
+                `msg_${await unicoBd('u')}`,
             )
             const legacy = webhook(
                 {
@@ -510,7 +510,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
                     amount_in_cents: centavos,
                     fee: 1050,
                 },
-                `msg_${unico('l')}`,
+                `msg_${await unicoBd('l')}`,
             )
             const uno = await new ProcesarWebhookPasarela().execute(
                 { proveedor: 'recurrente', ...unificado },
@@ -545,7 +545,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
         assert,
     }) => {
         const datos = await servicioCortado()
-        const checkout = `ch_${unico('v')}`
+        const checkout = `ch_${await unicoBd('v')}`
         await conRecurrente(checkout, 30000, async () => {
             const cobro = await new CrearCobroPasarela().execute(
                 { cliente_id: datos.clienteId },
@@ -564,7 +564,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
                     vat_withheld: Number(retenido.times(100).toFixed(0)),
                     vat_withheld_currency: 'GTQ',
                 },
-                `msg_${unico('w')}`,
+                `msg_${await unicoBd('w')}`,
             )
             const r = await new ProcesarWebhookPasarela().execute(
                 { proveedor: 'recurrente', ...w },
@@ -601,7 +601,7 @@ test.group('Auditor contable · egresos del cajero', (group) => {
         const c = await usuarioConRoles(['cajero'])
         const ctx = contextoPrueba(c.usuario.id)
         const caja = await new CrearCaja().execute(
-            { nombre: unico('Caja'), cajero_id: c.usuario.id, empresa_id: e.B },
+            { nombre: await unicoBd('Caja'), cajero_id: c.usuario.id, empresa_id: e.B },
             e.ctx,
         )
         await new AbrirCaja().execute({ caja_id: caja.id, fondo_inicial: fondo }, ctx)
@@ -716,7 +716,7 @@ async function cobroPagado(e: Empresas, checkout: string, extra: Record<string, 
                     fee: 1050,
                     ...extra,
                 },
-                `msg_${unico('p')}`,
+                `msg_${await unicoBd('p')}`,
             ),
         },
         contextoSistema('webhook'),
@@ -766,7 +766,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('r')}`
+        const checkout = `ch_${await unicoBd('r')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, centavos } = await cobroPagado(e, checkout)
             assert.equal(await deudaDe(e.B, s.clienteId), '0.00')
@@ -785,7 +785,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
                             },
                             intentable: { checkout: { id: checkout } },
                         },
-                        `msg_${unico('rp')}`,
+                        `msg_${await unicoBd('rp')}`,
                     ),
                 },
                 contextoSistema('webhook'),
@@ -798,7 +798,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
 
     test('reembolso total: anula el pago, la deuda vuelve y el libro cuadra', async ({ assert }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('t')}`
+        const checkout = `ch_${await unicoBd('t')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, centavos, pago } = await cobroPagado(e, checkout)
             const r = await new ProcesarWebhookPasarela().execute(
@@ -814,7 +814,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
                             },
                             intentable: { checkout: { id: checkout } },
                         },
-                        `msg_${unico('rt')}`,
+                        `msg_${await unicoBd('rt')}`,
                     ),
                 },
                 contextoSistema('webhook'),
@@ -829,7 +829,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
 
     test('monto distinto del cobro: no registra el pago ni toca el libro', async ({ assert }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('m')}`
+        const checkout = `ch_${await unicoBd('m')}`
         await conRecurrente(checkout, 0, async () => {
             const s = await servicioFacturado(e.B, '2026-10-01', {
                 precio: '300.00',
@@ -850,7 +850,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
                             amount_in_cents: Number(dec(cobro.monto).times(100).toFixed(0)) - 1,
                             fee: 100,
                         },
-                        `msg_${unico('md')}`,
+                        `msg_${await unicoBd('md')}`,
                     ),
                 },
                 contextoSistema('webhook'),
@@ -876,7 +876,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
             },
             e.ctx,
         )
-        const checkout = `ch_${unico('pc')}`
+        const checkout = `ch_${await unicoBd('pc')}`
         await conRecurrente(checkout, 0, async () => {
             const { pago } = await cobroPagado(e, checkout, { vat_withheld: 482 })
             assert.isNotNull(pago.pago_id)
@@ -926,7 +926,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
         const saldo = await new RegistrarSaldoInicial().execute(
             {
                 origen: 'auditoria',
-                id_externo: unico('s'),
+                id_externo: await unicoBd('s'),
                 cliente_id: cliente,
                 empresa_id: e.B,
                 monto: '80.00',
@@ -965,7 +965,7 @@ function deCentavosTexto(centavos: number) {
 }
 
 /** Aviso de reembolso de Recurrente (`refund.update` hecho) por `centavos`. */
-function reembolso(checkout: string, id: string, centavos: number) {
+async function reembolso(checkout: string, id: string, centavos: number) {
     return new ProcesarWebhookPasarela().execute(
         {
             proveedor: 'recurrente',
@@ -975,7 +975,7 @@ function reembolso(checkout: string, id: string, centavos: number) {
                     refund: { id, status: 'succeeded', customer_refunded_amount_in_cents: centavos },
                     intentable: { checkout: { id: checkout } },
                 },
-                `msg_${unico('re')}`,
+                `msg_${await unicoBd('re')}`,
             ),
         },
         contextoSistema('webhook'),
@@ -1000,7 +1000,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('rr')}`
+        const checkout = `ch_${await unicoBd('rr')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, pago } = await cobroPagado(e, checkout)
             const bruto = dec(cobro.monto)
@@ -1050,7 +1050,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('rc')}`
+        const checkout = `ch_${await unicoBd('rc')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, centavos } = await cobroPagado(e, checkout)
             // devuelve todo menos Q5.00 (la comisión es Q10.50)
@@ -1083,7 +1083,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('d')}`
+        const checkout = `ch_${await unicoBd('d')}`
         await conRecurrente(checkout, 0, async () => {
             const { pago } = await cobroPagado(e, checkout)
             const antes = await bancoNeto(e.B)
@@ -1093,7 +1093,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
                         proveedor: 'recurrente',
                         ...webhook(
                             { event_type: tipo, id: 'dp_1', reason: 'fraude', checkout: { id: checkout } },
-                            `msg_${unico('dp')}`,
+                            `msg_${await unicoBd('dp')}`,
                         ),
                     },
                     contextoSistema('webhook'),
@@ -1126,7 +1126,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             },
             e.ctx,
         )
-        const checkout = `ch_${unico('lq')}`
+        const checkout = `ch_${await unicoBd('lq')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, pago, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
             const fila = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
@@ -1137,7 +1137,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             await new LiquidarCobros().execute(
                 {
                     proveedor_cobro_id: proveedor.id,
-                    referencia: unico('liq'),
+                    referencia: await unicoBd('liq'),
                     bruto: puente,
                     comision: '10.50',
                     pagos: [pago.pago_id!],
@@ -1154,7 +1154,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             await new LiquidarCobros().execute(
                 {
                     proveedor_cobro_id: proveedor.id,
-                    referencia: unico('liq'),
+                    referencia: await unicoBd('liq'),
                     bruto: aTexto(CERO.minus(puente)),
                     comision: '0.00',
                     pagos: [],
@@ -1172,7 +1172,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('eb')}`
+        const checkout = `ch_${await unicoBd('eb')}`
         await conRecurrente(checkout, 0, async () => {
             const s = await servicioFacturado(e.B, '2026-10-01', {
                 precio: '300.00',
@@ -1199,7 +1199,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
                             amount_in_cents: centavos,
                             fee: centavos + 100,
                         },
-                        `msg_${unico('eb')}`,
+                        `msg_${await unicoBd('eb')}`,
                     ),
                 },
                 contextoSistema('webhook'),
@@ -1256,7 +1256,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
 })
 
 /** Reembolso con monto debitado al comercio distinto del devuelto al cliente. */
-function reembolsoConCuenta(checkout: string, id: string, cliente: number, cuenta: number) {
+async function reembolsoConCuenta(checkout: string, id: string, cliente: number, cuenta: number) {
     return new ProcesarWebhookPasarela().execute(
         {
             proveedor: 'recurrente',
@@ -1271,7 +1271,7 @@ function reembolsoConCuenta(checkout: string, id: string, cliente: number, cuent
                     },
                     intentable: { checkout: { id: checkout } },
                 },
-                `msg_${unico('rc')}`,
+                `msg_${await unicoBd('rc')}`,
             ),
         },
         contextoSistema('webhook'),
@@ -1285,7 +1285,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('rr')}`
+        const checkout = `ch_${await unicoBd('rr')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
             // quedan Q4.00 (menos que lo retenido, Q4.82, y que la comisión, Q10.50)
@@ -1313,7 +1313,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         const e = await prepararEmpresasGt()
         const resultado: Array<{ ret: string; dinero: string }> = []
         for (const queda of [483, 482]) {
-            const checkout = `ch_${unico('h70')}`
+            const checkout = `ch_${await unicoBd('h70')}`
             await conRecurrente(checkout, 0, async () => {
                 const { centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
                 const ret0 = dec(await saldoCuenta(e.B, '1.1.05'))
@@ -1345,7 +1345,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('h71')}`
+        const checkout = `ch_${await unicoBd('h71')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro } = await cobroPagado(e, checkout)
             const antes = dec(await bancoNeto(e.B))
@@ -1370,7 +1370,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('tot')}`
+        const checkout = `ch_${await unicoBd('tot')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, cobro, centavos } = await cobroPagado(e, checkout)
             const antes = dec(await bancoNeto(e.B))
@@ -1413,14 +1413,14 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
             },
             e.ctx,
         )
-        const checkout = `ch_${unico('pmc')}`
+        const checkout = `ch_${await unicoBd('pmc')}`
         await conRecurrente(checkout, 0, async () => {
             const { s, pago } = await cobroPagado(e, checkout)
             const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
             await new LiquidarCobros().execute(
                 {
                     proveedor_cobro_id: proveedor.id,
-                    referencia: unico('liq'),
+                    referencia: await unicoBd('liq'),
                     bruto: original.monto,
                     comision: '10.50',
                     pagos: [pago.pago_id!],
@@ -1446,7 +1446,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const checkout = `ch_${unico('h72')}`
+        const checkout = `ch_${await unicoBd('h72')}`
         await conRecurrente(checkout, 0, async () => {
             const { s } = await cobroPagado(e, checkout)
             const antes = dec(await bancoNeto(e.B))
@@ -1458,7 +1458,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
             assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '12.50')
         })
         // una comisión devuelta mayor que la del pago sigue siendo 422 (y el reembolso no se aplica)
-        const otro = `ch_${unico('h72b')}`
+        const otro = `ch_${await unicoBd('h72b')}`
         await conRecurrente(otro, 0, async () => {
             const x = await cobroPagado(e, otro)
             const malo = await reembolsoConCuenta(otro, 're_malo', 10000, 8000)
@@ -1475,7 +1475,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         const e = await prepararEmpresasGt()
         const comisiones: string[] = []
         for (const deja of [1, 0]) {
-            const checkout = `ch_${unico('h73')}`
+            const checkout = `ch_${await unicoBd('h73')}`
             await conRecurrente(checkout, 0, async () => {
                 const { centavos } = await cobroPagado(e, checkout)
                 const antes = dec(await saldoCuenta(e.B, '5.1.02'))
@@ -1503,7 +1503,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
             },
             e.ctx,
         )
-        const checkout = `ch_${unico('pq')}`
+        const checkout = `ch_${await unicoBd('pq')}`
         await conRecurrente(checkout, 0, async () => {
             const { pago, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
             const r = await reembolso(checkout, 're_pq', centavos - 400)
@@ -1517,7 +1517,7 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
             await new LiquidarCobros().execute(
                 {
                     proveedor_cobro_id: proveedor.id,
-                    referencia: unico('liq'),
+                    referencia: await unicoBd('liq'),
                     bruto: aTexto(puenteReemplazo),
                     comision: '0.00',
                     pagos: [r.pago_reemplazo_id!],

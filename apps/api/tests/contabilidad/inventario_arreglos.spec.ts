@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -47,11 +48,11 @@ async function pequenoContribuyente(e: EmpresasGt, empresaId: number, desde = '2
     )
 }
 
-function fact(proveedorId: number, lineas: unknown[], extra: Record<string, unknown> = {}) {
+async function fact(proveedorId: number, lineas: unknown[], extra: Record<string, unknown> = {}) {
     return {
         proveedor_id: proveedorId,
         tipo_documento: 'FACT',
-        numero: unico('F'),
+        numero: await unicoBd('F'),
         fecha_documento: haceMeses(0),
         condicion: 'credito',
         ...extra,
@@ -63,9 +64,10 @@ function fact(proveedorId: number, lineas: unknown[], extra: Record<string, unkn
 async function equipos(e: EmpresasGt, n: number, fecha = haceMeses(0)) {
     const onu = await productoEn(e.B, e.ctx, { nombre: 'ONU GPON', tipo: 'equipo', seguimiento: 'serie' })
     const bodega = await bodegaEn(e.B, e.ctx)
+    const series = await Promise.all(Array.from({ length: n }, () => unicoBd('ZTEG')))
     const proveedor = await proveedorEn(e.B, e.ctx)
     const compra = await new RegistrarCompra().execute(
-        fact(
+        await fact(
             proveedor.id,
             [
                 {
@@ -75,7 +77,7 @@ async function equipos(e: EmpresasGt, n: number, fecha = haceMeses(0)) {
                     cantidad: n,
                     producto_id: onu.id,
                     bodega_id: bodega.id,
-                    unidades: Array.from({ length: n }, () => ({ serie: unico('ZTEG') })),
+                    unidades: series.map((serie) => ({ serie })),
                 },
             ],
             { fecha_documento: fecha },
@@ -98,7 +100,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
         const proveedor = await proveedorEn(e.C, e.ctx)
         const pedido = await errorDe(
             new RegistrarCompra().execute(
-                fact(proveedor.id, [{ descripcion: 'Router', tipo: 'bien', total: '112.00' }], {
+                await fact(proveedor.id, [{ descripcion: 'Router', tipo: 'bien', total: '112.00' }], {
                     credito_fiscal: true,
                 }),
                 e.ctx,
@@ -106,12 +108,12 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
         )
         assert.include(pedido.reglas, 'credito_no_permitido')
         const gasto = await new RegistrarCompra().execute(
-            fact(proveedor.id, [{ descripcion: 'Enlace', tipo: 'servicio', total: '224.00' }]),
+            await fact(proveedor.id, [{ descripcion: 'Enlace', tipo: 'servicio', total: '224.00' }]),
             e.ctx,
         )
         assert.isFalse(gasto.credito_fiscal)
         const ncre = await new RegistrarCompra().execute(
-            fact(proveedor.id, [{ descripcion: 'Descuento', tipo: 'servicio', total: '22.40' }], {
+            await fact(proveedor.id, [{ descripcion: 'Descuento', tipo: 'servicio', total: '22.40' }], {
                 tipo_documento: 'NCRE',
                 compra_referencia_id: gasto.id,
             }),
@@ -134,7 +136,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
                 egreso_id: egreso.id,
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('E'),
+                numero: await unicoBd('E'),
                 fecha_documento: haceMeses(0),
                 lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '560.00' }],
             },
@@ -145,7 +147,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
         assert.equal(dec(sinCredito).toFixed(2), '0.00')
         // un documento del mes anterior al cambio de régimen todavía da crédito
         const anterior = await new RegistrarCompra().execute(
-            fact(proveedor.id, [{ descripcion: 'Router', tipo: 'bien', total: '112.00' }], {
+            await fact(proveedor.id, [{ descripcion: 'Router', tipo: 'bien', total: '112.00' }], {
                 fecha_documento: haceMeses(1, 20),
             }),
             e.ctx,
@@ -238,7 +240,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
         // 3. devuelta al proveedor con NCRE y la NCRE anulada: la compra queda como esté, el libro cuadra
         const c = await equipos(e, 1)
         const nota = await new RegistrarCompra().execute(
-            fact(
+            await fact(
                 c.proveedor.id,
                 [
                     {
@@ -297,7 +299,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
             {
                 producto_id: equipo.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('LT') },
+                unidad: { serie: await unicoBd('LT') },
                 costo_total: '100.00',
                 fecha: inicio,
             },

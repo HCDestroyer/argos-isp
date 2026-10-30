@@ -1,8 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
-import { unico } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
-import { generar } from '#tests/billing/ayudas_billing'
+import { generar, siguienteDeSecuencia } from '#tests/billing/ayudas_billing'
 import { Problema } from '#shared/errores'
 import { ConsumidorBilling } from '#billing/consumidor'
 import RegistrarPago, { type EntradaRegistrarPago } from '#billing/actions/registrar_pago'
@@ -235,6 +234,8 @@ export class EscenarioGenerativo {
     private foto!: FotoLibro
     private marcas!: { acciones: number; outbox: number }
     private referencia = 0
+    /** Marca de esta corrida (secuencia de la base): las referencias no chocan con otra corrida de la misma semilla. */
+    private corrida!: number
     readonly pasos: Paso[] = []
     private extra: Violacion[] = []
     private readonly fel: boolean
@@ -277,6 +278,7 @@ export class EscenarioGenerativo {
 
     async preparar() {
         this.marcas = await marcasAuditoria()
+        this.corrida = await siguienteDeSecuencia('audit.outbox')
         if (this.fel) {
             this.e = await empresasFel('obligatoria')
             await configurarModo(this.e, this.e.C, 'opcional')
@@ -512,7 +514,7 @@ export class EscenarioGenerativo {
 
     private nuevaReferencia(prefijo: string) {
         this.referencia += 1
-        return `${prefijo}-${this.semilla}-${this.referencia}-${unico('r')}`
+        return `${prefijo}-${this.semilla}-${this.referencia}-r-${this.corrida}`
     }
 
     /** Monto aleatorio en centavos entre 1 y el pendiente (parcial). */

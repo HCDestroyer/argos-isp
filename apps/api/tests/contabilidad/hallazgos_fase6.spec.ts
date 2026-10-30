@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { prepararEmpresas, servicioEn, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
@@ -63,7 +64,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         const importada = await new ImportarFacturaPendiente().execute(
             {
                 origen: 'auditoria',
-                id_externo: unico('f'),
+                id_externo: await unicoBd('f'),
                 cliente_id: s.clienteId,
                 empresa_id: e.B,
                 cargo_unico: true,

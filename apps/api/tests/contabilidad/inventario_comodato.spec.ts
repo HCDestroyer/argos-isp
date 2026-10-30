@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -50,12 +51,13 @@ async function comprarEquipos(
     n: number,
     fecha?: string,
 ) {
+    const series = await Promise.all(Array.from({ length: n }, () => unicoBd('ZTEG')))
     const proveedor = await proveedorEn(e.B, e.ctx)
     const compra = await new RegistrarCompra().execute(
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: fecha ?? haceMeses(0),
             condicion: 'credito',
             lineas: [
@@ -66,7 +68,7 @@ async function comprarEquipos(
                     cantidad: n,
                     producto_id: productoId,
                     bodega_id: bodegaId,
-                    unidades: Array.from({ length: n }, () => ({ serie: unico('ZTEG') })),
+                    unidades: series.map((serie) => ({ serie })),
                 },
             ],
         },
@@ -242,7 +244,7 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'NCRE',
-                numero: unico('NC'),
+                numero: await unicoBd('NC'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 compra_referencia_id: compra.id,
@@ -267,7 +269,7 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 lineas: [
@@ -377,7 +379,7 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
             {
                 producto_id: onu.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('ZTEG') },
+                unidad: { serie: await unicoBd('ZTEG') },
                 costo_total: '1200.00',
                 fecha: `${ANIO}-01-10`,
             },

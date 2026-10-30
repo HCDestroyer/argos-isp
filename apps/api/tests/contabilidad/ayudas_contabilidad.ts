@@ -1,7 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEmpresaFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
-import { crearPlantillaFila, cuentaBancariaPrueba, generar } from '#tests/billing/ayudas_billing'
+import { crearPlantillaFila, cuentaBancariaPrueba, generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { Problema } from '#shared/errores'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoAnticipos } from '#billing/cobros'
@@ -38,7 +38,7 @@ export async function prepararEmpresas(): Promise<Empresas> {
     const cuentas = new Map<number, number>()
     for (const empresaId of [B, C]) {
         const caja = await new CrearCaja().execute(
-            { nombre: unico('Caja'), cajero_id: usuario.id, empresa_id: empresaId },
+            { nombre: await unicoBd('Caja'), cajero_id: usuario.id, empresa_id: empresaId },
             ctx,
         )
         await new AbrirCaja().execute({ caja_id: caja.id, fondo_inicial: '100.00' }, ctx)

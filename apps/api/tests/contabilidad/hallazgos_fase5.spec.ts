@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { crearClienteFila } from '#tests/core/fabricas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
@@ -7,7 +8,6 @@ import { errorDe, saldoCuenta, sacarDeLaColaFel } from '#tests/contabilidad/ayud
 import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
 import { haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
-import { unico } from '#tests/ayudas'
 import { verActivo } from '#ledger/activos'
 import db from '@adonisjs/lucid/services/db'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
@@ -115,7 +115,7 @@ test.group('Auditor contable · hallazgos de la fase 5', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('H20'),
+                numero: await unicoBd('H20'),
                 fecha_documento: haceMeses(6, 5),
                 condicion: 'credito',
                 retenciones: [],
@@ -180,7 +180,7 @@ test.group('Auditor contable · hallazgos de la fase 5', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('LCK'),
+                numero: await unicoBd('LCK'),
                 fecha_documento: haceMeses(3, 5),
                 condicion: 'credito',
                 retenciones: [],

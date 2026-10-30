@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { cuentaBancariaPrueba } from '#tests/billing/ayudas_billing'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { cuentaBancariaPrueba, unicoBd } from '#tests/billing/ayudas_billing'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
 import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
@@ -58,7 +58,7 @@ test.group('Auditor contable · fase 4 (cobros y bancos)', (group) => {
             },
             e.ctx,
         )
-        const pagar = (monto: string) =>
+        const pagar = async (monto: string) =>
             new RegistrarPago().execute(
                 {
                     cliente_id: s.clienteId,
@@ -66,7 +66,7 @@ test.group('Auditor contable · fase 4 (cobros y bancos)', (group) => {
                     pasarela: 'falsa',
                     monto,
                     comision: '1.00',
-                    referencia: unico('PAS'),
+                    referencia: await unicoBd('PAS'),
                     empresa_id: e.B,
                 },
                 e.ctx,

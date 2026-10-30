@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { llevarFacturasA, llevarPagosA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro, huellaTablas } from '#tests/contabilidad/verificar_libro'
@@ -54,7 +55,7 @@ async function compra(e: EmpresasGt, proveedorId: number, total: string) {
         {
             proveedor_id: proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('D'),
+            numero: await unicoBd('D'),
             fecha_documento: HOY,
             condicion: 'credito',
             lineas: [{ descripcion: 'Servicio', total }],

@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { CUENTAS } from '#ledger/plan_cuentas'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { crearClienteFila } from '#tests/core/fabricas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
@@ -44,7 +45,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         const importada = await new ImportarFacturaPendiente().execute(
             {
                 origen: 'auditoria',
-                id_externo: unico('h12'),
+                id_externo: await unicoBd('h12'),
                 cliente_id: clienteId,
                 empresa_id: e.B,
                 cargo_unico: true,
@@ -132,7 +133,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
                 metodo: 'pasarela',
                 pasarela: 'falsa',
                 monto: '100.00',
-                referencia: unico('PAS'),
+                referencia: await unicoBd('PAS'),
                 empresa_id: e.B,
             },
             e.ctx,

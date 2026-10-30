@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
@@ -104,7 +105,7 @@ test.group('Auditor contable · cajas y bancos (4)', (group) => {
                 metodo: 'deposito',
                 monto: '150.00',
                 cuenta_bancaria_id: e.cuentas.get(e.B)!,
-                referencia: unico('BOL'),
+                referencia: await unicoBd('BOL'),
             },
             e.ctx,
         )
@@ -114,7 +115,7 @@ test.group('Auditor contable · cajas y bancos (4)', (group) => {
                 metodo: 'deposito',
                 monto: '20.00',
                 cuenta_bancaria_id: e.cuentas.get(e.B)!,
-                referencia: unico('BOL'),
+                referencia: await unicoBd('BOL'),
             },
             e.ctx,
         )
@@ -131,7 +132,7 @@ test.group('Auditor contable · cajas y bancos (4)', (group) => {
                     pasarela: 'falsa',
                     monto,
                     comision,
-                    referencia: unico('PAS'),
+                    referencia: await unicoBd('PAS'),
                     empresa_id: empresaId,
                 },
                 e.ctx,
@@ -160,7 +161,7 @@ test.group('Auditor contable · cajas y bancos (4)', (group) => {
                     cliente_id: s.clienteId,
                     metodo,
                     monto: '10.00',
-                    referencia: unico(metodo),
+                    referencia: await unicoBd(metodo),
                     empresa_id: e.B,
                     ...(metodo === 'pasarela' ? { comision: '0.35', pasarela: 'falsa' } : {}),
                 },

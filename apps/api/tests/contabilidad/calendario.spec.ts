@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
@@ -137,7 +138,7 @@ test.group('Auditor contable · calendario fiscal', (group) => {
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: '2026-10-05',
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Mantenimiento de red', total: '112.00' }],
