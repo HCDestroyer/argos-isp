@@ -67,6 +67,39 @@ export async function llevarFacturasA(facturas: number[], fecha: string) {
     })
 }
 
+/**
+ * Lleva las notas de crédito (la nota y su asiento) a `fecha`: la emisión usa la fecha real de hoy,
+ * y una prueba con instante fijo (`relojFiscal`) necesita la nota en ese día, no en el del reloj.
+ */
+export async function llevarNotasA(notas: number[], fecha: string) {
+    await db.transaction(async (trx) => {
+        await trx.rawQuery('ALTER TABLE ledger.asientos DISABLE TRIGGER USER')
+        await trx.rawQuery(
+            `UPDATE ledger.asientos SET fecha = ? WHERE origen_tipo = 'nota_credito' AND origen_id = ANY(?::bigint[])`,
+            [fecha, notas],
+        )
+        await trx.rawQuery('ALTER TABLE ledger.asientos ENABLE TRIGGER USER')
+        await trx.rawQuery('ALTER TABLE billing.notas_credito DISABLE TRIGGER USER')
+        await trx.rawQuery(`UPDATE billing.notas_credito SET fecha = ? WHERE id = ANY(?::bigint[])`, [
+            fecha,
+            notas,
+        ])
+        await trx.rawQuery('ALTER TABLE billing.notas_credito ENABLE TRIGGER USER')
+    })
+}
+
+/** Lleva el asiento de los pagos a `fecha` (el pago se registra con la fecha real de hoy). */
+export async function llevarPagosA(pagos: number[], fecha: string) {
+    await db.transaction(async (trx) => {
+        await trx.rawQuery('ALTER TABLE ledger.asientos DISABLE TRIGGER USER')
+        await trx.rawQuery(
+            `UPDATE ledger.asientos SET fecha = ? WHERE origen_tipo = 'pago' AND origen_id = ANY(?::bigint[])`,
+            [fecha, pagos],
+        )
+        await trx.rawQuery('ALTER TABLE ledger.asientos ENABLE TRIGGER USER')
+    })
+}
+
 /** Un mes pasado con una factura (sin FEL), una compra y un asiento manual, cerrado y bajo el global. */
 export async function mesConMovimiento(
     e: Empresas,
