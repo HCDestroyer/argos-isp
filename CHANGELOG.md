@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/HCDestroyer/argos-isp/compare/v1.4.0...v1.4.1) (2026-10-30)
+
+
+### Correcciones
+
+* **infra:** Caddy sin SNI detrás de un proxy y confianza en la red de compose ([#198](https://github.com/HCDestroyer/argos-isp/issues/198)) ([9f82148](https://github.com/HCDestroyer/argos-isp/commit/9f82148e6313e4a5c0213663d78e3c714a73d786))
+* **infra:** prueba de distribución sin grep -q sobre la tubería de compose logs ([#196](https://github.com/HCDestroyer/argos-isp/issues/196)) ([eed0da2](https://github.com/HCDestroyer/argos-isp/commit/eed0da286724809bb7b54868d952f8259e6a1bc4))
+
 ## [1.4.0](https://github.com/HCDestroyer/argos-isp/compare/v1.3.0...v1.4.0) (2026-10-30)
 
 
