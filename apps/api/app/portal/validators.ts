@@ -103,7 +103,11 @@ export const solicitarPromesaValidator = vine.compile(
     vine.object({
         // Día de pago (YYYY-MM-DD, hora de Guatemala); la promesa vence a las 23:59:59 de ese día.
         vence_el: fechaIso(),
-        monto: dinero(),
+        monto: dinero().optional().meta({
+            deprecated: true,
+            description:
+                'Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)',
+        }),
         servicio_id: servicioDeLaSesion(),
     }),
 )

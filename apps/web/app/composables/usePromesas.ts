@@ -3,7 +3,11 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Promesa = Schema<'Promesa'>
 export type EstadoPromesa = Promesa['estado']
 export type CanalPromesa = Promesa['canal']
-export type DatosPromesa = paths['/api/v1/promesas']['post']['requestBody']['content']['application/json']
+/**
+ * Cuerpo de `POST /promesas` sin `monto`: la promesa cubre todo lo vencido y Argos calcula el monto
+ * (decisión del PM, 29 oct; el campo quedó obsoleto y la API lo ignora).
+ */
+export type DatosPromesa = Omit<paths['/api/v1/promesas']['post']['requestBody']['content']['application/json'], 'monto'>
 export type FiltrosPromesas = Omit<NonNullable<paths['/api/v1/promesas']['get']['parameters']['query']>, 'cursor'>
 
 export type SimulacionPromesa = Schema<'SimulacionPromesa'>
@@ -24,7 +28,8 @@ export function usePromesas() {
 
     /**
      * `POST /promesas` (`promesas.crear`): responde 201 tanto si la promesa queda activa como si
-     * se rechaza o queda pendiente; `resultado_evaluacion` dice qué regla decidió.
+     * se rechaza o queda pendiente; `resultado_evaluacion` dice qué regla decidió. La respuesta
+     * trae el monto calculado (el total vencido), `facturas` y `regla_cumplimiento`.
      */
     function crear(datos: DatosPromesa, claveIdempotencia: string): Promise<Resultado<Promesa>> {
         return resolver(api.POST('/api/v1/promesas', {
@@ -62,11 +67,20 @@ export function usePromesas() {
 
     /**
      * `POST /promesas/simular` (`promesas.ver`): evalúa todas las reglas sin crear nada ni dejar
-     * auditoría. `resultado` y `regla` son los mismos que daría `POST /promesas`.
+     * auditoría. `resultado` y `regla` son los mismos que daría `POST /promesas`; `monto` y
+     * `facturas`, lo que cubriría (todo lo vencido).
      */
-    function simular(datos: CuerpoSimulacion): Promise<Resultado<SimulacionPromesa>> {
+    function simular(datos: Omit<CuerpoSimulacion, 'monto'>): Promise<Resultado<SimulacionPromesa>> {
         return resolver(api.POST('/api/v1/promesas/simular', { body: datos }))
     }
 
-    return { listar, crear, aprobar, rechazar, cancelar, simular }
+    /**
+     * Lo que cubriría una promesa creada ahora por ese canal (facturas vencidas, total, abono
+     * inicial y fecha límite): la misma simulación, sin fecha (la API usa mañana).
+     */
+    function cobertura(servicioId: number, canal: CanalPromesa): Promise<Resultado<SimulacionPromesa>> {
+        return simular({ servicio_id: servicioId, canal })
+    }
+
+    return { listar, crear, aprobar, rechazar, cancelar, simular, cobertura }
 }

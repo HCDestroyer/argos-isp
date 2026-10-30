@@ -1,6 +1,5 @@
 import type { Transaccion } from '#shared/domain_action'
-import { ResolverPromesa, siCumplida, type FilaPromesa } from '#billing/cierre_promesa'
-import { aTexto } from '#ledger/dinero'
+import { ResolverPromesa, detalleAvance, siCumplida, type FilaPromesa } from '#billing/cierre_promesa'
 
 /** `promesas.incumplir`: ver `cierre_promesa.ts`. La llama el cron `incumplirPromesas`. */
 export default class IncumplirPromesa extends ResolverPromesa {
@@ -16,7 +15,7 @@ export default class IncumplirPromesa extends ResolverPromesa {
         if (decision) return decision
         return {
             estado: 'incumplida' as const,
-            detalle: { pagado: aTexto(avance.pagado), deuda_vencida: aTexto(avance.vencida) },
+            detalle: detalleAvance(avance),
         }
     }
 }

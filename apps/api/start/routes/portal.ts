@@ -798,7 +798,8 @@ const promesas: Ruta[] = [
         operacion: 'portalPromesaCondiciones',
         resumen: 'Límites de una promesa de pago desde el portal (antes de enviarla)',
         descripcion:
-            'Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si ' +
+            'Solo lectura: plazo y fecha máximos del canal portal, lo que cubriría la promesa (`monto_promesa`: ' +
+            'todo lo vencido, y sus `facturas`), abono inicial y si ' +
             'requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las ' +
             `dice el resultado de \`POST /portal/promesas\`. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
@@ -819,12 +820,13 @@ const promesas: Ruta[] = [
         operacion: 'portalSolicitarPromesa',
         resumen: 'El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)',
         descripcion:
+            'La promesa cubre todo lo vencido: Argos calcula el monto (`monto` del cuerpo se ignora) y responde ' +
+            '`monto` y `facturas`; se cumple cuando todas quedan pagadas. ' +
             'Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, ' +
             '`sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa ' +
             'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
             '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
-            '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
-            'pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. ' +
+            '`promesa_abierta` si ya hay una activa o pendiente; 422 si la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. ' +
             `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
@@ -845,7 +847,7 @@ const promesas: Ruta[] = [
                     {
                         servicio_id: titular.servicioId,
                         vence_en: venceAlFinalDelDia(cuerpo.vence_el),
-                        monto: cuerpo.monto,
+                        // sin monto: la promesa cubre todo lo vencido (`contratos/promesas.md`)
                         canal: 'portal',
                     },
                     contextoDelTitular(ctx, titular),

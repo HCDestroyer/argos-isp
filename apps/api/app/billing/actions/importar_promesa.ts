@@ -259,6 +259,8 @@ export default class ImportarPromesa extends DomainAction<EntradaImportarPromesa
                 vence_en: vence,
                 monto: aTexto(monto),
                 estado: 'activa',
+                // vigente en el sistema de origen con su monto: se cumple con la regla de monto
+                regla_cumplimiento: 'monto',
                 canal,
                 origen: claveOrigen.origen,
                 clave_externa: clave,

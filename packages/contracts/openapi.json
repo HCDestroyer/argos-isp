@@ -51721,7 +51721,7 @@
       "post": {
         "operationId": "portalSolicitarPromesa",
         "summary": "El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "La promesa cubre todo lo vencido: Argos calcula el monto (`monto` del cuerpo se ignora) y responde `monto` y `facturas`; se cumple cuando todas quedan pagadas. Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -51753,10 +51753,11 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)",
                     "examples": [
                       "150.00"
-                    ]
+                    ],
+                    "deprecated": true
                   },
                   "servicio_id": {
                     "type": "integer",
@@ -51765,8 +51766,7 @@
                   }
                 },
                 "required": [
-                  "vence_el",
-                  "monto"
+                  "vence_el"
                 ],
                 "additionalProperties": false
               }
@@ -51822,7 +51822,7 @@
       "get": {
         "operationId": "portalPromesaCondiciones",
         "summary": "Límites de una promesa de pago desde el portal (antes de enviarla)",
-        "description": "Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Solo lectura: plazo y fecha máximos del canal portal, lo que cubriría la promesa (`monto_promesa`: todo lo vencido, y sus `facturas`), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -53438,7 +53438,7 @@
       "post": {
         "operationId": "promesasCrear",
         "summary": "Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
+        "description": "Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
         "tags": [
           "promesas"
         ],
@@ -53481,10 +53481,11 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)",
                     "examples": [
                       "150.00"
-                    ]
+                    ],
+                    "deprecated": true
                   },
                   "canal": {
                     "type": "string",
@@ -53498,8 +53499,7 @@
                 },
                 "required": [
                   "servicio_id",
-                  "vence_en",
-                  "monto"
+                  "vence_en"
                 ],
                 "additionalProperties": false
               }
@@ -53981,10 +53981,11 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Por defecto: la deuda pendiente del servicio",
+                    "description": "Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)",
                     "examples": [
                       "150.00"
-                    ]
+                    ],
+                    "deprecated": true
                   },
                   "evaluar_en": {
                     "type": "string",
@@ -75304,6 +75305,10 @@
           "deuda_vencida": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Cumplida o incumplida: deuda vencida al resolverse"
+          },
+          "saldo_cubierto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida con regla_cumplimiento=facturas: saldo que les quedaba a las facturas cubiertas"
           }
         }
       },
@@ -84611,6 +84616,43 @@
           }
         }
       },
+      "FacturaCubierta": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "tipo",
+          "periodo",
+          "vence_en",
+          "monto"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora",
+              "cargo"
+            ],
+            "description": "La mora es su propia factura"
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de la factura al crear la promesa (lo que cubre)"
+          }
+        }
+      },
       "FacturaDetalle": {
         "allOf": [
           {
@@ -84804,6 +84846,53 @@
           "aplicado_en": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "FacturaPromesa": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "tipo",
+          "periodo",
+          "vence_en",
+          "monto",
+          "saldo",
+          "estado"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora",
+              "cargo"
+            ],
+            "description": "La mora es su propia factura"
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de la factura al crear la promesa (lo que cubre)"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo hoy (0.00 si ya no está pendiente)"
+          },
+          "estado": {
+            "type": "string",
+            "description": "Estado actual de la factura"
           }
         }
       },
@@ -91723,8 +91812,8 @@
           "fecha_minima",
           "fecha_maxima",
           "plazo_max_dias",
-          "monto_maximo",
-          "monto_sugerido",
+          "monto_promesa",
+          "facturas",
           "abono_inicial",
           "deuda_maxima",
           "pago_previo",
@@ -91792,7 +91881,7 @@
             ],
             "minimum": 0
           },
-          "monto_maximo": {
+          "monto_promesa": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Dinero"
@@ -91801,18 +91890,14 @@
                 "type": "null"
               }
             ],
-            "description": "Deuda pendiente del servicio"
+            "description": "Lo que cubriría la promesa si se crea ahora: todo lo vencido (facturas y mora). El cliente no lo escribe"
           },
-          "monto_sugerido": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Dinero"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Saldo vencido (o pendiente si no hay vencido)"
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaCubierta"
+            },
+            "description": "Facturas vencidas que cubriría, la más antigua primero. La promesa se cumple cuando todas quedan pagadas"
           },
           "abono_inicial": {
             "type": [
@@ -92743,6 +92828,8 @@
           "servicio_id",
           "vence_en",
           "monto",
+          "regla_cumplimiento",
+          "facturas",
           "estado",
           "canal",
           "created_at"
@@ -92761,7 +92848,23 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total vencido al crearla (regla facturas) o el prometido (legado)"
+          },
+          "regla_cumplimiento": {
+            "type": "string",
+            "enum": [
+              "monto",
+              "facturas"
+            ],
+            "description": "facturas: se cumple al pagar todas las de `facturas`. monto (legado): al pagar el monto"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaPromesa"
+            },
+            "description": "Facturas que cubre (vacía con la regla monto)"
           },
           "estado": {
             "type": "string",
@@ -92796,6 +92899,7 @@
           "resultado",
           "vence_en",
           "monto",
+          "facturas",
           "motivo",
           "corregible",
           "servicio_estado"
@@ -92818,7 +92922,15 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total vencido que cubre la promesa (lo calcula Argos)"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaCubierta"
+            },
+            "description": "Facturas que cubre; se cumple cuando todas quedan pagadas"
           },
           "motivo": {
             "type": "string",
@@ -92826,7 +92938,7 @@
           },
           "corregible": {
             "type": "boolean",
-            "description": "Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto"
+            "description": "Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar la fecha no sirve: el portal ofrece el contacto"
           },
           "servicio_estado": {
             "anyOf": [
@@ -94133,7 +94245,23 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "regla_cumplimiento=facturas: total vencido al crearla (mora incluida), calculado por Argos. monto: el prometido (legado)"
+          },
+          "regla_cumplimiento": {
+            "type": "string",
+            "enum": [
+              "monto",
+              "facturas"
+            ],
+            "description": "facturas: se cumple cuando todas las de `facturas` quedan saldadas (promesas nuevas). monto (legado: abiertas al 29 oct e importadas): lo pagado llega al monto o no queda deuda vencida. Siempre presente en la respuesta"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaPromesa"
+            },
+            "description": "Facturas vencidas que cubre, con su saldo al crearla y hoy (vacía con la regla monto). Siempre presente en la respuesta"
           },
           "estado": {
             "type": "string",
@@ -102597,7 +102725,15 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total vencido que cubriría la promesa (lo calcula Argos)"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaCubierta"
+            },
+            "description": "Facturas vencidas que cubriría, la más antigua primero"
           },
           "evaluada_en": {
             "type": "string",
@@ -102795,6 +102931,17 @@
               },
               "en_periodo": {
                 "type": "integer"
+              },
+              "monto_promesa": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Total vencido que cubriría una promesa creada ahora"
+              },
+              "facturas": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FacturaCubierta"
+                },
+                "description": "Facturas vencidas que cubriría"
               }
             }
           },

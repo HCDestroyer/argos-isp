@@ -155,6 +155,9 @@ export function datosEvaluacion(evaluacion: EvaluacionPromesaApi): { clave: stri
         if (c.deuda_vencida) {
             partes.push(`deuda vencida ${formatearQuetzales(c.deuda_vencida)}`)
         }
+        if (c.saldo_cubierto) {
+            partes.push(`saldo de las facturas cubiertas ${formatearQuetzales(c.saldo_cubierto)}`)
+        }
         datos.push({ clave: 'cierre', etiqueta: 'Cierre', valor: partes.join(' · ') })
     }
     return datos
@@ -192,22 +195,126 @@ export const DECISIONES: Record<DecisionPromesa, { etiqueta: string, color: 'suc
     pendiente: { etiqueta: 'Pendiente de aprobación', color: 'warning', icono: 'i-lucide-hourglass' },
 }
 
-const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 
 /**
- * Espejo de `POST /promesas`: monto > 0 con hasta 2 decimales y vencimiento en el futuro. El
- * día se elige en hora de Guatemala y se manda como el final de ese día en UTC.
+ * Espejo de `POST /promesas`: vencimiento en el futuro y canal. Sin monto: la promesa cubre todo
+ * lo vencido y Argos lo calcula (decisión del PM, 29 oct). El día se elige en hora de Guatemala y
+ * se manda como el final de ese día en UTC.
  */
 export function esquemaPromesa(hoy: string) {
     return z.object({
-        monto: z.string()
-            .trim()
-            .regex(MONTO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 175.00)')
-            .refine(valor => !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero'),
         vence: z.string().regex(FECHA, 'Elige el día').refine(dia => dia >= hoy, 'Debe ser hoy o un día futuro'),
         canal: z.enum(['operador', 'supervisor']),
     })
 }
 
 export type DatosFormularioPromesa = z.output<ReturnType<typeof esquemaPromesa>>
+
+/*
+|--------------------------------------------------------------------------
+| Lo que cubre una promesa (`contratos/promesas.md`, 29 oct)
+|--------------------------------------------------------------------------
+*/
+
+export type FacturaCubierta = Schema<'FacturaCubierta'>
+export type FacturaPromesa = Schema<'FacturaPromesa'>
+export type ReglaCumplimiento = NonNullable<PromesaPago['regla_cumplimiento']>
+type Simulacion = Schema<'SimulacionPromesa'>
+
+export const REGLAS_CUMPLIMIENTO: Record<ReglaCumplimiento, { etiqueta: string, descripcion: string, icono: string }> = {
+    facturas: {
+        etiqueta: 'Por facturas',
+        descripcion: 'Se cumple cuando todas las facturas que cubre quedan saldadas; un pago parcial no la cumple.',
+        icono: 'i-lucide-files',
+    },
+    monto: {
+        etiqueta: 'Por monto',
+        descripcion: 'Promesa anterior al cambio: se cumple cuando lo pagado llega al monto o ya no queda deuda vencida.',
+        icono: 'i-lucide-coins',
+    },
+}
+
+const TIPOS_FACTURA: Record<FacturaCubierta['tipo'], string> = {
+    servicio: 'Servicio',
+    mora: 'Mora',
+    cargo: 'Cargo',
+}
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+/** `Servicio de septiembre 2026`, `Mora de octubre 2026`. */
+export function etiquetaFacturaCubierta(factura: Pick<FacturaCubierta, 'tipo' | 'periodo'>): string {
+    const [anio, mes] = factura.periodo.split('-')
+    const nombreMes = MESES[Number(mes) - 1]
+    return `${TIPOS_FACTURA[factura.tipo]}${nombreMes ? ` de ${nombreMes} ${anio}` : ` · ${factura.periodo}`}`
+}
+
+/** `2 facturas vencidas`. */
+export function textoFacturas(cantidad: number): string {
+    return `${cantidad} ${cantidad === 1 ? 'factura vencida' : 'facturas vencidas'}`
+}
+
+/**
+ * Lo que cubriría una promesa creada ahora, leído de `POST /promesas/simular` (`monto`,
+ * `facturas` y `limites`). Todo sale de la API: el panel no suma ni calcula nada aparte del abono
+ * que falta (requerido − pagado, con decimal.js).
+ */
+export interface CoberturaPromesa {
+    monto: string
+    facturas: FacturaCubierta[] | null
+    abonoRequerido: string
+    abonoPagado: string
+    abonoFalta: string
+    fechaMaxima: string
+    /** Sin facturas vencidas no hay nada que prometer (`sin_deuda`). */
+    sinVencido: boolean
+}
+
+export function coberturaDeSimulacion(simulacion: Pick<Simulacion, 'monto' | 'facturas' | 'limites'>): CoberturaPromesa {
+    const { limites } = simulacion
+    const falta = abonoFaltante(limites)
+    return {
+        monto: simulacion.monto,
+        facturas: simulacion.facturas ?? limites.facturas ?? null,
+        abonoRequerido: limites.abono_requerido,
+        abonoPagado: limites.abono_pagado,
+        abonoFalta: falta.toFixed(2),
+        fechaMaxima: limites.fecha_maxima,
+        sinVencido: !new Decimal(simulacion.monto).gt(0),
+    }
+}
+
+/**
+ * Por qué no se puede crear la promesa, sin importar la fecha elegida: no hay nada vencido, falta
+ * el abono inicial o el servicio ya tiene una promesa abierta (validación `promesa_abierta`).
+ * `null` si se puede intentar (las reglas que dependen de la fecha las decide la API al crear).
+ */
+export function motivoNoCreable(simulacion: Pick<Simulacion, 'monto' | 'facturas' | 'limites' | 'reglas' | 'validaciones'>): string | null {
+    const abierta = simulacion.validaciones.find(v => v.campo === 'servicio_id' && !v.ok)
+    if (abierta) {
+        return `${abierta.detalle}: ciérrala antes de crear otra.`
+    }
+    const cobertura = coberturaDeSimulacion(simulacion)
+    if (cobertura.sinVencido) {
+        return simulacion.reglas.find(r => r.regla === 'sin_deuda' && !r.ok)?.detalle ?? 'El servicio no tiene facturas vencidas: no hace falta promesa'
+    }
+    if (new Decimal(cobertura.abonoFalta).gt(0)) {
+        return `Falta abonar ${formatearQuetzales(cobertura.abonoFalta)} antes de prometer (requerido ${formatearQuetzales(cobertura.abonoRequerido)}, pagado ${formatearQuetzales(cobertura.abonoPagado)}): registra el abono primero.`
+    }
+    return null
+}
+
+/** Una línea con la regla de cumplimiento y lo que cubre, para la lista y la ficha. */
+export function resumenCumplimiento(promesa: Pick<PromesaPago, 'regla_cumplimiento' | 'facturas'>): string | null {
+    if (!promesa.regla_cumplimiento) {
+        return null
+    }
+    const regla = REGLAS_CUMPLIMIENTO[promesa.regla_cumplimiento].etiqueta
+    if (promesa.regla_cumplimiento === 'monto' || !promesa.facturas?.length) {
+        return regla
+    }
+    const pendientes = promesa.facturas.filter(f => new Decimal(f.saldo).gt(0)).length
+    const cubre = `cubre ${textoFacturas(promesa.facturas.length)}`
+    return `${regla} · ${cubre}${pendientes ? ` · ${pendientes} con saldo` : ' · todas saldadas'}`
+}

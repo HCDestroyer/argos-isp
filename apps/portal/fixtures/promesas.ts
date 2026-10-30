@@ -12,6 +12,17 @@ export function diaFixture(dias = 0): string {
     return fecha.toISOString().slice(0, 10)
 }
 
+/**
+ * Las dos facturas vencidas de `QUIEN_SOY_SUSPENDIDO` (Q350.00 de los Q525.00 que debe): lo que
+ * cubre una promesa creada ahora, la más antigua primero (`limitesPromesa().facturas`).
+ */
+export function facturasCubiertasFixture(): Schema<'FacturaCubierta'>[] {
+    return [
+        { factura_id: 1150, tipo: 'servicio', periodo: '2026-09-01', vence_en: '2026-09-10', monto: '175.00' },
+        { factura_id: 1203, tipo: 'servicio', periodo: '2026-10-01', vence_en: '2026-10-10', monto: '175.00' },
+    ]
+}
+
 /** Mismos montos que `QUIEN_SOY_SUSPENDIDO`: debe Q525.00, vencido Q350.00. Canal portal: 3 días. */
 export function condicionesFixture(): Schema<'PortalCondicionesPromesa'> {
     return {
@@ -21,8 +32,8 @@ export function condicionesFixture(): Schema<'PortalCondicionesPromesa'> {
         fecha_minima: diaFixture(0),
         fecha_maxima: diaFixture(3),
         plazo_max_dias: 3,
-        monto_maximo: '525.00',
-        monto_sugerido: '350.00',
+        monto_promesa: '350.00',
+        facturas: facturasCubiertasFixture(),
         abono_inicial: null,
         deuda_maxima: null,
         pago_previo: null,
@@ -50,14 +61,28 @@ export function condicionesConPromesaFixture(): Schema<'PortalCondicionesPromesa
         fecha_minima: null,
         fecha_maxima: null,
         plazo_max_dias: null,
-        monto_maximo: null,
-        monto_sugerido: null,
+        monto_promesa: null,
+        facturas: [],
+    }
+}
+
+/** Sin facturas vencidas (lo pendiente aún no vence): no hay nada que prometer. */
+export function condicionesSinVencidoFixture(): Schema<'PortalCondicionesPromesa'> {
+    return {
+        ...condicionesFixture(),
+        disponible: false,
+        motivo: 'No tienes facturas vencidas: no necesitas una promesa de pago.',
+        fecha_minima: null,
+        fecha_maxima: null,
+        plazo_max_dias: null,
+        monto_promesa: null,
+        facturas: [],
     }
 }
 
 export type ResultadoPromesaFixture = Schema<'PortalPromesaSolicitada'>['resultado']
 
-/** `rechazada` es por cupo del periodo (cambiar fecha o monto no sirve); `rechazada_fecha`, por el plazo. */
+/** `rechazada` es por cupo del periodo (cambiar la fecha no sirve); `rechazada_fecha`, por el plazo. */
 export type EscenarioResultadoFixture = ResultadoPromesaFixture | 'rechazada_fecha'
 
 const MOTIVOS: Record<ResultadoPromesaFixture, string> = {
@@ -66,10 +91,10 @@ const MOTIVOS: Record<ResultadoPromesaFixture, string> = {
     pendiente_aprobacion: 'Un asesor revisará tu solicitud y te avisaremos cuando quede aprobada.',
 }
 
-/** Respuesta de `POST /portal/promesas` con el resultado pedido. */
+/** Respuesta de `POST /portal/promesas` con el resultado pedido: cubre todo lo vencido (Q350.00). */
 export function promesaSolicitadaFixture(
     escenario: EscenarioResultadoFixture,
-    datos: { vence_el: string, monto: string },
+    datos: { vence_el: string },
 ): Schema<'PortalPromesaSolicitada'> {
     const resultado: ResultadoPromesaFixture = escenario === 'rechazada_fecha' ? 'rechazada' : escenario
     return {
@@ -77,7 +102,8 @@ export function promesaSolicitadaFixture(
         resultado,
         // 23:59:59 de Guatemala (UTC−6) = 05:59:59 UTC del día siguiente.
         vence_en: new Date(`${datos.vence_el}T23:59:59-06:00`).toISOString(),
-        monto: datos.monto,
+        monto: '350.00',
+        facturas: facturasCubiertasFixture(),
         motivo: escenario === 'rechazada_fecha' ? 'La fecha de pago debe estar dentro de los próximos 3 días.' : MOTIVOS[resultado],
         corregible: escenario === 'rechazada_fecha',
         servicio_estado: resultado === 'aprobada' ? 'activo' : null,

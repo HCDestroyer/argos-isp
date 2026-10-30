@@ -2,13 +2,15 @@ import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { ReglaNegocio } from '#shared/errores'
-import { aTexto, dec } from '#ledger/dinero'
+import { aTexto } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import {
+    abonoRequerido,
     datosEvaluacion,
     evaluarReglas,
     type DatosEvaluacion,
+    type FacturaCubierta,
     type ResultadoEvaluacion,
 } from '#billing/promesas'
 import {
@@ -27,7 +29,10 @@ import { ServicioPendienteInstalacion } from '#core/instalacion'
  * completa: revisa todas las reglas (no se detiene en la primera que falla) y marca con
  * `aplica: false` las que la configuración no exige. `resultado` y `regla` son exactamente los
  * que daría crear la promesa con los mismos datos; `validaciones` son los errores que crear
- * respondería antes de evaluar (monto, vencimiento, promesa abierta).
+ * respondería antes de evaluar (vencimiento, promesa abierta).
+ *
+ * Una promesa cubre todo lo vencido (decisión del PM, 29 oct): `monto` y `facturas` son lo que
+ * cubriría crearla ahora (las facturas vencidas con saldo, mora incluida). Nadie escribe el monto.
  */
 
 export interface EntradaSimulacion {
@@ -35,8 +40,8 @@ export interface EntradaSimulacion {
     canal: CanalPromesa
     /** por defecto: el fin de mañana en Guatemala */
     vence_en?: Date
-    /** por defecto: la deuda pendiente del servicio */
-    monto?: string
+    /** @deprecated Obsoleto desde el 29 oct: se ignora (el monto es el total vencido) */
+    monto?: string | null
     /** instante de referencia (simular otro día); por defecto ahora */
     ahora?: Date
     /**
@@ -47,6 +52,7 @@ export interface EntradaSimulacion {
 }
 
 export interface Validacion {
+    /** `monto` ya no se emite (el monto no se escribe); se conserva en el tipo por compatibilidad */
     campo: 'monto' | 'vence_en' | 'servicio_id'
     ok: boolean
     regla: string
@@ -68,13 +74,20 @@ export interface LimitesPromesa {
     abono_pagado: string
     max_por_periodo: number
     en_periodo: number
+    /** lo que cubriría una promesa creada ahora: el total vencido (mora incluida) */
+    monto_promesa: string
+    /** las facturas vencidas que cubriría, la más antigua primero */
+    facturas: FacturaCubierta[]
 }
 
 export interface Simulacion extends ResultadoEvaluacion {
     servicio_id: number
     cliente_id: number
     vence_en: string
+    /** total vencido que cubriría la promesa (lo calcula Argos) */
     monto: string
+    /** facturas vencidas que cubriría, con su saldo */
+    facturas: FacturaCubierta[]
     /** lo que respondería crear la promesa: el resultado de las reglas o `error` (ver validaciones) */
     resultado_creacion: ResultadoEvaluacion['resultado'] | 'error'
     validaciones: Validacion[]
@@ -113,12 +126,14 @@ export function limitesDe(datos: DatosEvaluacion): LimitesPromesa {
         deuda_pendiente: aTexto(datos.deuda.pendiente),
         deuda_vencida: aTexto(datos.deuda.vencida),
         deuda_maxima: deudaMaxima === null ? null : aTexto(deudaMaxima),
-        abono_requerido: aTexto(datos.deuda.total_pendientes.times(reglas.abono_inicial_pct).div(100)),
-        abono_pagado: aTexto(datos.deuda.pagado_pendientes),
+        abono_requerido: aTexto(abonoRequerido(datos)),
+        abono_pagado: aTexto(datos.abono.abonado),
         max_por_periodo:
             delCanal.max_por_periodo ??
             (buen ? reglas.max_por_periodo_buen_historial : reglas.max_por_periodo),
         en_periodo: datos.en_periodo,
+        monto_promesa: aTexto(datos.cobertura.monto),
+        facturas: datos.cobertura.facturas,
     }
 }
 
@@ -151,27 +166,7 @@ export async function simularPromesa(
         ahora,
     })
     const evaluacion = evaluarReglas(datos, { completo: true })
-    const monto = entrada.monto ? dec(entrada.monto) : datos.deuda.pendiente
-
     const validaciones: Validacion[] = []
-    const montoOk = monto.gt(0) && monto.decimalPlaces() <= 2
-    validaciones.push({
-        campo: 'monto',
-        ok: montoOk,
-        regla: 'monto',
-        detalle: montoOk ? `Monto Q${aTexto(monto)}` : 'El monto debe ser mayor que 0 con hasta 2 decimales',
-    })
-    if (montoOk && datos.deuda.pendiente.gt(0)) {
-        const ok = monto.lte(datos.deuda.pendiente)
-        validaciones.push({
-            campo: 'monto',
-            ok,
-            regla: 'monto_maximo',
-            detalle: ok
-                ? `No supera la deuda pendiente (Q${aTexto(datos.deuda.pendiente)})`
-                : `El monto supera la deuda pendiente del servicio (Q${aTexto(datos.deuda.pendiente)})`,
-        })
-    }
     const futura = venceEn > ahora
     validaciones.push({
         campo: 'vence_en',
@@ -201,7 +196,8 @@ export async function simularPromesa(
         servicio_id: servicio.id,
         cliente_id: servicio.cliente_id,
         vence_en: venceEn.toISOString(),
-        monto: aTexto(monto),
+        monto: aTexto(datos.cobertura.monto),
+        facturas: datos.cobertura.facturas,
         resultado_creacion: validaciones.every((v) => v.ok) ? evaluacion.resultado : 'error',
         validaciones,
         limites: limitesDe(datos),

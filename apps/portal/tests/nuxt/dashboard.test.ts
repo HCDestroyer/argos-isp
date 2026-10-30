@@ -96,8 +96,11 @@ describe('accesos rápidos: solo lo que la API aceptaría ahora', () => {
     it('promesa solo con condiciones disponibles; mientras se leen, no aparece', () => {
         expect(idsDe({ promesaDisponible: false })).not.toContain('promesa')
         expect(idsDe({ promesaDisponible: null })).not.toContain('promesa')
-        expect(promesaPermitida({ disponible: true, pago_previo: '262.50' })).toBe(false)
-        expect(promesaPermitida({ disponible: true, pago_previo: null })).toBe(true)
+        expect(promesaPermitida({ disponible: true, pago_previo: '262.50', monto_promesa: '350.00' })).toBe(false)
+        expect(promesaPermitida({ disponible: true, pago_previo: null, monto_promesa: '350.00' })).toBe(true)
+        // sin nada vencido no se ofrece aunque diga disponible
+        expect(promesaPermitida({ disponible: true, pago_previo: null, monto_promesa: '0.00' })).toBe(false)
+        expect(promesaPermitida({ disponible: true, pago_previo: null, monto_promesa: null })).toBe(false)
         expect(promesaPermitida(null)).toBeNull()
     })
 

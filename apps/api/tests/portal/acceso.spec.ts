@@ -556,7 +556,10 @@ test.group('Portal: sesión y datos del cliente', (group) => {
             estado: 'activa',
             monto: '100.00',
             servicio_id: propio.servicioId,
+            // una promesa de antes del cambio conserva su regla, sin facturas
+            regla_cumplimiento: 'monto',
         })
+        assert.deepEqual(promesas.body().data[0].facturas, [])
     })
 
     test('salir revoca la sesión y una sesión vencida pide código otra vez', async ({ client, assert }) => {

@@ -31,6 +31,13 @@ onMounted(recargar)
                     <p class="text-xs text-muted">
                         A más tardar el {{ formatearFechaHora(promesa.vence_en) }}
                     </p>
+                    <p
+                        v-if="promesa.regla_cumplimiento === 'facturas' && promesa.facturas.length > 0"
+                        class="mt-1 text-xs text-muted"
+                        data-testid="promesa-cubre-facturas"
+                    >
+                        {{ textoCoberturaPromesa(promesa.facturas.length) }}
+                    </p>
                 </div>
                 <UBadge
                     :label="ESTADOS_PROMESA[promesa.estado].etiqueta"

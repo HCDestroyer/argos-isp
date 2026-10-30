@@ -5,7 +5,7 @@ import { Conflicto, NoEncontrado, Problema, ReglaNegocio } from '#shared/errores
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
-import type { ReglaEvaluada, ResultadoEvaluacion } from '#billing/promesas'
+import type { FacturaCubierta, ReglaEvaluada, ResultadoEvaluacion } from '#billing/promesas'
 import { limitesPromesa, type LimitesPromesa } from '#billing/simulador_promesas'
 import type { ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
 import { resolverServicio, type EstadoServicio } from '#portal/consultas'
@@ -17,8 +17,11 @@ import { exigirSesionPortal } from '#portal/acceso/sesion'
  *
  * - `servicioDeLaPeticion`: qué servicio pide la promesa (IP de origen o sesión del portal).
  * - `condicionesPromesa`: los límites que se muestran **antes** de enviar (plazo y fecha máximos,
- *   monto máximo, abono inicial, deuda máxima, cupo), de `limitesPromesa()` de A3: la misma
- *   evaluación que `CrearPromesaPago`, sin reglas copiadas aquí.
+ *   lo que cubriría la promesa, abono inicial, deuda máxima, cupo), de `limitesPromesa()` de A3: la
+ *   misma evaluación que `CrearPromesaPago`, sin reglas copiadas aquí.
+ *
+ * La promesa cubre todo lo vencido (`contratos/promesas.md`, «Monto y cumplimiento»): el cliente
+ * no escribe un monto; Argos lo calcula y la promesa se cumple al pagar todas esas facturas.
  * - `promesaParaCliente`: la respuesta sin datos internos, con el motivo en palabras del cliente
  *   (nunca el código de la regla).
  */
@@ -77,8 +80,10 @@ export interface CondicionesPromesa {
     fecha_minima: string | null
     fecha_maxima: string | null
     plazo_max_dias: number | null
-    monto_maximo: string | null
-    monto_sugerido: string | null
+    /** total vencido que cubriría la promesa creada ahora */
+    monto_promesa: string | null
+    /** facturas vencidas que cubriría, la más antigua primero */
+    facturas: FacturaCubierta[]
     abono_inicial: { porcentaje: number; requerido: string; abonado: string; faltante: string } | null
     deuda_maxima: { maximo: string; vencida: string; faltante: string } | null
     pago_previo: string | null
@@ -92,8 +97,8 @@ const NO_DISPONIBLE = (motivo: string, extra: Partial<CondicionesPromesa> = {}):
     fecha_minima: null,
     fecha_maxima: null,
     plazo_max_dias: null,
-    monto_maximo: null,
-    monto_sugerido: null,
+    monto_promesa: null,
+    facturas: [],
     abono_inicial: null,
     deuda_maxima: null,
     pago_previo: null,
@@ -102,6 +107,9 @@ const NO_DISPONIBLE = (motivo: string, extra: Partial<CondicionesPromesa> = {}):
 })
 
 const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
+
+/** Sin facturas vencidas no hay nada que prometer (lo que aún no vence se paga en su fecha). */
+const SIN_VENCIDO = 'No tienes facturas vencidas: no necesitas una promesa de pago.'
 
 /**
  * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3): no hay corte que evitar ni
@@ -115,7 +123,8 @@ const INSTALACION_PENDIENTE =
  * reglas propias: salen de `limitesPromesa()` de A3 (la misma evaluación que `CrearPromesaPago`).
  * Aquí solo se traducen al cliente:
  *
- * - plazo y fecha máxima (con `no_exceder_siguiente_facturacion`), monto máximo = deuda pendiente;
+ * - plazo y fecha máxima (con `no_exceder_siguiente_facturacion`); lo que cubre la promesa
+ *   (`monto_promesa`, todo lo vencido) y sus facturas. Sin nada vencido no se ofrece;
  * - `abono_inicial` y `deuda_maxima`, y `pago_previo`: lo que debe pagar antes de que la promesa
  *   pueda aprobarse (el mayor de los dos faltantes). El portal no deja enviar mientras sea > 0;
  * - cupo del periodo agotado o canal cerrado: no disponible, con el motivo.
@@ -167,9 +176,9 @@ export async function condicionesPromesa(
     if (!limites.habilitadas || !limites.permitido) {
         return NO_DISPONIBLE(`Las promesas de pago no están disponibles desde esta página. ${CONTACTANOS}`)
     }
-    const pendiente = dec(limites.deuda_pendiente)
-    if (pendiente.lte(0)) {
-        return NO_DISPONIBLE('No tienes saldo pendiente: no necesitas una promesa de pago.')
+    const cubre = dec(limites.monto_promesa)
+    if (cubre.lte(0)) {
+        return NO_DISPONIBLE(SIN_VENCIDO)
     }
     if (limites.en_periodo >= limites.max_por_periodo) {
         return NO_DISPONIBLE(`Ya usaste las promesas de pago disponibles para este periodo. ${CONTACTANOS}`)
@@ -213,8 +222,8 @@ export async function condicionesPromesa(
         fecha_minima: hoy,
         fecha_maxima: fechaMaxima,
         plazo_max_dias: limites.plazo_max_dias,
-        monto_maximo: aTexto(pendiente),
-        monto_sugerido: aTexto(vencida.gt(0) ? vencida : pendiente),
+        monto_promesa: aTexto(cubre),
+        facturas: limites.facturas,
         abono_inicial: abono,
         deuda_maxima: deudaMaxima,
         pago_previo: previo.gt(0) ? aTexto(previo) : null,
@@ -233,19 +242,21 @@ export interface PromesaSolicitada {
     id: number
     resultado: ResultadoEvaluacion['resultado']
     vence_en: Date
+    /** total vencido que cubre (lo calcula Argos) */
     monto: string
+    /** facturas que cubre: se cumple cuando todas quedan pagadas */
+    facturas: FacturaCubierta[]
     motivo: string
-    /** rechazada por una regla que se cumple cambiando la fecha (ofrecer "Cambiar fecha o monto") */
+    /** rechazada por una regla que se cumple cambiando la fecha (ofrecer "Cambiar fecha") */
     corregible: boolean
     /** estado del servicio tras la promesa (solo si quedó aprobada) */
     servicio_estado: EstadoServicio | null
 }
 
 /**
- * Reglas de la evaluación que el cliente puede cumplir cambiando la fecha o el monto de la misma
- * solicitud. El resto (cupo del periodo, historial, antigüedad, deuda máxima, abono, canal) no
- * cambia con otra fecha u otro monto: el portal ofrece el contacto en lugar de "Cambiar".
- * El monto mayor que la deuda no llega aquí: es un 422 del formulario.
+ * Reglas de la evaluación que el cliente puede cumplir cambiando la fecha de la misma solicitud.
+ * El resto (cupo del periodo, historial, antigüedad, deuda máxima, abono, canal) no cambia con otra
+ * fecha: el portal ofrece el contacto en lugar de "Cambiar fecha". El monto no lo elige el cliente.
  */
 const REGLAS_CORREGIBLES = new Set(['plazo_max_dias', 'no_exceder_siguiente_facturacion'])
 
@@ -308,7 +319,7 @@ export function motivoParaCliente(evaluacion: ResultadoEvaluacion): string {
         case 'canal_permitido':
             return `Las promesas de pago no están disponibles desde esta página. ${CONTACTANOS}`
         case 'sin_deuda':
-            return 'No tienes saldo pendiente: no necesitas una promesa de pago.'
+            return SIN_VENCIDO
         case 'plazo_max_dias':
             if (limite === 0) return 'La fecha de pago debe ser hoy.'
             if (limite === 1) return 'La fecha de pago debe ser hoy o mañana.'
@@ -363,6 +374,13 @@ export function promesaParaCliente(promesa: ResultadoCrearPromesa): PromesaSolic
         resultado: evaluacion.resultado,
         vence_en: promesa.vence_en,
         monto: promesa.monto,
+        facturas: (promesa.facturas ?? []).map(({ factura_id, tipo, periodo, vence_en, monto }) => ({
+            factura_id: Number(factura_id),
+            tipo,
+            periodo,
+            vence_en,
+            monto,
+        })),
         motivo: motivoParaCliente(evaluacion),
         corregible: esCorregible(evaluacion),
         servicio_estado: promesa.servicio?.estado ?? null,
@@ -371,7 +389,7 @@ export function promesaParaCliente(promesa: ResultadoCrearPromesa): PromesaSolic
 
 /**
  * Errores de `CrearPromesaPago` en palabras del cliente: el 409 de A3 nombra ids internos y el 422
- * `sin_plantilla` habla de la configuración. El resto (422 de `monto`/`vence_en`) ya es legible.
+ * `sin_plantilla` habla de la configuración. El resto (422 de `vence_en`) ya es legible.
  */
 export function errorParaCliente(error: unknown): unknown {
     if (!(error instanceof Problema)) return error

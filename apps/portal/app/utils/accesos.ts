@@ -181,11 +181,14 @@ export function rutaContactoEmpresa(empresaId: number | null | undefined): strin
 
 /**
  * Lo que dicen las condiciones de promesa, reducido a "se puede pedir ahora": `disponible` y sin
- * pago previo pendiente (abono inicial o deuda máxima), que la API rechazaría.
+ * pago previo pendiente (abono inicial o deuda máxima), que la API rechazaría, y con algo vencido
+ * que cubrir (`monto_promesa` > 0).
  */
-export function promesaPermitida(condiciones: Pick<CondicionesPromesa, 'disponible' | 'pago_previo'> | null): boolean | null {
+export function promesaPermitida(
+    condiciones: Pick<CondicionesPromesa, 'disponible' | 'pago_previo' | 'monto_promesa'> | null,
+): boolean | null {
     if (condiciones === null) {
         return null
     }
-    return condiciones.disponible && !condiciones.pago_previo
+    return condiciones.disponible && !condiciones.pago_previo && hayVencidoQuePrometer(condiciones)
 }
