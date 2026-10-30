@@ -46,7 +46,7 @@ export default class EliminarRouter extends DomainAction<EntradaEliminarRouter, 
             .where('id', id)
             .forUpdate()
             .select('*', t.trx.raw('host(nas_ip) AS nas_ip_texto'))
-            .first()) as (Record<string, unknown> & { nas_ip_texto: string }) | null
+            .first()) as (Record<string, unknown> & { nas_ip_texto: string | null }) | null
         if (!fila) throw new NoEncontrado(`El router ${id} no existe`)
         const empresaId = fila.empresa_sugerida_id === null ? null : Number(fila.empresa_sugerida_id)
         t.fijarEmpresa(empresaId)

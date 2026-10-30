@@ -10,7 +10,8 @@ import { urlDeRouter } from '#network/routeros/router'
  *
  * Dos routers son «el mismo equipo» si coinciden en alguna de estas claves:
  * - `api`: el extremo de la API REST (`host:puerto` de `api_url`, o de `https://<host>`);
- * - `nas_ip`: la dirección del NAS (además es UNIQUE en la base);
+ * - `nas_ip`: la dirección del NAS (además es UNIQUE en la base); un router sin RADIUS (`modo_seguridad
+ *   = 'api'`) puede no tenerla, y entonces no choca por esta clave;
  * - `serial`: el número de serie o `software-id` que el sondeo leyó del equipo (si se conoce).
  */
 
@@ -21,7 +22,7 @@ interface FilaRouter {
     nombre: string
     host: string
     api_url: string | null
-    nas_ip: string
+    nas_ip: string | null
     serial: string | null
     activo: boolean
 }
@@ -46,8 +47,8 @@ function serialNormalizado(serial: string | null | undefined): string | null {
 function clavesDe(router: Pick<FilaRouter, 'host' | 'api_url' | 'nas_ip' | 'serial'>) {
     const claves: Array<{ motivo: MotivoDuplicado; valor: string }> = [
         { motivo: 'api', valor: extremoApi(router) },
-        { motivo: 'nas_ip', valor: router.nas_ip },
     ]
+    if (router.nas_ip) claves.push({ motivo: 'nas_ip', valor: router.nas_ip })
     const serial = serialNormalizado(router.serial)
     if (serial) claves.push({ motivo: 'serial', valor: serial })
     return claves
@@ -84,7 +85,13 @@ function mensaje(motivo: MotivoDuplicado, otro: FilaRouter, valor: string): stri
  */
 export async function exigirRouterUnico(
     trx: TransactionClientContract,
-    router: { id?: number; host: string; api_url: string | null; nas_ip: string; serial: string | null },
+    router: {
+        id?: number
+        host: string
+        api_url: string | null
+        nas_ip: string | null
+        serial: string | null
+    },
     revisar: Record<MotivoDuplicado, boolean>,
 ): Promise<void> {
     if (!revisar.api && !revisar.nas_ip && !revisar.serial) return
@@ -136,7 +143,7 @@ export interface RouterDeDuplicado {
     nombre: string
     host: string
     api_url: string | null
-    nas_ip: string
+    nas_ip: string | null
     serial: string | null
     control_velocidad: string
     /** servicios no retirados del router */

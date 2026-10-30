@@ -11,7 +11,7 @@ Dos routers son el mismo equipo si coinciden en alguna clave:
 | Clave (`motivo`) | Valor | Fuente |
 | --- | --- | --- |
 | `api` | `host:puerto` de la API REST: el de `api_url`, o el de `https://<host>` (un `host` con esquema se usa tal cual). Minúsculas; puerto por defecto 443 (`https`) u 80 (`http`) | `extremoApi` de `app/network/routers_duplicados.ts` |
-| `nas_ip` | La `nas_ip` (además UNIQUE en la base) | `network.routers.nas_ip` |
+| `nas_ip` | La `nas_ip` (además UNIQUE en la base). Un router sin RADIUS (`modo_seguridad = 'api'`) puede no tenerla: entonces no choca por esta clave | `network.routers.nas_ip` |
 | `serial` | `serial-number` de `/system/routerboard` o, en un CHR, `software-id` de `/system/license` (sin distinguir mayúsculas) | `network.routers.serial`, lo escribe el sondeo |
 
 `Router.serial` (texto o null) y `Router.unido_a_id` (id o null) salen en la vista `Router`; opcionales en el OpenAPI hasta que las fixtures del panel los traigan (la API siempre los envía).

@@ -53,7 +53,8 @@ function entradaDe(router: RouterNas): Entrada {
     return {
         nombre: router.nombre,
         host: router.host,
-        nas_ip: router.nas_ip,
+        // null en un router sin RADIUS (modo api)
+        nas_ip: router.nas_ip ?? '',
         modo_seguridad: router.modo_seguridad,
         api_usuario: router.api_usuario ?? '',
         api_password: '',

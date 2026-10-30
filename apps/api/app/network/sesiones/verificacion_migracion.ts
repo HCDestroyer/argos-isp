@@ -37,7 +37,7 @@ export interface Comprobacion {
 
 export interface InformeMigracion {
     routerId: number
-    router: { nombre: string; nasIp: string; modoSeguridad: string; activo: boolean } | null
+    router: { nombre: string; nasIp: string | null; modoSeguridad: string; activo: boolean } | null
     generadoEn: Date
     listo: boolean
     servicios: { total: number; porEstado: Record<string, number> }
@@ -47,7 +47,7 @@ export interface InformeMigracion {
 
 interface FilaRouter {
     nombre: string
-    nas_ip: string
+    nas_ip: string | null
     modo_seguridad: string
     activo: boolean
     radius_secret: string | null
@@ -156,7 +156,9 @@ export async function verificarMigracionRouter(
     const problemasRouter: string[] = []
     if (!router.activo) problemasRouter.push('el router está inactivo (`activo = false`)')
     if (router.modo_seguridad !== 'radius') {
-        problemasRouter.push(`modo_seguridad = ${router.modo_seguridad} (debe ser radius)`)
+        problemasRouter.push(
+            `modo_seguridad = ${router.modo_seguridad} (debe ser radius: un router «api» no usa RADIUS ni admite PPPoE)`,
+        )
     }
     comprobaciones.push({
         clave: 'router',
@@ -476,7 +478,7 @@ export function informeMarkdown(i: InformeMigracion): string {
         const estados = Object.entries(i.servicios.porEstado)
             .map(([e, n]) => `${e} ${n}`)
             .join(', ')
-        l.push(`- NAS: \`${i.router.nasIp}\``)
+        l.push(`- NAS: ${i.router.nasIp ? `\`${i.router.nasIp}\`` : 'sin nas_ip (router sin RADIUS)'}`)
         l.push(`- Servicios PPPoE (sin retirados): ${i.servicios.total}${estados ? ` (${estados})` : ''}`)
         l.push(`- Sesiones activas en \`network.sesiones\`: ${i.sesionesActivas}`)
         l.push('')

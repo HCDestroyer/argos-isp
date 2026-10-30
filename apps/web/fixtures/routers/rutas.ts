@@ -183,7 +183,7 @@ export const rutasRouters: RutasFixture = {
         }
         // Datos generales, como `editarRouterValidator`: sin el campo se conserva. Los secretos nunca
         // vuelven: solo `tiene_api_password` / `tiene_radius_secret`.
-        const texto = (campo: 'nombre' | 'host' | 'nas_ip'): string => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
+        const texto = (campo: 'nombre' | 'host' | 'nas_ip'): string | null => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
         Object.assign(router, {
             nombre: texto('nombre'),
             host: texto('host'),
