@@ -15,6 +15,7 @@ import {
     CanalFalso,
     ColaFalsa,
     crearUsuarioContabilidad,
+    bloqueIdsEvento,
 } from '#tests/notify/ayudas_notify'
 
 /**
@@ -27,7 +28,10 @@ const TOKEN = `7770202:${'D'.repeat(35)}`
 const CHAT_GLOBAL = '-1007770101'
 const CONTA_GLOBAL = 'contabilidad@argos.gt'
 
-let siguienteId = 9_600_000_000 + randomInt(0, 1_000_000) * 1000
+// Ids de evento simulados: un bloque de 1000 propio de cada prueba, único en la base
+// (bloqueIdsEvento, secuencia de audit.outbox). Con una base aleatoria dos archivos podían
+// solaparse (notify.envios es único por origen `outbox:<id>`).
+let siguienteId = 0
 function evento(nombre: string, payload: Record<string, unknown>, id = ++siguienteId) {
     return { id, evento: nombre, payload, requestId: `prueba-${id}` }
 }
@@ -106,6 +110,7 @@ test.group('notify · calendario fiscal (vencimientos y límite del pequeño con
     let telegram: CanalFalso
     let correo: CanalFalso
     group.each.setup(async () => {
+        siguienteId = await bloqueIdsEvento()
         await db.from('notify.configuracion_canales').delete()
         telegram = new CanalFalso('telegram')
         correo = new CanalFalso('correo')

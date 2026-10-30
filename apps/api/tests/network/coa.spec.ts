@@ -14,6 +14,13 @@ import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { contextoPrueba, unico } from '#tests/ayudas'
+import EditarPlan from '#network/actions/editar_plan'
+import { sincronizarPlan } from '#network/routeros/sincronizar'
+import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
+import { RouterOSFalso } from '#network/routeros/falso'
+import { clienteDeRouter } from '#network/routeros/router'
+import { bitacoraRed } from '#network/routeros/dispatcher'
+import { claveDesdeTexto } from '#shared/cifrado'
 import { crearClienteFila, crearPlanFila, crearRouterFila, crearServicioFila } from '#tests/core/fabricas'
 
 /**
@@ -154,6 +161,7 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
                 'servicio.estado_cambiado',
                 'servicio.config_cambiada',
                 'sesion.desconexion_solicitada',
+                'sesion.velocidad_solicitada',
             ])
             .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [servicioId])
             .where('id', '>', desdeId)
@@ -281,6 +289,11 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         assert.equal(final.respuesta.resultado, 'ack')
         assert.equal(final.respuesta.codigo, 'CoA-ACK')
         assert.equal(final.comando.nas_ip, '127.0.0.2')
+        assert.notProperty(
+            final.comando,
+            'nas_ip_sesion',
+            'sesión normal: la IP del router es la de la sesión',
+        )
 
         const paquete = await esperarHasta<PaqueteNas>(() =>
             nasAck.json<PaqueteNas>().find((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
@@ -316,6 +329,65 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             nasAck.json<PaqueteNas>().filter((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
             1,
         )
+    })
+
+    test('router registrado por el túnel con la sesión abierta: el CoA va a la IP del túnel con su secret, sin desconectar', async ({
+        assert,
+    }) => {
+        // Router en la LAN (nadie escucha en 127.0.0.40) con una sesión abierta desde esa IP.
+        const e = await escenario('127.0.0.40')
+        // Lo que hace `aplicarRegistro` (A1) al registrarse por WireGuard: host y nas_ip = ip_tunel.
+        // 127.0.0.41 hace de IP del túnel: ahí escucha el NAS (como el `/radius incoming` del router).
+        const tunel = nasSimulado('127.0.0.41', 'ack')
+        try {
+            await esperarHasta(() => tunel.lineas.some((l) => l.includes('"listo"')))
+            await db
+                .from('network.routers')
+                .where('id', e.routerId)
+                .update({ host: '127.0.0.41', nas_ip: '127.0.0.41' })
+            const sesion = await db.from('network.sesiones').where('id', e.sesionId).firstOrFail()
+            assert.isNull(sesion.fin, 'nadie la desconectó')
+            assert.equal(Number(sesion.router_id), e.routerId)
+
+            const eventoId = await cambiar(e.servicioId, 'suspendido')
+            const { final, filas } = await respuestaFinal(eventoId)
+            assert.lengthOf(filas, 1)
+            assert.equal(final.tipo, 'coa')
+            assert.isTrue(final.ok)
+            assert.equal(
+                final.respuesta.resultado,
+                'ack',
+                'no sin_secret: el secret es el del router de la sesión',
+            )
+            assert.equal(Number(final.router_id), e.routerId)
+            assert.equal(final.comando.nas_ip, '127.0.0.41')
+            assert.equal(final.comando.nas_ip_sesion, '127.0.0.40')
+            const paquete = await esperarHasta<PaqueteNas>(() =>
+                tunel.json<PaqueteNas>().find((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
+            )
+            assert.equal(paquete.codigo, 'CoA-Request')
+            assert.isTrue(paquete.firmaValida)
+            const fallidos = await db
+                .from('audit.outbox')
+                .where('evento', 'coa.fallido')
+                .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [e.servicioId])
+            assert.lengthOf(fallidos, 0)
+        } finally {
+            tunel.detener()
+        }
+    })
+
+    test('sesión sin router (el NAS no estaba dado de alta al abrirla): se resuelve por su nas_ip', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        await db.from('network.sesiones').where('id', e.sesionId).update({ router_id: null })
+        const eventoId = await cambiar(e.servicioId, 'suspendido')
+        const { final } = await respuestaFinal(eventoId)
+        assert.isTrue(final.ok)
+        assert.equal(final.respuesta.resultado, 'ack')
+        assert.equal(final.comando.nas_ip, '127.0.0.2')
+        assert.equal(Number(final.router_id), e.routerId)
     })
 
     test('reactivar (suspendido → activo) → Disconnect-Request y Disconnect-ACK', async ({ assert }) => {
@@ -494,5 +566,108 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         )
         assert.equal(paquete.codigo, 'Disconnect-Request')
         assert.isTrue(paquete.firmaValida)
+    })
+
+    test('sincronizar plan (cambió la velocidad) → CoA-Request con el rate-limit nuevo, sin Disconnect', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        const servicio = await db.from('core.servicios').where('id', e.servicioId).firstOrFail()
+        const plan = await db.from('network.planes').where('id', servicio.plan_id).firstOrFail()
+        const desde = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+        // Editar la velocidad del plan: `plan.velocidad_cambiada` → el consumidor `routeros` sincroniza;
+        // aquí se llama igual que él (actor sistema).
+        await new EditarPlan().execute(
+            { id: plan.id, version: plan.version, bajada_kbps: 40960, subida_kbps: 10240 },
+            contextoPrueba(),
+        )
+        const r = await sincronizarPlan({ plan_id: plan.id }, contextoPrueba())
+        const delRouter = r.routers.find((x) => x.router_id === e.routerId)!
+        assert.equal(delRouter.sesiones_actualizadas, 1)
+        const [eventoId] = await relayar(e.servicioId, Number(desde.id ?? 0))
+        const { final } = await respuestaFinal(eventoId!)
+        assert.equal(final.tipo, 'coa')
+        assert.isTrue(final.ok)
+        assert.equal(final.comando.evento, 'sesion.velocidad_solicitada')
+        const nuevo = await db.from('network.planes').where('id', plan.id).firstOrFail()
+        const esperado = rateLimitServicio(leerVelocidad(nuevo), 'activo')
+        const paquete = await esperarHasta<PaqueteNas>(() =>
+            nasAck
+                .json<PaqueteNas>()
+                .find(
+                    (p) =>
+                        p.atributos?.['Acct-Session-Id'] === e.acctSessionId &&
+                        p.atributos?.['Mikrotik-Rate-Limit'] === esperado,
+                ),
+        )
+        assert.equal(paquete.codigo, 'CoA-Request')
+        // Nunca Disconnect: la sesión sigue abierta
+        assert.isFalse(
+            nasAck
+                .json<PaqueteNas>()
+                .some(
+                    (p) =>
+                        p.codigo === 'Disconnect-Request' &&
+                        p.atributos?.['Acct-Session-Id'] === e.acctSessionId,
+                ),
+        )
+        const sesion = await db.from('network.sesiones').where('id', e.sesionId).firstOrFail()
+        assert.isNull(sesion.fin)
+    })
+
+    test('corte de punta a punta: el reconciliador deja el corte en un router virgen y el CoA de suspensión usa esos nombres', async ({
+        assert,
+    }) => {
+        const falso = new RouterOSFalso()
+        await falso.levantar()
+        try {
+            const e = await escenario('127.0.0.2')
+            await db
+                .from('network.routers')
+                .where('id', e.routerId)
+                .update({ host: falso.url, api_usuario: falso.usuario, api_password: cifrar(falso.password) })
+            const opciones = {
+                clientes: (router: Parameters<typeof clienteDeRouter>[0]) =>
+                    clienteDeRouter(router, {
+                        clave: claveDesdeTexto(env.get('AAA_PPP_KEY')),
+                        bitacora: bitacoraRed,
+                        timeoutMs: 500,
+                        reintentos: 1,
+                        esperaMs: 5,
+                    }),
+            }
+            const r = await new ReconciliarRouterOS(opciones).execute(
+                { router_id: e.routerId, motivo: 'manual' },
+                contextoPrueba(),
+            )
+            assert.isNull(r.error)
+
+            const eventoId = await cambiar(e.servicioId, 'suspendido')
+            const { final } = await respuestaFinal(eventoId)
+            assert.isTrue(final.ok)
+            const paquete = await esperarHasta<PaqueteNas>(() =>
+                nasAck
+                    .json<PaqueteNas>()
+                    .find(
+                        (p) =>
+                            p.atributos?.['Acct-Session-Id'] === e.acctSessionId &&
+                            p.codigo === 'CoA-Request',
+                    ),
+            )
+            // La lista y la cadena que nombra el CoA existen en el router (las dejó el reconciliador):
+            const lista = paquete.atributos['Mikrotik-Address-List']!
+            const cadena = paquete.atributos['Filter-Id']!.replace(/\.in$/, '')
+            const filtro = falso.tabla('/ip/firewall/filter')
+            assert.isTrue(filtro.some((o) => o['src-address-list'] === lista && o['jump-target'] === cadena))
+            assert.isTrue(filtro.some((o) => o.chain === cadena && o.comment === 'argosisp: corte portal'))
+            assert.isTrue(falso.tabla('/ip/firewall/address-list').some((o) => o.list === lista))
+            assert.containsSubset(
+                falso.tabla('/ppp/profile').find((p) => p.name === 'suspendido'),
+                { 'address-list': lista, 'interface-list': lista },
+            )
+            assert.isTrue(falso.tabla('/ip/firewall/nat').some((o) => o['src-address-list'] === lista))
+        } finally {
+            await falso.cerrar()
+        }
     })
 })

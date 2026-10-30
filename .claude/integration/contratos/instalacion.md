@@ -11,20 +11,21 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 
 ## 2. Activar la instalación
 
-`POST /api/v1/servicios/:id/activar-instalacion` con el permiso `servicios.activar_instalacion`, `Idempotency-Key` y `version`.
+`POST /api/v1/servicios/:id/activar-instalacion` con el permiso `servicios.activar_instalacion`, `Idempotency-Key` y, opcional, `version`.
 
 ```
-{ "version": 3, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"?,
+{ "version": 3?, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"?,
   "planta": { "caja": "…"?, "puerto": "…"?, "olt": "…"?, "slot": "…"?, "pon": "…"?, "potencia_dbm": "-19.40"? }? }
 → 200 Servicio (estado activo, instalado_en)
-→ 409 version · 422 servicio_no_pendiente (estado distinto de pendiente_instalacion)
+→ 409 conflicto_version (solo si llega version) · 409 servicio_no_pendiente (estado distinto de pendiente_instalacion)
 ```
 
 - **Efectos:**
     - pasa el servicio de `pendiente_instalacion` a `activo` y fija `core.servicios.instalado_en`, que es `instalado_en` o, si no viene, `now()`;
     - emite `servicio.estado_cambiado` con `de = pendiente_instalacion`, `a = activo` y `motivo = instalacion`;
     - refresca Redis AAA y RouterOS como cualquier cambio de estado.
-- **Reintento:** con la misma `Idempotency-Key` devuelve la misma respuesta. Una clave nueva sobre un servicio ya activo devuelve 422 `servicio_no_pendiente` (se revisa antes que la `version`, así no llega un 409). Sin la cabecera: 400 `idempotency_key_requerida`.
+- **`version` opcional** (decisión del líder, 29 oct, contrato Iris 0.3.1): Iris reintenta desde su cola con los mismos bytes y la misma `Idempotency-Key`, así que una `version` leída al encolar queda vieja. Si llega y no coincide: 409 `conflicto_version`, como siempre (el panel la manda). Si no llega, la acción se protege sola: bloquea la fila (`FOR UPDATE`) y solo sale de `pendiente_instalacion`.
+- **Reintento:** con la misma `Idempotency-Key` y los mismos bytes devuelve la misma respuesta (`Idempotent-Replayed: true`) y no emite otro evento. Una clave nueva (o una petición sin clave guardada) sobre un servicio que ya no está pendiente devuelve **409 `servicio_no_pendiente`** (`title`: «El servicio no está pendiente de instalación»; `detail` con el estado actual). Se revisa antes que la `version`, así llega el motivo real y no un `conflicto_version`. Es de negocio: no se reintenta (en Iris, solo `409 idempotencia_en_curso` se reintenta). No es un 200 idempotente porque el estado actual puede ser otro (`suspendido`, `retirado`) y la `planta` o el `instalado_en` de esa petición no se guardarían. Sin la cabecera: 400 `idempotency_key_requerida`.
 - **Fecha:** `instalado_en` no puede ser futura ni anterior a la creación del servicio (422 en `instalado_en`). Se toleran 5 minutos de reloj adelantado; un instante dentro de esa tolerancia se guarda como la hora de Argos. Si `fecha_instalacion` estaba vacía, toma el día de `instalado_en` en Guatemala.
 - **Permiso:** `servicios.activar_instalacion` lo tienen `admin`, `soporte` (que ya reactiva) y `tecnico` (que ya crea servicios e instala), y el usuario técnico «Iris».
 - **Transiciones prohibidas:** sobre un pendiente, suspender, reactivar, limitar, quitar límite, desconectar, programar un plan temporal y la transición de `evaluarEstadoServicio` (`CambiarEstadoServicio`) responden 422 `servicio_pendiente_instalacion`. Editarlo (plan, router, IPs) y cambiarlo de empresa sí se puede.
@@ -37,9 +38,6 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 | --- | --- |
 | AAA (A2) | El registro de Redis lleva `estado: "pendiente_instalacion"` y `aaa` responde **Access-Reject**, igual que con un servicio retirado. El servicio no navega aunque el CPE ya esté configurado. |
 | RouterOS (A2) | `routeros.aplicar_servicio` y `routeros.reconciliar` no crean colas, amarres, leases ni address-list (tampoco entradas del árbol ni cuenta para el padre del plan) hasta que el servicio esté `activo`; el reconciliador borra lo que encuentre de un pendiente. Se crean con `servicio.estado_cambiado` (`motivo: instalacion`). `coa` acepta `de: pendiente_instalacion` (Disconnect si quedara una sesión; normalmente no hay). |
-| Facturación (A3) | La generación por periodo omite los servicios pendientes. El primer periodo se cuenta desde `instalado_en`: con prorrateo, se prorratea desde ese día; en ciclo aniversario, el aniversario es `instalado_en`. Los cargos únicos sí se pueden emitir mientras está pendiente (por ejemplo, el cobro de instalación anticipado). |
-| Corte, mora y recordatorios (A3/A6) | No aplican mientras está pendiente. |
-| Promesas (A3) | No se pueden crear sobre un pendiente (422). |
 | Facturación (A3) | La generación por periodo omite los servicios pendientes. El primer periodo se cuenta desde `instalado_en`: con prorrateo, se prorratea desde ese día; en ciclo aniversario, el aniversario es `instalado_en`. Los cargos únicos sí se pueden emitir mientras está pendiente (por ejemplo, el cobro de instalación anticipado) y pagarlos no mueve el estado (`ServicioEvaluado` del pago lo trae con `estado: pendiente_instalacion`). Regla exacta (`inicioFacturacionSql`): activado desde pendiente (`instalado_en > created_at`) → día de `instalado_en` en Guatemala, aunque `fecha_instalacion` tenga otra fecha prevista; nacido activo (`instalado_en = created_at`) → `fecha_instalacion` o el día de alta, como siempre. |
 | Corte, mora y recordatorios (A3/A6) | No aplican mientras está pendiente. A3: el corte no lo evalúa y `vencerFacturas` no vence ni pone mora a sus facturas (sin `factura.vencida`); al activarse, una factura emitida mientras estaba pendiente (`emitida_en < instalado_en`, p. ej. el cobro de instalación anticipado) vence, para el vencimiento, la mora y el corte, en `max(vence_en, día de instalado_en en Guatemala + dias_gracia)` (decisión del líder, 28 oct: instalar nunca limita el servicio el mismo día; `venceEfectivoSql` de `app/billing/vencimiento.ts`). El documento no cambia: `vence_en`, lo certificado por FEL y el `vence` de `factura.vencida` quedan como se emitieron. Las facturas emitidas después de activar vencen en su `vence_en`. A6: los recordatorios (`ProgramarRecordatorios`) deben omitir las facturas de un servicio pendiente. |
 | Promesas (A3) | No se pueden crear sobre un pendiente: `CrearPromesaPago` (`POST /promesas`), `POST /promesas/simular` y `limitesPromesa` (portal) responden 422 `servicio_pendiente_instalacion` (`E_SERVICIO_PENDIENTE_INSTALACION`). |

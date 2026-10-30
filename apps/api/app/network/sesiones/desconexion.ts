@@ -1,3 +1,4 @@
+import db from '@adonisjs/lucid/services/db'
 import type { Transaccion } from '#shared/domain_action'
 
 /**
@@ -56,4 +57,41 @@ export async function solicitarDesconexion(
         user_ppp: sesion.user_ppp,
         motivo,
     })
+}
+
+/**
+ * Sesiones abiertas de un servicio ya eliminado (`servicio.eliminado`, `contratos/eliminar.md`).
+ * La fila de `core.servicios` ya no existe y `network.sesiones.servicio_id` tiene FK, así que una
+ * sesión viva solo puede ser una que el accounting abrió después del borrado: sin `servicio_id` y
+ * con el `user_ppp` que tenía el servicio. Con `t`, bloqueadas para la transacción.
+ */
+export async function sesionesAbiertasDeEliminado(
+    userPpp: string,
+    t?: Transaccion,
+): Promise<SesionDesconectable[]> {
+    const sql = `SELECT ${COLUMNAS} FROM network.sesiones
+        WHERE user_ppp = ? AND servicio_id IS NULL AND fin IS NULL ORDER BY inicio`
+    const { rows } = (await (t
+        ? t.trx.rawQuery(`${sql} FOR UPDATE`, [userPpp])
+        : db.rawQuery(sql, [userPpp]))) as {
+        rows: SesionDesconectable[]
+    }
+    return rows
+}
+
+/**
+ * `user_ppp` que tenía un servicio eliminado: el del payload si viene (A1 puede agregarlo) o, si no,
+ * el `antes` de `audit.cambios` que `EliminarServicio` deja por cada campo (`user_ppp` → null).
+ * null si el servicio no era PPPoE.
+ */
+export async function userPppDeEliminado(servicioId: number, payload: Record<string, unknown>) {
+    if (typeof payload.user_ppp === 'string' && payload.user_ppp !== '') return payload.user_ppp
+    const fila = (await db
+        .from('audit.cambios')
+        .where({ entidad_tipo: 'servicio', entidad_id: servicioId, campo: 'user_ppp' })
+        .whereRaw(`despues = 'null'::jsonb`)
+        .orderBy('id', 'desc')
+        .select(db.raw(`antes #>> '{}' AS user_ppp`))
+        .first()) as { user_ppp: string | null } | null
+    return fila?.user_ppp || null
 }

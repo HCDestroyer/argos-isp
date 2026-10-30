@@ -1,6 +1,6 @@
 # @argosisp/coa
 
-coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configuración de un servicio, manda CoA-Request o Disconnect-Request (RFC 5176) a cada sesión abierta del servicio, en el `nas_ip` de la sesión (UDP 3799, `/radius incoming` del MikroTik) y con el secret del router. Registra cada envío y su respuesta en `audit.red`. Dueño: A2 (`.claude/agents/a2-radius.md`).
+coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configuración de un servicio, manda CoA-Request o Disconnect-Request (RFC 5176) a cada sesión abierta del servicio, a la `nas_ip` **actual** del router de la sesión (`network.sesiones.router_id`; UDP 3799, `/radius incoming` del MikroTik) y con su secret; solo una sesión sin router va a su propia `nas_ip`. Así, una sesión abierta antes de que el router se registrara por el túnel WireGuard recibe el CoA por la IP del túnel (`contratos/conexion-routers.md` §6.4). Registra cada envío y su respuesta en `audit.red`. Dueño: A2 (`.claude/agents/a2-radius.md`).
 
 ## Eventos
 
@@ -34,6 +34,11 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
 - Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).
 - Velocidades: la cadena completa de `Mikrotik-Rate-Limit` que calcula A1 con `apps/api/app/network/velocidad.ts` (`plan.rate_limit` en activo, `plan.rate_limit_limitado` en limitado), la misma que entrega `aaa`. Sale de Redis `aaa:user:<user_ppp>` y, si falta, no es de este servicio o no trae las cadenas, de `GET ${API_INTERNAL_URL}internal/aaa/servicio?user_ppp=` con `AAA_INTERNAL_TOKEN` (`src/registro.ts`; reintentos `COA_API_REINTENTOS` ante red, timeout o 5xx). `coa` nunca arma `subida/bajada` por su cuenta: si ninguna fuente responde, no envía nada, deja `resultado = sin_rate_limit` en `audit.red` y emite `coa.fallido`.
+
+### Sincronizar plan y estrategia por capas (semana 4)
+
+- `sesion.velocidad_solicitada` (`planes.sincronizar`, cambio de estrategia): **CoA-Request** (nunca Disconnect) con `Mikrotik-Rate-Limit` = `rate_limit` del evento, si la sesión sigue abierta y el servicio sigue en `estado` (si no, nada: ese cambio trae su propio CoA). Envío y respuesta en `audit.red` (`comando.evento` = el nombre), `coa.fallido` sin ACK.
+- Con `velocidad` en el registro (`contratos/control-velocidad.md` §7): `pcq_plan` y `arbol_pcq` no reciben CoA de velocidad; un cambio de plan con `Mikrotik-Group = plan-<id>` (padre, tipo de cola o `perfil_ppp`) va por Disconnect. Sin `velocidad`, lo de arriba (`control_velocidad` y `reuso`).
 
 ## Envío, reintentos y auditoría
 

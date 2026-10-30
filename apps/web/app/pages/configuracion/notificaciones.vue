@@ -384,7 +384,7 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
                             v-model="form.telegram.alertas_activo"
                             :disabled="bloqueado"
                             label="Alertas al equipo"
-                            description="Caídas del aaa, CoA fallidos…"
+                            description="Caídas del servidor RADIUS, CoA fallidos…"
                         />
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">

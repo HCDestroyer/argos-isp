@@ -9,12 +9,21 @@ import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import VigilarCrons from '#notify/actions/vigilar_crons'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { ejecutarVigilancia } from '#notify/vigilancia'
-import { CanalFalso, ColaFalsa, crearCliente, crearServicio } from '#tests/notify/ayudas_notify'
+import {
+    CanalFalso,
+    ColaFalsa,
+    crearCliente,
+    crearServicio,
+    bloqueIdsEvento,
+} from '#tests/notify/ayudas_notify'
 import { unico } from '#tests/ayudas'
 
 const CHAT = '-1009990001'
 
-let siguienteId = 9_000_000_000 + randomInt(0, 1_000_000) * 1000
+// Ids de evento simulados: un bloque de 1000 propio de cada prueba, único en la base
+// (bloqueIdsEvento, secuencia de audit.outbox). Con una base aleatoria dos archivos podían
+// solaparse (notify.envios es único por origen `outbox:<id>`).
+let siguienteId = 0
 /** Evento simulado del bus (ids altos para no chocar con `audit.outbox` real). */
 function evento(nombre: string, payload: Record<string, unknown>, id = ++siguienteId) {
     return { id, evento: nombre, payload, requestId: `prueba-${id}` }
@@ -59,7 +68,8 @@ async function incidente(clave: string, estado?: string) {
 
 test.group('notify · alertas internas', (group) => {
     let telegram: CanalFalso
-    group.each.setup(() => {
+    group.each.setup(async () => {
+        siguienteId = await bloqueIdsEvento()
         telegram = new CanalFalso('telegram')
         registrarCanal('telegram', telegram)
         fijarChatEquipo(CHAT)

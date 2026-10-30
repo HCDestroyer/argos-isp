@@ -20,6 +20,8 @@ import { cargarDestinatario, construirVariables, resolverCliente } from '#notify
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
+import { avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
+import { servicioEliminado } from '#notify/eliminados'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -69,6 +71,11 @@ interface Aviso {
  *   empresa** (cada pago es de un NIT distinto, con su marca, su configuración y su bot); la
  *   plantilla dice que es parte de un cobro mayor con `{{#cobro.repartido}}` (`variables.ts`).
  *   Idempotente igual que cualquier evento: por `origen` (`outbox:<id>`) + cliente y por `pago_id`.
+ * - Servicio `pendiente_instalacion` (`instalacion.ts`): sin `factura.vencida` ni recordatorios, y
+ *   al activar la instalación, la bienvenida (`servicio.instalacion_activada`) en vez de «servicio
+ *   reactivado».
+ * - Servicio eliminado (`eliminados.ts`): un `servicio.*` atrasado de un servicio que ya no existe
+ *   no se avisa (ni error ni envío).
  * - Lealtad (`lealtad.ts`): `lealtad.referido_calificado` va al referidor; el
  *   `lealtad.puntos_acumulados` del crédito del referidor no se avisa (ya lo dice el del referido).
  */
@@ -78,13 +85,22 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
     protected async handle(input: EntradaProgramar, t: Transaccion): Promise<ResultadoProgramar> {
         // `lealtad.referido_calificado` va al referidor, no al referido (`lealtad.ts`)
         const payload = payloadDelAviso(input.evento, input.payload)
+        // Servicio eliminado (`contratos/eliminar.md`): nada que avisar sobre él
+        if (await servicioEliminado(t.trx, input.evento, payload)) {
+            return { clienteId: null, envios: [], encolar: [] }
+        }
+        // Servicio pendiente de instalación: sin mora ni recordatorios (`#notify/instalacion`)
+        if (await avisoNoAplicaPorInstalacion(t.trx, input.evento, payload)) {
+            return { clienteId: null, envios: [], encolar: [] }
+        }
         const clienteId = await resolverCliente(t.trx, payload)
         if (!clienteId) return { clienteId: null, envios: [], encolar: [] }
         // Auditoría: la empresa del evento (la del pago, la factura, el servicio…), no la activa
         const empresaEvento = await empresaDelEvento(t.trx, payload)
         if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
-        const avisos: Aviso[] = [{ clienteId, evento: input.evento, payload }]
+        // La activación de la instalación se avisa con la bienvenida (`instalacion.ts`)
+        const avisos: Aviso[] = [{ clienteId, evento: eventoDelAviso(input.evento, payload), payload }]
         if (input.evento === 'pago.registrado') {
             for (const tercero of tercerosDelPago(input.payload, clienteId)) {
                 avisos.push({

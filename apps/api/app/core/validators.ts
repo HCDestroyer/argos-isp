@@ -456,7 +456,10 @@ const potenciaEnRango = vine.createRule((valor, _opciones, campo) => {
 /** `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
 export const activarInstalacionValidator = vine.compile(
     vine.object({
-        version: versionEsperada(),
+        version: versionEsperada().optional().meta({
+            description:
+                'Opcional: si viene y no coincide, 409 conflicto_version. Sin ella protegen la máquina de estados (solo sale de pendiente_instalacion; si no, 409 servicio_no_pendiente) y la Idempotency-Key',
+        }),
         instalado_en: instanteIso().optional().meta({
             description:
                 'Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio',
@@ -495,7 +498,7 @@ export const activarInstalacionValidator = vine.compile(
             .optional()
             .meta({
                 description:
-                    'Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada',
+                    'Referencia de planta de la instalación (la envía Iris): solo lectura, no se valida contra nada',
             }),
     }),
 )
@@ -847,6 +850,25 @@ export const resolverIpsValidator = vine.compile(
 )
 
 /** `POST /integraciones/horus/tokens`. */
+/**
+ * `POST /integraciones/iris/tokens`: el usuario técnico Iris solo tiene alcance por empresas (contrato
+ * Iris 0.3.1 §1). `routers` y `zonas` se aceptan solo para responder 422 con su motivo en vez de
+ * ignorarlos.
+ */
+export const generarTokenIrisValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        routers: vine.array(idEntidad()).optional().meta({
+            description:
+                'No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)',
+        }),
+        zonas: vine.array(idEntidad()).optional().meta({
+            description:
+                'No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)',
+        }),
+    }),
+)
+
 export const generarTokenHorusValidator = vine.compile(
     vine.object({
         nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
@@ -1078,3 +1100,6 @@ export const definirAdicionalesPlanValidator = vine.compile(
             .meta({ description: 'Lista completa (reemplaza la anterior); [] la vacía' }),
     }),
 )
+
+/** `DELETE /servicios/:id?version=` (decisión del PM, 29 oct; `contratos/eliminar.md`). */
+export const eliminarServicioValidator = vine.compile(vine.object({ version: versionEsperada() }))

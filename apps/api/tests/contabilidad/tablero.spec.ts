@@ -6,7 +6,7 @@ import { unicoBd } from '#tests/billing/ayudas_billing'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, huellaTablas } from '#tests/contabilidad/verificar_libro'
-import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
+import { llevarFacturasA, llevarNotasA } from '#tests/contabilidad/ayudas_libros'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { eventos } from '#tests/fiscal/ayudas_fiscal'
@@ -33,7 +33,15 @@ import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
  * `ledger`, `fiscal` y `audit` antes y después).
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: el tablero lee `relojFiscal` y el libro
+ * fecha facturas, notas y pagos con el reloj real. Con `HOY` tomado al importar el archivo, una corrida
+ * que cruzaba la medianoche de Guatemala (06:00 UTC) comparaba el tablero de un día con el libro del
+ * otro; y en enero «el mes anterior» caía en el año pasado. Cada prueba fija `relojFiscal` en `AHORA`
+ * y lleva a `HOY` lo que el libro fecha con el reloj real.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const ANTERIOR = DateTime.fromISO(`${MES}-01`).minus({ months: 1 }).toFormat('yyyy-MM')
 const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
@@ -51,8 +59,14 @@ async function parametro(e: EmpresasGt, empresaId: number, clave: string, valor:
     )
 }
 
-const venta = (empresaId: number, precio: string) =>
-    servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+async function venta(empresaId: number, precio: string) {
+    const s = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        HOY,
+    )
+    return s
+}
 
 async function compra(e: EmpresasGt, empresaId: number, total: string) {
     const proveedor = await proveedorEn(empresaId, e.ctx)
@@ -136,6 +150,9 @@ function bloquesCoherentes(assert: any, t: TableroEmpresa) {
 
 test.group('Auditor contable · tablero fiscal', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()
@@ -158,10 +175,11 @@ test.group('Auditor contable · tablero fiscal', (group) => {
         for (const empresa of [e.B, e.C]) await parametro(e, empresa, 'inicio_libros', '2026-01-01')
         await venta(e.B, '224.00') // IVA 24
         const conNota = await venta(e.B, '112.00') // IVA 12
-        await new EmitirNotaCredito().execute(
+        const nota = await new EmitirNotaCredito().execute(
             { factura_id: conNota.facturas[0]!.id, monto: '56.00', motivo: 'auditoría: descuento' },
             e.ctx,
         )
+        await llevarNotasA([nota.id], HOY)
         await compra(e, e.B, '112.00') // crédito 12
         await venta(e.C, '336.00')
         // una venta de cada una en el mes anterior: el año no es el mes

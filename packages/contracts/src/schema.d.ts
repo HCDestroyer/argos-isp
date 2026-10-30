@@ -1134,7 +1134,7 @@ export interface paths {
         };
         /**
          * Clientes de los que es responsable de pago
-         * @description Dependientes con su número de servicios no retirados y el estado resumido. El cobro (A4) muestra sus facturas debajo del pagador.
+         * @description Dependientes con su número de servicios no retirados y el estado resumido. El panel de cobro muestra sus facturas debajo del pagador.
          */
         get: operations["clientesDependientes"];
         put?: never;
@@ -3470,6 +3470,219 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/iris": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conector Iris (secretos como ***) */
+        get: operations["irisVer"];
+        /**
+         * Configurar el conector Iris a mano (URL, token iris_pat_, receptor, encendido)
+         * @description Alternativa al enlace de conexión. El token y los secretos son de solo escritura (`***`). Encender exige URL y token (422). Solo https:// salvo `IRIS_PERMITIR_HTTP` (laboratorio).
+         */
+        put: operations["irisConfigurar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/abrir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ver en Iris: URL de autologin con ticket de un solo uso
+         * @description Contrato Iris §1.3. El servidor de Argos pide el ticket a Iris con el `iris_pat_` y devuelve solo la URL. Destinos `ticket`, `orden` y `prospecto` (ids de Iris). 422 `iris_apagado` con el conector apagado o sin configurar; 502 `iris_error` con el error real si Iris falla.
+         */
+        post: operations["irisAbrir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/conexion/canjear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Canje del enlace de conexión de Argos (lo llama Iris, servidor a servidor)
+         * @description Sin sesión: lo autentica el código. `sistema: "iris"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta.
+         */
+        post: operations["irisEnlaceCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/enlace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar enlace de conexión para pegar en Iris (15 min, un solo uso)
+         * @description Contrato Iris §1.3. `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256. Iris lo canjea en `POST /integraciones/iris/conexion/canjear`. Un enlace nuevo anula los anteriores sin usar.
+         */
+        post: operations["irisEnlaceGenerar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/envios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Webhooks enviados a Iris: estado, intentos y próximo reintento
+         * @description Contrato Iris §2.3. Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`. `descartado`: el conector se apagó antes de enviarlo.
+         */
+        get: operations["irisEnviosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/envios/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado de los webhooks a Iris: destino, alcance, pendientes, fallidos y último error */
+        get: operations["irisEnviosResumen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/estado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Si "Ver en Iris" puede funcionar (sin URL ni secretos) */
+        get: operations["irisEstado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/resolver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver un lote de IPs a servicio, cliente y empresa (Iris)
+         * @description Pedido A8 de Iris: igual que `POST /integraciones/horus/resolver` (1 a 500 IPv4 o IPv6 en el cuerpo, nunca en la URL; prefijo más largo; fuera del alcance del token → `no_encontrada`). Cada llamada queda en la bitácora (`ip.resolver`).
+         */
+        post: operations["irisResolver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/sso/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir un ticket de autologin para un usuario de Iris (servidor a servidor)
+         * @description Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).
+         */
+        post: operations["irisSsoTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tokens del usuario técnico Iris (sin su valor) */
+        get: operations["irisTokens"];
+        put?: never;
+        /**
+         * Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)
+         * @description Crea, la primera vez, el usuario técnico "Iris" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Su alcance son las empresas del usuario Iris (o global), nunca zonas ni routers: `routers`/`zonas` no vacíos, o roles del usuario con alcance por zona o router, responden 422 `usuario_tecnico_solo_empresas` (contrato Iris 0.3.1 §1). No revoca los anteriores.
+         */
+        post: operations["irisGenerarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/tokens/{id}/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar un token del usuario técnico Iris */
+        post: operations["irisRevocarToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/aaa/servicio": {
         parameters: {
             query?: never;
@@ -3548,6 +3761,46 @@ export interface paths {
          * @description Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.
          */
         post: operations["internoNodosPortalRevocar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/wireguard/estado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estado del servidor WireGuard y último handshake por peer (wireguard-agente)
+         * @description `{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos de 3 min. Claves desconocidas se ignoran.
+         */
+        post: operations["internoWireguardEstado"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/wireguard/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Peers WireGuard vigentes (wireguard-agente)
+         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista).
+         */
+        get: operations["internoWireguardPeers"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3863,6 +4116,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ipv6-bloques/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver bloque IPv6 */
+        get: operations["ipv6BloquesVer"];
+        /**
+         * Editar bloque IPv6: nombre, proveedor y prefijo
+         * @description Achicar el prefijo dejando fuera algún pool: 422 `pools_fuera_del_bloque` con la lista; traslape con otro bloque: 409 `bloque_traslapado`; `version` distinta: 409 (contratos/pools.md §1).
+         */
+        put: operations["ipv6BloquesEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ipv6-bloques/{id}/migrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pasar el bloque IPv6 (con todos sus pools) a otro router
+         * @description Un pool se muda con su bloque. Sin `mover_servicios`, si algún servicio usa prefijos del bloque responde 422 `pool_con_servicios` con la lista. Con `mover_servicios: true` (pide además `servicios.editar`) cada servicio pasa al router de destino conservando sus prefijos; su IPv4 se vuelve a asignar en el destino salvo que su red se mude también (`redes_ipv4`, pide `redes.migrar`). Si un servicio no puede pasar, 422 `servicio_no_migrable` y no cambia nada. `simular: true` devuelve lo que pasaría sin guardar (contratos/pools.md §3).
+         */
+        post: operations["ipv6BloquesMigrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ipv6-bloques/{id}/pools": {
         parameters: {
             query?: never;
@@ -3875,6 +4169,64 @@ export interface paths {
         put?: never;
         /** Crear pool IPv6 (enlace /64 o delegación /56, /48) */
         post: operations["ipv6PoolsCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ipv6-bloques/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa de un bloque IPv6: cuántos clientes caben y qué recibe cada uno (no guarda)
+         * @description Sugiere la división del bloque: la segunda mitad para el pool de delegación (`tamano_delegado` por cliente) y, al inicio de la primera, el pool de enlace /64 para la misma cantidad de clientes. Incluye lo que recibirían los dos primeros servicios. 422 si el bloque es muy chico (contratos/pools.md §4).
+         */
+        post: operations["ipv6BloquesVistaPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ipv6-pools/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver pool IPv6 (con su ocupación y lo que entrega) */
+        get: operations["ipv6PoolsVer"];
+        /**
+         * Editar pool IPv6: nombre, nombre en el router, prefijo, tipo y tamaño de entrega
+         * @description Achicar o mover el prefijo dejando fuera prefijos asignados: 422 `prefijos_asignados_fuera` con la lista. `tipo` y `tamano_entrega` solo cambian en un pool sin asignaciones (422 `pool_con_asignaciones`). Traslape: 409 `pool_traslapado`; `version` distinta: 409 (contratos/pools.md §1).
+         */
+        put: operations["ipv6PoolsEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ipv6-pools/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vista previa de un pool IPv6: cuántos clientes caben y qué recibe cada uno (no guarda) */
+        post: operations["ipv6PoolsVistaPrevia"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6208,6 +6560,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estrategia de velocidad propia de un plan en un router (o quitarla con null)
+         * @description Parcial por tipo de conexión: cada capa ausente o null hereda la del router. Valida la matriz con todo el router (422), guarda en `planes_routers` (la crea si el plan no estaba implementado) y emite `router.estrategia_cambiada` con `plan_id`. `version` de la implementación si ya existe.
+         */
+        post: operations["planesEstrategiaVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/planes/{id}/sincronizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sincronizar un plan con la red (sin desconectar)
+         * @description Reescribe `aaa:user:*` de sus servicios, pide CoA con la velocidad nueva a las sesiones PPPoE vivas (`radius_rate_limit` o `perfil_ppp`; nunca Disconnect) y reconcilia cada router (colas, padres, perfiles, PCQ). `?router_id=` lo limita a un router. Devuelve el resumen por router; un router que no responde no frena a los demás. Lo mismo corre solo al editar la velocidad del plan.
+         */
+        post: operations["planesSincronizar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/planes/vista-previa": {
         parameters: {
             query?: never;
@@ -7291,6 +7683,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/red/control-velocidad/matriz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capas del control de velocidad y qué combina con qué
+         * @description Aplicación, padre, tipo de cola y extras, con los tipos de conexión y de cola que admite cada aplicación, las reglas de la matriz (las mismas que dan 422) y los atajos `simple` y `arbol_pcq`.
+         */
+        get: operations["redControlVelocidadMatriz"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/red/eventos": {
         parameters: {
             query?: never;
@@ -7305,6 +7717,47 @@ export interface paths {
         get: operations["redEventosListar"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/redes-ipv4/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver red IPv4 (con su ocupación) */
+        get: operations["redesIpv4Ver"];
+        /**
+         * Editar red IPv4: nombre, red, gateway, rango, DNS y tipo
+         * @description Agrandar o achicar la red, mover el gateway o cambiar el rango: 422 `ips_asignadas_fuera` con la lista en `errors[]` si alguna IP asignada quedaría fuera; 409 `red_traslapada` si se traslapa con otra red; 409 `conflicto_version` si la `version` no coincide (contratos/pools.md §1).
+         */
+        put: operations["redesIpv4Editar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/redes-ipv4/{id}/migrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pasar la red IPv4 a otro router
+         * @description Sin `mover_servicios`, si algún servicio usa IPs de la red responde 422 `pool_con_servicios` con la lista. Con `mover_servicios: true` (pide además `servicios.editar`) cada servicio pasa al router de destino conservando su IPv4; su IPv6 se vuelve a reservar en el destino salvo que sus bloques se muden también (`bloques_ipv6`, pide `ipv6.migrar`). Si un servicio no puede pasar, 422 `servicio_no_migrable` y no cambia nada. `simular: true` devuelve lo que pasaría sin guardar (contratos/pools.md §3).
+         */
+        post: operations["redesIpv4Migrar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7693,7 +8146,11 @@ export interface paths {
         /** Editar router */
         put: operations["routersEditar"];
         post?: never;
-        delete?: never;
+        /**
+         * Eliminar un router que nunca se usó (si tiene historial: 422, desactívalo)
+         * @description Solo admin. Con servicios (también retirados), sesiones, historial, asignaciones en sus redes, comandos enviados al equipo, bodegas o alcances responde 422 `router_con_historial` con `errors[]`. Borra sus redes IPv4, bloques y pools IPv6, `planes_routers` y su conexión, y emite `router.eliminado`. Contrato `contratos/eliminar.md`.
+         */
+        delete: operations["routersEliminar"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7713,6 +8170,146 @@ export interface paths {
          * @description Solo cambia el campo y emite `router.control_cambiado`; la ejecución en el router (colas, árbol, PCQ) es del dispatcher. Si ya está en ese modo responde 200 sin evento. 409 si la `version` no coincide.
          */
         post: operations["routersCambiarControlVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/cambiar-estrategia-velocidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar la estrategia de control de velocidad del router (por tipo de conexión)
+         * @description Valida la matriz (422 con el porqué), cambia el campo y emite `router.estrategia_cambiada`; el worker de RouterOS lo aplica por lotes sin cortar (crea lo nuevo, mueve, borra lo viejo). Las sesiones PPPoE vivas reciben CoA de velocidad y conservan lo demás hasta reconectar, salvo `reconectar: true`. Sin cambios: 200 sin evento. 409 si la `version` no coincide.
+         */
+        post: operations["routersCambiarEstrategiaVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/conexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de la conexión WireGuard del router
+         * @description Estado (`sin_configurar`, `pendiente`, `conectado`), IP del túnel, clave pública, último handshake y vencimiento del token del último script. Nunca trae secretos. 404 si el router no existe.
+         */
+        get: operations["routersConexion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/conexion/clave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pegar a mano la clave pública WireGuard del router
+         * @description Para un router sin internet: la clave que imprimió el script. Mismo efecto que el registro por token (lo consume): el router queda `pendiente` hasta el primer handshake y `host`/`nas_ip` pasan a la IP del túnel. 422 `script_no_generado` si nunca se generó el script; 409 `clave_en_uso` si la clave es de otro router.
+         */
+        post: operations["routersConexionClave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/conexion/rotar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotar la conexión WireGuard del router y generar un script nuevo (.rsc)
+         * @description Invalida el peer (borra la clave pública registrada, vuelve a `pendiente`, emite `router.conexion_rotada`) y responde el script nuevo como `GET /routers/:id/script-conexion` (mismos `?admin=` e `?incluir=`). La IP del túnel no cambia.
+         */
+        post: operations["routersConexionRotar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/diagnostico-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ¿Un suspendido de este router ve la página de corte?
+         * @description El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), `sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y `walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 no se redirigen.
+         */
+        get: operations["routersDiagnosticoCorte"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/direccionamiento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Direccionamiento del router: pools con ocupación y qué recibe cada servicio
+         * @description Redes IPv4 y bloques IPv6 (con sus pools) del router, cada uno con su ocupación; totales por familia y, por cada plan disponible en el router, de dónde sale la IPv4, qué prefijos IPv6 recibe un servicio nuevo (modo radius_servicio) y avisos si faltan pools o direcciones libres (contratos/pools.md §2 y §4). 404 si el router no existe.
+         */
+        get: operations["routersDireccionamiento"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/eliminable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ¿Se puede eliminar el router? (nunca se usó) y, si no, qué lo impide
+         * @description Para que el panel muestre «Eliminar» o «Desactivar». Contrato `contratos/eliminar.md`.
+         */
+        get: operations["routersEliminable"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7794,6 +8391,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/probar-conexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probar la conexión con el router (túnel, API REST, datos del equipo, RADIUS y corte)
+         * @description Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, `motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara solo si el router lo devuelve y nunca sale) y `corte` (A2, si la API respondió: address-list `suspendidos`, reglas de filter y NAT activas y en orden, `/tool/fetch` al destino real del NAT `http://ip:puerto/corte`, suspendidos fuera de la lista y FastTrack; el detalle completo con comandos de RouterOS en `corte`). Cada GET queda en `audit.red`; si la API responde, actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.
+         */
+        post: operations["routersProbarConexion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/reconciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconciliar ahora la configuración de RouterOS del router
+         * @description Encola `routeros.reconciliar` (`motivo: manual`) en el worker de routeros, con lock: si ya hay uno esperando o en curso para el router, responde el mismo `job_id` con `encolado: false`. Lo corregido queda en `audit.red`. 404 si el router no existe.
+         */
+        post: operations["routersReconciliar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/redes-ipv4": {
         parameters: {
             query?: never;
@@ -7832,6 +8469,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/script-conexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generar el script de conexión del router (.rsc)
+         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
+         */
+        get: operations["routersScriptConexion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/vista-previa-control": {
         parameters: {
             query?: never;
@@ -7846,6 +8503,66 @@ export interface paths {
         get: operations["routersVistaPreviaControl"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/vista-previa-estrategia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa de un cambio de estrategia de velocidad (no escribe)
+         * @description Con la estrategia propuesta del router y, opcional, excepciones de planes: qué se crea, cambia y borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el router. 422 con `errors[]` si la combinación no es válida.
+         */
+        post: operations["routersVistaPreviaEstrategia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/vista-previa-reconciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué haría «Reconciliar ahora» (lee el router, no escribe)
+         * @description Compara el router con su estado deseado: servicios, velocidad (colas, árbol, PCQ, perfiles) y corte (reglas, listas, perfil suspendido, orden de los saltos). `error` si el router no responde.
+         */
+        get: operations["routersVistaPreviaReconciliar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/conexion/registrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registro del router con su token (lo llama el script, sin sesión)
+         * @description Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el certificado del router. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.
+         */
+        post: operations["routersConexionRegistrar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7882,7 +8599,11 @@ export interface paths {
         /** Editar servicio (plan, router, IPs, datos) */
         put: operations["serviciosEditar"];
         post?: never;
-        delete?: never;
+        /**
+         * Eliminar un servicio que nunca se usó (si tiene historial: 422, retíralo)
+         * @description Solo admin. Con facturas, pagos, asientos, DTE, sesiones, inventario u otro historial responde 422 `servicio_con_historial` con `errors[]` (qué lo impide). Libera IPs y prefijos, deja la lápida AAA y emite `servicio.eliminado`. Contrato `contratos/eliminar.md`.
+         */
+        delete: operations["serviciosEliminar"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7899,7 +8620,7 @@ export interface paths {
         put?: never;
         /**
          * Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)
-         * @description Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.
+         * @description Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta). `version` es opcional: si viene y no coincide, 409 `conflicto_version`. Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 409 `servicio_no_pendiente` si el servicio ya no está `pendiente_instalacion` (una clave nueva sobre uno ya activo; se revisa antes que la versión; de negocio, no se reintenta); 422 en `instalado_en` si es futura o anterior al alta.
          */
         post: operations["serviciosActivarInstalacion"];
         delete?: never;
@@ -8097,6 +8818,26 @@ export interface paths {
         put?: never;
         /** Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa) */
         post: operations["serviciosDesconectar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/eliminable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ¿Se puede eliminar el servicio? (nunca se usó) y, si no, qué lo impide
+         * @description Para que el panel muestre «Eliminar» (eliminable) o «Retirar». Contrato `contratos/eliminar.md`.
+         */
+        get: operations["serviciosEliminable"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8310,6 +9051,26 @@ export interface paths {
         put?: never;
         /** Retirar servicio (libera IPs) */
         post: operations["serviciosRetirar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/sincronizar-router": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sincronizar ya el servicio con su MikroTik (cola, address-list, lease y ARP)
+         * @description Ejecuta `routeros.aplicar_servicio` en el acto y devuelve lo corregido (`cambios[]`) o `ya_estaba_bien`. Idempotente y con candado por servicio; cada comando queda en `audit.red`. Si el router no responde, 200 con `error` (`motivo`, `detalle`). 422 `servicio_pendiente_instalacion`; 422 `router_sin_api` (router inactivo o sin usuario y clave de la API).
+         */
+        post: operations["serviciosSincronizarRouter"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9860,6 +10621,25 @@ export interface components {
             };
             conector_id: string;
         };
+        CanjeConexionIris: {
+            /** @description Token `atk_` del usuario técnico Iris (§1.1) */
+            token: string;
+            webhook: {
+                url: string;
+                secreto: string;
+            };
+            conector_id: string;
+            /** @description true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1) */
+            alcance_global: boolean;
+            /** @description Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
+            empresas: {
+                id: number;
+                /** @description Nombre comercial */
+                nombre: string;
+                /** @description NIT sin guiones; null si la empresa aún no lo tiene */
+                nit: string | null;
+            }[];
+        };
         CanjeLealtad: {
             id: number;
             empresa_id: number;
@@ -10015,6 +10795,29 @@ export interface components {
             pasan: boolean;
             /** @description Con historial=true: todas las filas, la más reciente primero */
             historial?: components["schemas"]["CheckCierre"][];
+        };
+        ChequeoConexion: {
+            /**
+             * @description `corte` (si la API respondió): ¿un suspendido ve la página de corte? (ver `corte`)
+             * @enum {string}
+             */
+            clave: "tunel" | "api" | "equipo" | "radius" | "corte";
+            /** @description null = no se pudo comprobar (falló otro chequeo antes) */
+            ok: boolean | null;
+            /** @description Explicación en lenguaje simple; nunca trae secretos */
+            detalle: string;
+            ms: number;
+            /**
+             * @description Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta
+             * @enum {string|null}
+             */
+            motivo?: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta" | null;
+            /** @description `equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica) */
+            datos?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Solo en `corte`: los pasos con sus comandos de RouterOS, suspendidos fuera de la lista y límites */
+            corte?: components["schemas"]["DiagnosticoCorte"] | null;
         };
         CierreAnual: {
             id: number;
@@ -10578,6 +11381,65 @@ export interface components {
             version: number;
             /** @description Secreto del receptor de Argos en claro, solo cuando se acaba de generar: copiarlo a Horus */
             webhook_entrada_secreto_nuevo: string | null;
+        };
+        ConectorIris: {
+            /** @description Apagado por defecto; encender exige URL y token */
+            activo: boolean;
+            /** @description Origen de la API de Iris */
+            url_base: string | null;
+            /**
+             * @description Secreto de solo escritura: `***` si está guardado, null si no
+             * @enum {string|null}
+             */
+            token: "***" | null;
+            /** @description Receptor de Iris (webhooks Argos → Iris, §2.3) */
+            webhook_salida_url: string | null;
+            /**
+             * @description Secreto de solo escritura: `***` si está guardado, null si no
+             * @enum {string|null}
+             */
+            webhook_salida_secreto: "***" | null;
+            /** @description Receptor de Argos para webhooks de Iris (reservado: responde 501 hasta que el contrato los defina) */
+            webhook_entrada_url: string | null;
+            /**
+             * @description Secreto de solo escritura: `***` si está guardado, null si no
+             * @enum {string|null}
+             */
+            webhook_entrada_secreto: "***" | null;
+            /** @description Id opaco del conector en Argos (respuesta del canje) */
+            conector_id: string | null;
+            /** Format: date-time */
+            conectado_por_enlace_en: string | null;
+            /** @description Token atk_ entregado a Iris en el último canje */
+            token_argos_id: number | null;
+            version: number;
+        };
+        ConexionRouter: {
+            router_id: number;
+            /**
+             * @description sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los últimos 3 min; conectado: handshake de menos de 3 min
+             * @enum {string}
+             */
+            estado: "sin_configurar" | "pendiente" | "conectado";
+            /** @description IP del router en el túnel (/32 de ARGOSISP_WG_RED) */
+            ip_tunel: string | null;
+            /** @description Clave pública WireGuard del router (no es secreta) */
+            public_key: string | null;
+            /** Format: date-time */
+            ultimo_handshake: string | null;
+            /** @description Hubo handshake en los últimos 180 s (el túnel está vivo) */
+            handshake_reciente: boolean;
+            /** Format: date-time */
+            registrado_en: string | null;
+            /** @description La que informó el router al registrarse */
+            routeros_version: string | null;
+            /**
+             * Format: date-time
+             * @description Vencimiento del token del último script; null si ya se usó o no hay
+             */
+            token_vence: string | null;
+            /** @description 0 sin configurar */
+            version: number;
         };
         ConfiguracionEfectivaServicio: {
             servicio_id: number;
@@ -11317,6 +12179,75 @@ export interface components {
             pagado_pendientes: components["schemas"]["Dinero"];
             facturas_vencidas: number;
         };
+        DiagnosticoCorte: {
+            router_id: number;
+            /** @description Un suspendido de este router ve la página de corte (todo en verde) */
+            ok: boolean;
+            chequeos: {
+                /**
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden
+                 * @enum {string}
+                 */
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden";
+                /** @description null: no se pudo comprobar */
+                ok: boolean | null;
+                /**
+                 * @description null si salió bien
+                 * @enum {string|null}
+                 */
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | null;
+                /** @description Qué se vio y qué hacer, en lenguaje simple */
+                detalle: string;
+                /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
+                comandos: string[];
+                /** @description «Reconciliar ahora» lo arregla */
+                reconciliar: boolean;
+            }[];
+            problemas: {
+                /** @enum {string} */
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack";
+                /** @description Qué falla y qué hacer, en lenguaje simple */
+                mensaje: string;
+                /** @description «Reconciliar ahora» lo arregla */
+                reconciliar: boolean;
+                comandos: string[];
+            }[];
+            faltan: {
+                ruta: string;
+                clave: string;
+                /** @enum {string} */
+                accion: "crear" | "actualizar" | "borrar" | "mover";
+            }[];
+            portal: {
+                /** @description PORTAL_URL_PUBLICA (la que ve el cliente) */
+                url: string | null;
+                fqdn: string | null;
+                /** @description IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe */
+                ipv4: string | null;
+                /** @enum {string|null} */
+                origen: "variable" | "url" | "dns" | null;
+                /** @description http://<ip>:<puerto>/corte: el destino real del dst-nat del router (o el deseado) */
+                destino_nat: string | null;
+                /** @description null: no se probó (sin destino) */
+                alcanzable: boolean | null;
+                http_status: number | null;
+                detalle: string | null;
+            };
+            suspendidos: {
+                /** @description Suspendidos con IPv4 (PPPoE con sesión abierta o WISP) */
+                total: number;
+                /** @description Cuántos no están en la address-list: navegan sin corte */
+                fuera_de_lista: number;
+                ejemplos: {
+                    servicio_id: number;
+                    /** @enum {string} */
+                    tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    ipv4: string;
+                }[];
+            };
+            /** @description Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre */
+            limites: string[];
+        };
         Diario: {
             id: number;
             empresa_id: number;
@@ -11392,6 +12323,53 @@ export interface components {
          * @example 150.00
          */
         Dinero: string;
+        DireccionamientoRouter: {
+            router_id: number;
+            redes_ipv4: components["schemas"]["RedIpv4"][];
+            bloques_ipv6: (components["schemas"]["Ipv6Bloque"] & {
+                pools: components["schemas"]["Ipv6Pool"][];
+            })[];
+            ocupacion: {
+                ipv4: components["schemas"]["OcupacionPool"];
+                ipv6: {
+                    /** @enum {string} */
+                    tipo: "enlace" | "delegacion";
+                    /** @enum {integer} */
+                    tamano_entrega: 64 | 56 | 48;
+                    ocupacion: components["schemas"]["OcupacionPool"];
+                }[];
+            };
+            /** @description Qué recibe un servicio nuevo de cada plan disponible en el router (modo IPv6 radius_servicio) */
+            planes: {
+                plan_id: number;
+                nombre: string;
+                /** @enum {string} */
+                dual_stack: "ambos" | "v4" | "v6";
+                ipv4: {
+                    /**
+                     * @description redes: IP fija de las redes del router; pool_router: la asigna el router (Framed-Pool); ninguna: plan solo IPv6 o sin origen
+                     * @enum {string}
+                     */
+                    origen: "redes" | "pool_router" | "ninguna";
+                    pool: string | null;
+                    libres: number | null;
+                };
+                ipv6: {
+                    /** @enum {integer} */
+                    prefijo_enlace: 64;
+                    /** @enum {integer} */
+                    prefijo_delegado: 64 | 56 | 48;
+                    redes_lan_por_cliente: number;
+                    enlaces_libres: number;
+                    delegados_libres: number;
+                } | null;
+                avisos: {
+                    /** @enum {string} */
+                    codigo: "sin_ipv4" | "sin_ipv4_libres" | "sin_pool_enlace" | "sin_pool_delegacion" | "sin_prefijos_enlace_libres" | "sin_prefijos_delegados_libres";
+                    mensaje: string;
+                }[];
+            }[];
+        };
         Dte: {
             id: number;
             empresa_id: number;
@@ -11520,6 +12498,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        Eliminable: {
+            /** @description true: nunca se usó y el panel ofrece «Eliminar»; false: solo «Retirar» (o desactivar) */
+            eliminable: boolean;
+            motivos: components["schemas"]["MotivoEliminacion"][];
         };
         EmisionLibro: {
             id: number;
@@ -11670,9 +12653,50 @@ export interface components {
             /** Format: date-time */
             vence_en: string;
         };
+        EnlaceConexionIris: {
+            /** @description `https://<argos>/conectar#<codigo>`: se muestra una sola vez */
+            enlace: string;
+            /** Format: date-time */
+            vence_en: string;
+        };
+        EntregaPoolIpv6: {
+            /**
+             * @description Atributo RADIUS con el que viaja el prefijo (enlace: Framed; delegación: Delegated)
+             * @enum {string}
+             */
+            atributo_radius: "Framed-IPv6-Prefix" | "Delegated-IPv6-Prefix";
+            /** @description /64 que el router del cliente puede repartir en su LAN (1 en un pool de enlace) */
+            redes_lan_por_cliente: number;
+            /** @description Servicios que caben en el pool */
+            clientes_maximos: number;
+            /** @description Lo que recibe el primer servicio */
+            primer_prefijo: string;
+            segundo_prefijo: string | null;
+            ultimo_prefijo: string;
+        };
         EnvioHorus: {
             id: number;
             /** @description `id` del webhook (estable entre reintentos) */
+            evento_id: string;
+            evento: string;
+            empresa_id: number | null;
+            /** @enum {string} */
+            estado: "pendiente" | "enviado" | "fallido" | "descartado";
+            intentos: number;
+            /** Format: date-time */
+            proximo_intento_en: string | null;
+            ultimo_status: number | null;
+            ultimo_error: string | null;
+            /** Format: date-time */
+            enviado_en: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        EnvioIris: {
+            id: number;
+            /** @description `id` del webhook (`argos-evt-<id>`, estable entre reintentos) */
             evento_id: string;
             evento: string;
             empresa_id: number | null;
@@ -11790,6 +12814,10 @@ export interface components {
              * @description Horus no respondió y está en pausa hasta este instante (UTC); null si no
              */
             reintentar_en: string | null;
+        };
+        EstadoConectorIris: {
+            /** @description Si "Ver en Iris" puede funcionar */
+            activo: boolean;
         };
         EstadoCuenta: {
             cliente_id: number;
@@ -11919,6 +12947,38 @@ export interface components {
                 al_dia: boolean;
             } | null;
         };
+        EstrategiasRouter: {
+            pppoe: components["schemas"]["EstrategiaVelocidad"];
+            ip_estatica: components["schemas"]["EstrategiaVelocidad"];
+            dhcp_fija: components["schemas"]["EstrategiaVelocidad"];
+        };
+        EstrategiaVelocidad: {
+            /**
+             * @description Capa 1: cómo se limita a cada cliente
+             * @enum {string}
+             */
+            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+            /**
+             * @description Capa 2: agregación
+             * @enum {string}
+             */
+            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+            /**
+             * @description Capa 3: cola de las hojas o del PCQ
+             * @enum {string}
+             */
+            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+            extras: {
+                /** @description burst-* del plan (en PCQ: pcq-burst-*) */
+                rafaga: boolean;
+                /** @description priority del plan (1–8); false = 8 */
+                prioridad: boolean;
+                /** @description limit-at (CIR); false = 0 */
+                garantizado: boolean;
+                /** @description Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack */
+                excluir_fasttrack: boolean;
+            };
+        };
         EvaluacionPromesa: {
             /** @enum {string} */
             resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
@@ -12032,6 +13092,50 @@ export interface components {
             reglas_promesa?: {
                 [key: string]: unknown;
             };
+        };
+        ExcepcionEstrategia: {
+            pppoe?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
+            ip_estatica?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
+            dhcp_fija?: {
+                /** @enum {string|null} */
+                aplicacion?: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq" | null;
+                /** @enum {string|null} */
+                padre?: "ninguno" | "por_plan" | "por_router" | "jerarquico" | null;
+                /** @enum {string|null} */
+                tipo_cola?: "default" | "sfq" | "pcq" | "fq_codel" | "cake" | null;
+                extras?: {
+                    rafaga?: boolean | null;
+                    prioridad?: boolean | null;
+                    garantizado?: boolean | null;
+                    excluir_fasttrack?: boolean | null;
+                } | null;
+            } | null;
         };
         ExistenciaInventario: {
             id: number;
@@ -12600,7 +13704,16 @@ export interface components {
         Ipv6Bloque: {
             id: number;
             router_id: number;
+            nombre: string | null;
+            /** @description Proveedor que asignó el bloque */
+            proveedor: string | null;
             prefijo: string;
+            /** @description Cuánto del bloque está repartido en pools */
+            espacio: {
+                pools: number;
+                /** @description Parte del bloque ya repartida en pools, con un decimal */
+                porcentaje_en_pools: number;
+            };
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -12611,12 +13724,20 @@ export interface components {
         Ipv6Pool: {
             id: number;
             bloque_id: number;
+            router_id: number;
+            nombre: string | null;
             prefijo: string;
-            /** @enum {string} */
+            /**
+             * @description enlace: un /64 por servicio para la conexión PPPoE; delegacion: el prefijo que el router del cliente reparte en su red
+             * @enum {string}
+             */
             tipo: "enlace" | "delegacion";
             /** @enum {integer} */
             tamano_entrega: 64 | 56 | 48;
+            /** @description Nombre del pool en RouterOS (modo radius_pool) */
             nombre_en_router: string | null;
+            ocupacion: components["schemas"]["OcupacionPool"];
+            entrega: components["schemas"]["EntregaPoolIpv6"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -12791,6 +13912,42 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        MatrizControlVelocidad: {
+            aplicaciones: {
+                /** @enum {string} */
+                valor: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                /** @enum {string} */
+                familia: "simple" | "arbol";
+                tipos_conexion: ("pppoe" | "ip_estatica" | "dhcp_fija")[];
+                tipos_cola: ("default" | "sfq" | "pcq" | "fq_codel" | "cake")[];
+                /** @description La velocidad de una sesión viva cambia por CoA */
+                coa_en_vivo: boolean;
+            }[];
+            tipos_cola: {
+                /** @enum {string} */
+                valor: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                routeros_minimo: string | null;
+            }[];
+            padres: {
+                /** @enum {string} */
+                valor: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+            }[];
+            extras: {
+                /** @enum {string} */
+                valor: "rafaga" | "prioridad" | "garantizado" | "excluir_fasttrack";
+                por_defecto: boolean;
+            }[];
+            reglas: {
+                /** @description El mismo `rule` de los errores 422 */
+                rule: string;
+                mensaje: string;
+            }[];
+            advertencias: string[];
+            atajos: {
+                simple: components["schemas"]["EstrategiasRouter"];
+                arbol_pcq: components["schemas"]["EstrategiasRouter"];
+            };
+        };
         Mayor: {
             cuenta: components["schemas"]["Cuenta"];
             saldo_inicial: components["schemas"]["Dinero"];
@@ -12861,6 +14018,33 @@ export interface components {
              */
             primer_accounting: string | null;
         };
+        MigracionPools: {
+            router_origen_id: number;
+            router_destino_id: number;
+            redes_ipv4: components["schemas"]["RedIpv4"][];
+            bloques_ipv6: components["schemas"]["Ipv6Bloque"][];
+            /** @description Servicios que pasaron (o pasarían, con simular) al router de destino */
+            servicios: {
+                servicio_id: number;
+                user_ppp: string | null;
+                /** @description Router y direcciones antes de migrar */
+                antes: {
+                    router_id: number;
+                    ipv4: string | null;
+                    prefijo_enlace_v6: string | null;
+                    prefijo_delegado_v6: string | null;
+                };
+                /** @description Router y direcciones después de migrar */
+                despues: {
+                    router_id: number;
+                    ipv4: string | null;
+                    prefijo_enlace_v6: string | null;
+                    prefijo_delegado_v6: string | null;
+                };
+            }[];
+            /** @description true = vista previa: no se guardó nada */
+            simulado: boolean;
+        };
         MotivoCortesia: {
             id: number;
             /** @description null = común a todas las empresas */
@@ -12874,6 +14058,13 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        MotivoEliminacion: {
+            /** @description facturas, sesiones, servicios, routeros… */
+            codigo: string;
+            cantidad: number;
+            /** @description «tiene 3 facturas» */
+            mensaje: string;
         };
         MotivoSinCosto: {
             id: number;
@@ -13068,7 +14259,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -13174,6 +14365,19 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Ocupación del pool (contratos/pools.md §2); total = asignadas + libres + reservadas */
+        OcupacionPool: {
+            /** @description IPv4: hosts utilizables. IPv6: prefijos que caben */
+            total: number;
+            /** @description En uso por servicios */
+            asignadas: number;
+            /** @description Las que el sistema todavía puede entregar */
+            libres: number;
+            /** @description No se entregan: IPv4, el gateway y las que quedan fuera del rango; IPv6, las ocupadas por prefijos de otro tamaño (estáticos) */
+            reservadas: number;
+            /** @description asignadas / (asignadas + libres) × 100, con un decimal */
+            porcentaje: number;
         };
         PaginaCanjesLealtad: {
             data: components["schemas"]["CanjeLealtad"][];
@@ -13417,6 +14621,14 @@ export interface components {
             descripcion: string;
             monto: components["schemas"]["Dinero"];
         };
+        PeersWireguard: {
+            data: components["schemas"]["PeerWireguard"][];
+        };
+        PeerWireguard: {
+            router_id: number;
+            public_key: string;
+            ip_tunel: string;
+        };
         Permiso: {
             id: number;
             nombre: components["schemas"]["NombrePermiso"];
@@ -13540,6 +14752,8 @@ export interface components {
             rafaga_segundos: number | null;
             /** @description null = hereda del plan */
             prioridad: number | null;
+            /** @description Estrategia propia del plan en este router, parcial por tipo de conexión; null = hereda la del router */
+            estrategia_velocidad: components["schemas"]["ExcepcionEstrategia"] | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -14517,6 +15731,14 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        PruebaConexion: {
+            router_id: number;
+            /** @description Todos los chequeos salieron bien */
+            ok: boolean;
+            /** Format: date-time */
+            probado_en: string;
+            chequeos: components["schemas"]["ChequeoConexion"][];
+        };
         PuntosCanjeables: {
             cliente_id: number;
             empresas: {
@@ -14571,6 +15793,12 @@ export interface components {
             /** @description Empresa del servicio de esa IP (su marca y su soporte); null sin identificar */
             empresa: components["schemas"]["PortalMarcaEmpresa"] | null;
         };
+        ReconciliacionEncolada: {
+            router_id: number;
+            job_id: string;
+            /** @description false: ya había una esperando o en curso (no se encoló otra) */
+            encolado: boolean;
+        };
         RecordatorioPago: {
             id: number;
             /** @description Plantilla `recordatorio.<orden>` */
@@ -14590,10 +15818,19 @@ export interface components {
         RedIpv4: {
             id: number;
             router_id: number;
+            nombre: string | null;
             cidr: string;
+            /** @description Puerta de enlace de los clientes; nunca se asigna */
             gateway: string | null;
             /** @enum {string} */
             tipo: "estatico" | "pool";
+            /** @description Primera IP que se entrega a servicios; null = toda la red */
+            rango_inicio: string | null;
+            /** @description Última IP que se entrega a servicios; null = toda la red */
+            rango_fin: string | null;
+            dns_primario: string | null;
+            dns_secundario: string | null;
+            ocupacion: components["schemas"]["OcupacionPool"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -14635,6 +15872,20 @@ export interface components {
             } | null;
             valor_id: number;
             frases: components["schemas"]["FraseFiscal"][];
+        };
+        RegistroConexion: {
+            router_id: number;
+            /** @description IP /32 del router en el túnel (el script la compara con la suya) */
+            ip_tunel: string;
+            servidor: {
+                /** @description Clave pública del servidor WireGuard */
+                public_key: string;
+                /** @description ARGOSISP_WG_ENDPOINT */
+                endpoint: string;
+                puerto: number;
+                /** @description IP del servidor en el túnel (RADIUS, CoA, API) */
+                ip: string;
+            };
         };
         ReglaConciliacion: {
             id: number;
@@ -15853,6 +17104,29 @@ export interface components {
                 resumen_promesas: string | null;
             };
         };
+        ResumenEnviosIris: {
+            /** @description Conector activo con URL y secreto del receptor de Iris; sin él no se envía nada */
+            destino_configurado: boolean;
+            /** @description Empresas del usuario técnico «Iris» cuyos eventos se envían; null sin usuario técnico activo (no se envía nada) */
+            alcance: {
+                global: boolean;
+                empresas: number[];
+            } | null;
+            pendientes: number;
+            fallidos: number;
+            /** Format: date-time */
+            ultimo_enviado_en: string | null;
+            ultimo_fallo: {
+                evento_id: string;
+                evento: string;
+                /** @enum {string} */
+                estado: "pendiente" | "fallido";
+                intentos: number;
+                ultimo_error: string | null;
+                /** Format: date-time */
+                en: string;
+            } | null;
+        };
         ResumenFondosEnTransito: {
             empresa_id: number;
             /** @description Saldo de 1.1.11 en el libro de la empresa */
@@ -15931,10 +17205,14 @@ export interface components {
             /** @enum {string} */
             modo_seguridad: "radius" | "api";
             /**
-             * @description simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)
+             * @description Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple
              * @enum {string}
              */
             control_velocidad: "simple" | "arbol_pcq";
+            /** @description Estrategia de control de velocidad por tipo de conexión (contratos/control-velocidad.md) */
+            estrategia_velocidad: components["schemas"]["EstrategiasRouter"];
+            /** @description Versión de RouterOS leída de /system/resource; null = no se sabe */
+            routeros_version: string | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
             capacidad_bajada_kbps: number | null;
             /** @description Capacidad del enlace (techo del padre global); null = sin techo */
@@ -15965,6 +17243,10 @@ export interface components {
              * @description Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca
              */
             ultimo_contacto: string | null;
+            /** @description Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
+            zona_id?: number | null;
+            /** @description Ubicación del router "lat,lng" en grados decimales, sin espacios, el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
+            coordenadas?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -16249,6 +17531,48 @@ export interface components {
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
         };
+        SincronizacionPlan: {
+            plan_id: number;
+            /** @description Servicios PPPoE del plan cuyo aaa:user:* se reescribe */
+            aaa_reescritos: number;
+            routers: {
+                router_id: number;
+                nombre: string;
+                servicios: number;
+                /** @description Sesiones PPPoE vivas a las que se pidió CoA con la velocidad nueva (sin desconectar) */
+                sesiones_actualizadas: number;
+                /** @description Sesiones abiertas sin CoA (PCQ del plan, suspendidas o con otra estrategia) */
+                sesiones_sin_coa: number;
+                /** @description Objetos que el reconciliador creó, corrigió o borró */
+                colas_cambiadas: number;
+                /** @description false: el router no tiene API (solo RADIUS) */
+                reconciliado: boolean;
+                errores: string[];
+            }[];
+        };
+        SincronizacionServicio: {
+            servicio_id: number;
+            router_id: number;
+            cambios: {
+                router_id: number;
+                /** @description Menú de RouterOS (`/queue/simple`, `/ip/arp`…) */
+                ruta: string;
+                /** @description `argosisp:servicio:<id>` o `argosisp:plan:<id>` */
+                comment: string;
+                /** @enum {string} */
+                accion: "creado" | "actualizado" | "borrado";
+                duplicados?: number;
+            }[];
+            /** @description Nada que corregir y el router respondió */
+            ya_estaba_bien: boolean;
+            avisos: string[];
+            /** @description El router no respondió o rechazó un comando (lenguaje simple); null si todo bien */
+            error: {
+                /** @enum {string} */
+                motivo: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta";
+                detalle: string;
+            } | null;
+        };
         SolicitudCertificacion: {
             factura_id: number;
             dte: components["schemas"]["Dte"] | null;
@@ -16497,6 +17821,12 @@ export interface components {
             /** Format: date-time */
             expira_en: string | null;
         };
+        TicketIris: {
+            /** @description URL de Iris con el ticket (un solo uso, 60 s); el panel la abre */
+            url: string;
+            /** Format: date-time */
+            expira_en: string | null;
+        };
         TicketSsoEmitido: {
             /** @description `https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso */
             url: string;
@@ -16525,6 +17855,13 @@ export interface components {
             token: string;
             datos: components["schemas"]["TokenApi"];
             /** @description Usuario técnico Horus */
+            usuario_id: number;
+        };
+        TokenIrisCreado: {
+            /** @description Valor `atk_…`; se muestra una sola vez */
+            token: string;
+            datos: components["schemas"]["TokenApi"];
+            /** @description Usuario técnico Iris */
             usuario_id: number;
         };
         TramoAsignacion: {
@@ -16790,6 +18127,31 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        VistaPreviaBloqueIpv6: {
+            prefijo: string;
+            /** @enum {integer} */
+            tamano_delegado: 64 | 56 | 48;
+            /** @description Servicios que caben con la división sugerida (un /64 de enlace y un delegado cada uno) */
+            clientes: number;
+            /** @description /64 que cada cliente reparte en su LAN */
+            redes_lan_por_cliente: number;
+            pools_sugeridos: {
+                /** @enum {string} */
+                tipo: "enlace" | "delegacion";
+                prefijo: string;
+                /** @enum {integer} */
+                tamano_entrega: 64 | 56 | 48;
+                clientes: number;
+            }[];
+            ejemplos: {
+                /** @description 1 = el primer servicio */
+                servicio: number;
+                prefijo_enlace: string;
+                prefijo_delegado: string;
+            }[];
+            /** @description Bloque existente con el que se traslaparía (no se podría crear); null si no hay */
+            traslapa_con: string | null;
+        };
         VistaPreviaControl: {
             router_id: number;
             /** @enum {string} */
@@ -16826,6 +18188,66 @@ export interface components {
                 nombre: string | null;
             }[];
         };
+        VistaPreviaEstrategia: {
+            router_id: number;
+            /** @description false: la combinación no es válida (ver errores) */
+            valida: boolean;
+            errores: {
+                /** @description Capa con el problema, p. ej. estrategia_velocidad.ip_estatica.aplicacion */
+                field: string;
+                /** @description aplicacion_tipo, tipo_cola, version, familia_router, plan_consistente, familia_plan o enum */
+                rule: string;
+                /** @description El porqué, en lenguaje simple */
+                message: string;
+            }[];
+            advertencias: {
+                /** @description sin_techo, reuso_dedicado, sin_padre_prioridad, fasttrack, version_desconocida o fuera_del_techo */
+                regla: string;
+                mensaje: string;
+            }[];
+            de: components["schemas"]["EstrategiasRouter"];
+            a: components["schemas"]["EstrategiasRouter"];
+            planes: {
+                plan_id: number;
+                de: components["schemas"]["ExcepcionEstrategia"] | null;
+                a: components["schemas"]["ExcepcionEstrategia"] | null;
+            }[];
+            crear: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            actualizar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            borrar: {
+                ruta: string;
+                /** @description `comment` del objeto (o `name` en `/queue/type`) */
+                clave: string;
+                nombre: string | null;
+            }[];
+            menus: {
+                ruta: string;
+                crear: number;
+                actualizar: number;
+                borrar: number;
+            }[];
+            /** @description Servicios cuya estrategia cambia */
+            servicios: number;
+            /** @description Lotes de 50 servicios en que el worker los migra */
+            lotes: number;
+            /** @description Sesiones PPPoE vivas que reciben el rate-limit nuevo por CoA */
+            sesiones_coa: number;
+            /** @description Sesiones PPPoE que conservan lo anterior hasta reconectar por su cuenta */
+            sesiones_conservan: number;
+            /** @description Solo con reconectar: sesiones que reciben Disconnect */
+            sesiones_a_desconectar: number;
+            orden: ("preparar" | "lotes" | "terminar")[];
+        };
         VistaPreviaPlantilla: {
             evento: string;
             /** @enum {string} */
@@ -16836,6 +18258,49 @@ export interface components {
             mensaje: string;
             /** @description Variables que la plantilla usa y el evento no trae: se renderizan vacías */
             variables_desconocidas: string[];
+        };
+        VistaPreviaPoolIpv6: {
+            prefijo: string;
+            /** @enum {string} */
+            tipo: "enlace" | "delegacion";
+            /** @enum {integer} */
+            tamano_entrega: 64 | 56 | 48;
+            /**
+             * @description Atributo RADIUS con el que viaja el prefijo (enlace: Framed; delegación: Delegated)
+             * @enum {string}
+             */
+            atributo_radius: "Framed-IPv6-Prefix" | "Delegated-IPv6-Prefix";
+            /** @description /64 que el router del cliente puede repartir en su LAN (1 en un pool de enlace) */
+            redes_lan_por_cliente: number;
+            /** @description Servicios que caben en el pool */
+            clientes_maximos: number;
+            /** @description Lo que recibe el primer servicio */
+            primer_prefijo: string;
+            segundo_prefijo: string | null;
+            ultimo_prefijo: string;
+            /** @description Pool existente con el que se traslaparía (no se podría crear); null si no hay */
+            traslapa_con: string | null;
+        };
+        VistaPreviaReconciliar: {
+            router_id: number;
+            cambios: {
+                ruta: string;
+                clave: string;
+                /** @enum {string} */
+                accion: "crear" | "actualizar" | "borrar" | "mover";
+                /** @enum {string} */
+                grupo: "servicio" | "velocidad" | "corte";
+            }[];
+            menus: {
+                ruta: string;
+                crear: number;
+                actualizar: number;
+                borrar: number;
+                mover: number;
+            }[];
+            avisos: string[];
+            /** @description El router no respondió o no tiene credenciales */
+            error: string | null;
         };
         VistaPreviaVelocidad: {
             /** @description Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override) */
@@ -30741,6 +32206,650 @@ export interface operations {
             };
         };
     };
+    irisVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConectorIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisConfigurar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; 0 si el conector nunca se guardó. 409 si cambió */
+                    version: number;
+                    activo?: boolean;
+                    /** @description Origen de la API de Iris (https://host[:puerto]) */
+                    url_base?: string | null;
+                    /** @description Token iris_pat_ de Iris para Argos. Omitido: se conserva; null: se borra. Nunca se devuelve */
+                    token?: string | null;
+                    /** @description Receptor de Iris para los webhooks de Argos */
+                    webhook_salida_url?: string | null;
+                    /** @description Secreto de ese receptor. Omitido: se conserva; null: se borra. Nunca se devuelve */
+                    webhook_salida_secreto?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Conector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConectorIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisAbrir: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    destino: {
+                        /** @enum {string} */
+                        tipo: "ticket" | "orden" | "prospecto";
+                        /** @description Id en Iris */
+                        id_externo: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description URL de Iris */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnlaceCanjear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    codigo: string;
+                    sistema: string;
+                    base_url: string;
+                    token: string;
+                    webhook: {
+                        url: string;
+                        secreto: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Credenciales de Argos para Iris */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeConexionIris"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnlaceGenerar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enlace */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnlaceConexionIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnviosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "pendiente" | "enviado" | "fallido" | "descartado";
+                evento?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de envíos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EnvioIris"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnviosResumen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenEnviosIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEstado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoConectorIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.abrir */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisResolver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden */
+                    ips: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Un resultado por IP, en orden */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolucionIpsHorus"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisSsoTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    usuario: {
+                        /** @description Id del usuario en Horus; con el conector forma la vinculación */
+                        id_externo: string;
+                        /** @description Solo informativo: nunca se vincula por correo */
+                        correo?: string | null;
+                        nombre?: string | null;
+                    };
+                    destino: {
+                        /** @enum {string} */
+                        tipo: "cliente" | "servicio";
+                        /** @description Id del cliente o del servicio en ArgosIsp */
+                        id_externo: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Ticket emitido */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketSsoEmitido"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens, los más nuevos primero */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisGenerarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre?: string;
+                    /** @description No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas) */
+                    routers?: number[];
+                    /** @description No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas) */
+                    zonas?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Token generado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenIrisCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisRevocarToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revocado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenApi"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     internoAaaServicio: {
         parameters: {
             query: {
@@ -30956,6 +33065,96 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    internoWireguardEstado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    servidor: {
+                        /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
+                        public_key: string;
+                        ip?: string | null;
+                        red?: string | null;
+                        puerto?: number | null;
+                        interfaz?: string | null;
+                        modo?: string | null;
+                    };
+                    peers: {
+                        /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
+                        public_key: string;
+                        /** Format: date-time */
+                        ultimo_handshake?: string | null;
+                        endpoint?: string | null;
+                        rx_bytes?: number | null;
+                        tx_bytes?: number | null;
+                    }[];
+                    /** Format: date-time */
+                    generado_en?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Estado registrado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    internoWireguardPeers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeersWireguard"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -32159,6 +34358,220 @@ export interface operations {
             };
         };
     };
+    ipv6BloquesVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bloque IPv6 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ipv6Bloque"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6BloquesEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Agrandar o achicar el bloque; 422 con la lista si algún pool quedaría fuera */
+                    prefijo?: string;
+                    /** @description Nombre para reconocer el bloque en el panel */
+                    nombre?: string | null;
+                    /** @description Proveedor que asignó el bloque (un router puede tener bloques de varios proveedores) */
+                    proveedor?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Bloque actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ipv6Bloque"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6BloquesMigrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Router de destino */
+                    router_id: number;
+                    /** @description false (por defecto): si algún servicio usa direcciones del pool responde 422 con la lista. true: los servicios pasan al router de destino conservando sus direcciones del pool */
+                    mover_servicios?: boolean;
+                    /** @description true = no guarda nada: devuelve lo que pasaría (servicios y direcciones antes y después) */
+                    simular?: boolean;
+                    /** @description Redes IPv4 del mismo router que se mudan junto con el bloque (así los servicios conservan también su IPv4) */
+                    redes_ipv4?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Migración (o su simulación) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigracionPools"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.migrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     ipv6PoolsListar: {
         parameters: {
             query?: never;
@@ -32226,6 +34639,9 @@ export interface operations {
                     tipo: "enlace" | "delegacion";
                     /** @enum {integer} */
                     tamano_entrega: 64 | 56 | 48;
+                    /** @description Nombre para reconocer el pool en el panel */
+                    nombre?: string | null;
+                    /** @description Nombre del pool en RouterOS (modo radius_pool) */
                     nombre_en_router?: string | null;
                 };
             };
@@ -32260,6 +34676,262 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6BloquesVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Prefijo IPv6 en notación CIDR */
+                    prefijo: string;
+                    /**
+                     * @description Prefijo delegado por cliente (el del plan: /56 por defecto)
+                     * @enum {integer}
+                     */
+                    tamano_delegado: 64 | 56 | 48;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaBloqueIpv6"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6PoolsVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pool IPv6 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ipv6Pool"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6PoolsEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Agrandar o achicar el pool; 422 con la lista si algún prefijo asignado quedaría fuera */
+                    prefijo?: string;
+                    /**
+                     * @description Solo se cambia si el pool no tiene prefijos asignados
+                     * @enum {string}
+                     */
+                    tipo?: "enlace" | "delegacion";
+                    /**
+                     * @description Solo se cambia si el pool no tiene prefijos asignados
+                     * @enum {integer}
+                     */
+                    tamano_entrega?: 64 | 56 | 48;
+                    /** @description Nombre para reconocer el pool en el panel */
+                    nombre?: string | null;
+                    /** @description Nombre del pool en RouterOS (modo radius_pool) */
+                    nombre_en_router?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Pool actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ipv6Pool"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ipv6PoolsVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Prefijo IPv6 en notación CIDR */
+                    prefijo: string;
+                    /** @enum {string} */
+                    tipo: "enlace" | "delegacion";
+                    /** @enum {integer} */
+                    tamano_entrega: 64 | 56 | 48;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaPoolIpv6"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso ipv6.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -41548,6 +44220,191 @@ export interface operations {
             };
         };
     };
+    planesEstrategiaVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                routerId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version?: number;
+                    estrategia_velocidad?: {
+                        pppoe?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                        ip_estatica?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                        dhcp_fija?: {
+                            aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                            padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                            tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                            extras?: {
+                                rafaga?: boolean | null;
+                                prioridad?: boolean | null;
+                                garantizado?: boolean | null;
+                                excluir_fasttrack?: boolean | null;
+                            } | null;
+                        } | null;
+                    } | null;
+                    motivo?: string;
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Implementación con la estrategia */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    planesSincronizar: {
+        parameters: {
+            query?: {
+                router_id?: number;
+            };
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por router */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SincronizacionPlan"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.sincronizar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     planesVistaPrevia: {
         parameters: {
             query?: never;
@@ -45276,6 +48133,44 @@ export interface operations {
             };
         };
     };
+    redControlVelocidadMatriz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matriz */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrizControlVelocidad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     redEventosListar: {
         parameters: {
             query?: {
@@ -45320,6 +48215,242 @@ export interface operations {
             };
             /** @description Sin el permiso red.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    redesIpv4Ver: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Red IPv4 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedIpv4"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso redes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    redesIpv4Editar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Agrandar o achicar la red; 422 con la lista si alguna IP asignada quedaría fuera */
+                    cidr?: string;
+                    /** @enum {string} */
+                    tipo?: "estatico" | "pool";
+                    /** @description Nombre para reconocer la red en el panel («Clientes zona norte») */
+                    nombre?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Puerta de enlace de los clientes; no se asigna a ningún servicio
+                     */
+                    gateway?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Primera IP que el sistema entrega a servicios; null (con rango_fin) = toda la red. Fuera del rango las IPs quedan reservadas
+                     */
+                    rango_inicio?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Última IP que el sistema entrega a servicios
+                     */
+                    rango_fin?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description DNS para los clientes de la red
+                     */
+                    dns_primario?: string | null;
+                    /** Format: ipv4 */
+                    dns_secundario?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Red actualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedIpv4"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso redes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    redesIpv4Migrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Router de destino */
+                    router_id: number;
+                    /** @description false (por defecto): si algún servicio usa direcciones del pool responde 422 con la lista. true: los servicios pasan al router de destino conservando sus direcciones del pool */
+                    mover_servicios?: boolean;
+                    /** @description true = no guarda nada: devuelve lo que pasaría (servicios y direcciones antes y después) */
+                    simular?: boolean;
+                    /** @description Bloques IPv6 del mismo router que se mudan junto con la red (así los servicios conservan también sus prefijos) */
+                    bloques_ipv6?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Migración (o su simulación) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigracionPools"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso redes.migrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -46255,7 +49386,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -46313,7 +49444,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -46484,9 +49615,9 @@ export interface operations {
                     /** @description Host o IP de la API REST de RouterOS */
                     host: string;
                     api_usuario?: string | null;
-                    /** @description Se guarda cifrada */
+                    /** @description Clave del usuario de la API REST. Se guarda cifrada. Vacía o null = sin credencial */
                     api_password?: string | null;
-                    /** @description Se guarda cifrado */
+                    /** @description Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado. Vacía o null = sin credencial */
                     radius_secret?: string | null;
                     /** Format: ipv4 */
                     nas_ip: string;
@@ -46494,6 +49625,10 @@ export interface operations {
                     modo_seguridad?: "radius" | "api";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;
+                    /** @description Zona del router (opcional); 422 si no existe */
+                    zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita */
+                    coordenadas?: string | null;
                     /**
                      * @description simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad
                      * @enum {string}
@@ -46622,14 +49757,24 @@ export interface operations {
                     nombre?: string;
                     host?: string;
                     api_usuario?: string | null;
+                    /** @description Clave nueva de la API REST (cifrada). Vacía o null = no cambiar */
                     api_password?: string | null;
+                    /** @description Secreto RADIUS nuevo (cifrado; el de FreeRADIUS). Vacío o null = no cambiar */
                     radius_secret?: string | null;
+                    /** @description Borra la clave de la API (422 si además llega api_password) */
+                    quitar_api_password?: boolean;
+                    /** @description Borra el secreto RADIUS (422 si además llega radius_secret) */
+                    quitar_radius_secret?: boolean;
                     /** Format: ipv4 */
                     nas_ip?: string;
                     /** @enum {string} */
                     modo_seguridad?: "radius" | "api";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;
+                    /** @description Zona del router (opcional); 422 si no existe */
+                    zona_id?: number | null;
+                    /** @description Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita */
+                    coordenadas?: string | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
                     capacidad_bajada_kbps?: number | null;
                     /** @description kbps del enlace (techo de la cola padre global); null = sin techo */
@@ -46668,6 +49813,77 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso routers.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersEliminar: {
+        parameters: {
+            query: {
+                /** @description version leída; si cambió responde 409 */
+                version: number;
+            };
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Router eliminado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -46782,6 +49998,451 @@ export interface operations {
             };
         };
     };
+    routersCambiarEstrategiaVelocidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    estrategia_velocidad: {
+                        pppoe: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        ip_estatica: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        dhcp_fija: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                    };
+                    motivo?: string;
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Router con la estrategia nueva */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Router"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersConexion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conexión del router */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConexionRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersConexionClave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
+                    public_key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conexión del router */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConexionRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.conexion_clave; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersConexionRotar: {
+        parameters: {
+            query?: {
+                /** @description IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). Vacía: gestión solo por el túnel */
+                admin?: string;
+                /** @description `servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión */
+                incluir?: "servicio";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Script .rsc nuevo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.rotar_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersDiagnosticoCorte: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diagnóstico */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticoCorte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersDireccionamiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Direccionamiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DireccionamientoRouter"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersEliminable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Si es eliminable y los motivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Eliminable"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     ipv6BloquesListar: {
         parameters: {
             query?: never;
@@ -46845,6 +50506,10 @@ export interface operations {
                 "application/json": {
                     /** @description Prefijo IPv6 en notación CIDR */
                     prefijo: string;
+                    /** @description Nombre para reconocer el bloque en el panel */
+                    nombre?: string | null;
+                    /** @description Proveedor que asignó el bloque (un router puede tener bloques de varios proveedores) */
+                    proveedor?: string | null;
                 };
             };
         };
@@ -47073,6 +50738,104 @@ export interface operations {
             };
         };
     };
+    routersProbarConexion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la prueba */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PruebaConexion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.probar_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersReconciliar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reconciliación encolada */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliacionEncolada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.reconciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     redesIpv4Listar: {
         parameters: {
             query?: never;
@@ -47136,10 +50899,32 @@ export interface operations {
                 "application/json": {
                     /** @description Red IPv4 en notación CIDR */
                     cidr: string;
-                    /** Format: ipv4 */
-                    gateway?: string | null;
                     /** @enum {string} */
                     tipo: "estatico" | "pool";
+                    /** @description Nombre para reconocer la red en el panel («Clientes zona norte») */
+                    nombre?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Puerta de enlace de los clientes; no se asigna a ningún servicio
+                     */
+                    gateway?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Primera IP que el sistema entrega a servicios; null (con rango_fin) = toda la red. Fuera del rango las IPs quedan reservadas
+                     */
+                    rango_inicio?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description Última IP que el sistema entrega a servicios
+                     */
+                    rango_fin?: string | null;
+                    /**
+                     * Format: ipv4
+                     * @description DNS para los clientes de la red
+                     */
+                    dns_primario?: string | null;
+                    /** Format: ipv4 */
+                    dns_secundario?: string | null;
                 };
             };
         };
@@ -47251,6 +51036,69 @@ export interface operations {
             };
         };
     };
+    routersScriptConexion: {
+        parameters: {
+            query?: {
+                /** @description IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). Vacía: gestión solo por el túnel */
+                admin?: string;
+                /** @description `servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión */
+                incluir?: "servicio";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Script .rsc */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.generar_script */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     routersVistaPreviaControl: {
         parameters: {
             query: {
@@ -47302,6 +51150,252 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersVistaPreviaEstrategia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    estrategia_velocidad?: {
+                        pppoe: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        ip_estatica: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                        dhcp_fija: {
+                            /** @enum {string} */
+                            aplicacion: "radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq";
+                            /** @enum {string} */
+                            padre: "ninguno" | "por_plan" | "por_router" | "jerarquico";
+                            /** @enum {string} */
+                            tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
+                            extras: {
+                                rafaga: boolean;
+                                prioridad: boolean;
+                                garantizado: boolean;
+                                excluir_fasttrack: boolean;
+                            };
+                        };
+                    };
+                    planes?: {
+                        plan_id: number;
+                        estrategia_velocidad?: {
+                            pppoe?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                            ip_estatica?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                            dhcp_fija?: {
+                                aplicacion?: ("radius_rate_limit" | "perfil_ppp" | "cola_simple" | "pcq_plan" | "arbol_pcq") | null;
+                                padre?: ("ninguno" | "por_plan" | "por_router" | "jerarquico") | null;
+                                tipo_cola?: ("default" | "sfq" | "pcq" | "fq_codel" | "cake") | null;
+                                extras?: {
+                                    rafaga?: boolean | null;
+                                    prioridad?: boolean | null;
+                                    garantizado?: boolean | null;
+                                    excluir_fasttrack?: boolean | null;
+                                } | null;
+                            } | null;
+                        } | null;
+                    }[];
+                    /** @description Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar */
+                    reconectar?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaEstrategia"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersVistaPreviaReconciliar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaReconciliar"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.reconciliar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersConexionRegistrar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
+                    public_key: string;
+                    /** @description Versión de RouterOS del equipo (`/system resource version`) */
+                    routeros_version?: string | null;
+                    /** @description PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella el certificado de www-ssl */
+                    api_ca?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Router registrado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistroConexion"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -47684,6 +51778,77 @@ export interface operations {
             };
         };
     };
+    serviciosEliminar: {
+        parameters: {
+            query: {
+                /** @description version leída; si cambió responde 409 */
+                version: number;
+            };
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Servicio eliminado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     serviciosActivarInstalacion: {
         parameters: {
             query?: never;
@@ -47699,8 +51864,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description version leída; si cambió responde 409 */
-                    version: number;
+                    /** @description Opcional: si viene y no coincide, 409 conflicto_version. Sin ella protegen la máquina de estados (solo sale de pendiente_instalacion; si no, 409 servicio_no_pendiente) y la Idempotency-Key */
+                    version?: number;
                     /**
                      * Format: date-time
                      * @description Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio
@@ -47710,7 +51875,7 @@ export interface operations {
                     origen_tipo?: string;
                     /** @description Id del documento de origen (la orden de Iris) */
                     origen_id?: string;
-                    /** @description Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada */
+                    /** @description Referencia de planta de la instalación (la envía Iris): solo lectura, no se valida contra nada */
                     planta?: {
                         caja?: string;
                         puerto?: string;
@@ -48553,6 +52718,55 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosEliminable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Si es eliminable y los motivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Eliminable"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -49527,6 +53741,76 @@ export interface operations {
             };
         };
     };
+    serviciosSincronizarRouter: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la sincronización */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SincronizacionServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.sincronizar_router; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     serviciosSuspender: {
         parameters: {
             query?: never;
@@ -49908,7 +54192,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
@@ -50374,7 +54658,7 @@ export interface operations {
                     /** @description Solo las de este usuario; sin él, todas */
                     usuario_id?: number;
                     /** @enum {string} */
-                    conector?: "horus";
+                    conector?: "horus" | "iris";
                 };
             };
         };

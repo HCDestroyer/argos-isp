@@ -35,14 +35,37 @@ export const RUTAS = [
     '/ip/dhcp-server/lease',
     '/ip/arp',
     '/ppp/profile',
+    // Corte (contratos/control-velocidad.md §10): reglas, NAT y lista de interfaces de los suspendidos
+    '/ip/firewall/filter',
+    '/ip/firewall/nat',
+    '/ipv6/firewall/filter',
+    '/ipv6/firewall/nat',
+    '/interface/list',
 ] as const
 export type RutaRouterOS = (typeof RUTAS)[number]
 
+/** Menús con orden (las reglas): admiten `move`. */
+export const RUTAS_ORDENADAS = [
+    '/ip/firewall/filter',
+    '/ip/firewall/nat',
+    '/ipv6/firewall/filter',
+    '/ipv6/firewall/nat',
+] as const satisfies readonly RutaRouterOS[]
+export type RutaOrdenada = (typeof RUTAS_ORDENADAS)[number]
+
+/**
+ * Comandos de diagnóstico que el router ejecuta sin cambiar su configuración (`POST /rest/<comando>`):
+ * si el router llega al portal de corte.
+ */
+export const COMANDOS = ['/tool/fetch', '/ping'] as const
+export type ComandoRouterOS = (typeof COMANDOS)[number]
+
 /**
  * Menús que ArgosIsp solo lee (nunca escribe): bindings de DHCPv6-PD para conocer el prefijo que
- * el router delegó a una sesión PPPoE en modo `radius_pool`, y las sesiones PPP activas.
+ * el router delegó a una sesión PPPoE en modo `radius_pool`, las sesiones PPP activas y los clientes
+ * RADIUS del router (`routers.probar_conexion`).
  */
-export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active'] as const
+export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active', '/radius'] as const
 export type RutaLectura = (typeof RUTAS_LECTURA)[number]
 
 /** Un objeto tal como lo devuelve RouterOS: todas las propiedades son texto. */
@@ -269,6 +292,36 @@ export class ClienteRouterOS {
         return this.#conReintentos((intento) => this.#escribir('PATCH', ruta, id, propiedades, ctx, intento))
     }
 
+    /**
+     * Mueve una regla antes de otra (`POST /rest/<menú>/move`, `numbers` y `destination`), como
+     * `/ip firewall filter move`. Queda en `audit.red` como cualquier escritura.
+     */
+    async mover(ruta: RutaOrdenada, id: string, destino: string, ctx: ContextoRed = {}): Promise<void> {
+        await this.#conReintentos((intento) =>
+            this.#escribir('POST', ruta, null, { numbers: id, destination: destino }, ctx, intento, {
+                comando: 'move',
+            }),
+        )
+    }
+
+    /**
+     * Ejecuta un comando de diagnóstico (`/tool/fetch` con `output=none`, `/ping`). No cambia la
+     * configuración; queda en `audit.red` con la respuesta del equipo. Devuelve lo que responde el
+     * router (una lista de resultados).
+     */
+    async ejecutar(
+        comando: ComandoRouterOS,
+        propiedades: Propiedades,
+        ctx: ContextoRed = {},
+    ): Promise<Array<Record<string, string>>> {
+        const objeto = await this.#escribir('POST', comando as never, null, propiedades, ctx, 1, {
+            comando: comando.slice(1),
+            diagnostico: true,
+        })
+        const lista = (objeto as unknown as { resultado?: unknown }).resultado
+        return Array.isArray(lista) ? (lista as Array<Record<string, string>>) : []
+    }
+
     async borrarPorId(ruta: RutaRouterOS, id: string, ctx: ContextoRed = {}): Promise<void> {
         await this.#conReintentos((intento) => this.#borrarId(ruta, { '.id': id }, ctx, intento))
     }
@@ -321,19 +374,31 @@ export class ClienteRouterOS {
     }
 
     async #escribir(
-        metodo: 'PUT' | 'PATCH' | 'DELETE',
+        metodo: 'PUT' | 'PATCH' | 'DELETE' | 'POST',
         ruta: RutaRouterOS,
         id: string | null,
         propiedades: Propiedades | null,
         ctx: ContextoRed,
         intento: number,
-        extra: { antes?: unknown } = {},
+        extra: { antes?: unknown; comando?: string; diagnostico?: boolean } = {},
     ): Promise<ObjetoRouterOS> {
-        this.#validarRuta(ruta)
-        const camino = id ? `${ruta.slice(1)}/${encodeURIComponent(id)}` : ruta.slice(1)
+        if (extra.diagnostico) {
+            if (!(COMANDOS as readonly string[]).includes(ruta)) {
+                throw new Error(`comando no permitido: ${ruta}`)
+            }
+        } else this.#validarRuta(ruta)
+        const camino =
+            metodo === 'POST'
+                ? extra.diagnostico
+                    ? ruta.slice(1)
+                    : `${ruta.slice(1)}/${extra.comando}`
+                : id
+                  ? `${ruta.slice(1)}/${encodeURIComponent(id)}`
+                  : ruta.slice(1)
         const comando: Record<string, unknown> = {
             metodo,
             ruta,
+            ...(extra.comando ? { comando: extra.comando } : {}),
             id,
             propiedades,
             host: this.host,
@@ -370,10 +435,20 @@ export class ClienteRouterOS {
             )
             throw e
         }
+        // `move` responde una lista vacía; un comando de diagnóstico, la lista de resultados.
         const objeto =
-            metodo === 'DELETE' ? { '.id': id ?? '' } : (this.#objeto(r.cuerpo, r.status) as ObjetoRouterOS)
+            metodo === 'DELETE'
+                ? { '.id': id ?? '' }
+                : metodo === 'POST'
+                  ? ({ '.id': propiedades?.numbers ?? '', resultado: r.cuerpo } as unknown as ObjetoRouterOS)
+                  : (this.#objeto(r.cuerpo, r.status) as ObjetoRouterOS)
         await registrar(
-            { status: r.status, objeto: metodo === 'DELETE' ? null : objeto, rtt_ms: r.rttMs },
+            {
+                status: r.status,
+                objeto: metodo === 'DELETE' || metodo === 'POST' ? null : objeto,
+                ...(extra.diagnostico ? { resultado: r.cuerpo } : {}),
+                rtt_ms: r.rttMs,
+            },
             true,
         )
         return objeto
@@ -457,7 +532,7 @@ export class ClienteRouterOS {
     }
 }
 
-const VERBOS: Record<string, string> = { GET: 'print', PUT: 'add', PATCH: 'set', DELETE: 'remove' }
+const VERBOS: Record<string, string> = { GET: 'print', PUT: 'add', PATCH: 'set', DELETE: 'remove', POST: '' }
 
 /** `queue/simple/*1A?x=y` + `PATCH` → `queue/simple set` (va tal cual en `routeros.fallido`). */
 export function operacionLegible(metodo: string, camino: string): string {
@@ -466,7 +541,8 @@ export function operacionLegible(metodo: string, camino: string): string {
         .split('/')
         .filter((parte) => parte !== '' && !parte.startsWith('*') && !parte.startsWith('%2A'))
         .join('/')
-    return `${base} ${VERBOS[metodo] ?? metodo.toLowerCase()}`
+    const verbo = VERBOS[metodo] ?? metodo.toLowerCase()
+    return verbo ? `${base} ${verbo}` : base
 }
 
 function leer(res: IncomingMessage): Promise<string> {

@@ -36,6 +36,8 @@ import { exigirAlcance } from '#core/acl'
 import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
+import EliminarServicio from '#core/actions/eliminar_servicio'
+import { servicioEliminable } from '#core/eliminacion'
 import ActivarInstalacionServicio from '#core/actions/activar_instalacion_servicio'
 import { rechazarSiPendiente } from '#core/instalacion'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
@@ -94,6 +96,7 @@ import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import adicionales from '#start/routes/adicionales'
+import iris from '#start/routes/iris'
 import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
@@ -133,6 +136,7 @@ import {
     CampoPersonalizado,
     RolBase,
     rolesBase,
+    Eliminable,
 } from '#core/esquemas'
 
 /** Pone la cookie del panel y arma `SesionPanel` (mismo cuerpo que `POST /auth/sesion`). */
@@ -678,7 +682,7 @@ const clientes: Ruta[] = [
         resumen: 'Clientes de los que es responsable de pago',
         descripcion:
             'Dependientes con su número de servicios no retirados y el estado resumido. ' +
-            'El cobro (A4) muestra sus facturas debajo del pagador.',
+            'El panel de cobro muestra sus facturas debajo del pagador.',
         etiqueta: 'clientes',
         permiso: 'clientes.ver',
         query: v.listarDependientesValidator,
@@ -966,16 +970,54 @@ const servicios: Ruta[] = [
         (entrada, ctx) => new RetirarServicio().execute(entrada, ctx.contextoAccion()),
     ),
     definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/eliminable',
+        operacion: 'serviciosEliminable',
+        resumen: '¿Se puede eliminar el servicio? (nunca se usó) y, si no, qué lo impide',
+        descripcion:
+            'Para que el panel muestre «Eliminar» (eliminable) o «Retirar». Contrato `contratos/eliminar.md`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        respuesta: { status: 200, descripcion: 'Si es eliminable y los motivos', esquema: Eliminable },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id) // 404 si no existe
+            return servicioEliminable(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'delete',
+        ruta: '/servicios/:id',
+        operacion: 'serviciosEliminar',
+        resumen: 'Eliminar un servicio que nunca se usó (si tiene historial: 422, retíralo)',
+        descripcion:
+            'Solo admin. Con facturas, pagos, asientos, DTE, sesiones, inventario u otro historial responde 422 ' +
+            '`servicio_con_historial` con `errors[]` (qué lo impide). Libera IPs y prefijos, deja la lápida AAA y ' +
+            'emite `servicio.eliminado`. Contrato `contratos/eliminar.md`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.eliminar',
+        query: v.eliminarServicioValidator,
+        idempotente: true,
+        versionada: true,
+        respuesta: { status: 204, descripcion: 'Servicio eliminado' },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            await new EliminarServicio().execute({ id, version: query.version }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
         metodo: 'post',
         ruta: '/servicios/:id/activar-instalacion',
         operacion: 'serviciosActivarInstalacion',
         resumen: 'Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)',
         descripcion:
             'Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa ' +
-            '`iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija ' +
-            '`instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. ' +
-            '422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre ' +
-            'uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.',
+            '`iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta). `version` es opcional: si ' +
+            'viene y no coincide, 409 `conflicto_version`. Fija `instalado_en` (o ahora) y emite ' +
+            '`servicio.estado_cambiado` con `motivo: instalacion` y el origen. 409 `servicio_no_pendiente` si ' +
+            'el servicio ya no está `pendiente_instalacion` (una clave nueva sobre uno ya activo; se revisa antes ' +
+            'que la versión; de negocio, no se reintenta); 422 en `instalado_en` si es futura o anterior al alta.',
         etiqueta: 'servicios',
         permiso: 'servicios.activar_instalacion',
         cuerpo: v.activarInstalacionValidator,
@@ -1425,7 +1467,10 @@ integraciones.push(
             if (!tokenId) {
                 throw new Prohibido('Solo el token de la integración Horus puede pedir tickets de autologin')
             }
-            return new EmitirTicketSso().execute({ ...cuerpo, atk_id: tokenId }, ctx.contextoAccion())
+            return new EmitirTicketSso().execute(
+                { ...cuerpo, conector: 'horus', atk_id: tokenId },
+                ctx.contextoAccion(),
+            )
         },
     }),
 )
@@ -1506,5 +1551,6 @@ export default [
     ...bitacora,
     ...ip,
     ...integraciones,
+    ...iris,
     ...interno,
 ]

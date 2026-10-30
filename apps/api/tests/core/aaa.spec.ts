@@ -69,6 +69,13 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
             estado: 'activo',
             router_id: routerId,
             control_velocidad: 'simple',
+            // estrategia migrada (`simple`): rate-limit por RADIUS, sin perfil del plan con reuso 1
+            velocidad: {
+                aplicacion: 'radius_rate_limit',
+                grupo: null,
+                rate_limit: true,
+                rate_limit_limitado: true,
+            },
             plan: {
                 id: planId,
                 subida_kbps: 5000,

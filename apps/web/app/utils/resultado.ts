@@ -29,7 +29,7 @@ export function aProblema(error: unknown, status: number): Problem {
     if (esProblema(error)) {
         return error
     }
-    return { type: 'about:blank', title: status === 501 ? 'Aún no implementado en la API' : 'Error inesperado', status }
+    return { type: 'about:blank', title: status === 501 ? 'Función no disponible' : 'Error inesperado', status }
 }
 
 interface RespuestaApi<T> {
@@ -52,6 +52,20 @@ export async function resolver<T>(peticion: Promise<RespuestaApi<T>>): Promise<R
             return { ok: true, data }
         }
         return { ok: false, problema: aProblema(error, response.status) }
+    }
+    catch {
+        return { ok: false, problema: PROBLEMA_SIN_CONEXION }
+    }
+}
+
+/**
+ * Como `resolver`, para una respuesta sin cuerpo (204 de un `DELETE`): openapi-fetch deja `data`
+ * en `undefined`, así que el éxito se lee del `status`.
+ */
+export async function resolverSinCuerpo(peticion: Promise<{ error?: unknown, response: Response }>): Promise<Resultado<null>> {
+    try {
+        const { error, response } = await peticion
+        return response.ok ? { ok: true, data: null } : { ok: false, problema: aProblema(error, response.status) }
     }
     catch {
         return { ok: false, problema: PROBLEMA_SIN_CONEXION }

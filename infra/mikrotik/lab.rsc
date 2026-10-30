@@ -144,8 +144,15 @@
 # Nombre e IP con que ArgosIsp llega al router (van al certificado: CN y subjectAltName)
 :local apiNombre "mikrotik-lab.argosisp.example"
 :local apiIp "10.255.255.2"
+# Nombre de la CA propia del router (certificado de www-ssl)
+:local apiCaNombre "ArgosIsp lab CA"
 # Apagar www (HTTP en claro), api (8728) y api-ssl (8729): ArgosIsp solo usa la API REST por www-ssl
 :local apiSoloHttps true
+# Certificado de www-ssl (comun-certificado.rsc): en el laboratorio siempre, con www-ssl solo desde
+# apiDesde. apiIpAnterior: otra IP para el SAN (vacía = solo apiIp).
+:local apiCertificar true
+:local apiIpAnterior ""
+:local apiWwwDesde $apiDesde
 
 # --- WireGuard opcional hacia el servidor (si el servidor no está en la LAN del router) ---
 :local wgHabilitar false
@@ -497,9 +504,11 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 # ============================================================================
 # 12. Usuario de la API REST con permisos mínimos y HTTPS (www-ssl)
 # ============================================================================
-# Grupo argosisp-api: read, write, api y rest-api. Sin ftp, ssh, telnet, winbox, web, policy,
-# password, sensitive, reboot, sniff, test, romon ni local: no puede cambiar usuarios ni leer
-# secretos, y la API solo acepta conexiones desde apiDesde.
+# Grupo argosisp-api: read, write, api y rest-api, el mínimo probado en CHR 7.24.5. La REST corre
+# sobre la API: sin "api" responde "not allowed" y sin "rest-api", 401; el SERVICIO api (8728)
+# queda apagado igual. Sin ftp, ssh, telnet, winbox, web, policy, password, sensitive, reboot,
+# sniff, test, romon ni local: no puede crear ni cambiar usuarios, reiniciar ni leer secretos, y
+# solo entra desde apiDesde (infra/mikrotik/README.md, "Permisos mínimos de la API").
 :put "argosisp: usuario de API REST"
 :if ([:len [/user group find where name="argosisp-api"]] = 0) do={
     /user group add name=argosisp-api policy=read,write,api,rest-api comment="argosisp: API REST de ArgosIsp"
@@ -515,25 +524,62 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     }
 }
 
-# Certificado: CA propia del laboratorio y certificado del servidor con CN = apiNombre y SAN =
-# DNS:apiNombre, IP:apiIp. Se crean una vez (para regenerarlos, bórralos y reaplica). La CA se
-# exporta a argosisp-ca.crt para que ArgosIsp verifique el certificado del router.
+# CA propia del router: se crea una vez y se exporta a argosisp-ca.crt para que ArgosIsp verifique el
+# certificado de www-ssl (el script de conexión la manda en el registro). El certificado del servidor
+# (argosisp-www) y su uso en www-ssl van en comun-certificado.rsc: en el script de conexión, después
+# del registro.
 :if ([:len [/certificate find where name="argosisp-ca"]] = 0) do={
-    /certificate add name=argosisp-ca common-name="ArgosIsp lab CA" key-usage=key-cert-sign,crl-sign days-valid=3650 key-size=2048
+    /certificate add name=argosisp-ca common-name=$apiCaNombre key-usage=key-cert-sign,crl-sign days-valid=3650 key-size=2048
     /certificate sign argosisp-ca
 }
-:if ([:len [/certificate find where name="argosisp-www"]] = 0) do={
-    /certificate add name=argosisp-www common-name=$apiNombre subject-alt-name=("DNS:" . $apiNombre . ",IP:" . $apiIp) key-usage=digital-signature,key-encipherment,tls-server days-valid=825 key-size=2048
-    /certificate sign argosisp-www ca=argosisp-ca
-}
 /certificate export-certificate argosisp-ca file-name=argosisp-ca
-/ip service set www-ssl certificate=argosisp-www tls-version=only-1.2 available-from=$apiDesde disabled=no
-:if ($apiSoloHttps) do={
-    /ip service set www disabled=yes
-    /ip service set api disabled=yes
-    /ip service set api-ssl disabled=yes
+# ============================================================================
+# 12b. Certificado de www-ssl (argosisp-www, firmado por argosisp-ca)
+# ============================================================================
+# CN = apiNombre y SAN = DNS:apiNombre, IP:apiIp y, si viene, IP:apiIpAnterior: la IP con que
+# ArgosIsp llegaba al router antes del túnel (api_url), para que el certificado sirva por los dos
+# caminos mientras se migra. Se regenera solo si le falta alguna de esas IP.
+# Solo se tocan los certificados llamados argosisp-www y argosisp-www-nuevo (el temporal de la
+# regeneración): los demás del router (p. ej. una CA o un certificado propio del administrador) se
+# quedan. www-ssl pasa al certificado nuevo antes de borrar el viejo: nunca queda sin certificado.
+# apiCertificar: en lab.rsc siempre. En el script de conexión, solo si el registro respondió OK
+# (ArgosIsp ya conoce argosisp-ca) o si www-ssl no usaba un certificado ajeno: nunca se cambia el
+# certificado que ArgosIsp verifica hoy por uno que no conoce (contratos/conexion-routers.md §6.2).
+:if ($apiCertificar) do={
+    :local san ("DNS:" . $apiNombre . ",IP:" . $apiIp)
+    :local ips [:toarray $apiIp]
+    :if ([:len $apiIpAnterior] > 0 && $apiIpAnterior != $apiIp) do={
+        :set san ($san . ",IP:" . $apiIpAnterior)
+        :set ips ($ips, $apiIpAnterior)
+    }
+    /certificate remove [find where name="argosisp-www-nuevo"]
+    :local wwwCert [/certificate find where name="argosisp-www"]
+    :local regenerar ([:len $wwwCert] = 0)
+    :if (!$regenerar) do={
+        :local sanActual [:tostr [/certificate get $wwwCert subject-alt-name]]
+        :foreach ip in=$ips do={
+            :if (!($sanActual ~ ("IP:" . $ip . "(,|;|\$)"))) do={ :set regenerar true }
+        }
+        :if ($regenerar) do={ :put ("argosisp: el certificado de www-ssl no lleva " . $san . ": se regenera (la CA se conserva)") }
+    }
+    :if ($regenerar) do={
+        /certificate add name=argosisp-www-nuevo common-name=$apiNombre subject-alt-name=$san key-usage=digital-signature,key-encipherment,tls-server days-valid=825 key-size=2048
+        /certificate sign argosisp-www-nuevo ca=argosisp-ca
+        /ip service set www-ssl certificate=argosisp-www-nuevo
+        /certificate remove [find where name="argosisp-www"]
+        /certificate set [find where name="argosisp-www-nuevo"] name=argosisp-www
+    }
+    # address= es available-from en RouterOS 7.17+ (acepta los dos nombres; 7.16 y anteriores solo address)
+    /ip service set www-ssl certificate=argosisp-www tls-version=only-1.2 disabled=no
+    :if ([:len $apiWwwDesde] > 0) do={ /ip service set www-ssl address=$apiWwwDesde }
+    :if ($apiSoloHttps) do={
+        /ip service set www disabled=yes
+        /ip service set api disabled=yes
+        /ip service set api-ssl disabled=yes
+    }
+} else={
+    :put ("argosisp: AVISO www-ssl sigue con su certificado (" . [:tostr [/ip service get www-ssl certificate]] . "): ArgosIsp no aprendió la CA del router")
 }
-
 # ============================================================================
 # 13. Reglas "argosisp:top" al inicio de cada tabla (antes de fasttrack y de
 #     "accept established,related", que dejarían pasar al suspendido)

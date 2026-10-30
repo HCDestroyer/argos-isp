@@ -31,7 +31,14 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
  * auditoría. Multiempresa: el alcance limita lectura y ocultado.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: el tablero, el comparador y los consejos lee `relojFiscal` y la facturación
+ * fecha con el reloj real. Con `HOY` tomado al importar el archivo, una corrida que cruzaba la
+ * medianoche de Guatemala (06:00 UTC) mezclaba dos días. Cada prueba fija `relojFiscal` en
+ * `AHORA` y lleva a `HOY` lo que el libro fecha con el reloj real.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
 
@@ -46,6 +53,16 @@ async function parametro(
         { empresa_id: empresaId, clave, valor, vigente_desde: desde, motivo: `Auditor: consejos (${clave})` },
         e.ctx,
     )
+}
+
+/** Servicio facturado en el mes, con la factura (y su asiento) en `HOY`. */
+async function venta(empresaId: number, precio: string) {
+    const s = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        HOY,
+    )
+    return s
 }
 
 async function compra(e: EmpresasGt, empresaId: number, total: string) {
@@ -117,6 +134,9 @@ function forma(assert: any, l: Awaited<ReturnType<typeof leer>>) {
 
 test.group('Auditor contable · consejos fiscales', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()
@@ -136,9 +156,9 @@ test.group('Auditor contable · consejos fiscales', (group) => {
             e.ctx,
         )
         for (const empresa of [e.B, e.C]) await parametro(e, empresa, 'inicio_libros', '2026-01-01')
-        await servicioFacturado(e.B, `${MES}-01`, { precio: '56000.00', instalacion: `${MES}-01` })
+        await venta(e.B, '56000.00')
         await compra(e, e.B, '11200.00')
-        await servicioFacturado(e.C, `${MES}-01`, { precio: '336.00', instalacion: `${MES}-01` })
+        await venta(e.C, '336.00')
         await parametro(e, e.C, 'pc_limite_anual', '300.00', `${HOY.slice(0, 4)}-01-01`)
 
         // la declaración del mes revisada y sin pagar, siete días después del vencimiento
@@ -393,7 +413,7 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        await servicioFacturado(e.B, `${MES}-01`, { precio: '224.00', instalacion: `${MES}-01` })
+        await venta(e.B, '224.00')
         await compra(e, e.B, '112.00')
         relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
         const d = await new CalcularDeclaracion().execute(

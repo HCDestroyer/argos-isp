@@ -91,6 +91,10 @@ const { conSelector: variasEmpresas, nombre: nombreEmpresa } = useEmpresaActiva(
 const puedeCambiarEmpresa = computed(() => variasEmpresas.value && puede('servicios.cambiar_empresa') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const cambiarEmpresaAbierto = ref(false)
 
+/** «Sincronizar con el router» (A1): aplica ya en el MikroTik lo que el servicio debe tener. */
+const puedeSincronizarRouter = computed(() => puede('servicios.sincronizar_router') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const sincronizarRouterAbierto = ref(false)
+
 function alCambiarEmpresa(actualizado: Servicio) {
     servicio.value = actualizado
     toast.add({ title: 'Empresa cambiada', description: `${etiquetaServicio(actualizado)} factura ahora con ${nombreEmpresa(actualizado.empresa_id)}`, icon: 'i-lucide-circle-check', color: 'success' })
@@ -267,6 +271,47 @@ async function alCambiarPlanTemporal() {
     void lineaTiempo.value?.recargar()
 }
 
+/**
+ * Eliminar sin historial (`contratos/eliminar.md`): solo quien tiene `servicios.eliminar` (admin)
+ * pregunta si se puede. Si nunca se usó, «Eliminar»; si no, los motivos y la alternativa (retirar).
+ */
+const puedeEliminar = computed(() => puede('servicios.eliminar'))
+const eliminable = shallowRef<Eliminable | null>(null)
+const problemaEliminable = ref<Problem | null>(null)
+const eliminarAbierto = ref(false)
+
+async function cargarEliminable() {
+    const actual = servicio.value
+    if (!actual || !puedeEliminar.value) {
+        eliminable.value = null
+        return
+    }
+    problemaEliminable.value = null
+    const resultado = await useServicios().eliminable(actual.id)
+    eliminable.value = resultado.ok ? resultado.data : null
+    problemaEliminable.value = resultado.ok ? null : resultado.problema
+}
+
+watch(() => [servicio.value?.id, servicio.value?.version], () => void cargarEliminable())
+
+const liberaServicio = computed(() => {
+    const actual = servicio.value
+    if (!actual) {
+        return []
+    }
+    return [
+        `Usuario PPPoE ${actual.user_ppp}`,
+        ...(actual.ipv4 ? [`IPv4 ${actual.ipv4}`] : []),
+        ...(actual.prefijo_enlace_v6 ? [`Prefijo de enlace ${actual.prefijo_enlace_v6}`] : []),
+        ...(actual.prefijo_delegado_v6 ? [`Prefijo delegado ${actual.prefijo_delegado_v6}`] : []),
+    ]
+})
+
+function alEliminar() {
+    toast.add({ title: 'Servicio eliminado', description: liberaServicio.value.length > 1 ? 'Su IP y sus prefijos quedaron libres.' : undefined, icon: 'i-lucide-trash-2', color: 'success' })
+    void navigateTo('/servicios')
+}
+
 const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
 
 watch(servicioId, cargar)
@@ -431,7 +476,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico"
+                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeSincronizarRouter"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -488,6 +533,15 @@ onMounted(cargar)
                     data-prueba="abrir-cambiar-empresa"
                     @click="cambiarEmpresaAbierto = true"
                 />
+                <UButton
+                    v-if="puedeSincronizarRouter"
+                    label="Sincronizar con el router"
+                    icon="i-lucide-refresh-cw"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-sincronizar-router"
+                    @click="sincronizarRouterAbierto = true"
+                />
             </div>
             <p
                 v-else-if="servicio.estado === 'retirado'"
@@ -495,6 +549,39 @@ onMounted(cargar)
             >
                 Servicio retirado: ya no admite acciones.
             </p>
+
+            <template v-if="puedeEliminar">
+                <ProblemaAlerta
+                    v-if="problemaEliminable"
+                    :problema="problemaEliminable"
+                    :reintentar="cargarEliminable"
+                />
+                <div
+                    v-else-if="eliminable?.eliminable"
+                    class="flex flex-wrap items-center gap-2"
+                >
+                    <UButton
+                        label="Eliminar"
+                        icon="i-lucide-trash-2"
+                        color="error"
+                        variant="outline"
+                        data-prueba="eliminar-servicio"
+                        @click="eliminarAbierto = true"
+                    />
+                    <span class="text-xs text-muted">Nunca se usó: se puede borrar del todo.</span>
+                </div>
+                <p
+                    v-else-if="eliminable"
+                    class="flex items-start gap-1.5 text-xs text-muted"
+                    data-prueba="no-eliminable"
+                >
+                    <UIcon
+                        name="i-lucide-history"
+                        class="mt-0.5 size-3.5 shrink-0"
+                    />
+                    <span>{{ textoNoEliminable('servicio', eliminable.motivos, servicio.estado === 'retirado') }}</span>
+                </p>
+            </template>
 
             <div class="grid gap-4 lg:grid-cols-2">
                 <UPageCard
@@ -879,6 +966,24 @@ onMounted(cargar)
                 :servicio="servicio"
                 @hecho="alActivarInstalacion"
                 @recargado="alRecargarServicio"
+            />
+
+            <ServicioSincronizarRouterModal
+                v-model:open="sincronizarRouterAbierto"
+                :servicio="servicio"
+                :nombre-router="servicio.router_nombre"
+            />
+
+            <EliminarRegistroModal
+                v-if="puedeEliminar && eliminable?.eliminable"
+                :id="servicio.id"
+                v-model:open="eliminarAbierto"
+                tipo="servicio"
+                :nombre="etiquetaServicio(servicio)"
+                :version="servicio.version"
+                :libera="liberaServicio"
+                @eliminado="alEliminar"
+                @recargar="cargar"
             />
 
             <ServicioAccionModal

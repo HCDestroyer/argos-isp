@@ -37,6 +37,10 @@ const OPCIONALES: Record<string, string[]> = {
     Plan: ['warnings'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],
+    // nuevos el 28 oct (`zona_id`, editar router) y el 30 oct (`coordenadas`, Iris 0.3.1): la API
+    // siempre los envía; obligatorios cuando las fixtures del panel (`apps/web/fixtures/routers`, A4)
+    // los traigan (fila en `a1.md`)
+    Router: ['zona_id', 'coordenadas'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {

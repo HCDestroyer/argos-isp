@@ -55,7 +55,7 @@ const planes = shallowRef<Plan[]>([])
 const zonas = shallowRef<Zona[]>([])
 
 const itemsEstado: SelectItem[] = [
-    { label: 'Todos los estados', value: TODOS },
+    { label: 'Todos menos retirados', value: TODOS },
     ...ESTADOS_FILTRO.map(e => ({ label: e.etiqueta, value: e.estado, icon: ESTADOS_SERVICIO[e.estado].icono })),
 ]
 
@@ -109,6 +109,12 @@ function filtros(): FiltrosServicios {
 }
 
 const lista = usePaginacionCursor(cursor => serviciosApi.listar(filtros(), cursor))
+/**
+ * Sin filtro de estado no se muestran los retirados: viven en «Retirados» (`?estado=retirado`).
+ * La API no tiene «todos menos retirados», así que se quitan de cada página (pedido a A1 en `a4.md`).
+ */
+const filasVisibles = computed(() => (estado.value === TODOS ? lista.filas.value.filter(s => s.estado !== 'retirado') : lista.filas.value))
+const ocultosRetirados = computed(() => lista.filas.value.length - filasVisibles.value.length)
 /** Insignia "Seguridad" de Horus por fila (solo con `horus.ver` y el conector activo). */
 const seguridad = useSeguridadServicios(lista.filas)
 
@@ -135,8 +141,8 @@ const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || conDeuda.value)
 
 /**
- * Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados", "Por instalar"
- * (`pendiente_instalacion`) y "Con deuda" vencida.
+ * Accesos rápidos: "Todos" (sin retirados), "Cortados" (suspendido), "Limitados", "Por instalar"
+ * (`pendiente_instalacion`), "Con deuda" vencida y "Retirados".
  */
 interface AccesoServicios {
     etiqueta: string
@@ -151,6 +157,7 @@ const accesos: AccesoServicios[] = [
     { etiqueta: 'Limitados', estado: 'limitado', deuda: false, color: 'warning' },
     { etiqueta: 'Por instalar', estado: 'pendiente_instalacion', deuda: false, color: 'info' },
     { etiqueta: 'Con deuda', estado: TODOS, deuda: true, color: 'warning' },
+    { etiqueta: 'Retirados', estado: 'retirado', deuda: false, color: 'neutral' },
 ]
 
 function accesoActivo(acceso: AccesoServicios): boolean {
@@ -403,7 +410,8 @@ onMounted(async () => {
                     Seguridad: {{ seguridad.pausa.value }}; se muestra el último dato conocido.
                 </p>
                 <UTable
-                    :data="lista.filas.value"
+                    data-prueba="tabla-servicios"
+                    :data="filasVisibles"
                     :columns="columnas"
                     :loading="lista.cargando.value"
                     sticky
@@ -506,12 +514,19 @@ onMounted(async () => {
                     </template>
                 </UTable>
 
+                <p
+                    v-if="ocultosRetirados"
+                    class="text-xs text-muted"
+                    data-prueba="retirados-ocultos"
+                >
+                    {{ ocultosRetirados === 1 ? '1 servicio retirado de esta página' : `${ocultosRetirados} servicios retirados de esta página` }} no se muestra{{ ocultosRetirados === 1 ? '' : 'n' }}: están en «Retirados».
+                </p>
                 <PaginacionCursor
                     :pagina="lista.pagina.value"
                     :hay-anterior="lista.hayAnterior.value"
                     :hay-siguiente="lista.haySiguiente.value"
                     :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
+                    :filas="filasVisibles.length"
                     @anterior="lista.anterior"
                     @siguiente="lista.siguiente"
                 />

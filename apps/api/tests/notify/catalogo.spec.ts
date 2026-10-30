@@ -115,6 +115,16 @@ test.group('notify · catálogo de eventos y vista previa', () => {
                 },
             ],
             [
+                'servicio.instalacion_activada',
+                {
+                    servicio_id: servicioId,
+                    cliente_id: clienteId,
+                    de: 'pendiente_instalacion',
+                    a: 'activo',
+                    motivo: 'instalacion',
+                },
+            ],
+            [
                 'promesa.creada',
                 {
                     promesa_id: 1,

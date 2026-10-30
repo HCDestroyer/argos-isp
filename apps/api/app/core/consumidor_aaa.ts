@@ -18,7 +18,10 @@ export class ConsumidorAaaCache implements ConsumidorEventos {
             // los adicionales (streaming, IPTV) no cambian nada de RADIUS
             (evento.startsWith('servicio.') && !evento.startsWith('servicio.adicional_')) ||
             evento === 'asignacion.cambiada' ||
-            evento === 'plan.velocidad_cambiada'
+            evento === 'plan.velocidad_cambiada' ||
+            // estrategia por capas (perfil y rate-limit por servicio; contratos/control-velocidad.md §7)
+            evento === 'router.estrategia_cambiada' ||
+            evento === 'router.control_cambiado'
         )
     }
 
@@ -28,6 +31,18 @@ export class ConsumidorAaaCache implements ConsumidorEventos {
             if (!Number.isInteger(planId) || planId <= 0) return
             const routerId = evento.payload.router_id === null ? undefined : Number(evento.payload.router_id)
             await refrescarAaa([{ planId, routerId: Number.isInteger(routerId) ? routerId : undefined }])
+            return
+        }
+        if (evento.evento === 'router.estrategia_cambiada' || evento.evento === 'router.control_cambiado') {
+            const routerId = Number(evento.payload.router_id)
+            if (!Number.isInteger(routerId) || routerId <= 0) return
+            const planId =
+                evento.payload.plan_id === null || evento.payload.plan_id === undefined
+                    ? null
+                    : Number(evento.payload.plan_id)
+            await refrescarAaa([
+                planId !== null && Number.isInteger(planId) ? { planId, routerId } : { routerId },
+            ])
             return
         }
         const id = Number(evento.payload.servicio_id)

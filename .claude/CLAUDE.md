@@ -98,6 +98,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
     - Sondeo de contacto de los routers: `routeros.sondear` (cron cada 5 min) solo deja fila si algún router no respondió o falló; cada GET enviado queda igual en `audit.red`.
     - Proyecciones derivadas que se refrescan por evento (el refresco del dashboard): no dejan fila; son una caché del dato, no una acción de nadie.
     - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
+    - Estado del túnel WireGuard: `routers.registrar_estado_wireguard` (el agente reporta el último handshake cada pocos segundos) solo deja fila cuando un router pasa de pendiente a conectado o al revés, o cuando cambia la clave del servidor; el registro, la rotación y la clave pegada a mano se auditan siempre.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
 - `audit.red`: cada CoA, Disconnect o comando a RouterOS con la respuesta del equipo.
@@ -151,6 +152,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | Evento | Emite | Payload |
 | --- | --- | --- |
 | `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
+| `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id; router: router_id, empresa_id. Solo sin historial (`contratos/eliminar.md`); con historial se retira |
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo (`instalacion` al activar un `pendiente_instalacion`) |
 | `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`); motivo y plan_temporal_id (opcionales, solo con un plan temporal) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
@@ -175,6 +177,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, empresa_id, cliente_id, pago_id, motivo |
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
+| `router.conexion_generada` / `router.conexion_registrada` / `router.conexion_rotada` / `router.conexion_eliminada` | núcleo (conexión WireGuard) | router_id, empresa_id; generada: actor; registrada: ip_tunel. Nunca claves ni secretos (`contratos/conexion-routers.md`) |
+| `router.radius_cambiado` | núcleo | router_id, empresa_id, campos[] (`nas_ip`, `radius_secret`; nunca el valor); al crear, editar o registrar el túnel. Lo consume `aaa` para regenerar los clientes de FreeRADIUS |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 | `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |

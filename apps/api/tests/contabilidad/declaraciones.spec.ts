@@ -6,6 +6,7 @@ import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { relojFiscal } from '#fiscal/comun'
@@ -33,25 +34,57 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * liquidación (`liquidacion_impuesto`) y su pago (`pago_impuesto`).
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
-const MES = HOY.slice(0, 7)
-const ANTERIOR = DateTime.fromISO(
-    `${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' }).slice(0, 7)}-01`,
-)
-    .minus({ months: 1 })
-    .toFormat('yyyy-MM')
-const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
-const DESPUES = DateTime.fromISO(`${MES}-01`).plus({ months: 2 }).toFormat('yyyy-MM')
+/** Hoy, su mes y los meses vecinos de un instante (en Guatemala). */
+interface Marco {
+    hoy: string
+    mes: string
+    anterior: string
+    siguiente: string
+    despues: string
+}
+function marcoDe(ahora: Date): Marco {
+    const hoy = DateTime.fromJSDate(ahora).setZone('America/Guatemala').toISODate()!
+    const mes = DateTime.fromISO(`${hoy.slice(0, 7)}-01`)
+    return {
+        hoy,
+        mes: mes.toFormat('yyyy-MM'),
+        anterior: mes.minus({ months: 1 }).toFormat('yyyy-MM'),
+        siguiente: mes.plus({ months: 1 }).toFormat('yyyy-MM'),
+        despues: mes.plus({ months: 2 }).toFormat('yyyy-MM'),
+    }
+}
 
-async function compra(e: EmpresasGt, empresaId: number, total: string) {
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: las declaraciones leen `relojFiscal` y la
+ * facturación fecha con el reloj real. Con `HOY` tomado al importar el archivo, una corrida que
+ * cruzaba la medianoche de Guatemala (06:00 UTC) mezclaba dos días, y al cruzar de mes declaraba un
+ * periodo anterior a `inicio_libros` (instalado con la fecha del día). Cada prueba fija `relojFiscal`
+ * en `AHORA` y lleva a `HOY` lo que el libro fecha con el reloj real.
+ *
+ * Dos pruebas no pueden: anular una factura y certificar un DTE (y su NCRE) fechan con el reloj real
+ * dentro de la acción, y lo que comprueban es justo que ese día cae en el mes liquidado. Esas toman su
+ * marco del instante real **al empezar la prueba** (`marcoReal`), no al importar el archivo.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const FIJO = marcoDe(AHORA)
+const { hoy: HOY, mes: MES, anterior: ANTERIOR, siguiente: SIGUIENTE, despues: DESPUES } = FIJO
+
+/** Marco del instante real al empezar la prueba, con `relojFiscal` fijo en ese instante. */
+function marcoReal(): Marco {
+    const ahora = new Date()
+    relojFiscal.ahora = () => ahora
+    return marcoDe(ahora)
+}
+
+async function compra(e: EmpresasGt, empresaId: number, total: string, m: Marco = FIJO) {
     const proveedor = await proveedorEn(empresaId, e.ctx)
     return new RegistrarCompra().execute(
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
             numero: await unicoBd('D'),
-            fecha_documento: HOY,
-            periodo_iva: `${MES}-01`,
+            fecha_documento: m.hoy,
+            periodo_iva: `${m.mes}-01`,
             condicion: 'credito',
             lineas: [{ descripcion: 'Enlace de tránsito', total }],
         },
@@ -59,8 +92,15 @@ async function compra(e: EmpresasGt, empresaId: number, total: string) {
     )
 }
 
-const venta = (empresaId: number, precio: string) =>
-    servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+/** Servicio facturado en el mes, con la factura (y su asiento) en el día del marco. */
+async function venta(empresaId: number, precio: string, m: Marco = FIJO) {
+    const s = await servicioFacturado(empresaId, `${m.mes}-01`, { precio, instalacion: `${m.mes}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        m.hoy,
+    )
+    return s
+}
 
 function declarar(
     e: EmpresasGt,
@@ -96,6 +136,9 @@ async function sinTriggers(
 
 test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
     const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
     group.each.teardown(async () => {
         relojFiscal.ahora = original
         await soloEmpresaPrincipal()
@@ -313,11 +356,13 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
     test('anular en el mes ya liquidado una factura de ese mes: el bloqueo de impuestos rechaza su reverso etiquetado', async ({
         assert,
     }) => {
+        // el reverso de la anulación lleva la fecha real de hoy: el mes liquidado es el real
+        const m = marcoReal()
         const e = await prepararEmpresasGt()
-        const v = await venta(e.B, '224.00')
-        await compra(e, e.B, '112.00')
-        relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
-        const d = await declarar(e, e.B, 'iva_mensual')
+        const v = await venta(e.B, '224.00', m)
+        await compra(e, e.B, '112.00', m)
+        relojFiscal.ahora = () => new Date(`${m.siguiente}-05T18:00:00Z`)
+        const d = await declarar(e, e.B, 'iva_mensual', m.mes)
         await new RevisarDeclaracion().execute({ declaracion_id: d.id }, e.ctx)
         const rechazo = await errorDe(
             new AnularFactura().execute(
@@ -440,6 +485,8 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
     test('cascada con el mes siguiente ya presentado y pagado: saldo a favor en 2.1.06, obligación por rectificar; una NCRE sin certificar la bloquea sin guardar nada; un ajuste sin etiqueta a una cuenta de impuesto ya no entra', async ({
         assert,
     }) => {
+        // el DTE de la factura y el de la NCRE llevan la fecha real de hoy: el mes liquidado es el real
+        const m = marcoReal()
         const e = await empresasFel('obligatoria')
         await new EditarParametro().execute(
             {
@@ -467,17 +514,17 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
             )
         }
         // mes anterior: crédito 36; este mes: factura FEL con débito 48 → usa 36, paga 12
-        await compraEn(`${ANTERIOR}-10`, '336.00')
-        const anterior = await declarar(e as EmpresasGt, e.B, 'iva_mensual', ANTERIOR)
+        await compraEn(`${m.anterior}-10`, '336.00')
+        const anterior = await declarar(e as EmpresasGt, e.B, 'iva_mensual', m.anterior)
         await new RevisarDeclaracion().execute({ declaracion_id: anterior.id }, e.ctx)
         const s = await servicioFel(e, 'emitir', '448.00', await crearClienteFila(datosNit()))
         await cola(e)
-        relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
-        const mes = await declarar(e as EmpresasGt, e.B, 'iva_mensual')
+        relojFiscal.ahora = () => new Date(`${m.siguiente}-05T18:00:00Z`)
+        const mes = await declarar(e as EmpresasGt, e.B, 'iva_mensual', m.mes)
         assert.include(mes.totales, { debito: '48.00', credito_usado: '36.00', a_pagar: '12.00' })
         await new RevisarDeclaracion().execute({ declaracion_id: mes.id }, e.ctx)
         await new MarcarDeclaracionPresentada().execute(
-            { declaracion_id: mes.id, numero_formulario: '2237-1', fecha_presentacion: `${SIGUIENTE}-05` },
+            { declaracion_id: mes.id, numero_formulario: '2237-1', fecha_presentacion: `${m.siguiente}-05` },
             e.ctx,
         )
         await new RegistrarPagoDeclaracion().execute(
@@ -485,7 +532,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                 declaracion_id: mes.id,
                 metodo: 'cuenta_bancaria',
                 cuenta_bancaria_id: e.cuentas.get(e.B)!,
-                fecha: HOY,
+                fecha: m.hoy,
             },
             e.ctx,
         )
@@ -497,7 +544,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                 new RegistrarAsiento().execute(
                     {
                         empresa_id: e.B,
-                        fecha: HOY,
+                        fecha: m.hoy,
                         descripcion: 'Ajuste manual al IVA (auditor)',
                         origen_tipo: 'ajuste',
                         movimientos: [
@@ -526,8 +573,8 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
             { factura_id: s.facturas[0]!.id, monto: '56.00', motivo: 'auditoría: descuento' },
             e.ctx,
         )
-        await compraEn(`${ANTERIOR}-20`, '56.00')
-        const sustitutiva = await declarar(e as EmpresasGt, e.B, 'iva_mensual', ANTERIOR, {
+        await compraEn(`${m.anterior}-20`, '56.00')
+        const sustitutiva = await declarar(e as EmpresasGt, e.B, 'iva_mensual', m.anterior, {
             sustitutiva: true,
         })
         const foto = async () => {
@@ -572,7 +619,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         assert.equal(await saldoCuenta(e.B, '2.1.06'), '12.00')
         const obligacion = await db
             .from('fiscal.obligaciones')
-            .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${MES}-01` })
+            .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${m.mes}-01` })
             .firstOrFail()
         assert.deepEqual([obligacion.estado, obligacion.motivo_estado], ['borrador', 'rectificativa'])
         const sustituidaMes = await db.from('fiscal.declaraciones').where('id', mes.id).firstOrFail()

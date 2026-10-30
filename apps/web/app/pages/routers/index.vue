@@ -1,18 +1,36 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, TabsItem } from '@nuxt/ui'
 
 /**
  * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
- * de velocidad y la capacidad del enlace. "Velocidad" abre el
- * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
- * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). "Nuevo router" (`routers.crear`);
+ * de velocidad y la capacidad del enlace. Cada fila lleva «Editar» y el menú de acciones del
+ * router (`RouterAcciones`: conexión de la API, control de velocidad…). "Nuevo router" (`routers.crear`);
  * redes IPv4 y bloques y pools IPv6 en la ficha de cada router.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
 useHead({ title: 'Routers · ArgosIsp' })
 
-const lista = usePaginacionCursor(cursor => useRouters().listar({}, cursor))
+const route = useRoute()
+const router = useRouter()
+
+/**
+ * «Activos» (por defecto) e «Inactivos» (`?activo=false` de la API; en la URL del panel
+ * `?vista=inactivos`): un router desactivado no se mezcla con los que están en uso.
+ */
+type VistaRouters = 'activos' | 'inactivos'
+const vista = ref<VistaRouters>(route.query.vista === 'inactivos' ? 'inactivos' : 'activos')
+const itemsVista: TabsItem[] = [
+    { label: 'Activos', value: 'activos', icon: 'i-lucide-router' },
+    { label: 'Inactivos', value: 'inactivos', icon: 'i-lucide-circle-pause' },
+]
+
+const lista = usePaginacionCursor(cursor => useRouters().listar({ activo: vista.value === 'activos' }, cursor))
+
+watch(vista, async (valor) => {
+    await router.replace({ query: valor === 'inactivos' ? { vista: 'inactivos' } : {} })
+    await lista.recargar()
+})
 const { puede } = usePermisos()
 const toast = useToast()
 const altaAbierta = ref(false)
@@ -44,22 +62,7 @@ function capacidad(router: RouterNas): string {
     return `${bajada ? formatearVelocidad(bajada) : 'sin techo'} / ${subida ? formatearVelocidad(subida) : 'sin techo'}`
 }
 
-const seleccionado = shallowRef<RouterNas | null>(null)
-const velocidadAbierta = ref(false)
-const conexionAbierta = ref(false)
-
-function abrir(router: RouterNas) {
-    seleccionado.value = router
-    velocidadAbierta.value = true
-}
-
-function abrirConexion(router: RouterNas) {
-    seleccionado.value = router
-    conexionAbierta.value = true
-}
-
-function alActualizar(router: RouterNas) {
-    seleccionado.value = router
+function alActualizar() {
     void lista.recargar()
 }
 
@@ -91,6 +94,14 @@ onMounted(() => void lista.recargar())
         </template>
 
         <div class="flex flex-col gap-4">
+            <UTabs
+                v-model="vista"
+                :items="itemsVista"
+                :content="false"
+                size="sm"
+                class="self-start"
+                data-prueba="vista-routers"
+            />
             <ProblemaAlerta
                 v-if="lista.problema.value"
                 :problema="lista.problema.value"
@@ -153,30 +164,12 @@ onMounted(() => void lista.recargar())
                         <span class="text-sm">{{ capacidad(row.original) }}</span>
                     </template>
                     <template #acciones-cell="{ row }">
-                        <div class="flex justify-end gap-2">
-                            <UButton
-                                label="Conexión"
-                                icon="i-lucide-plug"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :ui="{ label: 'hidden sm:inline' }"
-                                :aria-label="`Conexión de ${row.original.nombre}`"
-                                :data-prueba="`conexion-router-${row.original.id}`"
-                                @click="abrirConexion(row.original)"
-                            />
-                            <UButton
-                                label="Velocidad"
-                                icon="i-lucide-gauge"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :ui="{ label: 'hidden sm:inline' }"
-                                :aria-label="`Velocidad de ${row.original.nombre}`"
-                                :data-prueba="`velocidad-router-${row.original.id}`"
-                                @click="abrir(row.original)"
-                            />
-                        </div>
+                        <RouterAcciones
+                            :router="row.original"
+                            con-editar
+                            tamano="sm"
+                            @actualizado="alActualizar"
+                        />
                     </template>
                     <template #empty>
                         <UEmpty
@@ -202,18 +195,6 @@ onMounted(() => void lista.recargar())
         <RouterAltaModal
             v-model:open="altaAbierta"
             @creado="alCrear"
-        />
-        <RouterVelocidad
-            v-if="seleccionado"
-            v-model:open="velocidadAbierta"
-            :router="seleccionado"
-            @actualizado="alActualizar"
-        />
-        <RouterConexion
-            v-if="seleccionado"
-            v-model:open="conexionAbierta"
-            :router="seleccionado"
-            @actualizado="alActualizar"
         />
     </PanelPagina>
 </template>

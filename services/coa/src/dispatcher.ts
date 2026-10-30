@@ -1,14 +1,22 @@
 import type { Almacen, SesionActiva } from './almacen.ts'
 import { descifrar } from './cifrado.ts'
 import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
-import { decidir, EVENTOS_COA, leerDesconexion, leerEvento, type Decision } from './decision.ts'
+import {
+    decidir,
+    decidirVelocidad,
+    EVENTOS_COA,
+    leerDesconexion,
+    leerEvento,
+    leerVelocidad,
+    type Decision,
+} from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
 import type { MetricasCoa } from './metricas.ts'
 
 /**
  * coa-dispatcher: por cada `servicio.estado_cambiado` / `servicio.config_cambiada` decide CoA o
- * Disconnect (`decision.ts`), lo manda a cada sesión abierta del servicio (`nas_ip` de la sesión,
- * secret del router) y registra cada intento en `audit.red`.
+ * Disconnect (`decision.ts`), lo manda a cada sesión abierta del servicio (`nas_ip` y secret
+ * actuales del router de la sesión; `almacen.ts`) y registra cada intento en `audit.red`.
  *
  * - Reintentos: hasta `reintentos` más tras el primer envío, con backoff exponencial, solo ante
  *   timeout o error de red. Un NAK es respuesta definitiva del NAS (p. ej. sesión inexistente).
@@ -75,6 +83,7 @@ export class Dispatcher {
 
     async procesar(entrada: EventoEntrante): Promise<ResultadoProcesar> {
         if (entrada.evento === 'sesion.desconexion_solicitada') return this.#desconectar(entrada)
+        if (entrada.evento === 'sesion.velocidad_solicitada') return this.#velocidad(entrada)
         const evento = leerEvento(entrada.evento, entrada.payload)
         if (!evento) return { decision: null, sesiones: [] }
         const eventoId = String(entrada.id)
@@ -173,6 +182,33 @@ export class Dispatcher {
         return { decision, sesiones: [resultado] }
     }
 
+    /**
+     * Sincronizar plan: CoA con el rate-limit nuevo a esa sesión si sigue abierta y el servicio sigue
+     * en el estado del evento. Nunca Disconnect.
+     */
+    async #velocidad(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        const evento = leerVelocidad(entrada.payload)
+        const eventoId = String(entrada.id)
+        const sesion = await this.#op.almacen.sesionAbierta(evento.sesion_id)
+        const decision: Decision = sesion
+            ? decidirVelocidad(evento, await this.#op.almacen.servicio(evento.servicio_id))
+            : { accion: 'nada', razon: 'la sesión ya terminó' }
+        if (decision.accion === 'nada' || !sesion) {
+            this.#op.log.info(
+                {
+                    evento_id: eventoId,
+                    request_id: entrada.requestId ?? null,
+                    sesion_id: evento.sesion_id,
+                    razon: decision.razon,
+                },
+                'coa: nada que enviar',
+            )
+            return { decision, sesiones: [] }
+        }
+        const resultado = await this.#enviarASesion(entrada, eventoId, evento.servicio_id, sesion, decision)
+        return { decision, sesiones: [resultado] }
+    }
+
     async #enviarASesion(
         entrada: EventoEntrante,
         eventoId: string,
@@ -197,6 +233,10 @@ export class Dispatcher {
             razon: decision.razon,
             sesion_id: sesion.id,
             nas_ip: sesion.nas_ip,
+            // El router cambió de IP desde el Start (túnel WireGuard): queda la IP vieja para auditar.
+            ...(sesion.nas_ip_sesion && sesion.nas_ip_sesion !== sesion.nas_ip
+                ? { nas_ip_sesion: sesion.nas_ip_sesion }
+                : {}),
             puerto: this.#op.puertoNas,
             atributos,
         }

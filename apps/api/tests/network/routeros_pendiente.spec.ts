@@ -5,6 +5,7 @@ import env from '#start/env'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
+import { esCambioDeCorte } from '#network/routeros/corte_router'
 import { clienteDeRouter } from '#network/routeros/router'
 import { ConsumidorRouterOS } from '#network/routeros/consumidor'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
@@ -189,7 +190,9 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
         assert.isNull(r.error)
         assert.equal(r.servicios, 0, 'el pendiente no es un servicio vigente del router')
         assert.deepEqual(
-            r.correcciones.map((c) => `${c.accion} ${c.ruta} ${c.comment}`),
+            r.correcciones
+                .filter((c) => !esCambioDeCorte(c))
+                .map((c) => `${c.accion} ${c.ruta} ${c.comment}`),
             [`borrado /ip/firewall/address-list ${commentServicio(servicio.id)}`],
         )
         assert.deepEqual(Object.values(objetos(servicio.id)), [0, 0, 0, 0, 0])

@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { verificarVersion } from '#shared/version'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
@@ -8,7 +8,11 @@ import { TOLERANCIA_RELOJ_MS, normalizarPlanta, type PlantaServicio } from '#cor
 
 export interface EntradaActivarInstalacion {
     id: number
-    version: number
+    /**
+     * versión leída (opcional en esta acción, contrato Iris 0.3.1): si viene y no coincide, 409. Sin
+     * ella protegen la máquina de estados (solo sale de `pendiente_instalacion`) y la `Idempotency-Key`.
+     */
+    version?: number
     /** cuándo quedó instalado; sin él, ahora. Ni futuro ni antes de la creación del servicio. */
     instalado_en?: Date
     /** sistema y documento que pidió la activación (`iris_orden` + id de la orden) */
@@ -30,9 +34,14 @@ export interface EntradaActivarInstalacion {
  *   con `origen_tipo`/`origen_id` si vienen) y deja el diff en `audit.cambios`.
  * - Después del COMMIT reescribe `aaa:user:<user_ppp>` (ya con `estado: activo`). RouterOS (A2) lo
  *   aplica por el evento, como cualquier cambio de estado.
- * - Estado distinto de pendiente: 422 `servicio_no_pendiente` (antes que la versión: un reintento
- *   con otra clave sobre un servicio ya activo recibe el motivo real, no un 409).
- * - `version` distinta: 409. Fecha futura o anterior al alta: 422 en `instalado_en`.
+ * - `version` es opcional (pedido de Iris 0.3.1: su cola reintenta con los mismos bytes y una
+ *   versión leída al encolar queda vieja). Si viene y no coincide: 409 `conflicto_version`. Sin
+ *   ella la acción se protege sola: el `FOR UPDATE` y la máquina de estados (solo sale de
+ *   `pendiente_instalacion`), y la misma `Idempotency-Key` devuelve la respuesta guardada.
+ * - Estado distinto de pendiente: 409 `servicio_no_pendiente` (otra persona ya lo activó o lo
+ *   retiró: conflicto con el estado actual, de negocio, no se reintenta). Se revisa antes que la
+ *   versión, así una clave nueva sobre un servicio ya activo recibe el motivo real.
+ * - Fecha futura o anterior al alta: 422 en `instalado_en`.
  *
  * El estado no lo decide esta acción por facturas: es el hecho de la instalación, como `retirar`.
  */
@@ -60,12 +69,15 @@ export default class ActivarInstalacionServicio extends DomainAction<
         const empresaId = Number(fila.empresa_id)
         t.fijarEmpresa(empresaId)
         if (fila.estado !== 'pendiente_instalacion') {
-            throw new ReglaNegocio(
-                `El servicio ${input.id} no está pendiente de instalación (está ${fila.estado})`,
+            throw new Conflicto(
+                `El servicio ${input.id} no está pendiente de instalación (está ${fila.estado}): ya se activó o se retiró`,
                 'servicio_no_pendiente',
+                'El servicio no está pendiente de instalación',
             )
         }
-        verificarVersion('servicio', input.id, Number(fila.version), input.version)
+        if (input.version !== undefined) {
+            verificarVersion('servicio', input.id, Number(fila.version), input.version)
+        }
 
         const ahora = new Date()
         const instaladoEn = input.instalado_en ?? ahora
@@ -90,18 +102,23 @@ export default class ActivarInstalacionServicio extends DomainAction<
         // un instante "adelantado" dentro de la tolerancia se guarda como ahora (nunca futuro)
         const efectivo = instaladoEn.getTime() > ahora.getTime() ? ahora : instaladoEn
 
+        // JS tiene milisegundos y Postgres microsegundos: el instante del alta tal cual (o truncado a
+        // ms) quedaría <= created_at y la facturación lo tomaría por un servicio nacido activo
+        // (`activadoDesdePendienteSql` de `#billing/configuracion` exige instalado_en > created_at).
+        // Se guarda al menos 1 µs después del alta; al operador no le cambia nada.
+        const instalado = `greatest(?::timestamptz, created_at + interval '1 microsecond')`
         const antes = await verServicio(input.id, t.trx)
         await t.trx
             .from('core.servicios')
             .where('id', input.id)
             .update({
                 estado: 'activo',
-                instalado_en: efectivo,
+                instalado_en: t.trx.knexRawQuery(instalado, [efectivo.toISOString()]),
                 ...(input.planta ? { planta: JSON.stringify(normalizarPlanta(input.planta)) } : {}),
                 ...(fila.fecha_instalacion === null
                     ? {
                           fecha_instalacion: t.trx.knexRawQuery(
-                              `(?::timestamptz AT TIME ZONE 'America/Guatemala')::date`,
+                              `(${instalado} AT TIME ZONE 'America/Guatemala')::date`,
                               [efectivo.toISOString()],
                           ),
                       }

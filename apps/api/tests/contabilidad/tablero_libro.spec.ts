@@ -1,12 +1,15 @@
 import { test } from '@japa/runner'
+import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { unicoBd } from '#tests/billing/ayudas_billing'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA, llevarPagosA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro, huellaTablas } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { tableroFiscal } from '#fiscal/tablero'
+import { relojFiscal } from '#fiscal/comun'
 import { consejosFiscales } from '#fiscal/consejos'
 import { calcularChecks, reservaIncobrables } from '#ledger/checks'
 import type { Bloque } from '#fiscal/bloques'
@@ -25,10 +28,27 @@ import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
  * baja bajo el máximo de su clase. Multiempresa y nada se escribe.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (mediodía en Guatemala), no la fecha real: el tablero lee `relojFiscal` y el libro
+ * fecha facturas y pagos con el reloj real. Con `HOY` tomado al importar el archivo, una corrida que
+ * cruzaba la medianoche de Guatemala (06:00 UTC) pedía `reservaIncobrables` del día anterior a las
+ * facturas y daba base 0. Cada prueba fija `relojFiscal` en `AHORA` y lleva a `HOY` lo que el libro
+ * fecha con el reloj real.
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const ANIO = HOY.slice(0, 4)
 const datos = (b: Bloque) => b.datos as Record<string, any>
+
+async function venta(empresaId: number, precio: string) {
+    const s = await servicioFacturado(empresaId, `${MES}-01`, { precio, instalacion: `${MES}-01` })
+    await llevarFacturasA(
+        s.facturas.map((f) => f.id),
+        HOY,
+    )
+    return s
+}
 
 async function compra(e: EmpresasGt, proveedorId: number, total: string) {
     return new RegistrarCompra().execute(
@@ -123,7 +143,14 @@ async function activosDelLibro(empresaId: number) {
 }
 
 test.group('Auditor contable · bloques del libro del tablero', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
+    group.each.teardown(async () => {
+        relojFiscal.ahora = original
+        await soloEmpresaPrincipal()
+    })
 
     test('compras sin NIT, incobrables (= check de antes del refactor = cartera.provisionar) y depreciación = libro; multiempresa; nada se escribe', async ({
         assert,
@@ -131,14 +158,18 @@ test.group('Auditor contable · bloques del libro del tablero', (group) => {
         const e = await prepararEmpresasGt()
 
         // cartera: dos clientes con saldo, uno pagó una parte (base = Σ saldos deudores)
-        const s1 = await servicioFacturado(e.B, `${MES}-01`, { precio: '224.00', instalacion: `${MES}-01` })
-        const s2 = await servicioFacturado(e.B, `${MES}-01`, { precio: '560.00', instalacion: `${MES}-01` })
-        await new RegistrarPago().execute(
+        const s1 = await venta(e.B, '224.00')
+        const s2 = await venta(e.B, '560.00')
+        const pago = await new RegistrarPago().execute(
             { cliente_id: s2.clienteId, metodo: 'caja', monto: '100.00', empresa_id: e.B },
             e.ctx,
         )
+        await llevarPagosA(
+            pago.pagos.map((p) => p.id),
+            HOY,
+        )
         void s1
-        await servicioFacturado(e.C, `${MES}-01`, { precio: '1120.00', instalacion: `${MES}-01` })
+        await venta(e.C, '1120.00')
 
         // compras: CUI desde el límite (cuenta), CUI justo en el límite (cuenta), CUI anulada, NIT, CUI debajo; y C
         const cui = await proveedorEn(e.B, e.ctx, {

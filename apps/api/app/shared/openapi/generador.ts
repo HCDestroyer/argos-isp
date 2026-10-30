@@ -259,7 +259,7 @@ function operacion(ruta: Ruta): EsquemaJson {
     if (ruta.limitada) {
         respuestas['429'] = problema('Demasiadas peticiones; reintentar después de `Retry-After` segundos')
     }
-    if (!ruta.handler) respuestas['501'] = problema('No implementado todavía')
+    if (!ruta.handler) respuestas['501'] = problema('Operación no disponible en este servidor')
 
     const op: EsquemaJson = {
         operationId: ruta.operacion,

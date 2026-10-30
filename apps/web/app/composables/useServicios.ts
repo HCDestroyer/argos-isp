@@ -6,6 +6,8 @@ export type DatosServicio = paths['/api/v1/servicios']['post']['requestBody']['c
 export type ModoIpv6 = Servicio['ipv6_modo']
 export type TramoAsignacion = Schema<'TramoAsignacion'>
 export type ConfiguracionEfectivaServicio = Schema<'ConfiguracionEfectivaServicio'>
+/** Respuesta de `POST /servicios/:id/sincronizar-router`. */
+export type SincronizacionServicio = Schema<'SincronizacionServicio'>
 /** Cuerpo de `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
 export type DatosActivarInstalacion = paths['/api/v1/servicios/{id}/activar-instalacion']['post']['requestBody']['content']['application/json']
 /** Referencia de planta (caja, puerto, OLT, slot, PON, potencia), de solo lectura. */
@@ -129,5 +131,32 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion }
+    /**
+     * `POST /servicios/:id/sincronizar-router` (`servicios.sincronizar_router`, A1): aplica ya en el
+     * MikroTik la cola, address-list, lease y ARP del servicio y devuelve lo corregido o
+     * `ya_estaba_bien`. Si el router no responde es 200 con `error`; 422 `servicio_pendiente_instalacion`
+     * y `router_sin_api`. Idempotente.
+     */
+    function sincronizarRouter(id: number, claveIdempotencia: string): Promise<Resultado<SincronizacionServicio>> {
+        return resolver(api.POST('/api/v1/servicios/{id}/sincronizar-router', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    /** `GET /servicios/:id/eliminable` (`servicios.ver`): si nunca se usó y, si no, los motivos. */
+    function eliminable(id: number): Promise<Resultado<Eliminable>> {
+        return resolver(api.GET('/api/v1/servicios/{id}/eliminable', { params: { path: { id } } }))
+    }
+
+    /**
+     * `DELETE /servicios/:id?version=N` (`servicios.eliminar`, solo admin): 204; la IPv4 y los
+     * prefijos quedan libres. 409 si otra sesión lo cambió; 422 `servicio_con_historial`.
+     */
+    function eliminar(id: number, version: number, claveIdempotencia: string): Promise<Resultado<null>> {
+        return resolverSinCuerpo(api.DELETE('/api/v1/servicios/{id}', {
+            params: { path: { id }, query: { version }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { eliminable, eliminar, listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion, sincronizarRouter }
 }

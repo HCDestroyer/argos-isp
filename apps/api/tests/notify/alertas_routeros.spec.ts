@@ -7,9 +7,8 @@ import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { fijarChatEquipo } from '#notify/alertas'
 import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import RegistrarAlerta from '#notify/actions/registrar_alerta'
-import { CanalFalso, ColaFalsa } from '#tests/notify/ayudas_notify'
+import { CanalFalso, ColaFalsa, nasIpUnica, bloqueIdsEvento } from '#tests/notify/ayudas_notify'
 import { unico } from '#tests/ayudas'
-import { ipUnica } from '#tests/core/fabricas'
 
 /**
  * Semana 2, tarea 3: alerta al equipo de `routeros.fallido` (`contratos/routeros.md`:
@@ -18,7 +17,10 @@ import { ipUnica } from '#tests/core/fabricas'
  */
 
 const CHAT = '-1009990002'
-let siguienteId = 9_500_000_000 + randomInt(0, 1_000_000) * 1000
+// Ids de evento simulados: un bloque de 1000 propio de cada prueba, único en la base
+// (bloqueIdsEvento, secuencia de audit.outbox). Con una base aleatoria dos archivos podían
+// solaparse (notify.envios es único por origen `outbox:<id>`).
+let siguienteId = 0
 
 function evento(payload: Record<string, unknown>, id = ++siguienteId) {
     return { id, evento: 'routeros.fallido', payload, requestId: `prueba-${id}` }
@@ -30,7 +32,7 @@ async function crearRouter(nombre: string): Promise<number> {
         .insert({
             nombre,
             host: `10.${randomInt(1, 255)}.${randomInt(1, 255)}.1`,
-            nas_ip: ipUnica(),
+            nas_ip: await nasIpUnica(),
         })
         .returning('id')) as Array<{ id: number }>
     return fila!.id
@@ -60,7 +62,8 @@ async function enviosDe(incidenteId: number) {
 }
 
 test.group('notify · alertas · routeros.fallido', (group) => {
-    group.each.setup(() => {
+    group.each.setup(async () => {
+        siguienteId = await bloqueIdsEvento()
         registrarCanal('telegram', new CanalFalso('telegram'))
         fijarChatEquipo(CHAT)
         return () => {
