@@ -4,6 +4,7 @@ import {
     PlantillaInvalida,
     escapar,
     leerMikrotik,
+    plantillaConexion,
     renderizar,
     variablesDe,
     variablesMikrotik,
@@ -72,6 +73,23 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
         assert.include(r, ':local adminIps [:toarray "203.0.113.7,198.51.100.0/24"]')
         assert.notMatch(r, /pppoe-server/)
         assert.match(renderizar(leerMikrotik(PLANTILLAS.servicio), VALORES), /pppoe-server/)
+    })
+
+    test('sin RADIUS: plantilla por modo; sin radius_secret, use-radius=no y sensitive', ({ assert }) => {
+        assert.equal(plantillaConexion('radius', false), PLANTILLAS.conexion)
+        assert.equal(plantillaConexion('radius', true), PLANTILLAS.servicio)
+        assert.equal(plantillaConexion('api', false), PLANTILLAS.conexion_sin_radius)
+        assert.equal(plantillaConexion('api', true), PLANTILLAS.servicio_sin_radius)
+        const sinSecreto = Object.fromEntries(Object.entries(VALORES).filter(([k]) => k !== 'radius_secret'))
+        for (const ruta of [PLANTILLAS.conexion_sin_radius, PLANTILLAS.servicio_sin_radius]) {
+            const plantilla = leerMikrotik(ruta)
+            assert.notInclude(variablesDe(plantilla), 'radius_secret')
+            const r = renderizar(plantilla, sinSecreto)
+            assert.notMatch(r, /\{\{/)
+            assert.notMatch(r, /^\s*\/radius add/m)
+            assert.match(r, /^\/ppp aaa set use-radius=no/m)
+            assert.match(r, /name="argosisp-api"\] policy=[a-z,-]*sensitive/)
+        }
     })
 
     test('render: falta una variable, no cumple su patrón o trae un salto de línea → error', ({ assert }) => {
