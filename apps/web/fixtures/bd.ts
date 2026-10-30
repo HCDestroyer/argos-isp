@@ -35,6 +35,8 @@ import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
+import { irisInicial } from './iris/datos'
+import type { IrisFixtures } from './iris/datos'
 import { configuracionGlobal, enviosNotificacion, eventosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
 import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -286,6 +288,8 @@ interface BaseFixtures {
     fel: FelFixtures
     /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
     horus: HorusFixtures
+    /** Conector con Iris: conector, tokens `atk_` del usuario técnico y webhooks enviados. */
+    iris: IrisFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -386,6 +390,7 @@ function inicial(): BaseFixtures {
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
+        iris: irisInicial(),
         conceptosCargo,
         motivosSinCosto,
         bonificaciones,
