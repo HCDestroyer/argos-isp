@@ -21,7 +21,7 @@ const LECTURA: Me = { ...meAdmin, id: 90, nombre: 'Solo lectura', roles: ['lectu
 const SIN_PERMISOS: Me = { ...meAdmin, id: 91, nombre: 'Sin permisos', roles: [], permisos: [] }
 
 /** Botones que cambian algo: ninguno debe verse con `lectura`. */
-const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar|Ejecutar|Entregar|Marcar|Publicar|Abrir participación|Cancelar sorteo|Archivar|Cambiar imagen)/
+const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Abrir caja|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar|Ejecutar|Entregar|Marcar|Publicar|Abrir participación|Cancelar sorteo|Archivar|Cambiar imagen)/
 
 /** Botones y enlaces de la página montada y de lo que teletransporta a `body` (modales, menús). */
 function botones(raiz?: Element): string[] {

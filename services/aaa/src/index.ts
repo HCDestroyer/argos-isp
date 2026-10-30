@@ -1,10 +1,14 @@
 import { Redis } from 'ioredis'
+import pg from 'pg'
 import { ColaAccountingBullmq } from './accounting.ts'
 import { crearApp } from './app.ts'
 import { claveDesdeEntorno } from './cifrado.ts'
 import { leerConfig } from './config.ts'
 import { FuenteApi, FuenteFixtures, ResolutorServicios, type FuenteRespaldo } from './fuentes.ts'
 import { UltimoConocido } from './ultimo_conocido.ts'
+import { ConsumidorClientes } from './clientes/consumidor.ts'
+import { escribirClientes, leerRouters } from './clientes/generar.ts'
+import { avisarRecarga } from './clientes/recarga.ts'
 
 const config = leerConfig()
 const clave = claveDesdeEntorno(config.claveSecretos)
@@ -83,6 +87,39 @@ app.log.info(
     'aaa listo',
 )
 
+// Clientes de FreeRADIUS por evento (router.conexion_*): conexión de Redis propia (XREADGROUP
+// bloquea) y un pool de Postgres de una conexión, como `pnpm aaa:clients`.
+let clientes: { consumidor: ConsumidorClientes; redis: Redis; pool: pg.Pool } | undefined
+if (config.clientes.activo) {
+    const c = config.clientes
+    const pool = new pg.Pool({ ...c.db, max: 1 })
+    pool.on('error', () => {})
+    const redisEventos = new Redis({ host: config.redis.host, port: config.redis.port, db: config.redis.db })
+    redisEventos.on('error', () => {})
+    const consumidor = new ConsumidorClientes({
+        redis: redisEventos,
+        stream: c.stream,
+        grupo: c.grupo,
+        consumidor: c.consumidor,
+        regenerar: async () =>
+            escribirClientes({
+                routers: await leerRouters(pool),
+                clave,
+                dir: c.dir,
+                excluirNasIps: c.excluirNasIps,
+            }),
+        recargar: (motivo) => avisarRecarga(c.dir, motivo),
+        log: {
+            info: (o, m) => app.log.info(o, m),
+            warn: (o, m) => app.log.warn(o, m),
+            error: (o, m) => app.log.error(o, m),
+        },
+    })
+    await consumidor.iniciar()
+    clientes = { consumidor, redis: redisEventos, pool }
+    app.log.info({ dir: c.dir, grupo: c.grupo }, 'clientes RADIUS por evento')
+}
+
 /** Copia `aaa:user:*` al último perfil conocido y la vuelca al archivo. Nunca dos a la vez. */
 let espejando = false
 async function espejar(): Promise<void> {
@@ -97,7 +134,10 @@ async function espejar(): Promise<void> {
             'último perfil conocido: espejo de Redis',
         )
     } catch (e) {
-        app.log.warn({ error: (e as Error).message }, 'último perfil conocido: espejo fallido (se conserva el anterior)')
+        app.log.warn(
+            { error: (e as Error).message },
+            'último perfil conocido: espejo fallido (se conserva el anterior)',
+        )
     } finally {
         espejando = false
     }
@@ -117,6 +157,12 @@ async function apagar(signal: string): Promise<void> {
     await app.close()
     await ultimoConocido.volcar().catch(() => {})
     await cola.cerrar().catch(() => {})
+    if (clientes) {
+        const fin = clientes.consumidor.detener()
+        clientes.redis.disconnect()
+        await fin.catch(() => {})
+        await clientes.pool.end().catch(() => {})
+    }
     redis.disconnect()
     process.exit(0)
 }

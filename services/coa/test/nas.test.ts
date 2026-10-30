@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { after, before, describe, it } from 'node:test'
 import radius from 'radius'
+import { leerConfig } from '../src/config.ts'
 import { firmarPeticion, verificarPeticion, verificarRespuesta } from '../src/firma.ts'
 import { atributosRadius, ClienteNasUdp } from '../src/nas.ts'
 import { NasSimulado } from './nas_simulado.ts'
@@ -145,6 +146,43 @@ const sinDocker =
         : spawnSync('docker', ['image', 'inspect', IMAGEN], { stdio: 'ignore' }).status !== 0
           ? `sin Docker o sin ${IMAGEN}`
           : null
+
+describe('origen de los CoA (contratos/conexion-routers.md §6.4)', () => {
+    // Con WireGuard, `COA_ORIGEN_IP` queda vacía: el socket no se ata a una IP y el origen lo pone la
+    // ruta (y el enmascarado de Docker en el host: la .1 del túnel, `infra/wireguard/README.md`).
+    const nas = new NasSimulado({ ip: '127.0.0.7', secret: SECRET })
+    const envio = {
+        tipo: 'disconnect' as const,
+        nasIp: '127.0.0.7',
+        secret: SECRET,
+        timeoutMs: TIMEOUT_ACK_MS,
+        atributos: { 'User-Name': 'cliente-101', 'Acct-Session-Id': '81a00009' },
+    }
+
+    before(() => nas.iniciar())
+    after(() => nas.cerrar())
+
+    it('COA_ORIGEN_IP vacía: sin origen fijo; el NAS ve la IP que elige la ruta', async () => {
+        assert.equal(leerConfig({ COA_ORIGEN_IP: '' }).nas.origen, undefined)
+        assert.equal(leerConfig({}).nas.origen, undefined)
+        const r = await new ClienteNasUdp(leerConfig({ COA_ORIGEN_IP: '' }).nas.origen).enviar({
+            ...envio,
+            puerto: nas.puerto,
+        })
+        assert.equal(r.resultado, 'ack')
+        // El origen es la dirección preferida de la interfaz de salida (en loopback, 127.0.0.1), como
+        // en el host con WireGuard lo es la .1 de `wg-argos` tras el enmascarado: nada lo fijó.
+        assert.equal(nas.recibidos.at(-1)?.origen, '127.0.0.1')
+    })
+
+    it('COA_ORIGEN_IP con valor (router en la LAN): el paquete sale de esa IP', async () => {
+        const origen = leerConfig({ COA_ORIGEN_IP: '127.0.0.3' }).nas.origen
+        assert.equal(origen, '127.0.0.3')
+        const r = await new ClienteNasUdp(origen).enviar({ ...envio, puerto: nas.puerto })
+        assert.equal(r.resultado, 'ack')
+        assert.equal(nas.recibidos.at(-1)?.origen, '127.0.0.3')
+    })
+})
 
 describe('radclient (FreeRADIUS) → NAS simulado', { skip: sinDocker ?? false }, () => {
     const nas = new NasSimulado({ ip: '0.0.0.0', secret: SECRET, modo: 'ack' })

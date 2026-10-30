@@ -1,4 +1,121 @@
-# MikroTik del laboratorio
+# MikroTik: script de conexión y laboratorio
+
+Dos scripts salen de las mismas piezas (`piezas/*.rsc`):
+
+- **Script de conexión** (`plantillas/conexion.rsc.tpl`): lo genera el panel para cada router y lo conecta a ArgosIsp por un túnel WireGuard, con el usuario de la API, RADIUS y los puertos de gestión cerrados. Abajo, «Conectar un router».
+- **`lab.rsc`**: el laboratorio completo, que se edita a mano (el resto de este documento).
+
+Las piezas se editan en `piezas/` y se arman con `node infra/mikrotik/armar.mjs` (CI falla si `lab.rsc` o las plantillas no coinciden: `armar.mjs --verificar`). La configuración de servicio (PPPoE, perfiles, corte, FastTrack) es la misma pieza en `lab.rsc` y en `plantillas/conexion-servicio.rsc.tpl` (el script con «incluir configuración de servicio»): no hay copia.
+
+| Pieza | `lab.rsc` | conexión | conexión + servicio |
+| --- | :-: | :-: | :-: |
+| `lab-cabecera`, `lab-wireguard`, `lab-pie` (variables y túnel manual del laboratorio) | ✓ | | |
+| `conexion-cabecera.rsc.tpl`, `-limpieza`, `-tunel`, `-registro`, `-gestion`, `-orden`, `-pie` | | ✓ | ✓ |
+| `conexion-servicio.rsc.tpl` (variables de servicio que llena ArgosIsp) | | | ✓ |
+| `comun-api-rest` (CA, certificado, grupo y usuario de la API), `comun-radius` | ✓ | ✓ | ✓ |
+| `servicio-limpieza`, `-base` (pools, DNS, perfiles, PPPoE), `-firewall` (listas, corte IPv4/IPv6, WISP, árbol), `-orden`, `-fasttrack` | ✓ | | ✓ |
+
+## Conectar un router
+
+**Requisitos:** RouterOS 7 y salida a internet (el router se registra solo). En el servidor, WireGuard activo (`docs/runbooks/instalacion.md`, «Conectar los routers por WireGuard»).
+
+**Pasos (para el técnico):**
+
+1. En el panel: ficha del router → **Script de conexión**. Si administras el router desde una IP fija (tu oficina), escríbela en «IPs de administración»: Winbox y SSH solo quedarán abiertos para esas IPs y para el túnel. Marca «incluir configuración de servicio» solo en un router nuevo que ArgosIsp va a configurar completo (PPPoE, perfiles y corte).
+2. Descarga el archivo. **Lleva claves:** no lo guardes ni lo mandes por chat. Vale 24 horas y para un solo registro.
+3. En Winbox: **Files** → arrastra el archivo. Luego **New Terminal** y escribe `/import file-name=argosisp-conexion.rsc verbose=yes`. (También puedes copiar todo el texto y pegarlo en New Terminal.)
+4. Al final debe decir `argosisp: listo`: registrado, túnel con handshake y gestión restringida. En menos de un minuto el panel muestra el router **conectado**.
+5. Si dice `AVISO la gestión NO se restringió`, algo falló y **el router se queda como estaba** (sin reglas de drop nuevas ni `address=` en los servicios). Debajo dice qué falló: el registro (sin internet, token usado o vencido, certificado no verificado, RouterOS viejo) o el túnel (sin handshake: servidor sin `ARGOSISP_WIREGUARD=1`, UDP bloqueado, red NAT de WSL). Corrígelo, genera un script **nuevo** (el token es de un solo uso) y vuelve a correrlo.
+6. Si dice `FALTA un paso`, copia la **clave pública** que muestra y en el panel → Conexión → **Pegar clave pública**. Si además muestra la CA (`-----BEGIN CERTIFICATE-----`), pégala en el panel: ficha del router → Acciones → **Conexión de la API** → CA propia (PEM) → «Cargar una CA» (o «Reemplazar por otra») → **Guardar conexión**.
+
+**Nunca te deja fuera:** la gestión (`www-ssl`, Winbox, SSH) solo se restringe si el registro respondió OK **y** el túnel tiene handshake, y aun así se conserva el acceso desde la IP de **las sesiones abiertas** (`/user active`, incluida la que corre el script; RouterOS no marca cuál es la propia, así que se conservan todas las que tienen IP, menos `argosisp-api`). Una sesión de MAC-Winbox o de consola no tiene IP: en ese caso queda MAC-Winbox, que el script nunca apaga. La sesión abierta no se corta. Si aun así quedaste fuera (p. ej. con el script de la 1.3.0), usa el **rescate** de abajo.
+
+Puedes volver a correr el script cuantas veces quieras: solo toca lo que lleva comentario `argosisp:`, conserva la interfaz `wg-argos` y su clave, y la gestión de la ejecución anterior se rehace solo si esta vez el registro y el túnel funcionan (con el token ya usado se queda como estaba).
+
+**Qué hace, en orden:**
+
+| Paso | Qué queda en el router |
+| --- | --- |
+| C0 | Comprueba RouterOS 7 (si no, se detiene sin tocar nada) |
+| C1 | Borra los `/radius` de ArgosIsp de una ejecución anterior. La gestión anterior (reglas `argosisp:gestion`, `argosisp-admin`, `address=`) **no** se toca aquí: la rehace C4 solo si todo funcionó |
+| C2 | Interfaz WireGuard `wg-argos` (MTU 1420; la crea una vez y la **clave privada no sale del router**) y la IP `/32` del túnel con ruta solo hacia la `.1` del servidor |
+| API | CA `argosisp-ca` (se exporta a `argosisp-ca.crt`), grupo `argosisp-api` y usuario `argosisp-api` que solo entra desde la `.1` |
+| C3 | Se registra: `POST /api/v1/routers/conexion/registrar` con el token, su clave pública, la versión de RouterOS y la CA (para que ArgosIsp verifique el certificado). Con la respuesta agrega el peer del servidor (keepalive 25 s). Si el registro falla, usa los datos del servidor que trae el script y dice qué paso falló |
+| Cert. | `argosisp-www` (firmado por `argosisp-ca`) con SAN = IP del túnel **y** la IP con que ArgosIsp llegaba antes (`apiIpAnterior`, del `api_url` del router): sirve por los dos caminos mientras se migra. Va a `www-ssl` solo si el registro respondió OK (ArgosIsp ya conoce la CA) o si `www-ssl` no tenía certificado o ya usaba `argosisp-www`. Un certificado ajeno (p. ej. `argos-api` firmado por tu `argos-ca`) se queda en `www-ssl` y **no se borra**: solo se borran `argosisp-www` y su temporal `argosisp-www-nuevo` |
+| RADIUS | `/radius` hacia la `.1` con el secreto del router y `src-address` = su IP del túnel; `/radius incoming` en 3799; `/ppp aaa` con RADIUS y accounting |
+| C4 | Espera el handshake del túnel (hasta 40 s). **Solo si el registro respondió OK y hay handshake**: apaga `telnet`, `ftp`, `www`, `api`, `api-ssl`, el servidor de bandwidth-test, RoMON y MAC-Telnet; `www-ssl`, `winbox` y `ssh` solo desde la red del túnel, `argosisp-admin` y las IPs de las sesiones abiertas (que también entran en `argosisp-admin`). Si no, no cambia nada |
+| C5 | (solo con C4 aplicado) Reglas `argosisp:gestion` al **inicio** de `input`: CoA, REST y ping solo desde la `.1` por el túnel; Winbox, SSH y `www-ssl` desde `argosisp-admin`; el resto de los puertos de gestión y cualquier conexión nueva por el túnel se descartan. Solo conexiones nuevas hacia el propio router: **no toca el tráfico de los clientes** |
+| C6 | `listo`, o `AVISO` con qué falló (registro, túnel) y cómo reintentar; con el registro fallido, la CA para pegarla en el panel |
+
+El puerto UDP de WireGuard del router no se abre: el router inicia el túnel y las respuestas del servidor entran como conexión establecida.
+
+**Probado en CHR** (`/import` y pegado por la consola, como en New Terminal):
+
+| RouterOS | Resultado |
+| --- | --- |
+| 7.24.5 | Registro con verificación del certificado de ArgosIsp (raíces incluidas en RouterOS, `builtin-trust-store`), túnel con handshake, REST por el túnel con `argosisp-api` verificando el certificado del router por IP, CoA aceptado desde la `.1`, `Access-Request` llegando a la `.1:1812`. Pegado en un CHR limpio sin IPs de administración: Winbox, SSH y `www-ssl` dejan de responder desde fuera. Re-ejecutado con el token ya usado: no corta el túnel y avisa que ya estaba conectado. Con «servicio» sobre un router con `lab.rsc`: reglas `argosisp:gestion` primero, luego las `argosisp:top` del corte y FastTrack OK |
+| 7.24.5 (#181, sin encierro) | Con un Argos simulado y un segundo CHR como servidor WireGuard, `admin` vacío y un `argos-ca`/`argos-api` propio en `www-ssl`. **Registro 410 y túnel caído:** sin reglas ni `address=`, la LAN sigue llegando a `www-ssl`, SSH y Winbox, `www-ssl` sigue con `argos-api`, AVISO con los dos motivos. **Registro OK y túnel caído:** no restringe; `www-ssl` pasa a `argosisp-www` con SAN `IP:<túnel>,IP:<LAN>` (verificado con `openssl -verify_ip` por las dos IPs con la CA que recibió Argos); `argos-ca` y `argos-api` siguen. **Registro OK y handshake:** restringe; la LAN deja de llegar (timeout), la IP de la sesión SSH que lo corrió (`10.0.2.2`) entra en `argosisp-admin` y sigue entrando, REST desde la `.1` por el túnel OK. **Re-ejecución** con el token usado: se queda como estaba (7 reglas, 1 entrada) y AVISO + CA; con registro OK: rehecho sin duplicados. **Pegado por la consola** con `admin`: restringe a túnel + admins y avisa que no hay sesión con IP. **Rescate** por consola: vuelve el acceso; túnel, RADIUS y certificados siguen. En 7.2x las conexiones abiertas aparecen en `/ip service` como entradas dinámicas con el mismo nombre (`ssh`, `winbox`): por eso el script usa `/ip service set ssh …` y no `[find where name=…]` |
+| 7.16.2 | Igual, pero sin `builtin-trust-store`: el registro solo verifica el certificado si la CA de ArgosIsp está importada; si no, cae al paso de pegar la clave |
+| 7.12.1 | Sin `:serialize`: el registro falla, el resto se aplica y el script pide pegar la clave (por eso `:serialize`/`:deserialize` se cargan con `:parse`) |
+
+### Si quedaste fuera: rescate de la gestión
+
+`rescate-gestion.rsc` deshace **solo** lo `argosisp:gestion`: las reglas de filtro, la lista `argosisp-admin` y el `address=` (`available-from`) de `www-ssl`, `winbox` y `ssh`. No toca el túnel, RADIUS, el usuario `argosisp-api`, los certificados ni el tráfico de los clientes. Pégalo en una terminal que no dependa de la IP: **Winbox por MAC** (Neighbors → la MAC del router → Connect → New Terminal) o la **consola** (serial, monitor o la del hipervisor):
+
+```
+/ip firewall filter remove [find where comment~"^argosisp:gestion"]
+/ip firewall address-list remove [find where list="argosisp-admin"]
+/ip service set www-ssl address=""
+/ip service set winbox address=""
+/ip service set ssh address=""
+```
+
+Cada línea es independiente (si una falla, las demás se aplican). En 7.17+ RouterOS muestra un aviso `Deprecation warning: address` y lo aplica igual (es `available-from`); `address` funciona en todas las 7.x. Probado por consola serial en CHR 7.24.5 sobre un router restringido: la LAN vuelve a llegar a `www-ssl`, SSH y Winbox, y el túnel, RADIUS y los certificados siguen.
+
+Después, corrige lo que falló y vuelve a correr un script nuevo: ya no restringe si el registro o el túnel fallan.
+
+Las plantillas son ASCII y no llevan comentarios dentro del bloque: el terminal de RouterOS no maneja UTF-8 al pegar y cuenta las llaves de los comentarios (`armar.mjs` las limpia; los comentarios siguen en las piezas).
+
+### Permisos mínimos de la API
+
+Probado en CHR 7.24.5 grupo por grupo contra lo que hace ArgosIsp por REST (`GET /system/resource`; `PUT`/`PATCH`/`DELETE` en colas simples, árbol y tipos de cola, address-lists IPv4 e IPv6, leases DHCP, ARP, mangle, perfiles PPP; `GET` de `/ppp/active` y `/ipv6/dhcp-server/binding`; `PUT` de rutas IPv4/IPv6 y direcciones IPv6 para el prefijo estático):
+
+| Grupo | Resultado |
+| --- | --- |
+| `read,write,api,rest-api` | Todo lo anterior funciona. **Es el mínimo** |
+| `read,write,rest-api` (sin `api`) | `500 not allowed`: la REST corre sobre la API |
+| `read,write,api` (sin `rest-api`) | `401` |
+| `read,rest-api` | `500 not allowed` en lectura y escritura |
+
+Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, `POST /system/reboot` también, y `POST /execute` no logra crear usuarios: no puede escalar. Sí puede cambiar `/ip service` (es `write`); por eso el usuario solo entra desde la `.1` del túnel. No hace falta `web` para la REST por `www-ssl`. El **servicio** `api` (8728) queda apagado aunque el grupo tenga la **política** `api`.
+
+### Datos de «incluir configuración de servicio»
+
+`conexion-servicio.rsc.tpl` necesita el grupo `servicio` de `variables.json`. Argos todavía no los guarda por router: la API los lee de su entorno (`apps/api/app/network/conexion/servicio.ts`). Si falta alguno obligatorio responde 422 `servicio_incompleto` con la lista.
+
+| Variable del script | Entorno de la API | Ejemplo (`lab.rsc`) | Origen |
+| --- | --- | --- | --- |
+| `pppoe_interfaz` | `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES` | `ether2` | ficha del router |
+| `wan_interfaz` | `ROUTERS_SERVICIO_WAN_INTERFAZ` | `ether1` | `.env` |
+| `ppp_local_v4` | `ROUTERS_SERVICIO_PPP_LOCAL_V4` | `10.10.0.1` | `.env` |
+| `pool_v4_rangos` | `ROUTERS_SERVICIO_POOL_V4_RANGOS` | `10.10.0.10-10.10.0.250` | `.env` |
+| `clientes_v4` | `ROUTERS_SERVICIO_CLIENTES_V4` | `10.10.0.0/16` | `.env` |
+| `clientes_v6` (puede ir vacía) | `ROUTERS_SERVICIO_CLIENTES_V6` | `2001:db8:100::/48,2001:db8:200::/40` | `.env` |
+| `susp_rate_limit` | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`) | `256k/256k` | derivada |
+| `pool_v6_enlace_prefijo` | `ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO` | `2001:db8:100::/48` | `.env` |
+| `pool_v6_pd_prefijo` | `ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO` | `2001:db8:200::/40` | `.env` |
+| `portal_v4`, `portal_v6` | `ROUTERS_SERVICIO_PORTAL_V4`, `ROUTERS_SERVICIO_PORTAL_V6` | `192.0.2.20`, `2001:db8:ffff::20` | `.env` |
+| `portal_fqdn` | `ROUTERS_SERVICIO_PORTAL_FQDN` (en producción, `DOMINIO_PORTAL` por defecto) | `portal.argosisp.example` | derivada |
+| `walled_garden` (puede ir vacía) | `ROUTERS_SERVICIO_WALLED_GARDEN` | `app.recurrente.com` | `.env` |
+| `dns_v4`, `dns_v6` (`dns_v6` puede ir vacía) | `ROUTERS_SERVICIO_DNS_V4`, `ROUTERS_SERVICIO_DNS_V6` | `192.0.2.53,198.51.100.53` | `.env` |
+
+En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio). En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+
+### Render (para A1)
+
+`GET /routers/:id/script-conexion` sirve `plantillas/conexion.rsc.tpl` (o `conexion-servicio.rsc.tpl` con `?incluir=servicio`) reemplazando cada `{{variable}}`. Reglas en `render.mjs` (implementación de referencia) y patrones en `variables.json`: todas las variables de la plantilla deben venir y cumplir su patrón, el valor va siempre dentro de una cadena entre comillas y se escapan `\ " $ ?`; un carácter de control es error. Prueba: `node --test infra/mikrotik/render.test.mjs`. Para el laboratorio: `node infra/mikrotik/render.mjs plantillas/conexion.rsc.tpl valores.json > r.rsc`.
+
+## Laboratorio (`lab.rsc`)
 
 `lab.rsc` deja un RouterOS 7 listo para que A2 pruebe RADIUS, accounting y CoA, y para que A5 pruebe la página de corte por IPv4 e IPv6. Desde la semana 2 también prepara los clientes **WISP sin PPPoE** (`contratos/routeros.md`), el **control de velocidad** (`contratos/velocidad.md`) y el usuario de la **API REST** con HTTPS.
 
@@ -286,7 +403,7 @@ curl --cacert argosisp-ca.crt -u argosisp-api:$CLAVE -X PUT https://<apiNombre>/
 
 ## Control de velocidad (`simple` y `arbol_pcq`)
 
-Contrato: `.claude/integration/contratos/velocidad.md`.
+Contratos: `.claude/integration/contratos/velocidad.md` (fórmulas) y `.claude/integration/contratos/control-velocidad.md` (estrategia por capas: los modos `simple` y `arbol_pcq` son atajos de la sección «Estrategias por capas»).
 
 ### FastTrack excluido para clientes con colas
 
@@ -337,13 +454,39 @@ Una cola simple por servicio: la dinámica de PPPoE (`Mikrotik-Rate-Limit` desde
 - `/queue type` no tiene comentario, así que el script borra por nombre solo los `argosisp-plan-<arbolPlanId>-*` del ejemplo.
 - En un router que ArgosIsp maneja en `arbol_pcq`, pon `arbolEjemplo false`: ArgosIsp crea sus padres y planes con la acción `routers.cambiar_control_velocidad` (A2).
 
+### Estrategias por capas (semana 4)
+
+Un router combina formas de control por tipo de conexión (PPPoE, IP estática, DHCP fija) y por plan: ya no hace falta registrar el mismo MikroTik dos veces. Lo que ArgosIsp crea por la API REST según la estrategia (todo con `comment = argosisp:…`):
+
+| Estrategia | Objetos |
+| --- | --- |
+| `radius_rate_limit` | Nada propio por cliente (la cola dinámica `<pppoe-…>` la crea RouterOS con `Mikrotik-Rate-Limit`); con padre o tipo de cola, el perfil `plan-<id>` con `parent-queue` y `queue-type` |
+| `perfil_ppp` | Perfil `plan-<id>` con `rate-limit` (y `parent-queue` / `queue-type` si toca) |
+| `cola_simple` | `argosisp-servicio-<id>` por servicio WISP, con `queue=` si el tipo no es `default` |
+| `pcq_plan` | `/queue type argosisp-plan-<id>[-limitado]-pcq-{subida,bajada}` y `/queue simple argosisp-plan-<id>-pcq[-limitado]` con los clientes en el `target` |
+| `arbol_pcq` | Lo del ejemplo de arriba (tipos, árbol, mangle y address-lists) |
+| Padre `por_router` / `jerarquico` | `/queue simple argosisp-router` (`comment = argosisp:router`, `max-limit` = capacidad del router); en `jerarquico`, los padres de plan cuelgan de él. En el árbol, los globales `argosisp-global-*` |
+| Tipo de cola `sfq` / `fq_codel` / `cake` | `/queue type argosisp-sfq` / `argosisp-fq-codel` / `argosisp-cake` (`fq_codel` y `cake` solo RouterOS 7) |
+
+Notas de RouterOS 7 (verificar en el laboratorio, `docs/laboratorio/validacion-fisica.md` §4):
+
+- `Mikrotik-Rate-Limit` no lleva padre: la cola dinámica cuelga del `parent-queue` del perfil que nombra `Mikrotik-Group`.
+- Un CoA no cambia el perfil ni el padre de una sesión viva; sí su `Mikrotik-Rate-Limit`. Por eso cambiar de estrategia no desconecta: la sesión conserva su estructura hasta reconectar y recibe la velocidad nueva por CoA.
+- Una cola simple no acepta una address-list como `target`: `pcq_plan` lleva las direcciones de los clientes en el `target`.
+
+### Corte que mantiene ArgosIsp (igual que este script)
+
+El reconciliador deja en cada router con API, sea cual sea la estrategia, lo mismo que las secciones 4, 7, 8 y 9 de `lab.rsc` para el corte, **con los mismos comentarios**: la lista de interfaces y el perfil `suspendido`, las address-lists `suspendidos`, `argos-portal`, `argos-dns`, `argos-walled` y `argos-clientes`, los saltos `argosisp:top corte …` y `Filter-Id de RADIUS/CoA`, la excepción de FastTrack (si la estrategia la pide), las cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y el NAT `argos-corte-nat`. Si `lab.rsc` ya corrió, la reconciliación no cambia nada; si la reconciliación corrió antes, reaplicar `lab.rsc` deja lo mismo. Los saltos se mueven al inicio de su tabla con `move` (antes de FastTrack). Lo que solo pone este script (CoA desde aaa, DNS solo interno, WireGuard, NAT de salida) no lo toca.
+
+La configuración del portal y del walled garden sale del servidor (`ROUTERS_SERVICIO_PORTAL_V4`, `_PORTAL_FQDN`, `_WALLED_GARDEN`, … o `PORTAL_URL_PUBLICA`). El chequeo `corte` de «Probar conexión» (`GET /api/v1/routers/:id/diagnostico-corte`) dice qué falta y si el router llega al portal (`/tool fetch`); «Reconciliar ahora» (`POST /api/v1/routers/:id/reconciliar`) lo crea.
+
 ## Usuario de la API REST y HTTPS
 
 ArgosIsp habla con el router por la API REST (`/rest/...` sobre `www-ssl`). `lab.rsc` crea:
 
-- **Grupo `argosisp-api`** con `policy=read,write,api,rest-api` y nada más: sin `ftp`, `ssh`, `telnet`, `winbox`, `web`, `policy`, `password`, `sensitive`, `reboot`, `sniff`, `test`, `romon` ni `local`. Verificado en CHR 7.24.5: con ese grupo la API REST lee y escribe (`/ip/firewall/address-list`, colas, leases) y **no** puede cambiar usuarios (`/user/set` responde `not enough permissions`).
+- **Grupo `argosisp-api`** con `policy=read,write,api,rest-api` y nada más: sin `ftp`, `ssh`, `telnet`, `winbox`, `web`, `policy`, `password`, `sensitive`, `reboot`, `sniff`, `test`, `romon` ni `local`. Es el mínimo probado (arriba, «Permisos mínimos de la API»): con ese grupo la API REST lee y escribe y **no** puede cambiar usuarios (`/user/set` responde `not enough permissions`).
 - **Usuario `argosisp-api`** con `address=apiDesde` (solo desde el servidor ArgosIsp). Solo si cambias `apiPassword` (con `CAMBIAR` el import avisa y no lo crea). Genera la clave con `openssl rand -base64 24` y regístrala en el router de ArgosIsp (`api_usuario`, `api_password`; se guarda cifrada).
-- **Certificado**: CA propia `argosisp-ca` y `argosisp-www` con CN = `apiNombre` y SAN `DNS:apiNombre,IP:apiIp`, en `www-ssl` con `tls-version=only-1.2` y `available-from=apiDesde`. Se crean una sola vez; para regenerarlos (cambió `apiIp`), bórralos y reaplica.
+- **Certificado**: CA propia `argosisp-ca` (nombre `apiCaNombre`) y `argosisp-www` con CN = `apiNombre` y SAN `DNS:apiNombre,IP:apiIp`, en `www-ssl` con `tls-version=only-1.2` y `address=apiDesde` (RouterOS 7.17+ lo muestra como `available-from`; 7.16 y anteriores solo aceptan `address`). Se crean una sola vez; si `apiIp` cambió, el script regenera el certificado del servidor (la CA se conserva).
 - `apiSoloHttps true` apaga `www` (HTTP en claro), `api` (8728) y `api-ssl` (8729): ArgosIsp solo usa la API REST. WebFig sigue por HTTPS desde `apiDesde`; para administrar desde otra IP, usa Winbox o SSH.
 
 Verificación desde el servidor:

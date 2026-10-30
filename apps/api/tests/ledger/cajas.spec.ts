@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, cajeroDe, nuevaCaja } from '#tests/ledger/ayudas_libro'
-import { escenario, generar, lineasAsiento } from '#tests/billing/ayudas_billing'
+import { escenario, generar, lineasAsiento, unicoBd } from '#tests/billing/ayudas_billing'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import Usuario from '#core/models/usuario'
@@ -325,7 +325,7 @@ test.group('ledger · cajas y turnos', () => {
 async function rolConPermisos(permisos: string[]): Promise<string> {
     const [rol] = (await db
         .table('core.roles')
-        .insert({ nombre: unico('rol'), descripcion: 'a la medida' })
+        .insert({ nombre: await unicoBd('rol'), descripcion: 'a la medida' })
         .returning('id')) as Array<{ id: number }>
     const filas = (await db.from('core.permisos').whereIn('nombre', permisos).select('id')) as Array<{
         id: number

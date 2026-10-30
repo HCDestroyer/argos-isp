@@ -22,6 +22,7 @@ import {
     eventosDe,
     facturasDe,
     generar,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -158,7 +159,12 @@ test.group('billing · servicio pendiente de instalación', () => {
                 .post('/api/v1/pagos')
                 .bearerToken(token)
                 .header('Idempotency-Key', unico('cobro'))
-                .json({ cliente_id: clienteId, metodo: 'caja', monto: '336.00', referencia: unico('rec') }),
+                .json({
+                    cliente_id: clienteId,
+                    metodo: 'caja',
+                    monto: '336.00',
+                    referencia: await unicoBd('rec'),
+                }),
             201,
         )
         assert.deepEqual(pago.body().servicios, [

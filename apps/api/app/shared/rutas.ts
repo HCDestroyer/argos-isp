@@ -194,7 +194,7 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
     // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined
     const query = ruta.query ? await ruta.query.validate(ctx.request.qs()) : undefined
-    if (!ruta.handler) throw new NoImplementado(ruta.operacion)
+    if (!ruta.handler) throw new NoImplementado()
 
     const resultado = await ruta.handler(ctx, { cuerpo, query, params: ctx.params })
     const { status } = ruta.respuesta

@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, cajeroDe, nuevaCaja } from '#tests/ledger/ayudas_libro'
-import { cuentaBancariaPrueba, lineasAsiento } from '#tests/billing/ayudas_billing'
+import { cuentaBancariaPrueba, lineasAsiento, unicoBd } from '#tests/billing/ayudas_billing'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import AnularEgreso from '#ledger/actions/anular_egreso'
 import AbrirCaja from '#ledger/actions/abrir_caja'
@@ -19,7 +19,7 @@ test.group('ledger · egresos', () => {
     }) => {
         const cuenta = await cuentaBancariaPrueba()
         const { token } = await usuarioConRoles(['contabilidad'])
-        const proveedor = unico('EEGSA')
+        const proveedor = await unicoBd('EEGSA')
         const respuesta = await estado(
             client.post('/api/v1/egresos').bearerToken(token).header('Idempotency-Key', unico('e')).json({
                 categoria: 'energia',

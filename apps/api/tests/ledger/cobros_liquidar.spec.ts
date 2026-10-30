@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
 import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
@@ -38,7 +39,7 @@ async function pagarPasarela(
             pasarela: 'falsa',
             monto,
             comision,
-            referencia: unico('PAS'),
+            referencia: await unicoBd('PAS'),
             empresa_id: empresaId,
         },
         e.ctx,
@@ -345,7 +346,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
                 cliente_id: s.clienteId,
                 metodo: 'agente',
                 monto: '7.00',
-                referencia: unico('AG'),
+                referencia: await unicoBd('AG'),
                 empresa_id: e.C,
             },
             e.ctx,
@@ -360,7 +361,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
                 cliente_id: s.clienteId,
                 metodo: 'agente',
                 monto: '25.00',
-                referencia: unico('AG'),
+                referencia: await unicoBd('AG'),
                 empresa_id: e.C,
             },
             e.ctx,
@@ -371,7 +372,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
                 cliente_id: s.clienteId,
                 metodo: 'debito',
                 monto: '5.00',
-                referencia: unico('DB'),
+                referencia: await unicoBd('DB'),
                 empresa_id: e.C,
             },
             e.ctx,

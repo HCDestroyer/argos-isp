@@ -91,6 +91,10 @@ const { conSelector: variasEmpresas, nombre: nombreEmpresa } = useEmpresaActiva(
 const puedeCambiarEmpresa = computed(() => variasEmpresas.value && puede('servicios.cambiar_empresa') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const cambiarEmpresaAbierto = ref(false)
 
+/** «Sincronizar con el router» (A1): aplica ya en el MikroTik lo que el servicio debe tener. */
+const puedeSincronizarRouter = computed(() => puede('servicios.sincronizar_router') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const sincronizarRouterAbierto = ref(false)
+
 function alCambiarEmpresa(actualizado: Servicio) {
     servicio.value = actualizado
     toast.add({ title: 'Empresa cambiada', description: `${etiquetaServicio(actualizado)} factura ahora con ${nombreEmpresa(actualizado.empresa_id)}`, icon: 'i-lucide-circle-check', color: 'success' })
@@ -431,7 +435,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico"
+                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeSincronizarRouter"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -487,6 +491,15 @@ onMounted(cargar)
                     variant="outline"
                     data-prueba="abrir-cambiar-empresa"
                     @click="cambiarEmpresaAbierto = true"
+                />
+                <UButton
+                    v-if="puedeSincronizarRouter"
+                    label="Sincronizar con el router"
+                    icon="i-lucide-refresh-cw"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-sincronizar-router"
+                    @click="sincronizarRouterAbierto = true"
                 />
             </div>
             <p
@@ -879,6 +892,12 @@ onMounted(cargar)
                 :servicio="servicio"
                 @hecho="alActivarInstalacion"
                 @recargado="alRecargarServicio"
+            />
+
+            <ServicioSincronizarRouterModal
+                v-model:open="sincronizarRouterAbierto"
+                :servicio="servicio"
+                :nombre-router="servicio.router_nombre"
             />
 
             <ServicioAccionModal

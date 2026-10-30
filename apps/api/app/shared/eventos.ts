@@ -236,6 +236,68 @@ export interface CatalogoEventos {
         motivo: string | null
     }
     /**
+     * Cambió la estrategia de control de velocidad de un router o de un plan en él
+     * (`routers.cambiar_control_velocidad`, `contratos/control-velocidad.md` §4). A2 la ejecuta por
+     * lotes sin cortar (crear → mover → borrar); `aaa-cache` reescribe `aaa:user:*` del router o del plan.
+     */
+    'router.estrategia_cambiada': {
+        router_id: number
+        /** null = la estrategia del router; un id = la excepción de ese plan en el router */
+        plan_id: number | null
+        /** Del router: `{ pppoe, ip_estatica, dhcp_fija }` completas; de un plan: la parcial o null */
+        de: Record<string, unknown> | null
+        a: Record<string, unknown> | null
+        capas: Array<'aplicacion' | 'padre' | 'tipo_cola' | 'extras'>
+        /** Disconnect por lotes a las sesiones PPPoE (opcional; por defecto conservan lo anterior) */
+        reconectar: boolean
+        motivo: string | null
+    }
+    /**
+     * Se generó un script de conexión del router (`routers.generar_script`, también al rotar):
+     * nuevo token de registro, el anterior deja de valer (`contratos/conexion-routers.md`). Nunca
+     * lleva el token, la clave de la API ni el secreto RADIUS.
+     */
+    'router.conexion_generada': {
+        router_id: number
+        /** empresa sugerida del router; null si es compartido */
+        empresa_id: number | null
+        actor: { tipo: string; id: number | null }
+    }
+    /**
+     * El router registró su clave pública WireGuard (por token o pegada a mano). El servicio
+     * `wireguard` (A6) relee los peers (`GET /internal/routers/conexion/peers`) y aplica `wg syncconf`.
+     * Desde aquí `host` y `nas_ip` del router son `ip_tunel` (RADIUS y CoA por el túnel).
+     */
+    'router.conexion_registrada': {
+        router_id: number
+        empresa_id: number | null
+        ip_tunel: string
+    }
+    /** Se invalidó el peer del router (`routers.rotar_conexion`): `wireguard` lo quita. */
+    'router.conexion_rotada': {
+        router_id: number
+        empresa_id: number | null
+        ip_tunel: string
+    }
+    /**
+     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`;
+     * no hay borrado de routers). El `wireguard-agente` quita su peer (contrato §6.3). Al reactivarlo
+     * se emite otra vez `router.conexion_registrada`.
+     */
+    'router.conexion_eliminada': {
+        router_id: number
+        empresa_id: number | null
+    }
+    /**
+     * Cambió la dirección del NAS o el secreto RADIUS de un router (`routers.crear`, `routers.editar`,
+     * registro por el túnel). A2 regenera su cliente de FreeRADIUS. Nunca lleva el valor del secreto.
+     */
+    'router.radius_cambiado': {
+        router_id: number
+        empresa_id: number | null
+        campos: Array<'nas_ip' | 'radius_secret'>
+    }
+    /**
      * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
      * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
      * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
@@ -312,6 +374,21 @@ export interface CatalogoEventos {
         nas_ip: string
         acct_session_id: string
         user_ppp: string
+        motivo: string
+    }
+    /**
+     * Sincronizar plan (`planes.sincronizar`, `contratos/control-velocidad.md` §5): `coa` manda un CoA
+     * (nunca Disconnect) con `Mikrotik-Rate-Limit = rate_limit` si la sesión sigue abierta y el servicio
+     * sigue en `estado`.
+     */
+    'sesion.velocidad_solicitada': {
+        sesion_id: number
+        servicio_id: number
+        nas_ip: string
+        acct_session_id: string
+        user_ppp: string
+        estado: 'activo' | 'limitado'
+        rate_limit: string
         motivo: string
     }
     /** `servicio_id` null solo en una desconexión manual de una sesión sin servicio conocido. */
@@ -1010,11 +1087,18 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'router.estrategia_cambiada',
+    'router.conexion_generada',
+    'router.conexion_registrada',
+    'router.conexion_rotada',
+    'router.conexion_eliminada',
+    'router.radius_cambiado',
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',
     'servicio.caidas_repetidas',
     'sesion.desconexion_solicitada',
+    'sesion.velocidad_solicitada',
     'coa.fallido',
     'routeros.fallido',
     'aaa.caido',

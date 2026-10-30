@@ -51,3 +51,30 @@ export function indiceEnPool(pool: string, prefijo: string, tamano: number): big
 export function capacidad(pool: string, tamano: number): bigint {
     return 1n << BigInt(tamano - separarPrefijo(pool).largo)
 }
+
+/** Dirección en la forma corta de RFC 5952 (`2001:db8:100::`), como la escribe Postgres. */
+export function formatoCorto(valor: bigint): string {
+    const grupos = deBigInt(valor).split(':')
+    // la corrida de ceros más larga (de 2 o más grupos) se reemplaza por `::`
+    let mejor = { inicio: -1, largo: 0 }
+    for (let i = 0; i < 8;) {
+        if (grupos[i] !== '0') {
+            i++
+            continue
+        }
+        let j = i
+        while (j < 8 && grupos[j] === '0') j++
+        if (j - i > mejor.largo) mejor = { inicio: i, largo: j - i }
+        i = j
+    }
+    if (mejor.largo < 2) return grupos.join(':')
+    const izq = grupos.slice(0, mejor.inicio).join(':')
+    const der = grupos.slice(mejor.inicio + mejor.largo).join(':')
+    return `${izq}::${der}`
+}
+
+/** i-ésimo subprefijo en forma corta (`2001:db8:100:300::/56`). */
+export function subprefijoCorto(pool: string, tamano: number, indice: bigint): string {
+    const { red } = separarPrefijo(pool)
+    return `${formatoCorto(red + (indice << BigInt(128 - tamano)))}/${tamano}`
+}

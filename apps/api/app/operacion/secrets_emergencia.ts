@@ -177,10 +177,9 @@ interface PerfilEmergencia {
 /** Perfil de emergencia del plan: copia del perfil del plan en el router con el rate-limit de aaa. */
 function lineaPerfil(nombre: string, p: PerfilEmergencia, opciones: OpcionesRsc): string {
     const { r } = p
-    // Con reuso > 1 en modo simple, aaa manda `Mikrotik-Group = plan-<id>` (perfil con parent-queue).
-    const base =
-        r.plan.profile_ppp ??
-        (r.control_velocidad === 'simple' && r.plan.reuso > 1 ? `plan-${r.plan.id}` : opciones.perfilBase)
+    // El perfil que manda aaa (`Mikrotik-Group`): `plan-<id>` si la estrategia lo necesita (padre,
+    // tipo de cola o perfil_ppp; contratos/control-velocidad.md §7), si no el `profile_ppp` del router.
+    const base = r.plan.profile_ppp ?? r.velocidad.grupo ?? opciones.perfilBase
     const partes = [
         `add name=${cadenaRos(nombre)}`,
         `copy-from=${cadenaRos(base)}`,

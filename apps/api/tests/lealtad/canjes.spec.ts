@@ -608,6 +608,7 @@ test.group('Lealtad · canjes', (group) => {
         const [aplicacion] = await db
             .from('billing.notas_credito_aplicaciones')
             .where('factura_id', diciembre.id)
+            .orderBy('id', 'asc')
             .select('id', 'monto')
         assert.equal(aplicacion!.monto, '50.00')
         const anulada = await new AnularFactura().execute(

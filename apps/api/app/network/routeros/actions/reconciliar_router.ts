@@ -11,16 +11,22 @@ import {
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
 import {
+    estrategiasEnUso,
     necesitaVelocidad,
     planesDeRouter,
+    redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
+import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
+    aplicarCorte,
     aplicarEstado,
     asegurarVelocidad,
+    leerCorteRouter,
+    pideFasttrack,
     enTransicion,
     fabricaPorDefecto,
     leerVelocidadRouter,
@@ -39,7 +45,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion'
     evento_id?: string | null
 }
 
@@ -58,6 +64,11 @@ export interface ResultadoReconciliar {
     colas_simples: number | null
     /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
     errores_velocidad: string[]
+    /**
+     * El portal es un nombre que no resolvió a IPv4: no se escribió el NAT de HTTP a `/corte` (la regla
+     * que hubiera queda como está) y se emitió `routeros.fallido`. null si no hubo problema.
+     */
+    error_portal: string | null
 }
 
 /**
@@ -77,15 +88,22 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
     readonly nombre = 'routeros.reconciliar'
     readonly #fabrica: FabricaClientes
     readonly #red: OpcionesDispatcher['red']
+    readonly #resolver: OpcionesDispatcher['resolver']
 
     constructor(opciones: OpcionesDispatcher = {}) {
         super()
         this.#fabrica = opciones.clientes ?? fabricaPorDefecto
         this.#red = opciones.red
+        this.#resolver = opciones.resolver
     }
 
     protected auditarExito(salida: ResultadoReconciliar): boolean {
-        return salida.correcciones.length > 0 || salida.error !== null || salida.errores_velocidad.length > 0
+        return (
+            salida.correcciones.length > 0 ||
+            salida.error !== null ||
+            salida.errores_velocidad.length > 0 ||
+            salida.error_portal !== null
+        )
     }
 
     protected async handle(input: EntradaReconciliar, t: Transaccion): Promise<ResultadoReconciliar> {
@@ -100,6 +118,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             omitido: false,
             colas_simples: null,
             errores_velocidad: [],
+            error_portal: null,
         }
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, input.router_id])
         const router = await routerDispatcher(input.router_id, t.trx, this.#red)
@@ -130,6 +149,45 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     evento_id: input.evento_id ?? null,
                     request_id: t.ctx.requestId,
                     motivo: `reconciliar: ${input.motivo}`,
+                }
+                // Versión de RouterOS (CAKE y fq_codel necesitan la 7): se guarda si cambió.
+                if (router.con_credenciales) {
+                    const recurso = await cliente.probar()
+                    const version = typeof recurso.version === 'string' ? recurso.version.slice(0, 100) : null
+                    if (version && version !== router.velocidad.routeros_version) {
+                        await t.trx
+                            .from('network.routers')
+                            .where('id', input.router_id)
+                            .update({ routeros_version: version })
+                        router.velocidad.routeros_version = version
+                    }
+                }
+                // Corte y FastTrack (siempre, sea cual sea la estrategia): la lista de interfaces, el
+                // perfil suspendido, las listas y las reglas, en orden (corte_router.ts).
+                if (router.con_credenciales) {
+                    const lecturaCorte = await leerCorteRouter(cliente)
+                    // El FQDN del portal se resuelve en cada pasada (sin caché): si no resuelve, error
+                    // visible y la regla de NAT que haya queda como está.
+                    const config = await configCorteResuelta(process.env, this.#resolver)
+                    if (config.portal_v4_error) {
+                        salida.error_portal = config.portal_v4_error
+                        await t.emit('routeros.fallido', {
+                            servicio_id: null,
+                            router_id: input.router_id,
+                            operacion: 'resolver portal',
+                            error: config.portal_v4_error,
+                        })
+                    }
+                    const corte = estadoCorteRouter(
+                        config,
+                        {
+                            fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
+                            redes_v4: await redesV4DeRouter(input.router_id, t.trx),
+                        },
+                        lecturaCorte.get('/ppp/profile') ?? [],
+                    )
+                    salida.avisos.push(...corte.avisos)
+                    salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
                 nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null

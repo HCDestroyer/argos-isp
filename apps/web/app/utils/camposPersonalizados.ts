@@ -84,7 +84,7 @@ function fechaValida(valor: string): boolean {
 /** El mismo texto de error que la API (422 `campos_personalizados.<clave>`), o `null`. */
 export function errorValorCampo(campo: Campo, valor: ValorCampoFormulario): string | null {
     if (vacio(valor)) {
-        return campo.requerido ? `${campo.etiqueta} es obligatorio` : null
+        return campo.requerido ? `Completa «${campo.etiqueta}»: es obligatorio` : null
     }
     switch (campo.tipo) {
         case 'texto':

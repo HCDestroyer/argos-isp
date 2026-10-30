@@ -4,8 +4,8 @@ import type { Problem } from '@argosisp/contracts'
 /**
  * Ficha del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1), "Ver
  * en Horus", su estado en línea con el último contacto (`en_linea` null = desconocido) y su
- * direccionamiento (redes IPv4, bloques y pools IPv6). La velocidad y la conexión se cambian desde
- * la lista de routers.
+ * direccionamiento (redes IPv4, bloques y pools IPv6). «Editar» y el menú de acciones del router
+ * (`RouterAcciones`) van en la barra superior.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -31,6 +31,16 @@ async function cargar() {
 
 onMounted(cargar)
 
+/** Tras probar la conexión o generar un script: estado en línea y sección «Conexión» al día. */
+const seccionConexion = useTemplateRef('seccionConexion')
+async function refrescar() {
+    const resultado = await useRouters().ver(routerId.value)
+    if (resultado.ok) {
+        nas.value = resultado.data
+    }
+    await seccionConexion.value?.cargar()
+}
+
 const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
 
 const control = computed(() => {
@@ -53,6 +63,13 @@ const control = computed(() => {
                 v-if="nas"
                 tipo="router"
                 :id-externo="nas.id"
+            />
+            <RouterAcciones
+                v-if="nas"
+                :router="nas"
+                con-editar
+                @actualizado="nas = $event"
+                @probado="refrescar"
             />
             <UButton
                 to="/routers"
@@ -128,6 +145,12 @@ const control = computed(() => {
                 />
             </dl>
         </section>
+        <RouterConexionSeccion
+            v-if="nas"
+            ref="seccionConexion"
+            :router="nas"
+            class="mx-auto mt-6 w-full max-w-4xl"
+        />
         <RouterDireccionamiento
             v-if="nas"
             :router-id="nas.id"

@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -56,7 +57,7 @@ async function compra(ctx: ContextoAccion, empresaId: number, fecha: string, tot
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('D'),
+            numero: await unicoBd('D'),
             fecha_documento: fecha,
             periodo_iva: `${fecha.slice(0, 7)}-01`,
             condicion: 'credito',
@@ -401,7 +402,7 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
                 monto: '147.59',
                 caja_id: e.cajas.get(e.B)!,
                 empresa_id: e.B,
-                retenciones: [{ codigo: 'RET_IVA_ESP', numero: unico('ct'), monto: '2.41' }],
+                retenciones: [{ codigo: 'RET_IVA_ESP', numero: await unicoBd('ct'), monto: '2.41' }],
             },
             e.ctx,
         )

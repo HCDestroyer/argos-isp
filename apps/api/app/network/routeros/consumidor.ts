@@ -2,12 +2,14 @@ import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
 import { contextoSistema } from '#shared/contexto'
 import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
-import { routersConServiciosSinPppoe } from '#network/routeros/consultas'
 import type { OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { encolarPrefijo } from '#network/routeros/prefijos'
 import { encolarCambioControl } from '#network/routeros/jobs'
 import type { EntradaCambioControl } from '#network/routeros/cambio_control'
 import type { ControlVelocidad } from '#network/velocidad'
+import { routerDispatcher, firmaDeEvento } from '#network/routeros/consultas'
+import { controlDerivado, leerEstrategias } from '#network/estrategia_velocidad'
+import { sincronizarPlan } from '#network/routeros/sincronizar'
 
 /** Eventos de servicio: se recalcula el estado deseado completo del servicio. */
 const EVENTOS_SERVICIO = new Set([
@@ -27,8 +29,12 @@ const EVENTOS_SERVICIO = new Set([
  * - `sesion.iniciada` / `sesion.terminada` → `AplicarRedServicio` del servicio: en un router que
  *   necesita control de velocidad (padre por plan o árbol) recalcula los objetos del plan; si no, no
  *   toca el router.
- * - `plan.velocidad_cambiada` → reconciliar los routers con servicios sin PPPoE de ese plan (o el
- *   router de la excepción).
+ * - `plan.velocidad_cambiada` → `sincronizarPlan` (`contratos/control-velocidad.md` §5): CoA de
+ *   velocidad a las sesiones vivas del plan, `aaa:user:*` y reconciliar sus routers (o el de la excepción).
+ * - `router.estrategia_cambiada` → job `cambiar_control` (por lotes, sin cortar; con `reconectar`,
+ *   Disconnect por lotes como el cambio de modo de antes).
+ * - `router.conexion_registrada` (A1, el router se conectó por primera vez) → reconciliar el router: deja
+ *   el corte y la estrategia sin esperar al ciclo periódico.
  * - `router.control_cambiado` con cambio de modo → job `cambiar_control` (por lotes, `cambio_control.ts`);
  *   si solo cambió la capacidad → reconciliar el router (padres globales del árbol).
  * - Un router caído no hace lanzar: la acción emite `routeros.fallido` y el job `recuperar` lo
@@ -57,7 +63,9 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             evento === 'plan.velocidad_cambiada' ||
             evento === 'sesion.iniciada' ||
             evento === 'sesion.terminada' ||
-            evento === 'router.control_cambiado'
+            evento === 'router.control_cambiado' ||
+            evento === 'router.estrategia_cambiada' ||
+            evento === 'router.conexion_registrada'
         )
     }
 
@@ -95,6 +103,40 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             )
             return
         }
+        if (evento.evento === 'router.estrategia_cambiada') {
+            const routerId = Number(evento.payload.router_id)
+            if (!Number.isInteger(routerId) || routerId <= 0) return
+            const planId = evento.payload.plan_id === null ? null : Number(evento.payload.plan_id)
+            const router = await routerDispatcher(routerId)
+            if (!router) return
+            const de =
+                planId === null
+                    ? controlDerivado(leerEstrategias(evento.payload.de))
+                    : router.velocidad.control
+            await this.#cambioControl({
+                router_id: routerId,
+                de,
+                a:
+                    planId === null
+                        ? controlDerivado(leerEstrategias(evento.payload.a))
+                        : router.velocidad.control,
+                evento_id: String(evento.id),
+                request_id: ctx.requestId,
+                firma: firmaDeEvento(planId, evento.payload.a),
+                plan_id: planId,
+                reconectar: evento.payload.reconectar === true,
+            })
+            return
+        }
+        if (evento.evento === 'router.conexion_registrada') {
+            const routerId = Number(evento.payload.router_id)
+            if (!Number.isInteger(routerId) || routerId <= 0) return
+            await new ReconciliarRouterOS(opciones).execute(
+                { router_id: routerId, motivo: 'conexion', evento_id: String(evento.id) },
+                ctx,
+            )
+            return
+        }
         if (evento.evento === 'router.control_cambiado') {
             const routerId = Number(evento.payload.router_id)
             if (!Number.isInteger(routerId) || routerId <= 0) return
@@ -118,17 +160,18 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             )
             return
         }
+        // plan.velocidad_cambiada: lo mismo que «Sincronizar plan», con el actor sistema.
         const planId = Number(evento.payload.plan_id)
+        if (!Number.isInteger(planId) || planId <= 0) return
         const routerId = evento.payload.router_id === null ? null : Number(evento.payload.router_id)
-        const routers =
-            routerId !== null && Number.isInteger(routerId)
-                ? [routerId]
-                : await routersConServiciosSinPppoe({ planId: Number.isInteger(planId) ? planId : undefined })
-        for (const id of routers) {
-            await new ReconciliarRouterOS(opciones).execute(
-                { router_id: id, motivo: 'plan', evento_id: String(evento.id) },
-                ctx,
-            )
-        }
+        await sincronizarPlan(
+            {
+                plan_id: planId,
+                router_id: routerId !== null && Number.isInteger(routerId) ? routerId : null,
+                evento_id: String(evento.id),
+            },
+            ctx,
+            opciones,
+        )
     }
 }

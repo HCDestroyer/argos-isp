@@ -27,6 +27,8 @@ export const implementacionesPlan: PlanRouter[] = [
         rafaga_umbral_pct: null,
         rafaga_segundos: null,
         prioridad: null,
+        // Sin excepción de velocidad: hereda la estrategia del router (A2).
+        estrategia_velocidad: null,
         version: 1,
         created_at: creado,
         updated_at: creado,
@@ -92,6 +94,7 @@ export const rutasImplementacionesPlan: RutasFixture = {
             rafaga_umbral_pct: null,
             rafaga_segundos: null,
             prioridad: null,
+            estrategia_velocidad: null,
             version: 0,
             created_at: ahora(),
             updated_at: ahora(),

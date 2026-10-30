@@ -28,7 +28,7 @@ export function esquemaProvision(hoy: string) {
         anio: z.number({ message: 'Elige el año' }).int().min(2000).max(2100),
         fecha: z.string()
             .trim()
-            .refine(valor => valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || /^\d{4}-\d{2}-\d{2}$/.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor <= hoy, 'El corte no puede ser futuro'),
         confirmacion: z.string(),
     }).superRefine((datos, ctx) => {
@@ -50,7 +50,7 @@ export type EntradaProvision = z.input<ReturnType<typeof esquemaProvision>>
  */
 export const esquemaCastigo = z.object({
     facturas: z.array(z.number().int().positive()).min(1, 'Elige al menos una factura'),
-    motivo: z.string().trim().min(3, 'El motivo es obligatorio').max(500, 'Máximo 500 caracteres'),
+    motivo: z.string().trim().min(3, 'Escribe el motivo (al menos 3 caracteres)').max(500, 'Máximo 500 caracteres'),
     evidencia: z.string().trim().min(3, 'Describe la gestión de cobro (llamadas, cartas, avisos)').max(4000, 'Máximo 4000 caracteres'),
     confirmacion: z.string().refine(valor => confirmacionValida(valor, FRASE_CASTIGO), `Escribe ${FRASE_CASTIGO} para confirmar`),
 })

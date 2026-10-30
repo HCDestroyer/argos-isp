@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, unico } from '#tests/ayudas'
+import { contextoPrueba } from '#tests/ayudas'
 import { afirmarLibroCuadrado, cerrarMes, crearCliente, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { Problema } from '#shared/errores'
 import ImportarFacturaPendiente, {
@@ -21,6 +21,7 @@ import {
     generar,
     lineasAsiento,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -46,11 +47,11 @@ function importar(entrada: Omit<EntradaImportarFactura, 'origen'> & { origen?: s
     )
 }
 
-function promesa(entrada: Partial<EntradaImportarPromesa>) {
+async function promesa(entrada: Partial<EntradaImportarPromesa>) {
     return new ImportarPromesa().execute(
         {
             origen: 'mikrowisp',
-            id_externo: unico('promesa'),
+            id_externo: await unicoBd('promesa'),
             vence: '2026-10-20',
             creada_en: '2026-10-05',
             ahora: new Date('2026-10-08T15:00:00Z'),
@@ -65,7 +66,7 @@ test.group('billing · importación completa · facturas', () => {
         assert,
     }) => {
         const clienteId = await crearCliente()
-        const id = unico('fac')
+        const id = await unicoBd('fac')
         const r = await importar({
             id_externo: id,
             cliente_id: clienteId,
@@ -133,7 +134,7 @@ test.group('billing · importación completa · facturas', () => {
     test('sin servicio exige cliente_id; sin periodo exige emitida_en; no futura ni con mora', async ({
         assert,
     }) => {
-        const sinCliente = await problemaDe(importar({ id_externo: unico('x'), total: '10.00' }))
+        const sinCliente = await problemaDe(importar({ id_externo: await unicoBd('x'), total: '10.00' }))
         assert.equal(sinCliente.status, 422)
         assert.sameMembers(
             sinCliente.errores!.map((e) => e.field),
@@ -142,7 +143,7 @@ test.group('billing · importación completa · facturas', () => {
         const clienteId = await crearCliente()
         const futura = await problemaDe(
             importar({
-                id_externo: unico('x'),
+                id_externo: await unicoBd('x'),
                 cliente_id: clienteId,
                 emitida_en: '2026-11-01',
                 total: '1.00',
@@ -151,7 +152,7 @@ test.group('billing · importación completa · facturas', () => {
         assert.equal(futura.errores?.[0]?.field, 'emitida_en')
         const mora = await problemaDe(
             importar({
-                id_externo: unico('x'),
+                id_externo: await unicoBd('x'),
                 cliente_id: clienteId,
                 emitida_en: '2026-01-01',
                 total: '1.00',
@@ -161,7 +162,7 @@ test.group('billing · importación completa · facturas', () => {
         assert.equal(mora.errores?.[0]?.field, 'aplicar_mora')
         const negativo = await problemaDe(
             importar({
-                id_externo: unico('x'),
+                id_externo: await unicoBd('x'),
                 cliente_id: clienteId,
                 emitida_en: '2026-01-01',
                 total: '-1.00',
@@ -172,7 +173,7 @@ test.group('billing · importación completa · facturas', () => {
         const { servicioId } = await escenario()
         const otroDueno = await problemaDe(
             importar({
-                id_externo: unico('x'),
+                id_externo: await unicoBd('x'),
                 servicio_id: servicioId,
                 cliente_id: ajeno,
                 periodo: '2026-09-01',
@@ -190,7 +191,7 @@ test.group('billing · importación completa · facturas', () => {
             plantilla: { hora_corte: '00:00', facturas_para_limitar: 1, facturas_para_cortar: 3 },
         })
         const primera = await importar({
-            id_externo: unico('f1'),
+            id_externo: await unicoBd('f1'),
             servicio_id: servicioId,
             periodo: '2026-08-01',
             total: '150.00',
@@ -199,7 +200,7 @@ test.group('billing · importación completa · facturas', () => {
         // sin cargo_unico choca con la clave del periodo, con un mensaje que dice qué hacer
         const choque = await problemaDe(
             importar({
-                id_externo: unico('f2'),
+                id_externo: await unicoBd('f2'),
                 servicio_id: servicioId,
                 periodo: '2026-08-01',
                 total: '150.00',
@@ -209,7 +210,7 @@ test.group('billing · importación completa · facturas', () => {
         assert.match(choque.message, /cargo_unico: true/)
 
         const segunda = await importar({
-            id_externo: unico('f2'),
+            id_externo: await unicoBd('f2'),
             servicio_id: servicioId,
             periodo: '2026-08-01',
             cargo_unico: true,
@@ -218,7 +219,7 @@ test.group('billing · importación completa · facturas', () => {
         })
         assert.isTrue(segunda.cargo_unico)
         const instalacion = await importar({
-            id_externo: unico('inst'),
+            id_externo: await unicoBd('inst'),
             servicio_id: servicioId,
             emitida_en: '2026-08-01',
             total: '300.00',
@@ -255,7 +256,7 @@ test.group('billing · importación completa · facturas', () => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-07-01' })
         const cero = await importar({
             origen: 'smartisp',
-            id_externo: unico('cero'),
+            id_externo: await unicoBd('cero'),
             servicio_id: servicioId,
             periodo: '2026-07-01',
             emitida_en: '2026-07-01',
@@ -277,7 +278,7 @@ test.group('billing · importación completa · facturas', () => {
 
         const saldada = await importar({
             origen: 'smartisp',
-            id_externo: unico('saldada'),
+            id_externo: await unicoBd('saldada'),
             servicio_id: servicioId,
             periodo: '2026-08-01',
             emitida_en: '2026-08-01',
@@ -303,7 +304,7 @@ test.group('billing · importación completa · facturas', () => {
     test('emitida_en en un mes cerrado → 422 periodo_cerrado sin escribir', async ({ assert }) => {
         await cerrarMes('2016-03-01')
         const clienteId = await crearCliente()
-        const id = unico('cerrada')
+        const id = await unicoBd('cerrada')
         const error = await problemaDe(
             importar({ id_externo: id, cliente_id: clienteId, emitida_en: '2016-03-15', total: '80.00' }),
         )
@@ -314,7 +315,7 @@ test.group('billing · importación completa · facturas', () => {
         assert.lengthOf(filas, 0)
         // sin cargo no escribe en el libro: se acepta aunque el mes esté cerrado
         const historial = await importar({
-            id_externo: unico('cerrada-cero'),
+            id_externo: await unicoBd('cerrada-cero'),
             cliente_id: clienteId,
             emitida_en: '2016-03-15',
             total: '0.00',
@@ -329,7 +330,7 @@ test.group('billing · importación completa · promesas', () => {
         assert.equal(await estadoServicio(servicioId), 'suspendido')
         const emitidas = await facturasDe(servicioId)
         const facturas = emitidas.filter((f) => f.tipo === 'servicio')
-        const id = unico('prom')
+        const id = await unicoBd('prom')
         const p = await promesa({ id_externo: id, facturas: facturas.map((f) => f.id) })
         assert.deepEqual(
             [p.creada, p.estado, p.servicio_id, p.cliente_id],
@@ -365,7 +366,7 @@ test.group('billing · importación completa · promesas', () => {
             {
                 historico: true,
                 origen: 'mikrowisp',
-                id_externo: unico('pago-antes'),
+                id_externo: await unicoBd('pago-antes'),
                 cliente_id: clienteId,
                 metodo: 'deposito',
                 monto: '100.00',
@@ -381,7 +382,7 @@ test.group('billing · importación completa · promesas', () => {
             {
                 historico: true,
                 origen: 'mikrowisp',
-                id_externo: unico('pago-despues'),
+                id_externo: await unicoBd('pago-despues'),
                 cliente_id: clienteId,
                 metodo: 'deposito',
                 monto: '50.00',
@@ -403,7 +404,7 @@ test.group('billing · importación completa · promesas', () => {
 
         const clienteId = await crearCliente()
         const sinServicio = await importar({
-            id_externo: unico('ret'),
+            id_externo: await unicoBd('ret'),
             cliente_id: clienteId,
             emitida_en: '2025-01-10',
             total: '100.00',

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import { meAdmin } from '~~/fixtures/auth/sesiones'
+import { meAdmin, PERMISOS_PENDIENTES } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { permisosDelContrato } from '~~/herramientas/permisosContrato'
 import { UApp } from '#components'
@@ -45,7 +45,8 @@ describe('permisos de los fixtures desde el contrato', () => {
         const enumContrato = [...spec.paths['/api/v1/roles']!.post.requestBody.content['application/json'].schema.properties.permisos.items.enum].sort()
         expect(permisosDelContrato(OPENAPI).map(p => p.nombre)).toEqual(enumContrato)
         expect(bd.roles.find(r => r.nombre === 'admin')?.permisos).toEqual(enumContrato)
-        expect([...meAdmin.permisos].sort()).toEqual(enumContrato)
+        // Más los permisos de contratos escritos cuyo código aún no llega al OpenAPI (`PERMISOS_PENDIENTES`).
+        expect([...meAdmin.permisos].sort()).toEqual([...enumContrato, ...PERMISOS_PENDIENTES].sort())
         // la descripción es el resumen del endpoint que pide el permiso
         expect(permisosDelContrato(OPENAPI).find(p => p.nombre === 'campos_personalizados.activar')?.descripcion).toBe('Volver a activar un campo personalizado')
         // los demás roles base solo traen permisos que existen
@@ -99,7 +100,7 @@ describe('campos personalizados en el cliente', () => {
         const esquema = esquemaClienteCon(catalogo)
         const entrada = { ...entradaDesdeCliente(undefined, catalogo), nombre: 'Ana' }
         const sinValor = esquema.safeParse(entrada)
-        expect(!sinValor.success && sinValor.error.issues.map(i => [i.path.join('.'), i.message])).toEqual([['campos_personalizados.medio_contacto', 'Cómo nos conoció es obligatorio']])
+        expect(!sinValor.success && sinValor.error.issues.map(i => [i.path.join('.'), i.message])).toEqual([['campos_personalizados.medio_contacto', 'Completa «Cómo nos conoció»: es obligatorio']])
         const fechaMala = esquema.safeParse({ ...entrada, campos_personalizados: { ...entrada.campos_personalizados, medio_contacto: 'Vecino', fecha_visita: '2026-02-30' } })
         expect(!fechaMala.success && fechaMala.error.issues[0]?.path.join('.')).toBe('campos_personalizados.fecha_visita')
         const bien = esquema.parse({ ...entrada, campos_personalizados: { ...entrada.campos_personalizados, medio_contacto: 'Vecino', referencia_casa: '  Portón verde ' } })

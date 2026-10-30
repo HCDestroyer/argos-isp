@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd, unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -19,6 +20,7 @@ import {
     haceMeses,
     mesActual,
     nitPrueba,
+    nitUnico,
     partidas,
     proveedorEn,
 } from '#tests/ledger/ayudas_compras'
@@ -44,7 +46,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         )
         assert.equal(malo.status, 422)
         assert.include(malo.reglas, 'nit')
-        const nit = nitPrueba()
+        const nit = await nitUnico()
         const p = await new CrearProveedor().execute(
             { empresa_id: e.B, nit: `${nit.slice(0, -1)}-${nit.slice(-1)}`, nombre: 'Tránsito IP S.A.' },
             e.ctx,
@@ -60,7 +62,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         await new CrearProveedor().execute({ empresa_id: e.C, nit, nombre: 'Tránsito IP S.A.' }, e.ctx)
 
         const pequeno = await new CrearProveedor().execute(
-            { empresa_id: e.B, nit: nitPrueba(), nombre: 'Tienda', tipo: 'pequeno_contribuyente' },
+            { empresa_id: e.B, nit: await nitUnico(), nombre: 'Tienda', tipo: 'pequeno_contribuyente' },
             e.ctx,
         )
         assert.equal(pequeno.regimen_isr, 'pequeno_contribuyente')
@@ -237,7 +239,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(0),
                 condicion: 'contado',
                 metodo: 'caja',
@@ -316,7 +318,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             {
                 proveedor_id: pequeno.id,
                 tipo_documento: 'FPEQ',
-                numero: unico('P'),
+                numero: await unicoBd('P'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Reparación de torre', total: '448.00' }],
@@ -334,7 +336,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 {
                     proveedor_id: pequeno.id,
                     tipo_documento: 'FPEQ',
-                    numero: unico('P'),
+                    numero: await unicoBd('P'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     credito_fiscal: true,
@@ -349,7 +351,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 {
                     proveedor_id: general.id,
                     tipo_documento: 'FPEQ',
-                    numero: unico('P'),
+                    numero: await unicoBd('P'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     lineas: [{ descripcion: 'x', total: '10.00' }],
@@ -363,7 +365,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         const vieja = {
             proveedor_id: general.id,
             tipo_documento: 'FACT' as const,
-            numero: unico('V'),
+            numero: await unicoBd('V'),
             fecha_documento: haceMeses(4),
             periodo_iva: mesActual(),
             condicion: 'credito' as const,
@@ -380,14 +382,24 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         ])
         // en su mes (dentro de la ventana) toma el crédito con la fecha del documento
         const enSuMes = await new RegistrarCompra().execute(
-            { ...vieja, numero: unico('V'), fecha_documento: haceMeses(1, 15), periodo_iva: undefined },
+            {
+                ...vieja,
+                numero: await unicoBd('V'),
+                fecha_documento: haceMeses(1, 15),
+                periodo_iva: undefined,
+            },
             e.ctx,
         )
         assert.equal(enSuMes.periodo_iva, haceMeses(1))
         assert.equal(enSuMes.fecha, haceMeses(1, 15))
         const futuro = await errorDe(
             new RegistrarCompra().execute(
-                { ...vieja, numero: unico('V'), fecha_documento: haceMeses(0), periodo_iva: haceMeses(-1) },
+                {
+                    ...vieja,
+                    numero: await unicoBd('V'),
+                    fecha_documento: haceMeses(0),
+                    periodo_iva: haceMeses(-1),
+                },
                 e.ctx,
             ),
         )
@@ -418,7 +430,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                     egreso_id: egreso.id,
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('E'),
+                    numero: await unicoBd('E'),
                     fecha_documento: haceMeses(0),
                     lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '600.00' }],
                 },
@@ -431,7 +443,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 egreso_id: egreso.id,
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('E'),
+                numero: await unicoBd('E'),
                 fecha_documento: haceMeses(0),
                 lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '560.00' }],
             },
@@ -453,7 +465,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                     egreso_id: egreso.id,
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('E'),
+                    numero: await unicoBd('E'),
                     fecha_documento: haceMeses(0),
                     lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '560.00' }],
                 },
@@ -478,7 +490,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 egreso_id: egreso.id,
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('E'),
+                numero: await unicoBd('E'),
                 fecha_documento: haceMeses(0),
                 lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '560.00' }],
             },
@@ -501,7 +513,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 egreso_id: viejo.id,
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('E'),
+                numero: await unicoBd('E'),
                 fecha_documento: haceMeses(4),
                 periodo_iva: mesActual(),
                 lineas: [{ descripcion: 'Repuestos', categoria: 'otros', total: '112.00' }],
@@ -522,7 +534,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Mantenimiento de red', total: '3360.00' }],
@@ -549,7 +561,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 retenciones: [],
@@ -562,14 +574,14 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         const extranjero = await proveedorEn(e.B, e.ctx, {
             tipo: 'no_residente',
             tipo_documento: 'id_extranjero',
-            nit: unico('US').toUpperCase(),
+            nit: await unicoBdMayusculas('US'),
             pais: 'US',
         })
         const tr = await new RegistrarCompra().execute(
             {
                 proveedor_id: extranjero.id,
                 tipo_documento: 'RECIBO',
-                numero: unico('INV'),
+                numero: await unicoBd('INV'),
                 fecha_documento: haceMeses(0),
                 condicion: 'credito',
                 retenciones: [{ codigo: 'RET_ISR_NR_DATOS' }],
@@ -588,7 +600,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 {
                     proveedor_id: opcional.id,
                     tipo_documento: 'FACT',
-                    numero: unico('R'),
+                    numero: await unicoBd('R'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     retenciones: [{ codigo: 'RET_IVA_ESP' }],
@@ -611,7 +623,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 {
                     proveedor_id: proveedorB.id,
                     tipo_documento: 'FACT',
-                    numero: unico('X'),
+                    numero: await unicoBd('X'),
                     fecha_documento: haceMeses(0),
                     condicion: 'contado',
                     metodo: 'caja',
@@ -627,7 +639,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 {
                     proveedor_id: proveedorB.id,
                     tipo_documento: 'FACT',
-                    numero: unico('X'),
+                    numero: await unicoBd('X'),
                     fecha_documento: haceMeses(0),
                     condicion: 'credito',
                     lineas: [
@@ -655,7 +667,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
                 .bearerToken(e.token)
                 .headers(cabecera)
                 .header('Idempotency-Key', unico('p'))
-                .json({ nit: nitPrueba(), nombre: 'Claro Guatemala', dias_credito: 15 }),
+                .json({ nit: await nitUnico(), nombre: 'Claro Guatemala', dias_credito: 15 }),
             201,
         )
         const proveedor = nuevo.body()
@@ -668,7 +680,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         const cuerpo = {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: haceMeses(0),
             condicion: 'credito',
             lineas: [{ descripcion: 'Enlace dedicado', categoria: 'transito', total: '2240.00' }],

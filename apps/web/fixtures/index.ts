@@ -59,6 +59,9 @@ import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
 import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
+import { rutasEstrategias } from './routers/estrategias'
+import { rutasConexionRouters } from './routers/conexion'
+import { rutasPools } from './routers/pools'
 import { rutasRouters } from './routers/rutas'
 import { rutasAsignaciones } from './servicios/asignaciones'
 import { rutasPlanesTemporales } from './servicios/planesTemporales'
@@ -356,8 +359,9 @@ function fallasGuardadas(): Record<string, number> {
 }
 
 function respuestaFalla(ruta: string, status: number): RespuestaFixture {
+    // Como la API: el 501 ya no nombra la ruta; la falla simulada sí (solo se ve en pruebas).
     const cuerpo: Problem = status === 501
-        ? { type: 'urn:argosisp:problema:no_implementado', title: 'No implementado', status, detail: `La operación ${ruta} aún no está implementada` }
+        ? { type: 'urn:argosisp:problema:no_implementado', title: 'Operación no disponible', status, detail: 'Esta operación no está disponible en este servidor. Si la necesitas, avisa al administrador del sistema' }
         : { type: 'urn:argosisp:problema:error_interno', title: 'Error interno', status, detail: `Falla simulada en ${ruta}` }
     return { status, cuerpo }
 }
@@ -522,6 +526,9 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasServicios,
     ...rutasAsignaciones,
     ...rutasRouters,
+    ...rutasEstrategias,
+    ...rutasPools,
+    ...rutasConexionRouters,
     ...rutasRed,
     ...rutasPlanes,
     ...rutasPlantillas,

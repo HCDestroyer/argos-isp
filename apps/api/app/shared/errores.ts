@@ -85,6 +85,55 @@ export class Conflicto extends Problema {
     }
 }
 
+/**
+ * Nombre para el operador de una entidad que llega como tabla (`core.servicios`) o identificador
+ * (`plantilla_facturacion`): el `detail` nunca muestra nombres internos de la base.
+ */
+const NOMBRES_ENTIDAD: Record<string, string> = {
+    'core.servicios': 'El servicio',
+    servicio: 'El servicio',
+    'core.clientes': 'El cliente',
+    'core.empresas': 'La empresa',
+    'core.usuarios': 'El usuario',
+    'core.roles': 'El rol',
+    'core.zonas': 'La zona',
+    'core.adicionales': 'El adicional',
+    'core.servicios_adicionales': 'El adicional del servicio',
+    'core.anuncios': 'El anuncio',
+    'core.campos_personalizados': 'El campo personalizado',
+    'campo personalizado': 'El campo personalizado',
+    'core.motivos_cortesia': 'El motivo de cortesía',
+    'motivo de cortesía': 'El motivo de cortesía',
+    'core.plantillas_documentos': 'La plantilla de documento',
+    'billing.plantillas_facturacion': 'La plantilla de facturación',
+    plantilla_facturacion: 'La plantilla de facturación',
+    'network.planes': 'El plan',
+    'network.planes_adicionales': 'La lista de adicionales del plan',
+    'network.planes_routers': 'La implementación del plan en el router',
+    'network.routers': 'El router',
+    'network.redes_ipv4': 'La red IPv4',
+    'network.ipv6_bloques': 'El bloque IPv6',
+    'network.ipv6_pools': 'El pool IPv6',
+    'notify.plantillas': 'La plantilla de notificación',
+    'notify.recordatorios': 'El recordatorio',
+    'notify.configuracion_canales': 'La configuración de notificaciones',
+    'integraciones.horus_conector': 'La configuración de Horus',
+    regla_conciliacion: 'La regla de conciliación',
+    proveedor_cobro: 'El proveedor de cobro',
+    proveedor: 'El proveedor',
+    producto: 'El producto',
+    bodega: 'La bodega',
+    conteo: 'El conteo',
+}
+
+export function nombreEntidad(entidad: string): string {
+    const conocido = NOMBRES_ENTIDAD[entidad]
+    if (conocido) return conocido
+    // tabla o identificador sin traducción: nunca se muestra tal cual
+    if (/^[a-z0-9_]+(\.[a-z0-9_]+)?$/.test(entidad) && /[._]/.test(entidad)) return 'El registro'
+    return entidad
+}
+
 /** La entidad cambió desde que el cliente la leyó (control optimista por `version`). */
 export class ConflictoVersion extends Problema {
     constructor(entidad: string, id: number | string) {
@@ -92,7 +141,7 @@ export class ConflictoVersion extends Problema {
             409,
             'conflicto_version',
             'Conflicto de versión',
-            `${entidad} ${id} fue modificado por otra sesión; recarga y vuelve a intentar`,
+            `${nombreEntidad(entidad)} ${id} cambió en otra sesión; recarga y vuelve a intentar`,
         )
     }
 }
@@ -105,13 +154,20 @@ export class ValidacionFallida extends Problema {
 
 /** Una regla de negocio impide la acción (no es un error de formato). */
 export class ReglaNegocio extends Problema {
-    constructor(detalle: string, codigo = 'regla_negocio') {
-        super(422, codigo, 'Regla de negocio', detalle)
+    /** `errores`: detalle por elemento (p. ej. los servicios que impiden migrar un pool). */
+    constructor(detalle: string, codigo = 'regla_negocio', errores?: ErrorCampo[]) {
+        super(422, codigo, 'Regla de negocio', detalle, errores)
     }
 }
 
+/** 501: la ruta existe en el contrato pero este servidor no la atiende. */
 export class NoImplementado extends Problema {
-    constructor(operacion: string) {
-        super(501, 'no_implementado', 'No implementado', `La operación ${operacion} aún no está implementada`)
+    constructor() {
+        super(
+            501,
+            'no_implementado',
+            'Operación no disponible',
+            'Esta operación no está disponible en este servidor. Si la necesitas, avisa al administrador del sistema',
+        )
     }
 }
