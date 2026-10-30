@@ -57,31 +57,41 @@ export const EnlaceConexionIris = definirEsquema(
     }),
 )
 
+/** `alcance_global` y `empresas[]`: canje del enlace y vista previa de la autorización. */
+const alcanceEmpresas = {
+    alcance_global: {
+        ...booleano,
+        description:
+            'true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; ' +
+            'false: solo las de `empresas` (contrato Iris 0.3.1)',
+    },
+    empresas: {
+        ...lista(
+            objeto({
+                id,
+                nombre: { ...texto, description: 'Nombre comercial' },
+                nit: {
+                    ...nulable(texto),
+                    description: 'NIT sin guiones; null si la empresa aún no lo tiene',
+                },
+            }),
+        ),
+        description:
+            'Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1)',
+    },
+}
+
 export const CanjeConexionIris = definirEsquema(
     'CanjeConexionIris',
     objeto({
         token: { ...texto, description: 'Token `atk_` del usuario técnico Iris (§1.1)' },
         webhook: objeto({ url: texto, secreto: texto }),
         conector_id: texto,
-        alcance_global: {
-            ...booleano,
+        ...alcanceEmpresas,
+        panel_url: {
+            ...texto,
             description:
-                'true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; ' +
-                'false: solo las de `empresas` (contrato Iris 0.3.1)',
-        },
-        empresas: {
-            ...lista(
-                objeto({
-                    id,
-                    nombre: { ...texto, description: 'Nombre comercial' },
-                    nit: {
-                        ...nulable(texto),
-                        description: 'NIT sin guiones; null si la empresa aún no lo tiene',
-                    },
-                }),
-            ),
-            description:
-                'Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1)',
+                'URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0)',
         },
     }),
 )
@@ -91,5 +101,30 @@ export const TicketIris = definirEsquema(
     objeto({
         url: { ...texto, description: 'URL de Iris con el ticket (un solo uso, 60 s); el panel la abre' },
         expira_en: nulable(instante),
+    }),
+)
+
+export const AutorizacionIris = definirEsquema(
+    'AutorizacionIris',
+    objeto({
+        redirigir_a: {
+            ...texto,
+            description:
+                '`<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=…&state=…` (todo en el fragmento): ' +
+                'el panel navega ahí. El código vale 15 min y un solo uso',
+        },
+    }),
+)
+
+export const VistaPreviaAutorizacionIris = definirEsquema(
+    'VistaPreviaAutorizacionIris',
+    objeto({
+        origen_normalizado: { ...texto, description: '`https://host[:puerto]` de Iris' },
+        origen_conocido: {
+            ...booleano,
+            description:
+                'true: es el del conector Iris o está en `ARGOSISP_IRIS_ORIGENES`; false: el admin debe escribir el dominio para confirmar',
+        },
+        ...alcanceEmpresas,
     }),
 )

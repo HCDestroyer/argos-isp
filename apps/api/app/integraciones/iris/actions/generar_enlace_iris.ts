@@ -1,8 +1,6 @@
-import { randomBytes } from 'node:crypto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
-import { usuarioDelActor } from '#shared/contexto'
-import { VIGENCIA_ENLACE_MIN, hashCodigo } from '#integraciones/horus/actions/generar_enlace_horus'
+import { crearCodigoIris } from '#integraciones/iris/autorizacion'
 import { errorUrlIris } from '#integraciones/iris/configuracion'
 
 export interface EntradaGenerarEnlaceIris {
@@ -20,7 +18,8 @@ export interface SalidaGenerarEnlaceIris {
  * `iris.generar_enlace` (permiso `iris.configurar`): enlace de conexión para pegar en Iris (contrato
  * Iris §1.3 → Horus §1.4). Mismo formato y reglas que el de Horus (`hashCodigo`, 15 min, un solo
  * uso, un enlace nuevo anula los anteriores sin usar), en su propia tabla
- * (`integraciones.iris_enlaces`). El código no queda en la auditoría (la salida no se audita).
+ * (`integraciones.iris_enlaces`, `crearCodigoIris`, compartido con «Conectar con un botón» de §1.4).
+ * El código no queda en la auditoría (la salida no se audita).
  */
 export default class GenerarEnlaceIris extends DomainAction<
     EntradaGenerarEnlaceIris,
@@ -40,24 +39,7 @@ export default class GenerarEnlaceIris extends DomainAction<
                 { field: 'base_url', message: `URL pública de Argos: ${error}`, rule: 'url' },
             ])
         }
-        const anulados = (await t.trx
-            .from('integraciones.iris_enlaces')
-            .whereNull('usado_en')
-            .whereNull('anulado_en')
-            .update({ anulado_en: t.trx.knexRawQuery('now()') }, ['id'])) as Array<{ id: number }>
-        if (anulados.length > 0) t.anotarAuditoria({ enlaces_anulados: anulados.map((e) => Number(e.id)) })
-        const codigo = randomBytes(32).toString('base64url')
-        const vence = new Date(Date.now() + VIGENCIA_ENLACE_MIN * 60_000)
-        const [fila] = (await t.trx
-            .table('integraciones.iris_enlaces')
-            .insert({
-                codigo_sha256: hashCodigo(codigo),
-                base_url: base,
-                vence_en: vence,
-                creado_por: usuarioDelActor(t.ctx.actor),
-            })
-            .returning('id')) as Array<{ id: number }>
-        t.fijarEntidad('enlace_iris', Number(fila!.id))
+        const { codigo, vence } = await crearCodigoIris(t, { base_url: base })
         return { enlace: `${base}/conectar#${codigo}`, vence_en: vence.toISOString() }
     }
 }
