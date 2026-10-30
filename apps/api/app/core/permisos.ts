@@ -91,6 +91,9 @@ export const PERMISOS = {
     'planes.editar': 'Editar planes e implementaciones por router',
     'planes.sincronizar':
         'Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers',
+    'qos.ver': 'Ver los perfiles y clases de QoS (prioridad por protocolo en el árbol)',
+    'qos.gestionar':
+        'Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router',
     'sesiones.ver': 'Ver sesiones PPPoE',
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
     'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
@@ -469,6 +472,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'ipv6.migrar',
             'planes.ver',
             'planes.sincronizar',
+            'qos.ver',
+            'qos.gestionar',
             'sesiones.ver',
             'sesiones.desconectar',
             'red.ver',

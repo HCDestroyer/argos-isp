@@ -502,3 +502,81 @@ export async function aplicarCorte(
 export function pideFasttrack(estrategias: Estrategia[]): boolean {
     return estrategias.some((e) => e.extras.excluir_fasttrack)
 }
+
+/*
+|--------------------------------------------------------------------------
+| Verificación de QoS por clases (`contratos/qos.md` §6)
+|--------------------------------------------------------------------------
+*/
+
+/** ¿Es un objeto de QoS por clases (clasificación, cadena o salto del plan, hoja o PCQ de una clase)? */
+export function esObjetoQos(ruta: string, clave: Record<string, string | undefined>): boolean {
+    if (ruta === '/queue/type') return /-q\d+$/.test(clave.name ?? '')
+    const comment = clave.comment ?? ''
+    return comment.startsWith('argosisp:qos:') || /:qos(?::\d+)?$/.test(comment)
+}
+
+export interface VerificacionQos {
+    ok: boolean
+    /** objetos deseados que no están (`ruta clave`) */
+    faltan: string[]
+    /** objetos que están pero con propiedades distintas, con las que difieren */
+    distintos: Array<{ objeto: string; propiedades: string[] }>
+}
+
+/** Compara lo de QoS del estado deseado con lo que se volvió a leer del router. null = no hay QoS. */
+export function verificarQos(estado: EstadoVelocidad, lectura: LecturaVelocidad): VerificacionQos | null {
+    const deseados = estado.presentes.filter((o) => esObjetoQos(o.ruta, o.clave))
+    if (deseados.length === 0) return null
+    const faltan: string[] = []
+    const distintos: VerificacionQos['distintos'] = []
+    for (const o of deseados) {
+        const nombre = `${o.ruta} ${comentarioDe(o.clave)}`
+        const actual = (lectura.get(o.ruta as never) ?? []).find((x: ObjetoRouterOS) =>
+            Object.entries(o.clave).every(([k, v]) => x[k] === v),
+        )
+        if (!actual) {
+            faltan.push(nombre)
+            continue
+        }
+        const dif = Object.keys(diferencias(o.propiedades, actual))
+        if (dif.length > 0) distintos.push({ objeto: nombre, propiedades: dif })
+    }
+    return { ok: faltan.length === 0 && distintos.length === 0, faltan, distintos }
+}
+
+/**
+ * Fila `verificar_qos` en `audit.red` cuando la pasada tocó algo de QoS o la verificación falló; si
+ * falló, además `routeros.fallido`. Devuelve el error (o null).
+ */
+export async function registrarVerificacionQos(
+    t: Transaccion,
+    datos: { router_id: number; evento_id: string | null; cambiosQos: number },
+    verificacion: VerificacionQos | null,
+): Promise<string | null> {
+    if (!verificacion || (verificacion.ok && datos.cambiosQos === 0)) return null
+    await bitacoraRed.registrar({
+        tipo: 'routeros',
+        router_id: datos.router_id,
+        servicio_id: null,
+        comando: {
+            operacion: 'verificar_qos',
+            evento_id: datos.evento_id,
+            request_id: t.ctx.requestId,
+            cambios: datos.cambiosQos,
+        },
+        respuesta: { faltan: verificacion.faltan, distintos: verificacion.distintos, final: true },
+        ok: verificacion.ok,
+    })
+    if (verificacion.ok) return null
+    const error =
+        `QoS incompleto en el router: faltan ${verificacion.faltan.length} y difieren ` +
+        `${verificacion.distintos.length} objetos (${[...verificacion.faltan, ...verificacion.distintos.map((d) => d.objeto)].slice(0, 3).join('; ')})`
+    await t.emit('routeros.fallido', {
+        servicio_id: null,
+        router_id: datos.router_id,
+        operacion: 'verificar qos',
+        error,
+    })
+    return error
+}

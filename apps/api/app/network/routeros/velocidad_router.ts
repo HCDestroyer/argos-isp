@@ -16,6 +16,7 @@ import {
     nombrePadrePlan,
     nombreTipoHoja,
     padreCliente,
+    conQos,
     velocidadConExtras,
     type Estrategia,
     type EstrategiasRouter,
@@ -23,6 +24,14 @@ import {
     type TipoCola,
 } from '#network/estrategia_velocidad'
 import type { ObjetoRouterOS, Propiedades, RutaRouterOS } from '#network/routeros/cliente'
+import {
+    claseResto,
+    objetosClasificacion,
+    objetosQosPlan,
+    PREFIJO_COMMENT_QOS,
+    QOS_MAX_HOJAS,
+    type PerfilQosRouter,
+} from '#network/qos'
 import { normalizarValor } from '#network/routeros/normalizar'
 
 /**
@@ -125,6 +134,11 @@ export interface RouterVelocidad {
     capacidad_subida_kbps: number | null
     /** Versión de RouterOS leída del router (null = no se sabe) */
     routeros_version: string | null
+    /**
+     * Perfil de QoS del router (`contratos/qos.md`): el suyo o el predeterminado, con sus clases
+     * activas. Solo se usa en los planes del árbol con el extra `qos`. null/ausente = sin QoS.
+     */
+    qos?: PerfilQosRouter | null
 }
 
 /** Colas WISP (`cola_simple`) que cuelgan de un padre. */
@@ -180,7 +194,7 @@ export function kbpsPar(valor: string | undefined): { subida: number; bajada: nu
 /** Regla de oro del contrato que el router no cumpliría (`routeros.fallido` con el detalle). */
 export interface ErrorReglaOro {
     plan_id: number | null
-    regla: 'limit_at_hijos' | 'limit_at_global' | 'limit_at_router' | 'ipv6'
+    regla: 'limit_at_hijos' | 'limit_at_global' | 'limit_at_router' | 'ipv6' | 'qos_costo'
     detalle: string
 }
 
@@ -223,7 +237,7 @@ export type LecturaVelocidad = Map<MenuVelocidad, ObjetoRouterOS[]>
  * es el ejemplo de `lab.rsc` (ningún plan real tiene id 0) y no se toca.
  */
 const NOMBRE_TIPO =
-    /^(?:argosisp-plan-[1-9]\d*-(?:limitado-)?(?:pcq-)?(?:bajada|subida)|argosisp-(?:sfq|fq-codel|cake))$/
+    /^(?:argosisp-plan-[1-9]\d*-(?:limitado-)?(?:pcq-)?(?:bajada|subida)(?:-q[1-9]\d*)?|argosisp-(?:sfq|fq-codel|cake))$/
 
 /** ¿Es un objeto del control de velocidad que ArgosIsp administra en ese menú? */
 export function esObjetoVelocidad(ruta: MenuVelocidad, objeto: ObjetoRouterOS): boolean {
@@ -233,6 +247,7 @@ export function esObjetoVelocidad(ruta: MenuVelocidad, objeto: ObjetoRouterOS): 
     return (
         comment.startsWith(PREFIJO_COMMENT_PLAN) ||
         comment.startsWith(PREFIJO_COMMENT_GLOBAL) ||
+        comment.startsWith(PREFIJO_COMMENT_QOS) ||
         comment === COMMENT_PADRE_ROUTER
     )
 }
@@ -369,6 +384,7 @@ export function estadoVelocidadRouter(
     const arbol = estadoArbol(
         router,
         planes.filter((p) => p.familia === 'arbol'),
+        lectura,
     )
     // Los tipos de cola van antes que las colas que los usan; el árbol al final.
     const tipos = simple.presentes.filter((o) => o.ruta === '/queue/type')
@@ -677,11 +693,20 @@ function tipoPcq(vel: VelocidadPlan, sentido: Sentido): Propiedades {
  *    cliente lo pone el PCQ). `limit-at` = CIR × activos con garantizado y un padre.
  * 4. Mangle IPv4 e IPv6 (`chain = forward`, `mark-packet`, `passthrough = no`).
  */
-function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVelocidad {
+function estadoArbol(
+    router: RouterVelocidad,
+    planes: PlanRouter[],
+    lectura: LecturaVelocidad,
+): EstadoVelocidad {
     const tipos: ObjetoVelocidad[] = []
     const globales: ObjetoVelocidad[] = []
     const nodos: ObjetoVelocidad[] = []
     const mangles: ObjetoVelocidad[] = []
+    // QoS por clases (`contratos/qos.md` §3): tipos con tope, hojas, cadenas por plan y clasificación.
+    const qosTipos: ObjetoVelocidad[] = []
+    const hojas: ObjetoVelocidad[] = []
+    const qosMangles: ObjetoVelocidad[] = []
+    const perfilQos = router.qos && claseResto(router.qos.clases) ? router.qos : null
     const capacidad = { bajada: router.capacidad_bajada_kbps, subida: router.capacidad_subida_kbps }
     // El techo existe si la estrategia del router lo pide (aunque no haya planes) o algún plan lo usa.
     const conGlobal =
@@ -707,6 +732,7 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
         const base = velocidadConExtras(plan.velocidad, e.extras)
         const agrega = conNivelPlan(e, base.reuso)
         const conPadre = e.padre !== 'ninguno'
+        const qos = perfilQos !== null && conQos(e)
         for (const limitado of [false, true]) {
             const vel = limitado
                 ? {
@@ -723,18 +749,35 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
             for (const sentido of SENTIDOS) {
                 const nombre = nombreNodo(plan.plan_id, limitado, sentido)
                 const bajada = sentido === 'bajada'
+                const pcq = tipoPcq(vel, sentido)
                 tipos.push({
                     ruta: '/queue/type',
                     clave: { name: nombre },
-                    propiedades: tipoPcq(vel, sentido),
+                    propiedades: pcq,
                 })
+                if (qos) {
+                    // El nodo del plan pasa a ser interno: las hojas por clase cuelgan de él.
+                    const q = objetosQosPlan(perfilQos, {
+                        nodo: nombre,
+                        comment: commentNodo(plan.plan_id, limitado, sentido),
+                        lista,
+                        campoLista: bajada ? 'dst-address-list' : 'src-address-list',
+                        capacidad_kbps: limites.max_limit_kbps[sentido],
+                        clientes: cuenta,
+                        garantizado: e.extras.garantizado,
+                        pcq: { propiedades: pcq, mir_kbps: bajada ? vel.bajada_kbps : vel.subida_kbps },
+                    })
+                    qosTipos.push(...q.tipos)
+                    hojas.push(...q.hojas)
+                    qosMangles.push(...q.mangles)
+                }
                 nodos.push({
                     ruta: '/queue/tree',
                     clave: { comment: commentNodo(plan.plan_id, limitado, sentido) },
                     propiedades: {
                         name: nombre,
                         parent: conNivelRouter(e) ? nombreGlobal(sentido) : 'global',
-                        'packet-mark': nombre,
+                        'packet-mark': qos ? '' : nombre,
                         queue: nombre,
                         'max-limit': agrega ? formatoKbps(limites.max_limit_kbps[sentido]) : '0',
                         'limit-at': conPadre ? formatoKbps(limites.limit_at_kbps[sentido]) : '0',
@@ -743,6 +786,7 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
                     },
                 })
                 for (const ruta of ['/ip/firewall/mangle', '/ipv6/firewall/mangle'] as const) {
+                    if (qos) continue
                     mangles.push({
                         ruta,
                         clave: { comment: commentNodo(plan.plan_id, limitado, sentido) },
@@ -777,23 +821,53 @@ function estadoArbol(router: RouterVelocidad, planes: PlanRouter[]): EstadoVeloc
             })
         }
     }
+    if (hojas.length > QOS_MAX_HOJAS) {
+        errores.push({
+            plan_id: null,
+            regla: 'qos_costo',
+            detalle:
+                `el router pasaría de ${QOS_MAX_HOJAS} hojas de QoS (${hojas.length}): apaga qos en los planes ` +
+                'dedicados o usa menos clases',
+        })
+    }
+    const clasificacion = perfilQos && hojas.length > 0 ? objetosClasificacion(perfilQos) : []
+    const todos = [
+        ...tipos,
+        ...qosTipos,
+        ...globales,
+        ...nodos,
+        ...hojas,
+        ...mangles,
+        ...clasificacion,
+        ...qosMangles,
+    ]
     if (errores.length > 0) {
-        // Árbol inválido: no se escribe nada del árbol; lo que hay queda como está.
-        const conservar = [...tipos, ...globales, ...nodos, ...mangles].map(
-            (o) => `${o.ruta}|${claveTexto(o.clave)}`,
-        )
+        // Árbol inválido: no se escribe nada del árbol; lo que hay queda como está (también lo de QoS).
+        const conservar = todos.map((o) => `${o.ruta}|${claveTexto(o.clave)}`)
+        for (const ruta of ['/ip/firewall/mangle', '/ipv6/firewall/mangle', '/queue/tree'] as const) {
+            for (const o of lectura.get(ruta) ?? []) {
+                if (o.comment?.startsWith(PREFIJO_COMMENT_QOS) || o.comment?.includes(':qos')) {
+                    conservar.push(`${ruta}|${claveTexto({ comment: o.comment })}`)
+                }
+            }
+        }
+        for (const o of lectura.get('/queue/type') ?? []) {
+            if (/-q\d+$/.test(o.name ?? '')) conservar.push(`/queue/type|${claveTexto({ name: o.name! })}`)
+        }
         // También los globales que existan aunque esta vez no hagan falta.
         for (const sentido of SENTIDOS) {
             conservar.push(`/queue/tree|${claveTexto({ comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` })}`)
         }
         return { presentes: [], avisos: [], conservar, errores }
     }
-    return { presentes: [...tipos, ...globales, ...nodos, ...mangles], avisos: [], conservar: [], errores }
+    return { presentes: todos, avisos: [], conservar: [], errores }
 }
 
 /** Orden de borrado dentro de un menú: hojas, después padres de plan, al final los del router/global. */
 function profundidad(objeto: ObjetoRouterOS): number {
     const comment = objeto.comment ?? ''
+    // Hojas de QoS antes que el nodo del plan del que cuelgan.
+    if (/:qos:\d+$/.test(comment)) return -1
     if (comment === COMMENT_PADRE_ROUTER || comment.startsWith(PREFIJO_COMMENT_GLOBAL)) return 2
     if (/^argosisp:plan:\d+$/.test(comment)) return 1
     return 0

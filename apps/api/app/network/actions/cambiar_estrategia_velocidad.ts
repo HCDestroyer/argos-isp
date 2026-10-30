@@ -6,8 +6,10 @@ import { auditableRouter } from '#network/actions/crear_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { verImplementacion, type PlanRouterVista } from '#network/consultas/planes'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { perfilQosRouter } from '#network/consultas/qos'
 import {
     capasCambiadas,
+    completarQos,
     controlDerivado,
     leerExcepcion,
     validarEstrategias,
@@ -99,18 +101,23 @@ export function exigirEstrategiaValida(resultado: ResultadoValidacion): void {
 }
 
 export async function validarRouter(
-    router: Pick<RouterVista, 'id' | 'routeros_version' | 'capacidad_bajada_kbps' | 'capacidad_subida_kbps'>,
+    router: Pick<
+        RouterVista,
+        'id' | 'routeros_version' | 'capacidad_bajada_kbps' | 'capacidad_subida_kbps' | 'qos_perfil_id'
+    >,
     estrategias: EstrategiasRouter,
     cliente: QueryClientContract,
     planes?: PlanValidacion[],
     campoPlan?: (planId: number) => string,
 ): Promise<ResultadoValidacion> {
+    const perfil = await perfilQosRouter(router.qos_perfil_id ?? null, cliente)
     return validarEstrategias({
         estrategias,
         planes: planes ?? (await planesParaValidar(router.id, cliente)),
         routeros_version: router.routeros_version,
         capacidad_bajada_kbps: router.capacidad_bajada_kbps,
         capacidad_subida_kbps: router.capacidad_subida_kbps,
+        qos_clases: perfil?.clases.length ?? 0,
         campoPlan,
     })
 }
@@ -121,6 +128,11 @@ export class CambiarEstrategiaVelocidad extends DomainAction<EntradaEstrategiaRo
     protected async handle(input: EntradaEstrategiaRouter, t: Transaccion): Promise<RouterVista> {
         t.fijarEntidad('router', input.id)
         const antes = await verRouter(input.id, t.trx)
+        // `extras.qos` ausente conserva el del router (contratos/qos.md §2).
+        input = {
+            ...input,
+            estrategia_velocidad: completarQos(input.estrategia_velocidad, antes.estrategia_velocidad),
+        }
         const capas = capasCambiadas(antes.estrategia_velocidad, input.estrategia_velocidad)
         exigirEstrategiaValida(await validarRouter(antes, input.estrategia_velocidad, t.trx))
         if (capas.length === 0) {

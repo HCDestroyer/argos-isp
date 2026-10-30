@@ -35,6 +35,7 @@ import {
     type RouterVelocidad,
 } from '#network/routeros/velocidad_router'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
+import { perfilQosRouter } from '#network/consultas/qos'
 
 /**
  * Lecturas del dispatcher de RouterOS. Todo sale de Postgres en el momento de aplicar (nunca del
@@ -407,6 +408,7 @@ interface FilaRouterDispatcher {
     routeros_version: string | null
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
+    qos_perfil_id: number | string | null
 }
 
 /**
@@ -440,6 +442,7 @@ export async function routerDispatcher(
             'r.routeros_version',
             'r.capacidad_bajada_kbps',
             'r.capacidad_subida_kbps',
+            'r.qos_perfil_id',
         )
         .first()) as FilaRouterDispatcher | null
     if (!r) return null
@@ -483,6 +486,7 @@ export async function routerDispatcher(
             routeros_version: texto(r.routeros_version),
             capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
             capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
+            qos: await perfilQosRouter(r.qos_perfil_id === null ? null : Number(r.qos_perfil_id), cliente),
         },
         con_credenciales: texto(r.api_usuario) !== null && texto(r.api_password) !== null,
     }

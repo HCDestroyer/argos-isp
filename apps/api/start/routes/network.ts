@@ -78,6 +78,7 @@ import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
 import velocidad from '#start/routes/velocidad'
+import qos from '#start/routes/qos'
 import {
     ConexionRouter,
     PeersWireguard,
@@ -1100,4 +1101,5 @@ const conexion: Ruta[] = [
 ]
 
 // A2: control de velocidad por capas, sincronizar plan y corte (`start/routes/velocidad.ts`).
-export default [...routers, ...conexion, ...planes, ...sesiones, ...red, ...velocidad]
+// A2: QoS por clases (`start/routes/qos.ts`, `contratos/qos.md`).
+export default [...routers, ...conexion, ...planes, ...sesiones, ...red, ...velocidad, ...qos]

@@ -40,7 +40,8 @@ const OPCIONALES: Record<string, string[]> = {
     // nuevos el 28 oct (`zona_id`, editar router), el 29 oct (`serial`, `unido_a_id`, routers
     // duplicados) y el 30 oct (`coordenadas`, Iris 0.3.1): la API siempre los envía; obligatorios
     // cuando las fixtures del panel (`apps/web/fixtures/routers`, A4) los traigan (fila en `a1.md`)
-    Router: ['serial', 'unido_a_id', 'zona_id', 'coordenadas'],
+    // y `qos_perfil_id` (30 oct, QoS por clases, `contratos/qos.md`; fila en `a2.md`)
+    Router: ['serial', 'unido_a_id', 'zona_id', 'coordenadas', 'qos_perfil_id'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {
