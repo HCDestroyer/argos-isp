@@ -12,6 +12,7 @@ import {
     facturasDe,
     lineasAsiento,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -35,7 +36,7 @@ test.group('billing · pago de terceros', () => {
         const cuenta = await cuentaBancariaPrueba()
         const { token } = await usuarioConRoles(['cajero'])
         const { token: contador } = await usuarioConRoles(['contabilidad'])
-        const referencia = unico('trf')
+        const referencia = await unicoBd('trf')
         const cuerpo = {
             cliente_id: pagador.clienteId,
             metodo: 'transferencia',

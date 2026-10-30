@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
+import { unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { lineas, prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
@@ -51,7 +52,7 @@ async function lineasAdicionales(facturaId: number) {
 async function conIptv(empresas: Awaited<ReturnType<typeof prepararEmpresas>>) {
     const s = await servicioEn(empresas.B, { precio: '150.00', instalacion: '2026-10-01' })
     const iptv = await new CrearAdicional().execute(
-        { empresa_id: empresas.B, codigo: unico('IPTV').toUpperCase(), nombre: 'Usuario de IPTV' },
+        { empresa_id: empresas.B, codigo: await unicoBdMayusculas('IPTV'), nombre: 'Usuario de IPTV' },
         empresas.ctx,
     )
     const agregar = (datos: Record<string, unknown>) =>
@@ -71,7 +72,7 @@ test.group('Facturas · adicionales cobrados', (group) => {
         const e = await prepararEmpresas()
         const s = await servicioEn(e.B, { precio: '150.00', instalacion: '2026-10-01' })
         const iptv = await new CrearAdicional().execute(
-            { empresa_id: e.B, codigo: unico('IPTV').toUpperCase(), nombre: 'Usuario de IPTV' },
+            { empresa_id: e.B, codigo: await unicoBdMayusculas('IPTV'), nombre: 'Usuario de IPTV' },
             e.ctx,
         )
         const agregar = (datos: Record<string, unknown>) =>

@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { errorDe, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { afirmarCuadre, bodegaEn, productoEn, saldoInventario } from '#tests/inventario/ayudas_inventario'
@@ -150,7 +151,7 @@ test.group('Inventario · fase C · fechas pasadas y reparación', (group) => {
                 {
                     producto_id: onu.id,
                     bodega_id: bodega.id,
-                    unidad: { serie: unico('ONU') },
+                    unidad: { serie: await unicoBd('ONU') },
                     costo_total: costo,
                 },
                 e.ctx,

@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { Problema } from '#shared/errores'
 import { REGLAS_PROMESA_POR_DEFECTO } from '#billing/reglas_promesa'
@@ -19,7 +20,7 @@ test.group('Plantillas de facturación (API)', () => {
         assert,
     }) => {
         const token = await contabilidad()
-        const nombre = unico('Mensual día 5')
+        const nombre = await unicoBd('Mensual día 5')
         const requestId = unico('req')
         const respuesta = await estado(
             client
@@ -79,7 +80,7 @@ test.group('Plantillas de facturación (API)', () => {
                 .post(RUTA)
                 .bearerToken(token)
                 .json({
-                    nombre: unico('Aniversario'),
+                    nombre: await unicoBd('Aniversario'),
                     ciclo: 'aniversario',
                     dia: 12,
                     prorrateo: false,
@@ -125,7 +126,7 @@ test.group('Plantillas de facturación (API)', () => {
                 client
                     .post(RUTA)
                     .bearerToken(token)
-                    .json({ nombre: unico('Incoherente'), ...cuerpo }),
+                    .json({ nombre: await unicoBd('Incoherente'), ...cuerpo }),
                 422,
             )
             return respuesta.body().errors.map((e: { field: string }) => e.field)
@@ -162,7 +163,7 @@ test.group('Plantillas de facturación (API)', () => {
             client
                 .post(RUTA)
                 .bearerToken(token)
-                .json({ nombre: unico('Sin mora'), ciclo: 'dia_fijo', dia: 1, mora_valor: '25' }),
+                .json({ nombre: await unicoBd('Sin mora'), ciclo: 'dia_fijo', dia: 1, mora_valor: '25' }),
             201,
         )
         assert.equal(sinMora.body().mora_valor, '0.00')
@@ -170,7 +171,7 @@ test.group('Plantillas de facturación (API)', () => {
 
     test('nombre duplicado → 409', async ({ client }) => {
         const token = await contabilidad()
-        const nombre = unico('Duplicada')
+        const nombre = await unicoBd('Duplicada')
         await estado(client.post(RUTA).bearerToken(token).json({ nombre, ciclo: 'dia_fijo', dia: 1 }), 201)
         await estado(client.post(RUTA).bearerToken(token).json({ nombre, ciclo: 'dia_fijo', dia: 2 }), 409)
     })
@@ -185,7 +186,7 @@ test.group('Plantillas de facturación (API)', () => {
                 .post(RUTA)
                 .bearerToken(token)
                 .json({
-                    nombre: unico('Editable'),
+                    nombre: await unicoBd('Editable'),
                     ciclo: 'dia_fijo',
                     dia: 10,
                     reglas_promesa: { plazo_max_dias: 9 },
@@ -261,7 +262,7 @@ test.group('Plantillas de facturación (API)', () => {
             client
                 .post(RUTA)
                 .bearerToken(soporte.token)
-                .json({ nombre: unico('X'), ciclo: 'dia_fijo', dia: 1 }),
+                .json({ nombre: await unicoBd('X'), ciclo: 'dia_fijo', dia: 1 }),
             403,
         )
         const cajero = await usuarioConRoles(['cajero'])
@@ -321,7 +322,7 @@ test.group('Excepciones por servicio', () => {
             client
                 .post(RUTA)
                 .bearerToken(token)
-                .json({ nombre: unico('Base'), ciclo: 'dia_fijo', dia: 1, facturas_para_cortar: 2 }),
+                .json({ nombre: await unicoBd('Base'), ciclo: 'dia_fijo', dia: 1, facturas_para_cortar: 2 }),
             201,
         )
         const plantilla = await obtenerPlantilla(creada.body().id)

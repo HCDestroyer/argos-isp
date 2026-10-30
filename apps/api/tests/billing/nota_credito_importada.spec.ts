@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
@@ -39,7 +40,7 @@ async function importada(ctx: ContextoAccion, empresaId: number, total = '43.98'
     const r = await new ImportarFacturaPendiente().execute(
         {
             origen: 'prueba_h27',
-            id_externo: unico('f'),
+            id_externo: await unicoBd('f'),
             cliente_id: clienteId,
             empresa_id: empresaId,
             cargo_unico: true,
@@ -72,7 +73,7 @@ async function emisionSimulada(
         {
             empresa_id: empresaId,
             libro: 'ventas',
-            autorizacion: unico('SAT'),
+            autorizacion: await unicoBd('SAT'),
             folio_desde: 1,
             folio_hasta: 10,
             fecha: mes.desde,
@@ -250,11 +251,11 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27, H
     }) => {
         const e = await prepararEmpresasGt()
         const cliente = await crearClienteFila()
-        const saldo = (fecha: string, monto: string) =>
+        const saldo = async (fecha: string, monto: string) =>
             new RegistrarSaldoInicial().execute(
                 {
                     origen: 'prueba_h63',
-                    id_externo: unico('s'),
+                    id_externo: await unicoBd('s'),
                     cliente_id: cliente,
                     empresa_id: e.B,
                     monto,
@@ -309,7 +310,7 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27, H
             new RegistrarSaldoInicial().execute(
                 {
                     origen: 'prueba_h66',
-                    id_externo: unico('s'),
+                    id_externo: await unicoBd('s'),
                     cliente_id: await crearClienteFila(),
                     empresa_id: e.B,
                     monto,

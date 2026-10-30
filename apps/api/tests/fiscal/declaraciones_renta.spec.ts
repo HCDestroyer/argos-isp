@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import Usuario from '#core/models/usuario'
@@ -136,7 +137,7 @@ async function filasIso(empresaId: number) {
 async function tokenConPermisos(permisos: string[]): Promise<string> {
     const [rol] = (await db
         .table('core.roles')
-        .insert({ nombre: unico('rol'), descripcion: 'a la medida' })
+        .insert({ nombre: await unicoBd('rol'), descripcion: 'a la medida' })
         .returning('id')) as Array<{ id: number }>
     const filas = (await db.from('core.permisos').whereIn('nombre', permisos).select('id')) as Array<{
         id: number
@@ -186,7 +187,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
                 monto: '210.00',
                 caja_id: e.cajas.get(e.B)!,
                 empresa_id: e.B,
-                retenciones: [{ codigo: 'RET_ISR_OPC', numero: unico('ct'), monto: '14.00' }],
+                retenciones: [{ codigo: 'RET_ISR_OPC', numero: await unicoBd('ct'), monto: '14.00' }],
             },
             e.ctx,
         )
@@ -313,7 +314,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: HOY,
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Mantenimiento de red', total: '3360.00' }],

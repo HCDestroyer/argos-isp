@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { errorDe } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -50,8 +51,8 @@ test.group('Inventario · fase C · conteos', (group) => {
             { producto_id: intacto.id, bodega_id: bodega.id, cantidad: '5', costo_total: '5.00' },
             e.ctx,
         )
-        const serieA = unico('ONU-A')
-        const serieB = unico('ONU-B')
+        const serieA = await unicoBd('ONU-A')
+        const serieB = await unicoBd('ONU-B')
         const a = await new CargarSaldoInicial().execute(
             { producto_id: onu.id, bodega_id: bodega.id, unidad: { serie: serieA }, costo_total: '300.00' },
             e.ctx,
@@ -84,7 +85,7 @@ test.group('Inventario · fase C · conteos', (group) => {
             e.ctx,
         )
         // por serie: la A sí, la B no está, y aparece una C que no era de la bodega
-        const serieC = unico('ONU-C')
+        const serieC = await unicoBd('ONU-C')
         await new ContarInventario().execute(
             {
                 conteo_id: conteo.id,

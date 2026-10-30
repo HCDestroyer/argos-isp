@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
@@ -66,7 +67,7 @@ test.group('Fase 8 · consejos fiscales', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('D'),
+                numero: await unicoBd('D'),
                 fecha_documento: HOY,
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Enlace de tránsito', total: '11200.00' }],
