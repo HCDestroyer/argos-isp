@@ -12,7 +12,16 @@ import { VARIABLES, escapar, renderizar, variablesDe } from './render.mjs'
 
 const DIR = dirname(fileURLToPath(import.meta.url))
 const leer = (r) => readFileSync(join(DIR, r), 'utf8')
-const PLANTILLAS = ['plantillas/conexion.rsc.tpl', 'plantillas/conexion-servicio.rsc.tpl']
+const PLANTILLAS = [
+    'plantillas/conexion.rsc.tpl',
+    'plantillas/conexion-servicio.rsc.tpl',
+    'plantillas/conexion-sin-radius.rsc.tpl',
+    'plantillas/conexion-servicio-sin-radius.rsc.tpl',
+]
+const SIN_RADIUS = [
+    'plantillas/conexion-sin-radius.rsc.tpl',
+    'plantillas/conexion-servicio-sin-radius.rsc.tpl',
+]
 
 const VALORES = {
     router_id: '12',
@@ -93,6 +102,7 @@ test('llaves, corchetes y paréntesis balanceados', () => {
         assert.equal(balance(leer(salida)), null, salida)
     }
     assert.equal(balance(renderizar(leer(PLANTILLAS[1]), VALORES)), null)
+    assert.equal(balance(renderizar(leer(PLANTILLAS[3]), VALORES)), null)
 })
 
 test('cada variable está en variables.json, va entre comillas y se usa', () => {
@@ -199,7 +209,11 @@ test('gestión: se restringe solo con registro OK y handshake; si no, no hay dro
         assert.match(t, /\/user active find where name!=\$apiUsuario/, p)
         // el certificado de www-ssl se decide después del registro
         assert.ok(t.indexOf(':set apiCertificar ($registrado') < t.indexOf(':if ($apiCertificar) do={'), p)
-        assert.ok(t.indexOf('/api/v1/routers/conexion/registrar') < t.indexOf('/ip service set www-ssl certificate='), p)
+        assert.ok(
+            t.indexOf('/api/v1/routers/conexion/registrar') <
+                t.indexOf('/ip service set www-ssl certificate='),
+            p,
+        )
     }
 })
 
@@ -237,4 +251,51 @@ test('rescate-gestion.rsc: ASCII, una orden por línea y solo lo argosisp:gestio
         '/ip service set ssh address=""',
         ':put "argosisp: rescate aplicado: sin reglas argosisp:gestion y www-ssl, winbox y ssh aceptan desde cualquier IP"',
     ])
+})
+
+test('router sin RADIUS (modo_seguridad = api): sin /radius ni secreto, use-radius=no y "sensitive"', () => {
+    const { radius_secret, ...sinSecreto } = VALORES
+    assert.ok(radius_secret)
+    for (const p of [...SIN_RADIUS, 'lab-sin-radius.rsc']) {
+        const t = leer(p)
+        assert.doesNotMatch(t, /\{\{radius_secret\}\}/, p)
+        assert.doesNotMatch(t, /^\s*\/radius add/m, p)
+        assert.doesNotMatch(t, /use-radius=yes/, p)
+        assert.match(t, /^\/ppp aaa set use-radius=no accounting=no$/m, p)
+        assert.match(t, /^\/radius remove \[find where comment~"\^argosisp: aaa nodo"\]$/m, p)
+        assert.match(t, /policy=read,write,api,rest-api,sensitive/, p)
+        // el grupo con sensitive va después de crearlo con el mínimo
+        assert.ok(
+            t.indexOf('policy=read,write,api,rest-api,sensitive') >
+                t.indexOf('/user group add name=argosisp-api'),
+            p,
+        )
+        // la regla que acepta CoA solo se crea con RADIUS
+        for (const linea of t.split('\n').filter((l) => /dst-port=3799[^\n]*action=accept/.test(l))) {
+            assert.match(linea, /^\s{4,}/, `${p}: ${linea.trim()} sin :if ($radiusAddr != "")`)
+        }
+    }
+    for (const p of SIN_RADIUS) {
+        // la API no necesita radius_secret para un router api
+        const r = renderizar(leer(p), sinSecreto)
+        assert.doesNotMatch(r, /\{\{/)
+        assert.match(r, /:local radiusAddr ""/)
+    }
+    // con ?incluir=servicio: perfil default con PD, perfil de corte, NAT de /corte y FastTrack, como con RADIUS
+    const servicio = leer(SIN_RADIUS[1])
+    for (const patron of [
+        /\/ppp profile set \[find where name="default"\][^\n]*\\\n[^\n]*dhcpv6-pd-pool=\$poolV6Pd/,
+        /address-list=suspendidos interface-list=suspendidos/,
+        /default-profile=default/,
+        /action=dst-nat to-addresses=\$portalV4 to-ports=\$portalCortePuerto/,
+        /\/system script run argosisp-verificar-fasttrack/,
+    ]) {
+        assert.match(servicio, patron)
+        assert.match(leer(PLANTILLAS[1]), patron)
+    }
+    // las de RADIUS siguen sin "sensitive"
+    for (const p of ['lab.rsc', PLANTILLAS[0], PLANTILLAS[1]]) {
+        assert.doesNotMatch(leer(p), /,sensitive/, p)
+        assert.match(leer(p), /\/ppp aaa set use-radius=yes/, p)
+    }
 })

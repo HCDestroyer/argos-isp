@@ -243,7 +243,9 @@ cli radius-clientes > /dev/null || fallar "argosisp radius-clientes (respaldo ma
 # shellcheck disable=SC2016  # se expande dentro del contenedor
 cli compose exec -T api sh -c 'test -s "$ROUTERS_MIKROTIK_DIR/variables.json" &&
     test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion.rsc.tpl" &&
-    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion-servicio.rsc.tpl"' ||
+    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion-servicio.rsc.tpl" &&
+    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion-sin-radius.rsc.tpl" &&
+    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion-servicio-sin-radius.rsc.tpl"' ||
     fallar "la imagen de la API no trae las plantillas de conexión en ROUTERS_MIKROTIK_DIR"
 [ "$(sudo grep -E '^ARGOSISP_API_PORTAL=' "$DIR/.env" | cut -d= -f2)" = si ] || fallar "instalar.sh no dejó ARGOSISP_API_PORTAL=si"
 probar_api_portal
