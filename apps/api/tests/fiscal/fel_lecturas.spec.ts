@@ -6,6 +6,7 @@ import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import SustituirFactura from '#billing/actions/sustituir_factura'
 import { controlFelFalso } from '#fiscal/fel/falso'
 import { dteVigenteDe } from '#fiscal/fel/dte'
+import { hoyGuatemala } from '#ledger/fechas'
 import { sacarDeLaColaFel } from '#tests/contabilidad/ayudas_contabilidad'
 import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
 
@@ -172,7 +173,9 @@ test.group('FEL · lecturas para el panel, el portal y notify', (group) => {
         }>
         assert.isTrue(diarios.every((d) => d.empresa_id === e.B))
         const ven = diarios.find((d) => d.codigo === 'VEN')!
-        assert.isAbove(ven.secuencias.find((x) => x.anio === 2026)?.ultimo ?? 0, 0)
+        // la venta se asienta hoy (reloj real): su secuencia es la del año en curso, no una fija
+        const anio = Number(hoyGuatemala().slice(0, 4))
+        assert.isAbove(ven.secuencias.find((x) => x.anio === anio)?.ultimo ?? 0, 0)
         const uno = await estado(
             client
                 .get(`/api/v1/libro/diarios/${ven.id}`)

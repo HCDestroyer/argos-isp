@@ -1,12 +1,15 @@
 import { test } from '@japa/runner'
+import { DateTime } from 'luxon'
 import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { tableroFiscal } from '#fiscal/tablero'
+import { relojFiscal } from '#fiscal/comun'
 import { consejosFiscales, type ConsejoVista } from '#fiscal/consejos'
 import { reservaIncobrables } from '#ledger/checks'
 import EditarParametro from '#fiscal/actions/editar_parametro'
@@ -20,12 +23,27 @@ import type { Bloque } from '#fiscal/bloques'
  * máximo) y «crédito por vencer» como no aplica documentado. Solo lectura: `afirmarLibro` al final.
  */
 
-const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
+/**
+ * Instante fijo (2026-10-20, mediodía en Guatemala), no la fecha real: el tablero lee `relojFiscal` y
+ * el libro fecha las ventas con el reloj real (`hoyGuatemala()`). Con `HOY` tomado al importar el
+ * archivo, una corrida que cruzaba la medianoche de Guatemala (06:00 UTC) comparaba contra el día
+ * anterior: el libro «hasta HOY» no traía la venta que el tablero sí contaba. Cada prueba fija
+ * `relojFiscal` en `AHORA` (setup) y `venta` lleva sus facturas a `HOY` (`llevarFacturasA`).
+ */
+const AHORA = new Date('2026-10-20T18:00:00Z')
+const HOY = DateTime.fromJSDate(AHORA).setZone('America/Guatemala').toISODate()!
 const MES = HOY.slice(0, 7)
 const datos = (b: Bloque) => b.datos as Record<string, any>
 
 test.group('Fase 8 · bloques del libro y sus consejos', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    const original = relojFiscal.ahora
+    group.each.setup(() => {
+        relojFiscal.ahora = () => AHORA
+    })
+    group.each.teardown(async () => {
+        relojFiscal.ahora = original
+        await soloEmpresaPrincipal()
+    })
 
     test('compras sin NIT, reserva de incobrables y depreciación bajo el máximo: cifras del libro y consejos con ellas', async ({
         assert,
@@ -42,7 +60,14 @@ test.group('Fase 8 · bloques del libro y sus consejos', (group) => {
             e.ctx,
         )
         // venta sin cobrar: saldo deudor 224.00 → tope de la reserva 3 % = 6.72
-        await servicioFacturado(e.B, `${MES}-01`, { precio: '224.00', instalacion: `${MES}-01` })
+        const vendido = await servicioFacturado(e.B, `${MES}-01`, {
+            precio: '224.00',
+            instalacion: `${MES}-01`,
+        })
+        await llevarFacturasA(
+            vendido.facturas.map((f) => f.id),
+            HOY,
+        )
 
         // compras: una desde el límite con proveedor sin NIT (CUI), una con NIT y una debajo del límite
         const conCui = await proveedorEn(e.B, e.ctx, {
