@@ -30,6 +30,7 @@ import {
     eventoOutbox,
     fetchTelegramFalso,
     respuestaTelegramOk,
+    bloqueIdsEvento,
 } from '#tests/notify/ayudas_notify'
 import { SmtpFalso } from '#tests/notify/smtp_falso'
 import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
@@ -426,7 +427,7 @@ test.group('notify · configuración de canales · herencia e interruptores', (g
         fijarChatEquipo('-100555')
         const cola = new ColaFalsa()
         const nodo = unico('aaa-omitido')
-        const id = 9_500_000_000 + randomInt(0, 1_000_000)
+        const id = await bloqueIdsEvento()
         await new ConsumidorAlertas(cola).procesar({
             id,
             evento: 'aaa.caido',

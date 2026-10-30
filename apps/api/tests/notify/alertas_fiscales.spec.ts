@@ -10,7 +10,13 @@ import { recargarConfiguracion } from '#notify/configuracion'
 import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import ConfigurarNotificaciones, { type EntradaConfigurar } from '#notify/actions/configurar_notificaciones'
 import EnviarNotificacion from '#notify/actions/enviar_notificacion'
-import { apartarUsuariosContabilidad, CanalFalso, ColaFalsa, crearCliente } from '#tests/notify/ayudas_notify'
+import {
+    apartarUsuariosContabilidad,
+    CanalFalso,
+    ColaFalsa,
+    crearCliente,
+    bloqueIdsEvento,
+} from '#tests/notify/ayudas_notify'
 
 /**
  * Avisos fiscales (contrato de localización fiscal §14): `libro.integridad_rota`, `dte.rechazado`,
@@ -22,7 +28,10 @@ const TOKEN = `7770101:${'C'.repeat(35)}`
 const CHAT_GLOBAL = '-1007770001'
 const CONTA_GLOBAL = 'contabilidad@argos.gt, auditor@argos.gt'
 
-let siguienteId = 9_500_000_000 + randomInt(0, 1_000_000) * 1000
+// Ids de evento simulados: un bloque de 1000 propio de cada prueba, único en la base
+// (bloqueIdsEvento, secuencia de audit.outbox). Con una base aleatoria dos archivos podían
+// solaparse (notify.envios es único por origen `outbox:<id>`).
+let siguienteId = 0
 function evento(nombre: string, payload: Record<string, unknown>, id = ++siguienteId) {
     return { id, evento: nombre, payload, requestId: `prueba-${id}` }
 }
@@ -98,6 +107,7 @@ test.group('notify · avisos fiscales al equipo y a contabilidad', (group) => {
     let telegram: CanalFalso
     let correo: CanalFalso
     group.each.setup(async () => {
+        siguienteId = await bloqueIdsEvento()
         await db.from('notify.configuracion_canales').delete()
         telegram = new CanalFalso('telegram')
         correo = new CanalFalso('correo')
