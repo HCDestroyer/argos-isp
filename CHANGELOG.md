@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0](https://github.com/HCDestroyer/argos-isp/compare/v1.3.0...v1.4.0) (2026-10-30)
+
+
+### Funcionalidades
+
+* **billing:** la promesa de pago cubre todo lo vencido, sin monto escrito ([#190](https://github.com/HCDestroyer/argos-isp/issues/190)) ([f6d8b6e](https://github.com/HCDestroyer/argos-isp/commit/f6d8b6ea249a55c7f0cb8454db903a56cd8f5c92))
+* **core:** eliminar servicios y routers sin historial ([#186](https://github.com/HCDestroyer/argos-isp/issues/186)) ([8a007d8](https://github.com/HCDestroyer/argos-isp/commit/8a007d878f8459ccea0ebdd862ff9eb1ce545222))
+* **integraciones:** pedidos de Iris tras la prueba de punta a punta (contrato 0.3.1) ([#185](https://github.com/HCDestroyer/argos-isp/issues/185)) ([008f81c](https://github.com/HCDestroyer/argos-isp/commit/008f81c0f7679eceb326afd0f16f23810ae1ee66))
+* **network:** control de velocidad por capas, sincronizar plan y diagnóstico de corte ([#188](https://github.com/HCDestroyer/argos-isp/issues/188)) ([8acca91](https://github.com/HCDestroyer/argos-isp/commit/8acca9191cab2796b9d3c31b21a8f769e9f38073))
+* **network:** impedir, detectar y unir routers duplicados ([#192](https://github.com/HCDestroyer/argos-isp/issues/192)) ([59bcbc8](https://github.com/HCDestroyer/argos-isp/commit/59bcbc86a0c5273233717dbf51f97264ca5872c2))
+
+
+### Correcciones
+
+* **infra:** el script de conexión nunca deja fuera al administrador ([#183](https://github.com/HCDestroyer/argos-isp/issues/183)) ([ca1f619](https://github.com/HCDestroyer/argos-isp/commit/ca1f619168d5fe30b2218927ed0e376ae19f040d))
+
 ## [1.3.0](https://github.com/HCDestroyer/argos-isp/compare/v1.2.0...v1.3.0) (2026-10-29)
 
 
