@@ -35,6 +35,20 @@ async function cobradoDesde(asignaciones: number[], dia: string) {
     )
 }
 
+/**
+ * `baja_en` o `bloqueado_en` fijo (mediodía de Guatemala del día dado): `QuitarAdicionalServicio` y el
+ * bloqueo por suspensión los fechan con el reloj real, y desde el 1 de noviembre (o en enero) «hoy» ya
+ * cae dentro del periodo que la prueba factura.
+ */
+async function fijarFecha(columna: 'baja_en' | 'bloqueado_en', asignaciones: number[], dia: string) {
+    await db.rawQuery(
+        `UPDATE core.servicios_adicionales
+            SET ${columna} = (?::date + time '12:00') AT TIME ZONE 'America/Guatemala'
+          WHERE id = ANY(?::bigint[])`,
+        [dia, asignaciones],
+    )
+}
+
 async function lineasAdicionales(facturaId: number) {
     const filas = await db
         .from('billing.facturas_lineas')
@@ -98,6 +112,7 @@ test.group('Facturas · adicionales cobrados', (group) => {
             { servicio_id: s.servicioId, id: retirado.id, version: retirado.version, motivo: 'ya no lo usa' },
             e.ctx,
         )
+        await fijarFecha('baja_en', [retirado.id], '2026-10-20')
 
         const r = await new EmitirFactura().execute({ servicio_id: s.servicioId, periodo: NOVIEMBRE }, e.ctx)
         assert.isTrue(r.creada)
@@ -248,7 +263,8 @@ test.group('Facturas · adicionales cobrados', (group) => {
         )
         const bloqueada = await db.from('core.servicios_adicionales').where('id', tv.id).firstOrFail()
         assert.equal(bloqueada.bloqueo, 'bloqueado')
-        // el bloqueo es de hoy: diciembre empieza con el servicio suspendido
+        // bloqueado en octubre: diciembre empieza con el servicio suspendido
+        await fijarFecha('bloqueado_en', [tv.id], '2026-10-20')
         const suspendido = await new EmitirFactura().execute(
             { servicio_id: s.servicioId, periodo: DICIEMBRE },
             e.ctx,

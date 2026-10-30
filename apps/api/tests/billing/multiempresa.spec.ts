@@ -9,6 +9,7 @@ import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoPendienteServicio } from '#billing/facturas'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import { hoyGuatemala } from '#ledger/fechas'
 
 /**
  * Multiempresa en billing y ledger (`contratos/multiempresa.md`): cada documento financiero es de
@@ -113,6 +114,12 @@ async function afirmarCuadrePorEmpresa(assert: any) {
     assert.deepEqual(resultado.rows, [], 'hay empresas con el libro descuadrado')
     await afirmarLibroCuadrado(assert)
 }
+
+/**
+ * Fin de los rangos de los reportes del libro: hoy (al pedirlo), no una fecha fija. Las facturas se
+ * asientan con el reloj real; con `hasta: '2026-12-31'`, desde enero de 2027 quedaban fuera.
+ */
+const HASTA_HOY = () => hoyGuatemala()
 
 test.group('Multiempresa · billing y ledger', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
@@ -553,7 +560,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const resultados = await estado(
             client
                 .get('/api/v1/libro/estado-resultados')
-                .qs({ desde: '2026-09-01', hasta: '2026-12-31' })
+                .qs({ desde: '2026-09-01', hasta: HASTA_HOY() })
                 .bearerToken(soloB),
             200,
         )
@@ -623,7 +630,7 @@ test.group('Multiempresa · billing y ledger', (group) => {
         const iva = await estado(
             client
                 .get('/api/v1/reportes/iva')
-                .qs({ desde: '2026-09-01', hasta: '2026-12-31' })
+                .qs({ desde: '2026-09-01', hasta: HASTA_HOY() })
                 .bearerToken(soloB),
             200,
         )

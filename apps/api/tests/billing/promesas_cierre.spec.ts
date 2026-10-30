@@ -1,11 +1,16 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { normalizarReglasPromesa } from '#billing/reglas_promesa'
-import { estadoServicio, servicioCortado } from '#tests/billing/ayudas_billing'
+import {
+    estadoServicio,
+    reglasPromesaSinTopeFacturacion,
+    servicioCortado,
+} from '#tests/billing/ayudas_billing'
 
 /**
  * `POST /promesas/:id/rechazar` y `/cancelar` (supervisor de cobro: admin y contabilidad).
+ * Las promesas se crean por HTTP con el reloj real: plantillas sin el tope de la siguiente
+ * facturación, que el 30 y 31 de cada mes rechaza la promesa a dos días (`AHORA_PROMESAS`).
  */
 
 const crear = (client: any, token: string, servicioId: number) =>
@@ -27,9 +32,9 @@ test.group('billing · promesas: rechazar y cancelar', () => {
         client,
         assert,
     }) => {
-        const reglas = JSON.stringify(
-            normalizarReglasPromesa({ canales: { operador: { requiere_aprobacion: true } } }),
-        )
+        const reglas = reglasPromesaSinTopeFacturacion({
+            canales: { operador: { requiere_aprobacion: true } },
+        })
         const { servicioId } = await servicioCortado({ plantilla: { reglas_promesa: reglas } })
         const { token: cajero } = await usuarioConRoles(['cajero'])
         const { token: contador, usuario } = await usuarioConRoles(['contabilidad'])
@@ -70,7 +75,9 @@ test.group('billing · promesas: rechazar y cancelar', () => {
     })
 
     test('cancelar una activa: el servicio se re-evalúa y vuelve a cortarse', async ({ client, assert }) => {
-        const { servicioId } = await servicioCortado()
+        const { servicioId } = await servicioCortado({
+            plantilla: { reglas_promesa: reglasPromesaSinTopeFacturacion() },
+        })
         const { token: cajero } = await usuarioConRoles(['cajero'])
         const { token: admin } = await usuarioConRoles(['admin'])
         const creada = await crear(client, cajero, servicioId)
