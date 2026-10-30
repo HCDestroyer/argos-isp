@@ -1,4 +1,5 @@
 import type { ControlVelocidad, VelocidadPlan } from '#network/velocidad'
+import { QOS_MAX_HOJAS } from '#network/qos'
 
 /**
  * Estrategia de control de velocidad por capas (`.claude/integration/contratos/control-velocidad.md`).
@@ -29,7 +30,7 @@ export type TipoCola = (typeof TIPOS_COLA)[number]
 export const TIPOS_CONEXION = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const
 export type TipoConexionVelocidad = (typeof TIPOS_CONEXION)[number]
 
-export const CAMPOS_EXTRAS = ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack'] as const
+export const CAMPOS_EXTRAS = ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack', 'qos'] as const
 export type CampoExtra = (typeof CAMPOS_EXTRAS)[number]
 export type ExtrasVelocidad = Record<CampoExtra, boolean>
 
@@ -68,11 +69,24 @@ export function usaPcq(aplicacion: Aplicacion): boolean {
     return aplicacion === 'pcq_plan' || aplicacion === 'arbol_pcq'
 }
 
+/**
+ * Extras de los atajos y de la migración: todo encendido salvo `qos` (prioridad por clases,
+ * `contratos/qos.md`), que se prende a propósito y solo vale en el árbol.
+ */
 export const EXTRAS_TODOS: ExtrasVelocidad = {
     rafaga: true,
     prioridad: true,
     garantizado: true,
     excluir_fasttrack: true,
+    qos: false,
+}
+
+/** Valor por defecto de cada extra (la matriz lo publica). */
+export const EXTRAS_POR_DEFECTO: ExtrasVelocidad = { ...EXTRAS_TODOS }
+
+/** ¿La estrategia prioriza por clases? Solo en el árbol (`contratos/qos.md` §2). */
+export function conQos(e: Pick<Estrategia, 'aplicacion' | 'extras'>): boolean {
+    return e.extras.qos && familia(e.aplicacion) === 'arbol'
 }
 
 /**
@@ -107,6 +121,31 @@ export function estrategiasDeControl(control: ControlVelocidad): EstrategiasRout
         ip_estatica: wisp,
         dhcp_fija: { ...wisp, extras: { ...EXTRAS_TODOS } },
     }
+}
+
+/**
+ * Estrategias que llegan por la API: un `extras.qos` ausente conserva el valor actual del router
+ * (`contratos/qos.md` §2), así un cliente que no conoce `qos` no lo apaga al cambiar otra capa.
+ */
+export function completarQos(
+    propuesta: Record<
+        TipoConexionVelocidad,
+        { extras: Partial<ExtrasVelocidad> } & Omit<Estrategia, 'extras'>
+    >,
+    actual: EstrategiasRouter,
+): EstrategiasRouter {
+    const salida = {} as EstrategiasRouter
+    for (const tipo of TIPOS_CONEXION) {
+        const p = propuesta[tipo]
+        salida[tipo] = {
+            ...p,
+            extras: {
+                ...(p.extras as ExtrasVelocidad),
+                qos: typeof p.extras.qos === 'boolean' ? p.extras.qos : actual[tipo].extras.qos,
+            },
+        }
+    }
+    return salida
 }
 
 /** `control_velocidad` derivado (obsoleto): `arbol_pcq` si PPPoE va por árbol. */
@@ -449,6 +488,25 @@ function problemasDe(
             })
         }
     }
+    // QoS por clases (`contratos/qos.md` §2, reglas 9 y 10).
+    if (e.extras?.qos === true) {
+        if (aplicacion && aplicacion !== 'arbol_pcq') {
+            errores.push({
+                field: `${campo}.extras.qos`,
+                rule: 'qos_familia',
+                message:
+                    'qos necesita el árbol (arbol_pcq): en colas simples cada cliente tiene una sola cola y no hay hojas por clase',
+            })
+        }
+        if (e.extras.excluir_fasttrack === false) {
+            errores.push({
+                field: `${campo}.extras.excluir_fasttrack`,
+                rule: 'qos_fasttrack',
+                message:
+                    'qos exige excluir_fasttrack: con FastTrack las conexiones aceleradas no pasan por mangle y no se clasifican',
+            })
+        }
+    }
     if (e.padre !== undefined && e.padre !== null && !enLista(PADRES, e.padre)) {
         errores.push({
             field: `${campo}.padre`,
@@ -472,6 +530,8 @@ export interface EntradaValidacion {
     routeros_version: string | null
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
+    /** clases activas del perfil de QoS del router (para el costo, regla 11); sin ella no se revisa */
+    qos_clases?: number
     /** prefijo de los `field` de la estrategia del router (por defecto `estrategia_velocidad`) */
     campoRouter?: string
     /** prefijo de los `field` de la excepción de un plan (por defecto `planes.<id>`) */
@@ -609,6 +669,22 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
             })
         }
     }
+    // Regla 11: costo de QoS del router (hojas = planes con qos × 2 estados × 2 sentidos × clases).
+    if (entrada.qos_clases && entrada.qos_clases > 0) {
+        const planesQos = entrada.planes.filter((p) =>
+            TIPOS_CONEXION.some((t) => conQos(estrategiaEfectiva(entrada.estrategias, p.excepcion, t))),
+        ).length
+        const hojas = 4 * planesQos * entrada.qos_clases
+        if (hojas > QOS_MAX_HOJAS) {
+            errores.push({
+                field: campoRouter,
+                rule: 'qos_costo',
+                message:
+                    `el router pasaría de ${QOS_MAX_HOJAS} hojas de QoS (${planesQos} planes con qos × 2 estados × 2 ` +
+                    `sentidos × ${entrada.qos_clases} clases = ${hojas}): apaga qos en los planes dedicados o usa menos clases`,
+            })
+        }
+    }
     if (errores.length > 0) return { errores: dedupe(errores), advertencias }
 
     // Advertencias.
@@ -641,6 +717,12 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
             avisar(
                 'sin_padre_prioridad',
                 `${donde}: prioridad y garantizado solo reparten bajo un padre; con padre ninguno no tienen efecto`,
+            )
+        }
+        if (conQos(e) && e.padre === 'ninguno') {
+            avisar(
+                'qos_sin_cuello',
+                `${donde}: qos con padre ninguno: sin nodo del plan ni global que se llene, las clases nunca compiten`,
             )
         }
         if (!e.extras.excluir_fasttrack) {
@@ -702,7 +784,7 @@ export function matrizControlVelocidad() {
             routeros_minimo: valor === 'fq_codel' || valor === 'cake' ? '7' : null,
         })),
         padres: PADRES.map((valor) => ({ valor })),
-        extras: CAMPOS_EXTRAS.map((valor) => ({ valor, por_defecto: true })),
+        extras: CAMPOS_EXTRAS.map((valor) => ({ valor, por_defecto: EXTRAS_POR_DEFECTO[valor] })),
         reglas: [
             {
                 rule: 'aplicacion_tipo',
@@ -722,6 +804,12 @@ export function matrizControlVelocidad() {
                     'en un plan, los tipos que comparten la cola del plan usan el mismo padre y los mismos extras',
             },
             { rule: 'familia_plan', mensaje: 'un plan con por_plan o jerarquico no mezcla familias' },
+            { rule: 'qos_familia', mensaje: 'qos (prioridad por clases) solo con arbol_pcq' },
+            { rule: 'qos_fasttrack', mensaje: 'qos exige excluir_fasttrack' },
+            {
+                rule: 'qos_costo',
+                mensaje: `como máximo ${QOS_MAX_HOJAS} hojas de QoS por router (planes con qos × 4 × clases)`,
+            },
         ],
         advertencias: [
             'sin_techo',
@@ -730,6 +818,7 @@ export function matrizControlVelocidad() {
             'fasttrack',
             'version_desconocida',
             'fuera_del_techo',
+            'qos_sin_cuello',
         ],
         atajos: {
             simple: estrategiasDeControl('simple'),

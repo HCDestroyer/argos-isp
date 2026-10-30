@@ -33,6 +33,8 @@ const EVENTOS_SERVICIO = new Set([
  *   velocidad a las sesiones vivas del plan, `aaa:user:*` y reconciliar sus routers (o el de la excepción).
  * - `router.estrategia_cambiada` → job `cambiar_control` (por lotes, sin cortar; con `reconectar`,
  *   Disconnect por lotes como el cambio de modo de antes).
+ * - `qos.config_cambiada` → reconciliar cada router de `routers[]` (clasificación, cadenas y hojas de
+ *   QoS por clases, `contratos/qos.md`).
  * - `router.conexion_registrada` (A1, el router se conectó por primera vez) → reconciliar el router: deja
  *   el corte y la estrategia sin esperar al ciclo periódico.
  * - `router.control_cambiado` con cambio de modo → job `cambiar_control` (por lotes, `cambio_control.ts`);
@@ -65,6 +67,7 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             evento === 'sesion.terminada' ||
             evento === 'router.control_cambiado' ||
             evento === 'router.estrategia_cambiada' ||
+            evento === 'qos.config_cambiada' ||
             evento === 'router.conexion_registrada'
         )
     }
@@ -126,6 +129,19 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
                 plan_id: planId,
                 reconectar: evento.payload.reconectar === true,
             })
+            return
+        }
+        if (evento.evento === 'qos.config_cambiada') {
+            // QoS por clases (contratos/qos.md §4): reconciliar los routers que usan el perfil. Sin CoA.
+            const routers = Array.isArray(evento.payload.routers) ? evento.payload.routers : []
+            for (const valor of routers) {
+                const routerId = Number(valor)
+                if (!Number.isInteger(routerId) || routerId <= 0) continue
+                await new ReconciliarRouterOS(opciones).execute(
+                    { router_id: routerId, motivo: 'qos', evento_id: String(evento.id) },
+                    ctx,
+                )
+            }
             return
         }
         if (evento.evento === 'router.conexion_registrada') {

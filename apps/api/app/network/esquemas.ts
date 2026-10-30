@@ -17,6 +17,7 @@ import {
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { APLICACIONES, PADRES, TIPOS_CONEXION, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { MOTIVOS_API } from '#network/diagnostico_routeros'
+import { PROTOCOLOS_QOS } from '#network/qos'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -38,6 +39,12 @@ const extrasVelocidad = objeto({
     excluir_fasttrack: {
         ...booleano,
         description: 'Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack',
+    },
+    qos: {
+        ...booleano,
+        description:
+            'Prioridad por clases dentro del plan (contratos/qos.md): solo arbol_pcq y con excluir_fasttrack; ' +
+            'por defecto false',
     },
 })
 
@@ -73,8 +80,9 @@ const parcialVelocidad = objeto(
                     prioridad: nulable(booleano),
                     garantizado: nulable(booleano),
                     excluir_fasttrack: nulable(booleano),
+                    qos: nulable(booleano),
                 },
-                ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack'],
+                ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack', 'qos'],
             ),
         ),
     },
@@ -201,9 +209,16 @@ export const Router = definirEsquema(
                     'el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre ' +
                     'la envía; opcional en el esquema hasta que las fixtures del panel la traigan',
             },
+            qos_perfil_id: {
+                ...nulable(id),
+                description:
+                    'Perfil de QoS por clases del router (contratos/qos.md); null = el predeterminado. Se cambia con ' +
+                    'POST /routers/:id/qos-perfil. La API siempre lo envía; opcional en el esquema hasta que las ' +
+                    'fixtures del panel lo traigan',
+            },
             ...auditable,
         },
-        ['serial', 'unido_a_id', 'zona_id', 'coordenadas'],
+        ['serial', 'unido_a_id', 'zona_id', 'coordenadas', 'qos_perfil_id'],
     ),
 )
 
@@ -994,7 +1009,7 @@ export const MatrizControlVelocidad = definirEsquema(
         padres: lista(objeto({ valor: enumerado(PADRES) })),
         extras: lista(
             objeto({
-                valor: enumerado(['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack']),
+                valor: enumerado(['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack', 'qos']),
                 por_defecto: booleano,
             }),
         ),
@@ -1294,5 +1309,98 @@ export const SincronizacionServicio = definirEsquema(
             ...nulable(objeto({ motivo: enumerado(MOTIVOS_API), detalle: texto })),
             description: 'El router no respondió o rechazó un comando (lenguaje simple); null si todo bien',
         },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| QoS por clases (A2, `contratos/qos.md`)
+|--------------------------------------------------------------------------
+*/
+
+export const ReglaQos = definirEsquema(
+    'ReglaQos',
+    objeto({
+        protocolo: { ...enumNulable(PROTOCOLOS_QOS), description: 'tcp, udp, icmp o null (cualquiera)' },
+        puertos_destino: { ...nulable(texto), description: '`dst-port`: n o n-m separados por coma' },
+        puertos_origen: { ...nulable(texto), description: '`src-port`' },
+        dscp: { ...nulable(entero), description: '0–63' },
+        lista_destino: {
+            ...nulable(texto),
+            description: '`dst-address-list` que mantiene el admin en el router',
+        },
+    }),
+)
+
+export const ClaseQos = definirEsquema(
+    'ClaseQos',
+    objeto({
+        id,
+        perfil_id: id,
+        nombre: texto,
+        orden: {
+            ...entero,
+            description: 'Orden de clasificación: la primera clase que coincide se queda la conexión',
+        },
+        prioridad: { ...entero, description: '`priority` de la hoja del árbol (1 = primero)' },
+        garantizado_pct: {
+            ...entero,
+            description: '`limit-at` de la hoja = % de la capacidad del nodo del plan',
+        },
+        tope_pct: {
+            ...nulable(entero),
+            description:
+                'Tope por cliente (pcq-rate = MIR × %) y en total (max-limit de la hoja); null = sin tope',
+        },
+        es_resto: { ...booleano, description: 'Lo que no coincide con ninguna clase (una por perfil)' },
+        reglas: lista(ReglaQos),
+        bytes_minimo: {
+            ...nulable(entero),
+            description:
+                'Clase de descargas: reclasifica conexiones que pasaron estos bytes (connection-bytes)',
+        },
+        reclasifica_de: {
+            ...lista(id),
+            description: 'Clases de las que una clase de descargas toma conexiones',
+        },
+        activa: booleano,
+        ...auditable,
+    }),
+)
+
+const advertenciaQos = objeto({ regla: texto, mensaje: texto })
+
+const camposPerfilQos: Record<string, EsquemaJson> = {
+    id,
+    empresa_id: { ...nulable(id), description: 'null = común a todas las empresas' },
+    nombre: texto,
+    descripcion: nulable(texto),
+    predeterminado: { ...booleano, description: 'El de los routers sin qos_perfil_id' },
+    clases: lista(ClaseQos),
+    advertencias: { ...lista(advertenciaQos), description: 'tope_por_cliente, orden_repetido' },
+    ...auditable,
+}
+
+export const PerfilQos = definirEsquema('PerfilQos', objeto(camposPerfilQos))
+
+export const UsoPerfilQos = definirEsquema(
+    'UsoPerfilQos',
+    objeto({
+        router_id: id,
+        nombre: texto,
+        planes_qos: { ...entero, description: 'Planes del router con el extra qos' },
+        clases: entero,
+        hojas: { ...entero, description: 'Hojas de /queue/tree (planes × 2 estados × 2 sentidos × clases)' },
+        reglas_mangle: { ...entero, description: 'Reglas de mangle por familia (IPv4; IPv6 igual)' },
+        tipos_cola: { ...entero, description: 'Tipos PCQ extra (clases con tope)' },
+        limite_hojas: entero,
+    }),
+)
+
+export const PerfilQosDetalle = definirEsquema(
+    'PerfilQosDetalle',
+    objeto({
+        ...camposPerfilQos,
+        routers: { ...lista(UsoPerfilQos), description: 'Routers activos que usan el perfil y su costo' },
     }),
 )

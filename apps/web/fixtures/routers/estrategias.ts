@@ -2,7 +2,8 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import type { DiagnosticoCorte, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, SincronizacionPlan, TipoConexionVelocidad, VistaPreviaEstrategia, VistaPreviaReconciliar } from '../../app/types/controlVelocidad'
 import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } from '../../app/types/controlVelocidad'
-import { MATRIZ } from './estrategiasDatos'
+import { MATRIZ, QOS_MAX_HOJAS } from './estrategiasDatos'
+import { clasesActivasDeRouter } from '../qos/costo'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 
@@ -26,6 +27,8 @@ const TIPOS_POR_APLICACION = Object.fromEntries(MATRIZ.aplicaciones.map(a => [a.
 const familia = (e: Pick<Estrategia, 'aplicacion'>): 'simple' | 'arbol' => (e.aplicacion === 'arbol_pcq' ? 'arbol' : 'simple')
 const usaPcq = (e: Pick<Estrategia, 'aplicacion'>): boolean => e.aplicacion === 'pcq_plan' || e.aplicacion === 'arbol_pcq'
 const conNivelRouter = (e: Pick<Estrategia, 'padre'>): boolean => e.padre === 'por_router' || e.padre === 'jerarquico'
+/** `conQos()` de A2: prioridad por clases solo en el árbol. */
+export const conQos = (e: Pick<Estrategia, 'aplicacion' | 'extras'>): boolean => e.extras.qos && familia(e) === 'arbol'
 const porCoa = (e: Pick<Estrategia, 'aplicacion'>): boolean => e.aplicacion === 'radius_rate_limit' || e.aplicacion === 'perfil_ppp'
 
 function versionMayor(version: string | null): number | null {
@@ -38,7 +41,7 @@ function enLista<T extends string>(lista: readonly T[], valor: unknown): valor i
 }
 
 /** `estrategiaEfectiva()`: la del router, capa por capa sobrescrita por la excepción del plan. */
-function efectiva(router: EstrategiasRouter, excepcion: EstrategiasPlan | null | undefined, tipo: TipoConexionVelocidad): Estrategia {
+export function efectiva(router: EstrategiasRouter, excepcion: EstrategiasPlan | null | undefined, tipo: TipoConexionVelocidad): Estrategia {
     const base = router[tipo]
     const parcial = excepcion?.[tipo]
     const extras = { ...base.extras }
@@ -111,6 +114,15 @@ function problemasDe(e: Estrategia, tipo: TipoConexionVelocidad, campo: string, 
     const mayor = versionMayor(version)
     if ((e.tipo_cola === 'fq_codel' || e.tipo_cola === 'cake') && mayor !== null && mayor < 7) {
         errores.push({ field: `${campo}.tipo_cola`, rule: 'version', message: `${e.tipo_cola} necesita RouterOS 7; este router tiene ${version}` })
+    }
+    // QoS por clases (`contratos/qos.md` §2, reglas 9 y 10).
+    if (e.extras.qos) {
+        if (e.aplicacion !== 'arbol_pcq') {
+            errores.push({ field: `${campo}.extras.qos`, rule: 'qos_familia', message: 'qos necesita el árbol (arbol_pcq): en colas simples cada cliente tiene una sola cola y no hay hojas por clase' })
+        }
+        if (!e.extras.excluir_fasttrack) {
+            errores.push({ field: `${campo}.extras.excluir_fasttrack`, rule: 'qos_fasttrack', message: 'qos exige excluir_fasttrack: con FastTrack las conexiones aceleradas no pasan por mangle y no se clasifican' })
+        }
     }
     return errores
 }
@@ -188,6 +200,19 @@ export function validar(router: Router, estrategias: EstrategiasRouter, planes: 
             errores.push({ field: g.campo, rule: 'familia_plan', message: `el reuso de ${quien} se partiría entre colas simples y queue tree: usa una sola familia o padre ninguno/por_router en una de ellas` })
         }
     }
+    // Regla 11: costo de QoS del router (planes con qos × 2 estados × 2 sentidos × clases).
+    const clasesQos = clasesActivasDeRouter(router).length
+    if (clasesQos > 0) {
+        const planesQos = planes.filter(p => TIPOS_CONEXION_VELOCIDAD.some(t => conQos(efectiva(estrategias, p.excepcion, t)))).length
+        const hojas = 4 * planesQos * clasesQos
+        if (hojas > QOS_MAX_HOJAS) {
+            errores.push({
+                field: campoRouter,
+                rule: 'qos_costo',
+                message: `el router pasaría de ${QOS_MAX_HOJAS} hojas de QoS (${planesQos} planes con qos × 2 estados × 2 sentidos × ${clasesQos} clases = ${hojas}): apaga qos en los planes dedicados o usa menos clases`,
+            })
+        }
+    }
     if (errores.length) {
         return { errores: sinRepetir(errores), advertencias }
     }
@@ -208,6 +233,9 @@ export function validar(router: Router, estrategias: EstrategiasRouter, planes: 
         if (e.padre === 'ninguno' && (e.extras.prioridad || e.extras.garantizado)) {
             avisar('sin_padre_prioridad', `${donde}: prioridad y garantizado solo reparten bajo un padre; con padre ninguno no tienen efecto`)
         }
+        if (conQos(e) && e.padre === 'ninguno') {
+            avisar('qos_sin_cuello', `${donde}: qos con padre ninguno: sin nodo del plan ni global que se llene, las clases nunca compiten`)
+        }
         if (!e.extras.excluir_fasttrack) {
             avisar('fasttrack', `${donde}: sin verificar FastTrack; con FastTrack las colas no limitan el tráfico acelerado`)
         }
@@ -226,7 +254,7 @@ function sinRepetir(errores: Errores): Errores {
 }
 
 /** Planes del router con su reuso y su excepción (`planesParaValidar`). */
-function planesDelRouter(routerId: number): PlanValidacion[] {
+export function planesDelRouter(routerId: number): PlanValidacion[] {
     return (bd.planesPorRouter[routerId] ?? []).map((planId) => {
         const implementacion = bd.implementacionesPlan.find(i => i.plan_id === planId && i.router_id === routerId)
         const plan = bd.planes.find(p => p.id === planId)
@@ -239,7 +267,7 @@ function serviciosDelRouter(routerId: number) {
 }
 
 /** Objetos de RouterOS que cambian (muestra con los nombres de la API) y los totales por menú. */
-function objetos(de: EstrategiasRouter, a: EstrategiasRouter, cambian: { id: number, plan_id: number, tipo: TipoConexionVelocidad, antes: Estrategia, despues: Estrategia }[]) {
+function objetos(de: EstrategiasRouter, a: EstrategiasRouter, cambian: { id: number, plan_id: number, tipo: TipoConexionVelocidad, antes: Estrategia, despues: Estrategia }[], planesQos: number[] = []) {
     const crear: VistaPreviaEstrategia['crear'] = []
     const actualizar: VistaPreviaEstrategia['actualizar'] = []
     const borrar: VistaPreviaEstrategia['borrar'] = []
@@ -270,6 +298,22 @@ function objetos(de: EstrategiasRouter, a: EstrategiasRouter, cambian: { id: num
         }
         if (s.tipo !== 'pppoe' && despues.aplicacion === 'cola_simple' && antes.aplicacion !== 'cola_simple') {
             agregar(crear, '/queue/simple', `argosisp:servicio:${s.id}`, `argosisp-servicio-${s.id}`)
+        }
+    }
+    // QoS por clases (§3): una muestra de lo que se crea o se borra al prender o apagar `qos` en el
+    // router (la clasificación es una por router, aunque todavía no tenga servicios) y en cada plan.
+    const algunoConQos = (e: EstrategiasRouter) => TIPOS_CONEXION_VELOCIDAD.some(t => conQos(e[t]))
+    const listaQos = algunoConQos(a) && !algunoConQos(de) ? crear : !algunoConQos(a) && algunoConQos(de) ? borrar : null
+    if (listaQos) {
+        for (const ruta of ['/ip/firewall/mangle', '/ipv6/firewall/mangle']) {
+            agregar(listaQos, ruta, 'argosisp:qos:entrada', null)
+            agregar(listaQos, ruta, 'argosisp:qos:salto:1', null)
+        }
+        for (const planId of planesQos) {
+            for (const sentido of ['bajada', 'subida']) {
+                agregar(listaQos, '/ip/firewall/mangle', `argosisp:plan:${planId}:${sentido}:qos`, null)
+                agregar(listaQos, '/queue/tree', `argosisp:plan:${planId}:${sentido}:qos:1`, `argosisp-plan-${planId}-${sentido}-q1`)
+            }
         }
     }
     const fasttrack = (e: EstrategiasRouter) => TIPOS_CONEXION_VELOCIDAD.some(t => e[t].extras.excluir_fasttrack)
@@ -323,7 +367,7 @@ export function vistaPrevia(router: Router, propuesta: { estrategias?: Estrategi
         const antesExc = enRouter.find(p => p.plan_id === s.plan_id)?.excepcion ?? null
         return { id: s.id, plan_id: s.plan_id, tipo, estado: s.estado, antes: efectiva(de, antesExc, tipo), despues: efectiva(a, nuevas.get(s.plan_id) ?? null, tipo) }
     }).filter(s => !misma(s.antes, s.despues))
-    Object.assign(salida, objetos(de, a, cambian))
+    Object.assign(salida, objetos(de, a, cambian, enRouter.map(p => p.plan_id)))
     salida.servicios = cambian.length
     salida.lotes = Math.ceil(cambian.length / 50)
     for (const s of cambian.filter(c => c.tipo === 'pppoe' && bd.sesiones.some(x => x.servicio_id === c.id && x.fin === null))) {
@@ -345,9 +389,17 @@ function invalida(errores: Errores): RespuestaFixture {
     return problemaTipado(422, 'validacion', 'Datos inválidos', `La combinación de control de velocidad no es válida: ${errores[0]?.message ?? ''}`, errors)
 }
 
-function estrategiasDelCuerpo(cuerpo: Record<string, unknown>): EstrategiasRouter | undefined {
+/** Las del cuerpo; un `extras.qos` ausente conserva el del router (`completarQos`, `contratos/qos.md` §2). */
+function estrategiasDelCuerpo(cuerpo: Record<string, unknown>, actual: EstrategiasRouter): EstrategiasRouter | undefined {
     const valor = cuerpo.estrategia_velocidad
-    return typeof valor === 'object' && valor !== null ? (valor as EstrategiasRouter) : undefined
+    if (typeof valor !== 'object' || valor === null) {
+        return undefined
+    }
+    const propuesta = valor as EstrategiasRouter
+    return Object.fromEntries(TIPOS_CONEXION_VELOCIDAD.map(t => [t, {
+        ...propuesta[t],
+        extras: { ...propuesta[t].extras, qos: typeof propuesta[t].extras.qos === 'boolean' ? propuesta[t].extras.qos : actual[t].extras.qos },
+    }])) as EstrategiasRouter
 }
 
 function planesDelCuerpo(cuerpo: Record<string, unknown>): { plan_id: number, estrategia_velocidad: unknown }[] {
@@ -512,7 +564,7 @@ export const rutasEstrategias: RutasFixture = {
             return noEncontrado('el router')
         }
         const cuerpo = cuerpoObjeto(solicitud)
-        const previa = vistaPrevia(router, { estrategias: estrategiasDelCuerpo(cuerpo), planes: planesDelCuerpo(cuerpo), reconectar: cuerpo.reconectar === true })
+        const previa = vistaPrevia(router, { estrategias: estrategiasDelCuerpo(cuerpo, router.estrategia_velocidad), planes: planesDelCuerpo(cuerpo), reconectar: cuerpo.reconectar === true })
         return previa.valida ? { status: 200, cuerpo: previa } : invalida(previa.errores)
     }),
 
@@ -525,7 +577,7 @@ export const rutasEstrategias: RutasFixture = {
         if (cuerpo.version !== router.version) {
             return versionCambiada()
         }
-        const a = estrategiasDelCuerpo(cuerpo) ?? router.estrategia_velocidad
+        const a = estrategiasDelCuerpo(cuerpo, router.estrategia_velocidad) ?? router.estrategia_velocidad
         const { errores } = validar(router, a, planesDelRouter(router.id))
         if (errores.length) {
             return invalida(errores)

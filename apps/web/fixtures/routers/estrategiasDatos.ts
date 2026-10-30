@@ -8,7 +8,8 @@ import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA } from '../../app/types/contro
  * §3). Sin `bd`: lo importan `routers/datos.ts` y `bd.ts`.
  */
 
-const TODOS: Schema<'EstrategiaVelocidad'>['extras'] = { rafaga: true, prioridad: true, garantizado: true, excluir_fasttrack: true }
+/** `EXTRAS_TODOS` de A2: todo encendido salvo `qos`, que se prende a propósito (`contratos/qos.md`). */
+const TODOS: Schema<'EstrategiaVelocidad'>['extras'] = { rafaga: true, prioridad: true, garantizado: true, excluir_fasttrack: true, qos: false }
 
 /** `estrategiasDeControl('simple')`: PPPoE por RADIUS y WISP con cola simple, padre por plan. */
 export function estrategiaSimple(): EstrategiasRouter {
@@ -30,6 +31,9 @@ export function estrategiaDeControl(control: 'simple' | 'arbol_pcq'): Estrategia
     return control === 'arbol_pcq' ? estrategiaArbol() : estrategiaSimple()
 }
 
+/** `QOS_MAX_HOJAS` de A2 (`contratos/qos.md` §3.4). */
+export const QOS_MAX_HOJAS = 1024
+
 const TIPOS_POR_APLICACION: MatrizControlVelocidad['aplicaciones'][number]['tipos_conexion'][] = [
     ['pppoe'],
     ['pppoe'],
@@ -49,7 +53,7 @@ export const MATRIZ: MatrizControlVelocidad = {
     })),
     tipos_cola: TIPOS_COLA.map(valor => ({ valor, routeros_minimo: valor === 'fq_codel' || valor === 'cake' ? '7' : null })),
     padres: PADRES.map(valor => ({ valor })),
-    extras: EXTRAS.map(valor => ({ valor, por_defecto: true })),
+    extras: EXTRAS.map(valor => ({ valor, por_defecto: TODOS[valor] })),
     reglas: [
         { rule: 'aplicacion_tipo', mensaje: 'radius_rate_limit y perfil_ppp solo en PPPoE; cola_simple solo en IP estática y DHCP fija' },
         { rule: 'tipo_cola', mensaje: 'pcq_plan y arbol_pcq exigen pcq; las demás no aceptan pcq' },
@@ -57,7 +61,10 @@ export const MATRIZ: MatrizControlVelocidad = {
         { rule: 'familia_router', mensaje: 'por_router y jerarquico en una sola familia (colas simples o queue tree) en todo el router' },
         { rule: 'plan_consistente', mensaje: 'en un plan, los tipos que comparten la cola del plan usan el mismo padre y los mismos extras' },
         { rule: 'familia_plan', mensaje: 'un plan con por_plan o jerarquico no mezcla familias' },
+        { rule: 'qos_familia', mensaje: 'qos (prioridad por clases) solo con arbol_pcq' },
+        { rule: 'qos_fasttrack', mensaje: 'qos exige excluir_fasttrack' },
+        { rule: 'qos_costo', mensaje: `como máximo ${QOS_MAX_HOJAS} hojas de QoS por router (planes con qos × 4 × clases)` },
     ],
-    advertencias: ['sin_techo', 'reuso_dedicado', 'sin_padre_prioridad', 'fasttrack', 'version_desconocida', 'fuera_del_techo'],
+    advertencias: ['sin_techo', 'reuso_dedicado', 'sin_padre_prioridad', 'fasttrack', 'version_desconocida', 'fuera_del_techo', 'qos_sin_cuello'],
     atajos: { simple: estrategiaSimple(), arbol_pcq: estrategiaArbol() },
 }

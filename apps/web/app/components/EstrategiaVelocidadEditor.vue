@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { RadioGroupItem, TabsItem } from '@nuxt/ui'
 import type { Aplicacion, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, Extra, MatrizControlVelocidad, Padre, TipoCola, TipoConexionVelocidad } from '~/types/controlVelocidad'
+import type { Disponibilidad } from '~/utils/estrategiaVelocidad'
 
 /**
  * Editor por capas de la estrategia de velocidad (`contratos/control-velocidad.md` §1–§3): una
@@ -148,6 +149,30 @@ function valorExtra(extra: Extra): boolean {
     return efectiva.value.extras[extra]
 }
 
+/** Extras que publica la matriz (`matriz.extras`), en el orden del panel. */
+const extrasVisibles = computed(() => EXTRAS.filter(extra => props.matriz.extras.some(e => e.valor === extra)))
+
+/**
+ * Si el extra se puede prender aquí (hoy solo `qos`: árbol y FastTrack verificado). Uno ya prendido
+ * no se deshabilita: se puede apagar aunque ya no combine (el error de la API sale debajo).
+ */
+function disponibilidadExtra(extra: Extra): Disponibilidad {
+    return extraDisponible(props.matriz, extra, efectiva.value)
+}
+
+function extraDeshabilitado(extra: Extra): boolean {
+    return !valorExtra(extra) && !disponibilidadExtra(extra).valida
+}
+
+function descripcionExtra(extra: Extra): string {
+    const disponible = disponibilidadExtra(extra)
+    return [
+        OPCIONES_EXTRA[extra].explicacion,
+        extraHeredado(extra) ? '(heredado del router)' : null,
+        disponible.valida ? null : `No disponible: ${disponible.motivo}`,
+    ].filter(Boolean).join(' ')
+}
+
 function extraHeredado(extra: Extra): boolean {
     return modoPlan.value && parcial.value.extras?.[extra] === undefined
 }
@@ -240,7 +265,7 @@ function erroresDe(capa: string): string | undefined {
                 4 · Extras
             </legend>
             <div
-                v-for="extra in EXTRAS"
+                v-for="extra in extrasVisibles"
                 :key="extra"
                 class="flex flex-col gap-1"
                 :data-extra="extra"
@@ -248,9 +273,18 @@ function erroresDe(capa: string): string | undefined {
                 <USwitch
                     :model-value="valorExtra(extra)"
                     :label="OPCIONES_EXTRA[extra].etiqueta"
-                    :description="`${OPCIONES_EXTRA[extra].explicacion}${extraHeredado(extra) ? ' (heredado del router)' : ''}`"
+                    :description="descripcionExtra(extra)"
+                    :disabled="extraDeshabilitado(extra)"
+                    :data-prueba="`extra-${extra}`"
                     @update:model-value="valor => fijarExtra(extra, valor)"
                 />
+                <p
+                    v-if="erroresDe(`extras.${extra}`)"
+                    class="text-sm text-error"
+                    :data-prueba="`error-extra-${extra}`"
+                >
+                    {{ erroresDe(`extras.${extra}`) }}
+                </p>
                 <UButton
                     v-if="modoPlan && !extraHeredado(extra)"
                     label="Volver a heredar"

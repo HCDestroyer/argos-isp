@@ -49,6 +49,8 @@ export interface RouterVista {
     modo_velocidad: 'simple' | 'pcq'
     /** empresa por defecto de los servicios nuevos (multiempresa) */
     empresa_sugerida_id: number | null
+    /** perfil de QoS por clases (`contratos/qos.md`); null = el predeterminado */
+    qos_perfil_id: number | null
     /** zona del router (opcional; no cambia el alcance del ACL) */
     zona_id: number | null
     /** ubicación `"lat,lng"` (`network.routers.coordenadas`); null = sin ubicar */
@@ -115,6 +117,7 @@ const COLUMNAS_ROUTER = [
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
     'empresa_sugerida_id',
     'zona_id',
+    'qos_perfil_id',
     'coordenadas',
     'activo',
     'serial',

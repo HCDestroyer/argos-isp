@@ -3,6 +3,7 @@ import { contextoSistema } from '#shared/contexto'
 import { NoEncontrado } from '#shared/errores'
 import type { ControlVelocidad } from '#network/velocidad'
 import {
+    completarQos,
     controlDerivado,
     estrategiaEfectiva,
     estrategiasDeControl,
@@ -387,7 +388,7 @@ export async function vistaPreviaEstrategia(
     const router = await routerDispatcher(routerId)
     if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
     const de = router.velocidad.estrategias
-    const a = propuesta.estrategias ?? de
+    const a = propuesta.estrategias ? completarQos(propuesta.estrategias, de) : de
     const excepciones = await excepcionesDeRouter(routerId)
     const nuevas = new Map(excepciones)
     const planesCambian: VistaPreviaEstrategia['planes'] = []
@@ -407,6 +408,7 @@ export async function vistaPreviaEstrategia(
         routeros_version: router.velocidad.routeros_version,
         capacidad_bajada_kbps: router.velocidad.capacidad_bajada_kbps,
         capacidad_subida_kbps: router.velocidad.capacidad_subida_kbps,
+        qos_clases: router.velocidad.qos?.clases.length ?? 0,
     })
     const todos = await serviciosVigentesDeRouter(routerId)
     const redes = await redesV4DeRouter(routerId)

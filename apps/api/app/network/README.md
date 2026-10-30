@@ -58,7 +58,6 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 - `api_ca` (alta, edición y registro por el túnel) debe ser el certificado de una CA (`basicConstraints CA:TRUE`, `exigirCaValida`): pegar el del servicio da 422 en `api_ca` con lo que hay que revisar.
 - `POST /servicios/:id/sincronizar-router` (`servicios.sincronizar_router`: admin, técnico, soporte; `actions/sincronizar_router_servicio.ts`): corre `routeros.aplicar_servicio` en el acto (anidada) y responde `{ servicio_id, router_id, cambios[] (router_id, ruta, comment, accion), ya_estaba_bien, avisos[], error }`. Candado por servicio, idempotente, cada comando en `audit.red`. 422 `servicio_pendiente_instalacion` y `router_sin_api` (inactivo o sin usuario/clave de la API). Router caído: 200 con `error { motivo, detalle }`.
 
-
 - `POST /routers/:id/probar-conexion` (`routers.probar_conexion`: admin, técnico, soporte): chequeos `{ clave, ok, detalle, ms, motivo?, datos? }` en este orden: `tunel` (solo con conexión WireGuard), `api` (`GET /rest/system/resource`; si falla, `motivo` y `detalle` en lenguaje simple con los comandos de RouterOS, de `diagnostico_routeros.ts`: `sin_certificado` (alerta TLS 40: www-ssl sin certificado → crear la CA `argos-ca`, firmar con `ca=argos-ca` y asignarlo), `certificado_no_confiable` (autofirmado o emisor desconocido → desactivar la verificación o pegar la CA), `certificado_proposito` (`unsuitable certificate purpose`: la `api_ca` no es la CA o el certificado de www-ssl no tiene `tls-server`), `puerto_cerrado` (ECONNREFUSED o timeout), `protocolo` (wrong version number: HTTPS a un puerto HTTP), `credenciales` (401), `politicas` («not allowed»: faltan `api`/`rest-api`), `no_responde`, `respuesta` o `sin_credenciales`; el texto de OpenSSL solo en `datos.error_tecnico`. El sondeo guarda el mismo `motivo` y `detalle` en `audit.red`), `equipo` (`datos`: `version`, `modelo`, `uptime`, `cpu_pct`; exige RouterOS 7) y `radius` (modo radius: un `/radius` con servicio `ppp` hacia la IP del servidor en el túnel o `ROUTERS_RADIUS_DIRECCIONES`; el secreto se compara solo si el router lo devuelve y nunca sale). Reutiliza `sondearRouter` (`routeros/actions/sondear_routers.ts`): cada GET va a `audit.red` y una respuesta buena actualiza `en_linea`/`ultimo_contacto` (fuente `sondeo`). `ok: null` = no se pudo comprobar.
 - `POST /routers/:id/reconciliar` (`routers.reconciliar`: admin, técnico): 202 `{ router_id, job_id, encolado }`. Job `reconciliar_router` en la cola `routeros-cron` (worker de concurrencia 1, lock por router de la acción); `jobId = reconciliar-<id>`: mientras uno espera, otro pedido devuelve `encolado: false`.
 
@@ -109,15 +108,15 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 - `obtenerImplementacionPlan(plan_id, router_id)` (`actions/obtener_implementacion_plan.ts`, interfaz pública, solo lectura): plantilla del plan + excepciones del router (`profile_ppp`, pools, `local_address`, `rate_limit_override`). `rate_limit` y `rate_limit_limitado` = `Mikrotik-Rate-Limit` completo de `rateLimitServicio` (ver "Velocidad"). Los campos de velocidad del resultado ya traen las excepciones del router aplicadas. 422 `plan_no_disponible` si el plan no aplica al router.
 - Velocidades limitadas obligatorias y > 0 (las usa `aaa` al limitar).
 
-| Acción                                            | Permiso                           | Eventos         |
-| ------------------------------------------------- | --------------------------------- | --------------- |
-| `CrearRouter`, `EditarRouter`                     | `routers.crear`, `routers.editar` | ver "Velocidad" |
-| `CrearRedIpv4`                                    | `redes.crear`                     | —               |
-| `CrearPlan`, `EditarPlan`                         | `planes.crear`, `planes.editar`   | ver "Velocidad" |
-| `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar`                   | —               |
-| `CrearBloqueIpv6`, `CrearPoolIpv6`                | `ipv6.crear`                      | —               |
-| `EditarRedIpv4`                                   | `redes.editar`                    | —               |
-| `EditarBloqueIpv6`, `EditarPoolIpv6`              | `ipv6.editar`                     | —               |
+| Acción                                            | Permiso                           | Eventos                                          |
+| ------------------------------------------------- | --------------------------------- | ------------------------------------------------ |
+| `CrearRouter`, `EditarRouter`                     | `routers.crear`, `routers.editar` | ver "Velocidad"                                  |
+| `CrearRedIpv4`                                    | `redes.crear`                     | —                                                |
+| `CrearPlan`, `EditarPlan`                         | `planes.crear`, `planes.editar`   | ver "Velocidad"                                  |
+| `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar`                   | —                                                |
+| `CrearBloqueIpv6`, `CrearPoolIpv6`                | `ipv6.crear`                      | —                                                |
+| `EditarRedIpv4`                                   | `redes.editar`                    | —                                                |
+| `EditarBloqueIpv6`, `EditarPoolIpv6`              | `ipv6.editar`                     | —                                                |
 | `MigrarRedIpv4`                                   | `redes.migrar`                    | los de `EditarServicio` por cada servicio movido |
 | `MigrarBloqueIpv6`                                | `ipv6.migrar`                     | los de `EditarServicio` por cada servicio movido |
 
@@ -153,6 +152,24 @@ Contrato: `.claude/integration/contratos/velocidad.md`. Única fuente del rate-l
 | `ImplementarPlan` (excepción de velocidad, `rate_limit_override`, `profile_ppp`) | `planes.editar`                                  | `plan.velocidad_cambiada` (`router_id`)             |
 | `CambiarControlVelocidad` (`POST /routers/:id/cambiar-control-velocidad`)        | `routers.cambiar_control_velocidad` (solo admin) | `router.control_cambiado`                           |
 | `EditarRouter` (capacidad)                                                       | `routers.editar`                                 | `router.control_cambiado` (`campos: ['capacidad']`) |
+
+## QoS por clases: prioridad por protocolo en el árbol (`qos.ts`, pedido del PM 30 oct)
+
+Contrato: `.claude/integration/contratos/qos.md`. Dentro del plan de cada cliente (familia árbol, `arbol_pcq`), el tráfico interactivo (DNS, VoIP, juegos) y la web van antes que las descargas pesadas, con clases que el admin define.
+
+- Tablas: `network.qos_perfiles` (comunes o de una empresa; uno `predeterminado` con la semilla Interactivo, Streaming, Web, Descargas y Resto) y `network.qos_clases` (orden, prioridad 1–8, garantizado, tope, reglas de protocolo/puertos/DSCP/lista de destino, y para descargas `bytes_minimo` + `reclasifica_de`). `network.routers.qos_perfil_id` (null = el predeterminado).
+- Se prende con el extra `qos` de la estrategia (router por tipo de conexión, o excepción por plan). Matriz: `qos_familia`, `qos_fasttrack`, `qos_costo` (máx. 1024 hojas por router) y la advertencia `qos_sin_cuello`.
+- RouterOS (`objetosClasificacion`, `objetosQosPlan`, integrados en `estadoArbol` de `routeros/velocidad_router.ts`): clasificación de conexiones nuevas en cadenas de mangle por posición (sin `move`), salto por plan a su cadena (`argosisp-qos-plan-…`) que marca el paquete por clase, y hojas `plan → clase → PCQ`. IPv4 e IPv6. El reconciliador verifica lo escrito (`audit.red`, `operacion = verificar_qos`).
+
+| Acción (`app/network/actions`)                                      | Permiso         | Eventos                                 |
+| ------------------------------------------------------------------- | --------------- | --------------------------------------- |
+| `CrearPerfilQos` (`POST /qos/perfiles`)                             | `qos.gestionar` | —                                       |
+| `CrearClaseQos` (`POST /qos/perfiles/:id/clases`)                   | `qos.gestionar` | `qos.config_cambiada`                   |
+| `EditarClaseQos` (`PUT /qos/clases/:id`)                            | `qos.gestionar` | `qos.config_cambiada`                   |
+| `DesactivarClaseQos` / `ActivarClaseQos` (`POST /qos/clases/:id/…`) | `qos.gestionar` | `qos.config_cambiada`                   |
+| `AsignarPerfilQos` (`POST /routers/:id/qos-perfil`)                 | `qos.gestionar` | `qos.config_cambiada` (con `router_id`) |
+
+Lecturas: `GET /qos/perfiles` y `GET /qos/perfiles/:id` (con el costo en cada router) con `qos.ver`. Consume: el grupo `routeros` reconcilia los `routers[]` de `qos.config_cambiada`.
 
 ## Resolver una IP (`consultas/ip.ts`, tarea 13)
 
