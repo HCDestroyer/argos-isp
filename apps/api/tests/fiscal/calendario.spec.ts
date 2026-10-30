@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { errorDe, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
@@ -10,7 +11,6 @@ import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import AnularCompra from '#ledger/actions/anular_compra'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
-import { unico } from '#tests/ayudas'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import GenerarCalendario from '#fiscal/actions/generar_calendario'
@@ -243,7 +243,7 @@ test.group('Fase 7 · calendario fiscal: generación y conciliación', (group) =
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: '2026-10-05',
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Mantenimiento de red', total: '112.00' }],

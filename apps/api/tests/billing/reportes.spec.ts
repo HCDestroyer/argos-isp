@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, nuevaCaja, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { crearEmpresaFila, crearZonaFila } from '#tests/core/fabricas'
 import {
@@ -9,6 +9,7 @@ import {
     eventosDe,
     facturasDe,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
@@ -164,7 +165,7 @@ test.group('billing · reportes', (group) => {
                 cliente_id: datos.clienteId,
                 metodo: 'transferencia',
                 monto: '80.00',
-                referencia: unico('t'),
+                referencia: await unicoBd('t'),
                 cuenta_bancaria_id: cuenta.id,
                 banco_origen_id: await bancoId(),
             },

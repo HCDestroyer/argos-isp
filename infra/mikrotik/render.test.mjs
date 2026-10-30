@@ -29,6 +29,7 @@ const VALORES = {
     api_password: 'ClaveApi$0123456789abcdefghijklmnopq',
     api_nombre: 'router-12.argosisp',
     admin_ips: '203.0.113.7,198.51.100.0/24',
+    api_ip_anterior: '192.168.88.1',
     pppoe_interfaz: 'ether2',
     wan_interfaz: 'ether1',
     ppp_local_v4: '10.10.0.1',
@@ -153,4 +154,87 @@ test('el registro carga :serialize/:deserialize con :parse (RouterOS sin ellos s
     assert.match(t, /:parse ":return \[:deserialize from=json value=\\\$1\]"/)
     assert.match(t, /\/api\/v1\/routers\/conexion\/registrar/)
     assert.match(t, /policy=read,write,api,rest-api/)
+})
+
+/** Texto del bloque `do={ ... }` que abre en `inicio` (llaves contadas fuera de cadenas). */
+function bloque(texto, inicio) {
+    const abre = texto.indexOf('{', inicio)
+    let nivel = 0
+    let enCadena = false
+    for (let i = abre; i < texto.length; i++) {
+        const c = texto[i]
+        if (enCadena) {
+            if (c === '\\') i++
+            else if (c === '"') enCadena = false
+        } else if (c === '"') enCadena = true
+        else if (c === '{') nivel++
+        else if (c === '}' && --nivel === 0) return texto.slice(abre, i + 1)
+    }
+    throw new Error('bloque sin cerrar')
+}
+
+test('gestión: se restringe solo con registro OK y handshake; si no, no hay drop ni address= (#181)', () => {
+    for (const p of PLANTILLAS) {
+        const t = leer(p)
+        // C1 ya no borra la gestión anterior: solo C4 la rehace, y solo dentro de :if ($restringir)
+        assert.ok(t.includes(':local restringir ($registrado && $tunelOk)'), p)
+        const inicio = t.indexOf(':if ($restringir) do={')
+        assert.ok(inicio > t.indexOf(':local restringir'), p)
+        const dentro = bloque(t, inicio)
+        const fuera = t.replace(dentro, '')
+        for (const patron of [
+            /action=drop[^\n]*argosisp:gestion/,
+            /address=\$gestionDesde/,
+            /\/ip firewall filter remove \[find where comment~"\^argosisp:gestion"\]/,
+            /\/ip firewall address-list remove[^\n]*argosisp:gestion/,
+            /\/ip service set \$s disabled=yes/,
+            /\/tool mac-server set/,
+        ]) {
+            assert.match(dentro, patron, `${p}: ${patron} dentro de :if ($restringir)`)
+            assert.doesNotMatch(fuera, patron, `${p}: ${patron} fuera de :if ($restringir)`)
+        }
+        // el handshake se espera antes de decidir y la IP de las sesiones abiertas entra en argosisp-admin
+        assert.ok(t.indexOf('last-handshake') < inicio, p)
+        assert.match(dentro, /\/user active|sesionV4/, p)
+        assert.match(t, /\/user active find where name!=\$apiUsuario/, p)
+        // el certificado de www-ssl se decide después del registro
+        assert.ok(t.indexOf(':set apiCertificar ($registrado') < t.indexOf(':if ($apiCertificar) do={'), p)
+        assert.ok(t.indexOf('/api/v1/routers/conexion/registrar') < t.indexOf('/ip service set www-ssl certificate='), p)
+    }
+})
+
+test('/ip service por nombre: las conexiones abiertas (dinámicas) también se llaman ssh, winbox… (RouterOS 7.2x)', () => {
+    for (const salida of Object.keys(SALIDAS)) {
+        assert.doesNotMatch(leer(salida), /\/ip service (set|get) \[find/, salida)
+    }
+})
+
+test('certificado: SAN con la IP del túnel y la anterior; solo se borran los argosisp-www', () => {
+    const r = renderizar(leer(PLANTILLAS[0]), VALORES)
+    assert.ok(r.includes(':local apiIpAnterior "192.168.88.1"'))
+    assert.ok(r.includes(':set san ($san . ",IP:" . $apiIpAnterior)'))
+    for (const salida of Object.keys(SALIDAS)) {
+        for (const linea of leer(salida)
+            .split('\n')
+            .filter((l) => /\/certificate remove/.test(l))) {
+            assert.match(linea, /name="argosisp-www(-nuevo)?"/, `${salida}: ${linea.trim()}`)
+        }
+    }
+    // registro fallido: se imprime la CA con el paso para pegarla en el panel
+    assert.match(leer(PLANTILLAS[0]), /:put \$caPem/)
+    assert.match(leer(PLANTILLAS[0]), /Conexion de la API -> CA propia \(PEM\)/)
+})
+
+test('rescate-gestion.rsc: ASCII, una orden por línea y solo lo argosisp:gestion', () => {
+    const t = leer('rescate-gestion.rsc')
+    assert.doesNotMatch(t, /[^\x09\x0a\x0d\x20-\x7e]/)
+    const ordenes = t.split('\n').filter((l) => l.trim() && !l.startsWith('#'))
+    assert.deepEqual(ordenes, [
+        '/ip firewall filter remove [find where comment~"^argosisp:gestion"]',
+        '/ip firewall address-list remove [find where list="argosisp-admin"]',
+        '/ip service set www-ssl address=""',
+        '/ip service set winbox address=""',
+        '/ip service set ssh address=""',
+        ':put "argosisp: rescate aplicado: sin reglas argosisp:gestion y www-ssl, winbox y ssh aceptan desde cualquier IP"',
+    ])
 })

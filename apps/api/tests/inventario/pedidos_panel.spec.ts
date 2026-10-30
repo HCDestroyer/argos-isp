@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { haceMeses, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { bodegaEn, productoEn } from '#tests/inventario/ayudas_inventario'
@@ -26,7 +27,7 @@ async function problemaDe(promesa: Promise<unknown>) {
     throw new Error('Se esperaba un error de dominio')
 }
 
-function compraDeSerie(
+async function compraDeSerie(
     ctx: ContextoAccion,
     datos: { proveedorId: number; producto_id: number; bodega_id: number; cantidad: number; series: number },
 ) {
@@ -34,7 +35,7 @@ function compraDeSerie(
         {
             proveedor_id: datos.proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: haceMeses(0),
             condicion: 'credito',
             lineas: [
@@ -45,7 +46,9 @@ function compraDeSerie(
                     cantidad: datos.cantidad,
                     producto_id: datos.producto_id,
                     bodega_id: datos.bodega_id,
-                    unidades: Array.from({ length: datos.series }, () => ({ serie: unico('SN') })),
+                    unidades: await Promise.all(
+                        Array.from({ length: datos.series }, async () => ({ serie: await unicoBd('SN') })),
+                    ),
                 },
             ],
         },

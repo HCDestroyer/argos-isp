@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { enmascararNumero } from '#ledger/bancos'
@@ -22,7 +23,7 @@ test.group('ledger · bancos del libro', () => {
     }) => {
         const cuenta = await db.from('ledger.cuentas').where('codigo', '1.1.02.01').select('id').firstOrFail()
         const catalogo = await db.from('billing.bancos').orderBy('id').select('id', 'nombre').firstOrFail()
-        const nombre = unico('Banco de gastos')
+        const nombre = await unicoBd('Banco de gastos')
         const [nuevo] = await db
             .table('ledger.bancos')
             .insert({

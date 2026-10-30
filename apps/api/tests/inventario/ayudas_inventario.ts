@@ -1,5 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
-import { unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import type { ContextoAccion } from '#shared/contexto'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { saldoCuenta } from '#tests/contabilidad/ayudas_contabilidad'
@@ -23,7 +23,7 @@ export async function productoEn(
     return new CrearProducto().execute(
         {
             empresa_id: empresaId,
-            sku: unico('SKU'),
+            sku: await unicoBd('SKU', 'inventario.productos'),
             nombre: 'Cable UTP cat 6',
             unidad: 'metro',
             tipo: 'material',
@@ -40,7 +40,12 @@ export async function bodegaEn(
     extra: Partial<EntradaCrearBodega> = {},
 ) {
     return new CrearBodega().execute(
-        { empresa_id: empresaId, nombre: unico('Bodega'), tipo: 'bodega', ...extra },
+        {
+            empresa_id: empresaId,
+            nombre: await unicoBd('Bodega', 'inventario.bodegas'),
+            tipo: 'bodega',
+            ...extra,
+        },
         ctx,
     )
 }
@@ -60,7 +65,7 @@ export async function comprarInventario(
         {
             proveedor_id: proveedorId,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F', 'ledger.compras'),
             fecha_documento: haceMeses(0),
             condicion: 'credito',
             lineas: [

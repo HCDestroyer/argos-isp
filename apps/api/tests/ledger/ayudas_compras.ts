@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import { randomInt } from 'node:crypto'
 import { unico } from '#tests/ayudas'
+import { siguienteDeSecuencia } from '#tests/billing/ayudas_billing'
 import type { ContextoAccion } from '#shared/contexto'
 import { verificadorNit } from '#core/nit_cui'
 import { hoyGuatemala } from '#ledger/fechas'
@@ -12,9 +13,20 @@ import EditarParametro from '#fiscal/actions/editar_parametro'
  * Ayudas de las pruebas de la fase 5 (compras, proveedores, retenciones, activos y diferidos).
  */
 
-/** NIT válido nuevo (cuerpo de 7 dígitos + verificador módulo 11). */
+/** NIT válido al azar (cuerpo de 7 dígitos + verificador módulo 11); puede repetirse: ver `nitUnico`. */
 export function nitPrueba(): string {
     const cuerpo = String(randomInt(1_000_000, 9_999_999))
+    return `${cuerpo}${verificadorNit(cuerpo)}`
+}
+
+/**
+ * NIT válido que no se repite en la base (UNIQUE `empresa_id, nit` de los proveedores activos): el
+ * cuerpo sale de la secuencia de `tabla` (`siguienteDeSecuencia`; `core.empresas` para el NIT de una
+ * empresa, único entre las activas).
+ */
+export async function nitUnico(tabla = 'ledger.proveedores'): Promise<string> {
+    const n = await siguienteDeSecuencia(tabla)
+    const cuerpo = String(1_000_000 + (n % 8_999_999))
     return `${cuerpo}${verificadorNit(cuerpo)}`
 }
 
@@ -24,7 +36,7 @@ export async function proveedorEn(
     extra: Partial<EntradaCrearProveedor> = {},
 ) {
     return new CrearProveedor().execute(
-        { empresa_id: empresaId, nit: nitPrueba(), nombre: unico('Proveedor'), ...extra },
+        { empresa_id: empresaId, nit: await nitUnico(), nombre: unico('Proveedor'), ...extra },
         ctx,
     )
 }

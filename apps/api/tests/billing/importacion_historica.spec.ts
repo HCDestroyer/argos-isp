@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, unico } from '#tests/ayudas'
+import { contextoPrueba } from '#tests/ayudas'
 import { afirmarLibroCuadrado, cerrarMes, saldoTexto } from '#tests/ledger/ayudas_libro'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
@@ -8,17 +8,17 @@ import RegistrarPagoHistorico, { type EntradaPagoHistorico } from '#billing/acti
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
-import { escenario, estadoServicio, eventosDe, lineasAsiento } from '#tests/billing/ayudas_billing'
+import { escenario, estadoServicio, eventosDe, lineasAsiento, unicoBd } from '#tests/billing/ayudas_billing'
 
 /**
  * Semana 3 · tarea 7: pago histórico y reverso del saldo inicial para el importador (A6).
  * Contrato: `.claude/integration/contratos/importacion.md`.
  */
 
-const importarFactura = (servicioId: number, periodo: string, total = '150.00') =>
+const importarFactura = async (servicioId: number, periodo: string, total = '150.00') =>
     new ImportarFacturaPendiente().execute(
         {
-            clave_externa: unico('mw-fact'),
+            clave_externa: await unicoBd('mw-fact'),
             servicio_id: servicioId,
             periodo,
             total,
@@ -27,11 +27,13 @@ const importarFactura = (servicioId: number, periodo: string, total = '150.00') 
         contextoPrueba(),
     )
 
-const pagoHistorico = (datos: Partial<EntradaPagoHistorico> & Pick<EntradaPagoHistorico, 'cliente_id'>) =>
+const pagoHistorico = async (
+    datos: Partial<EntradaPagoHistorico> & Pick<EntradaPagoHistorico, 'cliente_id'>,
+) =>
     new RegistrarPagoHistorico().execute(
         {
             historico: true,
-            id_externo: unico('mw-pago'),
+            id_externo: await unicoBd('mw-pago'),
             metodo: 'deposito',
             monto: '300.00',
             fecha: '2026-09-10',
@@ -79,7 +81,7 @@ test.group('billing · importación histórica', () => {
         assert.equal(await saldoTexto(clienteId), '300.00')
         const estadoAntes = await estadoServicio(servicioId)
 
-        const idExterno = unico('mw-pago')
+        const idExterno = await unicoBd('mw-pago')
         const pago = await pagoHistorico({
             cliente_id: clienteId,
             id_externo: idExterno,
@@ -166,14 +168,14 @@ test.group('billing · importación histórica', () => {
     }) => {
         await cerrarMes('2017-04-01')
         const { clienteId } = await escenario()
-        const idPago = unico('mw-pago')
+        const idPago = await unicoBd('mw-pago')
         const pago = await errorDe(
             pagoHistorico({ cliente_id: clienteId, id_externo: idPago, fecha: '2017-04-15' }),
         )
         assert.equal(pago.status, 422)
         assert.match(pago.detalle, /2017-04.*cerrado/)
         assert.match(pago.detalle, new RegExp(idPago))
-        const idSaldo = unico('mw-saldo')
+        const idSaldo = await unicoBd('mw-saldo')
         const saldo = await errorDe(
             new RegistrarSaldoInicial().execute(
                 { id_externo: idSaldo, cliente_id: clienteId, monto: '80.00', fecha: '2017-04-30' },
@@ -191,7 +193,7 @@ test.group('billing · importación histórica', () => {
         assert,
     }) => {
         const { clienteId } = await escenario()
-        const id = unico('mw-saldo')
+        const id = await unicoBd('mw-saldo')
         const saldo = await new RegistrarSaldoInicial().execute(
             { id_externo: id, cliente_id: clienteId, monto: '80.00', fecha: '2026-10-01' },
             contextoPrueba(),
@@ -231,7 +233,7 @@ test.group('billing · importación histórica', () => {
 
     test('anular saldo deudor con pagos → 409 saldo_con_pagos', async ({ assert }) => {
         const { clienteId } = await escenario()
-        const id = unico('mw-saldo')
+        const id = await unicoBd('mw-saldo')
         await new RegistrarSaldoInicial().execute(
             { id_externo: id, cliente_id: clienteId, monto: '80.00' },
             contextoPrueba(),
@@ -253,7 +255,7 @@ test.group('billing · importación histórica', () => {
     }) => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-07-01' })
         const factura = await importarFactura(servicioId, '2026-08-01')
-        const id = unico('mw-saldo')
+        const id = await unicoBd('mw-saldo')
         await new RegistrarSaldoInicial().execute(
             { id_externo: id, cliente_id: clienteId, monto: '-50.00' },
             contextoPrueba(),

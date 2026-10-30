@@ -283,7 +283,11 @@ test.group('FEL · aviso de cobro (certificar_al = pagar) y 2.1.11', (group) => 
         const e = await empresasFel('desactivada')
         const s = await servicioFel(e, 'pagar', '150.00')
         const f = s.facturas[0]!
-        const [linea] = await db.from('billing.facturas_lineas').where('factura_id', f.id).select('id', 'iva')
+        const [linea] = await db
+            .from('billing.facturas_lineas')
+            .where('factura_id', f.id)
+            .orderBy('id', 'asc')
+            .select('id', 'iva')
         const nota = await new EmitirNotaCredito().execute(
             {
                 factura_id: f.id,
@@ -306,6 +310,7 @@ test.group('FEL · aviso de cobro (certificar_al = pagar) y 2.1.11', (group) => 
         const [l2] = await db
             .from('billing.facturas_lineas')
             .where('factura_id', otra.facturas[0]!.id)
+            .orderBy('id', 'asc')
             .select('id')
         const demas = await errorDe(
             new EmitirNotaCredito().execute(

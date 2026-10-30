@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import Usuario from '#core/models/usuario'
 import { unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { saldoCliente } from '#ledger/consultas'
 
 /**
@@ -69,7 +70,7 @@ export async function nuevaCaja(): Promise<number> {
     const [cuenta] = (await db
         .table('ledger.cuentas')
         .insert({
-            codigo: `1.1.01.${unico('c')}`,
+            codigo: `1.1.01.${await unicoBd('c', 'ledger.cuentas')}`,
             nombre: unico('Caja'),
             tipo: 'activo',
             padre_id: padre.id,
@@ -77,7 +78,7 @@ export async function nuevaCaja(): Promise<number> {
         .returning('id')) as Array<{ id: number }>
     const [caja] = (await db
         .table('ledger.cajas')
-        .insert({ nombre: unico('Caja'), cuenta_id: cuenta!.id })
+        .insert({ nombre: await unicoBd('Caja', 'ledger.cajas'), cuenta_id: cuenta!.id })
         .returning('id')) as Array<{ id: number }>
     return caja!.id
 }

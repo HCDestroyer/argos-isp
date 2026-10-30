@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
@@ -114,7 +115,7 @@ test.group('Inventario · fase C · salida premio', (group) => {
             {
                 producto_id: equipo.id,
                 bodega_id: bodega.id,
-                unidad: { serie: unico('PR') },
+                unidad: { serie: await unicoBd('PR') },
                 costo_total: '275.00',
             },
             e.ctx,
