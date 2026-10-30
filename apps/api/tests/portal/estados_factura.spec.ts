@@ -253,7 +253,7 @@ test.group('Portal: saldo cobrable por estado de factura', (group) => {
             200,
         )
         assert.isFalse(condiciones.body().disponible)
-        assert.include(condiciones.body().motivo, 'No tienes saldo pendiente')
+        assert.include(condiciones.body().motivo, 'No tienes facturas vencidas')
 
         const pago = await estado(
             client.post('/api/v1/portal/pagos/iniciar').header('X-Forwarded-For', ip).json({}),

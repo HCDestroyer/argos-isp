@@ -306,7 +306,11 @@ export const crearPromesaValidator = vine.compile(
     vine.object({
         servicio_id: idEntidad(),
         vence_en: instanteIso(),
-        monto: dinero(),
+        monto: dinero().optional().meta({
+            deprecated: true,
+            description:
+                'Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)',
+        }),
         canal: vine.enum(['portal', 'ia', 'operador', 'supervisor'] as const).optional(),
     }),
 )
@@ -608,7 +612,11 @@ export const simularPromesaValidator = vine.compile(
             .optional()
             .meta({ description: 'Por defecto el de la petición (portal/ia por X-Canal) u operador' }),
         vence_en: instanteIso().optional().meta({ description: 'Por defecto: el fin de mañana (Guatemala)' }),
-        monto: dinero().optional().meta({ description: 'Por defecto: la deuda pendiente del servicio' }),
+        monto: dinero().optional().meta({
+            deprecated: true,
+            description:
+                'Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)',
+        }),
         evaluar_en: instanteIso()
             .optional()
             .meta({ description: 'Simular como si fuera este instante (por defecto ahora)' }),

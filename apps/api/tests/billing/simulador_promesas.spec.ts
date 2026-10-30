@@ -129,7 +129,7 @@ test.group('billing · simulador de promesas', () => {
         assert.equal(portal.limites.plazo_max_dias, 3)
         assert.isTrue(portal.limites.requiere_aprobacion)
 
-        // monto mayor que la deuda y vencimiento pasado → crear respondería 422
+        // `monto` se ignora (obsoleto); vencimiento pasado → crear respondería 422
         const invalida = await simularPromesa({
             servicio_id: datos.servicioId,
             canal: 'operador',
@@ -138,9 +138,10 @@ test.group('billing · simulador de promesas', () => {
             ahora,
         })
         assert.equal(invalida.resultado_creacion, 'error')
+        assert.equal(invalida.monto, '300.00')
         assert.sameMembers(
             invalida.validaciones.filter((v) => !v.ok).map((v) => v.regla),
-            ['monto_maximo', 'futuro'],
+            ['futuro'],
         )
 
         // con una promesa activa: crear daría 409

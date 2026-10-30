@@ -3,9 +3,11 @@ import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fijarPromesaFixture, fijarSesionFixture } from '~~/fixtures'
 import { condicionesConPagoPrevioFixture, condicionesFixture, diaFixture } from '~~/fixtures/promesas'
+import { PROMESAS_FIXTURE } from '~~/fixtures/cuenta'
 import PaginaCorte from '~/pages/corte.vue'
 import PaginaCuenta from '~/pages/cuenta.vue'
 import SolicitarPromesa from '~/components/promesa/Solicitar.vue'
+import PromesasCuenta from '~/components/cuenta/Promesas.vue'
 
 async function esperar() {
     for (let i = 0; i < 6; i += 1) {
@@ -32,12 +34,6 @@ async function enviarFormulario() {
     await esperar()
 }
 
-function escribir(selector: string, valor: string) {
-    const campo = document.querySelector<HTMLInputElement>(selector)!
-    campo.value = valor
-    campo.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
 afterEach(() => {
     fijarPromesaFixture(null)
     fijarSesionFixture(false)
@@ -49,34 +45,44 @@ describe('esquema y textos de la promesa', () => {
     const condiciones = condicionesFixture()
     const esquema = esquemaPromesa(condiciones)
 
-    it('espejo del validador: fecha YYYY-MM-DD dentro del plazo y monto con 2 decimales hasta la deuda', () => {
-        expect(esquema.safeParse({ vence_el: diaFixture(1), monto: '350.00' }).success).toBe(true)
-        expect(esquema.safeParse({ vence_el: diaFixture(0), monto: '525' }).success).toBe(true)
+    it('espejo del validador: solo la fecha YYYY-MM-DD dentro del plazo; el monto no lo escribe el cliente', () => {
+        expect(esquema.safeParse({ vence_el: diaFixture(1) }).success).toBe(true)
+        expect(esquema.safeParse({ vence_el: diaFixture(0) }).success).toBe(true)
+        // un monto (de un formulario viejo) no forma parte de los datos que se envían
+        expect(esquema.parse({ vence_el: diaFixture(1), monto: '10.00' })).toEqual({ vence_el: diaFixture(1) })
 
-        const mensajes = (datos: { vence_el: string, monto: string }) =>
+        const mensajes = (datos: { vence_el: string }) =>
             esquema.safeParse(datos).error?.issues.map(i => i.message) ?? []
-        expect(mensajes({ vence_el: diaFixture(4), monto: '10' })[0]).toContain('Elige una fecha hasta el')
-        expect(mensajes({ vence_el: diaFixture(-1), monto: '10' })).toContain('Esa fecha ya pasó: elige hoy o un día posterior')
-        expect(mensajes({ vence_el: '', monto: '10' })).toContain('Elige el día en que vas a pagar')
-        expect(mensajes({ vence_el: diaFixture(1), monto: '525.01' })).toContain('El monto no puede pasar de Q 525.00: escribe esa cantidad o menos')
-        expect(mensajes({ vence_el: diaFixture(1), monto: '0' })).toContain('Escribe un monto mayor que Q 0.00')
-        expect(mensajes({ vence_el: diaFixture(1), monto: 'Q10' })[0]).toContain('sin la Q')
-        expect(mensajes({ vence_el: diaFixture(1), monto: '10.555' })[0]).toContain('hasta 2 decimales')
+        expect(mensajes({ vence_el: diaFixture(4) })[0]).toContain('Elige una fecha hasta el')
+        expect(mensajes({ vence_el: diaFixture(-1) })).toContain('Esa fecha ya pasó: elige hoy o un día posterior')
+        expect(mensajes({ vence_el: '' })).toContain('Elige el día en que vas a pagar')
+    })
+
+    it('lo que cubre: concepto de cada factura y solo con algo vencido', () => {
+        expect(conceptoCubierta({ tipo: 'servicio', periodo: '2026-10-01' })).toBe('Servicio de octubre 2026')
+        expect(conceptoCubierta({ tipo: 'mora', periodo: '2026-09-01' })).toBe('Recargo por mora')
+        expect(conceptoCubierta({ tipo: 'cargo', periodo: '2026-09-01' })).toBe('Cargo de septiembre 2026')
+        expect(hayVencidoQuePrometer(condiciones)).toBe(true)
+        expect(hayVencidoQuePrometer({ monto_promesa: '0.00' })).toBe(false)
+        expect(hayVencidoQuePrometer({ monto_promesa: null })).toBe(false)
+        expect(hayVencidoQuePrometer(null)).toBe(false)
+        expect(textoCoberturaPromesa(1)).toBe('Cubre 1 factura vencida: se cumple al pagarla')
+        expect(textoCoberturaPromesa(3)).toBe('Cubre 3 facturas vencidas: se cumple al pagarlas todas')
     })
 
     it('con pago previo (abono o deuda máxima de limitesPromesa) el mismo esquema no deja enviar', () => {
         const conPrevio = condicionesConPagoPrevioFixture()
-        const resultado = esquemaPromesa(conPrevio).safeParse({ vence_el: diaFixture(1), monto: '350.00' })
+        const resultado = esquemaPromesa(conPrevio).safeParse({ vence_el: diaFixture(1) })
         expect(resultado.success).toBe(false)
         expect(resultado.error?.issues.map(i => i.message)).toContain('Primero paga Q 262.50; después solicita la promesa')
-        expect(resultado.error?.issues[0]?.path).toEqual(['monto'])
+        expect(resultado.error?.issues[0]?.path).toEqual(['vence_el'])
         // pago_previo null o "0.00": nada que pagar antes
-        expect(esquemaPromesa({ ...conPrevio, pago_previo: '0.00' }).safeParse({ vence_el: diaFixture(1), monto: '350.00' }).success).toBe(true)
+        expect(esquemaPromesa({ ...conPrevio, pago_previo: '0.00' }).safeParse({ vence_el: diaFixture(1) }).success).toBe(true)
 
         const explicacion = textoPagoPrevio(conPrevio)
         expect(explicacion).not.toContain('abonar')
         expect(explicacion).toContain('Paga en línea, en la oficina o por depósito')
-        expect(textoPagoPrevio({ deuda_maxima: null })).toBe('Paga en línea, en la oficina o por depósito y luego solicita la promesa.')
+        expect(textoPagoPrevio({ deuda_maxima: null })).toBe('Paga en línea, en la oficina o por depósito y luego solicita la promesa: cubrirá lo que quede vencido.')
         expect(explicacion).toContain('Tu saldo vencido (Q\u00A0350.00) pasa del máximo para una promesa (Q\u00A0300.00)')
     })
 
@@ -92,16 +98,43 @@ describe('esquema y textos de la promesa', () => {
 })
 
 describe('modal "Solicitar promesa de pago"', () => {
-    it('muestra los límites antes de enviar y prellena fecha máxima y saldo vencido', async () => {
+    it('muestra los límites y todo lo vencido que cubre; solo se elige la fecha', async () => {
         await montarModal()
         const limites = enDocumento('[data-testid="promesa-limites"]')!.textContent ?? ''
         expect(limites).toContain('Fecha de pago: hasta 3 días')
-        expect(limites).toContain('Monto: hasta Q\u00A0525.00')
         const fecha = document.querySelector<HTMLInputElement>('input[type="date"]')!
         expect(fecha.value).toBe(diaFixture(3))
         expect(fecha.min).toBe(diaFixture(0))
         expect(fecha.max).toBe(diaFixture(3))
-        expect(document.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('350.00')
+        // sin campo de monto: lo calcula Argos
+        expect(document.querySelector('input[inputmode="decimal"]')).toBeNull()
+        expect(document.querySelectorAll('form input:not([type="hidden"])')).toHaveLength(1)
+
+        const cubre = enDocumento('[data-testid="promesa-cubre"]')!.textContent ?? ''
+        expect(cubre).toContain('Prometes pagar Q\u00A0350.00 (todo lo vencido)')
+        expect(cubre).toContain('se cumple cuando pagas todas estas facturas')
+        const facturas = [...document.querySelectorAll<HTMLElement>('[data-testid="promesa-factura"]')].map(f => f.textContent ?? '')
+        expect(facturas).toHaveLength(2)
+        expect(facturas[0]).toContain('Servicio de septiembre 2026')
+        expect(facturas[0]).toContain('venció el 10/09/2026')
+        expect(facturas[0]).toContain('Q\u00A0175.00')
+        expect(facturas[1]).toContain('Servicio de octubre 2026')
+    })
+
+    it('el envío solo lleva la fecha y la respuesta trae el total vencido', async () => {
+        fijarPromesaFixture('aprobada')
+        const wrapper = await montarModal()
+        await enviarFormulario()
+        const emitido = wrapper.emitted('resultado')?.[0]?.[0] as PromesaSolicitada
+        expect(emitido.monto).toBe('350.00')
+        expect(emitido.facturas.map(f => f.factura_id)).toEqual([1150, 1203])
+    })
+
+    it('sin facturas vencidas: no hay promesa que pedir', async () => {
+        fijarPromesaFixture('sin_vencido')
+        await montarModal()
+        expect(enDocumento('[data-testid="promesa-no-disponible"]')!.textContent).toContain('No tienes facturas vencidas')
+        expect(document.querySelector('form')).toBeNull()
     })
 
     it('con pago previo: muestra el límite y cuánto pagar antes, y no deja enviar', async () => {
@@ -110,6 +143,9 @@ describe('modal "Solicitar promesa de pago"', () => {
         const limites = enDocumento('[data-testid="promesa-limites"]')!.textContent ?? ''
         expect(limites).toContain('Fecha de pago: hasta 3 días')
         expect(limites).toContain('abonar el 50% de tu deuda')
+        expect(limites).toContain('te faltan Q\u00A0262.50')
+        // aun así dice qué cubrirá
+        expect(enDocumento('[data-testid="promesa-cubre"]')!.textContent).toContain('Q\u00A0350.00')
         expect(limites).toContain('Saldo vencido máximo para prometer: Q\u00A0300.00')
         expect(enDocumento('[data-testid="promesa-falta-abono"]')!.textContent).toContain('Antes de prometer debes pagar Q\u00A0262.50')
         expect(enDocumento('[data-testid="promesa-enviar"]')!.hasAttribute('disabled')).toBe(true)
@@ -157,7 +193,7 @@ describe('modal "Solicitar promesa de pago"', () => {
         await montarModal()
         await enviarFormulario()
         expect(enDocumento('[data-testid="promesa-pendiente"]')!.textContent).toContain('pendiente de aprobación')
-        expect(texto()).toContain('Prometiste pagar Q\u00A0350.00')
+        expect(texto()).toContain('Prometiste pagar Q\u00A0350.00 (todo lo vencido)')
     })
 
     it('con una promesa abierta: no disponible, sin formulario', async () => {
@@ -167,11 +203,13 @@ describe('modal "Solicitar promesa de pago"', () => {
         expect(document.querySelector('form')).toBeNull()
     })
 
-    it('monto mayor que la deuda: no se envía y el error queda en el campo', async () => {
+    it('fecha fuera del plazo: no se envía y el error queda en el campo', async () => {
         const wrapper = await montarModal()
-        escribir('input[inputmode="decimal"]', '600.00')
+        const campo = document.querySelector<HTMLInputElement>('input[type="date"]')!
+        campo.value = diaFixture(9)
+        campo.dispatchEvent(new Event('input', { bubbles: true }))
         await enviarFormulario()
-        expect(texto()).toContain('El monto no puede pasar de Q 525.00')
+        expect(texto()).toContain('Elige una fecha hasta el')
         expect(wrapper.emitted('resultado')).toBeUndefined()
     })
 })
@@ -223,5 +261,20 @@ describe('/corte y /cuenta con promesa', () => {
         await esperar()
         expect(wrapper.find('[data-testid="promesa-aprobada"]').text()).toContain('Ya tienes servicio')
         expect(wrapper.find('[data-testid="pedir-promesa"]').exists()).toBe(false)
+    })
+})
+
+describe('lista de promesas de /cuenta', () => {
+    it('la que cubre lo vencido dice cuántas facturas; la de antes del cambio (regla monto), no', async () => {
+        fijarSesionFixture(true)
+        const wrapper = await mountSuspended(PromesasCuenta)
+        await esperar()
+        const tarjetas = wrapper.findAll('[data-testid="promesa"]')
+        expect(tarjetas).toHaveLength(PROMESAS_FIXTURE.length)
+        const [nueva, vieja] = PROMESAS_FIXTURE
+        expect(nueva!.regla_cumplimiento).toBe('facturas')
+        expect(vieja!.regla_cumplimiento).toBe('monto')
+        expect(tarjetas[0]!.find('[data-testid="promesa-cubre-facturas"]').text()).toBe('Cubre 1 factura vencida: se cumple al pagarla')
+        expect(tarjetas[1]!.find('[data-testid="promesa-cubre-facturas"]').exists()).toBe(false)
     })
 })

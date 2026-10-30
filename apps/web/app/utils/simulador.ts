@@ -58,20 +58,16 @@ export function abonoFaltante(limites: Pick<Simulacion['limites'], 'abono_requer
     return Decimal.max(0, new Decimal(limites.abono_requerido).minus(limites.abono_pagado))
 }
 
-const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 
 /**
- * Formulario del simulador: todo es opcional como en `POST /promesas/simular` (sin monto, la
- * deuda pendiente; sin fecha, el fin de mañana). Se permite simular cualquier canal, también
- * portal e IA, para ver qué reglas les tocan.
+ * Formulario del simulador: todo es opcional como en `POST /promesas/simular` (sin fecha, el fin
+ * de mañana). Sin monto: la promesa cubre todo lo vencido y la API responde cuánto y qué facturas
+ * (decisión del PM, 29 oct). Se permite simular cualquier canal, también portal e IA, para ver qué
+ * reglas les tocan.
  */
 export const esquemaSimulacion = z.object({
     servicio_id: z.number({ message: 'Elige el servicio' }).int().positive('Elige el servicio'),
-    monto: z.string()
-        .trim()
-        .refine(valor => valor === '' || MONTO.test(valor), 'Escribe un monto con hasta 2 decimales, sin comas (ej. 175.00)')
-        .refine(valor => valor === '' || !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero'),
     vence: z.string().refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)'),
     canal: z.enum(['operador', 'supervisor', 'portal', 'ia']),
 })
@@ -80,11 +76,9 @@ export type EntradaSimulacion = z.input<typeof esquemaSimulacion>
 export type SalidaSimulacion = z.output<typeof esquemaSimulacion>
 export type CuerpoSimulacion = paths['/api/v1/promesas/simular']['post']['requestBody']['content']['application/json']
 
+/** Nunca manda `monto` (obsoleto: la API lo ignora). */
 export function cuerpoSimulacion(datos: SalidaSimulacion): CuerpoSimulacion {
     const cuerpo: CuerpoSimulacion = { servicio_id: datos.servicio_id, canal: datos.canal }
-    if (datos.monto) {
-        cuerpo.monto = new Decimal(datos.monto).toFixed(2)
-    }
     if (datos.vence) {
         cuerpo.vence_en = finDiaGuatemala(datos.vence)
     }

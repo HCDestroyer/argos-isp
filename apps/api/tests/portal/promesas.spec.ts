@@ -70,7 +70,21 @@ async function cortado(reglas: ReglasPromesaParciales = {}, cliente: Record<stri
         .whereIn('estado', ['emitida', 'parcial', 'vencida'])
         .select(db.raw('sum(total - pagado)::numeric(14,2)::text as pendiente'))
         .first()
-    return { ...datos, ip, deuda: String(deuda.pendiente) }
+    // Lo que cubre una promesa: las facturas vencidas con saldo, la más antigua primero.
+    const vencidas = await db
+        .from('billing.facturas')
+        .where('servicio_id', datos.servicioId)
+        .where('estado', 'vencida')
+        .orderBy([{ column: 'vence_en' }, { column: 'id' }])
+        .select('id', db.raw('(total - pagado)::numeric(14,2)::text as saldo'))
+    const vencido = vencidas.reduce((suma, f) => suma.plus(dec(f.saldo)), dec('0'))
+    return {
+        ...datos,
+        ip,
+        deuda: String(deuda.pendiente),
+        vencido: aTexto(vencido),
+        facturasVencidas: vencidas.map((f) => Number(f.id)),
+    }
 }
 
 /** Entra al portal como el cliente con `nit` y devuelve la cookie. */
@@ -105,25 +119,43 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         }
     })
 
-    test('por IP: condiciones con el plazo del canal portal y la deuda, sin datos personales', async ({
+    test('por IP: condiciones con el plazo del canal portal y todo lo vencido, sin datos personales', async ({
         client,
         assert,
     }) => {
         const s = await cortado({}, { nombre: 'Juana Inés Coyoy', email: 'juana@example.com' })
+        assert.isAtLeast(s.facturasVencidas.length, 2)
 
         const respuesta = await estado(
             client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
             200,
         )
-        assert.deepEqual(respuesta.body(), {
+        const { facturas, ...resto } = respuesta.body()
+        // la promesa cubre todo lo vencido: monto y facturas los calcula Argos (`limitesPromesa`)
+        assert.deepEqual(
+            facturas.map((f: { factura_id: number }) => f.factura_id),
+            s.facturasVencidas,
+        )
+        assert.equal(
+            aTexto(
+                facturas.reduce(
+                    (suma: ReturnType<typeof dec>, f: { monto: string }) => suma.plus(dec(f.monto)),
+                    dec('0'),
+                ),
+            ),
+            s.vencido,
+        )
+        for (const f of facturas) {
+            assert.deepEqual(Object.keys(f).sort(), ['factura_id', 'monto', 'periodo', 'tipo', 'vence_en'])
+        }
+        assert.deepEqual(resto, {
             disponible: true,
             motivo: null,
             promesa_abierta: null,
             fecha_minima: dia(0),
             fecha_maxima: dia(3),
             plazo_max_dias: 3,
-            monto_maximo: s.deuda,
-            monto_sugerido: s.deuda,
+            monto_promesa: s.vencido,
             abono_inicial: null,
             deuda_maxima: null,
             pago_previo: null,
@@ -184,7 +216,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: cuerpo.fecha_maxima, monto: cuerpo.monto_sugerido }),
+                .json({ vence_el: cuerpo.fecha_maxima }),
             201,
         )
         assert.equal(promesa.body().resultado, 'rechazada')
@@ -211,7 +243,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         assert.isNull(cuerpo.fecha_maxima)
     })
 
-    test('por IP: aprobada reactiva el servicio y /portal/estado lo ve; auditoría como sistema/portal', async ({
+    test('por IP: aprobada cubre todo lo vencido, reactiva el servicio y /portal/estado lo ve; auditoría como sistema/portal', async ({
         client,
         assert,
     }) => {
@@ -222,12 +254,13 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(2), monto: s.deuda }),
+                .json({ vence_el: dia(2) }),
             201,
         )
         const cuerpo = respuesta.body()
         assert.deepEqual(Object.keys(cuerpo).sort(), [
             'corregible',
+            'facturas',
             'id',
             'monto',
             'motivo',
@@ -237,7 +270,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         ])
         assert.include(cuerpo, {
             resultado: 'aprobada',
-            monto: s.deuda,
+            monto: s.vencido,
             servicio_estado: 'activo',
             motivo: 'Tu promesa de pago fue aprobada.',
         })
@@ -245,7 +278,17 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         assert.notInclude(JSON.stringify(cuerpo), 'Pedro')
 
         const promesa = await db.from('billing.promesas').where('id', cuerpo.id).firstOrFail()
-        assert.include(promesa, { estado: 'activa', canal: 'portal', servicio_id: s.servicioId })
+        assert.include(promesa, {
+            estado: 'activa',
+            canal: 'portal',
+            servicio_id: s.servicioId,
+            monto: s.vencido,
+            regla_cumplimiento: 'facturas',
+        })
+        assert.deepEqual(
+            cuerpo.facturas.map((f: { factura_id: number }) => f.factura_id),
+            s.facturasVencidas,
+        )
 
         const vivo = await estado(client.get('/api/v1/portal/estado').header('X-Forwarded-For', s.ip), 200)
         assert.equal(vivo.body().estado, 'activo')
@@ -274,7 +317,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(10), monto: '50.00' }),
+                .json({ vence_el: dia(10) }),
             201,
         )
         assert.include(respuesta.body(), {
@@ -293,7 +336,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '100.00' }),
+                .json({ vence_el: dia(1) }),
             201,
         )
         assert.include(respuesta.body(), {
@@ -316,7 +359,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '100.00' }),
+                .json({ vence_el: dia(1) }),
             409,
         )
         assert.equal(repetida.body().type, 'urn:argosisp:problema:promesa_abierta')
@@ -331,7 +374,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', '203.0.113.250')
-                .json({ vence_el: dia(1), monto: '100.00' }),
+                .json({ vence_el: dia(1) }),
             422,
         )
         assert.equal(respuesta.body().type, 'urn:argosisp:problema:no_identificado')
@@ -341,26 +384,37 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         )
     })
 
-    test('monto mayor que la deuda o fecha pasada: 422 por campo', async ({ client, assert }) => {
+    test('un monto escrito se ignora: 201 con todo lo vencido; fecha pasada: 422 por campo', async ({
+        client,
+        assert,
+    }) => {
         const s = await cortado()
-        const mucho = await estado(
-            client
-                .post('/api/v1/portal/promesas')
-                .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '99999.00' }),
-            422,
-        )
-        assert.equal(mucho.body().errors[0].field, 'monto')
         const ayer = await estado(
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(-1), monto: '10.00' }),
+                .json({ vence_el: dia(-1) }),
             422,
         )
         assert.equal(ayer.body().errors[0].field, 'vence_en')
         const n = await db.from('billing.promesas').where('servicio_id', s.servicioId).count('* as n')
         assert.equal(Number(n[0].n), 0)
+
+        // Un cliente viejo (o una página en caché) que aún manda `monto`: se ignora, no es un 422.
+        const mucho = await estado(
+            client
+                .post('/api/v1/portal/promesas')
+                .header('X-Forwarded-For', s.ip)
+                .json({ vence_el: dia(1), monto: '99999.00' }),
+            201,
+        )
+        assert.include(mucho.body(), { resultado: 'aprobada', monto: s.vencido })
+        assert.deepEqual(
+            mucho.body().facturas.map((f: { factura_id: number }) => f.factura_id),
+            s.facturasVencidas,
+        )
+        const guardada = await db.from('billing.promesas').where('id', mucho.body().id).firstOrFail()
+        assert.include(guardada, { monto: s.vencido, regla_cumplimiento: 'facturas' })
     })
 
     test('Idempotency-Key: el reintento devuelve la misma promesa sin crear otra', async ({
@@ -374,7 +428,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
                 .header('Idempotency-Key', clave)
-                .json({ vence_el: dia(1), monto: '100.00' })
+                .json({ vence_el: dia(1) })
         const primera = await estado(pedir(), 201)
         const segunda = await estado(pedir(), 201)
         assert.equal(segunda.header('idempotent-replayed'), 'true')
@@ -392,14 +446,14 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '10.00' }),
+                .json({ vence_el: dia(1) }),
             201,
         )
         const otra = await estado(
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '10.00' }),
+                .json({ vence_el: dia(1) }),
             429,
         )
         assert.isString(otra.header('retry-after'))
@@ -418,7 +472,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             client
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', s.ip)
-                .json({ vence_el: dia(1), monto: '10.00', servicio_id: s.servicioId }),
+                .json({ vence_el: dia(1), servicio_id: s.servicioId }),
             401,
         )
 
@@ -445,7 +499,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
                 .post('/api/v1/portal/promesas')
                 .header('X-Forwarded-For', otraIp)
                 .header('Cookie', cookie)
-                .json({ vence_el: dia(1), monto: s.deuda, servicio_id: s.servicioId }),
+                .json({ vence_el: dia(1), servicio_id: s.servicioId }),
             201,
         )
         assert.equal(creada.body().resultado, 'aprobada')
@@ -464,7 +518,17 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         assert.equal(await estadoServicio(ajeno.servicioId), 'suspendido')
 
         const lista = await estado(client.get('/api/v1/portal/promesas').header('Cookie', cookie), 200)
-        assert.equal(lista.body().data[0].id, creada.body().id)
+        assert.include(lista.body().data[0], {
+            id: creada.body().id,
+            monto: s.vencido,
+            regla_cumplimiento: 'facturas',
+        })
+        // cada factura con lo que cubre y su saldo de hoy (aún sin pagar)
+        for (const f of lista.body().data[0].facturas) {
+            assert.equal(f.saldo, f.monto)
+            assert.equal(f.estado, 'vencida')
+        }
+        assert.lengthOf(lista.body().data[0].facturas, s.facturasVencidas.length)
     })
 })
 
@@ -561,7 +625,7 @@ test.group('Portal: motivo de la promesa en palabras del cliente', () => {
         assert.equal(fechaLegible('2026-01-31'), '31 de enero')
     })
 
-    test('solo el plazo y la próxima factura se corrigen cambiando la fecha o el monto', ({ assert }) => {
+    test('solo el plazo y la próxima factura se corrigen cambiando la fecha', ({ assert }) => {
         assert.isTrue(esCorregible(evaluacion('plazo_max_dias', 3)))
         assert.isTrue(esCorregible(evaluacion('no_exceder_siguiente_facturacion', '2026-11-01')))
         for (const regla of [

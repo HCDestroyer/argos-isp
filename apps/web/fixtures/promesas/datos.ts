@@ -21,6 +21,9 @@ function promesa(id: number, clienteId: number, datos: Pick<Promesa, 'vence_en' 
         empresa_id: servicio.empresa_id,
         servicio_id: servicio.id,
         cliente_id: clienteId,
+        // Anteriores al 29 oct: la migración de A3 las deja con la regla legada `monto` y sin facturas.
+        regla_cumplimiento: 'monto',
+        facturas: [],
         ...datos,
         resultado_evaluacion: resultado,
         version: 1,
@@ -56,7 +59,7 @@ function evaluacion(datos: Pick<Evaluacion, 'resultado' | 'regla' | 'motivo' | '
 }
 
 /**
- * Promesas iniciales: la activa del cliente 12 (servicio con `promesa_activa`), una pendiente de
+ * Promesas iniciales (todas de antes del cambio del 29 oct, regla `monto`): la activa del cliente 12 (servicio con `promesa_activa`), una pendiente de
  * aprobación de una empresa y dos del historial (cumplida e incumplida).
  */
 export const promesas: Promesa[] = [
