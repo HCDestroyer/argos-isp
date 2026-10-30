@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 import * as z from 'zod'
 
 /**
- * Alta de un router (`POST /routers`, `routers.crear`, A1): nombre, host de la API REST, IP del NAS,
- * secreto RADIUS y credenciales de la API (se guardan cifrados; nunca vuelven), modo de seguridad y
- * colas. La conexión fina (puerto, TLS, CA, DHCP) se ajusta después en «Conexión» y la capacidad en
+ * Alta de un router (`POST /routers`, `routers.crear`, A1): primero el modo de seguridad («RADIUS» o
+ * «Sin RADIUS»), luego nombre, host de la API REST, IP del NAS y secreto RADIUS (solo con RADIUS),
+ * credenciales de la API (se guardan cifrados; nunca vuelven) y colas. Sin RADIUS (`api`) la IP del
+ * NAS y el secreto no se piden ni se mandan (`utils/modoSeguridad.ts`). La conexión fina (puerto, TLS, CA, DHCP) se ajusta después en «Conexión» y la capacidad en
  * «Velocidad»; el modo de colas después del alta solo cambia con su acción. Si ese MikroTik ya
  * está registrado (misma API o misma IP del NAS), la API responde 409 `router_duplicado`: se marca
  * el campo y se explica qué router es y qué hacer (`contratos/routers.md` §2).
@@ -14,19 +15,25 @@ import * as z from 'zod'
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ creado: [router: RouterNas] }>()
 
-const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
-
-/** Espejo de `crearRouterValidator` (A1) en los campos de este formulario. */
+/**
+ * Espejo de `crearRouterValidator` (A1) en los campos de este formulario: la IP del NAS es
+ * obligatoria solo con `radius`; con `api` no se valida ni se manda.
+ */
 const esquema = z.object({
+    modo_seguridad: z.enum(['radius', 'api']),
     nombre: z.string().trim().min(2, 'Al menos 2 caracteres').max(100, 'Máximo 100 caracteres'),
     host: z.string().trim().min(1, 'Escribe el host o la IP').max(255, 'Máximo 255 caracteres'),
-    nas_ip: z.string().trim().regex(IPV4, 'Escribe la IPv4 con la que el router habla con RADIUS'),
+    nas_ip: z.string().trim(),
     radius_secret: z.string().max(200, 'Máximo 200 caracteres'),
     api_usuario: z.string().trim().max(100, 'Máximo 100 caracteres'),
     api_password: z.string().max(200, 'Máximo 200 caracteres'),
-    modo_seguridad: z.enum(['radius', 'api']),
     control_velocidad: z.enum(['simple', 'arbol_pcq']),
     activo: z.boolean(),
+}).superRefine((datos, ctx) => {
+    const error = errorNas(datos.modo_seguridad, datos.nas_ip)
+    if (error) {
+        ctx.addIssue({ code: 'custom', path: ['nas_ip'], message: error })
+    }
 })
 type Entrada = z.input<typeof esquema>
 const vacio = (): Entrada => ({ nombre: '', host: '', nas_ip: '', radius_secret: '', api_usuario: '', api_password: '', modo_seguridad: 'radius', control_velocidad: 'simple', activo: true })
@@ -44,21 +51,24 @@ watch(abierto, (valor) => {
     }
 })
 
-const itemsSeguridad: SelectItem[] = [
-    { label: 'RADIUS', value: 'radius', description: 'Recomendado: el router autentica y corta por RADIUS' },
-    { label: 'API de RouterOS', value: 'api' },
-]
+const itemsSeguridad: RadioGroupItem[] = (['radius', 'api'] as const).map(modo => ({
+    label: MODOS_SEGURIDAD[modo].opcion,
+    value: modo,
+    description: MODOS_SEGURIDAD[modo].descripcion,
+}))
+const conRadius = computed(() => estado.modo_seguridad === 'radius')
 const itemsControl: SelectItem[] = (Object.keys(CONTROLES_VELOCIDAD) as ControlVelocidad[]).map(c => ({ label: CONTROLES_VELOCIDAD[c].etiqueta, value: c, icon: CONTROLES_VELOCIDAD[c].icono }))
 
 async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
     enviando.value = true
     problema.value = null
     const d = evento.data
+    const radius = d.modo_seguridad === 'radius'
     const resultado = await useRouters().crear({
         nombre: d.nombre,
         host: d.host,
-        nas_ip: d.nas_ip,
-        radius_secret: d.radius_secret || null,
+        // Sin RADIUS no se mandan: la API los deja en null (A1).
+        ...(radius ? { nas_ip: d.nas_ip, radius_secret: d.radius_secret || null } : {}),
         api_usuario: d.api_usuario || null,
         api_password: d.api_password || null,
         modo_seguridad: d.modo_seguridad,
@@ -97,6 +107,20 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 @submit="enviar"
             >
                 <UFormField
+                    label="Modo de seguridad"
+                    name="modo_seguridad"
+                    required
+                >
+                    <URadioGroup
+                        v-model="estado.modo_seguridad"
+                        :items="itemsSeguridad"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2' }"
+                        data-prueba="router-modo"
+                    />
+                </UFormField>
+                <UFormField
                     label="Nombre"
                     name="nombre"
                     required
@@ -113,6 +137,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         label="Host de la API"
                         name="host"
                         required
+                        :class="conRadius ? '' : 'sm:col-span-2'"
                     >
                         <UInput
                             v-model="estado.host"
@@ -122,9 +147,11 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         />
                     </UFormField>
                     <UFormField
+                        v-if="conRadius"
                         label="IP del NAS"
                         name="nas_ip"
                         required
+                        help="La IP con la que el router habla con RADIUS."
                     >
                         <UInput
                             v-model="estado.nas_ip"
@@ -135,6 +162,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     </UFormField>
                 </div>
                 <UFormField
+                    v-if="conRadius"
                     label="Secreto RADIUS"
                     name="radius_secret"
                 >
@@ -168,29 +196,17 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         />
                     </UFormField>
                 </div>
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <UFormField
-                        label="Seguridad"
-                        name="modo_seguridad"
-                    >
-                        <USelect
-                            v-model="estado.modo_seguridad"
-                            :items="itemsSeguridad"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Colas"
-                        name="control_velocidad"
-                        help="Después del alta solo cambia con «Velocidad»."
-                    >
-                        <USelect
-                            v-model="estado.control_velocidad"
-                            :items="itemsControl"
-                            class="w-full"
-                        />
-                    </UFormField>
-                </div>
+                <UFormField
+                    label="Colas"
+                    name="control_velocidad"
+                    help="Después del alta solo cambia con «Velocidad»."
+                >
+                    <USelect
+                        v-model="estado.control_velocidad"
+                        :items="itemsControl"
+                        class="w-full sm:max-w-xs"
+                    />
+                </UFormField>
                 <USwitch
                     v-model="estado.activo"
                     label="Activo"

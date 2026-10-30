@@ -58,7 +58,7 @@ const detalleRedes = computed(() => {
                     class="truncate text-sm font-semibold text-highlighted"
                     data-prueba="union-queda"
                 >{{ vista.router.nombre }}</span>
-                <span class="font-mono text-xs text-muted">{{ vista.router.host }} · NAS {{ vista.router.nas_ip }}</span>
+                <span class="font-mono text-xs text-muted">{{ hostYNas(vista.router) }}</span>
             </div>
             <UIcon
                 name="i-lucide-arrow-left"
@@ -70,7 +70,7 @@ const detalleRedes = computed(() => {
                     class="truncate text-sm font-semibold text-highlighted"
                     data-prueba="union-absorbido"
                 >{{ vista.absorbido.nombre }}</span>
-                <span class="font-mono text-xs text-muted">{{ vista.absorbido.host }} · NAS {{ vista.absorbido.nas_ip }}</span>
+                <span class="font-mono text-xs text-muted">{{ hostYNas(vista.absorbido) }}</span>
             </div>
         </div>
 

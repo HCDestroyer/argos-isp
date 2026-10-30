@@ -8126,7 +8126,10 @@ export interface paths {
         /** Listar routers */
         get: operations["routersListar"];
         put?: never;
-        /** Crear router */
+        /**
+         * Crear router
+         * @description Con `modo_seguridad: radius` (por defecto) la `nas_ip` es obligatoria (422 en `nas_ip`). Con `api` es un router sin RADIUS (solo ip_estatica y dhcp_fija por la API REST): `nas_ip` y `radius_secret` son opcionales. 409 `router_duplicado` si el MikroTik ya está registrado.
+         */
         post: operations["routersCrear"];
         delete?: never;
         options?: never;
@@ -8143,7 +8146,10 @@ export interface paths {
         };
         /** Ver router */
         get: operations["routersVer"];
-        /** Editar router */
+        /**
+         * Editar router
+         * @description Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite `router.radius_cambiado`.
+         */
         put: operations["routersEditar"];
         post?: never;
         /**
@@ -8478,7 +8484,7 @@ export interface paths {
         };
         /**
          * Generar el script de conexión del router (.rsc)
-         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
+         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `script_requiere_radius` si el router está en modo `api` (sin RADIUS); 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
          */
         get: operations["routersScriptConexion"];
         put?: never;
@@ -8619,7 +8625,10 @@ export interface paths {
         /** Listar servicios */
         get: operations["serviciosListar"];
         put?: never;
-        /** Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe) */
+        /**
+         * Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)
+         * @description 422 `pppoe_requiere_radius` si el servicio es pppoe (el tipo por defecto) y el router está en modo `api` (sin RADIUS): ahí solo van ip_estatica y dhcp_fija.
+         */
         post: operations["serviciosCrear"];
         delete?: never;
         options?: never;
@@ -8636,7 +8645,10 @@ export interface paths {
         };
         /** Ver servicio */
         get: operations["serviciosVer"];
-        /** Editar servicio (plan, router, IPs, datos) */
+        /**
+         * Editar servicio (plan, router, IPs, datos)
+         * @description Mover un servicio pppoe a un router en modo `api` (sin RADIUS) o pasar a pppoe uno que está en un router `api`: 422 `pppoe_requiere_radius`.
+         */
         put: operations["serviciosEditar"];
         post?: never;
         /**
@@ -13521,7 +13533,7 @@ export interface components {
                 nombre: string;
                 host: string;
                 api_url: string | null;
-                nas_ip: string;
+                nas_ip: string | null;
                 serial: string | null;
                 /** @enum {string} */
                 control_velocidad: "simple" | "arbol_pcq";
@@ -17330,8 +17342,12 @@ export interface components {
             api_usuario: string | null;
             tiene_api_password: boolean;
             tiene_radius_secret: boolean;
-            nas_ip: string;
-            /** @enum {string} */
+            /** @description IP con la que el router habla RADIUS; null solo en un router sin RADIUS (modo_seguridad api) */
+            nas_ip: string | null;
+            /**
+             * @description radius: PPPoE por RADIUS (y servicios ip_estatica/dhcp_fija por la API REST). api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; sin nas_ip ni radius_secret obligatorios y sin PPPoE
+             * @enum {string}
+             */
             modo_seguridad: "radius" | "api";
             /**
              * @description Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple
@@ -49795,11 +49811,17 @@ export interface operations {
                     api_usuario?: string | null;
                     /** @description Clave del usuario de la API REST. Se guarda cifrada. Vacía o null = sin credencial */
                     api_password?: string | null;
-                    /** @description Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado. Vacía o null = sin credencial */
+                    /** @description Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado. Opcional; un router `api` no lo usa. Vacía o null = sin credencial */
                     radius_secret?: string | null;
-                    /** Format: ipv4 */
-                    nas_ip: string;
-                    /** @enum {string} */
+                    /**
+                     * Format: ipv4
+                     * @description IP con la que el router habla RADIUS y a la que se envían los CoA. Obligatoria con modo_seguridad radius (422 en nas_ip si falta); opcional (null) con modo_seguridad api
+                     */
+                    nas_ip?: string | null;
+                    /**
+                     * @description radius (por defecto): PPPoE por RADIUS y CoA; nas_ip obligatoria. api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; nas_ip y radius_secret opcionales. Pasar a api con servicios pppoe no retirados: 422 servicios_pppoe_en_router
+                     * @enum {string}
+                     */
                     modo_seguridad?: "radius" | "api";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;
@@ -49943,9 +49965,15 @@ export interface operations {
                     quitar_api_password?: boolean;
                     /** @description Borra el secreto RADIUS (422 si además llega radius_secret) */
                     quitar_radius_secret?: boolean;
-                    /** Format: ipv4 */
-                    nas_ip?: string;
-                    /** @enum {string} */
+                    /**
+                     * Format: ipv4
+                     * @description null la quita (solo en un router api; 422 en nas_ip si el router queda en radius sin ella)
+                     */
+                    nas_ip?: string | null;
+                    /**
+                     * @description radius (por defecto): PPPoE por RADIUS y CoA; nas_ip obligatoria. api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; nas_ip y radius_secret opcionales. Pasar a api con servicios pppoe no retirados: 422 servicios_pppoe_en_router
+                     * @enum {string}
+                     */
                     modo_seguridad?: "radius" | "api";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;

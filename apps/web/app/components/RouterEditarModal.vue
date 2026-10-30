@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 import * as z from 'zod'
 
 /**
@@ -11,6 +11,12 @@ import * as z from 'zod'
  * túnel, avisa antes de cambiar host o NAS. Un 409 ofrece cargar la
  * versión actual. La URL, el puerto y el TLS de la API se cambian en «Conexión de la API»; el modo
  * de colas, en «Control de velocidad».
+ *
+ * Modo de seguridad arriba (`utils/modoSeguridad.ts`): con «Sin RADIUS» (`api`) se ocultan la IP del
+ * NAS y el secreto RADIUS. Al pasar un router de RADIUS a «Sin RADIUS», la IP del NAS se conserva
+ * salvo que el operador marque «Quitar la IP del NAS» (entonces va `nas_ip: null`, como acepta A1).
+ * Si el router tiene servicios PPPoE sin retirar, la API responde 422 `servicios_pppoe_en_router`
+ * y aquí se listan con su enlace.
  */
 const props = defineProps<{
     router: RouterNas
@@ -23,18 +29,22 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const { conSelector: variasEmpresas, empresas } = useEmpresaActiva()
 
-const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 const KBPS = z.number().int('Escribe los kbps sin decimales').min(1, 'Escribe al menos 1 kbps, o déjalo vacío').max(100_000_000, 'Escribe como máximo 100 000 000 kbps').nullable()
 
-/** Espejo de `editarRouterValidator` en los campos de este formulario. */
+/**
+ * Espejo de `editarRouterValidator` en los campos de este formulario: la IP del NAS es obligatoria
+ * solo si el router queda en `radius`.
+ */
 const esquema = z.object({
+    modo_seguridad: z.enum(['radius', 'api']),
     nombre: z.string().trim().min(2, 'Escribe un nombre de al menos 2 caracteres').max(100, 'Acorta el nombre: máximo 100 caracteres'),
     host: z.string().trim().min(1, 'Escribe el host o la IP con la que el panel llega a la API').max(255, 'Máximo 255 caracteres'),
-    nas_ip: z.string().trim().regex(IPV4, 'Escribe la IPv4 con la que el router habla con RADIUS, como 10.0.0.1'),
-    modo_seguridad: z.enum(['radius', 'api']),
+    nas_ip: z.string().trim(),
+    /** Solo con «Sin RADIUS» y una IP del NAS guardada: mandar `nas_ip: null`. */
+    quitar_nas_ip: z.boolean(),
     api_usuario: z.string().trim().max(100, 'Máximo 100 caracteres'),
     api_password: z.string().max(200, 'Máximo 200 caracteres'),
     radius_secret: z.string().max(200, 'Máximo 200 caracteres'),
@@ -45,6 +55,11 @@ const esquema = z.object({
     capacidad_bajada_kbps: KBPS,
     capacidad_subida_kbps: KBPS,
     activo: z.boolean(),
+}).superRefine((datos, ctx) => {
+    const error = errorNas(datos.modo_seguridad, datos.nas_ip)
+    if (error) {
+        ctx.addIssue({ code: 'custom', path: ['nas_ip'], message: error })
+    }
 })
 type Entrada = z.input<typeof esquema>
 type Salida = z.output<typeof esquema>
@@ -53,7 +68,9 @@ function entradaDe(router: RouterNas): Entrada {
     return {
         nombre: router.nombre,
         host: router.host,
-        nas_ip: router.nas_ip,
+        // null en un router sin RADIUS (modo api)
+        nas_ip: router.nas_ip ?? '',
+        quitar_nas_ip: false,
         modo_seguridad: router.modo_seguridad,
         api_usuario: router.api_usuario ?? '',
         api_password: '',
@@ -76,8 +93,23 @@ const problema = ref<Problem | null>(null)
 // 409 `router_duplicado` (A1) no es un conflicto de versión: el host, la API o la nas_ip ya son de otro router.
 const duplicado = computed(() => esRouterDuplicado(problema.value))
 const conflicto = computed(() => problema.value?.status === 409 && !duplicado.value)
+// 422 `servicios_pppoe_en_router` (A1): no se puede pasar a «Sin RADIUS» con servicios PPPoE.
+const pppoeEnRouter = computed(() => serviciosPppoeEnRouter(problema.value))
 // 422 sin campos (p. ej. `router_unido` al reactivar un router unido) se explica arriba.
 const sinCampos = computed(() => problema.value?.status === 422 && !(problema.value.errors ?? []).length)
+
+const conRadius = computed(() => estado.modo_seguridad === 'radius')
+/** Pasa de RADIUS a «Sin RADIUS» en esta edición. */
+const pasaASinRadius = computed(() => actual.value.modo_seguridad === 'radius' && estado.modo_seguridad === 'api')
+/** Con «Sin RADIUS» y una IP del NAS guardada: se ofrece quitarla (por defecto se conserva). */
+const ofreceQuitarNas = computed(() => !conRadius.value && Boolean(actual.value.nas_ip))
+
+// Volver a RADIUS deshace «Quitar la IP del NAS».
+watch(conRadius, (valor) => {
+    if (valor) {
+        estado.quitar_nas_ip = false
+    }
+})
 
 function reiniciar(router: RouterNas) {
     actual.value = router
@@ -117,7 +149,8 @@ const zona = computed({
     },
 })
 /** Cambiar host o NAS de un router conectado por túnel lo desconecta de Argos. */
-const tocaTunel = computed(() => ipTunel.value !== null && (estado.host.trim() !== actual.value.host || estado.nas_ip.trim() !== actual.value.nas_ip))
+const tocaTunel = computed(() => ipTunel.value !== null && (estado.host.trim() !== actual.value.host
+    || (conRadius.value ? estado.nas_ip.trim() !== (actual.value.nas_ip ?? '') : estado.quitar_nas_ip)))
 
 // Escribir una clave nueva y pedir borrarla a la vez no tiene sentido: se desmarca «quitar».
 watch(() => estado.api_password, (valor) => {
@@ -131,10 +164,11 @@ watch(() => estado.radius_secret, (valor) => {
     }
 })
 
-const itemsSeguridad: SelectItem[] = [
-    { label: 'RADIUS', value: 'radius', description: 'Recomendado: el router autentica y corta por RADIUS' },
-    { label: 'API de RouterOS', value: 'api', description: 'El panel corta y reactiva con comandos a la API' },
-]
+const itemsSeguridad: RadioGroupItem[] = (['radius', 'api'] as const).map(modo => ({
+    label: MODOS_SEGURIDAD[modo].opcion,
+    value: modo,
+    description: MODOS_SEGURIDAD[modo].descripcion,
+}))
 
 const SIN_EMPRESA = 0
 const itemsEmpresa = computed<SelectItem[]>(() => [
@@ -154,13 +188,16 @@ function cambios(datos: Salida): CambiosRouter {
     const salida: CambiosRouter = { version: anterior.version }
     if (datos.nombre !== anterior.nombre) salida.nombre = datos.nombre
     if (datos.host !== anterior.host) salida.host = datos.host
-    if (datos.nas_ip !== anterior.nas_ip) salida.nas_ip = datos.nas_ip
+    // Con RADIUS, la IP escrita si cambió; sin RADIUS, null solo si el operador decidió quitarla.
+    if (datos.modo_seguridad === 'radius' && datos.nas_ip !== (anterior.nas_ip ?? '')) salida.nas_ip = datos.nas_ip
+    if (datos.modo_seguridad === 'api' && datos.quitar_nas_ip && anterior.nas_ip) salida.nas_ip = null
     if (datos.modo_seguridad !== anterior.modo_seguridad) salida.modo_seguridad = datos.modo_seguridad
     if ((datos.api_usuario || null) !== anterior.api_usuario) salida.api_usuario = datos.api_usuario || null
     if (datos.api_password) salida.api_password = datos.api_password
     else if (datos.quitar_api_password) salida.quitar_api_password = true
-    if (datos.radius_secret) salida.radius_secret = datos.radius_secret
-    else if (datos.quitar_radius_secret) salida.quitar_radius_secret = true
+    // El secreto solo se ve (y se cambia) con RADIUS.
+    if (datos.modo_seguridad === 'radius' && datos.radius_secret) salida.radius_secret = datos.radius_secret
+    else if (datos.modo_seguridad === 'radius' && datos.quitar_radius_secret) salida.quitar_radius_secret = true
     if ((datos.zona_id ?? null) !== (anterior.zona_id ?? null)) salida.zona_id = datos.zona_id
     if (variasEmpresas.value && datos.empresa_sugerida_id !== anterior.empresa_sugerida_id) salida.empresa_sugerida_id = datos.empresa_sugerida_id
     if (datos.capacidad_bajada_kbps !== anterior.capacidad_bajada_kbps) salida.capacidad_bajada_kbps = datos.capacidad_bajada_kbps
@@ -185,7 +222,8 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
     const resultado = await useRouters().editar(actual.value.id, cambios(evento.data))
     guardando.value = false
     if (!resultado.ok) {
-        const errores = erroresDeFormulario(resultado.problema)
+        // Los `servicios.<id>` de `servicios_pppoe_en_router` no son campos: se listan arriba.
+        const errores = serviciosPppoeEnRouter(resultado.problema) ? [] : erroresDeFormulario(resultado.problema)
         if (errores.length) {
             formulario.value?.setErrors(errores)
         }
@@ -250,10 +288,75 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         </div>
                     </template>
                 </UAlert>
+                <UAlert
+                    v-else-if="problema && pppoeEnRouter"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-key-round"
+                    :title="pppoeEnRouter.total === 1 ? 'Hay 1 servicio PPPoE en este router' : `Hay ${pppoeEnRouter.total} servicios PPPoE en este router`"
+                    data-prueba="router-pppoe-en-router"
+                >
+                    <template #description>
+                        <div class="flex flex-col gap-1.5">
+                            <p>{{ problema.detail }}</p>
+                            <ul class="list-disc pl-5">
+                                <li
+                                    v-for="servicio in pppoeEnRouter.servicios"
+                                    :key="servicio.id"
+                                >
+                                    <ULink
+                                        :to="enlace(`/servicios/${servicio.id}`)"
+                                        class="underline hover:text-highlighted"
+                                    >
+                                        {{ servicio.texto }}
+                                    </ULink>
+                                </li>
+                            </ul>
+                            <p v-if="pppoeEnRouter.total > pppoeEnRouter.servicios.length">
+                                Y {{ pppoeEnRouter.total - pppoeEnRouter.servicios.length }} más: búscalos en Servicios filtrando por este router y PPPoE.
+                            </p>
+                        </div>
+                    </template>
+                </UAlert>
                 <ProblemaAlerta
                     v-else-if="problema && (problema.status !== 422 || sinCampos)"
                     :problema="problema"
                 />
+
+                <UFormField
+                    label="Modo de seguridad"
+                    name="modo_seguridad"
+                    required
+                >
+                    <URadioGroup
+                        v-model="estado.modo_seguridad"
+                        :items="itemsSeguridad"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2 sm:grid-cols-2' }"
+                        data-prueba="router-editar-modo"
+                    />
+                </UFormField>
+                <UAlert
+                    v-if="pasaASinRadius"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-triangle-alert"
+                    title="El router deja de usar RADIUS"
+                    description="Sale de FreeRADIUS y ya no recibe CoA. Solo admite servicios con IP estática o DHCP fija; si tiene servicios PPPoE sin retirar, no se puede cambiar hasta pasarlos a otro tipo, moverlos o retirarlos."
+                    data-prueba="aviso-sin-radius"
+                />
+                <UFormField
+                    v-if="ofreceQuitarNas"
+                    name="quitar_nas_ip"
+                    :help="estado.quitar_nas_ip ? `Se quitará la IP del NAS (${actual.nas_ip}) al guardar.` : `Se conserva la IP del NAS (${actual.nas_ip}): no se usa sin RADIUS, pero sigue contando para detectar routers duplicados.`"
+                >
+                    <UCheckbox
+                        v-model="estado.quitar_nas_ip"
+                        label="Quitar la IP del NAS"
+                        data-prueba="quitar-nas-ip"
+                    />
+                </UFormField>
 
                 <UFormField
                     label="Nombre"
@@ -264,6 +367,7 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     <UInput
                         v-model="estado.nombre"
                         class="w-full"
+                        data-prueba="router-editar-nombre"
                     />
                 </UFormField>
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -272,6 +376,7 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         name="host"
                         required
                         help="IP o nombre con el que el panel llega al router. El puerto se cambia en «Conexión de la API»."
+                        :class="conRadius ? '' : 'sm:col-span-2'"
                     >
                         <UInput
                             v-model="estado.host"
@@ -279,6 +384,7 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         />
                     </UFormField>
                     <UFormField
+                        v-if="conRadius"
                         label="IP del NAS"
                         name="nas_ip"
                         required
@@ -286,7 +392,9 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     >
                         <UInput
                             v-model="estado.nas_ip"
+                            placeholder="10.0.0.1"
                             class="w-full font-mono"
+                            data-prueba="router-editar-nas"
                         />
                     </UFormField>
                 </div>
@@ -301,17 +409,6 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         : 'El host y la IP del NAS son la IP del túnel. No los cambies a mano.'"
                     data-prueba="aviso-tunel"
                 />
-                <UFormField
-                    label="Seguridad"
-                    name="modo_seguridad"
-                    required
-                >
-                    <USelect
-                        v-model="estado.modo_seguridad"
-                        :items="itemsSeguridad"
-                        class="w-full"
-                    />
-                </UFormField>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <UFormField
                         label="Usuario de la API"
@@ -349,6 +446,7 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     </UFormField>
                 </div>
                 <UFormField
+                    v-if="conRadius"
                     label="Secreto RADIUS"
                     name="radius_secret"
                     :hint="actual.tiene_radius_secret ? 'Guardado' : 'Sin guardar'"

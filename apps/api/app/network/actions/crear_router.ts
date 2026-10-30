@@ -9,6 +9,7 @@ import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
 import { X509Certificate } from 'node:crypto'
 import { MENSAJE_PROPOSITO } from '#network/diagnostico_routeros'
+import { MENSAJE_NAS_IP_REQUERIDA } from '#network/validators'
 
 /**
  * La `api_ca` debe ser el certificado de una CA (`basicConstraints CA:TRUE`): pegar el del servicio
@@ -49,7 +50,8 @@ export interface DatosRouter {
     api_usuario?: string | null
     api_password?: string | null
     radius_secret?: string | null
-    nas_ip?: string
+    /** null o ausente solo en un router sin RADIUS (`modo_seguridad = 'api'`) */
+    nas_ip?: string | null
     modo_seguridad?: 'radius' | 'api'
     capacidad_bajada_kbps?: number | null
     capacidad_subida_kbps?: number | null
@@ -74,7 +76,6 @@ export interface EntradaCrearRouter extends DatosRouter {
     externo?: IdExterno
     nombre: string
     host: string
-    nas_ip: string
 }
 
 /** `"lat, lng"` → `"lat,lng"` (sin espacio), tal como sale en la API. El validador ya revisó el rango. */
@@ -130,15 +131,38 @@ export function auditableRouter(router: RouterVista) {
     }
 }
 
+/**
+ * Un router `radius` necesita su `nas_ip` (FreeRADIUS lo reconoce por ella y el CoA va a ella); uno
+ * `api` (sin RADIUS) no. 422 en `nas_ip`. La base lo respalda con `routers_nas_ip_radius_check`.
+ */
+export function exigirNasIpSiRadius(modo: 'radius' | 'api', nasIp: string | null | undefined) {
+    if (modo === 'radius' && !nasIp) {
+        throw new ValidacionFallida([
+            { field: 'nas_ip', rule: 'required', message: MENSAJE_NAS_IP_REQUERIDA },
+        ])
+    }
+}
+
 /** Campos del router que FreeRADIUS necesita (dirección del NAS y secreto). */
 const CAMPOS_RADIUS = ['nas_ip', 'radius_secret'] as const
 
+/** En la edición también el modo: pasar a `api` saca al router de los clients de FreeRADIUS. */
+export const CAMPOS_RADIUS_EDICION = [...CAMPOS_RADIUS, 'modo_seguridad'] as const
+
+export type CampoRadius = (typeof CAMPOS_RADIUS_EDICION)[number]
+
 /**
  * Emite `router.radius_cambiado` si entre los campos auditados (`registrarCambios`) cambió
- * `nas_ip` o `radius_secret`: A2 regenera el cliente de FreeRADIUS. Nunca lleva el secreto.
+ * `nas_ip` o `radius_secret` (en la edición, también `modo_seguridad`): A2 regenera los clientes de
+ * FreeRADIUS, que solo incluyen routers `radius`. Nunca lleva el secreto.
  */
-export async function avisarRadius(t: Transaccion, router: RouterVista, cambiados: string[]) {
-    const campos = CAMPOS_RADIUS.filter((campo) => cambiados.includes(campo))
+export async function avisarRadius(
+    t: Transaccion,
+    router: RouterVista,
+    cambiados: string[],
+    vigilados: readonly CampoRadius[] = CAMPOS_RADIUS,
+) {
+    const campos = vigilados.filter((campo) => cambiados.includes(campo))
     if (campos.length === 0) return
     await t.emit('router.radius_cambiado', {
         router_id: router.id,
@@ -149,6 +173,8 @@ export async function avisarRadius(t: Transaccion, router: RouterVista, cambiado
 
 /**
  * Alta de un router MikroTik (NAS RADIUS y API REST), con su ubicación opcional (`coordenadas`).
+ * Con `modo_seguridad = 'api'` es un router sin RADIUS: `nas_ip` y `radius_secret` son opcionales;
+ * con `radius` (por defecto) la `nas_ip` es obligatoria (422).
  * 409 `router_duplicado` si otro router activo tiene el mismo extremo de la API (`host`/`api_url`
  * con su puerto) o cualquiera la misma `nas_ip` (`contratos/routers.md`): el mismo equipo no se
  * registra dos veces.
@@ -163,10 +189,11 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
         }
         await exigirZona(t.trx, datos.zona_id)
         exigirCaValida(datos.api_ca)
+        exigirNasIpSiRadius(datos.modo_seguridad ?? 'radius', datos.nas_ip)
         // 409 `router_duplicado` si ese MikroTik ya está registrado (`contratos/routers.md`)
         await exigirRouterUnico(
             t.trx,
-            { host: datos.host, api_url: datos.api_url ?? null, nas_ip: datos.nas_ip, serial: null },
+            { host: datos.host, api_url: datos.api_url ?? null, nas_ip: datos.nas_ip ?? null, serial: null },
             { api: datos.activo !== false, nas_ip: true, serial: false },
         )
         const [fila] = (await t.trx
