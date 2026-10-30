@@ -62,6 +62,7 @@ Una **estrategia** es un objeto con cuatro capas:
 | `rafaga` | `burst-*` del plan en la cola del cliente; en PCQ `pcq-burst-rate`, `pcq-burst-threshold`, `pcq-burst-time` | Sin ráfaga aunque el plan la defina |
 | `prioridad` | `priority` del plan (1–8) en el cliente y en los padres | 8 en todo |
 | `garantizado` | `limit-at` (CIR) en el cliente y en los padres | `limit-at=0` |
+| `qos` | Prioridad por clases dentro del plan (`contratos/qos.md`): hojas por clase bajo el nodo del plan y mangle de clasificación. Solo `arbol_pcq` y con `excluir_fasttrack` (422 `qos_familia`, `qos_fasttrack`). **Por defecto `false`** | Árbol de siempre (una hoja PCQ por plan) |
 | `excluir_fasttrack` | El reconciliador verifica que ninguna regla `fasttrack-connection` (IPv4 e IPv6) quede antes de las reglas `argosisp:top sin fasttrack` de `lab.rsc`; si no, fila `operacion = verificar_fasttrack` (`ok=false`) en `audit.red` y `routeros.fallido` | No se verifica (advertencia: con FastTrack las colas no limitan lo acelerado) |
 
 ArgosIsp no escribe reglas de filtro (su orden lo pone la plantilla `lab.rsc`); solo verifica.

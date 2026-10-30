@@ -16,6 +16,7 @@ import {
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
 import { APLICACIONES, PADRES, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { PROTOCOLOS_QOS, QOS_MAX_CLASES, QOS_MAX_REGLAS } from '#network/qos'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
 /*
@@ -800,6 +801,8 @@ const extrasEstrategia = () =>
         prioridad: vine.boolean(),
         garantizado: vine.boolean(),
         excluir_fasttrack: vine.boolean(),
+        /** ausente = conserva el valor actual del router (`contratos/qos.md` §2) */
+        qos: vine.boolean().optional(),
     })
 
 const estrategiaCompleta = () =>
@@ -822,6 +825,7 @@ const estrategiaParcial = () =>
                     prioridad: vine.boolean().nullable().optional(),
                     garantizado: vine.boolean().nullable().optional(),
                     excluir_fasttrack: vine.boolean().nullable().optional(),
+                    qos: vine.boolean().nullable().optional(),
                 })
                 .nullable()
                 .optional(),
@@ -881,3 +885,92 @@ export const vistaPreviaEstrategiaValidator = vine.compile(
 )
 
 export const sincronizarPlanValidator = vine.compile(vine.object({ router_id: idEntidad().optional() }))
+
+/*
+|--------------------------------------------------------------------------
+| QoS por clases (A2, `contratos/qos.md`)
+|--------------------------------------------------------------------------
+*/
+
+const reglaQos = () =>
+    vine.object({
+        protocolo: vine.enum(PROTOCOLOS_QOS).nullable().optional(),
+        puertos_destino: vine
+            .string()
+            .trim()
+            .maxLength(200)
+            .nullable()
+            .optional()
+            .meta({ description: 'n o n-m separados por coma (máx. 15); exige tcp o udp' }),
+        puertos_origen: vine.string().trim().maxLength(200).nullable().optional(),
+        dscp: vine.number().withoutDecimals().range([0, 63]).nullable().optional(),
+        lista_destino: vine
+            .string()
+            .trim()
+            .maxLength(63)
+            .regex(/^[A-Za-z0-9._-]+$/)
+            .nullable()
+            .optional()
+            .meta({
+                description: 'address-list de destino (IPv4 e IPv6, mismo nombre) que mantiene el admin',
+            }),
+    })
+
+const camposClaseQos = {
+    nombre: vine.string().trim().minLength(1).maxLength(80),
+    orden: vine.number().withoutDecimals().range([1, 1000]),
+    prioridad: vine.number().withoutDecimals().range([1, 8]),
+    garantizado_pct: vine.number().withoutDecimals().range([0, 100]).optional(),
+    tope_pct: vine.number().withoutDecimals().range([1, 100]).nullable().optional(),
+    reglas: vine.array(reglaQos()).maxLength(QOS_MAX_REGLAS).optional(),
+    bytes_minimo: vine
+        .number()
+        .withoutDecimals()
+        .range([1, 1_000_000_000_000])
+        .nullable()
+        .optional()
+        .meta({ description: 'Clase de descargas: connection-bytes mínimo para reclasificar' }),
+    reclasifica_de: vine.array(idEntidad()).maxLength(QOS_MAX_CLASES).optional(),
+}
+
+export const listarPerfilesQosValidator = vine.compile(vine.object({ ...reglasPaginacion }))
+
+export const crearPerfilQosValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(1).maxLength(120),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        empresa_id: idEntidad().nullable().optional(),
+        copiar_de: idEntidad().optional(),
+    }),
+)
+
+export const crearClaseQosValidator = vine.compile(vine.object(camposClaseQos))
+
+export const editarClaseQosValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: camposClaseQos.nombre.clone().optional(),
+        orden: camposClaseQos.orden.clone().optional(),
+        prioridad: camposClaseQos.prioridad.clone().optional(),
+        garantizado_pct: vine.number().withoutDecimals().range([0, 100]).optional(),
+        tope_pct: vine.number().withoutDecimals().range([1, 100]).nullable().optional(),
+        reglas: vine.array(reglaQos()).maxLength(QOS_MAX_REGLAS).optional(),
+        bytes_minimo: vine.number().withoutDecimals().range([1, 1_000_000_000_000]).nullable().optional(),
+        reclasifica_de: vine.array(idEntidad()).maxLength(QOS_MAX_CLASES).optional(),
+    }),
+)
+
+export const estadoClaseQosValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+    }),
+)
+
+export const asignarPerfilQosValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        qos_perfil_id: idEntidad().nullable().meta({ description: 'null = el perfil predeterminado' }),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+    }),
+)

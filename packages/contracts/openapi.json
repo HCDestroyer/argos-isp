@@ -102,6 +102,9 @@
       "name": "promesas"
     },
     {
+      "name": "qos"
+    },
+    {
       "name": "red"
     },
     {
@@ -47841,6 +47844,16 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "qos": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [],
@@ -47951,6 +47964,16 @@
                                     "type": "null"
                                   }
                                 ]
+                              },
+                              "qos": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [],
@@ -48053,6 +48076,16 @@
                                 ]
                               },
                               "excluir_fasttrack": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "qos": {
                                 "anyOf": [
                                   {
                                     "type": "boolean"
@@ -55071,6 +55104,1005 @@
         "x-implementado": true
       }
     },
+    "/api/v1/qos/clases/{id}": {
+      "put": {
+        "operationId": "qosEditarClase",
+        "summary": "Editar una clase de QoS",
+        "description": "Lo ausente queda igual. 409 si la `version` no coincide; 422 como al crear.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "garantizado_pct": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "tope_pct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "reglas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "protocolo": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "tcp",
+                                "udp",
+                                "icmp"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "puertos_destino": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200,
+                          "description": "n o n-m separados por coma (máx. 15); exige tcp o udp"
+                        },
+                        "puertos_origen": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200
+                        },
+                        "dscp": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 0,
+                          "maximum": 63
+                        },
+                        "lista_destino": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 63,
+                          "pattern": "^[A-Za-z0-9._-]+$",
+                          "description": "address-list de destino (IPv4 e IPv6, mismo nombre) que mantiene el admin"
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10
+                  },
+                  "bytes_minimo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 1000000000000
+                  },
+                  "reclasifica_de": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clase actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaseQos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/qos/clases/{id}/activar": {
+      "post": {
+        "operationId": "qosActivarClase",
+        "summary": "Volver a activar una clase de QoS",
+        "description": "Revisa el perfil y el costo (422). Ya activa: 200 sin cambios.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clase activada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaseQos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/qos/clases/{id}/desactivar": {
+      "post": {
+        "operationId": "qosDesactivarClase",
+        "summary": "Desactivar una clase de QoS (no se borra)",
+        "description": "«resto» no se desactiva (422 `qos_resto`). Ya inactiva: 200 sin cambios.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clase desactivada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaseQos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/qos/perfiles": {
+      "get": {
+        "operationId": "qosPerfiles",
+        "summary": "Perfiles de QoS por clases (comunes y de la empresa activa)",
+        "description": "Cada perfil con sus clases (activas primero, por orden) y sus advertencias.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de perfiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PerfilQos"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "qosCrearPerfil",
+        "summary": "Crear un perfil de QoS copiando las clases de otro (por defecto, el predeterminado)",
+        "description": "Sin `empresa_id`, común a todas las empresas (solo con alcance global; 403 `empresa_no_permitida`). 409 `qos_nombre_duplicado`.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "copiar_de": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Perfil creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilQos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/qos/perfiles/{id}": {
+      "get": {
+        "operationId": "qosVerPerfil",
+        "summary": "Ver un perfil de QoS con su costo en cada router que lo usa",
+        "description": "`routers[]`: routers activos con este perfil (el suyo o el predeterminado), cuántos planes priorizan por clases y el costo (hojas del árbol, reglas de mangle, tipos de cola) contra el límite.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilQosDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/qos/perfiles/{id}/clases": {
+      "post": {
+        "operationId": "qosCrearClase",
+        "summary": "Agregar una clase a un perfil de QoS",
+        "description": "Valida el perfil como quedaría y el costo en cada router que lo usa (422 `qos_resto`, `qos_max_clases`, `qos_garantizado`, `qos_reglas`, `qos_puertos`, `qos_reclasifica`, `qos_costo`). Emite `qos.config_cambiada`: los routers se reconcilian solos.",
+        "tags": [
+          "qos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "garantizado_pct": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "tope_pct": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "reglas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "protocolo": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "tcp",
+                                "udp",
+                                "icmp"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "puertos_destino": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200,
+                          "description": "n o n-m separados por coma (máx. 15); exige tcp o udp"
+                        },
+                        "puertos_origen": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200
+                        },
+                        "dscp": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 0,
+                          "maximum": 63
+                        },
+                        "lista_destino": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 63,
+                          "pattern": "^[A-Za-z0-9._-]+$",
+                          "description": "address-list de destino (IPv4 e IPv6, mismo nombre) que mantiene el admin"
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10
+                  },
+                  "bytes_minimo": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 1000000000000,
+                    "description": "Clase de descargas: connection-bytes mínimo para reclasificar"
+                  },
+                  "reclasifica_de": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "orden",
+                  "prioridad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Clase creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaseQos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/red/control-velocidad/matriz": {
       "get": {
         "operationId": "redControlVelocidadMatriz",
@@ -57965,6 +58997,8 @@
                         "promesas.ver",
                         "proveedores.editar",
                         "proveedores.ver",
+                        "qos.gestionar",
+                        "qos.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.editar",
@@ -58308,6 +59342,8 @@
                         "promesas.ver",
                         "proveedores.editar",
                         "proveedores.ver",
+                        "qos.gestionar",
+                        "qos.ver",
                         "red.ver",
                         "redes.crear",
                         "redes.editar",
@@ -59481,6 +60517,9 @@
                               },
                               "excluir_fasttrack": {
                                 "type": "boolean"
+                              },
+                              "qos": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -59546,6 +60585,9 @@
                               },
                               "excluir_fasttrack": {
                                 "type": "boolean"
+                              },
+                              "qos": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -59610,6 +60652,9 @@
                                 "type": "boolean"
                               },
                               "excluir_fasttrack": {
+                                "type": "boolean"
+                              },
+                              "qos": {
                                 "type": "boolean"
                               }
                             },
@@ -60774,6 +61819,133 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/qos-perfil": {
+      "post": {
+        "operationId": "routersQosPerfil",
+        "summary": "Elegir el perfil de QoS por clases del router (null = el predeterminado)",
+        "description": "El perfil debe ser común o de la empresa sugerida del router (422 `qos_empresa`) y caber en el límite de hojas (422 `qos_costo`). Emite `qos.config_cambiada`; el router se reconcilia si algún plan usa qos.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "qos_perfil_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "null = el perfil predeterminado"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Router con el perfil nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Router"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso qos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "qos.gestionar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/reconciliar": {
       "post": {
         "operationId": "routersReconciliar",
@@ -61587,6 +62759,9 @@
                               },
                               "excluir_fasttrack": {
                                 "type": "boolean"
+                              },
+                              "qos": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -61652,6 +62827,9 @@
                               },
                               "excluir_fasttrack": {
                                 "type": "boolean"
+                              },
+                              "qos": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -61716,6 +62894,9 @@
                                 "type": "boolean"
                               },
                               "excluir_fasttrack": {
+                                "type": "boolean"
+                              },
+                              "qos": {
                                 "type": "boolean"
                               }
                             },
@@ -61860,6 +63041,16 @@
                                           "type": "null"
                                         }
                                       ]
+                                    },
+                                    "qos": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
                                     }
                                   },
                                   "required": [],
@@ -61970,6 +63161,16 @@
                                           "type": "null"
                                         }
                                       ]
+                                    },
+                                    "qos": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
                                     }
                                   },
                                   "required": [],
@@ -62072,6 +63273,16 @@
                                       ]
                                     },
                                     "excluir_fasttrack": {
+                                      "anyOf": [
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "qos": {
                                       "anyOf": [
                                         {
                                           "type": "boolean"
@@ -67883,6 +69094,8 @@
                             "promesas.ver",
                             "proveedores.editar",
                             "proveedores.ver",
+                            "qos.gestionar",
+                            "qos.ver",
                             "red.ver",
                             "redes.crear",
                             "redes.editar",
@@ -75309,6 +76522,99 @@
           "saldo_cubierto": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Cumplida o incumplida con regla_cumplimiento=facturas: saldo que les quedaba a las facturas cubiertas"
+          }
+        }
+      },
+      "ClaseQos": {
+        "type": "object",
+        "required": [
+          "id",
+          "perfil_id",
+          "nombre",
+          "orden",
+          "prioridad",
+          "garantizado_pct",
+          "tope_pct",
+          "es_resto",
+          "reglas",
+          "bytes_minimo",
+          "reclasifica_de",
+          "activa",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "perfil_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "orden": {
+            "type": "integer",
+            "description": "Orden de clasificación: la primera clase que coincide se queda la conexión"
+          },
+          "prioridad": {
+            "type": "integer",
+            "description": "`priority` de la hoja del árbol (1 = primero)"
+          },
+          "garantizado_pct": {
+            "type": "integer",
+            "description": "`limit-at` de la hoja = % de la capacidad del nodo del plan"
+          },
+          "tope_pct": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Tope por cliente (pcq-rate = MIR × %) y en total (max-limit de la hoja); null = sin tope"
+          },
+          "es_resto": {
+            "type": "boolean",
+            "description": "Lo que no coincide con ninguna clase (una por perfil)"
+          },
+          "reglas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaQos"
+            }
+          },
+          "bytes_minimo": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Clase de descargas: reclasifica conexiones que pasaron estos bytes (connection-bytes)"
+          },
+          "reclasifica_de": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Clases de las que una clase de descargas toma conexiones"
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -83401,7 +84707,8 @@
                 "type": "boolean",
                 "description": "Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack"
               }
-            }
+            },
+            "description": "Además `qos` (boolean, por defecto false): prioridad por clases en el árbol (contratos/qos.md); la API siempre lo envía"
           }
         }
       },
@@ -83912,6 +85219,12 @@
                       "boolean",
                       "null"
                     ]
+                  },
+                  "qos": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -83995,6 +85308,12 @@
                       "boolean",
                       "null"
                     ]
+                  },
+                  "qos": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -84074,6 +85393,12 @@
                     ]
                   },
                   "excluir_fasttrack": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "qos": {
                     "type": [
                       "boolean",
                       "null"
@@ -87341,7 +88666,8 @@
                     "rafaga",
                     "prioridad",
                     "garantizado",
-                    "excluir_fasttrack"
+                    "excluir_fasttrack",
+                    "qos"
                   ]
                 },
                 "por_defecto": {
@@ -88742,6 +90068,8 @@
           "promesas.ver",
           "proveedores.editar",
           "proveedores.ver",
+          "qos.gestionar",
+          "qos.ver",
           "red.ver",
           "redes.crear",
           "redes.editar",
@@ -88978,6 +90306,8 @@
           "Ver promesas de pago",
           "Crear y editar proveedores",
           "Ver proveedores",
+          "Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router",
+          "Ver los perfiles y clases de QoS (prioridad por protocolo en el árbol)",
           "Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)",
           "Crear redes IPv4",
           "Editar redes IPv4: nombre, red, gateway, rango y DNS",
@@ -90475,6 +91805,174 @@
           },
           "ip_tunel": {
             "type": "string"
+          }
+        }
+      },
+      "PerfilQos": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "descripcion",
+          "predeterminado",
+          "clases",
+          "advertencias",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = común a todas las empresas"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predeterminado": {
+            "type": "boolean",
+            "description": "El de los routers sin qos_perfil_id"
+          },
+          "clases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClaseQos"
+            }
+          },
+          "advertencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "regla",
+                "mensaje"
+              ],
+              "properties": {
+                "regla": {
+                  "type": "string"
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "tope_por_cliente, orden_repetido"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PerfilQosDetalle": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "descripcion",
+          "predeterminado",
+          "clases",
+          "advertencias",
+          "version",
+          "created_at",
+          "updated_at",
+          "routers"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = común a todas las empresas"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "predeterminado": {
+            "type": "boolean",
+            "description": "El de los routers sin qos_perfil_id"
+          },
+          "clases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClaseQos"
+            }
+          },
+          "advertencias": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "regla",
+                "mensaje"
+              ],
+              "properties": {
+                "regla": {
+                  "type": "string"
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "tope_por_cliente, orden_repetido"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsoPerfilQos"
+            },
+            "description": "Routers activos que usan el perfil y su costo"
           }
         }
       },
@@ -95696,6 +97194,59 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReglaQos": {
+        "type": "object",
+        "required": [
+          "protocolo",
+          "puertos_destino",
+          "puertos_origen",
+          "dscp",
+          "lista_destino"
+        ],
+        "properties": {
+          "protocolo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "tcp",
+              "udp",
+              "icmp",
+              null
+            ],
+            "description": "tcp, udp, icmp o null (cualquiera)"
+          },
+          "puertos_destino": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`dst-port`: n o n-m separados por coma"
+          },
+          "puertos_origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`src-port`"
+          },
+          "dscp": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "0–63"
+          },
+          "lista_destino": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`dst-address-list` que mantiene el admin en el router"
           }
         }
       },
@@ -101315,6 +102866,8 @@
               "promesas.ver",
               "proveedores.editar",
               "proveedores.ver",
+              "qos.gestionar",
+              "qos.ver",
               "red.ver",
               "redes.crear",
               "redes.editar",
@@ -101487,6 +103040,8 @@
               "ipv6.ver",
               "planes.sincronizar",
               "planes.ver",
+              "qos.gestionar",
+              "qos.ver",
               "red.ver",
               "redes.crear",
               "redes.editar",
@@ -101673,6 +103228,7 @@
               "plantillas.ver",
               "promesas.ver",
               "proveedores.ver",
+              "qos.ver",
               "red.ver",
               "redes.ver",
               "reportes.ver",
@@ -101878,6 +103434,14 @@
             ],
             "pattern": "^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$",
             "description": "Ubicación del router \"lat,lng\" en grados decimales, sin espacios, el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
+          },
+          "qos_perfil_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Perfil de QoS por clases del router (contratos/qos.md); null = el predeterminado. Se cambia con POST /routers/:id/qos-perfil. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan"
           },
           "version": {
             "type": "integer",
@@ -105048,6 +106612,50 @@
           },
           "absorbido": {
             "$ref": "#/components/schemas/Router"
+          }
+        }
+      },
+      "UsoPerfilQos": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "nombre",
+          "planes_qos",
+          "clases",
+          "hojas",
+          "reglas_mangle",
+          "tipos_cola",
+          "limite_hojas"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "planes_qos": {
+            "type": "integer",
+            "description": "Planes del router con el extra qos"
+          },
+          "clases": {
+            "type": "integer"
+          },
+          "hojas": {
+            "type": "integer",
+            "description": "Hojas de /queue/tree (planes × 2 estados × 2 sentidos × clases)"
+          },
+          "reglas_mangle": {
+            "type": "integer",
+            "description": "Reglas de mangle por familia (IPv4; IPv6 igual)"
+          },
+          "tipos_cola": {
+            "type": "integer",
+            "description": "Tipos PCQ extra (clases con tope)"
+          },
+          "limite_hojas": {
+            "type": "integer"
           }
         }
       },

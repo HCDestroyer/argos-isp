@@ -46,7 +46,7 @@ const OPCIONES: OpcionesDispatcher = {
     red: { interfaz_clientes: 'ether-clientes', dhcp_servidor: 'dhcp-clientes' },
 }
 
-const EXTRAS = { rafaga: true, prioridad: true, garantizado: true, excluir_fasttrack: true }
+const EXTRAS = { rafaga: true, prioridad: true, garantizado: true, excluir_fasttrack: true, qos: false }
 const e = (
     aplicacion: Estrategia['aplicacion'],
     padre: Estrategia['padre'],

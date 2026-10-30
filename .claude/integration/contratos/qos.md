@@ -83,7 +83,7 @@ Advertencias (no bloquean; salen en la vista del perfil): `tope_por_cliente` (Σ
 
 - La regla 6 (plan consistente) ya cubre `qos`: en el árbol todos los tipos de un plan comparten la rama, así que `qos` es el mismo en PPPoE, IP estática y DHCP fija del plan.
 - `matriz.extras[]` publica `{ valor: "qos", por_defecto: false }`.
-- **Esquema:** en `EstrategiaVelocidad.extras`, `qos` es opcional en la respuesta (ausente = `false`) para no romper a los clientes que ya arman extras sin él; la API siempre lo devuelve.
+- **Esquema:** la API siempre devuelve `extras.qos`, pero el esquema de respuesta `EstrategiaVelocidad.extras` todavía no lo declara: agregarlo (aun opcional) rompe los `Record<Extra, …>` del panel. Se agrega en la misma PR en que A4 lo use (fila en `a2.md`). En las peticiones (`cambiar-estrategia-velocidad`, `vista-previa-estrategia`, excepción del plan) y en la excepción parcial (`PlanRouter`) sí está, opcional.
 
 ## 3. Qué se escribe en RouterOS 7
 
@@ -161,15 +161,16 @@ QoS solo depende de que la IP del cliente esté en `argosisp-plan-<id>[-limitado
 | --- | --- | --- | --- |
 | `GET /qos/perfiles?cursor=&limit=` | `qos.ver` | — | `{ data: PerfilQos[], nextCursor }` (comunes y de la empresa activa) |
 | `GET /qos/perfiles/:id` | `qos.ver` | — | `PerfilQos` con `clases[]`, `advertencias[]` y `routers[]` (`router_id`, `nombre`, `planes_qos`, `hojas`, `reglas_mangle`, `limite_hojas`) |
-| `POST /qos/perfiles` | `qos.gestionar` | `qos.crear_perfil` | 201 `PerfilQos`. `{ nombre, descripcion?, empresa_id?, copiar_de? }`: copia las clases de `copiar_de` (por defecto, del predeterminado) |
-| `POST /qos/perfiles/:id/clases` | `qos.gestionar` | `qos.crear_clase` | 201 `ClaseQos` |
-| `PUT /qos/clases/:id` | `qos.gestionar` | `qos.editar_clase` | `ClaseQos`; `version` obligatoria (409) |
-| `POST /qos/clases/:id/desactivar` | `qos.gestionar` | `qos.desactivar_clase` | `ClaseQos`; `{ version, motivo? }`. `resto` no se desactiva (422 `qos_resto`). Ya inactiva: 200 sin cambios |
-| `POST /qos/clases/:id/activar` | `qos.gestionar` | `qos.activar_clase` | `ClaseQos`; revisa §1 y el costo |
-| `POST /routers/:id/qos-perfil` | `qos.gestionar` | `qos.asignar_perfil` | `Router` (con `qos_perfil_id`); `{ version, qos_perfil_id: id \| null, motivo? }` |
+| `POST /qos/perfiles` | `qos.gestionar` | `CrearPerfilQos` | 201 `PerfilQos`. `{ nombre, descripcion?, empresa_id?, copiar_de? }`: copia las clases activas de `copiar_de` (por defecto, del predeterminado). 409 `qos_nombre_duplicado` |
+| `POST /qos/perfiles/:id/clases` | `qos.gestionar` | `CrearClaseQos` | 201 `ClaseQos`. 409 `qos_nombre_duplicado` |
+| `PUT /qos/clases/:id` | `qos.gestionar` | `EditarClaseQos` | `ClaseQos`; `version` obligatoria (409); lo ausente queda igual |
+| `POST /qos/clases/:id/desactivar` | `qos.gestionar` | `DesactivarClaseQos` | `ClaseQos`; `{ version, motivo? }`. `resto` no se desactiva (422 `qos_resto`). Ya inactiva: 200 sin cambios |
+| `POST /qos/clases/:id/activar` | `qos.gestionar` | `ActivarClaseQos` | `ClaseQos`; revisa §1 y el costo |
+| `POST /routers/:id/qos-perfil` | `qos.gestionar` | `AsignarPerfilQos` | `Router` (con `qos_perfil_id`); `{ version, qos_perfil_id: id \| null, motivo? }` |
 
-- Permisos nuevos en `apps/api/app/core/permisos.ts`: **`qos.ver`** (admin, técnico y lectura) y **`qos.gestionar`** (admin y técnico). El permiso de la ruta es `qos.gestionar`; el nombre de la acción en `audit.acciones` es el de la tabla.
-- Cada acción audita con diff en `audit.cambios` (`qos_perfil`, `qos_clase`, `router`) y, si cambia algo que llega al router, emite **`qos.config_cambiada`** por outbox. Sin cambios: 200 sin evento.
+- Permisos nuevos en `apps/api/app/core/permisos.ts`: **`qos.ver`** (admin, técnico y lectura) y **`qos.gestionar`** (admin y técnico). Todas las acciones de escritura se llaman `qos.gestionar` en `audit.acciones` (permiso = nombre de la acción, como las dos de `routers.cambiar_control_velocidad`); la entidad (`qos_perfil`, `qos_clase`, `router`) dice qué se cambió.
+- Cada acción audita con diff en `audit.cambios` (`qos_perfil`, `qos_clase`, `router`) y, si cambia algo que llega al router (clases, perfil de un router), emite **`qos.config_cambiada`** por outbox. Crear un perfil no emite (ningún router lo usa todavía). Sin cambios: 200 sin evento.
+- `extras.qos` en `POST /routers/:id/cambiar-estrategia-velocidad` y en la vista previa es **opcional**: si no viene, se conserva el valor actual del router (un cliente que todavía no conoce `qos` no lo apaga al cambiar otra capa).
 - Perfiles comunes (`empresa_id` null) y el predeterminado: solo con alcance global (403 `empresa_no_permitida`).
 - La vista previa del cambio de estrategia (`POST /routers/:id/vista-previa-estrategia`) ya incluye lo de QoS (crear/actualizar/borrar en `/ip/firewall/mangle`, `/ipv6/firewall/mangle`, `/queue/tree`, `/queue/type`) cuando la propuesta prende o apaga `qos`, y la matriz da el 422 `qos_*`.
 
@@ -179,7 +180,7 @@ QoS solo depende de que la IP del cliente esté en `argosisp-plan-<id>[-limitado
 | --- | --- |
 | `perfil_id` | perfil afectado |
 | `empresa_id` | del perfil (null = común) |
-| `clase_id` | o null (alta de perfil, perfil de un router) |
+| `clase_id` | o null (perfil de un router) |
 | `router_id` | solo en `qos.asignar_perfil`; si no, null |
 | `campos[]` | lo que cambió (`nombre`, `orden`, `prioridad`, `garantizado_pct`, `tope_pct`, `reglas`, `bytes_minimo`, `reclasifica_de`, `activa`, `qos_perfil_id`) |
 | `routers[]` | routers activos que usan el perfil y tienen algún plan con `qos` (los que hay que reconciliar) |

@@ -279,6 +279,18 @@ export interface CatalogoEventos {
      * (`routers.cambiar_control_velocidad`, `contratos/control-velocidad.md` §4). A2 la ejecuta por
      * lotes sin cortar (crear → mover → borrar); `aaa-cache` reescribe `aaa:user:*` del router o del plan.
      */
+    /**
+     * Cambió un perfil de QoS por clases o el perfil de un router (`contratos/qos.md` §4). `routers`:
+     * los que lo usan y tienen algún plan con `qos`; el grupo `routeros` los reconcilia.
+     */
+    'qos.config_cambiada': {
+        perfil_id: number
+        empresa_id: number | null
+        clase_id: number | null
+        router_id: number | null
+        campos: string[]
+        routers: number[]
+    }
     'router.estrategia_cambiada': {
         router_id: number
         /** null = la estrategia del router; un id = la excepción de ese plan en el router */
@@ -1132,6 +1144,7 @@ export const EVENTOS = [
     'servicio.eliminado',
     'router.eliminado',
     'router.estrategia_cambiada',
+    'qos.config_cambiada',
     'router.conexion_generada',
     'router.conexion_registrada',
     'router.conexion_rotada',

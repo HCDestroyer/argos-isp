@@ -28,6 +28,9 @@ import {
     leerCorteRouter,
     pideFasttrack,
     enTransicion,
+    esObjetoQos,
+    registrarVerificacionQos,
+    verificarQos,
     fabricaPorDefecto,
     leerVelocidadRouter,
     limpiarVelocidad,
@@ -45,7 +48,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos'
     evento_id?: string | null
 }
 
@@ -243,6 +246,24 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     salida.correcciones.push(
                         ...(await limpiarVelocidad(cliente, velocidad, despues, ctxPlan)),
                     )
+                }
+                // QoS por clases: se vuelve a leer y se compara con lo deseado (contratos/qos.md §6).
+                if (velocidad) {
+                    const cambiosQos = salida.correcciones.filter((c) =>
+                        esObjetoQos(
+                            c.ruta,
+                            c.ruta === '/queue/type' ? { name: c.comment } : { comment: c.comment },
+                        ),
+                    ).length
+                    const hayQos = velocidad.presentes.some((o) => esObjetoQos(o.ruta, o.clave))
+                    if (hayQos || cambiosQos > 0) {
+                        const errorQos = await registrarVerificacionQos(
+                            t,
+                            { router_id: input.router_id, evento_id: input.evento_id ?? null, cambiosQos },
+                            verificarQos(velocidad, await leerVelocidadRouter(cliente)),
+                        )
+                        if (errorQos) salida.errores_velocidad.push(errorQos)
+                    }
                 }
             } finally {
                 cliente.cerrar()
