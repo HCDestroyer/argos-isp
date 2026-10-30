@@ -58069,7 +58069,7 @@
                       "null"
                     ],
                     "pattern": "^-?(?:90(?:\\.0+)?|[1-8]?\\d(?:\\.\\d{1,15})?), ?-?(?:180(?:\\.0+)?|(?:1[0-7]\\d|[1-9]?\\d)(?:\\.\\d{1,15})?)$",
-                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180; 6 decimales); null la quita"
+                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita"
                   },
                   "control_velocidad": {
                     "type": "string",
@@ -58379,7 +58379,7 @@
                       "null"
                     ],
                     "pattern": "^-?(?:90(?:\\.0+)?|[1-8]?\\d(?:\\.\\d{1,15})?), ?-?(?:180(?:\\.0+)?|(?:1[0-7]\\d|[1-9]?\\d)(?:\\.\\d{1,15})?)$",
-                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180; 6 decimales); null la quita"
+                    "description": "Ubicación del router \"lat,lng\" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita"
                   },
                   "capacidad_bajada_kbps": {
                     "type": [
@@ -98314,7 +98314,7 @@
               "null"
             ],
             "pattern": "^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$",
-            "description": "Ubicación del router \"lat,lng\" en grados decimales (hasta 6 decimales, sin ceros de sobra), el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
+            "description": "Ubicación del router \"lat,lng\" en grados decimales, sin espacios, el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan"
           },
           "version": {
             "type": "integer",

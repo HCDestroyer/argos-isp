@@ -61,7 +61,7 @@ export interface DatosRouter {
     empresa_sugerida_id?: number | null
     /** zona del router (opcional) */
     zona_id?: number | null
-    /** ubicación `"lat,lng"` (Iris 0.3.1); se guarda en `latitud`/`longitud`; null la quita */
+    /** ubicación `"lat,lng"` (Iris 0.3.1), en `network.routers.coordenadas`; null la quita */
     coordenadas?: string | null
     activo?: boolean
 }
@@ -76,14 +76,9 @@ export interface EntradaCrearRouter extends DatosRouter {
     nas_ip: string
 }
 
-/** `"lat,lng"` → columnas `latitud`/`longitud` (null quita las dos). El validador ya revisó el rango. */
-export function latitudLongitud(coordenadas: string | null): {
-    latitud: string | null
-    longitud: string | null
-} {
-    if (coordenadas === null) return { latitud: null, longitud: null }
-    const [latitud, longitud] = coordenadas.split(',').map((parte) => parte.trim())
-    return { latitud: latitud!, longitud: longitud! }
+/** `"lat, lng"` → `"lat,lng"` (sin espacio), tal como sale en la API. El validador ya revisó el rango. */
+export function normalizarCoordenadas(coordenadas: string | null): string | null {
+    return coordenadas === null ? null : coordenadas.replace(/\s+/g, '')
 }
 
 /** Nunca se guarda una credencial vacía cifrada. */
@@ -98,7 +93,7 @@ export function columnasRouter(datos: DatosRouter): Record<string, unknown> {
     for (const [clave, valor] of Object.entries(datos)) {
         if (valor === undefined) continue
         if (clave === 'coordenadas') {
-            Object.assign(columnas, latitudLongitud(valor as string | null))
+            columnas.coordenadas = normalizarCoordenadas(valor as string | null)
             continue
         }
         if (CREDENCIALES.has(clave) && valor === '') continue

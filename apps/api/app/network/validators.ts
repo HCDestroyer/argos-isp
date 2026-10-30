@@ -85,7 +85,7 @@ const credencialRouter = (descripcion: string) =>
 const coordenadasRouter = () =>
     coordenadasEnRango().nullable().optional().meta({
         description:
-            'Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180; 6 decimales); null la quita',
+            'Ubicación del router "lat,lng" (latitud −90…90, longitud −180…180); se guarda sin espacios; null la quita',
     })
 
 const zonaRouter = () =>

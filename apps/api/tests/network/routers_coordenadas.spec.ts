@@ -5,7 +5,8 @@ import { ipUnica } from '#tests/core/fabricas'
 
 /**
  * Coordenadas del router (contrato Iris 0.3.1 §2.1, factibilidad desde el catálogo de routers):
- * columnas `latitud`/`longitud` en `network.routers`, `coordenadas: "lat,lng"` en la API.
+ * `network.routers.coordenadas` (`text` con CHECK de formato, como clientes y servicios) y
+ * `coordenadas: "lat,lng"` en la API; el rango lo valida VineJS.
  */
 
 test.group('Iris 0.3.1 · coordenadas de routers', () => {
@@ -29,15 +30,15 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
         const router = creado.body()
         assert.equal(router.coordenadas, '14.6349,-90.5069')
         const fila = await db.from('network.routers').where('id', router.id).firstOrFail()
-        assert.equal(fila.latitud, '14.634900')
-        assert.equal(fila.longitud, '-90.506900')
+        // se guarda sin el espacio, tal como sale en la API
+        assert.equal(fila.coordenadas, '14.6349,-90.5069')
 
         // el catálogo que lee Iris (§2.1)
         const lista = await estado(client.get('/api/v1/routers?limit=100').bearerToken(token), 200)
         const enLista = (lista.body().data as Array<Record<string, unknown>>).find((r) => r.id === router.id)
         assert.equal(enLista?.coordenadas, '14.6349,-90.5069')
 
-        // más de 6 decimales se redondea al guardar
+        // los decimales se guardan tal cual (texto, no numeric)
         const editado = await estado(
             client
                 .put(`/api/v1/routers/${router.id}`)
@@ -45,7 +46,7 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
                 .json({ version: router.version, coordenadas: '-0.12345678,179.9' }),
             200,
         )
-        assert.equal(editado.body().coordenadas, '-0.123457,179.9')
+        assert.equal(editado.body().coordenadas, '-0.12345678,179.9')
 
         // editar otra cosa no la toca
         const otro = await estado(
@@ -55,7 +56,7 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
                 .json({ version: editado.body().version, host: 'mk-norte-2.lab' }),
             200,
         )
-        assert.equal(otro.body().coordenadas, '-0.123457,179.9')
+        assert.equal(otro.body().coordenadas, '-0.12345678,179.9')
 
         const quitado = await estado(
             client
@@ -66,8 +67,7 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
         )
         assert.isNull(quitado.body().coordenadas)
         const sinUbicar = await db.from('network.routers').where('id', router.id).firstOrFail()
-        assert.isNull(sinUbicar.latitud)
-        assert.isNull(sinUbicar.longitud)
+        assert.isNull(sinUbicar.coordenadas)
 
         const cambios = await db
             .from('audit.cambios')
@@ -77,13 +77,13 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
             cambios.map((c) => [c.antes, c.despues]),
             [
                 [null, '14.6349,-90.5069'],
-                ['14.6349,-90.5069', '-0.123457,179.9'],
-                ['-0.123457,179.9', null],
+                ['14.6349,-90.5069', '-0.12345678,179.9'],
+                ['-0.12345678,179.9', null],
             ],
         )
     })
 
-    test('fuera de rango o mal formadas: 422 en coordenadas; la base exige la pareja', async ({
+    test('fuera de rango o mal formadas: 422 en coordenadas; la base exige el formato', async ({
         client,
         assert,
     }) => {
@@ -127,11 +127,13 @@ test.group('Iris 0.3.1 · coordenadas de routers', () => {
         )
         assert.equal(borde.body().coordenadas, '-90,180')
 
-        await assert.rejects(() =>
-            db.from('network.routers').where('id', borde.body().id).update({ longitud: null }),
-        )
-        await assert.rejects(() =>
-            db.from('network.routers').where('id', borde.body().id).update({ latitud: 95 }),
-        )
+        // el CHECK de formato de la base (sin `?` en la regex: la trampa de knex en schema.raw)
+        for (const malo of ['14.6', 'norte,sur', '14.6;-90.5', '']) {
+            await assert.rejects(
+                () => db.from('network.routers').where('id', borde.body().id).update({ coordenadas: malo }),
+                /routers_coordenadas_check/,
+            )
+        }
+        await db.from('network.routers').where('id', borde.body().id).update({ coordenadas: '14.6, -90.5' })
     })
 })

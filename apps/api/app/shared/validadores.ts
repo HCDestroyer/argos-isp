@@ -72,7 +72,7 @@ export const coordenadasEnRango = () =>
         .regex(new RegExp(`^${LATITUD}, ?${LONGITUD}$`))
         .meta({
             description:
-                'Latitud y longitud en grados decimales: "14.634900,-90.506900" (latitud −90…90, longitud −180…180; se guardan con 6 decimales)',
+                'Latitud y longitud en grados decimales: "14.6349,-90.5069" (latitud −90…90, longitud −180…180)',
         })
 
 /** Empresa sugerida para los servicios nuevos (zona o router); `null` la quita. */

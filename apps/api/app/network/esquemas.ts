@@ -101,7 +101,7 @@ export const Router = definirEsquema(
                 ...nulable(texto),
                 pattern: '^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$',
                 description:
-                    'Ubicación del router "lat,lng" en grados decimales (hasta 6 decimales, sin ceros de sobra), ' +
+                    'Ubicación del router "lat,lng" en grados decimales, sin espacios, ' +
                     'el mismo formato que `coordenadas` de clientes y servicios; null = sin ubicar. La API siempre ' +
                     'la envía; opcional en el esquema hasta que las fixtures del panel la traigan',
             },
