@@ -6,7 +6,8 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
+import { ORIGENES_IRIS_FIXTURES } from './datos'
 
 type Conector = Schema<'ConectorIris'>
 
@@ -92,7 +93,107 @@ function resumen(): Schema<'ResumenEnviosIris'> {
     }
 }
 
+/** Como `normalizarOrigenIris` de la API, sin `IRIS_PERMITIR_HTTP`: solo `https://host[:puerto]`. */
+function normalizarOrigen(valor: string): { origen: string, host: string } | { error: string } {
+    let url: URL
+    try {
+        url = new URL(valor.trim())
+    }
+    catch {
+        return { error: 'No es una URL válida' }
+    }
+    if (url.protocol !== 'https:') {
+        return { error: 'Solo https:// (http:// solo en laboratorio con IRIS_PERMITIR_HTTP)' }
+    }
+    if (url.username || url.password) {
+        return { error: 'La URL no lleva usuario ni contraseña' }
+    }
+    if (url.search || url.hash || valor.includes('#') || valor.includes('?')) {
+        return { error: 'La URL no lleva consulta ni fragmento' }
+    }
+    if (url.pathname !== '/' && url.pathname !== '') {
+        return { error: 'Se espera el origen de Iris (https://host[:puerto]), sin ruta' }
+    }
+    return { origen: url.origin, host: url.host }
+}
+
+function origenInvalido(detalle: string): RespuestaFixture {
+    return problemaTipado(422, 'iris_origen_invalido', 'Origen de Iris inválido', detalle, [{ field: 'iris', message: detalle, rule: 'origen' }])
+}
+
+/** Conocido: el origen de la URL del conector o uno de `ORIGENES_IRIS_FIXTURES`. */
+function origenConocido(origen: string): boolean {
+    const { url_base } = bd.iris.conector
+    if (ORIGENES_IRIS_FIXTURES.includes(origen)) {
+        return true
+    }
+    try {
+        return url_base !== null && new URL(url_base).origin === origen
+    }
+    catch {
+        return false
+    }
+}
+
+/** `empresasDelAlcance` del usuario técnico Iris (si no existe, nacerá global con las activas). */
+function empresasIris(): Pick<Schema<'VistaPreviaAutorizacionIris'>, 'alcance_global' | 'empresas'> {
+    const alcance = bd.iris.alcanceUsuario ?? { global: true, empresas: bd.empresas.filter(e => e.activa).map(e => e.id) }
+    const ids = alcance.global ? bd.empresas.filter(e => e.activa).map(e => e.id) : alcance.empresas
+    return {
+        alcance_global: alcance.global,
+        empresas: bd.empresas
+            .filter(e => e.activa && ids.includes(e.id))
+            .sort((a, b) => a.id - b.id)
+            .map(e => ({ id: e.id, nombre: e.nombre_comercial, nit: e.nit })),
+    }
+}
+
+/** Como `AutorizarIris` (A1): valida, crea el código ligado al challenge y arma la vuelta a Iris. */
+function autorizar(solicitud: SolicitudFixture): RespuestaFixture {
+    const cuerpo = cuerpoObjeto(solicitud)
+    const iris = typeof cuerpo.iris === 'string' ? cuerpo.iris : ''
+    const state = typeof cuerpo.state === 'string' ? cuerpo.state : ''
+    if (!/^[A-Za-z0-9._~-]{16,256}$/.test(state)) {
+        return problemaTipado(422, 'validacion', 'Datos inválidos', 'Revisa los campos marcados.', [{ field: 'state', message: 'El state de Iris tiene de 16 a 256 caracteres A-Z a-z 0-9 . _ ~ -', rule: 'regex' }])
+    }
+    const normal = normalizarOrigen(iris)
+    if ('error' in normal) {
+        return origenInvalido(normal.error)
+    }
+    const challenge = typeof cuerpo.code_challenge === 'string' ? cuerpo.code_challenge : ''
+    if (cuerpo.code_challenge_method !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) {
+        const detalle = 'code_challenge debe ser base64url de 43 caracteres (SHA-256 del code_verifier, S256)'
+        return problemaTipado(422, 'code_challenge_invalido', 'code_challenge inválido', detalle, [{ field: 'code_challenge', message: detalle, rule: 'formato' }])
+    }
+    const conocido = origenConocido(normal.origen)
+    const confirmar = typeof cuerpo.confirmar_origen === 'string' ? cuerpo.confirmar_origen.trim().toLowerCase() : ''
+    if (!conocido && confirmar !== normal.host.toLowerCase()) {
+        const detalle = `Iris en ${normal.host} no es un origen conocido: escribe su dominio (${normal.host}) para confirmar`
+        return problemaTipado(422, 'iris_origen_no_confirmado', 'Confirma el origen de Iris', detalle, [{ field: 'confirmar_origen', message: detalle, rule: 'confirmar' }])
+    }
+    const codigo = `${aleatorio()}${aleatorio()}${aleatorio()}`
+    registrarAccion(solicitud, 'iris.autorizar', { tipo: 'integracion', id: 2 }, { iris: normal.origen, origen_conocido: conocido, codigo: '***' })
+    const respuesta: Schema<'AutorizacionIris'> = {
+        redirigir_a: `${normal.origen}/administracion/integraciones/argos/vuelta#codigo=${encodeURIComponent(codigo)}&api=${encodeURIComponent('http://localhost:3333')}&state=${encodeURIComponent(state)}`,
+    }
+    return { status: 200, cuerpo: respuesta }
+}
+
 export const rutasIris: RutasFixture = {
+    'GET /api/v1/integraciones/iris/autorizar/vista-previa': conPermiso('iris.configurar', (solicitud) => {
+        const normal = normalizarOrigen(solicitud.query.get('iris') ?? '')
+        if ('error' in normal) {
+            return origenInvalido(normal.error)
+        }
+        const vista: Schema<'VistaPreviaAutorizacionIris'> = {
+            origen_normalizado: normal.origen,
+            origen_conocido: origenConocido(normal.origen),
+            ...empresasIris(),
+        }
+        return { status: 200, cuerpo: vista }
+    }),
+    'POST /api/v1/integraciones/iris/autorizar': conPermiso('iris.configurar', autorizar),
+
     'GET /api/v1/integraciones/iris': conPermiso('iris.ver', () => ({ status: 200, cuerpo: bd.iris.conector })),
     'GET /api/v1/integraciones/iris/estado': conPermiso('iris.abrir', () => {
         const { activo, url_base, token } = bd.iris.conector

@@ -25,13 +25,25 @@ export interface IrisFixtures {
     tokens: Schema<'TokenApi'>[]
     /** Webhooks Argos → Iris, en orden de creación (la lista los devuelve como la API, por id). */
     envios: Schema<'EnvioIris'>[]
+    /**
+     * Alcance del usuario técnico Iris para la vista previa de «Conectar con un botón». `null`: aún
+     * no existe y nacerá global (todas las empresas activas), como `vistaPreviaAutorizacionIris`.
+     */
+    alcanceUsuario: Schema<'ResumenEnviosIris'>['alcance']
 }
+
+/**
+ * Orígenes de Iris aceptados sin confirmar el dominio, como `ARGOSISP_IRIS_ORIGENES` en la API
+ * (vacía por defecto). El otro origen conocido es el de la URL del conector.
+ */
+export const ORIGENES_IRIS_FIXTURES: string[] = ['https://iris.argosnet.gt']
 
 export function irisInicial(): IrisFixtures {
     return {
         conector: structuredClone(conectorIrisInicial),
         tokens: [],
         envios: [],
+        alcanceUsuario: null,
     }
 }
 
