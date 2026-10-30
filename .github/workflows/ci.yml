@@ -164,6 +164,12 @@ jobs:
           COMPOSE_PROFILES=wireguard docker compose -f infra/produccion/docker-compose.produccion.yml \
             --env-file infra/produccion/.env.example config --services | grep -qx wireguard-agente
 
+      # PORTAL_PROXIES_CONFIABLES sigue a COMPOSE_SUBNET_V4/V6 (compose resuelto y con sockets)
+      - name: La API confía en la red de compose con cualquier COMPOSE_SUBNET
+        run: |
+          shellcheck infra/ci/probar-red-compose.sh
+          infra/ci/probar-red-compose.sh
+
       # Scripts de RouterOS (infra/mikrotik): lab.rsc y plantillas armados desde sus piezas, variables,
       # escape de secretos y llaves balanceadas. El /import real se prueba en CHR (README de mikrotik).
       - name: Plantillas de RouterOS (armado y render)

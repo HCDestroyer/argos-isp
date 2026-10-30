@@ -34,6 +34,8 @@ V3=0.0.3
 IMAGENES=(api web portal aaa coa backup freeradius)
 DOMINIO=argosisp.test
 CORREO=admin@argosisp.test
+# Red de compose distinta de la de siempre (172.30.0.0/24): la instalación la pasa a instalar.sh
+SUBRED_V4=10.213.60.0/24
 TMP="$(mktemp -d)"
 FUENTE="$TMP/fuente"
 mkdir -p "$FUENTE"
@@ -200,8 +202,9 @@ paso "instalar.sh (un comando, sin preguntas, por pipe como curl … | sudo bash
 # Por pipe, igual que en un servidor: bash lee el script de stdin y un hijo que lea stdin se traga
 # el resto (1.1.0 terminaba en "arriba y sano" sin clave ni credenciales-iniciales.txt).
 # shellcheck disable=SC2002
+# Con otra red de compose (COMPOSE_SUBNET_V4), como un servidor cuya LAN choca con 172.30.0.0/24
 cat "$FUENTE/instalar.sh" | sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
-    ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" \
+    ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" COMPOSE_SUBNET_V4="$SUBRED_V4" \
     bash -s -- --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR" --si | tee "$TMP/instalar.log"
 grep -q "ArgosIsp $V1 instalado" "$TMP/instalar.log" || fallar "instalar.sh por pipe no llegó al resumen final"
 sudo test -s "$DIR/credenciales-iniciales.txt" || fallar "instalar.sh por pipe no escribió credenciales-iniciales.txt"
@@ -213,6 +216,19 @@ esperar_version "$V1"
 # /corte por HTTP con cualquier Host (dst-nat de los suspendidos)
 codigo="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: cualquiera.example' http://127.0.0.1/corte)"
 [ "$codigo" -lt 500 ] || fallar "/corte por HTTP respondió $codigo"
+# Red de compose: instalar.sh la deja en el .env y la API confía en ella (hasta la 1.4.0 la API
+# confiaba en 172.30.0.0/24 fijo y con otra red veía la IP de Caddy o del portal como cliente)
+sudo grep -qx "COMPOSE_SUBNET_V4=$SUBRED_V4" "$DIR/.env" || fallar "instalar.sh no escribió COMPOSE_SUBNET_V4 en el .env"
+red="$(docker network inspect "$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' \
+    "$(cli compose ps -q proxy)")" -f '{{(index .IPAM.Config 0).Subnet}}')"
+[ "$red" = "$SUBRED_V4" ] || fallar "la red de compose es $red y se esperaba $SUBRED_V4"
+ip_vista="$(curl -s -H 'Host: cualquiera.example' http://127.0.0.1/api/v1/portal/quien-soy | jq -r '.ip // ""')"
+for s in proxy portal; do
+    ip_s="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(cli compose ps -q "$s")")"
+    [ "$ip_vista" != "$ip_s" ] || fallar "con COMPOSE_SUBNET_V4=$SUBRED_V4 la API ve como cliente la IP de $s ($ip_s)"
+done
+[ -n "$ip_vista" ] || fallar "quien-soy por el portal no devolvió ip"
+echo "    red $SUBRED_V4 en el .env; quien-soy ve $ip_vista (no Caddy ni el portal)"
 cli estado > /dev/null
 # Clientes de FreeRADIUS por evento (contratos/conexion-routers.md §6.4): la imagen trae recargar.sh
 # y es el PID 1 del contenedor (el FIFO .recargar lo crea aaa con el primer cambio de clientes)
