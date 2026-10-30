@@ -55,18 +55,26 @@ test('servicio: «Retirados» aparte, el motivo de no eliminar y eliminar uno re
 
     // Un servicio recién dado de alta nunca se usó: se elimina.
     await ir(page, 'Clientes', /\/clientes$/)
-    await page.getByRole('link', { name: 'Nuevo cliente' }).click()
-    await page.getByLabel('Nombre', { exact: true }).fill('Mario Prueba Borrar')
-    await page.getByLabel('Teléfono').fill('5555-9876')
-    await page.getByRole('button', { name: 'Crear cliente' }).click()
+    // Desde #180 el alta de cliente es un modal y el de servicio un panel lateral de la ficha.
+    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
+    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
+    await expect(altaCliente).toBeVisible()
+    await altaCliente.getByLabel('Nombre', { exact: true }).fill('Mario Prueba Borrar')
+    await altaCliente.getByLabel('Teléfono').fill('5555-9876')
+    await altaCliente.getByRole('button', { name: 'Crear cliente' }).click()
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
-    await page.getByRole('link', { name: 'Nuevo servicio' }).first().click()
-    await page.getByRole('radio', { name: /RB-Centro/ }).click()
-    await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
-    for (let i = 0; i < 5; i++) {
-        await page.getByRole('button', { name: 'Siguiente' }).click()
+    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
+    await expect(alta).toBeVisible()
+    await alta.getByRole('radio', { name: /RB-Centro/ }).click()
+    await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
+    // Conexión → Red y PPPoE → Instalación y cobro → Resumen.
+    for (let i = 0; i < 3; i++) {
+        await alta.getByRole('button', { name: 'Siguiente' }).click()
     }
-    await page.getByRole('button', { name: 'Crear servicio' }).click()
+    await expect(alta.locator('[data-prueba="resumen-alta"]')).toContainText('RB-Centro')
+    await alta.getByRole('button', { name: 'Crear servicio' }).click()
+    await expect(alta).toBeHidden()
     await expect(page).toHaveURL(/\/clientes\/\d+\?tab=servicios/)
     await page.getByRole('link', { name: /^mario\./ }).click()
     await expect(page).toHaveURL(/\/servicios\/\d+$/)
