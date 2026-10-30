@@ -41,7 +41,7 @@ describe('editar router', () => {
         expect(claves.every(c => c.value === '')).toBe(true)
 
         escribir('input[data-prueba="router-editar-usuario"], [data-prueba="router-editar-usuario"] input', 'admin-api')
-        const nombre = formulario.querySelector<HTMLInputElement>('input')!
+        const nombre = formulario.querySelector<HTMLInputElement>('input[data-prueba="router-editar-nombre"], [data-prueba="router-editar-nombre"] input')!
         nombre.value = 'Nodo Centro Norte'
         nombre.dispatchEvent(new Event('input', { bubbles: true }))
         await enviar()
@@ -57,7 +57,7 @@ describe('editar router', () => {
         bd.routers[0]!.version += 1
         await mountSuspended(RouterEditarModal, { props: { router, open: true } })
         await esperar(() => expect(document.body.querySelector('[data-prueba="router-editar"]')).not.toBeNull())
-        const nombre = document.body.querySelector<HTMLInputElement>('[data-prueba="router-editar"] input')!
+        const nombre = document.body.querySelector<HTMLInputElement>('[data-prueba="router-editar"] input[data-prueba="router-editar-nombre"], [data-prueba="router-editar-nombre"] input')!
         nombre.value = 'Otro nombre'
         nombre.dispatchEvent(new Event('input', { bubbles: true }))
         await enviar()

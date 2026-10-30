@@ -1,5 +1,5 @@
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { RutasFixture } from '~/utils/fetchFixtures'
+import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
@@ -34,6 +34,37 @@ export function efectivo(plan: Schema<'Plan'>, routerId: number): Schema<'PlanEf
 
 const API_URL = /^https?:\/\/[^\s/]+(:\d{1,5})?\/?$/
 const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
+/** `MENSAJE_NAS_IP_REQUERIDA` de A1 (`apps/api/app/network/validators.ts`). */
+const MENSAJE_NAS_IP_REQUERIDA = 'La IP del NAS es obligatoria en un router con RADIUS: es la IP con la que el router habla con RADIUS y a la '
+    + 'que se envían los CoA. Si el router no usa RADIUS (solo IP estática o DHCP fija), elige el modo «api»'
+const MAXIMO_SERVICIOS_LISTADOS = 50
+
+/**
+ * Como `exigirSinPppoe` (A1): 422 `servicios_pppoe_en_router` al pasar a `api` un router con
+ * servicios `pppoe` no retirados; un `errors[]` por servicio (hasta 50) y el total en `detail`.
+ */
+function serviciosPppoe(routerId: number): RespuestaFixture | null {
+    const servicios = bd.servicios
+        .filter(s => s.router_id === routerId && (s.tipo_conexion ?? 'pppoe') === 'pppoe' && s.estado !== 'retirado')
+        .sort((a, b) => a.id - b.id)
+    if (!servicios.length) {
+        return null
+    }
+    const total = servicios.length
+    return problemaTipado(
+        422,
+        'servicios_pppoe_en_router',
+        'Regla de negocio',
+        `El router tiene ${total} ${total === 1 ? 'servicio PPPoE' : 'servicios PPPoE'} sin retirar, y PPPoE necesita RADIUS. `
+        + 'Pásalos a IP estática o DHCP fija, muévelos a un router con RADIUS o retíralos antes de cambiar el router a «api»',
+        servicios.slice(0, MAXIMO_SERVICIOS_LISTADOS).map(s => ({
+            field: `servicios.${s.id}`,
+            rule: 'pppoe_requiere_radius',
+            message: `Servicio ${s.id} (PPPoE${s.user_ppp ? ` ${s.user_ppp}` : ''}, ${s.estado})`,
+        })),
+    )
+}
+
 const CIDR_V4 = /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[12][0-9]|3[0-2])$/
 const CIDR_V6 = /^[0-9a-fA-F:]+\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/
 
@@ -156,15 +187,30 @@ export const rutasRouters: RutasFixture = {
         if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
             errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
         }
+        // Como `EditarRouter` (A1): `nas_ip: null` la quita; un router que queda en `radius` la exige.
+        const modo = cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad
+        const nasDespues = 'nas_ip' in cuerpo ? (typeof cuerpo.nas_ip === 'string' ? cuerpo.nas_ip.trim() : null) : router.nas_ip
+        if (typeof nasDespues === 'string' && !IPV4.test(nasDespues)) {
+            errores.push({ field: 'nas_ip', message: 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1', rule: 'ipAddress' })
+        }
+        else if (modo === 'radius' && !nasDespues) {
+            errores.push({ field: 'nas_ip', message: MENSAJE_NAS_IP_REQUERIDA, rule: 'required' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
+        }
+        if (modo === 'api' && router.modo_seguridad !== 'api') {
+            const conPppoe = serviciosPppoe(router.id)
+            if (conPppoe) {
+                return conPppoe
+            }
         }
         // Como `exigirSinDuplicado` (A1): solo lo que cambia (API, nas_ip) o reactivar, que revisa todo.
         const despues = {
             id: router.id,
             host: typeof cuerpo.host === 'string' ? cuerpo.host.trim() : router.host,
             api_url: 'api_url' in cuerpo ? (typeof cuerpo.api_url === 'string' && cuerpo.api_url.trim() ? cuerpo.api_url.trim() : null) : router.api_url ?? null,
-            nas_ip: typeof cuerpo.nas_ip === 'string' ? cuerpo.nas_ip.trim() : router.nas_ip,
+            nas_ip: nasDespues,
             serial: router.serial ?? null,
         }
         const activo = typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo
@@ -183,12 +229,12 @@ export const rutasRouters: RutasFixture = {
         }
         // Datos generales, como `editarRouterValidator`: sin el campo se conserva. Los secretos nunca
         // vuelven: solo `tiene_api_password` / `tiene_radius_secret`.
-        const texto = (campo: 'nombre' | 'host' | 'nas_ip'): string | null => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
+        const texto = (campo: 'nombre' | 'host'): string => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
         Object.assign(router, {
             nombre: texto('nombre'),
             host: texto('host'),
-            nas_ip: texto('nas_ip'),
-            modo_seguridad: cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad,
+            nas_ip: nasDespues,
+            modo_seguridad: modo,
             api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
             // Vacío o null no cambia; `quitar_*` la borra a propósito.
             tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
@@ -276,16 +322,22 @@ export const rutasRouters: RutasFixture = {
             : noEncontrado('el router')
     }),
 
-    /** Como `CrearRouter` (A1): nombre, host y NAS obligatorios; NAS único; secretos sin devolverse. */
+    /**
+     * Como `CrearRouter` (A1): nombre y host obligatorios; la IP del NAS solo con `radius` (con `api`
+     * es opcional y queda null); NAS único; secretos sin devolverse. Como la API, un plan global está
+     * disponible en todos los routers: el router nuevo los ofrece desde el alta.
+     */
     'POST /api/v1/routers': conPermiso('routers.crear', (solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
         const nombre = typeof cuerpo.nombre === 'string' ? cuerpo.nombre.trim() : ''
         const host = typeof cuerpo.host === 'string' ? cuerpo.host.trim() : ''
-        const nas = typeof cuerpo.nas_ip === 'string' ? cuerpo.nas_ip.trim() : ''
+        const modo = cuerpo.modo_seguridad === 'api' ? 'api' : 'radius'
+        const nas = typeof cuerpo.nas_ip === 'string' && cuerpo.nas_ip.trim() ? cuerpo.nas_ip.trim() : null
         const errores = [
             ...(nombre.length < 2 ? [{ field: 'nombre', message: 'El nombre debe tener al menos 2 caracteres', rule: 'minLength' }] : []),
             ...(!host ? [{ field: 'host', message: 'El host es obligatorio', rule: 'required' }] : []),
-            ...(!IPV4.test(nas) ? [{ field: 'nas_ip', message: 'El NAS debe ser una IPv4', rule: 'ipAddress' }] : []),
+            ...(nas !== null && !IPV4.test(nas) ? [{ field: 'nas_ip', message: 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1', rule: 'ipAddress' }] : []),
+            ...(nas === null && modo === 'radius' ? [{ field: 'nas_ip', message: MENSAJE_NAS_IP_REQUERIDA, rule: 'required' }] : []),
         ]
         if (errores.length) {
             return datosInvalidos(errores)
@@ -306,7 +358,7 @@ export const rutasRouters: RutasFixture = {
             tiene_api_password: typeof cuerpo.api_password === 'string' && cuerpo.api_password.length > 0,
             tiene_radius_secret: typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret.length > 0,
             nas_ip: nas,
-            modo_seguridad: cuerpo.modo_seguridad === 'api' ? 'api' : 'radius',
+            modo_seguridad: modo,
             control_velocidad: control,
             // Como `CrearRouter` (A2): la estrategia del atajo; sin versión hasta que la API responda.
             estrategia_velocidad: estrategiaDeControl(control),
@@ -332,6 +384,7 @@ export const rutasRouters: RutasFixture = {
             updated_at: creado,
         }
         bd.routers.push(router)
+        bd.planesPorRouter[router.id] = bd.planes.filter(p => p.global && p.activo).map(p => p.id)
         registrarAccion(solicitud, 'routers.crear', { tipo: 'router', id: router.id }, { ...cuerpo, api_password: '***', radius_secret: '***' })
         return { status: 201, cuerpo: router }
     }),
