@@ -8,7 +8,10 @@ import GenerarTokenIris from '#core/actions/generar_token_iris'
 import RevocarTokenIris from '#core/actions/revocar_token_iris'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { ContextoAccion } from '#shared/contexto'
+import { urlPanel } from '#core/sso'
+import { CodigoInvalido, gastarCodigoIris, verifierCoincide } from '#integraciones/iris/autorizacion'
 import {
     FORMATO_TOKEN_IRIS,
     RUTA_RECEPTOR_IRIS,
@@ -28,6 +31,8 @@ export interface EntradaCanjearEnlaceIris {
     token: string
     /** receptor de Iris para los webhooks de Argos (§2.3) */
     webhook: { url: string; secreto: string }
+    /** PKCE (§1.4): obligatorio si el código nació con `code_challenge` (Conectar con un botón) */
+    code_verifier?: string | null
 }
 
 export interface SalidaCanjearEnlaceIris {
@@ -43,6 +48,8 @@ export interface SalidaCanjearEnlaceIris {
     alcance_global: boolean
     /** empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
     empresas: EmpresaDelAlcance[]
+    /** URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (0.4.0) */
+    panel_url: string
 }
 
 export interface EmpresaDelAlcance {
@@ -56,7 +63,7 @@ export interface EmpresaDelAlcance {
 /** Empresas activas que ve el usuario (por su alcance), con nombre comercial y NIT. */
 export async function empresasDelAlcance(
     usuarioId: number,
-    trx: TransactionClientContract,
+    trx: QueryClientContract,
 ): Promise<{ alcance_global: boolean; empresas: EmpresaDelAlcance[] }> {
     const alcance = await alcanceEmpresasDeUsuario(usuarioId, trx)
     if (alcance.empresas.length === 0) return { alcance_global: alcance.alcanceGlobal, empresas: [] }
@@ -88,12 +95,35 @@ export async function empresasDelAlcance(
  *   cifrada) sin emitir otro token; cualquier otra con un código usado → 410.
  * - Informa las empresas del alcance del token (`empresas[]` con `id`, `nombre` y `nit`, y
  *   `alcance_global`), para que Iris sepa de qué empresas recibirá datos (contrato Iris 0.3.1).
+ * - Código de «Conectar con un botón» (§1.4, con `code_challenge`): exige `code_verifier` con
+ *   `base64url(SHA-256(verifier)) = challenge` (tiempo constante); si falta o no coincide, 401
+ *   `codigo_invalido` y el código queda gastado. Un código de §1.3 no lo pide.
+ * - Responde además `panel_url` (`PANEL_URL_PUBLICA`, contrato Iris 0.4.0 §1.4 paso 6).
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
     SalidaCanjearEnlaceIris
 > {
     readonly nombre = 'iris.canjear_enlace'
+
+    /**
+     * PKCE (§1.4): si el verifier falta o no coincide, la transacción del canje se revierte (y el
+     * error queda auditado), y el código se marca gastado aparte: no admite un segundo intento.
+     */
+    override async execute(
+        input: EntradaCanjearEnlaceIris,
+        ctx: ContextoAccion,
+        opciones: { trx?: TransactionClientContract } = {},
+    ): Promise<SalidaCanjearEnlaceIris> {
+        try {
+            return await super.execute(input, ctx, opciones)
+        } catch (error) {
+            if (error instanceof CodigoInvalido && error.gastar && !opciones.trx) {
+                await gastarCodigoIris(error.enlaceId)
+            }
+            throw error
+        }
+    }
 
     protected async handle(
         input: EntradaCanjearEnlaceIris,
@@ -112,22 +142,39 @@ export default class CanjearEnlaceIris extends DomainAction<
                 'anulado_en',
                 'peticion_sha256',
                 'respuesta_cifrada',
+                'code_challenge',
+                'rechazado_en',
             )
             .first()) as FilaEnlaceIris | null
-        if (!enlace || enlace.anulado_en || new Date(enlace.vence_en).getTime() <= Date.now()) {
+        if (
+            !enlace ||
+            enlace.anulado_en ||
+            enlace.rechazado_en ||
+            new Date(enlace.vence_en).getTime() <= Date.now()
+        ) {
             throw new EnlaceVencido()
         }
         t.fijarEntidad('enlace_iris', Number(enlace.id))
+        if (enlace.code_challenge) {
+            t.anotarAuditoria({ pkce: true })
+            if (!verifierCoincide(input.code_verifier, enlace.code_challenge)) {
+                throw new CodigoInvalido(Number(enlace.id), !enlace.usado_en)
+            }
+        }
         const peticion = hashPeticionIris(input)
         if (enlace.usado_en) {
             if (enlace.peticion_sha256 !== peticion || !enlace.respuesta_cifrada) throw new EnlaceVencido()
             t.anotarAuditoria({ repeticion: true })
-            const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as SalidaCanjearEnlaceIris
-            if (guardada.empresas) return guardada
+            const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as Omit<
+                SalidaCanjearEnlaceIris,
+                'panel_url'
+            > & { panel_url?: string }
+            const completa = { ...guardada, panel_url: guardada.panel_url ?? urlPanel() }
+            if (completa.empresas) return completa
             // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
             const usuarioId = await usuarioIris(t.trx)
-            if (usuarioId === null) return { ...guardada, alcance_global: false, empresas: [] }
-            return { ...guardada, ...(await empresasDelAlcance(usuarioId, t.trx)) }
+            if (usuarioId === null) return { ...completa, alcance_global: false, empresas: [] }
+            return { ...completa, ...(await empresasDelAlcance(usuarioId, t.trx)) }
         }
 
         const errores = validarDatosDeIris(input)
@@ -156,6 +203,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             webhook: { url: `${enlace.base_url}${RUTA_RECEPTOR_IRIS}`, secreto: secretoEntrada },
             conector_id: despues.conector_id,
             ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
+            panel_url: urlPanel(),
         }
         await t.trx
             .from('integraciones.iris_enlaces')
@@ -177,6 +225,8 @@ interface FilaEnlaceIris {
     anulado_en: Date | null
     peticion_sha256: string | null
     respuesta_cifrada: string | null
+    code_challenge: string | null
+    rechazado_en: Date | null
 }
 
 async function revocarSiVigente(t: Transaccion, tokenId: number) {

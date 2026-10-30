@@ -162,6 +162,14 @@ onMounted(() => void lista.recargar())
                                     variant="subtle"
                                     size="sm"
                                 />
+                                <UBadge
+                                    :label="MODOS_SEGURIDAD[row.original.modo_seguridad].etiqueta"
+                                    :icon="MODOS_SEGURIDAD[row.original.modo_seguridad].icono"
+                                    :color="MODOS_SEGURIDAD[row.original.modo_seguridad].color"
+                                    variant="subtle"
+                                    size="sm"
+                                    :data-prueba="`modo-${row.original.id}`"
+                                />
                             </span>
                             <span class="font-mono text-xs text-muted">{{ row.original.host }}</span>
                             <RouterContacto
@@ -173,7 +181,10 @@ onMounted(() => void lista.recargar())
                         </div>
                     </template>
                     <template #nas_ip-cell="{ row }">
-                        <span class="font-mono text-sm">{{ row.original.nas_ip }}</span>
+                        <span
+                            class="text-sm"
+                            :class="row.original.nas_ip ? 'font-mono' : 'text-muted'"
+                        >{{ textoNas(row.original) }}</span>
                     </template>
                     <template #contacto-cell="{ row }">
                         <RouterContacto

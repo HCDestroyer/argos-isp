@@ -35,6 +35,8 @@ import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
+import { irisInicial } from './iris/datos'
+import type { IrisFixtures } from './iris/datos'
 import { configuracionGlobal, enviosNotificacion, eventosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
 import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -51,6 +53,7 @@ import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
+import { clasesQos, perfilesQos, type ClaseQosFixture, type PerfilQosFila } from './qos/datos'
 import { sesiones } from './sesiones/datos'
 import { zonas } from './zonas/datos'
 
@@ -111,6 +114,9 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     /** Implementación de cada plan en un router (`GET /planes/:id/routers`). */
     implementacionesPlan: Schema<'PlanRouter'>[]
+    /** QoS por clases (A2, `contratos/qos.md`): perfiles (sin clases) y sus clases. */
+    qosPerfiles: PerfilQosFila[]
+    qosClases: ClaseQosFixture[]
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
     cambios: Schema<'CambioAuditoria'>[]
@@ -286,6 +292,8 @@ interface BaseFixtures {
     fel: FelFixtures
     /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
     horus: HorusFixtures
+    /** Conector con Iris: conector, tokens `atk_` del usuario técnico y webhooks enviados. */
+    iris: IrisFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -298,6 +306,8 @@ function inicial(): BaseFixtures {
         routersReconciliados: [],
         routersSinRespuesta: [],
         conexionesRouter,
+        qosPerfiles: perfilesQos,
+        qosClases: clasesQos,
         redesIpv4,
         ipv6Bloques,
         ipv6Pools,
@@ -386,6 +396,7 @@ function inicial(): BaseFixtures {
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
+        iris: irisInicial(),
         conceptosCargo,
         motivosSinCosto,
         bonificaciones,

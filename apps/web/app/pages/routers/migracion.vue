@@ -26,7 +26,7 @@ const problemaRouters = ref<Problem | null>(null)
 const cargandoRouters = ref(true)
 const routerId = ref<number | undefined>(Number(route.query.router) || undefined)
 const routerActual = computed(() => routers.value.find(r => r.id === routerId.value) ?? null)
-const itemsRouters = computed<SelectItem[]>(() => routers.value.map(r => ({ label: `${r.nombre} · NAS ${r.nas_ip}`, value: r.id })))
+const itemsRouters = computed<SelectItem[]>(() => routers.value.map(r => ({ label: r.nas_ip ? `${r.nombre} · NAS ${r.nas_ip}` : `${r.nombre} · sin RADIUS`, value: r.id })))
 
 /* Fecha de migración. */
 const migracion = shallowRef<LecturaMigracion<MigracionAaa>>({ estado: 'cargando' })

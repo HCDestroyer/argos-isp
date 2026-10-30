@@ -3511,6 +3511,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/iris/autorizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conectar con un botón: aprobar la conexión que Iris pidió (state + PKCE S256)
+         * @description Contrato Iris §1.4 paso 4. Crea el mismo código de conexión de §1.3 (15 min, un uso; anula los anteriores sin usar), ligado al `code_challenge` y al origen de Iris, y responde `redirigir_a` = `<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=<API_PUBLIC_URL>&state=…`. Origen desconocido (ni el conector ni `ARGOSISP_IRIS_ORIGENES`) exige `confirmar_origen` igual a su host. 422 `iris_origen_invalido`, `iris_origen_no_confirmado` y `code_challenge_invalido`.
+         */
+        post: operations["irisAutorizar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/autorizar/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conectar con un botón: qué Iris pide conectarse y qué empresas verá
+         * @description Contrato Iris §1.4 paso 3, para la pantalla `/integraciones/iris/autorizar` del panel. Normaliza `iris` a `https://host[:puerto]`; `origen_conocido` dice si es el del conector Iris o está en `ARGOSISP_IRIS_ORIGENES` (si no, el admin escribe el dominio para confirmar). `empresas[]` y `alcance_global`, iguales a los del canje. 422 `iris_origen_invalido`.
+         */
+        get: operations["irisAutorizarVistaPrevia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/iris/conexion/canjear": {
         parameters: {
             query?: never;
@@ -3522,7 +3562,7 @@ export interface paths {
         put?: never;
         /**
          * Canje del enlace de conexión de Argos (lo llama Iris, servidor a servidor)
-         * @description Sin sesión: lo autentica el código. `sistema: "iris"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta.
+         * @description Sin sesión: lo autentica el código. `sistema: "iris"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta. Responde además `panel_url` (`PANEL_URL_PUBLICA`). Un código de «Conectar con un botón» (§1.4) exige `code_verifier`: si falta o no coincide, 401 `codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide.
          */
         post: operations["irisEnlaceCanjear"];
         delete?: never;
@@ -9897,6 +9937,10 @@ export interface components {
             alcance_tipo: "router" | "zona" | "caja" | null;
             alcance_id: number | null;
         };
+        AutorizacionIris: {
+            /** @description `<iris>/administracion/integraciones/argos/vuelta#codigo=…&api=…&state=…` (todo en el fragmento): el panel navega ahí. El código vale 15 min y un solo uso */
+            redirigir_a: string;
+        };
         BalanceComprobacion: {
             /** Format: date */
             desde: string;
@@ -10835,6 +10879,8 @@ export interface components {
                 /** @description NIT sin guiones; null si la empresa aún no lo tiene */
                 nit: string | null;
             }[];
+            /** @description URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0) */
+            panel_url: string;
         };
         CanjeLealtad: {
             id: number;
@@ -13193,7 +13239,6 @@ export interface components {
              * @enum {string}
              */
             tipo_cola: "default" | "sfq" | "pcq" | "fq_codel" | "cake";
-            /** @description Además `qos` (boolean, por defecto false): prioridad por clases en el árbol (contratos/qos.md); la API siempre lo envía */
             extras: {
                 /** @description burst-* del plan (en PCQ: pcq-burst-*) */
                 rafaga: boolean;
@@ -13203,6 +13248,8 @@ export interface components {
                 garantizado: boolean;
                 /** @description Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack */
                 excluir_fasttrack: boolean;
+                /** @description Prioridad por clases dentro del plan (contratos/qos.md): solo arbol_pcq y con excluir_fasttrack; por defecto false */
+                qos: boolean;
             };
         };
         EvaluacionPromesa: {
@@ -18573,6 +18620,22 @@ export interface components {
             revocada_en: string | null;
             /** Format: date-time */
             created_at: string;
+        };
+        VistaPreviaAutorizacionIris: {
+            /** @description `https://host[:puerto]` de Iris */
+            origen_normalizado: string;
+            /** @description true: es el del conector Iris o está en `ARGOSISP_IRIS_ORIGENES`; false: el admin debe escribir el dominio para confirmar */
+            origen_conocido: boolean;
+            /** @description true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1) */
+            alcance_global: boolean;
+            /** @description Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
+            empresas: {
+                id: number;
+                /** @description Nombre comercial */
+                nombre: string;
+                /** @description NIT sin guiones; null si la empresa aún no lo tiene */
+                nit: string | null;
+            }[];
         };
         VistaPreviaBloqueIpv6: {
             prefijo: string;
@@ -32821,6 +32884,118 @@ export interface operations {
             };
         };
     };
+    irisAutorizar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Dirección de Iris (`https://host[:puerto]`); se normaliza a su origen */
+                    iris: string;
+                    /** @description Valor opaco de Iris (16 a 256 caracteres A-Z a-z 0-9 . _ ~ -); vuelve en el fragmento */
+                    state: string;
+                    /** @description base64url(SHA-256(code_verifier)), 43 caracteres. Si no → 422 `code_challenge_invalido` */
+                    code_challenge: string;
+                    /** @enum {string} */
+                    code_challenge_method: "S256";
+                    /** @description Dominio de Iris escrito por el admin (su host, con puerto si lo lleva). Obligatorio si el origen no es el del conector ni está en `ARGOSISP_IRIS_ORIGENES` (422 `iris_origen_no_confirmado`) */
+                    confirmar_origen?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description URL de vuelta a Iris */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutorizacionIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisAutorizarVistaPrevia: {
+        parameters: {
+            query: {
+                /** @description Dirección de Iris (`https://host[:puerto]`); se normaliza a su origen */
+                iris: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaAutorizacionIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.configurar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     irisEnlaceCanjear: {
         parameters: {
             query?: never;
@@ -32839,6 +33014,8 @@ export interface operations {
                         url: string;
                         secreto: string;
                     };
+                    /** @description PKCE (RFC 7636): obligatorio si el código nació en «Conectar con un botón» (§1.4). Falta o no coincide con el code_challenge → 401 `codigo_invalido` y el código queda gastado */
+                    code_verifier?: string;
                 };
             };
         };

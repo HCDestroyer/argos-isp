@@ -197,6 +197,12 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_URL_PUBLICA: Env.schema.string.optional(),
     /** URL pública del panel: los tickets de autologin de Horus abren `<PANEL_URL_PUBLICA>/sso/entrar#…` (`app/core/sso.ts`). */
     PANEL_URL_PUBLICA: Env.schema.string.optional(),
+    /**
+     * Orígenes de Iris (`https://host[:puerto]`, separados por espacios) que pueden pedir «Conectar
+     * con un botón» sin que el admin escriba el dominio para confirmar (contrato Iris §1.4;
+     * `app/integraciones/iris/autorizacion.ts`). Vacía: solo la URL del conector Iris configurado.
+     */
+    ARGOSISP_IRIS_ORIGENES: Env.schema.string.optional(),
 
     /*
     |----------------------------------------------------------

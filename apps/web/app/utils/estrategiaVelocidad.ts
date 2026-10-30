@@ -62,6 +62,7 @@ export const OPCIONES_EXTRA: Record<Extra, { etiqueta: string, explicacion: stri
     prioridad: { etiqueta: 'Prioridad', explicacion: 'Los planes con más prioridad pasan primero cuando el enlace se llena.' },
     garantizado: { etiqueta: 'Velocidad garantizada', explicacion: 'Reserva el mínimo del plan (CIR) aunque el enlace esté lleno.' },
     excluir_fasttrack: { etiqueta: 'Verificar FastTrack', explicacion: 'Revisa que FastTrack no se salte las colas: sin esto, lo acelerado no se limita.' },
+    qos: { etiqueta: 'Prioridad por clases (QoS)', explicacion: 'Dentro del plan, lo interactivo (DNS, VoIP, juegos) y la web pasan antes que las descargas pesadas, según el perfil de QoS del router. Actúa cuando el plan o el enlace se llenan.' },
 }
 
 /**
@@ -147,6 +148,29 @@ export function tipoColaDisponible(matriz: MatrizControlVelocidad, tipoCola: Tip
 }
 
 /**
+ * Si un extra se puede prender con esa estrategia. Solo `qos` tiene condiciones (`contratos/qos.md`
+ * §2): la familia de la aplicación la dice la matriz (`aplicaciones[].familia`) y el porqué es el
+ * mensaje de su regla (`qos_familia`, `qos_fasttrack`); el panel no copia las reglas.
+ */
+export function extraDisponible(matriz: MatrizControlVelocidad, extra: Extra, estrategia: Estrategia): Disponibilidad {
+    if (!matriz.extras.some(e => e.valor === extra)) {
+        return { valida: false, motivo: 'La API todavía no publica esta opción.' }
+    }
+    if (extra !== 'qos') {
+        return { valida: true, motivo: null }
+    }
+    const mensaje = (regla: string, otro: string) => matriz.reglas.find(r => r.rule === regla)?.mensaje ?? otro
+    const familia = matriz.aplicaciones.find(a => a.valor === estrategia.aplicacion)?.familia
+    if (familia !== 'arbol') {
+        return { valida: false, motivo: `${OPCIONES_APLICACION[estrategia.aplicacion].etiqueta} no tiene hojas por clase: ${mensaje('qos_familia', 'qos solo con arbol_pcq')}.` }
+    }
+    if (!estrategia.extras.excluir_fasttrack) {
+        return { valida: false, motivo: `Prende «Verificar FastTrack»: ${mensaje('qos_fasttrack', 'qos exige excluir_fasttrack')}.` }
+    }
+    return { valida: true, motivo: null }
+}
+
+/**
  * Corrige una estrategia que quedó inválida al cambiar una capa: si la aplicación ya no sirve para
  * el tipo, toma la primera válida; si el tipo de cola no combina, el primero que sí.
  */
@@ -158,6 +182,10 @@ export function ajustarEstrategia(matriz: MatrizControlVelocidad, estrategia: Es
     if (!tipoColaDisponible(matriz, ajustada.tipo_cola, ajustada.aplicacion, version).valida) {
         ajustada.tipo_cola = TIPOS_COLA.find(t => tipoColaDisponible(matriz, t, ajustada.aplicacion, version).valida) ?? ajustada.tipo_cola
     }
+    // Fuera del árbol no hay hojas por clase: QoS se apaga solo.
+    if (ajustada.extras.qos && !extraDisponible(matriz, 'qos', ajustada).valida) {
+        ajustada.extras.qos = false
+    }
     return ajustada
 }
 
@@ -167,9 +195,9 @@ export function igualParaTodos(matriz: MatrizControlVelocidad, origen: TipoConex
     return Object.fromEntries(TIPOS_CONEXION_VELOCIDAD.map(tipo => [tipo, tipo === origen ? clonarEstrategia(base) : ajustarEstrategia(matriz, base, tipo, version)])) as EstrategiasRouter
 }
 
-/** Resumen corto de una estrategia para listas: «RADIUS por sesión · Por plan · CAKE». */
+/** Resumen corto de una estrategia para listas: «RADIUS por sesión · Por plan · CAKE» (+ «QoS»). */
 export function resumenEstrategia(estrategia: Estrategia): string {
-    return [OPCIONES_APLICACION[estrategia.aplicacion].etiqueta, OPCIONES_PADRE[estrategia.padre].etiqueta, OPCIONES_TIPO_COLA[estrategia.tipo_cola].etiqueta].join(' · ')
+    return [OPCIONES_APLICACION[estrategia.aplicacion].etiqueta, OPCIONES_PADRE[estrategia.padre].etiqueta, OPCIONES_TIPO_COLA[estrategia.tipo_cola].etiqueta, estrategia.extras.qos ? 'QoS por clases' : null].filter(Boolean).join(' · ')
 }
 
 /** Si un plan tiene alguna capa propia en algún tipo de conexión. */

@@ -32,26 +32,21 @@ const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero),
 |--------------------------------------------------------------------------
 */
 
-/**
- * Extras de la estrategia. La API además envía `qos` (prioridad por clases, `contratos/qos.md`, por
- * defecto false): queda fuera del esquema de respuesta hasta que el panel lo use (agregarlo, aunque
- * sea opcional, rompe los `Record<Extra, …>` de `apps/web`); se pide a A4 en `.claude/integration/a2.md`.
- * En las peticiones sí está (`extras.qos` opcional).
- */
-const extrasVelocidad = {
-    ...objeto({
-        rafaga: { ...booleano, description: 'burst-* del plan (en PCQ: pcq-burst-*)' },
-        prioridad: { ...booleano, description: 'priority del plan (1–8); false = 8' },
-        garantizado: { ...booleano, description: 'limit-at (CIR); false = 0' },
-        excluir_fasttrack: {
-            ...booleano,
-            description: 'Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack',
-        },
-    }),
-    description:
-        'Además `qos` (boolean, por defecto false): prioridad por clases en el árbol (contratos/qos.md); la API ' +
-        'siempre lo envía',
-}
+const extrasVelocidad = objeto({
+    rafaga: { ...booleano, description: 'burst-* del plan (en PCQ: pcq-burst-*)' },
+    prioridad: { ...booleano, description: 'priority del plan (1–8); false = 8' },
+    garantizado: { ...booleano, description: 'limit-at (CIR); false = 0' },
+    excluir_fasttrack: {
+        ...booleano,
+        description: 'Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack',
+    },
+    qos: {
+        ...booleano,
+        description:
+            'Prioridad por clases dentro del plan (contratos/qos.md): solo arbol_pcq y con excluir_fasttrack; ' +
+            'por defecto false',
+    },
+})
 
 export const EstrategiaVelocidad = definirEsquema(
     'EstrategiaVelocidad',

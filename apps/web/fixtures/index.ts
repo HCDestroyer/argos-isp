@@ -48,6 +48,7 @@ import { rutasChecksCierre, rutasCorridasFacturacion } from './libro/checks'
 import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
 import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horus/datos'
 import { rutasHorus } from './horus/rutas'
+import { rutasIris } from './iris/rutas'
 import { rutasImplementacionesPlan } from './planes/implementaciones'
 import { rutasPlanes } from './planes/rutas'
 import { rutasNodosPortal } from './nodosPortal/rutas'
@@ -57,6 +58,7 @@ import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
+import { rutasQos } from './qos/rutas'
 import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
 import { rutasEstrategias } from './routers/estrategias'
@@ -532,6 +534,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasConexionRouters,
     ...rutasEliminacion,
     ...rutasRed,
+    ...rutasQos,
     ...rutasPlanes,
     ...rutasPlantillas,
     ...rutasBitacora,
@@ -562,4 +565,5 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasReportes,
     ...rutasEgresos,
     ...rutasHorus,
+    ...rutasIris,
 })

@@ -33,5 +33,5 @@ export type CambioEstrategiaPlan = paths['/api/v1/planes/{id}/routers/{routerId}
 export const APLICACIONES = ['radius_rate_limit', 'perfil_ppp', 'cola_simple', 'pcq_plan', 'arbol_pcq'] as const satisfies readonly Aplicacion[]
 export const PADRES = ['ninguno', 'por_plan', 'por_router', 'jerarquico'] as const satisfies readonly Padre[]
 export const TIPOS_COLA = ['default', 'sfq', 'pcq', 'fq_codel', 'cake'] as const satisfies readonly TipoCola[]
-export const EXTRAS = ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack'] as const satisfies readonly Extra[]
+export const EXTRAS = ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack', 'qos'] as const satisfies readonly Extra[]
 export const TIPOS_CONEXION_VELOCIDAD = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const satisfies readonly TipoConexionVelocidad[]

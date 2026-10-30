@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormError, FormSubmitEvent, TableColumn } from '@nuxt/ui'
+import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 
 /**
  * Configuración → Integraciones → Horus Flow (`contratos/horus.md` 1.2.0; API de A1 y A6). Estado
@@ -242,14 +242,6 @@ async function cargarTokens() {
     tokens.value = resultado.ok ? resultado.data : []
     problemaTokens.value = resultado.ok ? null : resultado.problema
 }
-
-const columnasTokens: TableColumn<TokenApi>[] = [
-    { accessorKey: 'nombre', header: 'Token', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'created_at', header: 'Creado', meta: SOLO_ESCRITORIO },
-    { accessorKey: 'ultimo_uso', header: 'Último uso', meta: SOLO_ESCRITORIO },
-    { id: 'estado', header: 'Estado' },
-    { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
-]
 
 const tokenAbierto = ref(false)
 const estadoToken = reactive<{ nombre: string }>({ nombre: '' })
@@ -750,55 +742,15 @@ const enPausa = computed(() => {
                     :reintentar="cargarTokens"
                     :reintentando="cargandoTokens"
                 />
-                <UTable
+                <TablaTokensIntegracion
                     v-else
-                    :data="tokens"
-                    :columns="columnasTokens"
-                    :loading="cargandoTokens"
+                    :tokens="tokens"
+                    :cargando="cargandoTokens"
+                    :puede-revocar="puede('horus.revocar_token')"
+                    vacio="Todavía no hay tokens para Horus"
                     data-prueba="tabla-tokens-horus"
-                >
-                    <template #nombre-cell="{ row }">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
-                            <span class="text-xs text-muted sm:hidden">Creado {{ formatearFechaHora(row.original.created_at) }}</span>
-                        </div>
-                    </template>
-                    <template #created_at-cell="{ row }">
-                        {{ formatearFechaHora(row.original.created_at) }}
-                    </template>
-                    <template #ultimo_uso-cell="{ row }">
-                        {{ row.original.ultimo_uso ? formatearFechaHora(row.original.ultimo_uso) : 'Nunca' }}
-                    </template>
-                    <template #estado-cell="{ row }">
-                        <UBadge
-                            :label="row.original.revocado_en ? 'Revocado' : 'Vigente'"
-                            :icon="row.original.revocado_en ? 'i-lucide-ban' : 'i-lucide-circle-check'"
-                            :color="row.original.revocado_en ? 'neutral' : 'success'"
-                            variant="subtle"
-                            size="sm"
-                        />
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <UButton
-                            v-if="puede('horus.revocar_token') && !row.original.revocado_en"
-                            label="Revocar"
-                            icon="i-lucide-ban"
-                            color="error"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`Revocar ${row.original.nombre}`"
-                            :data-prueba="`revocar-token-${row.original.id}`"
-                            @click="pedirRevocar(row.original)"
-                        />
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-key-round"
-                            title="Todavía no hay tokens para Horus"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                    @revocar="pedirRevocar"
+                />
             </section>
 
             <!-- Vinculaciones -->
