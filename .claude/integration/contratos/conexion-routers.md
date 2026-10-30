@@ -11,8 +11,8 @@ Pedido del PM (28 oct): conectar un MikroTik a Argos con un script generado desd
 | IP del túnel | IPAM de A1 | Una `/32` por router, de `ARGOSISP_WG_RED`, única y estable mientras el router exista. |
 | Clave privada del router | En el MikroTik | **Nunca sale del router.** El script crea la interfaz, lee su `public-key` y la registra en Argos. |
 | Registro | `POST /api/v1/routers/conexion/registrar` (sin sesión, con token) | Token de un solo uso, ligado al router, válido 24 h y guardado con hash. El router manda `{ token, public_key }` y Argos responde con la clave pública del servidor y su endpoint. El script añade el peer con esos datos. Token vencido o usado → 410. Si el router no tiene internet, el panel acepta pegar la `public_key` a mano (`POST /routers/:id/conexion/clave`). |
-| Usuario de la API | En el MikroTik | Grupo `argosisp-api` con `read,write,api,rest-api` y nada más (sin `ftp`, `ssh`, `telnet`, `winbox`, `password`, `policy`, `sensitive`). Es el mínimo probado por A6 en CHR 7.24.5: sin `api` la REST responde `not allowed` y sin `rest-api`, 401; `web` no hace falta (`infra/mikrotik/README.md`, «Permisos mínimos de la API»). Usuario `argosisp-api`, con clave aleatoria de 32 caracteres que Argos genera y guarda cifrada en `api_password`, y `address=` la IP del servidor en el túnel. |
-| RADIUS | En el MikroTik | `/radius` hacia la IP del servidor en el túnel, con el secreto del NAS (de A2) y `src-address` = la IP del router en el túnel. `/radius incoming` en 3799, solo desde la IP del servidor en el túnel. |
+| Usuario de la API | En el MikroTik | Grupo `argosisp-api` con `read,write,api,rest-api` y nada más (sin `ftp`, `ssh`, `telnet`, `winbox`, `password`, `policy`, `sensitive`; un router sin RADIUS suma `sensitive`, §3). Es el mínimo probado por A6 en CHR 7.24.5: sin `api` la REST responde `not allowed` y sin `rest-api`, 401; `web` no hace falta (`infra/mikrotik/README.md`, «Permisos mínimos de la API»). Usuario `argosisp-api`, con clave aleatoria de 32 caracteres que Argos genera y guarda cifrada en `api_password`, y `address=` la IP del servidor en el túnel. |
+| RADIUS | En el MikroTik (solo routers `radius`) | `/radius` hacia la IP del servidor en el túnel, con el secreto del NAS (de A2) y `src-address` = la IP del router en el túnel. `/radius incoming` en 3799, solo desde la IP del servidor en el túnel. |
 
 ## 2. Puertos
 
@@ -46,6 +46,7 @@ Pedido del PM (28 oct): conectar un MikroTik a Argos con un script generado desd
 - Cada generación emite un token nuevo (el anterior deja de valer), queda en la auditoría **sin** secretos y emite `router.conexion_generada { router_id, empresa_id, actor }`.
 - El script es re-ejecutable: borra y recrea solo lo que lleva comentario `argosisp:`. Requiere RouterOS 7.x (WireGuard nativo) y lo comprueba al inicio.
 - Lleva secretos (clave de la API y secreto RADIUS), así que el panel lo descarga y no lo guarda. El texto lo advierte.
+- **Router sin RADIUS** (`modo_seguridad = 'api'`, 30 oct; pedido de A6 en `a6.md`): el mismo endpoint elige la variante sin RADIUS de A6, `plantillas/conexion-sin-radius.rsc.tpl` (o `conexion-servicio-sin-radius.rsc.tpl` con `?incluir=servicio`). Mismo túnel, registro, certificado y restricción de gestión; sin `/radius` de Argos ni CoA (quita los `/radius` con comentario `argosisp: aaa nodo` de una ejecución anterior), `/ppp aaa set use-radius=no accounting=no` y el grupo `argosisp-api` con `sensitive` (el reconciliador de PPPoE local lee la contraseña de cada `/ppp secret`, `contratos/pppoe-local.md`; el usuario solo entra por el túnel). No usa `{{radius_secret}}`: Argos no lee ni exige el secreto RADIUS de ese router (aunque tenga uno guardado, no viaja en el script). Elección en `plantillaConexion(modo, incluirServicio)` (`apps/api/app/network/conexion/render.ts`). Ya no existe el 422 `script_requiere_radius`. `routers.rotar_conexion` usa la misma elección.
 - Al registrarse, el router pasa a `conexion.estado = conectado` cuando el servidor ve su handshake (menos de 3 min, §6.3); si no, `pendiente`. `routers.rotar_conexion` invalida el peer y genera un script nuevo.
 
 ## 4. Permisos y eventos
@@ -102,7 +103,7 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 
 | Endpoint | Permiso | Respuesta |
 | --- | --- | --- |
-| `GET /api/v1/routers/:id/script-conexion?admin=&incluir=servicio` | `routers.generar_script` | `text/plain` (descarga `argosisp-router-<id>.rsc`, `Cache-Control: no-store`). 422 `radius_secret_requerido`, `servicio_incompleto`, `red_tunel_llena`; 503 `wireguard_no_configurado`, `plantillas_no_disponibles` |
+| `GET /api/v1/routers/:id/script-conexion?admin=&incluir=servicio` | `routers.generar_script` | `text/plain` (descarga `argosisp-router-<id>.rsc`, `Cache-Control: no-store`). Plantilla según `modo_seguridad` (§3). 422 `radius_secret_requerido` (solo en modo `radius`), `servicio_incompleto`, `red_tunel_llena`; 503 `wireguard_no_configurado`, `plantillas_no_disponibles` |
 | `GET /api/v1/routers/:id/conexion` | `routers.ver` | `ConexionRouter`: `estado` (`sin_configurar`, `pendiente`, `conectado` = handshake < 3 min), `ip_tunel`, `public_key`, `ultimo_handshake`, `handshake_reciente`, `registrado_en`, `routeros_version`, `token_vence`, `version` |
 | `POST /api/v1/routers/conexion/registrar` | público, token | §6.1. 410 `token_invalido`, 409 `clave_en_uso`, 429 |
 | `POST /api/v1/routers/:id/conexion/clave` `{ public_key }` | `routers.conexion_clave` | `ConexionRouter`. 422 `script_no_generado` |
