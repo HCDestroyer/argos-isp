@@ -565,6 +565,10 @@ export async function coberturaDeServicio(
  * de que empezó la mora actual = el vencimiento más antiguo de las facturas vencidas que aún tienen
  * saldo. Cuenta aunque el pago haya saldado una factura completa. No cuentan los adelantos a
  * facturas que todavía no vencían ni los pagos de moras anteriores ya saldadas.
+ *
+ * Un pago histórico (importado) se aplica al importarlo (`a.created_at` = hoy), pero se pagó en el
+ * sistema de origen el día de su `created_at`: cuenta solo si **ese** día ya era después del
+ * vencimiento (mismo resguardo que `avanceDePromesa`; revisión del auditor a la PR #190).
  */
 export async function abonoDeServicio(cliente: QueryClientContract, servicioId: number): Promise<Dec> {
     const inicio = (await cliente
@@ -575,6 +579,7 @@ export async function abonoDeServicio(cliente: QueryClientContract, servicioId: 
         .select(cliente.raw('min(coalesce(vencida_en, emitida_en)) as desde'))
         .first()) as { desde: Date | null } | null
     if (!inicio?.desde) return CERO
+    const desde = inicio.desde
     const fila = (await cliente
         .from('billing.pagos_aplicaciones as a')
         .join('billing.pagos as p', 'p.id', 'a.pago_id')
@@ -584,6 +589,13 @@ export async function abonoDeServicio(cliente: QueryClientContract, servicioId: 
         .whereNotNull('f.vencida_en')
         .whereRaw('a.created_at >= f.vencida_en')
         .where('a.created_at', '>=', inicio.desde)
+        .where((q) =>
+            q
+                .where('p.historico', false)
+                .orWhere((h) =>
+                    h.whereRaw('p.created_at >= f.vencida_en').where('p.created_at', '>=', desde),
+                ),
+        )
         .select(cliente.raw('coalesce(sum(a.monto), 0)::text as abonado'))
         .first()) as { abonado: string }
     return dec(fila.abonado)
@@ -666,9 +678,26 @@ export interface AvancePromesa {
  *
  * - `facturas`: se cumple cuando ninguna de sus facturas cubiertas sigue pendiente (pagada, o
  *   acreditada/anulada/castigada: ya no se cobra). Una factura vencida después de crearla no cuenta.
+ *   Una cubierta **sustituida** (`billing.sustituciones`, p. ej. corrección de NIT) sigue en su
+ *   sustituta, y en la sustituta de esta (`facturasCubiertasSql`): anular la original para
+ *   reemitirla no cumple la promesa; pagar la sustituta, sí.
  * - `monto` (legado): se cumple si lo pagado a las facturas del servicio desde la promesa llega a
  *   su monto, o si el servicio ya no tiene deuda vencida.
  */
+/**
+ * Subconsulta SQL con las facturas que cubre la promesa `?`: las de `billing.promesas_facturas` más
+ * sus sustitutas en cadena (`original_id → nueva_id`, revisión del auditor a la PR #190). La
+ * original sustituida queda anulada (ya no pendiente); la deuda sigue en la sustituta.
+ */
+export const FACTURAS_CUBIERTAS_SQL = `(
+    WITH RECURSIVE cubiertas (factura_id) AS (
+        SELECT pf.factura_id FROM billing.promesas_facturas pf WHERE pf.promesa_id = ?
+        UNION
+        SELECT s.nueva_id FROM billing.sustituciones s JOIN cubiertas c ON s.original_id = c.factura_id
+    )
+    SELECT factura_id FROM cubiertas
+)`
+
 export async function avanceDePromesa(
     cliente: QueryClientContract,
     promesa: {
@@ -693,18 +722,11 @@ export async function avanceDePromesa(
 
     if (promesa.regla_cumplimiento === 'facturas') {
         const fila = (await pagos
-            .whereIn(
-                'a.factura_id',
-                cliente
-                    .from('billing.promesas_facturas')
-                    .where('promesa_id', promesa.id)
-                    .select('factura_id'),
-            )
+            .whereRaw(`a.factura_id IN ${FACTURAS_CUBIERTAS_SQL}`, [promesa.id])
             .first()) as { pagado: string }
         const saldo = (await cliente
-            .from('billing.promesas_facturas as pf')
-            .join('billing.facturas as f', 'f.id', 'pf.factura_id')
-            .where('pf.promesa_id', promesa.id)
+            .from('billing.facturas as f')
+            .whereRaw(`f.id IN ${FACTURAS_CUBIERTAS_SQL}`, [promesa.id])
             .whereIn('f.estado', [...ESTADOS_PENDIENTES])
             .select(
                 cliente.raw('count(*) = 0 as cumplida'),

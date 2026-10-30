@@ -6,6 +6,8 @@ import CrearPromesaPago, { type EntradaCrearPromesa } from '#billing/actions/cre
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import VencerFacturas from '#billing/actions/vencer_facturas'
+import SustituirFactura from '#billing/actions/sustituir_factura'
+import RegistrarPagoHistorico from '#billing/actions/registrar_pago_historico'
 import { ConsumidorBilling } from '#billing/consumidor'
 import { verPromesa } from '#billing/promesas'
 import { normalizarReglasPromesa } from '#billing/reglas_promesa'
@@ -17,6 +19,7 @@ import {
     facturasDe,
     generar,
     servicioCortado,
+    unicoBd,
 } from '#tests/billing/ayudas_billing'
 
 /**
@@ -328,7 +331,9 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
     })
 
     test('POST /promesas ignora monto y responde el total calculado', async ({ client, assert }) => {
-        const { servicioId } = await servicioCortado()
+        // por HTTP el reloj es el real: sin el tope de la siguiente facturación, que el 30 y 31 del
+        // mes rechaza la promesa a dos días
+        const { servicioId } = await servicioCortado({ plantilla: { reglas_promesa: REGLAS_AMPLIAS } })
         const { token } = await usuarioConRoles(['cajero'])
         const respuesta = await estado(
             client
@@ -350,7 +355,7 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
         assert.lengthOf(respuesta.body().facturas, 2)
 
         // sin monto también
-        const { servicioId: otro } = await servicioCortado()
+        const { servicioId: otro } = await servicioCortado({ plantilla: { reglas_promesa: REGLAS_AMPLIAS } })
         const sinMonto = await estado(
             client
                 .post('/api/v1/promesas')
@@ -360,6 +365,7 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
             201,
         )
         assert.equal(sinMonto.body().monto, '300.00')
+        assert.equal(sinMonto.body().estado, 'activa')
     })
 
     test('el simulador y los límites del portal devuelven el total y las facturas que cubriría', async ({
@@ -390,5 +396,112 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
         // no creó nada
         const n = await db.from('billing.promesas').where('servicio_id', servicioId).count('* as n')
         assert.equal(Number(n[0].n), 0)
+    })
+})
+
+test.group('billing · promesas: sustituciones y pagos históricos (revisión de la PR #190)', () => {
+    test('sustituir una factura cubierta (corrección de NIT) no cumple la promesa; pagar la sustituta, sí', async ({
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await servicioCortado()
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.monto, '300.00')
+        // septiembre se paga; octubre (vencida, sin pagos) se sustituye
+        await pagar(clienteId, '150.00')
+        const facturas = await facturasDe(servicioId)
+        const octubre = facturas.find((f) => f.periodo === '2026-10-01')!
+        const primera = await new SustituirFactura().execute(
+            { factura_id: Number(octubre.id), motivo: 'NIT equivocado' },
+            contextoPrueba(),
+        )
+        assert.equal(primera.original.estado, 'anulada')
+
+        // la cubierta ya no está pendiente, pero su deuda sigue en la sustituta: no se cumple
+        await pagoRegistrado(clienteId)
+        assert.equal(await estadoPromesa(promesa.id), 'activa')
+        assert.lengthOf(await eventosDe('promesa.cumplida', 'promesa_id', promesa.id), 0)
+
+        // y tampoco al sustituir la sustituta (otra corrección): se sigue la cadena
+        const segunda = await new SustituirFactura().execute(
+            { factura_id: primera.nueva.id, motivo: 'Faltaba la dirección fiscal' },
+            contextoPrueba(),
+        )
+        const cron = await new IncumplirPromesas().execute(
+            { servicio_id: servicioId, ahora: gt('2026-10-12T18:00') },
+            contextoPrueba(),
+        )
+        assert.containSubset(cron, { revisadas: 1, cumplidas: 0, incumplidas: 1 })
+        const incumplida = await db.from('billing.promesas').where('id', promesa.id).firstOrFail()
+        assert.containSubset(incumplida.resultado_evaluacion.cierre, {
+            estado: 'incumplida',
+            pagado: '150.00',
+            saldo_cubierto: '150.00',
+        })
+
+        // la deuda está en la última sustituta, pendiente
+        const ultima = await db.from('billing.facturas').where('id', segunda.nueva.id).firstOrFail()
+        assert.include(['emitida', 'vencida'], ultima.estado)
+        assert.equal(ultima.total, '150.00')
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('una promesa cuya cubierta se sustituye y la sustituta se paga queda cumplida con lo pagado', async ({
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await servicioCortado()
+        const promesa = await prometer(servicioId)
+        const [septiembre] = await facturasDe(servicioId)
+        const s = await new SustituirFactura().execute(
+            { factura_id: Number(septiembre!.id), motivo: 'NIT equivocado' },
+            contextoPrueba(),
+        )
+        await pagoRegistrado(clienteId)
+        assert.equal(await estadoPromesa(promesa.id), 'activa')
+
+        // el pago va a lo más antiguo: la sustituta de septiembre y octubre
+        await pagar(clienteId, '300.00')
+        await pagoRegistrado(clienteId)
+        assert.equal(await estadoPromesa(promesa.id), 'cumplida')
+        const fila = await db.from('billing.promesas').where('id', promesa.id).firstOrFail()
+        assert.containSubset(fila.resultado_evaluacion.cierre, {
+            estado: 'cumplida',
+            pagado: '300.00',
+            saldo_cubierto: '0.00',
+        })
+        const aplicada = await db
+            .from('billing.pagos_aplicaciones')
+            .where('factura_id', s.nueva.id)
+            .sum('monto as monto')
+            .firstOrFail()
+        assert.equal(aplicada.monto, '150.00')
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('un pago histórico anterior al vencimiento (en el sistema de origen) no cuenta como abono', async ({
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await servicioCortado({ plantilla: { reglas_promesa: abono(50) } })
+        const [septiembre] = await facturasDe(servicioId)
+        // pagado el 3 de septiembre en el sistema anterior; importado hoy (aplicación de hoy)
+        await new RegistrarPagoHistorico().execute(
+            {
+                historico: true,
+                id_externo: await unicoBd('mw-pago'),
+                cliente_id: clienteId,
+                metodo: 'deposito',
+                monto: '150.00',
+                fecha: '2026-09-03',
+                facturas: [Number(septiembre!.id)],
+            },
+            contextoPrueba(),
+        )
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.estado, 'rechazada')
+        assert.containSubset(reglaAbono(promesa), { ok: false, valor: '0.00' })
+
+        // un pago de hoy (después del vencimiento) sí cuenta
+        await pagar(clienteId, '75.00')
+        const conAbono = await prometer(servicioId)
+        assert.containSubset(reglaAbono(conAbono), { valor: '75.00' })
     })
 })
