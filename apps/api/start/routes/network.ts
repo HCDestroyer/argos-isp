@@ -149,6 +149,10 @@ const routers: Ruta[] = [
         ruta: '/routers',
         operacion: 'routersCrear',
         resumen: 'Crear router',
+        descripcion:
+            'Con `modo_seguridad: radius` (por defecto) la `nas_ip` es obligatoria (422 en `nas_ip`). Con `api` es un ' +
+            'router sin RADIUS (solo ip_estatica y dhcp_fija por la API REST): `nas_ip` y `radius_secret` son ' +
+            'opcionales. 409 `router_duplicado` si el MikroTik ya está registrado.',
         etiqueta: 'routers',
         permiso: 'routers.crear',
         cuerpo: v.crearRouterValidator,
@@ -201,6 +205,11 @@ const routers: Ruta[] = [
         ruta: '/routers/:id',
         operacion: 'routersEditar',
         resumen: 'Editar router',
+        descripcion:
+            'Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). ' +
+            'Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por ' +
+            'servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite ' +
+            '`router.radius_cambiado`.',
         etiqueta: 'routers',
         permiso: 'routers.editar',
         cuerpo: v.editarRouterValidator,
@@ -866,6 +875,7 @@ const SOBRE_EL_SCRIPT =
     'panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de ' +
     'valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; ' +
     '`?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). ' +
+    '422 `script_requiere_radius` si el router está en modo `api` (sin RADIUS); ' +
     '422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 ' +
     '`wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin ' +
     '`API_PUBLIC_URL` https) o `plantillas_no_disponibles`.'

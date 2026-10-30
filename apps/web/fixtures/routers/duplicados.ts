@@ -33,7 +33,11 @@ export function extremoApi(router: Pick<Router, 'host' | 'api_url'>): string {
 type ConClaves = Pick<Router, 'host' | 'api_url' | 'nas_ip'> & { serial?: string | null }
 
 function clavesDe(router: ConClaves): Clave[] {
-    const claves: Clave[] = [{ motivo: 'api', valor: extremoApi(router) }, { motivo: 'nas_ip', valor: router.nas_ip }]
+    const claves: Clave[] = [{ motivo: 'api', valor: extremoApi(router) }]
+    // un router sin RADIUS (modo api) puede no tener nas_ip: no choca por esa clave (como la API)
+    if (router.nas_ip) {
+        claves.push({ motivo: 'nas_ip', valor: router.nas_ip })
+    }
     const serial = router.serial?.trim().toLowerCase()
     if (serial) {
         claves.push({ motivo: 'serial', valor: serial })

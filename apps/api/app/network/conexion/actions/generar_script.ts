@@ -62,6 +62,8 @@ const SECRETO_RADIUS = /^[\x21-\x7e]{16,128}$/
  * - El secreto RADIUS es el `radius_secret` del router, el mismo con que se arma su cliente de
  *   FreeRADIUS. Nunca se inventa otro: sin él (o si no cumple 16 a 128 caracteres imprimibles sin
  *   espacios), 422 `radius_secret_requerido`.
+ * - Un router sin RADIUS (`modo_seguridad = 'api'`): 422 `script_requiere_radius`, antes de mirar el
+ *   secreto; las plantillas siempre activan RADIUS en el equipo.
  * - Ni la auditoría ni el evento llevan secretos; el script no se guarda.
  */
 export default class GenerarScript extends DomainAction<EntradaGenerarScript, ScriptConexion> {
@@ -73,6 +75,14 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
         await t.trx.from('network.routers').where('id', routerId).forUpdate().select('id')
         const router = await verRouter(routerId, t.trx)
         t.fijarEmpresa(router.empresa_sugerida_id)
+        if (router.modo_seguridad === 'api') {
+            throw new ReglaNegocio(
+                'Este router no usa RADIUS (modo «api»), y el script de conexión configura RADIUS y CoA en el ' +
+                    'equipo (use-radius=yes). Cambia el router a RADIUS para usar el script, o configura a mano el ' +
+                    'acceso a su API REST',
+                'script_requiere_radius',
+            )
+        }
         const wg = await configWireguard(t.trx)
         const argosUrl = urlBaseApi(input.origen)
 

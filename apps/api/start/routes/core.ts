@@ -857,6 +857,9 @@ const servicios: Ruta[] = [
         resumen: 'Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)',
         etiqueta: 'servicios',
         permiso: 'servicios.crear',
+        descripcion:
+            '422 `pppoe_requiere_radius` si el servicio es pppoe (el tipo por defecto) y el router está en modo `api` ' +
+            '(sin RADIUS): ahí solo van ip_estatica y dhcp_fija.',
         cuerpo: v.crearServicioValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Servicio creado', esquema: Servicio },
@@ -922,6 +925,9 @@ const servicios: Ruta[] = [
         ruta: '/servicios/:id',
         operacion: 'serviciosEditar',
         resumen: 'Editar servicio (plan, router, IPs, datos)',
+        descripcion:
+            'Mover un servicio pppoe a un router en modo `api` (sin RADIUS) o pasar a pppoe uno que está en un router ' +
+            '`api`: 422 `pppoe_requiere_radius`.',
         etiqueta: 'servicios',
         permiso: 'servicios.editar',
         cuerpo: v.editarServicioValidator,

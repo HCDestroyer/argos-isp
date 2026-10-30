@@ -92,6 +92,21 @@ const coordenadasRouter = () =>
 const zonaRouter = () =>
     idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
 
+/**
+ * `radius` (por defecto): PPPoE por RADIUS y CoA, `nas_ip` obligatoria. `api`: router sin RADIUS; solo
+ * `ip_estatica` y `dhcp_fija` por la API REST (`app/network/README.md`, «Modo de seguridad»).
+ */
+const modoSeguridad = () =>
+    vine
+        .enum(['radius', 'api'] as const)
+        .optional()
+        .meta({
+            description:
+                'radius (por defecto): PPPoE por RADIUS y CoA; nas_ip obligatoria. api: router sin RADIUS, solo ' +
+                'ip_estatica y dhcp_fija por la API REST; nas_ip y radius_secret opcionales. Pasar a api con ' +
+                'servicios pppoe no retirados: 422 servicios_pppoe_en_router',
+        })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -103,10 +118,17 @@ const camposRouter = {
     api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
     api_password: credencialRouter('Clave del usuario de la API REST. Se guarda cifrada'),
     radius_secret: credencialRouter(
-        'Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado',
+        'Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado. Opcional; un router `api` no lo usa',
     ),
-    nas_ip: ipv4(),
-    modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
+    nas_ip: ipv4()
+        .nullable()
+        .optional()
+        .meta({
+            description:
+                'IP con la que el router habla RADIUS y a la que se envían los CoA. Obligatoria con modo_seguridad radius ' +
+                '(422 en nas_ip si falta); opcional (null) con modo_seguridad api',
+        }),
+    modo_seguridad: modoSeguridad(),
     empresa_sugerida_id: empresaSugerida(),
     zona_id: zonaRouter(),
     coordenadas: coordenadasRouter(),
@@ -120,12 +142,16 @@ const camposRouter = {
     activo: vine.boolean().optional(),
 }
 
+/** También lo usa `CrearRouter`/`EditarRouter` cuando un router `radius` queda sin `nas_ip`. */
+export const MENSAJE_NAS_IP_REQUERIDA =
+    'La IP del NAS es obligatoria en un router con RADIUS: es la IP con la que el router habla con RADIUS y a la ' +
+    'que se envían los CoA. Si el router no usa RADIUS (solo IP estática o DHCP fija), elige el modo «api»'
+
 const MENSAJES_ROUTER = {
     'nombre.required': 'El nombre es obligatorio: así reconoces el router en el panel y en los servicios',
     'host.required':
         'El host es obligatorio: es la IP o el nombre con el que el sistema llega a la API del router',
-    'nas_ip.required':
-        'La IP del NAS es obligatoria: es la IP con la que el router habla con RADIUS y a la que se envían los CoA',
+    'nas_ip.required': MENSAJE_NAS_IP_REQUERIDA,
     'nas_ip.ipAddress': 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1',
     'coordenadas.regex':
         'Las coordenadas van como "latitud,longitud" en grados decimales, por ejemplo 14.6349,-90.5069 (latitud entre −90 y 90, longitud entre −180 y 180)',
@@ -157,8 +183,11 @@ export const editarRouterValidator = conMensajes(
                 .boolean()
                 .optional()
                 .meta({ description: 'Borra el secreto RADIUS (422 si además llega radius_secret)' }),
-            nas_ip: ipv4().optional(),
-            modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
+            nas_ip: ipv4().nullable().optional().meta({
+                description:
+                    'null la quita (solo en un router api; 422 en nas_ip si el router queda en radius sin ella)',
+            }),
+            modo_seguridad: modoSeguridad(),
             empresa_sugerida_id: empresaSugerida(),
             zona_id: zonaRouter(),
             coordenadas: coordenadasRouter(),

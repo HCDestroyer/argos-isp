@@ -7,6 +7,10 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
  * `version`): plan del mismo router, tipo de conexión PPPoE / IP estática / DHCP fija, MAC,
  * amarre IP-MAC, modo IPv6, instalación y precio especial. Solo viaja lo que cambió; los 422 se
  * muestran junto a cada campo y el 409 ofrece recargar.
+ *
+ * En un router sin RADIUS (`modo_seguridad = 'api'`) no se puede pasar a PPPoE (422
+ * `pppoe_requiere_radius`): la opción queda deshabilitada con su motivo. Un PPPoE que ya estaba en
+ * ese router (dato viejo) se sigue editando, como en la API.
  */
 const props = defineProps<{
     servicio: Servicio
@@ -25,6 +29,8 @@ const estado = reactive<EntradaEdicionServicio>(entradaEdicionDesde(props.servic
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 const planes = shallowRef<PlanEfectivo[]>([])
+/** Router del servicio, para saber si usa RADIUS (sin `routers.ver` no se sabe: decide la API). */
+const routerServicio = shallowRef<RouterNas | null>(null)
 
 watch(abierto, async (valor) => {
     if (!valor) {
@@ -32,19 +38,28 @@ watch(abierto, async (valor) => {
     }
     Object.assign(estado, entradaEdicionDesde(props.servicio))
     problema.value = null
-    if (puede('planes.ver')) {
-        const resultado = await useRouters().planes(props.servicio.router_id)
-        planes.value = resultado.ok ? resultado.data : []
-    }
+    const [resultadoPlanes, resultadoRouter] = await Promise.all([
+        puede('planes.ver') ? useRouters().planes(props.servicio.router_id) : null,
+        puede('routers.ver') ? useRouters().ver(props.servicio.router_id) : null,
+    ])
+    planes.value = resultadoPlanes?.ok ? resultadoPlanes.data : []
+    routerServicio.value = resultadoRouter?.ok ? resultadoRouter.data : null
 }, { immediate: true })
 
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 const eraPppoe = computed(() => esPppoe(props.servicio))
 
-const itemsTipo: RadioGroupItem[] = (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: TIPOS_CONEXION[tipo].descripcion,
+/** Pasar a PPPoE en un router sin RADIUS: no se permite (sí seguir editando un PPPoE que ya estaba). */
+const pppoeBloqueado = computed(() => esSinRadius(routerServicio.value) && !eraPppoe.value)
+
+const itemsTipo = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map((tipo) => {
+    const bloqueado = tipo === 'pppoe' && pppoeBloqueado.value
+    return {
+        label: TIPOS_CONEXION[tipo].etiqueta,
+        value: tipo,
+        description: bloqueado ? `No disponible: ${routerServicio.value?.nombre ?? 'el router'} no usa RADIUS.` : TIPOS_CONEXION[tipo].descripcion,
+        disabled: bloqueado,
+    }
 }))
 
 const itemsPlan = computed<SelectItem[]>(() => {
@@ -105,7 +120,7 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
         formulario.value?.setErrors(errores)
     }
     const campos = new Set(Object.keys(estado))
-    if (!errores.length || errores.some(e => !e.name || !campos.has(e.name))) {
+    if (!errores.length || esPppoeRequiereRadius(resultado.problema) || errores.some(e => !e.name || !campos.has(e.name))) {
         problema.value = resultado.problema
     }
 }

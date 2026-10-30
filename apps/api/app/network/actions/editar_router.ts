@@ -4,11 +4,14 @@ import { actualizarConVersion } from '#shared/version'
 import {
     auditableRouter,
     avisarRadius,
+    CAMPOS_RADIUS_EDICION,
     columnasRouter,
     exigirCaValida,
+    exigirNasIpSiRadius,
     exigirZona,
     type DatosRouter,
 } from '#network/actions/crear_router'
+import { exigirSinPppoe } from '#network/modo_seguridad'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { extremoApi, exigirRouterUnico } from '#network/routers_duplicados'
@@ -85,7 +88,7 @@ async function exigirSinDuplicado(t: Transaccion, antes: RouterVista, datos: Dat
         id: antes.id,
         host: datos.host ?? antes.host,
         api_url: datos.api_url !== undefined ? datos.api_url : antes.api_url,
-        nas_ip: datos.nas_ip ?? antes.nas_ip,
+        nas_ip: datos.nas_ip !== undefined ? datos.nas_ip : antes.nas_ip,
         serial: antes.serial,
     }
     const activo = datos.activo ?? antes.activo
@@ -104,6 +107,18 @@ async function exigirSinDuplicado(t: Transaccion, antes: RouterVista, datos: Dat
 }
 
 /**
+ * Modo de seguridad (`app/network/modo_seguridad.ts`): un router que queda en `radius` necesita su
+ * `nas_ip` (422 en `nas_ip`); pasar a `api` con servicios `pppoe` no retirados es 422
+ * `servicios_pppoe_en_router` con la lista. La fila se toma con `FOR UPDATE` antes de revisar los
+ * servicios: un alta de PPPoE simultánea (que la lee con `FOR SHARE`) espera o ya está contada.
+ */
+async function exigirModoSeguridad(t: Transaccion, antes: RouterVista, datos: DatosRouter) {
+    const modo = datos.modo_seguridad ?? antes.modo_seguridad
+    exigirNasIpSiRadius(modo, datos.nas_ip !== undefined ? datos.nas_ip : antes.nas_ip)
+    if (modo === 'api' && antes.modo_seguridad !== 'api') await exigirSinPppoe(t.trx, antes.id)
+}
+
+/**
  * Edita un router (control optimista por `version`). Cambiar una credencial se audita como
  * campo cambiado con valor `***`, nunca en claro. Cambiar la capacidad del enlace emite
  * `router.control_cambiado` con `campos: ['capacidad']` (A2 recalcula el padre global). El
@@ -115,12 +130,14 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
     protected async handle(input: EntradaEditarRouter, t: Transaccion): Promise<RouterVista> {
         const { id, version, ...datos } = credencialesEditadas(input)
         t.fijarEntidad('router', id)
+        await t.trx.from('network.routers').where('id', id).forUpdate().select('id')
         const antes = await verRouter(id, t.trx)
         if (datos.empresa_sugerida_id && datos.empresa_sugerida_id !== antes.empresa_sugerida_id) {
             await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
         }
         if (datos.zona_id !== antes.zona_id) await exigirZona(t.trx, datos.zona_id)
         exigirCaValida(datos.api_ca)
+        await exigirModoSeguridad(t, antes, datos)
         await exigirSinDuplicado(t, antes, datos)
         await actualizarConVersion(t.trx, 'network.routers', id, version, columnasRouter(datos))
         const despues = await verRouter(id, t.trx)
@@ -132,7 +149,7 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         if (datos.radius_secret && a.radius_secret) a.radius_secret = 'anterior'
         if (typeof datos.api_ca === 'string' && a.api_ca) a.api_ca = 'anterior'
         const cambiados = await t.registrarCambios({ tipo: 'router', id }, a, d)
-        await avisarRadius(t, despues, cambiados)
+        await avisarRadius(t, despues, cambiados, CAMPOS_RADIUS_EDICION)
         if (antes.activo !== despues.activo) await avisarTunel(t, despues)
         if (
             antes.capacidad_bajada_kbps !== despues.capacidad_bajada_kbps ||

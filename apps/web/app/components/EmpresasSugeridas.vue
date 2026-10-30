@@ -166,7 +166,7 @@ const columnasRouters: TableColumn<RouterNas>[] = [
                 <template #nombre-cell="{ row }">
                     <div class="flex flex-col">
                         <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
-                        <span class="font-mono text-xs text-muted">{{ row.original.nas_ip }}</span>
+                        <span class="font-mono text-xs text-muted">{{ textoNas(row.original) }}</span>
                     </div>
                 </template>
                 <template #empresa_sugerida_id-cell="{ row }">

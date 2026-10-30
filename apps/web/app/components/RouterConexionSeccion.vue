@@ -6,6 +6,8 @@ import type { Problem } from '@argosisp/contracts'
  * del túnel WireGuard con icono + texto + color, IP del túnel, último handshake y versión de
  * RouterOS. Botones con su permiso exacto: «Script de conexión» (`routers.generar_script`), «Pegar
  * clave pública» (`routers.conexion_clave`) y «Rotar conexión» (`routers.rotar_conexion`).
+ * Un router sin RADIUS (`modo_seguridad = 'api'`) no admite el script (la API responde 422
+ * `script_requiere_radius`, también al rotar): los dos botones quedan deshabilitados con su motivo.
  */
 const props = defineProps<{
     router: RouterNas
@@ -30,6 +32,7 @@ watch(() => props.router.id, () => void cargar(), { immediate: true })
 defineExpose({ cargar })
 
 const estado = computed(() => (conexion.value ? ESTADOS_TUNEL[conexion.value.estado] : null))
+const sinRadius = computed(() => esSinRadius(props.router))
 const scriptAbierto = ref(false)
 const rotarAbierto = ref(false)
 const claveAbierta = ref(false)
@@ -58,8 +61,30 @@ const claveAbierta = ref(false)
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <!-- Sin RADIUS: deshabilitado, con el motivo en un tooltip (el botón deshabilitado no recibe el puntero). -->
+                <UTooltip
+                    v-if="puede('routers.generar_script') && sinRadius"
+                    :text="MENSAJE_SCRIPT_SIN_RADIUS"
+                    :content="{ side: 'bottom' }"
+                    :ui="{ content: 'h-auto max-w-xs whitespace-normal py-1.5' }"
+                >
+                    <span
+                        class="inline-flex"
+                        tabindex="0"
+                        data-prueba="script-deshabilitado"
+                    >
+                        <UButton
+                            label="Script de conexión"
+                            icon="i-lucide-file-code-2"
+                            color="neutral"
+                            variant="outline"
+                            disabled
+                            data-prueba="abrir-script"
+                        />
+                    </span>
+                </UTooltip>
                 <UButton
-                    v-if="puede('routers.generar_script')"
+                    v-else-if="puede('routers.generar_script')"
                     label="Script de conexión"
                     icon="i-lucide-file-code-2"
                     :class="conexion?.estado === 'conectado' ? '' : 'glow-brand'"
@@ -79,6 +104,8 @@ const claveAbierta = ref(false)
                 />
                 <UButton
                     v-if="puede('routers.rotar_conexion') && conexion && conexion.estado !== 'sin_configurar'"
+                    :disabled="sinRadius"
+                    :title="sinRadius ? MENSAJE_SCRIPT_SIN_RADIUS : undefined"
                     label="Rotar conexión"
                     icon="i-lucide-rotate-ccw-key"
                     color="error"
@@ -89,6 +116,15 @@ const claveAbierta = ref(false)
             </div>
         </div>
 
+        <UAlert
+            v-if="sinRadius"
+            color="info"
+            variant="subtle"
+            icon="i-lucide-plug"
+            title="Router sin RADIUS: sin script de conexión"
+            :description="MENSAJE_SCRIPT_SIN_RADIUS"
+            data-prueba="script-sin-radius"
+        />
         <ProblemaAlerta
             v-if="problema"
             :problema="problema"

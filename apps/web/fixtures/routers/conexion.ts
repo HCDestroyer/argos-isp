@@ -77,6 +77,10 @@ function generar(solicitud: SolicitudFixture, accion: 'routers.generar_script' |
     if (malas.length) {
         return datosInvalidos([{ field: 'admin', message: `No son IPv4 ni redes: ${malas.join(', ')}`, rule: 'ipv4' }])
     }
+    // Como `GenerarScript` (A1): un router sin RADIUS no admite el script, antes de mirar el secreto.
+    if (router.modo_seguridad === 'api') {
+        return problemaTipado(422, 'script_requiere_radius', 'Regla de negocio', 'Este router no usa RADIUS (modo «api»), y el script de conexión configura RADIUS y CoA en el equipo (use-radius=yes). Cambia el router a RADIUS para usar el script, o configura a mano el acceso a su API REST')
+    }
     if (!router.tiene_radius_secret || router.id === 3) {
         return problemaTipado(422, 'radius_secret_requerido', 'Falta el secreto RADIUS', 'Define el secreto RADIUS del router (de 16 a 128 caracteres, sin espacios) en «Editar» antes de generar el script')
     }

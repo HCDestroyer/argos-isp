@@ -39,10 +39,10 @@ const absorbido = computed(() => candidatos.value.find(r => r.id === absorberId.
 const itemsQueda = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
     label: r.nombre,
     value: r.id,
-    description: `${r.host} · NAS ${r.nas_ip} · ${enPlural(r.servicios_total, 'servicio', 'servicios')} · ${enPlural(r.sesiones_abiertas, 'sesión abierta', 'sesiones abiertas')}`,
+    description: `${hostYNas(r)} · ${enPlural(r.servicios_total, 'servicio', 'servicios')} · ${enPlural(r.sesiones_abiertas, 'sesión abierta', 'sesiones abiertas')}`,
 })))
 
-const itemsAbsorber = computed<SelectItem[]>(() => candidatos.value.map(r => ({ label: r.nombre, value: r.id, description: `${r.host} · NAS ${r.nas_ip}` })))
+const itemsAbsorber = computed<SelectItem[]>(() => candidatos.value.map(r => ({ label: r.nombre, value: r.id, description: hostYNas(r) })))
 
 const puedeConfirmar = computed(() => Boolean(vista.value && vista.value.bloqueos.length === 0 && confirmado.value && !simulando.value))
 

@@ -11,7 +11,7 @@ import { evaluarComprobaciones, type Comprobacion } from '#core/eliminacion'
  * y los CoA/Disconnect. Las lecturas (sondeo cada 5 min, probar conexión) no son historial que
  * conservar: un router recién creado se sondea igual.
  */
-function comprobacionesRouter(id: number, nasIp: string): Comprobacion[] {
+function comprobacionesRouter(id: number, nasIp: string | null): Comprobacion[] {
     return [
         {
             codigo: 'servicios',
@@ -22,13 +22,16 @@ function comprobacionesRouter(id: number, nasIp: string): Comprobacion[] {
             codigo: 'sesiones',
             nombre: ['sesión PPPoE', 'sesiones PPPoE'],
             consulta: (c) =>
-                c
-                    .from('network.sesiones')
-                    .where((w) =>
-                        w
-                            .where('router_id', id)
-                            .orWhere((n) => n.whereNull('router_id').where('nas_ip', nasIp)),
-                    ),
+                c.from('network.sesiones').where((w) =>
+                    w
+                        .where('router_id', id)
+                        // un router sin RADIUS (sin nas_ip) solo cuenta las suyas
+                        .orWhere((n) =>
+                            nasIp === null
+                                ? n.whereRaw('false')
+                                : n.whereNull('router_id').where('nas_ip', nasIp),
+                        ),
+                ),
         },
         {
             codigo: 'historial_asignaciones',
@@ -102,7 +105,7 @@ function comprobacionesRouter(id: number, nasIp: string): Comprobacion[] {
 /** ¿Se puede eliminar el router? Si no, qué lo impide. 404 lo resuelve quien llama. */
 export async function routerEliminable(
     id: number,
-    nasIp: string,
+    nasIp: string | null,
     cliente: QueryClientContract = db.connection(),
 ) {
     return evaluarComprobaciones(comprobacionesRouter(id, nasIp), cliente)

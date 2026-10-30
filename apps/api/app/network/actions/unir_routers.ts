@@ -84,7 +84,7 @@ interface FilaRouter {
     nombre: string
     host: string
     api_url: string | null
-    nas_ip: string
+    nas_ip: string | null
     serial: string | null
     activo: boolean
     unido_a_id: number | null
@@ -363,7 +363,7 @@ export async function unirRouters(
         avisos.push(
             `El MikroTik manda RADIUS con la nas_ip de «${absorbido.nombre}» (${absorbido.nas_ip}): al unir, ` +
                 `ese registro queda desactivado y deja de ser cliente de RADIUS. Si el equipo usa esa nas_ip, une ` +
-                `al revés (que quede «${absorbido.nombre}») o cambia en el equipo el NAS a ${queda.nas_ip}`,
+                `al revés (que quede «${absorbido.nombre}») o cambia en el equipo el NAS a ${queda.nas_ip ?? '(el que queda no usa RADIUS)'}`,
         )
     }
 

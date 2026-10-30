@@ -108,7 +108,7 @@ function alCambiarEstrategia(router: RouterNas) {
     <USlideover
         v-model:open="abierto"
         :title="`Velocidad · ${actual.nombre}`"
-        :description="`${actual.host} · NAS ${actual.nas_ip}`"
+        :description="hostYNas(actual)"
         :ui="{ content: 'sm:max-w-xl' }"
     >
         <template #body>
