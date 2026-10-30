@@ -304,6 +304,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
     'sesiones.desconectar': 'Desconexión de sesión solicitada',
+    'sesiones.desconectar_eliminado': 'Sesión del servicio eliminado desconectada',
     // Inventario (A3)
     'bodegas.crear': 'Bodega creada',
     'bodegas.editar': 'Bodega editada',
