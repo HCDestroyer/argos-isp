@@ -341,12 +341,13 @@ export interface CatalogoEventos {
     }
     /**
      * Cambió la dirección del NAS o el secreto RADIUS de un router (`routers.crear`, `routers.editar`,
-     * registro por el túnel). A2 regenera su cliente de FreeRADIUS. Nunca lleva el valor del secreto.
+     * registro por el túnel) o, en la edición, su `modo_seguridad` (`api` lo saca de FreeRADIUS). A2 regenera
+     * los clientes de FreeRADIUS. Nunca lleva el valor del secreto.
      */
     'router.radius_cambiado': {
         router_id: number
         empresa_id: number | null
-        campos: Array<'nas_ip' | 'radius_secret'>
+        campos: Array<'nas_ip' | 'radius_secret' | 'modo_seguridad'>
     }
     /**
      * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):

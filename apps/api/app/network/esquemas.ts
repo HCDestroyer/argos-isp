@@ -106,8 +106,17 @@ export const Router = definirEsquema(
             api_usuario: nulable(texto),
             tiene_api_password: booleano,
             tiene_radius_secret: booleano,
-            nas_ip: texto,
-            modo_seguridad: enumerado(['radius', 'api']),
+            nas_ip: {
+                ...nulable(texto),
+                description:
+                    'IP con la que el router habla RADIUS; null solo en un router sin RADIUS (modo_seguridad api)',
+            },
+            modo_seguridad: {
+                ...enumerado(['radius', 'api']),
+                description:
+                    'radius: PPPoE por RADIUS (y servicios ip_estatica/dhcp_fija por la API REST). api: router sin RADIUS, ' +
+                    'solo ip_estatica y dhcp_fija por la API REST; sin nas_ip ni radius_secret obligatorios y sin PPPoE',
+            },
             control_velocidad: {
                 ...enumerado(['simple', 'arbol_pcq']),
                 description:
@@ -826,7 +835,7 @@ export const GrupoRoutersDuplicados = definirEsquema(
                 nombre: texto,
                 host: texto,
                 api_url: nulable(texto),
-                nas_ip: texto,
+                nas_ip: nulable(texto),
                 serial: nulable(texto),
                 control_velocidad: enumerado(['simple', 'arbol_pcq']),
                 servicios_total: { ...entero, description: 'Servicios no retirados del router' },

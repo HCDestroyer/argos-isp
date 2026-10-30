@@ -96,7 +96,7 @@ async function abrirEliminar() {
         puede('ipv6.ver') ? useRouters().ipv6Bloques(actual.id) : null,
     ])
     liberaRouter.value = [
-        `NAS ${actual.nas_ip}`,
+        ...(actual.nas_ip ? [`NAS ${actual.nas_ip}`] : []),
         ...(redes?.ok ? redes.data.map(r => `Red IPv4 ${r.cidr}`) : ['Sus redes IPv4']),
         ...(bloques?.ok ? bloques.data.map(b => `Bloque IPv6 ${b.prefijo} con sus pools`) : ['Sus bloques y pools IPv6']),
         'Los planes no se borran: solo deja de estar en ellos',
@@ -224,9 +224,26 @@ const control = computed(() => {
                 />
                 <DatoFicha
                     etiqueta="NAS"
-                    :valor="nas.nas_ip"
-                    mono
+                    :valor="textoNas(nas)"
+                    :mono="Boolean(nas.nas_ip)"
+                    data-prueba="router-nas-ip"
                 />
+                <DatoFicha etiqueta="Modo de seguridad">
+                    <UBadge
+                        :label="MODOS_SEGURIDAD[nas.modo_seguridad].etiqueta"
+                        :icon="MODOS_SEGURIDAD[nas.modo_seguridad].icono"
+                        :color="MODOS_SEGURIDAD[nas.modo_seguridad].color"
+                        variant="subtle"
+                        size="sm"
+                        data-prueba="router-modo-seguridad"
+                    />
+                    <p
+                        v-if="esSinRadius(nas)"
+                        class="mt-1 text-xs text-muted"
+                    >
+                        Solo IP estática y DHCP fija, por la API REST.
+                    </p>
+                </DatoFicha>
                 <DatoFicha etiqueta="Estado">
                     <UBadge
                         :label="nas.activo ? 'Activo' : 'Inactivo'"

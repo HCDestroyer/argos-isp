@@ -32,6 +32,9 @@
 # ARGOSISP_WG_RED, ARGOSISP_WG_PUERTO y ARGOSISP_WG_ENDPOINT (túnel WireGuard: red, puerto UDP y
 # nombre o IP pública para los routers; infra/wireguard/README.md), y para un nodo portal de prueba
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
+# COMPOSE_SUBNET_V4 y COMPOSE_SUBNET_V6: subred de la red de compose si la de siempre (172.30.0.0/24
+# y fd00:a6:30::/64; en un nodo portal 172.31.0.0/24 y fd00:a6:31::/64) choca con la LAN. Quedan en
+# el .env: la API confía en el X-Forwarded-For de Caddy y del portal solo desde esa subred.
 set -Eeuo pipefail
 
 # Todo el instalador va dentro de main(), que se llama en la última línea. Con
@@ -163,6 +166,14 @@ for p in ${PROXIES//,/ }; do
     proxies_ok="${proxies_ok:+$proxies_ok }$p"
 done
 PROXIES="$proxies_ok"
+# Subred de la red de compose (opcional): CIDR, se escribe en el .env para que `argosisp levantar`
+# use la misma que la instalación y la API confíe en esa red (PORTAL_PROXIES_CONFIABLES)
+SUBNET_V4="${COMPOSE_SUBNET_V4:-}"
+SUBNET_V6="${COMPOSE_SUBNET_V6:-}"
+[ -z "$SUBNET_V4" ] || [[ "$SUBNET_V4" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]] ||
+    morir "COMPOSE_SUBNET_V4: '$SUBNET_V4' no es un CIDR IPv4 (p. ej. 10.255.252.0/26)"
+[ -z "$SUBNET_V6" ] || [[ "$SUBNET_V6" =~ ^[0-9A-Fa-f]*:[0-9A-Fa-f:]*/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$ ]] ||
+    morir "COMPOSE_SUBNET_V6: '$SUBNET_V6' no es un CIDR IPv6 (p. ej. fd00:a6:30::/64)"
 [ -z "$PROXIES" ] || [ "${ARGOSISP_TLS:-}" = interno ] ||
     aviso "con un proxy delante (ARGOSISP_PROXIES_CONFIABLES) los retos de Let's Encrypt los recibe el proxy, no Caddy: usa ARGOSISP_TLS=interno (el certificado público lo pone el proxy)"
 mkdir -p "$DIR"
@@ -468,6 +479,15 @@ cat >> "$DIR/.env.nuevo" << EOF
 # X-Forwarded-For / X-Real-IP. Vacía = no hay proxy delante. docs/runbooks/detras-de-proxy.md
 ARGOSISP_PROXIES_CONFIABLES="$PROXIES"
 EOF
+fi
+if [ -n "$SUBNET_V4$SUBNET_V6" ]; then
+    {
+        echo
+        echo "# Red de compose (instalar.sh con COMPOSE_SUBNET_V4/V6). La API confía en el X-Forwarded-For"
+        echo "# de Caddy y del portal desde esta subred. Cambiarla: editar aquí y argosisp levantar"
+        [ -z "$SUBNET_V4" ] || echo "COMPOSE_SUBNET_V4=$SUBNET_V4"
+        [ -z "$SUBNET_V6" ] || echo "COMPOSE_SUBNET_V6=$SUBNET_V6"
+    } >> "$DIR/.env.nuevo"
 fi
 mv -f "$DIR/.env.nuevo" "$DIR/.env"
 chmod 600 "$DIR/.env"

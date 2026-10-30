@@ -22,7 +22,9 @@ export interface RouterVista {
     api_usuario: string | null
     tiene_api_password: boolean
     tiene_radius_secret: boolean
-    nas_ip: string
+    /** IP del NAS para RADIUS y CoA; null solo en un router sin RADIUS (`modo_seguridad = 'api'`) */
+    nas_ip: string | null
+    /** `radius`: PPPoE por RADIUS. `api`: router sin RADIUS, solo `ip_estatica`/`dhcp_fija` por la API REST */
     modo_seguridad: 'radius' | 'api'
     /** cola simple por servicio o árbol con PCQ por plan (`contratos/velocidad.md`) */
     control_velocidad: ControlVelocidad

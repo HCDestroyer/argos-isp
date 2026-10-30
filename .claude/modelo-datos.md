@@ -24,7 +24,7 @@ Convenciones: `id bigint identity`, `created_at`, `updated_at`, `version int` en
 
 | Tabla | Columnas clave |
 | --- | --- |
-| `routers` | nombre, host, api_usuario, api_password (cifrado), radius_secret (cifrado), nas_ip, modo_seguridad (`radius`/`api`), modo_velocidad (`simple`/`pcq`), activo |
+| `routers` | nombre, host, api_usuario, api_password (cifrado), radius_secret (cifrado), nas_ip (null solo en `api`), modo_seguridad (`radius`; `api` = sin RADIUS, solo `ip_estatica`/`dhcp_fija`), modo_velocidad (`simple`/`pcq`), activo |
 | `redes_ipv4` | router_id, cidr, gateway, tipo (`estatico`/`pool`) |
 | `ipv4_asignaciones` | servicio_id, red_id, ip, inicio, fin |
 | `ipv6_bloques` | router_id, prefijo (ej. /40) |

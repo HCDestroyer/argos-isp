@@ -6,6 +6,12 @@
 # `npm` (el proxy de confianza) y `otra` (cualquiera que no está en la lista). Caddy tiene una
 # pata en cada una. Los clientes son contenedores de node en `npm` u `otra` que llaman a Caddy por
 # HTTPS sin SNI (como NPM) o con SNI, y por HTTP (/corte), con X-Forwarded-For / X-Real-IP propios.
+# Además, un cliente en la red del host entra por el puerto publicado en 127.0.0.1 (docker-proxy),
+# como NPM en producción, sin SNI.
+#
+# «Sin SNI» es de verdad sin SNI: node toma el SNI del encabezado Host si no se le dice nada, y
+# hasta la 1.4.0 esta prueba mandaba SNI en todos los casos «sin SNI» (Caddy sin default_sni
+# responde `tlsv1 alert internal error` a un ClientHello sin SNI y nadie lo veía).
 #
 # El eco devuelve lo que recibe y además la IP que decidiría la API con su regla
 # (apps/api/app/portal/ip_origen.ts: X-Forwarded-For de derecha a izquierda mientras la IP sea de
@@ -15,7 +21,9 @@
 #   - con la variable: desde `npm` la API ve la IP del encabezado (XFF, X-Real-IP, IPv6; un XFF
 #     falso que el cliente mandó a NPM queda a la izquierda y se ignora); desde `otra`, la IP del
 #     socket aunque mande XFF; en los tres dominios, el webhook y /corte por HTTP;
-#   - sin la variable (lo de siempre): nadie es de confianza, la API ve la IP del socket.
+#   - sin la variable (lo de siempre): nadie es de confianza, la API ve la IP del socket;
+#   - TLS sin SNI (a la IP del contenedor y al puerto publicado en 127.0.0.1): Caddy entrega el
+#     certificado de default_sni (DOMINIO_API, CA interna) y reparte por Host igual.
 #
 #   infra/ci/probar-detras-de-proxy.sh     (necesita Docker y las imágenes caddy:2.10.0-alpine y
 #                                           node:22-alpine; las baja si faltan)
@@ -95,12 +103,15 @@ for (const c of cabeceras) {
     const i = c.indexOf(':')
     headers[c.slice(0, i).trim().toLowerCase()] = c.slice(i + 1).trim()
 }
-const opciones = { host: ip, port: Number(puerto), path: ruta, headers, rejectUnauthorized: false }
-if (sni === 'si') opciones.servername = host
+// servername '' = ClientHello sin SNI. Sin esta línea node manda el Host como SNI.
+const opciones = { host: ip, port: Number(puerto), path: ruta, headers, rejectUnauthorized: false, agent: false }
+if (esquema === 'https') opciones.servername = sni === 'si' ? host : ''
 const q = (esquema === 'https' ? https : http).request(opciones, (r) => {
     let cuerpo = ''
+    // Certificado que entregó Caddy (SAN) y si el ClientHello llevó SNI
+    const cert = esquema === 'https' ? (r.socket.getPeerCertificate()?.subjectaltname ?? null) : null
     r.on('data', (d) => (cuerpo += d))
-    r.on('end', () => process.stdout.write(JSON.stringify({ status: r.statusCode, ...JSON.parse(cuerpo || '{}') })))
+    r.on('end', () => process.stdout.write(JSON.stringify({ status: r.statusCode, cert, ...JSON.parse(cuerpo || '{}') })))
 })
 q.on('error', (e) => { process.stdout.write(JSON.stringify({ error: e.message })); process.exit(0) })
 q.end()
@@ -122,11 +133,16 @@ cliente() {
     ip="$([ "$red" = npm ] && echo "$IP_NPM" || echo "$IP_OTRA")"
     docker run --rm --network "$P-$red" --ip "$ip" -v "$TMP:/prueba:ro" "$NODE_IMG" node /prueba/cliente.mjs "$@"
 }
+# Como NPM en producción: desde la red del host al puerto publicado en 127.0.0.1 (docker-proxy)
+cliente_host() { # <esquema> <puerto> <host> <ruta> <sni> [cabeceras...]
+    docker run --rm --network host -v "$TMP:/prueba:ro" "$NODE_IMG" node /prueba/cliente.mjs "$1" 127.0.0.1 "${@:2}"
+}
 campo() { node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(String(o[process.argv[2]] ?? ""))' "$1" "$2"; }
 
 levantar_caddy() { # $1 = ARGOSISP_PROXIES_CONFIABLES
     docker rm -f "$P-caddy" > /dev/null 2>&1 || true
-    docker create --name "$P-caddy" --network "$P-argos" \
+    # 443 publicado en 127.0.0.1 con puerto libre, como el compose de producción (ARGOSISP_HTTPS_PORT)
+    docker create --name "$P-caddy" --network "$P-argos" -p 127.0.0.1::443 \
         -e DOMINIO_API=api.localhost -e DOMINIO_PANEL=panel.localhost -e DOMINIO_PORTAL=portal.localhost \
         -e PROXY_TLS_GLOBAL=local_certs -e PORTAL_HSTS_MAX_AGE=300 -e PROXY_LIMPIEZA_ALMACEN=off \
         -e API_PORTAL_DESTINO=api-portal:3333 -e ARGOSISP_PROXIES_CONFIABLES="$1" \
@@ -134,6 +150,7 @@ levantar_caddy() { # $1 = ARGOSISP_PROXIES_CONFIABLES
     docker network connect --ip "$CADDY_NPM" "$P-npm" "$P-caddy"
     docker network connect --ip "$CADDY_OTRA" "$P-otra" "$P-caddy"
     docker start "$P-caddy" > /dev/null
+    PUERTO_HTTPS="$(docker port "$P-caddy" 443/tcp | head -n 1 | sed 's/.*://')"
     # Listo cuando los tres certificados de la CA interna existen (HTTPS con SNI responde del eco)
     local h r listo
     for _ in $(seq 1 40); do
@@ -170,6 +187,7 @@ r="$(cliente npm https "$CADDY_NPM" 443 api.localhost /api/v1/version no 'X-Forw
 comprobar 'NPM sin SNI → api: la API ve la IP real' "$r" ip_api 198.51.100.7
 comprobar 'NPM sin SNI → api: X-Forwarded-For solo con la IP real' "$r" xff 198.51.100.7
 comprobar 'NPM sin SNI → sitio por Host (api)' "$r" servicio api
+comprobar 'NPM sin SNI → certificado de la CA interna para DOMINIO_API (default_sni)' "$r" cert DNS:api.localhost
 r="$(cliente npm https "$CADDY_NPM" 443 api.localhost /api/v1/version no 'X-Forwarded-For: 203.0.113.66, 198.51.100.7')"
 comprobar 'XFF falso que el cliente mandó a NPM queda fuera' "$r" ip_api 198.51.100.7
 r="$(cliente npm https "$CADDY_NPM" 443 api.localhost /api/v1/version no 'X-Real-IP: 198.51.100.9')"
@@ -186,6 +204,19 @@ comprobar 'Panel recibe la IP real' "$r" xff 198.51.100.7
 r="$(cliente npm https "$CADDY_NPM" 443 portal.localhost /entrar si 'X-Forwarded-For: 198.51.100.7' 'X-Forwarded-Proto: https')"
 comprobar 'Portal por HTTPS recibe la IP real' "$r" xff 198.51.100.7
 comprobar 'Portal por HTTPS con X-Forwarded-Proto https' "$r" proto https
+r="$(cliente npm https "$CADDY_NPM" 443 portal.localhost /entrar no)"
+comprobar 'Portal por Host sin SNI' "$r" servicio portal
+
+# Lo de producción: NPM entra por el puerto publicado en 127.0.0.1 (o la IP del host), sin SNI
+r="$(cliente_host https "$PUERTO_HTTPS" panel.localhost / no)"
+comprobar "127.0.0.1:$PUERTO_HTTPS sin SNI → panel por Host" "$r" servicio web
+comprobar "127.0.0.1:$PUERTO_HTTPS sin SNI → certificado de default_sni" "$r" cert DNS:api.localhost
+r="$(cliente_host https "$PUERTO_HTTPS" api.localhost /api/v1/version no)"
+comprobar "127.0.0.1:$PUERTO_HTTPS sin SNI → api por Host" "$r" servicio api
+r="$(cliente_host https "$PUERTO_HTTPS" portal.localhost /entrar no)"
+comprobar "127.0.0.1:$PUERTO_HTTPS sin SNI → portal por Host" "$r" servicio portal
+r="$(cliente_host https "$PUERTO_HTTPS" portal.localhost /entrar si)"
+comprobar "127.0.0.1:$PUERTO_HTTPS con SNI → certificado del portal" "$r" cert DNS:portal.localhost
 
 r="$(cliente otra https "$CADDY_OTRA" 443 api.localhost /api/v1/version si 'X-Forwarded-For: 198.51.100.7' 'X-Real-IP: 198.51.100.7')"
 comprobar 'Fuera de la lista: XFF ignorado, la API ve el socket' "$r" ip_api "$IP_OTRA"

@@ -24,6 +24,11 @@
 {
 	# `email <correo>` (avisos de Let's Encrypt) o `local_certs` (CA interna, pruebas en CI)
 	{$PROXY_TLS_GLOBAL}
+	# TLS sin SNI (Nginx Proxy Manager se conecta así por defecto: proxy_ssl_server_name off): sin
+	# esto Caddy responde `tlsv1 alert internal error` y NPM da 502. Con default_sni entrega el
+	# certificado de DOMINIO_API (CA interna o Let's Encrypt); el sitio de cada petición sigue
+	# saliendo del Host, igual para los tres.
+	default_sni {$DOMINIO_API}
 	# Sin la redirección automática HTTP → HTTPS: /corte debe responder por HTTP.
 	auto_https disable_redirects
 	storage_clean_interval {$PROXY_LIMPIEZA_ALMACEN:24h}

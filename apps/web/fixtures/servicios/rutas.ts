@@ -1,6 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
-import type { ManejadorFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import type { ManejadorFixture, RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { ipEnCidr, ipv4ANumero } from '~/utils/red'
 import { bd, siguienteId } from '../bd'
 import {
@@ -119,6 +119,19 @@ function validarTipo(tipo: Servicio['tipo_conexion'], datos: { modo: string, mac
         }
     }
     return errores
+}
+
+/** `MENSAJE_PPPOE_REQUIERE_RADIUS` de A1 (`apps/api/app/network/modo_seguridad.ts`). */
+const MENSAJE_PPPOE_REQUIERE_RADIUS = 'Este router no usa RADIUS: PPPoE necesita RADIUS. Usa IP estática o DHCP fija, o cambia el router a RADIUS'
+
+/** Como `exigirRadiusParaPppoe` (A1): 422 `pppoe_requiere_radius` si un PPPoE quedaría en un router `api`. */
+function pppoeSinRadius(routerId: number, tipo: Servicio['tipo_conexion']): RespuestaFixture | null {
+    if ((tipo ?? 'pppoe') !== 'pppoe' || bd.routers.find(r => r.id === routerId)?.modo_seguridad !== 'api') {
+        return null
+    }
+    return problemaTipado(422, 'pppoe_requiere_radius', 'Regla de negocio', MENSAJE_PPPOE_REQUIERE_RADIUS, [
+        { field: 'tipo_conexion', rule: 'pppoe_requiere_radius', message: MENSAJE_PPPOE_REQUIERE_RADIUS },
+    ])
 }
 
 function validarAlta(cuerpo: Record<string, unknown>): Errores {
@@ -626,6 +639,10 @@ export const rutasServicios: RutasFixture = {
         if (Array.isArray(resultado)) {
             return datosInvalidos(resultado)
         }
+        const sinRadius = pppoeSinRadius(resultado.router_id, resultado.tipo_conexion)
+        if (sinRadius) {
+            return sinRadius
+        }
         bd.servicios.push(resultado)
         const { pass_ppp: clave, ...entrada } = cuerpoObjeto(solicitud)
         if (resultado.tipo_conexion === 'pppoe') {
@@ -673,6 +690,11 @@ export const rutasServicios: RutasFixture = {
         }
         if (errores.length) {
             return datosInvalidos(errores)
+        }
+        // Un PPPoE que ya estaba en el router se sigue editando; pasar a PPPoE en un router `api`, no (A1).
+        const sinRadius = tipo !== tipoAntes ? pppoeSinRadius(actual.router_id, tipo) : null
+        if (sinRadius) {
+            return sinRadius
         }
         const actualizado: Servicio = {
             ...actual,

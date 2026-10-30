@@ -8,6 +8,9 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem, StepperItem } from '@
  * siguiente IP libre de las redes del router), la IPv6 sigue al plan, las credenciales PPP se
  * generan y la plantilla es la primera. El último paso es un resumen con «Cambiar» por grupo.
  *
+ * Router sin RADIUS (`modo_seguridad = 'api'`, `utils/modoSeguridad.ts`): PPPoE queda deshabilitado
+ * con su motivo y se preselecciona IP estática (la API respondería 422 `pppoe_requiere_radius`).
+ *
  * Se usa en la página `/servicios/nuevo` y en un panel lateral de la ficha del cliente
  * (`cliente` dado: no se pide el cliente y no se sale de la ficha).
  */
@@ -115,6 +118,8 @@ const plan = computed(() => planes.value.find(p => p.id === estado.plan_id) ?? n
 const red = computed(() => redes.value.find(r => r.id === estado.red_id) ?? null)
 const plantilla = computed(() => plantillas.value.find(p => p.id === estado.plantilla_facturacion_id) ?? null)
 const soloIpv4 = computed(() => plan.value?.dual_stack === 'v4')
+/** El router elegido no usa RADIUS: solo IP estática o DHCP fija. */
+const routerSinRadius = computed(() => esSinRadius(router.value))
 
 /*
 | Multiempresa: el servicio factura con una empresa (NIT). Sugerida como la API: la de la zona del
@@ -150,18 +155,27 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
     if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
         ctx.addIssue({ code: 'custom', path: ['tipo_conexion'], message: 'El plan es solo IPv6: elige PPPoE u otro plan con IPv4' })
     }
+    // Espejo de `exigirRadiusParaPppoe` (A1): 422 `pppoe_requiere_radius`.
+    const elegidoRouter = routers.value.find(r => r.id === datos.router_id)
+    if (datos.tipo_conexion === 'pppoe' && esSinRadius(elegidoRouter)) {
+        ctx.addIssue({ code: 'custom', path: ['tipo_conexion'], message: MENSAJE_PPPOE_SIN_RADIUS })
+    }
 }))
 
-const itemsTipoConexion: RadioGroupItem[] = (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: TIPOS_CONEXION[tipo].descripcion,
+const itemsTipoConexion = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map((tipo) => {
+    const bloqueado = tipo === 'pppoe' && routerSinRadius.value
+    return {
+        label: TIPOS_CONEXION[tipo].etiqueta,
+        value: tipo,
+        description: bloqueado ? 'No disponible: este router no usa RADIUS.' : TIPOS_CONEXION[tipo].descripcion,
+        disabled: bloqueado,
+    }
 }))
 
 const itemsRouter = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
     label: r.nombre,
     value: r.id,
-    description: `${r.host} · ${CONTROLES_VELOCIDAD[r.control_velocidad ?? (r.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')].etiqueta.toLowerCase()}`,
+    description: `${r.host} · ${CONTROLES_VELOCIDAD[r.control_velocidad ?? (r.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')].etiqueta.toLowerCase()}${esSinRadius(r) ? ' · sin RADIUS (sin PPPoE)' : ''}`,
 })))
 
 function textoPila(p: Plan): string {
@@ -268,6 +282,10 @@ function alElegirCliente(elegido: Cliente) {
 }
 
 async function alCambiarRouter(id: number) {
+    // Sin RADIUS no hay PPPoE: se pasa a IP estática (el operador puede elegir DHCP fija).
+    if (estado.tipo_conexion === 'pppoe' && esSinRadius(routers.value.find(r => r.id === id))) {
+        estado.tipo_conexion = 'ip_estatica'
+    }
     estado.plan_id = 0
     estado.red_id = undefined
     planes.value = []
@@ -458,7 +476,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
             :problema="problemaCatalogo"
         />
         <ProblemaAlerta
-            v-if="problema && problema.status !== 422"
+            v-if="problema && (problema.status !== 422 || esPppoeRequiereRadius(problema))"
             :problema="problema"
         />
         <UAlert
@@ -576,10 +594,19 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         />
                     </UFormField>
 
+                    <UAlert
+                        v-if="routerSinRadius"
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-plug"
+                        :title="`${router?.nombre ?? 'El router'} no usa RADIUS`"
+                        description="PPPoE necesita RADIUS: en este router solo hay IP estática o DHCP fija, que Argos configura, limita y corta por la API de RouterOS."
+                        data-prueba="router-sin-radius"
+                    />
                     <UFormField
                         name="tipo_conexion"
                         label="Tipo de conexión"
-                        help="PPPoE es lo habitual. Sin PPPoE el router identifica al cliente por su IP."
+                        :help="routerSinRadius ? 'Sin RADIUS el router identifica al cliente por su IP (y su MAC con DHCP fija).' : 'PPPoE es lo habitual. Sin PPPoE el router identifica al cliente por su IP.'"
                         required
                     >
                         <URadioGroup

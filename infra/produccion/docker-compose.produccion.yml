@@ -108,8 +108,9 @@ x-api-env: &api-env
   METRICS_TOKEN: ${METRICS_TOKEN:-}
   AAA_PPP_KEY: ${AAA_PPP_KEY:?Falta AAA_PPP_KEY en .env}
   # El portal (detrás del proxy) reenvía /api/v1/portal/**: se confía en el X-Forwarded-For que
-  # llega desde la red de compose (subred fija de abajo).
-  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
+  # llega desde la red de compose: la misma subred de `networks` (COMPOSE_SUBNET_V4/V6), aunque se
+  # cambie en el .env. Hasta la 1.4.0 era 172.30.0.0/24 fijo y con otra red la API veía la IP de Caddy.
+  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-${COMPOSE_SUBNET_V4:-172.30.0.0/24},${COMPOSE_SUBNET_V6:-fd00:a6:30::/64}}
   PORTAL_CABECERA_IP: x-forwarded-for
   # El portal se sirve por HTTPS (proxy): cookie de sesión siempre Secure.
   PORTAL_COOKIE_SEGURA: siempre
