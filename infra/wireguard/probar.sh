@@ -126,8 +126,11 @@ docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 1 evento router.conex
     payload "{\"router_id\":7,\"empresa_id\":1,\"ip_tunel\":\"$IP_ROUTER\"}" request_id '' > /dev/null
 esperar 20 "peer en wg show" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$ROUTER_PUB.*$IP_ROUTER/32'"
 [ "$(docker exec "$P-servidor" wg show "$IFACE" peers | grep -c .)" = 1 ] || fallar "se aplicaron peers inválidos"
-docker logs "$P-agente" 2>&1 | grep -q 'router 8: public_key inválida' || fallar "no avisó la clave inválida"
-docker logs "$P-agente" 2>&1 | grep -q 'router 9: ip_tunel' || fallar "no avisó la IP fuera de la red"
+# Los logs se leen completos antes de buscar: con pipefail, `docker logs | grep -q` falla al azar
+# (grep sale al primer acierto y docker logs muere por SIGPIPE).
+LOGS_AGENTE="$(docker logs "$P-agente" 2>&1)"
+grep -q 'router 8: public_key inválida' <<< "$LOGS_AGENTE" || fallar "no avisó la clave inválida"
+grep -q 'router 9: ip_tunel' <<< "$LOGS_AGENTE" || fallar "no avisó la IP fuera de la red"
 
 paso "2. Handshake y estado en la API"
 esperar 30 "handshake" docker exec "$P-router" ping -c1 -W1 "$IP_SRV"
