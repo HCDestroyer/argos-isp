@@ -37,6 +37,8 @@ describe('control de velocidad por capas', () => {
             [1, 'radius_rate_limit', '7.24.5 (stable)'],
             [2, 'arbol_pcq', '6.49.10 (long-term)'],
             [3, 'radius_rate_limit', null],
+            // el RB-Centro registrado otra vez «para usar árbol PCQ» (routers duplicados, `contratos/routers.md`)
+            [4, 'arbol_pcq', '7.24.5 (stable)'],
         ])
         expect(MATRIZ.atajos.simple).toEqual(bd.routers[0]?.estrategia_velocidad)
         expect(MATRIZ.atajos.arbol_pcq).toEqual(bd.routers[1]?.estrategia_velocidad)

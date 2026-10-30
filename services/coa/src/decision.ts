@@ -15,6 +15,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | → `retirado`                             | Disconnect | (al reconectar `aaa` lo rechaza)                                |
  * | `pendiente_instalacion` → `activo`       | Disconnect | (sin sesión no se envía nada: `aaa` rechazaba al pendiente)     |
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
+ * | config: `router` con `union_routers`     | nada       | (mismo equipo físico: la sesión sigue; `contratos/routers.md`)  |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
  * | velocidad o plan en `arbol_pcq`          | nada       | (sin cola por sesión: el dispatcher mueve la lista del plan)    |
@@ -43,6 +44,9 @@ export const ESTADOS: readonly EstadoServicio[] = [
 
 export type CampoConfig = 'plan' | 'ips' | 'prefijo_v6' | 'router'
 
+/** `servicio.config_cambiada` de `routers.unir` (A1, `contratos/routers.md`) */
+export const MOTIVO_UNION_ROUTERS = 'union_routers'
+
 export type EventoServicio =
     | {
           evento: 'servicio.estado_cambiado'
@@ -51,7 +55,13 @@ export type EventoServicio =
           a: EstadoServicio
           motivo?: string
       }
-    | { evento: 'servicio.config_cambiada'; servicio_id: number; campos: CampoConfig[] }
+    | {
+          evento: 'servicio.config_cambiada'
+          servicio_id: number
+          campos: CampoConfig[]
+          /** `union_routers`: el servicio pasó al otro registro del mismo MikroTik (`routers.unir`) */
+          motivo?: string
+      }
 
 /** Lo que hay que saber del servicio hoy (Postgres + registro de `aaa`, ver `registro.ts`). */
 export interface ServicioActual {
@@ -182,9 +192,20 @@ export function decidir(
     }
 
     const campos = new Set(evento.campos)
+    // Unión de routers (`routers.unir`, A1): dos registros del mismo MikroTik. El NAS no cambia, la
+    // sesión sigue y A1 reatribuye su accounting al router que queda: no hay nada que cortar.
+    if (evento.motivo === MOTIVO_UNION_ROUTERS) campos.delete('router')
     const reconectar = (['ips', 'prefijo_v6', 'router'] as const).filter((c) => campos.has(c))
     if (reconectar.length > 0) return { accion: 'disconnect', razon: `cambió ${reconectar.join(', ')}` }
-    if (!campos.has('plan')) return { accion: 'nada', razon: 'sin campos que afecten a la sesión' }
+    if (!campos.has('plan')) {
+        return {
+            accion: 'nada',
+            razon:
+                evento.motivo === MOTIVO_UNION_ROUTERS
+                    ? 'unión de routers: mismo equipo, la sesión sigue'
+                    : 'sin campos que afecten a la sesión',
+        }
+    }
     if (!servicio) return { accion: 'nada', razon: 'servicio inexistente' }
     if (servicio.estado !== 'activo' && servicio.estado !== 'limitado') {
         return {
@@ -318,5 +339,6 @@ export function leerEvento(nombre: string, payload: unknown): EventoServicio | n
         campos: p.campos.filter((c): c is CampoConfig =>
             ['plan', 'ips', 'prefijo_v6', 'router'].includes(String(c)),
         ),
+        ...(typeof p.motivo === 'string' ? { motivo: p.motivo } : {}),
     }
 }

@@ -1,7 +1,9 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { registrarContactoRouter } from '#network/contacto_router'
+import { registrarContactoRouter, umbralEnLineaS } from '#network/contacto_router'
 import { routerDispatcher } from '#network/routeros/consultas'
+import { identificarRouter } from '#network/routeros/identidad'
 import type { RouterApi } from '#network/routeros/router'
+import type { ClienteRouterOS } from '#network/routeros/cliente'
 import { diagnosticarErrorRouterOS, type DiagnosticoRouterOS } from '#network/diagnostico_routeros'
 import {
     bitacoraRed,
@@ -33,6 +35,9 @@ export interface ResultadoSondear {
  * pasa a false cuando se cumple el umbral. Un router sin credenciales no se sondea: si tampoco
  * manda accounting, queda «sin dato» (`en_linea` null).
  *
+ * Si responde y su serial no se conoce, o vuelve de estar caído (sin contacto en el umbral de
+ * `en_linea`), además lee su número de serie (`identificarRouter`, `contratos/routers.md`).
+ *
  * Cada GET enviado queda en `audit.red` (`tipo = routeros`, `comando.operacion = sondear`) con la
  * respuesta o el error del equipo, fuera de la transacción (el GET ya ocurrió aunque se revierta).
  * `audit.acciones` solo deja fila si algún router no respondió o falló (excepción de la regla 9
@@ -53,7 +58,10 @@ export default class SondearRouters extends DomainAction<EntradaSondear, Resulta
 
     protected async handle(entrada: EntradaSondear, t: Transaccion): Promise<ResultadoSondear> {
         const { rows } = (await t.trx.rawQuery(
-            `SELECT r.id FROM network.routers r
+            `SELECT r.id, r.serial IS NULL AS sin_serial,
+                    (rc.ultimo_contacto IS NULL
+                     OR rc.ultimo_contacto < now() - make_interval(secs => ?)) AS caido
+               FROM network.routers r
                LEFT JOIN network.routers_contacto rc ON rc.router_id = r.id
               WHERE r.activo
                 AND coalesce(r.api_usuario, '') <> '' AND coalesce(r.api_password, '') <> ''
@@ -62,17 +70,24 @@ export default class SondearRouters extends DomainAction<EntradaSondear, Resulta
                 ${entrada.router_ids ? 'AND r.id = ANY(?::bigint[])' : ''}
               ORDER BY r.id`,
             [
+                umbralEnLineaS(),
                 Math.max(1, Math.floor(entrada.sin_contacto_desde_s)),
                 ...(entrada.router_ids ? [entrada.router_ids] : []),
             ],
-        )) as { rows: Array<{ id: number | string }> }
+        )) as { rows: Array<{ id: number | string; sin_serial: boolean; caido: boolean }> }
         const resultado: ResultadoSondear = { sondeados: [], respondieron: [], sin_respuesta: [] }
         for (const fila of rows) {
             const id = Number(fila.id)
             const router = await routerDispatcher(id, t.trx)
             if (!router) continue
             resultado.sondeados.push(id)
-            const sondeo = await sondearRouter(t, router.api, this.#clientes, 'sondear')
+            // A1: número de serie del equipo para detectar routers duplicados (`contratos/routers.md`),
+            // solo si no se conoce o el router vuelve de estar caído (pudo cambiar el equipo)
+            const identificar =
+                fila.sin_serial || fila.caido
+                    ? (cliente: ClienteRouterOS) => identificarRouter(t, cliente, id)
+                    : undefined
+            const sondeo = await sondearRouter(t, router.api, this.#clientes, 'sondear', identificar)
             if (sondeo.ok) resultado.respondieron.push(id)
             else {
                 resultado.sin_respuesta.push({
@@ -103,12 +118,16 @@ export type ResultadoSondeo =
  * responde, anota el contacto con fuente `sondeo` (`Router.en_linea`, `ultimo_contacto`) en la
  * transacción de la acción. El GET queda en `audit.red` con su respuesta o error, fuera de la
  * transacción. Nunca lanza: devuelve el error del cliente.
+ *
+ * `alResponder` corre con el mismo cliente (antes de cerrarlo) solo si el router respondió: el
+ * sondeo lo usa para leer el serial (`identificarRouter`, que tampoco lanza por el equipo).
  */
 export async function sondearRouter(
     t: Transaccion,
     api: RouterApi,
     clientes: FabricaClientes,
     operacion: string,
+    alResponder?: (cliente: ClienteRouterOS) => Promise<unknown>,
 ): Promise<ResultadoSondeo> {
     let cliente
     const comando = { operacion, metodo: 'GET', ruta: '/system/resource', request_id: t.ctx.requestId }
@@ -127,6 +146,7 @@ export async function sondearRouter(
             respuesta: { status: 200, rtt_ms: ms },
             ok: true,
         })
+        if (alResponder) await alResponder(cliente)
         return { ok: true, recurso, ms, host: cliente.host }
     } catch (error) {
         const e = error as Error & { status?: number | null; tipo?: string; codigo?: string | null }

@@ -52,6 +52,10 @@ export interface RouterVista {
     /** ubicación `"lat,lng"` (`network.routers.coordenadas`); null = sin ubicar */
     coordenadas: string | null
     activo: boolean
+    /** serial-number (RouterBOARD) o software-id (CHR) leído por el sondeo; null = no se conoce */
+    serial: string | null
+    /** router que lo absorbió con `routers.unir` (queda inactivo); null = no está unido */
+    unido_a_id: number | null
     /** null = ninguna fuente periódica lo mide (`app/network/contacto_router.ts`) */
     en_linea: boolean | null
     /** última vez que respondió o mandó accounting; null = nunca */
@@ -111,6 +115,8 @@ const COLUMNAS_ROUTER = [
     'zona_id',
     'coordenadas',
     'activo',
+    'serial',
+    'unido_a_id',
     'version',
     'created_at',
     'updated_at',

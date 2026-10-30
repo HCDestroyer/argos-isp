@@ -48,7 +48,7 @@ import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales } from './inventario/datos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
-import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
+import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
@@ -96,6 +96,8 @@ interface BaseFixtures {
     servicios: Schema<'Servicio'>[]
     zonas: Schema<'Zona'>[]
     routers: Schema<'Router'>[]
+    /** Secreto RADIUS en claro por router (solo fixtures; `routers.unir` los compara). */
+    secretosRadius: Record<number, string | null>
     /** Routers que ya pasaron por «Reconciliar ahora» (A2): su vista previa y su chequeo del corte quedan limpios. */
     routersReconciliados: number[]
     /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
@@ -292,6 +294,7 @@ function inicial(): BaseFixtures {
         servicios,
         zonas,
         routers,
+        secretosRadius,
         routersReconciliados: [],
         routersSinRespuesta: [],
         conexionesRouter,

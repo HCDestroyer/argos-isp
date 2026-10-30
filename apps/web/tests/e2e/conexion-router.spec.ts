@@ -9,7 +9,7 @@ import { entrar, ir } from './ayudas'
 test('probar conexión, reconciliar, script de conexión y zona del router', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
-    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro' }).click()
+    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
 
     const conexion = page.locator('[data-prueba="conexion-router"]')

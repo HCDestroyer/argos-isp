@@ -73,10 +73,11 @@ export async function resolverContexto(t: Transaccion, r: RegistroAccounting): P
         .where('user_ppp', r.user_ppp)
         .select('id', 'ipv6_modo')
         .first()) as { id: number | string; ipv6_modo: string } | null
+    // un router unido a otro (`routers.unir`) es el mismo equipo: la sesión es del que quedó
     const router = (await t.trx
         .from('network.routers')
         .whereRaw('nas_ip = ?::inet', [r.nas_ip])
-        .select('id')
+        .select(t.trx.raw('coalesce(unido_a_id, id) AS id'))
         .first()) as { id: number | string } | null
 
     let prefijoEnlace = r.prefijo_enlace_v6

@@ -4,6 +4,7 @@ import { verRouter, type RouterVista } from '#network/consultas/routers'
 import type { ControlVelocidad } from '#network/velocidad'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { exigirEmpresaActiva } from '#core/empresas'
+import { exigirRouterUnico } from '#network/routers_duplicados'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
 import { X509Certificate } from 'node:crypto'
@@ -146,7 +147,12 @@ export async function avisarRadius(t: Transaccion, router: RouterVista, cambiado
     })
 }
 
-/** Alta de un router MikroTik (NAS RADIUS y API REST), con su ubicación opcional (`coordenadas`). */
+/**
+ * Alta de un router MikroTik (NAS RADIUS y API REST), con su ubicación opcional (`coordenadas`).
+ * 409 `router_duplicado` si otro router activo tiene el mismo extremo de la API (`host`/`api_url`
+ * con su puerto) o cualquiera la misma `nas_ip` (`contratos/routers.md`): el mismo equipo no se
+ * registra dos veces.
+ */
 export default class CrearRouter extends DomainAction<EntradaCrearRouter, RouterVista> {
     readonly nombre = 'routers.crear'
 
@@ -157,6 +163,12 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
         }
         await exigirZona(t.trx, datos.zona_id)
         exigirCaValida(datos.api_ca)
+        // 409 `router_duplicado` si ese MikroTik ya está registrado (`contratos/routers.md`)
+        await exigirRouterUnico(
+            t.trx,
+            { host: datos.host, api_url: datos.api_url ?? null, nas_ip: datos.nas_ip, serial: null },
+            { api: datos.activo !== false, nas_ip: true, serial: false },
+        )
         const [fila] = (await t.trx
             .insertQuery()
             .table('network.routers')

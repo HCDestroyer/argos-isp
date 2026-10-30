@@ -22,7 +22,7 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
     await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
-    await page.getByRole('radio', { name: /RB-Centro/ }).click()
+    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     for (let i = 0; i < 2; i++) {
         await alta.getByRole('button', { name: 'Siguiente' }).click()

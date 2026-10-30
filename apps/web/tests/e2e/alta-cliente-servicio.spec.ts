@@ -25,7 +25,7 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
     await expect(alta).toBeVisible()
 
-    await page.getByRole('radio', { name: /RB-Centro/ }).click()
+    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // IPv4 automática, IPv6 recomendada, credenciales generadas y plantilla: se aceptan tal cual.
     // Conexión → Red y PPPoE → Instalación y cobro → Resumen.
