@@ -235,6 +235,8 @@ export interface CatalogoEventos {
         empresa_id: number
         cliente_id: number
         router_id: number
+        /** usuario PPPoE que tenía (null si no era PPPoE); nunca la contraseña */
+        user_ppp: string | null
     }
     /**
      * Router eliminado sin historial (`contratos/eliminar.md`). FreeRADIUS regenera sus clientes y

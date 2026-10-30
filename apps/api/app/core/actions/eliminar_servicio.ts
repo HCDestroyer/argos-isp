@@ -82,11 +82,14 @@ export default class EliminarServicio extends DomainAction<EntradaEliminarServic
         await t.trx.from('core.servicios').where('id', id).delete()
 
         await t.registrarCambios({ tipo: 'servicio', id }, antes, null)
+        const userPpp = typeof fila.user_ppp === 'string' && fila.user_ppp !== '' ? fila.user_ppp : null
+        // `user_ppp` (pedido de A2): para cerrar una sesión que siguiera viva. Nunca la contraseña.
         await t.emit('servicio.eliminado', {
             servicio_id: id,
             empresa_id: empresaId,
             cliente_id: Number(fila.cliente_id),
             router_id: Number(fila.router_id),
+            user_ppp: userPpp,
         })
         const ahora = new Date().toISOString()
         await t.emit('asignacion.cambiada', {
@@ -100,7 +103,6 @@ export default class EliminarServicio extends DomainAction<EntradaEliminarServic
         })
         t.anotarAuditoria({ liberadas: vigentes })
 
-        const userPpp = typeof fila.user_ppp === 'string' ? fila.user_ppp : null
         if (userPpp) {
             // versión mayor que cualquier registro publicado del servicio: la lápida no se pisa
             refrescarAaaAlConfirmar(t, {

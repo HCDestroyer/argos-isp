@@ -75,6 +75,7 @@ El estado no importa: un servicio `activo`, `pendiente_instalacion` o `retirado`
 
 - Borra `network.ipv6_pools` de sus bloques, `network.ipv6_bloques`, `network.redes_ipv4`, `network.planes_routers`, `network.routers_contacto`, `network.routers_migracion_aaa`, `network.routers_conexion` y `core.ids_externos` del router; luego `network.routers`. Los planes se conservan.
 - Outbox: `router.eliminado` y, si tenía túnel registrado (`routers_conexion.public_key`), antes `router.conexion_eliminada` (lo que ya escuchan el `wireguard-agente` y los clientes de FreeRADIUS, `contratos/conexion-routers.md`).
+- Los dos eventos salen en la misma transacción y no duplican trabajo: el `wireguard-agente` (`infra/wireguard/agente.sh`) y los clientes de FreeRADIUS (`services/aaa/src/clientes/consumidor.ts`) reconcilian la lista completa una vez por lote y solo escriben o recargan si algo cambió; si llegan en lotes distintos, la segunda pasada no cambia nada.
 
 ### Auditoría (los dos)
 
@@ -86,7 +87,7 @@ El estado no importa: un servicio `activo`, `pendiente_instalacion` o `retirado`
 
 | Evento | Emite | Payload | Lo consume |
 | --- | --- | --- | --- |
-| `servicio.eliminado` | A1 (`EliminarServicio`) | `servicio_id`, `empresa_id`, `cliente_id`, `router_id` (el router donde estaba) | A2 (`routeros`): limpiar en el router lo que haya creado (hoy ya lo hace con el `asignacion.cambiada` que acompaña). A2 (`aaa`, §7) y A2 (`sesiones`, §7). A6: webhook a Iris (quitar la instantánea del servicio). `aaa-cache` lo recibe como `servicio.*` y no escribe nada (el servicio ya no existe) |
+| `servicio.eliminado` | A1 (`EliminarServicio`) | `servicio_id`, `empresa_id`, `cliente_id`, `router_id` (el router donde estaba), `user_ppp` (null si no era PPPoE; nunca `pass_ppp` ni otra credencial) | A2 (`routeros`): limpiar en el router lo que haya creado (hoy ya lo hace con el `asignacion.cambiada` que acompaña). A2 (`aaa`, §7) y A2 (`sesiones`, §7). A6: webhook a Iris (quitar la instantánea del servicio). `aaa-cache` lo recibe como `servicio.*` y no escribe nada (el servicio ya no existe) |
 | `router.eliminado` | A1 (`EliminarRouter`) | `router_id`, `empresa_id` (`empresa_sugerida_id` del router, o `null`) | A2 (`aaa`, grupo `radius-clientes:<nodo>`): regenerar los clientes de FreeRADIUS (sale `router-<id>.conf`) y recargar; lápida en las claves `aaa:user:*` con ese `router_id`. A6: el agente WireGuard borra el peer del router |
 
 Los consumidores son idempotentes y no deben buscar la fila: ya no existe. Un evento atrasado de ese servicio o router (`servicio.config_cambiada`, `asignacion.cambiada`) puede llegar después de `*.eliminado`; tratarlo como «no existe».
@@ -107,7 +108,7 @@ Los consumidores son idempotentes y no deben buscar la fila: ya no existe. Un ev
 ### API (grupo `sesiones`, `node ace sesiones:worker`)
 
 - `servicio.eliminado`: si quedó una sesión abierta del `user_ppp` del servicio (solo puede ser una sin `servicio_id`, abierta por accounting después del borrado), `sesiones.desconectar_eliminado` emite `sesion.desconexion_solicitada` (`motivo: servicio_eliminado`) y `coa` manda el Disconnect. Sin sesión, no hace nada.
-- El `user_ppp` se toma de `payload.user_ppp` si viene; si no, del `antes` de `audit.cambios` del servicio (`campo = user_ppp`, `despues = null`). Pedido a A1 (`a2.md`): agregar `user_ppp` (o null si no es PPPoE) al payload de `servicio.eliminado`, sin credenciales.
+- El `user_ppp` se toma de `payload.user_ppp` si viene; si no, del `antes` de `audit.cambios` del servicio (`campo = user_ppp`, `despues = null`). A1 ya lo manda (`user_ppp` o null si no es PPPoE, sin credenciales); el respaldo por `audit.cambios` queda para eventos viejos.
 
 ## 8. A6 · Iris, WireGuard y notify
 

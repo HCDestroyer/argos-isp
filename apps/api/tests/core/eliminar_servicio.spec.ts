@@ -477,7 +477,9 @@ test.group('Servicios · eliminar sin historial', () => {
             empresa_id: 1,
             cliente_id: s.cliente_id,
             router_id: s.router_id,
+            user_ppp: s.user_ppp,
         })
+        assert.notInclude(JSON.stringify(eliminado?.payload), 'pass_ppp')
         assert.include(
             eventos.map((e) => e.evento),
             'asignacion.cambiada',

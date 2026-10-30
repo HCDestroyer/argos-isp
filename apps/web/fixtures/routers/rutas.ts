@@ -172,6 +172,7 @@ export const rutasRouters: RutasFixture = {
             tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
             tiene_radius_secret: cuerpo.quitar_radius_secret === true ? false : (typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') || router.tiene_radius_secret,
             zona_id: 'zona_id' in cuerpo ? (cuerpo.zona_id as number | null) : (router.zona_id ?? null),
+            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
             activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
@@ -183,8 +184,6 @@ export const rutasRouters: RutasFixture = {
             interfaz_clientes: conexion('interfaz_clientes'),
             // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
             empresa_sugerida_id: 'empresa_sugerida_id' in cuerpo ? (cuerpo.empresa_sugerida_id as number | null) : router.empresa_sugerida_id,
-            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
-            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             version: router.version + 1,
             updated_at: ahora(),
         })
