@@ -62,7 +62,7 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
     }
 
     /** Accounting-Request desde el contenedor como lo mandaría el MikroTik (radclient → 1813). */
-    async function radacct(atributos: string): Promise<boolean> {
+    async function enviarAcct(atributos: string): Promise<{ ok: boolean; salida: string }> {
         const r = await exec(
             'docker',
             [
@@ -73,8 +73,37 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
                 `printf '%s\\n' '${atributos}' | radclient -x -c 1 -r 1 -t 3 127.0.0.1:1813 acct ${SECRET}`,
             ],
             { timeout: 15_000 },
-        ).catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? '' }))
-        return /Received Accounting-Response/.test(r.stdout)
+        ).catch((e: { stdout?: string; stderr?: string; message?: string }) => ({
+            stdout: e.stdout ?? '',
+            stderr: e.stderr ?? e.message ?? '',
+        }))
+        const salida = `${r.stdout}\n${r.stderr}`
+        return { ok: /Received Accounting-Response/.test(r.stdout), salida }
+    }
+
+    async function radacct(atributos: string): Promise<boolean> {
+        return (await enviarAcct(atributos)).ok
+    }
+
+    /**
+     * Como el NAS: si no hubo Accounting-Response, retransmite (hasta 3 envíos). En CI, con la máquina
+     * cargada, un paquete UDP suelto puede perderse o llegar antes de que el proceso esté listo; un
+     * reenvío del mismo paquete es legítimo (el worker es idempotente por `Acct-Session-Id`). Si aun
+     * así no responde, el mensaje trae lo que imprimió radclient y el final del log de FreeRADIUS.
+     */
+    async function acctComoNas(atributos: string): Promise<void> {
+        const salidas: string[] = []
+        for (let intento = 1; intento <= 3; intento++) {
+            const r = await enviarAcct(atributos)
+            if (r.ok) return
+            salidas.push(`intento ${intento}:\n${r.salida.trim()}`)
+        }
+        const { stdout } = await exec('docker', ['logs', '--tail', '60', contenedor]).catch(() => ({
+            stdout: '',
+        }))
+        assert.fail(
+            `FreeRADIUS no respondió al accounting:\n${salidas.join('\n')}\n--- docker logs ---\n${stdout}`,
+        )
     }
 
     async function radtest(usuario: string, clave: string, metodo: 'pap' | 'chap'): Promise<Respuesta> {
@@ -268,22 +297,21 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
         const comunes =
             'User-Name = "prueba-activo", NAS-IP-Address = 127.0.0.1, Acct-Session-Id = "81a0000f", ' +
             'Framed-IP-Address = 10.10.1.10, Framed-IPv6-Prefix = 2001:db8:101:1::/64'
-        assert.ok(await radacct(`Acct-Status-Type = Start, ${comunes}`))
-        assert.ok(
-            await radacct(
-                `Acct-Status-Type = Interim-Update, ${comunes}, Acct-Input-Octets = 100, Acct-Output-Gigawords = 1, Acct-Session-Time = 300`,
-            ),
+        const antes = encolados.length
+        await acctComoNas(`Acct-Status-Type = Start, ${comunes}`)
+        await acctComoNas(
+            `Acct-Status-Type = Interim-Update, ${comunes}, Acct-Input-Octets = 100, Acct-Output-Gigawords = 1, Acct-Session-Time = 300`,
         )
-        assert.ok(
-            await radacct(
-                `Acct-Status-Type = Stop, ${comunes}, Acct-Input-Octets = 200, Acct-Session-Time = 600, Acct-Terminate-Cause = User-Request`,
-            ),
+        await acctComoNas(
+            `Acct-Status-Type = Stop, ${comunes}, Acct-Input-Octets = 200, Acct-Session-Time = 600, Acct-Terminate-Cause = User-Request`,
         )
+        // Un job por paquete: una retransmisión del NAS deja el mismo paquete repetido seguido.
+        const sesion = encolados.slice(antes).filter((r, i, xs) => i === 0 || r.tipo !== xs[i - 1]!.tipo)
         assert.deepEqual(
-            encolados.map((r) => r.tipo),
+            sesion.map((r) => r.tipo),
             ['Start', 'Interim-Update', 'Stop'],
         )
-        const [inicio, interino, fin] = encolados
+        const [inicio, interino, fin] = sesion
         assert.equal(inicio?.user_ppp, 'prueba-activo')
         assert.equal(inicio?.nas_ip, '127.0.0.1')
         assert.equal(inicio?.acct_session_id, '81a0000f')
@@ -301,7 +329,7 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
             ]),
         )
         assert.deepEqual(
-            encolados.map((r) => r.request_id),
+            sesion.map((r) => r.request_id),
             [esperado, esperado, esperado],
         )
     })
