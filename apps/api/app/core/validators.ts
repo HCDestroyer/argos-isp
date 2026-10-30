@@ -850,6 +850,25 @@ export const resolverIpsValidator = vine.compile(
 )
 
 /** `POST /integraciones/horus/tokens`. */
+/**
+ * `POST /integraciones/iris/tokens`: el usuario técnico Iris solo tiene alcance por empresas (contrato
+ * Iris 0.3.1 §1). `routers` y `zonas` se aceptan solo para responder 422 con su motivo en vez de
+ * ignorarlos.
+ */
+export const generarTokenIrisValidator = vine.compile(
+    vine.object({
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        routers: vine.array(idEntidad()).optional().meta({
+            description:
+                'No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)',
+        }),
+        zonas: vine.array(idEntidad()).optional().meta({
+            description:
+                'No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)',
+        }),
+    }),
+)
+
 export const generarTokenHorusValidator = vine.compile(
     vine.object({
         nombre: vine.string().trim().minLength(2).maxLength(100).optional(),

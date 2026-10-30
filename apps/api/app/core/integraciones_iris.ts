@@ -14,7 +14,9 @@ import {
  * permisos a `PERMISOS_IRIS`. Sin token generado (o sin canje), Iris no puede nada.
  */
 
-export const EMAIL_USUARIO_IRIS = 'iris@integraciones.argosisp.local'
+import { EMAIL_USUARIO_IRIS } from '#core/alcance_usuario_tecnico'
+
+export { EMAIL_USUARIO_IRIS }
 export const NOMBRE_USUARIO_IRIS = 'Iris'
 export const ROL_IRIS = 'integracion_iris'
 

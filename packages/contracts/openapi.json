@@ -26497,7 +26497,7 @@
       "post": {
         "operationId": "irisGenerarToken",
         "summary": "Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)",
-        "description": "Crea, la primera vez, el usuario técnico \"Iris\" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Opcionalmente restringido a routers o zonas. No revoca los anteriores.",
+        "description": "Crea, la primera vez, el usuario técnico \"Iris\" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Su alcance son las empresas del usuario Iris (o global), nunca zonas ni routers: `routers`/`zonas` no vacíos, o roles del usuario con alcance por zona o router, responden 422 `usuario_tecnico_solo_empresas` (contrato Iris 0.3.1 §1). No revoca los anteriores.",
         "tags": [
           "integraciones"
         ],
@@ -26527,7 +26527,7 @@
                       "type": "integer",
                       "minimum": 1
                     },
-                    "description": "Restringe el token a servicios de estos routers"
+                    "description": "No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)"
                   },
                   "zonas": {
                     "type": "array",
@@ -26535,7 +26535,7 @@
                       "type": "integer",
                       "minimum": 1
                     },
-                    "description": "Restringe el token a clientes de estas zonas"
+                    "description": "No se admite: con una lista no vacía responde 422 usuario_tecnico_solo_empresas (el alcance de Iris son sus empresas)"
                   }
                 },
                 "required": [],
