@@ -164,6 +164,20 @@ export const Router = definirEsquema(
                     'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
                     'comando de RouterOS (`audit.red` con ok); null si nunca',
             },
+            serial: {
+                ...nulable(texto),
+                description:
+                    'Número de serie del equipo (`/system/routerboard` serial-number) o software-id (`/system/license`, ' +
+                    'CHR), leído por el sondeo; null = no se conoce. Sirve para detectar el mismo MikroTik registrado dos ' +
+                    'veces (GET /routers/duplicados). La API siempre lo envía; opcional en el esquema hasta que las ' +
+                    'fixtures del panel lo traigan',
+            },
+            unido_a_id: {
+                ...nulable(id),
+                description:
+                    'Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan',
+            },
             zona_id: {
                 ...nulable(id),
                 description:
@@ -180,7 +194,7 @@ export const Router = definirEsquema(
             },
             ...auditable,
         },
-        ['zona_id', 'coordenadas'],
+        ['serial', 'unido_a_id', 'zona_id', 'coordenadas'],
     ),
 )
 
@@ -772,6 +786,96 @@ export const VistaPreviaVelocidad = definirEsquema(
             limit_at_kbps: parKbps,
             activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
         }),
+    }),
+)
+
+const motivoDuplicado = {
+    ...enumerado(['api', 'nas_ip', 'serial']),
+    description:
+        'api: mismo host:puerto de la API REST (api_url o https://<host>); nas_ip: misma nas_ip; serial: mismo ' +
+        'número de serie o software-id del equipo',
+}
+
+/** Un grupo de `GET /routers/duplicados` (`contratos/routers.md` §2). */
+export const GrupoRoutersDuplicados = definirEsquema(
+    'GrupoRoutersDuplicados',
+    objeto({
+        motivos: { ...lista(motivoDuplicado), description: 'Por qué parecen el mismo equipo' },
+        claves: {
+            ...lista(objeto({ motivo: motivoDuplicado, valor: texto })),
+            description: 'Valores compartidos por dos o más routers del grupo',
+        },
+        routers: lista(
+            objeto({
+                id,
+                nombre: texto,
+                host: texto,
+                api_url: nulable(texto),
+                nas_ip: texto,
+                serial: nulable(texto),
+                control_velocidad: enumerado(['simple', 'arbol_pcq']),
+                servicios_total: { ...entero, description: 'Servicios no retirados del router' },
+                sesiones_abiertas: { ...entero, description: 'Sesiones PPPoE abiertas atribuidas al router' },
+                servicios: {
+                    ...lista(
+                        objeto({
+                            id,
+                            cliente_id: id,
+                            user_ppp: nulable(texto),
+                            estado: texto,
+                            tipo_conexion: texto,
+                        }),
+                    ),
+                    description: 'Los primeros 50 servicios no retirados (por id)',
+                },
+                version: entero,
+            }),
+        ),
+    }),
+)
+
+/** Resultado de `POST /routers/:id/unir` (o su simulación; `contratos/routers.md` §3). */
+export const UnionRouters = definirEsquema(
+    'UnionRouters',
+    objeto({
+        router_id: { ...id, description: 'El router que queda' },
+        absorbido_id: { ...id, description: 'El router absorbido (queda desactivado y unido)' },
+        simulado: { ...booleano, description: 'true = simulación: no se guardó nada' },
+        coincidencias: {
+            ...lista(motivoDuplicado),
+            description: 'Claves que comparten; vacío = no parecen el mismo equipo (va un aviso)',
+        },
+        servicios: {
+            ...lista(
+                objeto({ servicio_id: id, user_ppp: nulable(texto), estado: texto, tipo_conexion: texto }),
+            ),
+            description: 'Servicios que pasan al router que queda (conservan sus direcciones)',
+        },
+        redes_ipv4: { ...lista(id), description: 'Redes IPv4 que pasan al que queda' },
+        ipv6_bloques: { ...lista(id), description: 'Bloques IPv6 (con sus pools) que pasan al que queda' },
+        planes_movidos: {
+            ...lista(id),
+            description: 'plan_id de las implementaciones que pasan al que queda',
+        },
+        planes_descartados: {
+            ...lista(id),
+            description:
+                'plan_id implementados en los dos: gana la del que queda y se descarta la del absorbido',
+        },
+        sesiones_abiertas: { ...entero, description: 'Sesiones abiertas que pasan al que queda' },
+        avisos: { ...lista(texto), description: 'Lo que el operador debe saber antes de confirmar' },
+        bloqueos: {
+            ...lista(enumerado(['secreto_radius_distinto'])),
+            description:
+                'Solo en la simulación: lo que hará fallar la unión (422 con ese código). secreto_radius_distinto: ' +
+                'primero el mismo secreto RADIUS en el equipo y en Argos. Vacío = se puede unir',
+        },
+        reencadenados: {
+            ...lista(id),
+            description: 'Routers que ya estaban unidos al absorbido y ahora apuntan al que queda',
+        },
+        router: Router,
+        absorbido: Router,
     }),
 )
 

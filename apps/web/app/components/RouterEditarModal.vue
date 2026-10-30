@@ -73,7 +73,11 @@ const actual = shallowRef<RouterNas>(props.router)
 const estado = reactive<Entrada>(entradaDe(props.router))
 const guardando = ref(false)
 const problema = ref<Problem | null>(null)
-const conflicto = computed(() => problema.value?.status === 409)
+// 409 `router_duplicado` (A1) no es un conflicto de versión: el host, la API o la nas_ip ya son de otro router.
+const duplicado = computed(() => esRouterDuplicado(problema.value))
+const conflicto = computed(() => problema.value?.status === 409 && !duplicado.value)
+// 422 sin campos (p. ej. `router_unido` al reactivar un router unido) se explica arriba.
+const sinCampos = computed(() => problema.value?.status === 422 && !(problema.value.errors ?? []).length)
 
 function reiniciar(router: RouterNas) {
     actual.value = router
@@ -223,8 +227,31 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     :actions="[{ label: 'Recargar', icon: 'i-lucide-rotate-cw', color: 'warning', variant: 'outline', onClick: recargar }]"
                     data-prueba="router-conflicto"
                 />
+                <UAlert
+                    v-else-if="problema && duplicado"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-copy"
+                    title="Ese MikroTik ya está registrado"
+                    data-prueba="router-editar-duplicado"
+                >
+                    <template #description>
+                        <div class="flex flex-col gap-1.5">
+                            <p>{{ problema.detail }}</p>
+                            <ul class="list-disc pl-5">
+                                <li
+                                    v-for="(error, indice) in problema.errors ?? []"
+                                    :key="indice"
+                                >
+                                    {{ error.message }}
+                                </li>
+                            </ul>
+                            <p>Si es el mismo equipo, no lo cambies aquí: únelos desde Routers con «Unir».</p>
+                        </div>
+                    </template>
+                </UAlert>
                 <ProblemaAlerta
-                    v-else-if="problema && problema.status !== 422"
+                    v-else-if="problema && (problema.status !== 422 || sinCampos)"
                     :problema="problema"
                 />
 

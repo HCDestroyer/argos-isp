@@ -5,7 +5,8 @@ import type { TableColumn, TabsItem } from '@nuxt/ui'
  * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
  * de velocidad y la capacidad del enlace. Cada fila lleva «Editar» y el menú de acciones del
  * router (`RouterAcciones`: conexión de la API, control de velocidad…). "Nuevo router" (`routers.crear`);
- * redes IPv4 y bloques y pools IPv6 en la ficha de cada router.
+ * redes IPv4 y bloques y pools IPv6 en la ficha de cada router. Arriba, el aviso de routers
+ * duplicados (el mismo MikroTik registrado dos veces) con «Unir» (`contratos/routers.md`).
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -62,6 +63,27 @@ function capacidad(router: RouterNas): string {
     return `${bajada ? formatearVelocidad(bajada) : 'sin techo'} / ${subida ? formatearVelocidad(subida) : 'sin techo'}`
 }
 
+function alUnir() {
+    void lista.recargar()
+}
+
+/**
+ * Nombres de los routers ya vistos en cualquier vista: el absorbido queda inactivo («Inactivos») y
+ * el que quedó sigue en «Activos», así que no están en la misma página.
+ */
+const nombres = reactive(new Map<number, string>())
+watch(() => lista.filas.value, (filas) => {
+    for (const fila of filas) {
+        nombres.set(fila.id, fila.nombre)
+    }
+}, { immediate: true })
+
+/** Nombre del router al que se unió uno absorbido (si ya se vio en la lista). */
+function unidoA(router: RouterNas): string {
+    const destino = typeof router.unido_a_id === 'number' ? nombres.get(router.unido_a_id) : undefined
+    return destino ? `Unido a ${destino}` : `Unido al router ${router.unido_a_id}`
+}
+
 function alActualizar() {
     void lista.recargar()
 }
@@ -94,6 +116,7 @@ onMounted(() => void lista.recargar())
         </template>
 
         <div class="flex flex-col gap-4">
+            <RoutersDuplicadosAviso @unido="alUnir" />
             <UTabs
                 v-model="vista"
                 :items="itemsVista"
@@ -124,7 +147,16 @@ onMounted(() => void lista.recargar())
                                     class="hover:text-primary"
                                 >{{ row.original.nombre }}</ULink>
                                 <UBadge
-                                    v-if="!row.original.activo"
+                                    v-if="row.original.unido_a_id"
+                                    :label="unidoA(row.original)"
+                                    icon="i-lucide-merge"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                    :data-prueba="`unido-${row.original.id}`"
+                                />
+                                <UBadge
+                                    v-else-if="!row.original.activo"
                                     label="Inactivo"
                                     color="neutral"
                                     variant="subtle"

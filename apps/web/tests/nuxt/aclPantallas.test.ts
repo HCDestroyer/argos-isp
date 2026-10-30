@@ -265,6 +265,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
     'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
     'CanjeLealtadModal.vue': { permisos: ['lealtad.canjear', 'lealtad.ver'], desde: ['pages/lealtad/canjes.vue'] },
+    // Routers duplicados (A1, `contratos/routers.md`): el aviso en la lista y la ficha; «Unir» solo con `routers.unir`.
+    // El aviso no repite `routers.ver`: solo se monta en las páginas de routers, que ya lo exigen.
+    'RoutersDuplicadosAviso.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue', 'pages/routers/[id].vue'] },
+    'RouterUnirModal.vue': { permisos: ['routers.unir', 'routers.ver'], desde: ['components/RoutersDuplicadosAviso.vue'], exentos: { 'components/RoutersDuplicadosAviso.vue': ['routers.ver'] } },
     // Alta de servicio: la página tiene `servicios.crear`; el panel lateral lo abre la ficha del cliente, que lo comprueba.
     'ServicioAltaFormulario.vue': { permisos: ['servicios.crear'], desde: ['pages/servicios/nuevo.vue', 'components/ServicioAltaSlideover.vue'], exentos: { 'components/ServicioAltaSlideover.vue': ['servicios.crear'] } },
     'ServicioAltaSlideover.vue': { permisos: ['servicios.crear'], desde: ['pages/clientes/[id]/index.vue'] },

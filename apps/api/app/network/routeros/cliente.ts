@@ -198,6 +198,32 @@ export class ClienteRouterOS {
         })
     }
 
+    /**
+     * Identidad del equipo (`contratos/routers.md`): `serial-number` de `/system/routerboard` o, en
+     * un CHR (sin RouterBOARD), `software-id` de `/system/license`, con la ruta que lo dio. null si
+     * el router no informa ninguno o no deja leerlos (400/403/404). Un router inalcanzable o con
+     * credenciales malas lanza.
+     */
+    async identificar(): Promise<{ serial: string; ruta: '/system/routerboard' | '/system/license' } | null> {
+        for (const [ruta, campo] of [
+            ['/system/routerboard', 'serial-number'],
+            ['/system/license', 'software-id'],
+        ] as const) {
+            const valor = await this.#conReintentos(async () => {
+                try {
+                    const r = await this.#http('GET', ruta.slice(1))
+                    const dato = this.#objeto(r.cuerpo, r.status)[campo]
+                    return typeof dato === 'string' && dato.trim() !== '' ? dato.trim() : null
+                } catch (e) {
+                    if (e instanceof RouterOSSolicitud || e instanceof RouterOSRespuesta) return null
+                    throw e
+                }
+            })
+            if (valor) return { serial: valor, ruta }
+        }
+        return null
+    }
+
     /** Lista un menú, opcionalmente filtrado por propiedades (`?comment=…`). */
     async listar(ruta: RutaRouterOS | RutaLectura, filtro: Propiedades = {}): Promise<ObjetoRouterOS[]> {
         return this.#conReintentos(() => this.#listar(ruta, filtro, true))
