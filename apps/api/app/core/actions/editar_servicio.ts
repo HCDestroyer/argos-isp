@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { exigirRadiusParaPppoe } from '#network/modo_seguridad'
+import { exigirPppoeAdmitido } from '#network/modo_seguridad'
 import { cifrar } from '#shared/cifrado'
 import { actualizarConVersion, verificarVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
@@ -212,7 +212,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         })
         // PPPoE en un router sin RADIUS: 422 al mover el servicio o al pasarlo a pppoe (un PPPoE que ya
         // estaba en el router se sigue editando; `#network/modo_seguridad`)
-        if (routerId !== antes.router_id || cambiaTipo) await exigirRadiusParaPppoe(t.trx, routerId, tipo)
+        if (routerId !== antes.router_id || cambiaTipo) await exigirPppoeAdmitido(t.trx, routerId, tipo)
 
         const columnas: Record<string, unknown> = Object.fromEntries(
             Object.entries(datos).filter(([, valor]) => valor !== undefined),

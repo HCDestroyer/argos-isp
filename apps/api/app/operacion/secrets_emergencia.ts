@@ -29,7 +29,8 @@ export const COMENTARIO = 'argosisp-emergencia'
 export interface RouterEmergencia {
     id: number
     nombre: string
-    nas_ip: string
+    /** null en un router sin RADIUS (`modo_seguridad = 'api'`): sus PPPoE ya son `/ppp secret` */
+    nas_ip: string | null
 }
 
 export interface OpcionesRsc {
@@ -144,7 +145,7 @@ export function generarRscEmergencia(
 
     const encontrar = `[find comment=${cadenaRos(COMENTARIO)}]`
     const l: string[] = [
-        `# ArgosIsp · secrets PPPoE de EMERGENCIA · router ${router.id} ${router.nombre.replace(/[\r\n]/g, ' ')} (NAS ${router.nas_ip})`,
+        `# ArgosIsp · secrets PPPoE de EMERGENCIA · router ${router.id} ${router.nombre.replace(/[\r\n]/g, ' ')} (${router.nas_ip ? `NAS ${router.nas_ip}` : 'sin RADIUS: sin NAS'})`,
         `# Generado ${opciones.generado} · ${resumen.servicios} servicios · ${resumen.perfiles.length} perfiles`,
         '# CONTIENE CONTRASEÑAS EN CLARO: no lo guardes en el repositorio ni lo compartas; bórralo al terminar.',
         '# Solo si aaa (RADIUS) no responde: docs/runbooks/aaa-caido.md, paso 3. Sin RADIUS no hay corte',

@@ -122,12 +122,14 @@ test.group('network · sesiones para el panel (tarea 8)', () => {
             'inicio',
             'ipv4',
             'nas_ip',
+            'origen',
             'prefijo_delegado_v6',
             'prefijo_enlace_v6',
             'router_id',
             'servicio_id',
             'user_ppp',
         ])
+        assert.equal(s.origen, 'accounting')
         assert.include(s, {
             id: viva.id,
             servicio_id: e.servicioId,

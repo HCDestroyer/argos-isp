@@ -409,6 +409,8 @@ export async function vistaPreviaEstrategia(
         capacidad_bajada_kbps: router.velocidad.capacidad_bajada_kbps,
         capacidad_subida_kbps: router.velocidad.capacidad_subida_kbps,
         qos_clases: router.velocidad.qos?.clases.length ?? 0,
+        modo_seguridad: router.red.modo_seguridad,
+        revisar_router_sin_radius: propuesta.estrategias !== undefined,
     })
     const todos = await serviciosVigentesDeRouter(routerId)
     const redes = await redesV4DeRouter(routerId)

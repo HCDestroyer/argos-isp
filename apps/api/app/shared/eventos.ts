@@ -108,10 +108,16 @@ interface PayloadComprobante {
 
 interface PayloadSesion {
     servicio_id: number | null
-    nas_ip: string
+    /** null solo en una sesión de sondeo de un router sin RADIUS y sin `nas_ip` */
+    nas_ip: string | null
     acct_session_id: string
     ipv4: string | null
     prefijos_v6: string[]
+    /**
+     * `accounting` (RADIUS) o `sondeo` (router sin RADIUS: la abrió o cerró el sondeo de `/ppp/active`,
+     * `contratos/pppoe-local.md` §6). Agregado el 30 oct; ausente = `accounting`.
+     */
+    origen?: 'accounting' | 'sondeo'
 }
 
 /**
@@ -455,10 +461,15 @@ export interface CatalogoEventos {
     'sesion.desconexion_solicitada': {
         sesion_id: number
         servicio_id: number | null
-        nas_ip: string
+        nas_ip: string | null
         acct_session_id: string
         user_ppp: string
         motivo: string
+        /**
+         * `sondeo` (router sin RADIUS): no la ejecuta `coa` sino el dispatcher de RouterOS con
+         * `/ppp active remove` (`contratos/pppoe-local.md` §4). Ausente = `accounting`.
+         */
+        origen?: 'accounting' | 'sondeo'
     }
     /**
      * Sincronizar plan (`planes.sincronizar`, `contratos/control-velocidad.md` §5): `coa` manda un CoA

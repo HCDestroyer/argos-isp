@@ -13,6 +13,16 @@ import {
 } from '#network/routeros/consultas'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import {
+    asegurarPerfilCorte,
+    asegurarSecret,
+    llevaSecret,
+    passwordDe,
+    secretDeseado,
+    sesionesQuitadas,
+    type SecretDeseado,
+} from '#network/routeros/pppoe_local'
+import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
+import {
     aplicarEstado,
     asegurarVelocidad,
     enTransicion,
@@ -102,11 +112,16 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
             await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ROUTEROS, routerId])
             const router = await routerDispatcher(routerId, t.trx, this.#red)
             const deseado = papel === 'deseado' && servicio !== null
+            const modo = router?.red.modo_seguridad ?? 'radius'
+            // Secret PPPoE (router sin RADIUS, `contratos/pppoe-local.md`): en un router `api`, o donde
+            // ArgosIsp escribió antes (cambio de router, de tipo, de modo; retiro, eliminación).
+            const conSecret = router !== null && (modo === 'api' || historial.includes(routerId))
             // Objetos propios del servicio: WISP en su router, o limpieza donde escribió antes.
             // (PPPoE en `arbol_pcq`: sus direcciones en la lista del plan).
             const porServicio =
                 !deseado ||
                 servicio.tipo_conexion !== 'pppoe' ||
+                modo === 'api' ||
                 historial.includes(routerId) ||
                 router?.red.control_velocidad === 'arbol_pcq' ||
                 servicio.estrategia.aplicacion === 'arbol_pcq' ||
@@ -150,6 +165,43 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 }
                 // Los objetos del plan no son del servicio: van a `audit.red` sin servicio_id.
                 const ctxPlan = { ...ctx, servicio_id: null }
+                const secret = async () => {
+                    if (!conSecret) return
+                    let deseadoSecret: SecretDeseado | null = null
+                    if (llevaSecret(deseado ? servicio : null, routerId, modo)) {
+                        const clave = passwordDe(servicio!)
+                        if ('error' in clave) {
+                            // Sin contraseña legible no se toca el secret que haya (aviso, sin el valor).
+                            fila.avisos = [...fila.avisos, clave.error]
+                            return
+                        }
+                        deseadoSecret = secretDeseado(servicio!, perfilSuspendido(), clave.clave)
+                        if (servicio!.estado === 'suspendido') {
+                            fila.cambios.push(
+                                ...(await asegurarPerfilCorte(
+                                    cliente,
+                                    await cliente.listar('/ppp/profile'),
+                                    ctxPlan,
+                                )),
+                            )
+                        }
+                    }
+                    // Un PPPoE que sigue en este router pero ahora con RADIUS (de `api` a `radius`): se
+                    // borra el secret sin cortar la sesión; reconecta por RADIUS cuando se caiga.
+                    const migrando = deseado && servicio.tipo_conexion === 'pppoe' && modo === 'radius'
+                    const cambiosSecret = await asegurarSecret(
+                        cliente,
+                        input.servicio_id,
+                        deseadoSecret,
+                        ctx,
+                        {
+                            desconectar: !migrando,
+                        },
+                    )
+                    fila.cambios.push(...cambiosSecret)
+                    // Las sesiones quitadas se cierran ya (Admin-Reset), sin esperar al sondeo.
+                    await cerrarSesionesQuitadas(t, routerId, sesionesQuitadas(cambiosSecret))
+                }
                 try {
                     if (conVelocidad) {
                         const lectura = await leerVelocidadRouter(cliente)
@@ -166,6 +218,8 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         )
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
                         if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
+                        // El secret después de los perfiles a los que apunta y antes de borrar los que sobran.
+                        await secret()
                         // Durante un cambio de modo, lo del modo anterior lo borra el cambio al final.
                         if (!(await enTransicion(routerId))) {
                             const despues = await leerVelocidadRouter(cliente)
@@ -175,6 +229,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         }
                     } else {
                         fila.cambios = await aplicarEstado(cliente, estado, ctx)
+                        await secret()
                     }
                 } finally {
                     cliente.cerrar()

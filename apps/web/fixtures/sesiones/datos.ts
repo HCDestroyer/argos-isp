@@ -10,15 +10,20 @@ function acctSessionId(id: number): string {
     return (0x81A00000 + id * 4099).toString(16).toUpperCase().slice(-8)
 }
 
-/** Sesión PPPoE abierta para un servicio, con las direcciones que le entregó RADIUS. */
-export function nuevaSesion(id: number, servicio: Servicio, inicio: string): Sesion {
-    const router = routers.find(r => r.id === servicio.router_id)
+/**
+ * Sesión PPPoE abierta para un servicio, con las direcciones que le entregó RADIUS. En un router sin
+ * RADIUS (`modo_seguridad = 'api'`, `contratos/pppoe-local.md` §6) es una de sondeo, como la abre
+ * `sesiones.sondear_ppp`: `origen = 'sondeo'`, `acct_session_id = sondeo:<session-id>`, la `nas_ip` del
+ * router (o null) y sin consumo.
+ */
+export function nuevaSesion(id: number, servicio: Servicio, inicio: string, router: Pick<Schema<'Router'>, 'nas_ip' | 'modo_seguridad'> | undefined = routers.find(r => r.id === servicio.router_id)): Sesion {
+    const sondeo = router?.modo_seguridad === 'api'
     return {
         id,
         servicio_id: servicio.id,
         router_id: servicio.router_id,
-        nas_ip: router?.nas_ip ?? '10.10.0.1',
-        acct_session_id: acctSessionId(id),
+        nas_ip: sondeo ? router.nas_ip : (router?.nas_ip ?? '10.10.0.1'),
+        acct_session_id: sondeo ? `sondeo:*${(0x8100 + id).toString(16).toUpperCase()}` : acctSessionId(id),
         // Solo los servicios PPPoE tienen sesión; los fixtures de sesiones usan servicios PPPoE.
         user_ppp: servicio.user_ppp ?? '',
         ipv4: servicio.ipv4,
@@ -29,6 +34,7 @@ export function nuevaSesion(id: number, servicio: Servicio, inicio: string): Ses
         bytes_in: 0,
         bytes_out: 0,
         causa_fin: null,
+        origen: sondeo ? 'sondeo' : 'accounting',
     }
 }
 

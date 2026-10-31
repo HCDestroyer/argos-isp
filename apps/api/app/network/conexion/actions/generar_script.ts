@@ -13,7 +13,7 @@ import {
     generarClaveApi,
     generarToken,
 } from '#network/conexion/consultas'
-import { PLANTILLAS, leerMikrotik, renderizar, variablesMikrotik } from '#network/conexion/render'
+import { leerMikrotik, plantillaConexion, renderizar, variablesMikrotik } from '#network/conexion/render'
 import { valoresServicio } from '#network/conexion/servicio'
 
 export interface EntradaGenerarScript {
@@ -50,6 +50,27 @@ function ipApiAnterior(apiUrl: string | null, ipTunel: string): string {
 /** El patrón de `radius_secret` en `variables.json` (16 a 128 ASCII imprimibles, sin espacio). */
 const SECRETO_RADIUS = /^[\x21-\x7e]{16,128}$/
 
+/** El `radius_secret` del router, descifrado; 422 `radius_secret_requerido` si falta o no cumple. */
+async function secretoRadius(t: Transaccion, routerId: number): Promise<string> {
+    const { radius_secret: secretoCifrado } = (await t.trx
+        .from('network.routers')
+        .where('id', routerId)
+        .select('radius_secret')
+        .firstOrFail()) as { radius_secret: string | null }
+    const secreto = secretoCifrado ? descifrar(secretoCifrado) : null
+    if (!secreto || !SECRETO_RADIUS.test(secreto)) {
+        throw new ReglaNegocio(
+            secreto
+                ? 'El secreto RADIUS del router debe tener de 16 a 128 caracteres imprimibles y sin espacios ' +
+                      '(va en el script y en FreeRADIUS). Cámbialo en la ficha del router y vuelve a generar'
+                : 'El router no tiene secreto RADIUS. Defínelo en la ficha del router (es el mismo que usa ' +
+                      'FreeRADIUS) y vuelve a generar el script',
+            'radius_secret_requerido',
+        )
+    }
+    return secreto
+}
+
 /**
  * `routers.generar_script` (`contratos/conexion-routers.md` §3 y §6.2): arma el `.rsc` con las
  * plantillas de A6 (`infra/mikrotik/plantillas`) y el render de `render.ts`.
@@ -59,11 +80,14 @@ const SECRETO_RADIUS = /^[\x21-\x7e]{16,128}$/
  *   el usuario `argosisp-api`, que se guarda cifrada como pendiente: pasa a `api_password` cuando el
  *   router se registra con este script (un script generado y no ejecutado no deja a la API sin
  *   acceso al router).
- * - El secreto RADIUS es el `radius_secret` del router, el mismo con que se arma su cliente de
- *   FreeRADIUS. Nunca se inventa otro: sin él (o si no cumple 16 a 128 caracteres imprimibles sin
- *   espacios), 422 `radius_secret_requerido`.
- * - Un router sin RADIUS (`modo_seguridad = 'api'`): 422 `script_requiere_radius`, antes de mirar el
- *   secreto; las plantillas siempre activan RADIUS en el equipo.
+ * - Router con RADIUS (`modo_seguridad = 'radius'`): plantillas `conexion` / `servicio`. El secreto
+ *   RADIUS es el `radius_secret` del router, el mismo con que se arma su cliente de FreeRADIUS. Nunca
+ *   se inventa otro: sin él (o si no cumple 16 a 128 caracteres imprimibles sin espacios), 422
+ *   `radius_secret_requerido`.
+ * - Router sin RADIUS (`modo_seguridad = 'api'`): plantillas `conexion_sin_radius` /
+ *   `servicio_sin_radius` (mismo túnel, registro y gestión; sin `/radius` de Argos ni CoA,
+ *   `/ppp aaa use-radius=no` y el grupo `argosisp-api` con `sensitive`). No se lee ni se exige el
+ *   secreto RADIUS.
  * - Ni la auditoría ni el evento llevan secretos; el script no se guarda.
  */
 export default class GenerarScript extends DomainAction<EntradaGenerarScript, ScriptConexion> {
@@ -75,33 +99,11 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
         await t.trx.from('network.routers').where('id', routerId).forUpdate().select('id')
         const router = await verRouter(routerId, t.trx)
         t.fijarEmpresa(router.empresa_sugerida_id)
-        if (router.modo_seguridad === 'api') {
-            throw new ReglaNegocio(
-                'Este router no usa RADIUS (modo «api»), y el script de conexión configura RADIUS y CoA en el ' +
-                    'equipo (use-radius=yes). Cambia el router a RADIUS para usar el script, o configura a mano el ' +
-                    'acceso a su API REST',
-                'script_requiere_radius',
-            )
-        }
+        const sinRadius = router.modo_seguridad === 'api'
         const wg = await configWireguard(t.trx)
         const argosUrl = urlBaseApi(input.origen)
 
-        const { radius_secret: secretoCifrado } = (await t.trx
-            .from('network.routers')
-            .where('id', routerId)
-            .select('radius_secret')
-            .firstOrFail()) as { radius_secret: string | null }
-        const secreto = secretoCifrado ? descifrar(secretoCifrado) : null
-        if (!secreto || !SECRETO_RADIUS.test(secreto)) {
-            throw new ReglaNegocio(
-                secreto
-                    ? 'El secreto RADIUS del router debe tener de 16 a 128 caracteres imprimibles y sin espacios ' +
-                          '(va en el script y en FreeRADIUS). Cámbialo en la ficha del router y vuelve a generar'
-                    : 'El router no tiene secreto RADIUS. Defínelo en la ficha del router (es el mismo que usa ' +
-                          'FreeRADIUS) y vuelve a generar el script',
-                'radius_secret_requerido',
-            )
-        }
+        const secreto = sinRadius ? null : await secretoRadius(t, routerId)
         const servicio = input.incluir_servicio ? valoresServicio(router) : {}
 
         const antes = await filaConexion(routerId, t.trx, true)
@@ -137,7 +139,9 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
             auditableConexion(despues),
         )
 
-        const plantilla = leerMikrotik(input.incluir_servicio ? PLANTILLAS.servicio : PLANTILLAS.conexion)
+        const plantilla = leerMikrotik(
+            plantillaConexion(router.modo_seguridad, input.incluir_servicio === true),
+        )
         const texto = renderizar(
             plantilla,
             {
@@ -151,7 +155,8 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
                 wg_servidor_public_key: wg.clavePublica,
                 wg_servidor_endpoint: wg.endpoint,
                 wg_servidor_puerto: String(wg.puerto),
-                radius_secret: secreto,
+                // la plantilla sin RADIUS no lo usa; se omite para que nunca viaje en ese script
+                ...(secreto ? { radius_secret: secreto } : {}),
                 api_password: claveApi,
                 api_nombre: `router-${routerId}.argosisp`,
                 admin_ips: (input.admin ?? []).join(','),

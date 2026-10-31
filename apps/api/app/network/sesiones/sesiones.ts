@@ -24,7 +24,8 @@ export interface FilaSesion {
     id: number
     servicio_id: number | null
     router_id: number | null
-    nas_ip: string
+    /** null solo en una sesión de sondeo (router sin RADIUS y sin `nas_ip`) */
+    nas_ip: string | null
     acct_session_id: string
     user_ppp: string
     ipv4: string | null
@@ -33,6 +34,8 @@ export interface FilaSesion {
     inicio: Date
     fin: Date | null
     causa_fin: string | null
+    /** `accounting` (RADIUS) o `sondeo` (router sin RADIUS, `contratos/pppoe-local.md` §6) */
+    origen: 'accounting' | 'sondeo'
 }
 
 /** `rawQuery` con valores que pueden ser null (knex los acepta; sus tipos no). */
@@ -42,12 +45,12 @@ function consulta(t: Transaccion, sql: string, valores: unknown[]): Promise<unkn
 
 const COLUMNAS = `id, servicio_id::int AS servicio_id, router_id::int AS router_id, host(nas_ip) AS nas_ip,
     acct_session_id, user_ppp, host(ipv4) AS ipv4, prefijo_enlace_v6::text AS prefijo_enlace_v6,
-    prefijo_delegado_v6::text AS prefijo_delegado_v6, inicio, fin, causa_fin`
+    prefijo_delegado_v6::text AS prefijo_delegado_v6, inicio, fin, causa_fin, origen`
 
 /** `COLUMNAS` con alias `s.` (UPDATE … FROM). */
 const COLUMNAS_S = `s.id, s.servicio_id::int AS servicio_id, s.router_id::int AS router_id, host(s.nas_ip) AS nas_ip,
     s.acct_session_id, s.user_ppp, host(s.ipv4) AS ipv4, s.prefijo_enlace_v6::text AS prefijo_enlace_v6,
-    s.prefijo_delegado_v6::text AS prefijo_delegado_v6, s.inicio, s.fin, s.causa_fin`
+    s.prefijo_delegado_v6::text AS prefijo_delegado_v6, s.inicio, s.fin, s.causa_fin, s.origen`
 
 /** Causa con la que se cierra una sesión vieja del mismo usuario al abrir otra. */
 export const CAUSA_REEMPLAZADA = 'Sesion-Reemplazada'
@@ -265,6 +268,8 @@ function payload(sesion: FilaSesion) {
         prefijos_v6: [sesion.prefijo_enlace_v6, sesion.prefijo_delegado_v6].filter(
             (p): p is string => p !== null,
         ),
+        // Solo en las de sondeo (ausente = accounting): los consumidores de antes no cambian.
+        ...(sesion.origen === 'sondeo' ? { origen: 'sondeo' as const } : {}),
     }
 }
 
@@ -347,10 +352,12 @@ export async function cerrarColgadas(
         t,
         `WITH nas_vivos AS (
              SELECT DISTINCT nas_ip FROM network.sesiones
-             WHERE fin IS NULL AND (updated_at >= ?::timestamptz OR inicio >= ?::timestamptz)
+             WHERE fin IS NULL AND origen = 'accounting'
+               AND (updated_at >= ?::timestamptz OR inicio >= ?::timestamptz)
          ), candidatas AS (
+             -- Las de sondeo (router sin RADIUS) no tienen Interim: las cierra el sondeo.
              SELECT s.id FROM network.sesiones s
-             WHERE s.fin IS NULL AND s.updated_at < ?::timestamptz
+             WHERE s.fin IS NULL AND s.origen = 'accounting' AND s.updated_at < ?::timestamptz
                AND s.nas_ip IN (SELECT nas_ip FROM nas_vivos)
              ORDER BY s.id
              LIMIT ?
@@ -366,10 +373,10 @@ export async function cerrarColgadas(
     const { rows: silenciosos } = (await consulta(
         t,
         `SELECT DISTINCT host(nas_ip) AS nas_ip FROM network.sesiones s
-         WHERE s.fin IS NULL AND s.updated_at < ?::timestamptz
+         WHERE s.fin IS NULL AND s.origen = 'accounting' AND s.updated_at < ?::timestamptz
            AND NOT EXISTS (
                SELECT 1 FROM network.sesiones o
-               WHERE o.nas_ip = s.nas_ip AND o.fin IS NULL
+               WHERE o.nas_ip = s.nas_ip AND o.fin IS NULL AND o.origen = 'accounting'
                  AND (o.updated_at >= ?::timestamptz OR o.inicio >= ?::timestamptz)
            )
          ORDER BY 1`,
@@ -386,4 +393,131 @@ export interface ResultadoAccounting {
     eventos: Array<'sesion.iniciada' | 'sesion.terminada' | 'servicio.caidas_repetidas'>
     /** El paquete trajo un prefijo IPv6 que la sesión no tenía (modo `radius_pool`) */
     prefijoNuevo?: boolean
+}
+
+/*
+|--------------------------------------------------------------------------
+| Sesiones por sondeo (router sin RADIUS, `contratos/pppoe-local.md` §6)
+|--------------------------------------------------------------------------
+*/
+
+/** Causa con la que el sondeo cierra una sesión que ya no está en `/ppp/active`. */
+export const CAUSA_SONDEO = 'sondeo_sin_sesion'
+
+/** Prefijo del `acct_session_id` de una sesión de sondeo: `sondeo:<session-id de /ppp/active>`. */
+export const PREFIJO_SESION_SONDEO = 'sondeo:'
+
+/** `acct_session_id` de una sesión de `/ppp/active`: `sondeo:<session-id>` (o su `.id`). */
+export function idSesionSondeo(activa: { '.id': string; 'session-id'?: string }): string {
+    return `${PREFIJO_SESION_SONDEO}${activa['session-id'] || activa['.id']}`
+}
+
+/** Causa de una sesión de sondeo que ArgosIsp quitó (`/ppp active remove`): la misma que un Disconnect. */
+export const CAUSA_QUITADA = 'Admin-Reset'
+
+/**
+ * Cierra en el acto las sesiones de sondeo que el dispatcher acaba de quitar del router (cambio de
+ * estado, de plan, retiro, desconexión manual), con causa `Admin-Reset`: así no esperan al sondeo
+ * (que las cerraría como caída del cliente) ni cuentan para las caídas repetidas. Cada una deja su
+ * diff en `audit.cambios` y emite `sesion.terminada`.
+ */
+export async function cerrarSesionesQuitadas(
+    t: Transaccion,
+    routerId: number,
+    acctIds: string[],
+): Promise<number[]> {
+    if (acctIds.length === 0) return []
+    const cerradas = await cerrarSesiones(
+        t,
+        {
+            sql: `router_id = ? AND origen = 'sondeo' AND acct_session_id IN (${acctIds.map(() => '?').join(', ')})`,
+            valores: [routerId, ...acctIds],
+        },
+        new Date().toISOString(),
+        CAUSA_QUITADA,
+    )
+    for (const c of cerradas) {
+        await t.registrarCambios(
+            { tipo: 'sesion', id: c.id },
+            { fin: null, causa_fin: null },
+            { fin: c.fin?.toISOString() ?? null, causa_fin: c.causa_fin },
+        )
+        await emitirTerminada(t, c)
+    }
+    return cerradas.map((c) => c.id)
+}
+
+export interface SesionSondeo {
+    router_id: number
+    nas_ip: string | null
+    acct_session_id: string
+    user_ppp: string
+    ipv4: string | null
+    prefijo_enlace_v6: string | null
+    prefijo_delegado_v6: string | null
+    inicio: string
+    servicio_id: number | null
+}
+
+/** Sesiones de sondeo abiertas de un router, bloqueadas para la transacción. */
+export async function sesionesSondeoAbiertas(t: Transaccion, routerId: number): Promise<FilaSesion[]> {
+    const { rows } = (await consulta(
+        t,
+        `SELECT ${COLUMNAS} FROM network.sesiones
+         WHERE router_id = ? AND origen = 'sondeo' AND fin IS NULL ORDER BY id FOR UPDATE`,
+        [routerId],
+    )) as { rows: FilaSesion[] }
+    return rows
+}
+
+/**
+ * Abre una sesión de sondeo (sin contadores: no hay accounting). Con la estrategia de velocidad con
+ * la que entró, como el `Start`. null si ya existía (otro sondeo la abrió).
+ */
+export async function insertarSesionSondeo(t: Transaccion, s: SesionSondeo): Promise<FilaSesion | null> {
+    const { rows } = (await consulta(
+        t,
+        `INSERT INTO network.sesiones (servicio_id, router_id, nas_ip, acct_session_id, user_ppp, ipv4,
+             prefijo_enlace_v6, prefijo_delegado_v6, inicio, origen, estrategia_velocidad)
+         VALUES (?, ?, ?::inet, ?, ?, ?::inet, network(?::inet)::cidr, network(?::inet)::cidr, ?, 'sondeo',
+             (SELECT jsonb_build_object('router', r.estrategia_velocidad, 'control', r.control_velocidad,
+                                        'plan', pr.estrategia_velocidad)
+                FROM core.servicios sv
+                JOIN network.routers r ON r.id = sv.router_id
+                LEFT JOIN network.planes_routers pr ON pr.plan_id = sv.plan_id AND pr.router_id = sv.router_id
+               WHERE sv.id = ?))
+         ON CONFLICT DO NOTHING
+         RETURNING ${COLUMNAS}`,
+        [
+            s.servicio_id,
+            s.router_id,
+            s.nas_ip,
+            s.acct_session_id,
+            s.user_ppp,
+            s.ipv4,
+            s.prefijo_enlace_v6,
+            s.prefijo_delegado_v6,
+            s.inicio,
+            s.servicio_id,
+        ],
+    )) as { rows: FilaSesion[] }
+    return rows[0] ?? null
+}
+
+/** Completa IPv4 y prefijos de una sesión de sondeo abierta (el /56 llega unos segundos después). */
+export async function actualizarSesionSondeo(
+    t: Transaccion,
+    id: number,
+    datos: { ipv4: string | null; prefijo_enlace_v6: string | null; prefijo_delegado_v6: string | null },
+): Promise<void> {
+    await consulta(
+        t,
+        `UPDATE network.sesiones SET
+             ipv4 = COALESCE(?::inet, ipv4),
+             prefijo_enlace_v6 = COALESCE(network(?::inet)::cidr, prefijo_enlace_v6),
+             prefijo_delegado_v6 = COALESCE(network(?::inet)::cidr, prefijo_delegado_v6),
+             updated_at = now()
+         WHERE id = ? AND fin IS NULL`,
+        [datos.ipv4, datos.prefijo_enlace_v6, datos.prefijo_delegado_v6, id],
+    )
 }

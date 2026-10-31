@@ -17,6 +17,9 @@ import type { FuenteRateLimits } from './registro.ts'
  * IP del túnel, `contratos/conexion-routers.md` §6.4) recibe el CoA por el túnel sin desconectarla.
  * Solo una sesión sin router (`router_id` null: el NAS no estaba dado de alta al abrirla) se resuelve
  * por `sesiones.nas_ip`, como antes.
+ *
+ * Solo sesiones de `origen = 'accounting'`: las de `sondeo` son de un router sin RADIUS (PPPoE con
+ * secrets locales, `contratos/pppoe-local.md`), que no recibe CoA; las maneja el dispatcher de RouterOS.
  */
 export interface SesionActiva {
     id: number
@@ -136,7 +139,7 @@ export class AlmacenPg implements Almacen {
                  ses.router_id,
                  (SELECT r2.id FROM network.routers r2 WHERE r2.nas_ip = ses.nas_ip ORDER BY r2.id LIMIT 1)
              )
-             WHERE ses.servicio_id = $1 AND ses.fin IS NULL
+             WHERE ses.servicio_id = $1 AND ses.fin IS NULL AND ses.origen = 'accounting'
              ORDER BY ses.inicio`,
             [servicioId],
         )
@@ -155,7 +158,7 @@ export class AlmacenPg implements Almacen {
                  ses.router_id,
                  (SELECT r2.id FROM network.routers r2 WHERE r2.nas_ip = ses.nas_ip ORDER BY r2.id LIMIT 1)
              )
-             WHERE ses.id = $1 AND ses.fin IS NULL`,
+             WHERE ses.id = $1 AND ses.fin IS NULL AND ses.origen = 'accounting'`,
             [sesionId],
         )
         return rows[0] ?? null

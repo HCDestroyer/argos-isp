@@ -1,9 +1,12 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { randomBytes } from 'node:crypto'
+import { cifrar, descifrar } from '#shared/cifrado'
 import {
     crearClienteFila,
     crearEscenarioRouter,
+    crearRouterFila,
     crearPlanFila,
     crearServicioFila,
     ipUnica,
@@ -11,11 +14,21 @@ import {
 
 /**
  * Router sin RADIUS (bug del PM, Argos 1.4.0; `app/network/README.md`, «Modo de seguridad»): un
- * router `api` no exige `nas_ip` ni `radius_secret`, no admite PPPoE y no es cliente de FreeRADIUS.
+ * router `api` no exige `nas_ip` ni `radius_secret` y no es cliente de FreeRADIUS. PPPoE se admite
+ * con secrets locales (`contratos/pppoe-local.md`, 30 oct) si el router tiene credenciales de la API.
  */
 
 const MENSAJE_PPPOE =
-    'Este router no usa RADIUS: PPPoE necesita RADIUS. Usa IP estática o DHCP fija, o cambia el router a RADIUS'
+    'Este router no usa RADIUS: los clientes PPPoE se crean como secrets por su API REST, y el router no ' +
+    'tiene usuario y contraseña de la API. Complétalos en el router o usa uno con RADIUS'
+
+/** Credenciales de la API (cifradas como las guarda la API; no se usan para conectar en estas pruebas). */
+async function conCredenciales(routerId: number) {
+    await db
+        .from('network.routers')
+        .where('id', routerId)
+        .update({ api_usuario: 'argosisp-api', api_password: cifrar('clave-api') })
+}
 
 function crearRouter(client: any, token: string, cuerpo: Record<string, unknown>, requestId = unico('req')) {
     return client
@@ -59,6 +72,50 @@ async function escenarioApi() {
 
 function codigo(respuesta: any): string {
     return String(respuesta.body().type).replace('urn:argosisp:problema:', '')
+}
+
+const entornoOriginal = { ...process.env }
+
+/** Entorno del túnel y del servicio para generar el script (como en `conexion_routers.spec.ts`). */
+const ENTORNO_SCRIPT: Record<string, string> = {
+    ARGOSISP_WIREGUARD: '1',
+    ARGOSISP_WG_ENDPOINT: 'vpn.argosisp.example',
+    ARGOSISP_WG_RED: '10.255.0.0/16',
+    ARGOSISP_WG_PUERTO: '51820',
+    API_PUBLIC_URL: 'https://argos.example',
+    ROUTERS_REGISTRO_LIMITE: '0',
+    ROUTERS_SERVICIO_WAN_INTERFAZ: 'ether1',
+    ROUTERS_SERVICIO_PPP_LOCAL_V4: '10.10.0.1',
+    ROUTERS_SERVICIO_POOL_V4_RANGOS: '10.10.0.10-10.10.0.250',
+    ROUTERS_SERVICIO_CLIENTES_V4: '10.10.0.0/16',
+    ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: '2001:db8:100::/48',
+    ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: '2001:db8:200::/40',
+    ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
+    ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
+    ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
+    ROUTERS_SERVICIO_DNS_V4: '192.0.2.53',
+}
+
+function generarScript(client: any, token: string, routerId: number, qs: Record<string, string> = {}) {
+    return estado(client.get(`/api/v1/routers/${routerId}/script-conexion`).qs(qs).bearerToken(token), 200)
+}
+
+async function textoScript(client: any, token: string, routerId: number): Promise<string> {
+    const r = await generarScript(client, token, routerId)
+    return r.text()
+}
+
+/** Lo propio del script sin RADIUS: sin `/radius add` ni su secreto; `use-radius=no` y `sensitive`. */
+function assertSinRadius(assert: any, script: string, secreto?: string) {
+    assert.notMatch(script, /\{\{/)
+    assert.notInclude(script, '{{radius_secret}}')
+    assert.notMatch(script, /^\s*\/radius add/m)
+    assert.notMatch(script, /^\s*\/radius\s*\n\s*add/m)
+    assert.notMatch(script, /use-radius=yes/)
+    assert.notMatch(script, /:local radiusSecret/)
+    assert.match(script, /^\/ppp aaa set use-radius=no/m)
+    assert.match(script, /name="argosisp-api"\] policy=[a-z,-]*sensitive/)
+    if (secreto) assert.notInclude(script, secreto)
 }
 
 test.group('Routers sin RADIUS · alta y edición', () => {
@@ -216,16 +273,6 @@ test.group('Routers sin RADIUS · alta y edición', () => {
         await estado(editarRouter(client, token, id, { version: 1, modo_seguridad: 'api' }), 200)
     })
 
-    test('script de conexión de un router api: 422 script_requiere_radius', async ({ client, assert }) => {
-        const { token } = await usuarioConRoles(['admin'])
-        const creado = await estado(crearRouter(client, token, { modo_seguridad: 'api' }), 201)
-        const r = await estado(
-            client.get(`/api/v1/routers/${creado.body().id}/script-conexion`).bearerToken(token),
-            422,
-        )
-        assert.equal(codigo(r), 'script_requiere_radius')
-    })
-
     test('un router api sin nas_ip se puede eliminar y no es cliente de FreeRADIUS', async ({
         client,
         assert,
@@ -259,8 +306,102 @@ test.group('Routers sin RADIUS · alta y edición', () => {
     })
 })
 
+test.group('Routers sin RADIUS · script de conexión', (group) => {
+    group.each.setup(async () => {
+        Object.assign(process.env, ENTORNO_SCRIPT)
+        await db.rawQuery(
+            `INSERT INTO network.wireguard_servidor (id, public_key) VALUES (1, ?)
+             ON CONFLICT (id) DO UPDATE SET public_key = EXCLUDED.public_key`,
+            [randomBytes(32).toString('base64')],
+        )
+        return () => {
+            for (const nombre of Object.keys(process.env)) {
+                if (!(nombre in entornoOriginal)) delete process.env[nombre]
+            }
+            Object.assign(process.env, entornoOriginal)
+        }
+    })
+
+    test('router api: plantilla sin RADIUS, sin exigir radius_secret; con servicio también', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const creado = await estado(
+            crearRouter(client, token, { modo_seguridad: 'api', interfaz_clientes: 'ether2' }),
+            201,
+        )
+        const routerId = creado.body().id as number
+
+        const script = await generarScript(client, token, routerId)
+        assertSinRadius(assert, script.text())
+        assert.notMatch(script.text(), /pppoe-server/)
+        assert.include(script.header('content-disposition'), `argosisp-router-${routerId}.rsc`)
+        // el registro y la clave de la API son los de siempre
+        const fila = await db.from('network.routers_conexion').where('router_id', routerId).firstOrFail()
+        assert.match(script.text(), new RegExp(`:local wgIp "${fila.ip_tunel.replace(/\./g, '\\.')}"`))
+        assert.lengthOf(descifrar(fila.api_password_pendiente), 32)
+        const acciones = await db
+            .from('audit.acciones')
+            .where({ accion: 'routers.generar_script', entidad_tipo: 'router', entidad_id: routerId })
+        assert.lengthOf(acciones, 1)
+
+        const conServicio = await generarScript(client, token, routerId, { incluir: 'servicio' })
+        assertSinRadius(assert, conServicio.text())
+        assert.match(conServicio.text(), /pppoe-server/)
+    })
+
+    test('rotar la conexión de un router api: script sin RADIUS', async ({ client, assert }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const routerId = await crearRouterFila({ modo_seguridad: 'api', nas_ip: null, radius_secret: null })
+        await generarScript(client, token, routerId)
+        const r = await estado(
+            client.post(`/api/v1/routers/${routerId}/conexion/rotar`).bearerToken(token),
+            200,
+        )
+        assertSinRadius(assert, r.text())
+        const acciones = await db
+            .from('audit.acciones')
+            .where({ accion: 'routers.rotar_conexion', entidad_tipo: 'router', entidad_id: routerId })
+        assert.lengthOf(acciones, 1)
+    })
+
+    test('router api con un radius_secret guardado: no lo exige ni lo pone en el script', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        // inválido para RADIUS (corto): en modo api no importa
+        const corto = await crearRouterFila({ modo_seguridad: 'api', radius_secret: cifrar('corto') })
+        assertSinRadius(assert, await textoScript(client, token, corto), 'corto')
+        const largo = await crearRouterFila({
+            modo_seguridad: 'api',
+            radius_secret: cifrar('secreto-guardado-de-antes'),
+        })
+        assertSinRadius(assert, await textoScript(client, token, largo), 'secreto-guardado-de-antes')
+    })
+
+    test('router radius: sigue con la plantilla RADIUS y exige su secreto (422 radius_secret_requerido)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const sinSecreto = await crearRouterFila({ radius_secret: null })
+        const r = await estado(
+            client.get(`/api/v1/routers/${sinSecreto}/script-conexion`).bearerToken(token),
+            422,
+        )
+        assert.equal(codigo(r), 'radius_secret_requerido')
+
+        const conSecreto = await crearRouterFila({ radius_secret: cifrar('secreto-del-nas-1234') })
+        const script = await textoScript(client, token, conSecreto)
+        assert.match(script, /:local radiusSecret "secreto-del-nas-1234"/)
+        assert.notMatch(script, /use-radius=no/)
+    })
+})
+
 test.group('Routers sin RADIUS · servicios', () => {
-    test('crear pppoe en un router api: 422 pppoe_requiere_radius; ip_estatica y dhcp_fija sí', async ({
+    test('crear pppoe en un router api: sin credenciales de la API 422 pppoe_local_requiere_api; con ellas, secret local', async ({
         client,
         assert,
     }) => {
@@ -271,11 +412,14 @@ test.group('Routers sin RADIUS · servicios', () => {
         // pppoe explícito o por defecto
         for (const cuerpo of [{ ...base, tipo_conexion: 'pppoe' }, base]) {
             const r = await estado(crearServicio(client, token, cuerpo), 422)
-            assert.equal(codigo(r), 'pppoe_requiere_radius')
+            assert.equal(codigo(r), 'pppoe_local_requiere_api')
             assert.equal(r.body().detail, MENSAJE_PPPOE)
-            assert.equal(r.body().errors[0].field, 'tipo_conexion')
+            assert.equal(r.body().errors[0].field, 'router_id')
         }
         assert.isNull(await db.from('core.servicios').where('router_id', routerId).first())
+        await conCredenciales(routerId)
+        const pppoe = await estado(crearServicio(client, token, base), 201)
+        assert.equal(pppoe.body().tipo_conexion, 'pppoe')
 
         const estatica = await estado(
             crearServicio(client, token, { ...base, tipo_conexion: 'ip_estatica' }),
@@ -288,7 +432,7 @@ test.group('Routers sin RADIUS · servicios', () => {
         )
     })
 
-    test('mover un pppoe a un router api o pasar a pppoe en un router api: 422 pppoe_requiere_radius', async ({
+    test('mover un pppoe a un router api o pasar a pppoe en él: 422 sin credenciales de la API, 200 con ellas', async ({
         client,
         assert,
     }) => {
@@ -311,7 +455,7 @@ test.group('Routers sin RADIUS · servicios', () => {
                 .json({ version: pppoe.body().version, router_id: api.routerId }),
             422,
         )
-        assert.equal(codigo(r), 'pppoe_requiere_radius')
+        assert.equal(codigo(r), 'pppoe_local_requiere_api')
 
         // moverlo cambiando a ip_estatica en la misma edición sí se puede
         r = await estado(
@@ -324,7 +468,7 @@ test.group('Routers sin RADIUS · servicios', () => {
         )
         assert.containsSubset(r.body(), { router_id: api.routerId, tipo_conexion: 'ip_estatica' })
 
-        // y de vuelta a pppoe en el router api: 422
+        // y de vuelta a pppoe en el router api: 422 sin credenciales, 200 con ellas (secret local)
         const r2 = await estado(
             client
                 .put(`/api/v1/servicios/${pppoe.body().id}`)
@@ -332,6 +476,15 @@ test.group('Routers sin RADIUS · servicios', () => {
                 .json({ version: r.body().version, tipo_conexion: 'pppoe' }),
             422,
         )
-        assert.equal(codigo(r2), 'pppoe_requiere_radius')
+        assert.equal(codigo(r2), 'pppoe_local_requiere_api')
+        await conCredenciales(api.routerId)
+        const r3 = await estado(
+            client
+                .put(`/api/v1/servicios/${pppoe.body().id}`)
+                .bearerToken(token)
+                .json({ version: r.body().version, tipo_conexion: 'pppoe' }),
+            200,
+        )
+        assert.containsSubset(r3.body(), { router_id: api.routerId, tipo_conexion: 'pppoe' })
     })
 })

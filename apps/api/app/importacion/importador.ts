@@ -48,7 +48,7 @@ import { archivarYCuadrar, claveResultado, type ResultadoEntidad } from '#import
  *   `errores` y se sigue. La auditoría del error (`audit.acciones`, resultado `error`) la escribe
  *   `DomainAction` en una transacción aparte, así que queda aun en seco.
  * - Idempotente: primero por `core.ids_externos` (si A1 ya la agregó, `ids_externos.ts`); si no,
- *   clientes por `campos_personalizados.<sistema>_id`; routers por `nas_ip` (o `nombre`); planes
+ *   clientes por `campos_personalizados.<sistema>_id`; routers por `nas_ip` si la trae (o `nombre`); planes
  *   por `nombre` (o `equivale_a`); redes por `cidr` en el mismo router; implementaciones por
  *   (plan, router); servicios PPPoE por `user_ppp`, sin PPPoE por IP (o MAC) del mismo cliente;
  *   facturas y saldos por su `clave_externa` (`<sistema>:factura:<id>`, `<sistema>:saldo:<id>`).
@@ -573,7 +573,12 @@ class Importador {
     async routers() {
         const conteo = this.reporte.resumen.routers
         for (const r of this.fuente.routers) {
-            const faltan = (['api_usuario', 'api_password', 'radius_secret'] as const).filter((c) => !r[c])
+            // Sin RADIUS (`api`) el secreto RADIUS no hace falta; usuario y clave de la API sí (secrets)
+            const credenciales =
+                r.modo_seguridad === 'api'
+                    ? (['api_usuario', 'api_password'] as const)
+                    : (['api_usuario', 'api_password', 'radius_secret'] as const)
+            const faltan = credenciales.filter((c) => !r[c])
             if (faltan.length > 0) {
                 this.reporte.diferencias.routers_sin_credenciales.push({
                     router_origen: r.id,
@@ -584,8 +589,10 @@ class Importador {
             const existente = await this.#existente('router', r.id, async () => {
                 const fila = (await this.trx
                     .from('network.routers')
-                    .whereRaw('nas_ip = ?::inet', [r.nas_ip])
-                    .orWhere('nombre', r.nombre)
+                    .where((q) => {
+                        q.where('nombre', r.nombre)
+                        if (r.nas_ip) q.orWhereRaw('nas_ip = ?::inet', [r.nas_ip])
+                    })
                     .select('id')
                     .first()) as { id: number } | null
                 return fila ? Number(fila.id) : null
@@ -606,6 +613,7 @@ class Importador {
                         nombre: r.nombre,
                         host: r.host,
                         nas_ip: r.nas_ip,
+                        modo_seguridad: r.modo_seguridad,
                         api_usuario: r.api_usuario,
                         api_password: r.api_password,
                         radius_secret: r.radius_secret,

@@ -4,7 +4,12 @@ import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { contextoSistema, type Actor } from '#shared/contexto'
 import ReconciliarRouterOS, { type ResultadoReconciliar } from '#network/routeros/actions/reconciliar_router'
-import { routerDispatcher, routersConServiciosSinPppoe } from '#network/routeros/consultas'
+import {
+    routerDispatcher,
+    routersConServiciosSinPppoe,
+    routersConSesionesPpp,
+} from '#network/routeros/consultas'
+import SondearSesionesPpp, { type ResultadoSondearPpp } from '#network/sesiones/actions/sondear_sesiones_ppp'
 import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { ejecutarCambioControl, type EntradaCambioControl } from '#network/routeros/cambio_control'
 import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions/sondear_routers'
@@ -17,6 +22,7 @@ import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions
  * | `recuperar` | 30 s (`ROUTEROS_RECUPERAR_CADA_MS`) | Sondea (`/system/resource`) los routers que fallaron; al responder, los reconcilia |
  * | `reconciliar` | 15 min (`ROUTEROS_RECONCILIAR_CADA_MS`) | Reconcilia todos los routers con servicios sin PPPoE (red de seguridad) |
  * | `sondear` | 5 min (`ROUTEROS_SONDEO_CADA_MS`, por defecto `AAA_INTERIM_SEGUNDOS`; 0 = apagado) | `GET /system/resource` a los routers con API sin contacto reciente (`Router.en_linea`) |
+ * | `sesiones_ppp` | 1 min (`ROUTEROS_SESIONES_PPP_CADA_MS`; 0 = apagado) | Routers sin RADIUS: `/ppp/active` → abre y cierra `network.sesiones` (`origen = sondeo`, `contratos/pppoe-local.md` §6) |
  * | `cambiar_control` | por evento (`router.control_cambiado`) | Cambio de modo de control por lotes (`cambio_control.ts`); `jobId` = el evento |
  * | `reconciliar_router` | a pedido (`POST /routers/:id/reconciliar`) | Reconcilia un router (`motivo: manual`); `jobId` = `reconciliar-<router_id>`: mientras uno espera, otro pedido no encola otro |
  *
@@ -32,12 +38,18 @@ export function sondeoCadaMs(): number {
     return env.get('ROUTEROS_SONDEO_CADA_MS') ?? (env.get('AAA_INTERIM_SEGUNDOS') ?? 300) * 1000
 }
 
+/** ms entre sondeos de `/ppp/active` de los routers sin RADIUS (60 s por defecto); 0 lo apaga. */
+export function sesionesPppCadaMs(): number {
+    return env.get('ROUTEROS_SESIONES_PPP_CADA_MS') ?? 60_000
+}
+
 export function cronsRouterOS(): Record<string, number> {
     const crons: Record<string, number> = {
         recuperar: env.get('ROUTEROS_RECUPERAR_CADA_MS') ?? 30_000,
         reconciliar: env.get('ROUTEROS_RECONCILIAR_CADA_MS') ?? 15 * 60_000,
     }
     if (sondeoCadaMs() > 0) crons.sondear = sondeoCadaMs()
+    if (sesionesPppCadaMs() > 0) crons.sesiones_ppp = sesionesPppCadaMs()
     return crons
 }
 
@@ -62,6 +74,7 @@ export async function programarCronsRouterOS(opciones: { prefijo?: string } = {}
     })
     // Un cron apagado (sondeo en 0) no debe quedar programado de una versión anterior.
     if (!('sondear' in cronsRouterOS())) await cola.removeJobScheduler('sondear')
+    if (!('sesiones_ppp' in cronsRouterOS())) await cola.removeJobScheduler('sesiones_ppp')
     for (const [nombre, cada] of Object.entries(cronsRouterOS())) {
         await cola.upsertJobScheduler(
             nombre,
@@ -99,7 +112,10 @@ async function conLock<T>(
 export async function ejecutarCronRouterOS(
     nombre: string,
     opciones: OpcionesDispatcher & { ahora?: Date } = {},
-): Promise<{ omitido: boolean; resultado?: ResultadoReconciliar[] | ResultadoSondear[] }> {
+): Promise<{
+    omitido: boolean
+    resultado?: ResultadoReconciliar[] | ResultadoSondear[] | ResultadoSondearPpp[]
+}> {
     const ahora = opciones.ahora ?? new Date()
     const ctx = contextoSistema('cron', `routeros-${nombre}-${ahora.toISOString()}`)
     const fabrica = opciones.clientes ?? fabricaPorDefecto
@@ -150,6 +166,20 @@ export async function ejecutarCronRouterOS(
                     ctx,
                 )
                 return [salida]
+            })
+        case 'sesiones_ppp':
+            return conLock(nombre, async () => {
+                // Cada router en su transacción (un router lento no retiene a los demás).
+                const salidas: ResultadoSondearPpp[] = []
+                for (const id of await routersConSesionesPpp()) {
+                    salidas.push(
+                        await new SondearSesionesPpp({ clientes: fabrica, red: opciones.red }).execute(
+                            { router_id: id, ahora: ahora.toISOString() },
+                            ctx,
+                        ),
+                    )
+                }
+                return salidas
             })
         default:
             throw new Error(`Cron de routeros desconocido: ${nombre}`)

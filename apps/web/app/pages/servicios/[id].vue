@@ -32,6 +32,7 @@ const accionAbierta = ref(false)
 const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
 const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
 const historialAsignaciones = useTemplateRef<{ recargar: () => Promise<void> }>('asignaciones')
+const historialSesiones = useTemplateRef<{ recargar: () => Promise<void> }>('historialSesiones')
 
 useHead(() => ({ title: `${servicio.value ? etiquetaServicio(servicio.value) : 'Servicio'} · ArgosIsp` }))
 
@@ -244,6 +245,7 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
         color: 'success',
     })
     void cargarSesion()
+    void historialSesiones.value?.recargar()
     void lineaTiempo.value?.recargar()
     // Retirar libera IPv4 y prefijos: cierra el tramo vigente.
     void historialAsignaciones.value?.recargar()
@@ -710,11 +712,32 @@ onMounted(cargar)
                         v-else
                         class="flex flex-col gap-4"
                     >
-                        <EstadoSesionBadge
-                            estado="en_linea"
-                            :latido="latidoSesion"
-                            :leido-en="sesionLeidaEn"
-                        />
+                        <div class="flex flex-wrap items-center gap-2">
+                            <EstadoSesionBadge
+                                estado="en_linea"
+                                :latido="latidoSesion"
+                                :leido-en="sesionLeidaEn"
+                            />
+                            <UTooltip
+                                v-if="esSesionPorSondeo(sesion)"
+                                :text="DISTINTIVO_SONDEO.explicacion"
+                            >
+                                <UBadge
+                                    :label="DISTINTIVO_SONDEO.etiqueta"
+                                    :icon="DISTINTIVO_SONDEO.icono"
+                                    :color="DISTINTIVO_SONDEO.color"
+                                    variant="subtle"
+                                    size="sm"
+                                    data-prueba="sesion-activa-sondeo"
+                                />
+                            </UTooltip>
+                        </div>
+                        <p
+                            v-if="esSesionPorSondeo(sesion)"
+                            class="text-xs text-muted"
+                        >
+                            {{ DISTINTIVO_SONDEO.explicacion }}
+                        </p>
                         <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                             <DatoFicha
                                 etiqueta="Conectado desde"
@@ -722,7 +745,7 @@ onMounted(cargar)
                             />
                             <DatoFicha
                                 etiqueta="NAS"
-                                :valor="`${sesion.nas_ip} · ${sesion.acct_session_id}`"
+                                :valor="`${textoNasSesion(sesion)} · ${sesion.acct_session_id}`"
                                 mono
                             />
                             <DatoFicha
@@ -737,7 +760,8 @@ onMounted(cargar)
                             />
                             <DatoFicha
                                 etiqueta="Tráfico"
-                                :valor="`${formatearBytes(sesion.bytes_in)} ↓ / ${formatearBytes(sesion.bytes_out)} ↑`"
+                                :valor="textoConsumoSesion(sesion)"
+                                data-prueba="sesion-activa-consumo"
                             />
                         </dl>
                     </div>
@@ -873,6 +897,20 @@ onMounted(cargar)
                 :servicio="servicio"
                 @cambiado="lineaTiempo?.recargar()"
             />
+
+            <section
+                v-if="puede('sesiones.ver') && conPppoe"
+                class="flex flex-col gap-3"
+                aria-label="Historial de sesiones"
+            >
+                <h3 class="text-sm font-semibold text-highlighted">
+                    Historial de sesiones
+                </h3>
+                <ServicioSesiones
+                    ref="historialSesiones"
+                    :servicio-id="servicio.id"
+                />
+            </section>
 
             <section
                 class="flex flex-col gap-3"

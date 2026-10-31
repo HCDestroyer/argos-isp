@@ -9,9 +9,9 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
  * precio especial. Solo viaja lo que cambió; los 422 se muestran junto a cada campo (el teléfono con
  * `rule: 'telefono'`) y el 409 ofrece recargar.
  *
- * En un router sin RADIUS (`modo_seguridad = 'api'`) no se puede pasar a PPPoE (422
- * `pppoe_requiere_radius`): la opción queda deshabilitada con su motivo. Un PPPoE que ya estaba en
- * ese router (dato viejo) se sigue editando, como en la API.
+ * En un router sin RADIUS (`modo_seguridad = 'api'`) PPPoE va como secret local en el MikroTik
+ * (`contratos/pppoe-local.md`), con su ayuda. Si el router no tiene credenciales de la API, pasar a
+ * PPPoE (o cambiar un PPPoE) responde 422 `pppoe_local_requiere_api`: se avisa antes y al recibirlo.
  */
 const props = defineProps<{
     servicio: Servicio
@@ -52,18 +52,17 @@ watch(abierto, async (valor) => {
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 const eraPppoe = computed(() => esPppoe(props.servicio))
 
-/** Pasar a PPPoE en un router sin RADIUS: no se permite (sí seguir editando un PPPoE que ya estaba). */
-const pppoeBloqueado = computed(() => esSinRadius(routerServicio.value) && !eraPppoe.value)
+/** Router sin RADIUS: PPPoE como secret local (sin consumo ni cambios al instante). */
+const routerSinRadius = computed(() => esSinRadius(routerServicio.value))
+/** PPPoE en un router sin RADIUS y sin credenciales de la API: la API respondería 422. */
+const faltanCredencialesApi = computed(() => conPppoe.value && pppoeSinCredencialesApi(routerServicio.value))
+const credencialesRechazadas = computed(() => esPppoeLocalRequiereApi(problema.value))
 
-const itemsTipo = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map((tipo) => {
-    const bloqueado = tipo === 'pppoe' && pppoeBloqueado.value
-    return {
-        label: TIPOS_CONEXION[tipo].etiqueta,
-        value: tipo,
-        description: bloqueado ? `No disponible: ${routerServicio.value?.nombre ?? 'el router'} no usa RADIUS.` : TIPOS_CONEXION[tipo].descripcion,
-        disabled: bloqueado,
-    }
-}))
+const itemsTipo = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
+    label: TIPOS_CONEXION[tipo].etiqueta,
+    value: tipo,
+    description: tipo === 'pppoe' && routerSinRadius.value ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[tipo].descripcion,
+})))
 
 const itemsPlan = computed<SelectItem[]>(() => {
     const lista = planes.value.filter(p => p.activo || p.id === props.servicio.plan_id)
@@ -123,7 +122,7 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
         formulario.value?.setErrors(errores)
     }
     const campos = new Set(Object.keys(estado))
-    if (!errores.length || esPppoeRequiereRadius(resultado.problema) || errores.some(e => !e.name || !campos.has(e.name))) {
+    if (!errores.length || errores.some(e => !e.name || !campos.has(e.name))) {
         problema.value = resultado.problema
     }
 }
@@ -189,6 +188,10 @@ async function recargar() {
                     icon="i-lucide-triangle-alert"
                     :description="avisoTipo"
                     data-prueba="aviso-tipo"
+                />
+                <PppoeLocalSinApiAlerta
+                    v-if="faltanCredencialesApi && !credencialesRechazadas"
+                    :router-id="servicio.router_id"
                 />
 
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -359,8 +362,13 @@ async function recargar() {
                     </UFormField>
                 </div>
 
+                <PppoeLocalSinApiAlerta
+                    v-if="credencialesRechazadas"
+                    :router-id="servicio.router_id"
+                    :detalle="problema?.detail ?? null"
+                />
                 <ProblemaAlerta
-                    v-if="problema"
+                    v-else-if="problema"
                     :problema="problema"
                     :reintentar="problema.status === 409 ? recargar : undefined"
                     data-prueba="editar-servicio-error"

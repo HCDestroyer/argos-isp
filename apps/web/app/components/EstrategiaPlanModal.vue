@@ -135,6 +135,7 @@ async function aplicar() {
                         :version="router.routeros_version ?? null"
                         :router="estrategiasDeRouter(router)"
                         :errores="errores"
+                        :sin-radius="esSinRadius(router)"
                     />
                 </template>
                 <template v-else-if="vista">

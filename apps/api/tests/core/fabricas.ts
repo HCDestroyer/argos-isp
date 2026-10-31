@@ -25,10 +25,17 @@ export function redUnica(): string {
 
 let contadorV6 = 0
 
-/** Bloque /40 único por corrida dentro de 2001:db8::/32. */
+/**
+ * Bloque /40 único por corrida: `2001:<h2>:<b>00::/40`. Un /32 tiene solo 256 bloques /40 (el byte
+ * alto del tercer hexteto), así que al agotarse 2001:db8::/32 se sigue en 2001:db9::/32,
+ * 2001:dba::/32… Nunca genera un hexteto mayor que ffff (antes, el 257.º daba `2001:db8:10000::/40`).
+ * Conserva la forma `<raíz>00::/40` de la que los llamadores sacan la raíz.
+ */
 export function bloqueV6Unico(): string {
     contadorV6 += 1
-    return `2001:db8:${contadorV6.toString(16)}00::/40`
+    const segundo = 0xdb8 + Math.floor(contadorV6 / 256)
+    if (segundo > 0xffff) throw new Error('bloqueV6Unico: se agotaron los bloques /40 de prueba')
+    return `2001:${segundo.toString(16)}:${(contadorV6 % 256).toString(16)}00::/40`
 }
 
 async function insertar(tabla: string, fila: Record<string, unknown>): Promise<number> {

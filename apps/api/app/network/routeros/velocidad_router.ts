@@ -33,6 +33,7 @@ import {
     type PerfilQosRouter,
 } from '#network/qos'
 import { normalizarValor } from '#network/routeros/normalizar'
+import { perfilesLocales, type PoolsPlan } from '#network/routeros/pppoe_local'
 
 /**
  * Estado deseado del control de velocidad de un router (`contratos/control-velocidad.md`): los
@@ -139,6 +140,12 @@ export interface RouterVelocidad {
      * activas. Solo se usa en los planes del árbol con el extra `qos`. null/ausente = sin QoS.
      */
     qos?: PerfilQosRouter | null
+    /**
+     * `network.routers.modo_seguridad` (ausente = `radius`). Con `api` (PPPoE sin RADIUS,
+     * `contratos/pppoe-local.md`) los perfiles `plan-<id>` y `plan-<id>-limitado` los arma
+     * `perfilesLocales`, en las dos familias.
+     */
+    modo_seguridad?: 'radius' | 'api'
 }
 
 /** Colas WISP (`cola_simple`) que cuelgan de un padre. */
@@ -179,6 +186,8 @@ export interface PlanRouter {
     perfil: Estrategia | null
     /** Tipos de cola de las hojas (sin `default` ni `pcq`) */
     tipos_hoja: TipoCola[]
+    /** Pools del plan en el router (solo sin RADIUS: van en sus perfiles) */
+    pools?: PoolsPlan | null
 }
 
 /**
@@ -389,10 +398,16 @@ export function estadoVelocidadRouter(
     // Los tipos de cola van antes que las colas que los usan; el árbol al final.
     const tipos = simple.presentes.filter((o) => o.ruta === '/queue/type')
     const resto = simple.presentes.filter((o) => o.ruta !== '/queue/type')
+    // Sin RADIUS: perfiles `plan-<id>[-limitado]` de todo plan con PPPoE, después de las colas a las
+    // que apuntan (`parent-queue`, `queue-type`).
+    const locales =
+        router.modo_seguridad === 'api'
+            ? perfilesLocales(planes, perfilBase(lectura), new Set(simple.conservar))
+            : { presentes: [], conservar: [] }
     return {
-        presentes: [...tipos, ...resto, ...arbol.presentes],
+        presentes: [...tipos, ...resto, ...locales.presentes, ...arbol.presentes],
         avisos: [...simple.avisos, ...arbol.avisos],
-        conservar: [...simple.conservar, ...arbol.conservar],
+        conservar: [...simple.conservar, ...arbol.conservar, ...locales.conservar],
         errores: [...simple.errores, ...arbol.errores],
     }
 }
@@ -565,8 +580,8 @@ function estadoSimple(
             }
         }
 
-        // Perfil PPP del plan.
-        if (plan.perfil) {
+        // Perfil PPP del plan (sin RADIUS los arma `perfilesLocales`, con su variante limitada).
+        if (plan.perfil && router.modo_seguridad !== 'api') {
             const ep = plan.perfil
             const vp = velocidadConExtras(plan.velocidad, ep.extras)
             const padre = padreCliente(ep, id, vp.reuso)

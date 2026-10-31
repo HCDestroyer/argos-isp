@@ -101,6 +101,13 @@ export interface ServicioRed {
      * último cambio; la conserva hasta reconectar). null sin sesión o fuera de PPPoE.
      */
     estrategia_sesion: Estrategia | null
+    /** PPPoE: usuario y contraseña cifrada (`v1`), para el secret en un router sin RADIUS */
+    user_ppp?: string | null
+    pass_ppp?: string | null
+    /** /64 de enlace vigente (modo `radius_servicio`): `remote-ipv6-prefix` del secret */
+    prefijo_enlace?: string | null
+    /** Pools del plan en el router (`planes_routers`): van en el perfil `plan-<id>` sin RADIUS */
+    pools?: { ipv4: string | null; enlace: string | null; delegado: string | null }
 }
 
 /** Datos del router que entran en los objetos. */
@@ -112,11 +119,15 @@ export interface RouterRed {
     interfaz_clientes: string | null
     /** `network.routers.control_velocidad` (`contratos/velocidad.md`) */
     control_velocidad: ControlVelocidad
+    /** `network.routers.modo_seguridad` (ausente = `radius`): `api` = PPPoE con secrets locales */
+    modo_seguridad?: 'radius' | 'api'
 }
 
 export interface PerfilSuspendidoRed {
     rateLimit: string
     addressList: string
+    /** Perfil PPP de corte (`suspendido`): el `profile` del secret de un suspendido sin RADIUS */
+    perfil?: string
 }
 
 export interface ObjetoDeseado {
@@ -224,9 +235,12 @@ export function estadoDeseado(
         const v6: Array<[SufijoV6, string]> = []
         if (servicio.sesion.enlace) v6.push(['enlace', servicio.sesion.enlace])
         if (servicio.sesion.delegado) v6.push(['delegado', servicio.sesion.delegado])
+        // Sin RADIUS (`contratos/pppoe-local.md` §5) la IPv4 la pone el router en la lista al conectar
+        // (`address-list` del perfil `plan-<id>`); una entrada estática igual chocaría con la dinámica.
+        const ipv4 = router.modo_seguridad === 'api' ? null : servicio.sesion.ipv4
         return completar(
             id,
-            entradasArbol(id, servicio.plan_id, servicio.estado === 'limitado', servicio.sesion.ipv4, v6),
+            entradasArbol(id, servicio.plan_id, servicio.estado === 'limitado', ipv4, v6),
             [],
         )
     }

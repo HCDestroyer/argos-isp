@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.0](https://github.com/HCDestroyer/argos-isp/compare/v1.4.1...v1.5.0) (2026-10-31)
+
+
+### Funcionalidades
+
+* **integraciones:** conectar Iris con un botón (contrato 0.4.0 §1.4) ([#205](https://github.com/HCDestroyer/argos-isp/issues/205)) ([f7a213d](https://github.com/HCDestroyer/argos-isp/commit/f7a213d938e698a9aad2ff1163bab36b40b33320))
+* **network:** PPPoE sin RADIUS con secrets locales (API, panel, plantilla y script) ([#206](https://github.com/HCDestroyer/argos-isp/issues/206)) ([df5ecf6](https://github.com/HCDestroyer/argos-isp/commit/df5ecf6b4f75162178c01067584ad7f546dd8aa5))
+* **network:** prioridad por protocolo (QoS) con clases configurables ([#204](https://github.com/HCDestroyer/argos-isp/issues/204)) ([10078a6](https://github.com/HCDestroyer/argos-isp/commit/10078a6cbbbf791e4b8c5511047998519a9ef7b5))
+* **network:** routers sin RADIUS (modo api) en la API y el panel ([#200](https://github.com/HCDestroyer/argos-isp/issues/200)) ([3de1990](https://github.com/HCDestroyer/argos-isp/commit/3de1990f32eaf7b7a85ce8063223ecc068351e27))
+* **web:** pantalla Integraciones → Iris ([#203](https://github.com/HCDestroyer/argos-isp/issues/203)) ([021981d](https://github.com/HCDestroyer/argos-isp/commit/021981d3a97bdde6749589aa26dcb44d9c2ee16f))
+
 ## [1.4.1](https://github.com/HCDestroyer/argos-isp/compare/v1.4.0...v1.4.1) (2026-10-30)
 
 

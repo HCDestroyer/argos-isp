@@ -1,3 +1,6 @@
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
@@ -633,6 +636,66 @@ test.group('importacion · Mikrowisp', () => {
             r.diferencias.planes_sin_equivalente.map((p) => p.plan_origen),
             ['1', '2', '3', '9'],
         )
+    })
+
+    test('router sin RADIUS: modo_seguridad = api sin nas_ip; sin la columna, nas_ip obligatoria', async ({
+        assert,
+    }) => {
+        const dir = await mkdtemp(join(tmpdir(), 'a6-sin-radius-'))
+        try {
+            await cp(EJEMPLO, dir, { recursive: true })
+            // Formato anterior (sin la columna) más una columna nueva al final
+            const texto = await readFile(join(dir, 'routers.csv'), 'utf8')
+            const anterior = texto.trimEnd().split('\n')
+            await writeFile(
+                join(dir, 'routers.csv'),
+                [
+                    `${anterior[0]},modo_seguridad`,
+                    ...anterior.slice(1).map((l) => `${l},`),
+                    '7,Torre local,198.51.100.70,,argosisp-api,clave-api-local,,api',
+                    '8,Torre sin NAS,198.51.100.80,,admin,clave,secreto,',
+                    '9,Torre modo raro,198.51.100.90,198.51.100.90,,,,local',
+                ].join('\n') + '\n',
+            )
+            const fuente = await leerDirectorio(dir)
+            assert.deepEqual(
+                fuente.routers.map((r) => [r.id, r.nas_ip, r.modo_seguridad]),
+                [
+                    ['1', '198.51.100.10', 'radius'],
+                    ['2', '198.51.100.20', 'radius'],
+                    ['7', null, 'api'],
+                ],
+            )
+            assert.containSubset(fuente.problemas, [
+                { archivo: 'routers.csv', id: '8', mensaje: 'Falta nas_ip', aviso: false },
+                { archivo: 'routers.csv', id: '9', aviso: false },
+            ])
+
+            const plantillaId = await crearPlantillaFila()
+            const trx = await db.transaction()
+            try {
+                const r = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
+                assert.deepEqual(r.errores, [])
+                const router = (await trx
+                    .from('network.routers')
+                    .where('nombre', 'Torre local')
+                    .select('id', 'nas_ip', 'modo_seguridad', 'radius_secret')
+                    .first()) as Record<string, unknown>
+                assert.containSubset(router, { nas_ip: null, modo_seguridad: 'api', radius_secret: null })
+                // sin RADIUS no se pide el secreto RADIUS (sí la API, que aquí viene)
+                assert.notInclude(
+                    r.diferencias.routers_sin_credenciales.map((x) => x.router_origen),
+                    '7',
+                )
+                // idempotente sin nas_ip: lo encuentra por nombre
+                const otra = await importar(fuente, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
+                assert.equal(otra.resumen.routers.creados, 0)
+            } finally {
+                await trx.rollback()
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true })
+        }
     })
 })
 

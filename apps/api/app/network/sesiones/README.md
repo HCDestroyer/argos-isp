@@ -35,6 +35,19 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 - Al abrir una sesión (`Start`, o el Interim que la abre) `insertarSesion` guarda en `network.sesiones.estrategia_velocidad` la copia de la estrategia del router y la del plan en él (`contratos/control-velocidad.md` §4). La sesión conserva esa estructura (perfil, padre, PCQ o lista del árbol) hasta reconectar aunque la estrategia cambie; null (sesiones anteriores) = la vigente.
 - `velocidad.ts` (`solicitarVelocidad`): emite `sesion.velocidad_solicitada` para cada sesión viva `radius_rate_limit` o `perfil_ppp` de un servicio activo o limitado; `coa` manda el CoA con el `Mikrotik-Rate-Limit` nuevo (nunca Disconnect). Lo usan `planes.sincronizar` y el cambio de estrategia.
 
+## Sesiones por sondeo: PPPoE sin RADIUS (`contratos/pppoe-local.md` §6)
+
+Un router `modo_seguridad = 'api'` no manda accounting. `sesiones.sondear_ppp` (`actions/sondear_sesiones_ppp.ts`, cron `sesiones_ppp` de `routeros-cron`, cada `ROUTEROS_SESIONES_PPP_CADA_MS` = 60 s; 0 lo apaga) lee `/ppp/active` y `/ipv6/dhcp-server/binding` de cada router `api` activo con credenciales (y de los que pasaron a `radius` con sesiones de sondeo abiertas):
+
+- **Nueva** → fila con `origen = 'sondeo'`, `acct_session_id = sondeo:<session-id>`, `nas_ip` del router (o null), `inicio = ahora − uptime`, IPv4, /64 de la asignación (`radius_servicio`) y /56 del binding (`server = <pppoe-<user>>`); `sesion.iniciada` con `origen: 'sondeo'`; cierra otras abiertas del usuario (`Sesion-Reemplazada`).
+- **Ya no está** → `fin = ahora`, causa `sondeo_sin_sesion`, `sesion.terminada` y diff en `audit.cambios`.
+- **Sigue** → completa IPv4 y /56 si cambiaron, sin evento.
+- **Router caído** → no abre ni cierra nada.
+- **Sin consumo**: `bytes_in`/`bytes_out` en 0 (no hay Interim). El panel lo dice con `Sesion.origen = 'sondeo'`.
+- Una sesión que ArgosIsp quita (`/ppp active remove`: cambio de estado, de plan, retiro, desconexión manual) se cierra en el acto con `Admin-Reset` (`cerrarSesionesQuitadas`), que no cuenta para caídas repetidas.
+- `coa`, el cron de colgadas y `Accounting-On/Off` solo miran `origen = 'accounting'`. `POST /sesiones/:id/desconectar` de una de sondeo emite `sesion.desconexion_solicitada` con `origen: 'sondeo'`: la ejecuta el consumidor `routeros`.
+- Auditoría: solo si abrió o cerró algo, o falló (telemetría, como las colgadas).
+
 ## Sesiones colgadas (semana 3)
 
 Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:worker` (`colgadas.ts`, acción `CerrarSesionesColgadas`, permiso/nombre `sesiones.cerrar_colgadas`). `--sin-cron` lo apaga en una réplica.
@@ -131,6 +144,8 @@ Tabla propia `network.routers_migracion_aaa` (`router_id`, `aaa_desde`, `motivo`
 Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 ## Pruebas
+
+- `tests/network/pppoe_local.spec.ts`: sondeo (abre, cierra, sin cambios, router caído), sesión quitada por cambio de estado (`Admin-Reset`) y desconexión manual de una sesión de sondeo.
 
 - `tests/network/sesiones_eliminado.spec.ts`: `servicio.eliminado` sin sesión (nada, sin auditoría), con una sesión abierta después del borrado (Disconnect con su payload, auditoría, repetición mientras siga abierta y nada tras el Stop), `user_ppp` del payload y payload sin id.
 - `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados y pendientes de instalación fuera, 404/422/403, alcance).

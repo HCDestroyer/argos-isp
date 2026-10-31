@@ -134,7 +134,25 @@ interface PlanValidacion {
 }
 
 /** `validarEstrategias()` de A2: errores (422) y advertencias. */
-export function validar(router: Router, estrategias: EstrategiasRouter, planes: PlanValidacion[], campoPlan: (id: number) => string = id => `planes.${id}`): { errores: Errores, advertencias: Advertencias } {
+/**
+ * Regla 12 `pppoe_sin_radius` (`contratos/pppoe-local.md` §5): en un router sin RADIUS, PPPoE solo con
+ * `perfil_ppp` o `arbol_pcq`. Mismos mensajes que `validarEstrategias` de A2.
+ */
+function sinRadius(router: Router, e: Pick<Estrategia, 'aplicacion'>, campo: string): Errores {
+    if (router.modo_seguridad !== 'api' || (e.aplicacion !== 'radius_rate_limit' && e.aplicacion !== 'pcq_plan')) {
+        return []
+    }
+    return [{
+        field: `${campo}.aplicacion`,
+        rule: 'pppoe_sin_radius',
+        message: e.aplicacion === 'radius_rate_limit'
+            ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
+            : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp o arbol_pcq',
+    }]
+}
+
+/** `revisarRouter = false`: la regla `pppoe_sin_radius` solo revisa las excepciones de plan (como A2). */
+export function validar(router: Router, estrategias: EstrategiasRouter, planes: PlanValidacion[], campoPlan: (id: number) => string = id => `planes.${id}`, revisarRouter = true): { errores: Errores, advertencias: Advertencias } {
     const campoRouter = 'estrategia_velocidad'
     const version = router.routeros_version
     const errores: Errores = []
@@ -147,10 +165,16 @@ export function validar(router: Router, estrategias: EstrategiasRouter, planes: 
     for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
         errores.push(...problemasDe(estrategias[tipo], tipo, `${campoRouter}.${tipo}`, version))
     }
+    if (revisarRouter) {
+        errores.push(...sinRadius(router, estrategias.pppoe, `${campoRouter}.pppoe`))
+    }
     for (const plan of planes) {
         for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
             if (plan.excepcion?.[tipo]) {
                 errores.push(...problemasDe(efectiva(estrategias, plan.excepcion, tipo), tipo, `${campoPlan(plan.plan_id)}.${tipo}`, version))
+                if (tipo === 'pppoe') {
+                    errores.push(...sinRadius(router, efectiva(estrategias, plan.excepcion, tipo), `${campoPlan(plan.plan_id)}.${tipo}`))
+                }
             }
         }
     }
@@ -338,7 +362,7 @@ export function vistaPrevia(router: Router, propuesta: { estrategias?: Estrategi
         planesCambian.push({ plan_id: plan.plan_id, de: nuevas.get(plan.plan_id) ?? null, a: limpia })
         nuevas.set(plan.plan_id, limpia)
     }
-    const { errores, advertencias } = validar(router, a, enRouter.map(p => ({ ...p, excepcion: nuevas.has(p.plan_id) ? (nuevas.get(p.plan_id) ?? null) : p.excepcion })))
+    const { errores, advertencias } = validar(router, a, enRouter.map(p => ({ ...p, excepcion: nuevas.has(p.plan_id) ? (nuevas.get(p.plan_id) ?? null) : p.excepcion })), undefined, propuesta.estrategias !== undefined)
     const salida: VistaPreviaEstrategia = {
         router_id: router.id,
         valida: errores.length === 0,
@@ -609,7 +633,7 @@ export const rutasEstrategias: RutasFixture = {
         const planes = planesDelRouter(router.id).filter(p => p.plan_id !== planId)
         const plan = bd.planes.find(p => p.id === planId)
         planes.push({ plan_id: planId, reuso: plan?.reuso ?? 1, excepcion })
-        const { errores } = validar(router, router.estrategia_velocidad, planes, () => 'estrategia_velocidad')
+        const { errores } = validar(router, router.estrategia_velocidad, planes, () => 'estrategia_velocidad', false)
         if (errores.length) {
             return invalida(errores)
         }

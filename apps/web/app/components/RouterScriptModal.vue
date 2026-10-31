@@ -111,7 +111,7 @@ const PASOS = [
     <UModal
         v-model:open="abierto"
         :title="rotar ? `Rotar conexión · ${router.nombre}` : `Script de conexión · ${router.nombre}`"
-        description="Conecta el MikroTik a ArgosIsp por un túnel WireGuard: crea el usuario de la API, RADIUS y cierra los puertos que no hacen falta."
+        :description="esSinRadius(router) ? 'Conecta el MikroTik a ArgosIsp por un túnel WireGuard: crea el usuario de la API y cierra los puertos que no hacen falta. Sin RADIUS: deja use-radius=no.' : 'Conecta el MikroTik a ArgosIsp por un túnel WireGuard: crea el usuario de la API, RADIUS y cierra los puertos que no hacen falta.'"
         :dismissible="!generando"
         :ui="{ content: 'sm:max-w-2xl' }"
     >
@@ -126,7 +126,7 @@ const PASOS = [
                     variant="subtle"
                     icon="i-lucide-triangle-alert"
                     title="Rotar corta la conexión actual"
-                    description="El túnel de este router deja de valer: Argos no llega a él (ni RADIUS ni CoA) hasta que ejecutes el script nuevo."
+                    :description="esSinRadius(router) ? 'El túnel de este router deja de valer: Argos no llega a su API hasta que ejecutes el script nuevo.' : 'El túnel de este router deja de valer: Argos no llega a él (ni RADIUS ni CoA) hasta que ejecutes el script nuevo.'"
                     data-prueba="aviso-rotar"
                 />
                 <UAlert
@@ -134,7 +134,7 @@ const PASOS = [
                     variant="subtle"
                     icon="i-lucide-key-round"
                     title="El script lleva claves"
-                    description="Trae la clave de la API y el secreto RADIUS. ArgosIsp no lo guarda: descárgalo o cópialo ahora; no lo mandes por chat. Vale 24 horas y para un solo registro, y cada script nuevo invalida el anterior."
+                    :description="`Trae la clave de la API${esSinRadius(router) ? '' : ' y el secreto RADIUS'}. ArgosIsp no lo guarda: descárgalo o cópialo ahora; no lo mandes por chat. Vale 24 horas y para un solo registro, y cada script nuevo invalida el anterior.`"
                 />
 
                 <UForm

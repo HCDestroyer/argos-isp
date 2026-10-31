@@ -1,30 +1,3 @@
-# ArgosIsp · script de conexión del router (RouterOS 7)
-#
-# AVISO: este archivo lleva secretos (la clave del usuario de la API y el secreto RADIUS). Úsalo,
-# no lo guardes ni lo mandes por chat. El token de registro vale 24 h y una sola vez.
-#
-# Qué hace (contratos/conexion-routers.md):
-#   1. Comprueba RouterOS 7, crea la interfaz WireGuard "wg-argos" y lee su clave pública (la
-#      privada nunca sale del router).
-#   2. Crea la CA y el certificado de www-ssl, el grupo "argosisp-api" con el mínimo de permisos
-#      (read, write, api, rest-api) y el usuario "argosisp-api", que solo entra desde ArgosIsp.
-#   3. Se registra en ArgosIsp con el token y agrega el servidor como peer del túnel. Solo si el
-#      registro responde OK pone en www-ssl el certificado firmado por argosisp-ca (si falla, muestra
-#      la CA para pegarla en el panel y deja el certificado que ArgosIsp ya conoce).
-#   4. Configura RADIUS y CoA hacia ArgosIsp por el túnel.
-#   5. Solo si el registro respondió OK y el túnel tiene handshake: apaga los servicios que no se
-#      usan y deja la gestión (www-ssl, Winbox, SSH) solo por el túnel, desde las IPs de
-#      administración y desde la IP de la sesión que corre el script. Si algo falló, la gestión se
-#      queda como estaba y el script dice qué falló y cómo reintentar. No toca a los clientes.
-#
-# Si aun así quedaste fuera: infra/mikrotik/rescate-gestion.rsc (por MAC-Winbox o por consola).
-#
-# Cómo usarlo: Winbox → Files → arrastra el archivo; luego New Terminal y
-#   /import file-name=argosisp-conexion.rsc verbose=yes
-# (o pega el contenido completo en New Terminal). Es re-ejecutable: solo borra y recrea lo que lleva
-# comentario "argosisp:"; la interfaz wg-argos y su clave se conservan.
-# Generado por ArgosIsp desde infra/mikrotik/piezas (no editar a mano: infra/mikrotik/armar.mjs).
-
 {
 # ============================================================================
 # Variables (las llena ArgosIsp al generar el script)
@@ -51,42 +24,4 @@
 :local wgServidorPub "{{wg_servidor_public_key}}"
 :local wgServidorEndpoint "{{wg_servidor_endpoint}}"
 :local wgServidorPuerto [:tonum "{{wg_servidor_puerto}}"]
-
-# --- RADIUS y CoA (por el túnel) ---
-:local radiusAddr $wgServidorIp
-:local radiusAddr2 ""
-:local radiusSrc $wgIp
-:local radiusSecret "{{radius_secret}}"
-
-# --- Usuario de la API REST ---
-:local apiUsuario "argosisp-api"
-:local apiPassword "{{api_password}}"
-:local apiDesde ($wgServidorIp . "/32")
-:local apiNombre "{{api_nombre}}"
-:local apiIp $wgIp
-:local apiCaNombre "ArgosIsp CA del router {{router_id}}"
-# IP con que ArgosIsp llega hoy al router (host de api_url antes del túnel; vacía si no hay): va
-# también en el SAN del certificado de www-ssl, que así sirve por los dos caminos mientras se migra.
-:local apiIpAnterior "{{api_ip_anterior}}"
-# www, api y api-ssl los apaga C4 (solo con el túnel arriba); el certificado se decide tras el
-# registro (C3) y www-ssl no cambia su address= hasta C4.
-:local apiSoloHttps false
-:local apiCertificar false
-:local apiWwwDesde ""
-
-# --- Gestión ---
-# IPs o redes de los administradores (lista argosisp-admin). Vacío = gestión solo por el túnel, por
-# la IP de la sesión que corre el script y por MAC-Winbox en la red local.
-:local adminIps [:toarray "{{admin_ips}}"]
-
-# ============================================================================
-# C0. Requisitos
-# ============================================================================
-:local rosVersion [/system resource get version]
-:local rosMayor [:tonum [:pick $rosVersion 0 [:find $rosVersion "."]]]
-:if ($rosMayor < 7) do={ :error ("argosisp: hace falta RouterOS 7 (este router tiene " . $rosVersion . ")") }
-:put ("argosisp: RouterOS " . $rosVersion . ", router " . $routerId . ", script del " . $generadoEn)
-:if ([:len $adminIps] = 0) do={
-    :put "argosisp: AVISO sin IPs de administración: Winbox y SSH quedarán solo por el túnel, por la IP de esta sesión y por MAC-Winbox en la red local"
-}
 

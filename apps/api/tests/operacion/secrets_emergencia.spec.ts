@@ -151,6 +151,30 @@ test.group('operacion · secrets PPPoE de emergencia', () => {
         )
     })
 
+    test('encabezado con el NAS; un router sin RADIUS (nas_ip null) no imprime «null»', async ({
+        assert,
+    }) => {
+        const nasIp = '198.51.100.77'
+        const conRadius = await crearRouterFila({ nombre: unico('Con RADIUS'), nas_ip: nasIp })
+        const sinRadius = await crearRouterFila({
+            nombre: unico('Sin RADIUS'),
+            modo_seguridad: 'api',
+            nas_ip: null,
+        })
+        const exportar = (router_id: number) =>
+            new ExportarSecretsEmergencia().execute({ router_id }, contextoPrueba())
+
+        const { rsc: conNas } = await exportar(conRadius)
+        assert.include(conNas.split('\n')[0]!, `(NAS ${nasIp})`)
+
+        const { rsc, resumen } = await exportar(sinRadius)
+        const encabezado = rsc.split('\n')[0]!
+        assert.notInclude(rsc, 'null')
+        assert.include(encabezado, `router ${sinRadius} `)
+        assert.include(encabezado, '(sin RADIUS: sin NAS)')
+        assert.equal(resumen.servicios, 0)
+    })
+
     test('comando: escribe el archivo 0600, no lo pisa y no imprime contraseñas', async ({ assert }) => {
         const e = await escenario()
         const dir = await mkdtemp(join(tmpdir(), 'a6-emergencia-'))

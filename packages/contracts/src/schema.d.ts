@@ -8691,7 +8691,7 @@ export interface paths {
         };
         /**
          * Generar el script de conexión del router (.rsc)
-         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `script_requiere_radius` si el router está en modo `api` (sin RADIUS); 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
+         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Un router en modo `api` (sin RADIUS) recibe la variante sin RADIUS: sin `/radius` ni CoA, `/ppp aaa use-radius=no` y el grupo `argosisp-api` con `sensitive`; no se exige su secreto RADIUS. Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` (solo en modo `radius`) sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
          */
         get: operations["routersScriptConexion"];
         put?: never;
@@ -9384,7 +9384,7 @@ export interface paths {
         put?: never;
         /**
          * Desconectar sesión (Disconnect-Request al NAS)
-         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
+         * @description Emite `sesion.desconexion_solicitada`; `coa` manda el Disconnect-Request al NAS de la sesión (en una sesión de sondeo de un router sin RADIUS, el dispatcher de RouterOS la quita de /ppp/active y la cierra) y registra la respuesta en `audit.red`. La sesión se cierra cuando llega el Stop del NAS. 404 si no existe, 409 si ya terminó.
          */
         post: operations["sesionesDesconectar"];
         delete?: never;
@@ -17911,7 +17911,8 @@ export interface components {
             id: number;
             servicio_id: number | null;
             router_id: number | null;
-            nas_ip: string;
+            /** @description IP del NAS; null solo en una sesión de sondeo de un router sin RADIUS y sin nas_ip */
+            nas_ip: string | null;
             acct_session_id: string;
             user_ppp: string;
             ipv4: string | null;
@@ -17924,6 +17925,11 @@ export interface components {
             bytes_in: number;
             bytes_out: number;
             causa_fin: string | null;
+            /**
+             * @description `accounting`: RADIUS (con contadores). `sondeo`: router sin RADIUS, abierta y cerrada por el sondeo de /ppp/active, sin consumo (bytes en 0)
+             * @enum {string}
+             */
+            origen: "accounting" | "sondeo";
         };
         SesionIniciada: {
             /** @description Token Bearer opaco */
@@ -18050,7 +18056,7 @@ export interface components {
                 /** @description `argosisp:servicio:<id>` o `argosisp:plan:<id>` */
                 comment: string;
                 /** @enum {string} */
-                accion: "creado" | "actualizado" | "borrado";
+                accion: "creado" | "actualizado" | "borrado" | "desconectado";
                 duplicados?: number;
             }[];
             /** @description Nada que corregir y el router respondió */

@@ -122,16 +122,21 @@ function validarTipo(tipo: Servicio['tipo_conexion'], datos: { modo: string, mac
     return errores
 }
 
-/** `MENSAJE_PPPOE_REQUIERE_RADIUS` de A1 (`apps/api/app/network/modo_seguridad.ts`). */
-const MENSAJE_PPPOE_REQUIERE_RADIUS = 'Este router no usa RADIUS: PPPoE necesita RADIUS. Usa IP estática o DHCP fija, o cambia el router a RADIUS'
+/** `MENSAJE_PPPOE_LOCAL_REQUIERE_API` de A2 (`apps/api/app/network/modo_seguridad.ts`). */
+export const MENSAJE_API_PPPOE_LOCAL = 'Este router no usa RADIUS: los clientes PPPoE se crean como secrets por su API REST, y el router no '
+    + 'tiene usuario y contraseña de la API. Complétalos en el router o usa uno con RADIUS'
 
-/** Como `exigirRadiusParaPppoe` (A1): 422 `pppoe_requiere_radius` si un PPPoE quedaría en un router `api`. */
+/**
+ * Como `exigirPppoeAdmitido` (A2, `contratos/pppoe-local.md` §9): un PPPoE en un router `api` sin
+ * usuario o contraseña de la API responde 422 `pppoe_local_requiere_api` en `router_id`.
+ */
 function pppoeSinRadius(routerId: number, tipo: Servicio['tipo_conexion']): RespuestaFixture | null {
-    if ((tipo ?? 'pppoe') !== 'pppoe' || bd.routers.find(r => r.id === routerId)?.modo_seguridad !== 'api') {
+    const router = bd.routers.find(r => r.id === routerId)
+    if ((tipo ?? 'pppoe') !== 'pppoe' || router?.modo_seguridad !== 'api' || (router.api_usuario && router.tiene_api_password)) {
         return null
     }
-    return problemaTipado(422, 'pppoe_requiere_radius', 'Regla de negocio', MENSAJE_PPPOE_REQUIERE_RADIUS, [
-        { field: 'tipo_conexion', rule: 'pppoe_requiere_radius', message: MENSAJE_PPPOE_REQUIERE_RADIUS },
+    return problemaTipado(422, 'pppoe_local_requiere_api', 'Regla de negocio', MENSAJE_API_PPPOE_LOCAL, [
+        { field: 'router_id', rule: 'pppoe_local_requiere_api', message: MENSAJE_API_PPPOE_LOCAL },
     ])
 }
 
@@ -713,7 +718,7 @@ export const rutasServicios: RutasFixture = {
         if (errores.length) {
             return datosInvalidos(errores)
         }
-        // Un PPPoE que ya estaba en el router se sigue editando; pasar a PPPoE en un router `api`, no (A1).
+        // Pasar a PPPoE en un router `api` exige sus credenciales de la API (A2, `pppoe-local.md` §9).
         const sinRadius = tipo !== tipoAntes ? pppoeSinRadius(actual.router_id, tipo) : null
         if (sinRadius) {
             return sinRadius
