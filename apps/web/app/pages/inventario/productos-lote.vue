@@ -57,7 +57,7 @@ function itemsModalidad(fila: FilaLote): SelectItem[] {
     const tipo = tipoDe(fila.tipo)
     const seguimiento = seguimientoDe(fila)
     return [
-        { label: tipo ? `La del tipo (${MODALIDADES[tipo.modalidad_defecto].etiqueta})` : 'La del tipo', value: '' },
+        { label: tipo ? `La del tipo (${MODALIDADES[tipo.modalidad_defecto].etiqueta})` : 'La del tipo', value: 'del_tipo' },
         ...(Object.keys(MODALIDADES) as ModalidadProducto[]).filter(m => modalidadCompatible(m, seguimiento)).map(m => ({ label: MODALIDADES[m].etiqueta, value: m })),
     ]
 }

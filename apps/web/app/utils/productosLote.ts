@@ -23,8 +23,8 @@ export const esquemaFilaLote = z.object({
     nombre: z.string().trim().min(2, 'Al menos 2 caracteres').max(200, 'Máximo 200 caracteres'),
     tipo: z.string().trim().regex(/^[a-z0-9_]{2,40}$/, 'Elige el tipo'),
     unidad: z.string().trim().max(30, 'Máximo 30 caracteres'),
-    /** Vacía = la del tipo. */
-    modalidad: z.enum(['', 'comodato', 'consumible_gasto', 'consumible_cobro']),
+    /** `del_tipo` = la del tipo. */
+    modalidad: z.enum(['del_tipo', 'comodato', 'consumible_gasto', 'consumible_cobro']),
     precio_venta: z.string().trim().refine(v => v === '' || PRECIO.test(v), 'Precio con hasta 2 decimales'),
     /** Entrada por cantidad. */
     cantidad: z.string().trim().refine(v => v === '' || (CANTIDAD.test(v) && !new Decimal(v).isZero()), 'Cantidad mayor que 0, hasta 3 decimales'),
@@ -43,7 +43,7 @@ export const esquemaLote = z.object({
 export type EntradaLote = z.input<typeof esquemaLote>
 
 export function filaLoteVacia(tipo = 'material'): FilaLote {
-    return { sku: '', nombre: '', tipo, unidad: '', modalidad: '', precio_venta: '', cantidad: '', costo_unitario: '', series: '' }
+    return { sku: '', nombre: '', tipo, unidad: '', modalidad: 'del_tipo', precio_venta: '', cantidad: '', costo_unitario: '', series: '' }
 }
 
 /** Una fila sin nada escrito (no viaja). */
@@ -148,7 +148,7 @@ export function filasDesdeTexto(texto: string, tipos: readonly { codigo: string,
                 fila.tipo = porNombre.get(normalizar(valor)) ?? normalizar(valor)
             }
             else if (columna === 'modalidad') {
-                fila.modalidad = MODALIDADES_TEXTO[normalizar(valor)] ?? ''
+                fila.modalidad = MODALIDADES_TEXTO[normalizar(valor)] ?? 'del_tipo'
             }
             else if (columna === 'precio_venta' || columna === 'costo_unitario' || columna === 'cantidad') {
                 fila[columna] = valor.replace(/[Q\s]/g, '').replace(/,(?=\d{3}\b)/g, '')
@@ -177,7 +177,7 @@ export function cuerpoLote(d: EntradaLote, tipos: readonly TipoParaLote[]) {
                 nombre: f.nombre.trim(),
                 tipo: f.tipo,
                 ...(f.unidad.trim() ? { unidad: f.unidad.trim() } : {}),
-                ...(f.modalidad ? { modalidad: f.modalidad } : {}),
+                ...(f.modalidad !== 'del_tipo' ? { modalidad: f.modalidad } : {}),
                 ...(f.precio_venta.trim() ? { precio_venta: f.precio_venta.trim() } : {}),
                 ...(conEntrada && d.bodega_id !== null
                     ? { entrada: seguimiento === 'serie'
