@@ -316,3 +316,160 @@ Rama `a3/inventario-c` (sale de `a3/inventario-b` c15a016). Incluye las decision
 5. **Contabilidad.** Solo trazabilidad: ningún asiento, costo, saldo ni descripción de asiento cambia (las pruebas comparan las partidas de un cargo con y sin origen y verifican el libro).
 6. **Idempotencia.** Todas estas rutas ya eran idempotentes por `Idempotency-Key`; Iris manda `iris:<operacion>:<orden_id>[:…]` (§3 de `contratos/iris.md`), probado con `iris:cargo:<orden_id>` y `iris:consumo:<orden_id>`.
 7. **OpenAPI.** En las respuestas los dos campos están siempre (null sin orden), pero se declaran opcionales en `MovimientoInventario`, `Factura` y `Bonificacion` para no romper los fixtures del panel; A4 los agrega y se vuelven requeridos.
+
+## Fase D: pedidos del PM 31 oct
+
+Rama `a3/inventario-v2` (sale de `main` 10078a6). Decisiones del PM: **recibe quien recibe** (orden de traslado en tránsito), **la modalidad la define cada producto**, la factura de compra en PDF o imagen la lee una **IA con proveedor configurable**, y la orden de traslado se recibe con **firma digital**, con **firma en papel** (PDF imprimible) o, si la empresa lo permite, con **aceptación sin firma**. Una sección por pedido; lo contable al final (D.8) para el auditor.
+
+### D.1 Orden de traslado
+
+**Modelo.**
+
+- `inventario.ordenes_traslado`: `empresa_id`, `numero` (correlativo por empresa, único, sin huecos: `max + 1` con lock por empresa), `bodega_origen_id`, `bodega_destino_id`, `estado` (`en_transito` → `recibida` | `recibida_con_diferencias` | `cancelada`), `motivo` (del envío), `enviado_por`, `enviado_en`, recepción (`recibido_por` = usuario técnico o encargado que recibió, `registrado_por` = el usuario que hizo la llamada, `metodo_recepcion`, `recibido_en`, `observaciones`), firma (`firma_ruta`, `firma_sha256`, `firma_ip`, `firma_en`), documento firmado en papel (`documento_ruta`, `documento_sha256`, `documento_tipo`, `documento_tamano`), cancelación (`cancelado_por`, `cancelado_en`, `motivo_cancelacion`) y `version`. Se actualiza solo por sus tres acciones (y el adjunto), con `audit.cambios`.
+- `inventario.ordenes_traslado_lineas`: `producto_id`, `cantidad` enviada y `costo_total` enviado (lo que salió del origen), `cantidad_recibida` y `costo_recibido` (null en tránsito). Una línea por producto en la orden.
+- `inventario.ordenes_traslado_unidades` (líneas de serie): `unidad_id`, `estado_previo` (`disponible` o `en_reparacion`, el que recupera al llegar o al volver), `recibida` (null en tránsito, true/false al recibir).
+
+**Dónde está lo enviado: bodega virtual «en tránsito» por empresa.** Una bodega `tipo = 'transito'` (una por empresa, índice único; nace la primera vez que se envía una orden). Por qué una bodega y no una reserva:
+
+- El kardex sigue siendo la única verdad: lo que salió del origen está en el kardex de la bodega de tránsito, con su costo. Los checks §8.1 y §8.2 no cambian (todo sigue en `1.1.14`) y la existencia del origen y del destino no lo cuentan, sin tocar ninguna lectura de existencias ni la regla «salida ≤ existencia».
+- Una reserva habría obligado a restar «reservado» en cada salida (consumo, venta, baja, conteo, premio…) y a llevar una segunda verdad fuera del kardex.
+
+La bodega de tránsito no se opera a mano: `bodegaMovible` la rechaza en toda operación (422 `bodega_transito`), no se edita, no se desactiva, no se cuenta y no se elige como origen o destino. Sale en existencias, kardex y el reporte valorizado con `bodega_tipo = transito` (así se ve lo que viaja).
+
+**Movimientos.** Todos `tipo = 'traslado'` con `origen_tipo = 'orden_traslado'`, `origen_id` = la orden, sin asiento (misma cuenta `1.1.14`). Cada tramo es un par con su propio `traslado_id` que suma 0 en cantidad y en valor (check D.8.c):
+
+| Paso | Par de movimientos | Unidad de serie |
+| --- | --- | --- |
+| Enviar (`inventario.crear_traslado`) | origen − / tránsito +, al costo promedio del origen (o el de la unidad) | `en_transito`, `bodega_id` = tránsito |
+| Recibir lo recibido (`inventario.recibir_traslado`) | tránsito − / destino +, al costo de la línea | `estado_previo`, `bodega_id` = destino |
+| Faltante al recibir | tránsito − / **origen** +, al costo de la línea | `estado_previo`, `bodega_id` = origen |
+| Cancelar (`inventario.cancelar_traslado`) | tránsito − / origen +, todo, al costo de la línea | `estado_previo`, `bodega_id` = origen |
+
+Costo de lo recibido por cantidad: `costo_recibido = redondear(cantidad_recibida × costo_total / cantidad)`; el faltante lleva el resto (`costo_total − costo_recibido`), así la línea sale de tránsito exactamente por lo que entró y el valor de la bodega de tránsito es siempre la suma de las líneas en tránsito (check D.8.b). Una unidad de serie se mueve a su costo.
+
+**Faltantes (decisión de A3): vuelven al origen.** Lo que el destino no recibió regresa al kardex del origen al mismo costo, sin asiento, y la orden queda `recibida_con_diferencias` con el faltante por línea y por serie. Por qué:
+
+- Quien recibe (a menudo un técnico) no debe poder crear un gasto: declarar una pérdida es de contabilidad. Una baja automática pondría en `5.6.02` lo que tal vez aparece mañana en la camioneta.
+- Responde quien lo tenía y lo envió. La pérdida, si se confirma, se registra después con `inventario.dar_de_baja` (5.6.02, con motivo que cite la orden) o la saca un conteo; si aparece, se envía otra orden.
+- Una bodega de tránsito con existencias «a investigar» sin dueño ni fecha de cierre rompería D.8.b.
+
+`GET /inventario/traslados?estado=recibida_con_diferencias` es la lista de diferencias por investigar.
+
+**Acciones y permisos.**
+
+- `inventario.crear_traslado` (`POST /inventario/traslados/enviar`; `admin`, `contabilidad`, `tecnico`): `{ bodega_origen_id, bodega_destino_id, motivo?, lineas: [{ producto_id, cantidad } | { producto_id, unidad_ids[] }] }`. Origen ≠ destino, misma empresa, un producto una sola vez (422 `lineas.N.producto_id` `repetido`), todo o nada (409 `existencia_insuficiente` o `unidad_*` de la primera que falle). El origen exige poder operarlo (tope por técnico); el destino solo el alcance, como el traslado inmediato. Fecha de hoy. Emite `inventario.traslado_enviado`. Idempotente por `Idempotency-Key`.
+- `inventario.recibir_traslado` (`POST /inventario/traslados/:id/recibir`; `admin`, `contabilidad`, `tecnico`): solo `en_transito` (409 `orden_no_en_transito`), con `version` opcional (409 si difiere).
+    - Cuerpo: `{ metodo_recepcion?, recibido_por?, firma?, observaciones?, lineas?: [{ linea_id, cantidad_recibida? , unidad_ids_faltantes? }], version? }`. Sin `lineas` (o sin una línea) se recibe todo lo de esa línea. `cantidad_recibida` entre 0 y lo enviado (422 `cantidad`); las unidades faltantes deben ser de la línea (422 `unidad_ids_faltantes`).
+    - **Quién recibe.** Si la destino es una bodega `tecnico`: su técnico (el actor es su `usuario_id`) o un usuario con el permiso de alcance global (encargado, o el usuario técnico «Iris») que registra en nombre del técnico. Si la destino es una bodega `bodega`: quien pueda operarla. Si no: 403. `recibido_por` = el técnico de la bodega destino (o, en una bodega `bodega`, el actor); `registrado_por` = el actor.
+    - **Métodos** (`metodo_recepcion`; por defecto `firma_digital` si llega `firma` y `aceptacion_sistema` si no):
+        - `firma_digital`: `firma` obligatoria (422 `firma` `requerida`). La pone el técnico en su dispositivo (Argos o Iris) o un encargado en el dispositivo con el técnico presente.
+        - `firma_papel`: solo un usuario con alcance global que registra el papel firmado (403 si es el propio técnico sin alcance global); `firma` no aplica (422 `no_aplica`). El escaneo o la foto se adjunta con `POST /inventario/traslados/:id/documento` (abajo).
+        - `aceptacion_sistema`: sin firma, solo si `inventario.configuracion.traslado_firma_obligatoria = false` para la empresa (si no, 422 `firma` `requerida`). Por defecto la firma es obligatoria.
+    - **Firma** (`firma`): PNG del trazo, en base64 (con o sin `data:image/png;base64,`) en JSON, o el archivo `firma` en `multipart/form-data` (los demás campos como texto; `lineas` como JSON). Se valida por contenido (firma PNG, no por extensión), hasta 256 KB, ancho y alto entre 50 y 4000 px (IHDR); si no, 422 `firma`. Se guarda en el almacén de archivos (el de los comprobantes, `inventario/firmas/AAAA/MM/<uuid>.png`) con SHA-256, quién firmó (`recibido_por`), la fecha (`firma_en`) y la IP de la petición. En la auditoría va `{ firma_sha256, firma_bytes }`, nunca el binario ni el base64.
+    - Emite `inventario.traslado_recibido`. Deja `audit.acciones` con método, quién recibió y quién registró.
+- `inventario.cancelar_traslado` (`POST /inventario/traslados/:id/cancelar`; `admin`, `contabilidad`, `tecnico`): solo `en_transito`, `motivo` obligatorio; quien pueda operar el origen o con alcance global. Todo vuelve al origen. Emite `inventario.traslado_cancelado`.
+- `inventario.adjuntar_documento_traslado` (`POST /inventario/traslados/:id/documento`, multipart `archivo`; permiso `inventario.recibir_traslado`): la foto o el escaneo del papel firmado, solo en una orden recibida con `firma_papel` y una sola vez (409 `documento_registrado`). JPG, PNG, WebP o PDF por contenido, hasta 5 MB, con SHA-256 (como los comprobantes). `GET /inventario/traslados/:id/documento` y `GET /inventario/traslados/:id/firma` lo devuelven (`inventario.ver` y poder ver la orden).
+- `inventario.configurar` (`POST /inventario/configuracion`; `admin`): `{ traslado_firma_obligatoria, version }` por empresa (`inventario.configuracion`, una fila por empresa; sin fila = valores por defecto). `GET /inventario/configuracion` (`inventario.ver`).
+
+**Lecturas.** `GET /inventario/traslados?estado=&bodega_id=&numero=` (orígenes o destinos visibles por el tope del técnico) y `GET /inventario/traslados/:id` (líneas, unidades con serie y MAC, recepción, hash corto de la firma; nunca rutas del almacén).
+
+**PDF imprimible** `GET /inventario/traslados/:id/pdf` (`inventario.ver`), con `pdfkit` (el motor del acta de sorteos y los libros): encabezado de la empresa (nombre, NIT, logo si hay); «Orden de traslado N.º», fecha, origen y destino (con el técnico); una fila por producto (SKU, nombre, unidad, cantidad, series o MAC) con una casilla por línea; totales (líneas, unidades, cantidad); estado («En tránsito», «Recibida por X el …», «Recibida con diferencias…» con los faltantes, o «Cancelada»). Firmas: «Entrega» (nombre de quien envió y fecha) y «Recibe»: con firma digital, la imagen en el espacio «Recibe» con nombre, fecha y los 12 primeros caracteres del SHA-256; con firma en papel o en tránsito, los espacios en blanco (nombre, firma y fecha) para imprimir. El PDF no muestra costos (lo firma el técnico); el valor está en la orden.
+
+**Eventos** (outbox): `inventario.traslado_enviado` (orden_id, empresa_id, numero, bodega_origen_id, bodega_destino_id, usuario_destino_id o null, lineas: [{ producto_id, cantidad, unidad_ids[] }]); `inventario.traslado_recibido` (orden_id, empresa_id, numero, estado, metodo_recepcion, recibido_por, registrado_por, faltantes: [{ producto_id, cantidad, unidad_ids[] }]); `inventario.traslado_cancelado` (orden_id, empresa_id, numero, motivo). Cada movimiento emite además su `inventario.movimiento_registrado`.
+
+**Traslado inmediato.** `POST /inventario/traslados` (`inventario.trasladar`) queda igual. No toca la bodega de tránsito.
+
+### D.2 Tipos de producto editables
+
+- `inventario.tipos_producto`: `empresa_id` (null = global), `codigo` (`[a-z0-9_]`, único por empresa y entre los globales; uno de empresa no puede repetir el código de uno global), `nombre`, `seguimiento_defecto` (`cantidad` | `serie`), `modalidad_defecto` (D.3), `activo`, `version`. Semillas globales: `equipo` (serie, comodato), `material` (cantidad, consumible_gasto), `otro` (cantidad, consumible_gasto).
+- `productos.tipo` sigue siendo el **código** (la API no cambia): se quita el CHECK fijo y se agrega `productos.tipo_id` (FK). Se resuelve primero en la empresa y luego en los globales; inexistente o inactivo: 422 `tipo`. Las filas existentes apuntan a la semilla global de su código.
+- Al crear un producto, `seguimiento` y `modalidad` son opcionales y toman los del tipo. `Producto` agrega `tipo_id`, `tipo_nombre` y `modalidad`.
+- API: `GET /inventario/tipos-producto?activo=` (`inventario.ver`), `POST /inventario/tipos-producto` (`tipos_producto.crear`), `POST /inventario/tipos-producto/:id/editar` (`tipos_producto.editar`, con `version`, `audit.cambios`; el código no cambia), `POST /inventario/tipos-producto/:id/desactivar` (`tipos_producto.desactivar`, con `version`; los productos que ya lo usan siguen igual, los nuevos no lo aceptan). Un tipo global se crea, edita o desactiva solo con alcance global (403). Roles: `admin` y `contabilidad`.
+- Un tipo con `modalidad_defecto` incompatible con su `seguimiento_defecto` (D.3): 422 `modalidad_defecto`.
+
+### D.3 Modalidad por producto (consumibles)
+
+`productos.modalidad`: `comodato` | `consumible_gasto` | `consumible_cobro`. Compatibilidad: `comodato` solo con seguimiento `serie`; `consumible_gasto` solo con `cantidad` (un equipo de serie que se queda en la red es un activo fijo, no un gasto); `consumible_cobro` con los dos (por serie es la **venta de un equipo**). Si no, 422 `modalidad`. Migración: los productos de serie quedan `comodato` y los de cantidad `consumible_gasto` (lo de hoy). Se edita con `productos.editar` (afecta solo lo que se registre después).
+
+`POST /inventario/consumos` con `servicio_id` aplica la modalidad del producto:
+
+| Modalidad | Qué hace | Kardex y asiento |
+| --- | --- | --- |
+| `consumible_gasto` | Lo de hoy | `consumo`: `cuenta_consumo` (5.2.07) / 1.1.14 |
+| `consumible_cobro` | **Cargo único inmediato** al cliente del servicio por `facturas.emitir_cargo_unico` (la acción que ya existe), una factura por petición con una línea por producto cobrado | `venta` (fase C): `5.6.01 / 1.1.14` al costo, diario VEN; la factura: `CxC / ingreso del concepto + IVA` como todo cargo único |
+| `comodato` (serie, con `unidad_id` o `serie`) | `inventario.asignar_comodato` (la que ya existe) | `asignacion_comodato`: `1.2.01.NN / 1.1.14` y alta del activo |
+
+- **Por qué cargo único y no la siguiente factura.** El cargo único ya resuelve todo lo de una venta de inventario: costo en la misma transacción, IVA, FEL, reverso al anularla o con una NCRE (fase C), bloqueo de ventas y la auditoría del auditor. Diferirlo a la mensualidad obligaría a llevar «cargos pendientes» con su costo ya salido del kardex sin ingreso, que el libro no puede cuadrar por periodo. El cargo vence según los días de gracia del servicio (regla del cargo único), así que en la práctica se cobra con la siguiente mensualidad.
+- **Precio y concepto.** `precio_unitario` de la línea o, si falta, `productos.precio_venta` (IVA incluido); sin ninguno: 422 `lineas.N.precio_unitario` `precio_requerido`. Concepto: `concepto_id` de la línea o `productos.concepto_cargo_id`; sin ninguno: 422 `concepto_requerido`. Sin `servicio_id`: 422 `servicio_requerido` (cobro y comodato). La factura lleva el `origen_tipo`/`origen_id` de Iris si vienen.
+- **Permiso.** Basta `inventario.consumir`: el cargo es consecuencia de la modalidad que fijó quien tiene `productos.editar`. La auditoría deja las dos acciones (`inventario.consumir` y la anidada `facturas.emitir_cargo_unico`) con el mismo `request_id`.
+- **Varias líneas** (lo que pide `contratos/iris.md` §3): `POST /inventario/consumos` acepta además `{ bodega_id?, servicio_id, lineas: [{ producto_id, cantidad? , unidad_id? , serie?, precio_unitario?, concepto_id? }], tecnico?, origen_tipo?, origen_id?, fecha?, motivo? }`, todo o nada (errores `lineas.N.*`). Responde `ConsumoLote { movimientos[], factura (o null), comodatos[] }`. El cuerpo de hoy (un `producto_id` arriba) sigue igual y responde `MovimientoInventario`, que agrega `factura_id` (null salvo cobro).
+- Un consumo `consumible_gasto` no lleva `precio_unitario` (422 `no_aplica`). Sin `servicio_id`, un producto `consumible_cobro` o `comodato` responde 422 `servicio_requerido` (un consumo interno sin cliente va por `consumible_gasto` o `dar_de_baja`).
+
+### D.4 Alta de productos por lotes
+
+`POST /productos/lote` (`productos.crear_lote`; `admin`, `contabilidad`) — **desvío de ruta**: el pedido decía `/inventario/productos/lote`; los productos viven en `/productos` y el lote va a su lado. Cuerpo `{ productos: [ <lo de POST /productos> + entrada? ] }`, hasta 500 filas, `Idempotency-Key` obligatoria (422 sin ella).
+
+- **Todo o nada.** Primero se valida todo (formato, SKU repetido en el lote o en la empresa, tipo, modalidad, bodega, series) y se responde 422 con todos los `errors[]` (`productos.<i>.campo`); después se crea en una transacción y el primer error de negocio (409) se devuelve con su `productos.<i>` en `detail` y nada queda.
+- **Entrada opcional por fila:** `entrada: { bodega_id, cantidad, costo_unitario, fecha? }` (cantidad) o `entrada: { bodega_id, unidades: [{ serie?, mac?, costo }], fecha? }` (serie). **Vía contable: saldo inicial** (`inventario.cargar_saldo_inicial`, `1.1.14 / 2.9.01 Saldos de apertura`). Por qué: el producto es nuevo y no tiene movimientos, que es exactamente el caso del saldo inicial (existencias que la empresa ya tenía al empezar a usar el sistema). Un ajuste pondría el valor en `4.2.04 Sobrantes` (un ingreso) como si un conteo hubiera encontrado mercadería de más, y lo comprado a un proveedor entra por una compra (D.5) con su IVA y su cuenta por pagar. La entrada exige además `inventario.cargar_saldo_inicial` (403 si falta).
+- Responde `{ data: Producto[], movimientos: MovimientoInventario[] }`.
+
+### D.5 Factura de compra desde un archivo (borrador)
+
+**Flujo.** Subir el archivo → `borrador` con sus datos y una propuesta → el usuario corrige → confirmar crea la compra con `compras.registrar` (la de siempre, con su asiento y su entrada al kardex) en la misma transacción. Nunca se crea una compra sin la confirmación explícita.
+
+- `inventario.compras_borradores`: `empresa_id`, `estado` (`borrador` → `confirmado` | `descartado`), `fuente` (`xml_fel` | `ia` | `manual`), archivo (`archivo_ruta`, `archivo_sha256`, `archivo_tipo`, `archivo_tamano`), `extraccion` (jsonb, lo que leyó el parser o la IA, inmutable), `datos` (jsonb, lo que el usuario corrige), `propuesta` (jsonb: proveedor y productos), `confianza` (jsonb, solo IA), `error_extraccion` (texto), `compra_id`, `version`, `creado_por`. Índice único `(empresa_id, archivo_sha256)` entre los vivos: el mismo archivo dos veces responde 409 `archivo_duplicado` con el borrador.
+- **Acciones** (permisos con su nombre; `admin` y `contabilidad`):
+    - `compras.cargar_borrador` (`POST /compras/borradores`, multipart `archivo`): XML, PDF, JPG, PNG o WebP por contenido, hasta 10 MB (422 `archivo`). XML → parser FEL; PDF o imagen → IA. Si la IA falla o no está configurada, el borrador se crea igual, vacío, con `error_extraccion` visible (`ia_no_configurada`, `ia_fallo: <detalle>`) para capturar a mano. Sin archivo: `{ fuente: manual }`.
+    - `compras.editar_borrador` (`POST /compras/borradores/:id/editar`, `version`): reemplaza `datos` (mismo esquema que la extracción) y recalcula la propuesta.
+    - `compras.confirmar_borrador` (`POST /compras/borradores/:id/confirmar`, `version`, `Idempotency-Key`): `{ proveedor: { id } | { crear: <POST /proveedores> }, condicion, metodo?, caja_id?…, lineas: [{ indice, producto: { id } | { crear: <POST /productos> } | null, bodega_id?, unidades?, cuenta?, categoria? }] }`. Crea lo que se pidió crear (proveedor con `proveedores.crear`, productos con `productos.crear`; el actor debe tener esos permisos), arma la entrada de `compras.registrar` (serie y número, fecha, líneas con su total con IVA, cantidad, producto y bodega) y la registra. El borrador queda `confirmado` con `compra_id`.
+    - `compras.descartar_borrador` (`POST /compras/borradores/:id/descartar`, motivo).
+    - Lecturas: `GET /compras/borradores`, `GET /compras/borradores/:id`, `GET /compras/borradores/:id/archivo` (`compras.ver`).
+- **Duplicados.** La misma factura (NIT del emisor, serie y número, sin distinguir mayúsculas) ya registrada en `ledger.compras` de la empresa o en otro borrador confirmado: 409 `compra_duplicada` al cargar (si el archivo los trae) y al confirmar (el mismo 409 de `compras.registrar`).
+- **Esquema común** (`ExtraccionCompra`, el del parser XML y el de la IA): `emisor { nit, nombre }`, `receptor { nit, nombre }` (para avisar si la factura no es de la empresa: 422 al confirmar `receptor_distinto`, con `forzar_receptor: true` para seguir), `tipo_documento` (FACT, FCAM, FPEQ, NCRE…), `serie`, `numero`, `autorizacion` (UUID FEL), `fecha` (YYYY-MM-DD), `moneda`, `lineas: [{ codigo?, descripcion, cantidad, unidad?, precio_unitario, descuento, total, iva, bien_o_servicio }]`, `totales { total, iva }`. Montos como texto con 2 decimales (cantidad hasta 3). La IA agrega `confianza` (0 a 1) por campo y por línea. La salida de la IA se valida con el mismo esquema VineJS; si no valida: `ia_fallo: respuesta_invalida`.
+- **Parser XML FEL (SAT)**: determinístico, con `htmlparser2` (ya es dependencia; modo XML), sin dependencias nuevas. Lee `dte:GTDocumento/dte:SAT/dte:DTE/dte:DatosEmision`: `DatosGenerales` (Tipo, FechaHoraEmision, CodigoMoneda), `Emisor` (NITEmisor, NombreEmisor o NombreComercial), `Receptor` (IDReceptor, NombreReceptor), `Items/Item` (BienOServicio, Cantidad, UnidadMedida, Descripcion, PrecioUnitario, Precio, Descuento, Impuestos/Impuesto[NombreCorto=IVA]/MontoImpuesto, Total), `Totales` (GranTotal, TotalImpuestos) y `Certificacion/NumeroAutorizacion` (`Serie`, `Numero`, UUID). Un XML que no es un DTE: 422 `archivo` `xml_no_fel`.
+- **Coincidencia de productos** (por línea, en la propuesta): 1) `codigo` del proveedor contra `inventario.productos_codigos_proveedor` (`proveedor_id`, `codigo`, `producto_id`; se aprende al confirmar), 2) `codigo` contra el SKU, 3) nombre normalizado (minúsculas, sin tildes ni signos, espacios simples) igual al del producto. Sin coincidencia: propone crear el producto con SKU sugerido, `tipo` (`material`, o `equipo` si la línea es un bien con «router», «onu», «antena»… no: la propuesta es solo `material` por defecto y el usuario lo cambia) y la modalidad del tipo. Una línea de servicio (`S`) no propone producto: va a gasto.
+- **Proveedor**: por NIT (normalizado) en `ledger.proveedores` de la empresa; si no existe, propone crearlo con NIT y nombre del emisor.
+- **Cantidad con decimales**: `compras.registrar` acepta solo cantidades enteras (desvío A.3). Una línea con decimales que va a un producto: 422 al confirmar `lineas.N.cantidad` `cantidad_entera` (se corrige la unidad del producto, o la línea va a gasto).
+
+**IA configurable.**
+
+- `inventario.ia_configuracion`: `empresa_id` (null = global), `proveedor` (`privada` | `anthropic` | `deepseek` | `openai`), `modelo`, `url_base` (obligatoria en `privada`, endpoint compatible con OpenAI: Ollama, vLLM…), `clave_cifrada` (AES-256-GCM `v1` de `#shared/cifrado`), `activo`, `version`. Se usa la de la empresa y, si no hay, la global.
+- `inventario.configurar_ia` (`POST /inventario/ia/configuracion`; `admin`; global solo con alcance global): `{ empresa_id?, proveedor, modelo, url_base?, clave_api?, activo, version? }`. `clave_api` se escribe y nunca se lee: `GET /inventario/ia/configuracion` devuelve `clave_configurada: true|false`. En `audit.cambios` la clave va como `***`. Emite `inventario.ia_config_cambiada` (configuracion_id, empresa_id, campos[]; sin valores).
+- Interfaz única `ExtractorFactura.extraer({ contenido, tipo }) → { datos: ExtraccionCompra, confianza }` con un adaptador por proveedor, llamados con `fetch` directo (sin SDK): `anthropic` (`/v1/messages`, imagen o documento PDF en base64), `openai`, `deepseek` y `privada` (`/chat/completions` compatible con OpenAI, imagen en `image_url` data URL). El PDF va como documento a Anthropic; para los compatibles con OpenAI se extrae su texto con un lector mínimo propio (flujos `FlateDecode` con `zlib` de Node, operadores `Tj`/`TJ`), sin dependencias; un PDF escaneado sin texto: `ia_fallo: pdf_sin_texto` (subir la imagen). Tiempo máximo 60 s. En pruebas, un proveedor falso (`IA_EXTRACTOR=falso` solo en `NODE_ENV=test`); CI nunca llama a una API real.
+- El archivo se guarda en el almacén de los comprobantes (`inventario/compras/AAAA/MM/<uuid>.<ext>`) con SHA-256 y tamaño máximo.
+
+### D.6 El técnico, su bodega e Iris
+
+- **Bodega del técnico.** Es la bodega `tecnico` activa con `usuario_id` = el usuario de Argos (una por usuario y empresa, índice que ya existe). Desde Iris se identifica al técnico con `tecnico: { id_externo }` (el id del usuario de Argos, el mismo `usuario.id_externo` que Argos manda en el autologin hacia Iris y que Iris guarda en su vínculo) o `tecnico: { correo }` (el correo del usuario de Argos, sin distinguir mayúsculas, activo). `id_externo` tiene prioridad. Sin usuario: 422 `tecnico` `tecnico_no_encontrado`; sin bodega activa en la empresa: 422 `tecnico_sin_bodega`.
+- **`GET /inventario/mi-bodega`** (`inventario.ver`): la bodega del actor con `{ bodega, existencias[], unidades[] (disponibles y en reparación), traslados_pendientes[] (órdenes en tránsito hacia ella), kardex (últimos 50, con cursor en `GET /inventario/movimientos?bodega_id=`) }`. Con `?usuario_id=` o `?correo=` (o `?id_externo=`) responde la de otro técnico solo con alcance global (Iris, encargados); si no, 403. Sin bodega: 404 `sin_bodega`.
+- **Consumo y comodato de una orden de Iris salen por defecto de la bodega del técnico.** En `POST /inventario/consumos` y `POST /servicios/:id/equipos`, sin `bodega_id`, con `origen_tipo = iris_orden` y `tecnico`, la bodega es la del técnico. Con `bodega_id` explícita, manda la explícita (compatible con hoy). Sin ninguna: 422 `bodega_id` `required`. La modalidad de cada producto decide (D.3): Iris puede mandar todo lo instalado en un solo `POST /inventario/consumos` con `lineas[]` (consumibles, cobros y equipos en comodato). En comodato por serie se valida que la unidad esté en la bodega del técnico (409 `unidad_en_otra_bodega`).
+- **Recibir traslados desde Iris.** Iris lista con `GET /inventario/traslados?bodega_id=<la del técnico>&estado=en_transito` o en `traslados_pendientes` de `mi-bodega`, y recibe con `POST /inventario/traslados/:id/recibir` con `{ recibido_por: { id_externo } | { correo }, metodo_recepcion: 'firma_digital', firma: <PNG base64 del trazo de la app de campo>, lineas? }`, `Idempotency-Key: iris:recepcion:<orden_id>`. El usuario técnico «Iris» necesita `inventario.recibir_traslado` (y su alcance global de empresas ya le da el registro en nombre del técnico). Llegan a Iris por webhook `inventario.traslado_enviado` (aviso al técnico) e `inventario.traslado_recibido`.
+- Pedidos a Iris y al líder (contrato `iris.md`): permiso `inventario.recibir_traslado` para el usuario técnico «Iris»; mandar `tecnico` en consumos y comodatos; `lineas[]` en consumos; la firma en la recepción; suscribir los dos eventos. Quedan en `.claude/integration/a3.md`.
+
+### D.7 Permisos y eventos nuevos
+
+- Permisos: `inventario.crear_traslado`, `inventario.recibir_traslado`, `inventario.cancelar_traslado`, `inventario.configurar`, `inventario.configurar_ia`, `tipos_producto.crear`, `tipos_producto.editar`, `tipos_producto.desactivar`, `productos.crear_lote`, `compras.cargar_borrador`, `compras.editar_borrador`, `compras.confirmar_borrador`, `compras.descartar_borrador`. Roles: `admin` todo; `contabilidad` todo salvo `inventario.configurar` e `inventario.configurar_ia`; `tecnico` `crear_traslado`, `recibir_traslado`, `cancelar_traslado`.
+- Eventos: `inventario.traslado_enviado`, `inventario.traslado_recibido`, `inventario.traslado_cancelado`, `inventario.ia_config_cambiada` (en `contratos/eventos.md` y el catálogo de `CLAUDE.md`).
+
+### D.8 Lo contable (para el auditor)
+
+Asientos nuevos: **ninguno con cuentas nuevas**.
+
+| Operación | Kardex | Asiento |
+| --- | --- | --- |
+| Enviar, recibir, devolver faltante, cancelar una orden | pares `traslado` con `origen_tipo = orden_traslado` | Ninguno (todo en `1.1.14`) |
+| Consumo `consumible_gasto` | `consumo` | `cuenta_consumo` (5.2.07) / 1.1.14 (igual que hoy) |
+| Consumo `consumible_cobro` | `venta` (fase C, `factura_linea_id`) | Costo: `5.6.01 / 1.1.14`, diario VEN. Ingreso: el de todo cargo único `CxC (1.1.03) / ingreso del concepto + IVA débito` |
+| Consumo `comodato` | `asignacion_comodato` | `1.2.01.NN / 1.1.14` + alta del activo (igual que hoy) |
+| Lote con entrada | `saldo_inicial` | `1.1.14 / 2.9.01` |
+| Confirmar borrador | `entrada_compra` | El de `compras.registrar` (línea `bien` con producto a `1.1.14`) |
+
+Checks nuevos propuestos para `verificar_libro.ts`:
+
+- **a.** Todo `traslado_id` suma 0 en cantidad y en `costo_total`, y no tiene `asiento_id`.
+- **b.** Por empresa y producto, el saldo de la bodega de tránsito (cantidad y valor) = la suma de las líneas de las órdenes `en_transito` (`cantidad`, `costo_total`); la bodega de tránsito queda en 0 cuando no hay órdenes en tránsito.
+- **c.** Cada unidad `en_transito` está en la bodega de tránsito de su empresa y en una orden `en_transito` con `recibida IS NULL`; ninguna otra unidad está en esa bodega.
+- **d.** Cada movimiento con `origen_tipo = orden_traslado` cita una orden de su empresa cuyos origen o destino (o tránsito) son su bodega.
+- **e.** Cada borrador `confirmado` tiene su `compra_id`, y cada consumo `consumible_cobro` (movimiento `venta` con `origen_externo` o sin él) tiene su factura vigente o su reverso (ya cubierto por los checks de la fase C).
+
+Lo demás (§8.1 a §8.5) no cambia y sigue verificándose igual.
