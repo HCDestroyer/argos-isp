@@ -23,6 +23,7 @@ import {
     Existencia,
     MovimientoInventario,
     Producto,
+    ProductosLote,
     TrasladoInventario,
     Unidad,
     UnidadConHistorial,
@@ -37,9 +38,11 @@ import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comoda
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
 import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
 import { Prohibido } from '#shared/errores'
+import { exigirPermiso } from '#inventario/acceso_http'
 import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
+import CrearProductosLote from '#inventario/actions/crear_productos_lote'
 import EditarProducto from '#inventario/actions/editar_producto'
 import DesactivarProducto from '#inventario/actions/desactivar_producto'
 import CrearBodega from '#inventario/actions/crear_bodega'
@@ -108,6 +111,26 @@ const productos: Ruta[] = [
             '409 sku_duplicado. clase_activo solo con seguimiento serie (por defecto equipo_red). cuenta_costo y cuenta_consumo: cuentas de gasto (por defecto 5.6.01 y 5.2.07).',
         respuesta: { status: 201, descripcion: 'Producto creado', esquema: Producto },
         handler: (ctx, { cuerpo }) => new CrearProducto().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/productos/lote',
+        operacion: 'productosCrearLote',
+        resumen: 'Crear productos por lotes, todo o nada (con su saldo inicial opcional)',
+        etiqueta: 'inventario',
+        permiso: 'productos.crear_lote',
+        cuerpo: v.crearProductosLoteValidator,
+        idempotente: 'obligatoria',
+        descripcion:
+            'Fase D: hasta 500 productos. Primero valida todas las filas y responde 422 con todos los errors[] (productos.<i>.campo: sku_duplicado en el lote o en la empresa, tipo, modalidad, bodega, series); luego crea todo en una transacción. entrada (opcional) = saldo inicial 1.1.14 / 2.9.01 en una bodega (por cantidad: cantidad y costo_unitario o costo_total; por serie: unidades con su costo) y exige además inventario.cargar_saldo_inicial. Un error al crear deshace todo y sale con productos.<i>.',
+        respuesta: { status: 201, descripcion: 'Productos creados', esquema: ProductosLote },
+        handler: async (ctx, { cuerpo }) => {
+            // la entrada es un saldo inicial: exige también su permiso
+            if (cuerpo.productos.some((p) => p.entrada)) {
+                await exigirPermiso(ctx, 'inventario.cargar_saldo_inicial')
+            }
+            return new CrearProductosLote().execute(cuerpo, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'post',

@@ -1,5 +1,9 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { exigirAcceso } from '#billing/empresa'
+import { permisosDeUsuario } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Prohibido } from '#shared/errores'
+import type { Permiso } from '#core/permisos'
 import { exigirOperarBodega, verBodega, type AccesoBodegas } from '#inventario/bodegas'
 
 /**
@@ -16,4 +20,17 @@ export async function exigirBodega(ctx: HttpContext, bodegaId: number, destino =
     const bodega = await verBodega(bodegaId)
     exigirAcceso(ctx, { empresa_id: bodega.empresa_id })
     exigirOperarBodega(accesoBodegas(ctx), destino ? { ...bodega, tipo: 'bodega' } : bodega)
+}
+
+/**
+ * 403 si el usuario no tiene además `permiso` (fase D: una operación que hace dos cosas, como el lote de
+ * productos con su saldo inicial o el borrador de compra que crea productos y proveedores).
+ */
+export async function exigirPermiso(ctx: HttpContext, permiso: Permiso): Promise<void> {
+    const usuario = ctx.auth.user
+    if (!usuario) throw new Prohibido()
+    const permisos = await permisosDeUsuario(usuario.id, alcancesDelToken(ctx))
+    if (!permisos.includes(permiso)) {
+        throw new Prohibido(`Esta operación necesita además el permiso ${permiso}`)
+    }
 }

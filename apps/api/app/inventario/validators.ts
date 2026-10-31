@@ -133,6 +133,52 @@ export const crearProductoValidator = vine.compile(
     }),
 )
 
+/** Un producto del lote (fase D, D.4): lo de `POST /productos` más su saldo inicial opcional. */
+const productoDelLote = () =>
+    vine.object({
+        sku: vine.string().trim().minLength(1).maxLength(60),
+        nombre: vine.string().trim().minLength(2).maxLength(200),
+        tipo: codigoTipo(),
+        seguimiento: vine.enum(SEGUIMIENTOS).nullable().optional(),
+        ...datosProducto,
+        entrada: vine
+            .object({
+                bodega_id: idEntidad(),
+                cantidad: cantidad().nullable().optional().meta({ description: 'Por cantidad' }),
+                costo_unitario: costoUnitario().nullable().optional(),
+                costo_total: dinero().nullable().optional(),
+                unidades: vine
+                    .array(
+                        vine.object({
+                            serie: texto(100).nullable().optional(),
+                            mac: texto(30).nullable().optional(),
+                            costo: dinero(),
+                        }),
+                    )
+                    .maxLength(500)
+                    .nullable()
+                    .optional()
+                    .meta({ description: 'Por serie: cada unidad con su costo' }),
+                fecha: fechaIso()
+                    .nullable()
+                    .optional()
+                    .meta({ description: 'Fecha del saldo (por defecto hoy)' }),
+            })
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Saldo inicial en una bodega (1.1.14 / 2.9.01). Exige además inventario.cargar_saldo_inicial',
+            }),
+    })
+
+export const crearProductosLoteValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        productos: vine.array(productoDelLote()).minLength(1).maxLength(500),
+    }),
+)
+
 export const editarProductoValidator = vine.compile(
     vine.object({
         version: versionEsperada(),

@@ -7804,6 +7804,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/productos/lote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Crear productos por lotes, todo o nada (con su saldo inicial opcional)
+         * @description Fase D: hasta 500 productos. Primero valida todas las filas y responde 422 con todos los errors[] (productos.<i>.campo: sku_duplicado en el lote o en la empresa, tipo, modalidad, bodega, series); luego crea todo en una transacción. entrada (opcional) = saldo inicial 1.1.14 / 2.9.01 en una bodega (por cantidad: cantidad y costo_unitario o costo_total; por serie: unidades con su costo) y exige además inventario.cargar_saldo_inicial. Un error al crear deshace todo y sale con productos.<i>.
+         */
+        post: operations["productosCrearLote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/promesas": {
         parameters: {
             query?: never;
@@ -16357,6 +16377,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ProductosLote: {
+            data: components["schemas"]["Producto"][];
+            /** @description Los saldos iniciales de las entradas */
+            movimientos: components["schemas"]["MovimientoInventario"][];
         };
         ProgramaLealtad: {
             id: number;
@@ -49449,6 +49474,144 @@ export interface operations {
                 };
             };
             /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    productosCrearLote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    productos: {
+                        sku: string;
+                        nombre: string;
+                        /**
+                         * @description Código del tipo de producto (GET /inventario/tipos-producto)
+                         * @example material
+                         */
+                        tipo: string;
+                        seguimiento?: ("cantidad" | "serie") | null;
+                        /** @description comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo */
+                        modalidad?: ("comodato" | "consumible_gasto" | "consumible_cobro") | null;
+                        /** @description unidad (por defecto), metro, caja… */
+                        unidad?: string | null;
+                        /** @description Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red) */
+                        clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                        /** @description Concepto de cargo único con que se vende (fase C) */
+                        concepto_cargo_id?: number | null;
+                        /** @description Cuenta de costo de ventas (gasto); por defecto 5.6.01 */
+                        cuenta_costo?: string | null;
+                        /** @description Cuenta del consumo interno (gasto); por defecto 5.2.07 */
+                        cuenta_consumo?: string | null;
+                        /** @description Existencia total bajo la cual se avisa (inventario.existencia_minima) */
+                        existencia_minima?: string | null;
+                        /**
+                         * @description Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)
+                         * @example 450.00
+                         */
+                        precio_venta?: string | null;
+                        /** @description Saldo inicial en una bodega (1.1.14 / 2.9.01). Exige además inventario.cargar_saldo_inicial */
+                        entrada?: {
+                            bodega_id: number;
+                            /**
+                             * @description Por cantidad
+                             * @example 12.5
+                             */
+                            cantidad?: string | null;
+                            /**
+                             * @description Costo unitario con hasta 6 decimales, como string
+                             * @example 5.25
+                             */
+                            costo_unitario?: string | null;
+                            /**
+                             * @description Monto con hasta 2 decimales, como string
+                             * @example 150.00
+                             */
+                            costo_total?: string | null;
+                            /** @description Por serie: cada unidad con su costo */
+                            unidades?: {
+                                serie?: string | null;
+                                mac?: string | null;
+                                /**
+                                 * @description Monto con hasta 2 decimales, como string
+                                 * @example 150.00
+                                 */
+                                costo: string;
+                            }[] | null;
+                            /**
+                             * Format: date
+                             * @description Fecha del saldo (por defecto hoy)
+                             */
+                            fecha?: string | null;
+                        } | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Productos creados */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductosLote"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso productos.crear_lote; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
             409: {
                 headers: {
                     [name: string]: unknown;

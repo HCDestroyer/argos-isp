@@ -446,3 +446,11 @@ export const ConsumoLote = definirEsquema(
         comodatos: { ...lista(Unidad), description: 'Las unidades prestadas en comodato' },
     }),
 )
+
+export const ProductosLote = definirEsquema(
+    'ProductosLote',
+    objeto({
+        data: lista(Producto),
+        movimientos: { ...lista(MovimientoInventario), description: 'Los saldos iniciales de las entradas' },
+    }),
+)

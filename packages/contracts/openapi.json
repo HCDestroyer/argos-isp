@@ -55724,6 +55724,360 @@
         "x-implementado": true
       }
     },
+    "/api/v1/productos/lote": {
+      "post": {
+        "operationId": "productosCrearLote",
+        "summary": "Crear productos por lotes, todo o nada (con su saldo inicial opcional)",
+        "description": "Fase D: hasta 500 productos. Primero valida todas las filas y responde 422 con todos los errors[] (productos.<i>.campo: sku_duplicado en el lote o en la empresa, tipo, modalidad, bodega, series); luego crea todo en una transacción. entrada (opcional) = saldo inicial 1.1.14 / 2.9.01 en una bodega (por cantidad: cantidad y costo_unitario o costo_total; por serie: unidades con su costo) y exige además inventario.cargar_saldo_inicial. Un error al crear deshace todo y sale con productos.<i>.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "productos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sku": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "nombre": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 200
+                        },
+                        "tipo": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9_]{2,40}$",
+                          "description": "Código del tipo de producto (GET /inventario/tipos-producto)",
+                          "examples": [
+                            "material"
+                          ]
+                        },
+                        "seguimiento": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "cantidad",
+                                "serie"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modalidad": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "comodato",
+                                "consumible_gasto",
+                                "consumible_cobro"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo"
+                        },
+                        "unidad": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 30,
+                          "description": "unidad (por defecto), metro, caja…"
+                        },
+                        "clase_activo": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "equipo_red",
+                                "computacion",
+                                "mobiliario",
+                                "vehiculos",
+                                "herramientas",
+                                "edificios",
+                                "otros"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red)"
+                        },
+                        "concepto_cargo_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Concepto de cargo único con que se vende (fase C)"
+                        },
+                        "cuenta_costo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+(\\.\\d+)*$",
+                          "maxLength": 30,
+                          "description": "Cuenta de costo de ventas (gasto); por defecto 5.6.01"
+                        },
+                        "cuenta_consumo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+(\\.\\d+)*$",
+                          "maxLength": 30,
+                          "description": "Cuenta del consumo interno (gasto); por defecto 5.2.07"
+                        },
+                        "existencia_minima": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                          "description": "Existencia total bajo la cual se avisa (inventario.existencia_minima)"
+                        },
+                        "precio_venta": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)",
+                          "examples": [
+                            "450.00"
+                          ]
+                        },
+                        "entrada": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "bodega_id": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "cantidad": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                              "description": "Por cantidad",
+                              "examples": [
+                                "12.5"
+                              ]
+                            },
+                            "costo_unitario": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "pattern": "^\\d{1,12}(\\.\\d{1,6})?$",
+                              "description": "Costo unitario con hasta 6 decimales, como string",
+                              "examples": [
+                                "5.25"
+                              ]
+                            },
+                            "costo_total": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                              "description": "Monto con hasta 2 decimales, como string",
+                              "examples": [
+                                "150.00"
+                              ]
+                            },
+                            "unidades": {
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "serie": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "maxLength": 100
+                                  },
+                                  "mac": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "maxLength": 30
+                                  },
+                                  "costo": {
+                                    "type": "string",
+                                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                    "description": "Monto con hasta 2 decimales, como string",
+                                    "examples": [
+                                      "150.00"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "costo"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 500,
+                              "description": "Por serie: cada unidad con su costo"
+                            },
+                            "fecha": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                              "format": "date",
+                              "description": "Fecha del saldo (por defecto hoy)"
+                            }
+                          },
+                          "required": [
+                            "bodega_id"
+                          ],
+                          "additionalProperties": false,
+                          "description": "Saldo inicial en una bodega (1.1.14 / 2.9.01). Exige además inventario.cargar_saldo_inicial"
+                        }
+                      },
+                      "required": [
+                        "sku",
+                        "nombre",
+                        "tipo"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "productos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Productos creados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductosLote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso productos.crear_lote; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "productos.crear_lote",
+        "x-implementado": true
+      }
+    },
     "/api/v1/promesas": {
       "get": {
         "operationId": "promesasListar",
@@ -98802,6 +99156,28 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ProductosLote": {
+        "type": "object",
+        "required": [
+          "data",
+          "movimientos"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Producto"
+            }
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoInventario"
+            },
+            "description": "Los saldos iniciales de las entradas"
           }
         }
       },

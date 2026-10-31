@@ -414,7 +414,7 @@ Costo de lo recibido por cantidad: `costo_recibido = redondear(cantidad_recibida
 
 - **Todo o nada.** Primero se valida todo (formato, SKU repetido en el lote o en la empresa, tipo, modalidad, bodega, series) y se responde 422 con todos los `errors[]` (`productos.<i>.campo`); después se crea en una transacción y el primer error de negocio (409) se devuelve con su `productos.<i>` en `detail` y nada queda.
 - **Entrada opcional por fila:** `entrada: { bodega_id, cantidad, costo_unitario, fecha? }` (cantidad) o `entrada: { bodega_id, unidades: [{ serie?, mac?, costo }], fecha? }` (serie). **Vía contable: saldo inicial** (`inventario.cargar_saldo_inicial`, `1.1.14 / 2.9.01 Saldos de apertura`). Por qué: el producto es nuevo y no tiene movimientos, que es exactamente el caso del saldo inicial (existencias que la empresa ya tenía al empezar a usar el sistema). Un ajuste pondría el valor en `4.2.04 Sobrantes` (un ingreso) como si un conteo hubiera encontrado mercadería de más, y lo comprado a un proveedor entra por una compra (D.5) con su IVA y su cuenta por pagar. La entrada exige además `inventario.cargar_saldo_inicial` (403 si falta).
-- Responde `{ data: Producto[], movimientos: MovimientoInventario[] }`.
+- Responde `ProductosLote { data: Producto[], movimientos: MovimientoInventario[] }` (201). Sin `Idempotency-Key`: 400 `idempotency_key_requerida`. La validación previa no ve las series que ya existen en la empresa: esas fallan al crear (422 `serie_duplicada` con `productos.<i>.unidad…`) y deshacen todo igual.
 
 ### D.5 Factura de compra desde un archivo (borrador)
 
