@@ -42,6 +42,9 @@ import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
  *   compra por menos que la factura).
  * - **H76 · media**: el saldo inicial (y el lote con entrada, D.4) entra contra 2.9.01 después del
  *   cierre de la apertura: inventario contra patrimonio sin compra, sin IVA ni proveedor.
+ * - **H78 · media** (sobre el arreglo de H75 en 5c17a24): la tolerancia de Q0.01 por línea deja confirmar
+ *   una factura cuyas líneas no suman su total; la compra (y la CxP) queda por Σ líneas. En FEL el
+ *   GranTotal es exactamente Σ Total de los ítems: la diferencia solo puede ser una lectura mal hecha.
  * - **H77 · baja**: una bodega origen con todo en tránsito se desactiva (su saldo es 0) y el faltante o
  *   la cancelación devuelven la existencia a una bodega inactiva.
  */
@@ -659,6 +662,32 @@ test.group('Auditor contable · inventario fase D', (group) => {
         )
         // la IA (o el usuario) perdió la última línea: totales sigue en 392.00
         const datos = { ...b.datos, lineas: b.datos.lineas.slice(0, 2) }
+        const editado = await estado(
+            client
+                .post(`/api/v1/compras/borradores/${b.id}/editar`)
+                .bearerToken(e.token)
+                .headers({ 'X-Empresa-Id': String(e.B) })
+                .json({ version: b.version, datos }),
+            200,
+        )
+        const r = confirmar(client, e, editado.body(), { proveedor: { crear: { nombre: 'Distribuidora' } } })
+        const status = await statusDe(r)
+        assert.deepEqual(await invariantes([e.B]), [])
+        assert.equal(status, 422, 'totales_descuadrados')
+    })
+
+    test('H78 · media: la tolerancia de H75 (Q0.01 por línea) registra la compra por Σ líneas (Q392.00) y no por el total de la factura (Q392.03): la CxP no es la de la factura', async ({
+        client,
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const b = await cargarXml(
+            client,
+            e,
+            xmlFel({ nit: await nitUnico(), receptor: await nitEmpresa(e.B), ...documento() }),
+        )
+        // en FEL el GranTotal es exactamente Σ Total de los ítems: una diferencia es una lectura mal hecha
+        const datos = { ...b.datos, totales: { ...b.datos.totales, total: '392.03' } }
         const editado = await estado(
             client
                 .post(`/api/v1/compras/borradores/${b.id}/editar`)

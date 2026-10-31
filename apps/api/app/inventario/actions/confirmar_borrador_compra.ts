@@ -142,18 +142,21 @@ export default class ConfirmarBorradorCompra extends DomainAction<EntradaConfirm
                 [{ field: 'datos.moneda', message: `La factura está en ${datos.moneda}`, rule: 'moneda' }],
             )
         }
-        const suma = datos.lineas.reduce((s, l) => s.plus(dec(l.total)), dec('0'))
-        const diferencia = suma.minus(dec(datos.totales.total)).abs()
-        if (diferencia.gt(dec('0.01').times(datos.lineas.length))) {
+        // H78 (auditor): tolerancia 0. En FEL el GranTotal es exactamente Σ Total de los ítems: cualquier
+        // diferencia es una lectura mal hecha y se corrige en la línea del borrador
+        const suma = datos.lineas.reduce((acc, l) => acc.plus(dec(l.total)), dec('0'))
+        const totalFactura = dec(datos.totales.total)
+        if (!suma.eq(totalFactura)) {
+            const diferencia = totalFactura.minus(suma)
             throw new Problema(
                 422,
                 'totales_descuadrados',
                 'Totales descuadrados',
-                `Las líneas suman ${suma.toFixed(2)} y la factura dice ${dec(datos.totales.total).toFixed(2)}: revisa las líneas`,
+                `Las líneas suman ${suma.toFixed(2)} y la factura dice ${totalFactura.toFixed(2)} (diferencia ${diferencia.toFixed(2)}): corrige la línea en el borrador`,
                 [
                     {
                         field: 'datos.totales.total',
-                        message: 'Σ líneas ≠ total de la factura',
+                        message: `Σ líneas = ${suma.toFixed(2)}; total de la factura = ${totalFactura.toFixed(2)}; diferencia = ${diferencia.toFixed(2)}`,
                         rule: 'totales_descuadrados',
                     },
                 ],
