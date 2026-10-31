@@ -170,6 +170,14 @@ jobs:
           shellcheck infra/ci/probar-red-compose.sh
           infra/ci/probar-red-compose.sh
 
+      # argosisp actualizar/levantar/revertir/reparar-red con la red de compose cambiada en el .env
+      # (1.5.0: el respaldo previo tropezaba con la red vieja y dejaba ArgosIsp caído). CLI real con
+      # un compose de juguete (alpine y node:22-alpine), sin imágenes de ArgosIsp
+      - name: argosisp con la red de compose cambiada
+        run: |
+          shellcheck -x infra/ci/probar-actualizar-red.sh
+          infra/ci/probar-actualizar-red.sh
+
       # Scripts de RouterOS (infra/mikrotik): lab.rsc y plantillas armados desde sus piezas, variables,
       # escape de secretos y llaves balanceadas. El /import real se prueba en CHR (README de mikrotik).
       - name: Plantillas de RouterOS (armado y render)
