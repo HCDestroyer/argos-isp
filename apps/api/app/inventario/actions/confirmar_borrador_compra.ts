@@ -5,6 +5,7 @@ import {
     Conflicto,
     ConflictoVersion,
     NoEncontrado,
+    Problema,
     ValidacionFallida,
     type ErrorCampo,
 } from '#shared/errores'
@@ -67,6 +68,25 @@ export interface EntradaConfirmarBorrador {
     lineas?: LineaConfirmacion[] | null
 }
 
+/** H74 (auditor): el proveedor de la compra es el emisor de la factura; si no, 422 `proveedor_distinto`. */
+function exigirEmisor(nitProveedor: string, nitEmisor: string, campo: string): void {
+    if (nitLimpio(nitProveedor) !== nitLimpio(nitEmisor)) {
+        throw new Problema(
+            422,
+            'proveedor_distinto',
+            'Proveedor distinto del emisor',
+            `El proveedor tiene NIT ${nitLimpio(nitProveedor)} y la factura la emitió el NIT ${nitLimpio(nitEmisor)}`,
+            [
+                {
+                    field: campo,
+                    message: 'El proveedor debe ser el emisor de la factura',
+                    rule: 'proveedor_distinto',
+                },
+            ],
+        )
+    }
+}
+
 export default class ConfirmarBorradorCompra extends DomainAction<EntradaConfirmarBorrador, BorradorVista> {
     readonly nombre = 'compras.confirmar_borrador'
 
@@ -112,10 +132,42 @@ export default class ConfirmarBorradorCompra extends DomainAction<EntradaConfirm
                 },
             ])
         }
+        // H75 (auditor): solo quetzales, y las líneas deben sumar el total de la factura
+        if (datos.moneda !== 'GTQ') {
+            throw new Problema(
+                422,
+                'moneda',
+                'Moneda distinta de quetzales',
+                `La factura está en ${datos.moneda}: solo se registran compras en GTQ`,
+                [{ field: 'datos.moneda', message: `La factura está en ${datos.moneda}`, rule: 'moneda' }],
+            )
+        }
+        const suma = datos.lineas.reduce((s, l) => s.plus(dec(l.total)), dec('0'))
+        const diferencia = suma.minus(dec(datos.totales.total)).abs()
+        if (diferencia.gt(dec('0.01').times(datos.lineas.length))) {
+            throw new Problema(
+                422,
+                'totales_descuadrados',
+                'Totales descuadrados',
+                `Las líneas suman ${suma.toFixed(2)} y la factura dice ${dec(datos.totales.total).toFixed(2)}: revisa las líneas`,
+                [
+                    {
+                        field: 'datos.totales.total',
+                        message: 'Σ líneas ≠ total de la factura',
+                        rule: 'totales_descuadrados',
+                    },
+                ],
+            )
+        }
         await exigirFacturaNueva(
             t.trx,
             empresaId,
-            { nit: datos.emisor.nit, serie: datos.serie, numero: datos.numero },
+            {
+                nit: datos.emisor.nit,
+                serie: datos.serie,
+                numero: datos.numero,
+                autorizacion: datos.autorizacion,
+            },
             input.id,
         )
 
@@ -125,13 +177,17 @@ export default class ConfirmarBorradorCompra extends DomainAction<EntradaConfirm
             const proveedor = await t.trx
                 .from('ledger.proveedores')
                 .where({ id: input.proveedor.id, empresa_id: empresaId })
-                .select('id')
+                .select('id', 'nit')
                 .first()
             if (!proveedor) {
                 throw new NoEncontrado(`El proveedor ${input.proveedor.id} no existe en esta empresa`)
             }
+            exigirEmisor(String(proveedor.nit), datos.emisor.nit, 'proveedor.id')
             proveedorId = Number(proveedor.id)
         } else if (input.proveedor.crear) {
+            if (input.proveedor.crear.nit) {
+                exigirEmisor(input.proveedor.crear.nit, datos.emisor.nit, 'proveedor.crear.nit')
+            }
             const creado = await new CrearProveedor().execute(
                 {
                     ...input.proveedor.crear,

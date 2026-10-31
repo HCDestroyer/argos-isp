@@ -4467,7 +4467,7 @@ export interface paths {
         put?: never;
         /**
          * Recibir una orden de traslado (firma digital, firma en papel o aceptación), con faltantes
-         * @description Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, o el archivo `firma` en multipart/form-data con `lineas` como texto JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.
+         * @description Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.
          */
         post: operations["inventarioRecibirTraslado"];
         delete?: never;
@@ -11143,10 +11143,10 @@ export interface components {
             empresa_id: number;
             nombre: string;
             /**
-             * @description bodega o tecnico. La bodega virtual transito (fase D) solo sale con ?tipo=transito; el enum se amplía cuando el panel la adopte
+             * @description bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)
              * @enum {string}
              */
-            tipo: "bodega" | "tecnico";
+            tipo: "bodega" | "tecnico" | "transito";
             usuario_id: number | null;
             usuario_nombre: string | null;
             zona_id: number | null;
@@ -11234,7 +11234,10 @@ export interface components {
                 } | null;
                 lineas: {
                     indice: number;
-                    /** @enum {string|null} */
+                    /**
+                     * @description Cómo se encontró el producto; null sin coincidencia
+                     * @enum {string|null}
+                     */
                     coincidencia: "codigo_proveedor" | "sku" | "nombre" | null;
                     producto_id: number | null;
                     producto_sku: string | null;
@@ -14027,7 +14030,7 @@ export interface components {
              * @description La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true
              * @enum {string}
              */
-            bodega_tipo: "bodega" | "tecnico";
+            bodega_tipo: "bodega" | "tecnico" | "transito";
             /** @description Cantidad con 3 decimales */
             cantidad: string;
             valor: components["schemas"]["Dinero"];
@@ -14039,10 +14042,10 @@ export interface components {
             existencia_minima: string | null;
             bajo_minimo: boolean;
             /**
-             * @description Modalidad del producto (fase D, contrato Iris 0.5.0); opcional en el esquema hasta que el panel la adopte
+             * @description Modalidad del producto (fase D, contrato Iris 0.5.0)
              * @enum {string}
              */
-            modalidad?: "comodato" | "consumible_gasto" | "consumible_cobro";
+            modalidad: "comodato" | "consumible_gasto" | "consumible_cobro";
         };
         ExtraccionCompra: {
             emisor: {
@@ -16739,20 +16742,17 @@ export interface components {
             sku: string;
             nombre: string;
             unidad: string;
-            /**
-             * @description Código del tipo de producto. Fase D: el catálogo es editable (GET /inventario/tipos-producto) y puede traer el código de un tipo de la empresa; el enum de las semillas se quita cuando el panel adopte el catálogo
-             * @enum {string}
-             */
-            tipo: "equipo" | "material" | "otro";
-            tipo_id?: number;
-            tipo_nombre?: string;
+            /** @description Código del tipo de producto (catálogo editable, GET /inventario/tipos-producto) */
+            tipo: string;
+            tipo_id: number;
+            tipo_nombre: string;
             /** @enum {string} */
             seguimiento: "cantidad" | "serie";
             /**
              * @description Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)
              * @enum {string}
              */
-            modalidad?: "comodato" | "consumible_gasto" | "consumible_cobro";
+            modalidad: "comodato" | "consumible_gasto" | "consumible_cobro";
             clase_activo: string | null;
             concepto_cargo_id: number | null;
             /** @description null = 5.6.01 */
@@ -37374,7 +37374,7 @@ export interface operations {
                         correo?: string | null;
                     } | null;
                     observaciones?: string | null;
-                    /** @description Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). En multipart/form-data (panel) va como archivo `firma`, y `lineas` y `recibido_por` como texto JSON */
+                    /** @description Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). Solo JSON (panel e Iris) */
                     firma?: {
                         /** @description PNG del trazo en base64 (con o sin data:image/png;base64,) */
                         png_base64: string;

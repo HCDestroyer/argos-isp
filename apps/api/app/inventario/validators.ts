@@ -597,7 +597,7 @@ export const recibirTrasladoValidator = vine.compile(
             .optional()
             .meta({
                 description:
-                    'Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). En multipart/form-data (panel) va como archivo `firma`, y `lineas` y `recibido_por` como texto JSON',
+                    'Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). Solo JSON (panel e Iris)',
             }),
         recibido_en: vine.string().trim().maxLength(40).nullable().optional().meta({
             description:

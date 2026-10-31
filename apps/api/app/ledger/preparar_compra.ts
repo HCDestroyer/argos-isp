@@ -190,6 +190,26 @@ export async function prepararCompra(
         )
     }
 
+    // H74 (auditor, inventario fase D): la misma autorización FEL (UUID) no entra dos veces, aunque el
+    // proveedor o el número se hayan capturado distinto; una compra anulada no cuenta
+    const autorizacion = (input.autorizacion ?? '').trim().toUpperCase()
+    if (autorizacion) {
+        const misma = await t.trx
+            .from('ledger.compras as c')
+            .where('c.empresa_id', empresaId)
+            .whereRaw('upper(c.autorizacion) = ?', [autorizacion])
+            .whereNotExists((q) => q.from('ledger.compras_anulaciones as a').whereRaw('a.compra_id = c.id'))
+            .select('c.id')
+            .first()
+        if (misma) {
+            throw new Conflicto(
+                `La autorización FEL ${autorizacion} ya está registrada (compra ${misma.id})`,
+                'compra_duplicada',
+                'Compra duplicada',
+            )
+        }
+    }
+
     // referencia (NCRE obligatoria; NDEB opcional): compra vigente del mismo proveedor
     interface Referencia {
         id: number

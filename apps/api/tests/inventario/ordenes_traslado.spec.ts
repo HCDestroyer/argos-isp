@@ -504,7 +504,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
         await afirmarCuadre(assert, e.B)
     })
 
-    test('aceptación sin firma solo si la empresa no la exige; firma como archivo en multipart', async ({
+    test('aceptación sin firma solo si la empresa no la exige; firma en JSON con líneas completas', async ({
         client,
         assert,
     }) => {
@@ -515,15 +515,17 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
             lineas: [{ producto_id: cable.id, cantidad: '4' }],
         }
         const primera = await enviar(client, e.token, cabecera, cuerpo)
-        // multipart: firma como archivo y lineas como texto JSON
+        // la firma en JSON y una línea recibida completa
         const firma = pngFirma(200, 80)
         const multipart = await estado(
             client
                 .post(`/api/v1/inventario/traslados/${primera.id}/recibir`)
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
-                .field('lineas', JSON.stringify([{ linea_id: primera.lineas[0].id, cantidad_recibida: '4' }]))
-                .file('firma', firma, { filename: 'firma.png' }),
+                .json({
+                    firma: firmaIris(firma),
+                    lineas: [{ linea_id: primera.lineas[0].id, cantidad_recibida: '4' }],
+                }),
             200,
         )
         assert.equal(multipart.body().metodo_recepcion, 'firma_digital')
