@@ -1,4 +1,4 @@
-Versión: 0.4.0 (borrador) · Iris ↔ ArgosISP
+Versión: 0.5.0 (borrador) · Iris ↔ ArgosISP
 
 # Contrato de integración Iris ↔ ArgosISP (copia de ArgosISP)
 
@@ -27,7 +27,7 @@ Versión: 0.4.0 (borrador) · Iris ↔ ArgosISP
 Iris guarda, cifrado y de solo escritura, un token de Argos `atk_…` del usuario técnico «Iris» (rol creado por el seed de Argos), con estos permisos:
 
 - **Lectura:** `clientes.ver`, `clientes.estado_cuenta`, `servicios.ver`, `planes.ver`, `routers.ver`, `zonas.ver`, `ip.resolver`, `inventario.ver`.
-- **Instalación y retiro:** `servicios.activar_instalacion` (pedido A1), `servicios.retirar`, `inventario.asignar_comodato`, `inventario.devolver_comodato`, `inventario.declarar_perdida_comodato`, `inventario.consumir` y `facturas.emitir_cargo_unico`.
+- **Instalación y retiro:** `servicios.activar_instalacion` (pedido A1), `servicios.retirar`, `inventario.asignar_comodato`, `inventario.devolver_comodato`, `inventario.declarar_perdida_comodato`, `inventario.consumir`, `inventario.recibir_traslado` (0.5.0) y `facturas.emitir_cargo_unico`.
 - **Comercial:** `clientes.crear` y `servicios.crear`.
 - **Autologin:** `sso.emitir`.
 
@@ -87,7 +87,8 @@ Alternativa al enlace de §1.3, que sigue vigente: el admin conecta Iris con Arg
 | Planes para cotizar | `GET /api/v1/planes?activo=true&router_id=<router sugerido>` (planes globales de la instalación más los implementados en ese router; `precio` como string decimal; sin `empresa_id`) |
 | Routers, zonas y coordenadas para factibilidad | `GET /api/v1/routers` (cada router trae `coordenadas`: `"lat,lng"` en grados decimales, sin espacios, o `null` si no está ubicado; el mismo formato que `coordenadas` de clientes y servicios) y `GET /api/v1/zonas` |
 | Equipos en comodato de un servicio | `GET /api/v1/servicios/:id/equipos` |
-| Existencias de la bodega del técnico | `GET /api/v1/inventario/existencias?bodega_id=` |
+| Bodega y kardex del técnico (0.5.0) | `GET /api/v1/inventario/mi-bodega?id_externo=<usuario de Argos>` (o `?correo=`): `{ bodega, existencias[], unidades[], traslados_pendientes[], kardex }` (últimos 50; más con `GET /api/v1/inventario/movimientos?bodega_id=` y cursor). Sin bodega activa: `404 sin_bodega`. `GET /api/v1/inventario/existencias?bodega_id=` sigue igual |
+| Ubicación y contacto en sitio (0.5.0) | `Cliente.referencia`; `Servicio.referencia`, `Servicio.contacto_nombre` y `Servicio.contacto_telefono` (null si no hay) |
 
 ### 2.2 Instantánea en Iris
 
@@ -99,7 +100,10 @@ Iris guarda en `integracion.argos_clientes` y `integracion.argos_servicios` solo
 
 | Evento | Efecto en Iris |
 | --- | --- |
-| `cliente.actualizado`: cliente_id, empresa_id, empresas[], campos[] (los que cambiaron, solo nombres, nunca valores: `nombre`, `tipo`, `codigo`, `nit_cui`, `tipo_documento_fiscal`, `telefono`, `movil`, `direccion`, `coordenadas`, `zona_id`) | Refresca la instantánea del cliente. |
+| `cliente.actualizado`: cliente_id, empresa_id, empresas[], campos[] (los que cambiaron, solo nombres, nunca valores: `nombre`, `tipo`, `codigo`, `nit_cui`, `tipo_documento_fiscal`, `telefono`, `movil`, `direccion`, `coordenadas`, `zona_id`; desde 0.5.0 también `email` y `referencia`) | Refresca la instantánea del cliente. |
+| `servicio.datos_cambiados` (0.5.0): servicio_id, empresa_id, cliente_id, campos[] (`direccion`, `coordenadas`, `referencia`, `contacto_nombre`, `contacto_telefono`; solo nombres). No lleva cambios de red (esos van en `servicio.config_cambiada`) | Refresca la dirección, la ubicación y el contacto del servicio en la instantánea y en las órdenes abiertas. |
+| `catalogo.cambiado` (0.5.0): catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido, llega a cualquier alcance), campos[] (`nombre`). Solo al renombrar | Refresca el nombre en sus catálogos locales. |
+| `inventario.traslado_enviado` / `inventario.traslado_recibido` (0.5.0): orden de traslado hacia la bodega de un técnico (contrato de inventario, Fase D) | Enviado: avisa al técnico y muestra la orden por recibir en la app de campo. Recibido: la cierra. |
 | `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada` | Refresca la instantánea del servicio. |
 | `servicio.estado_cambiado` | Refresca el estado. Con `a = retirado`, propone una orden de retiro si el servicio tiene equipos en comodato. |
 | `inventario.equipo_por_recuperar` | Crea una orden de retiro (`origen = argos`), si no hay una abierta para esa unidad. |
@@ -115,14 +119,17 @@ Todas las llamadas llevan `Idempotency-Key`. Cada una queda en `integracion.pend
 
 | Hecho en Iris | Llamada a Argos | Idempotency-Key |
 | --- | --- | --- |
-| Instalación cerrada como exitosa | `POST /servicios/:id/activar-instalacion` (pedido A1), sin `version` (§3.1), con `planta` si la orden la trae (pedido A9) y, por cada equipo instalado, `POST /servicios/:id/equipos` con `{ unidad_id }` o `{ serie }` | `iris:instalacion:<orden_id>` · `iris:comodato:<orden_id>:<serie>` |
-| Materiales usados en una orden | `POST /inventario/consumos` con `{ bodega_id: bodega del técnico, lineas[], servicio_id, origen_tipo: 'iris_orden', origen_id }` | `iris:consumo:<orden_id>` |
+| Instalación cerrada como exitosa | `POST /servicios/:id/activar-instalacion` (pedido A1), sin `version` (§3.1), con `planta` si la orden la trae (pedido A9) y, por cada equipo instalado, `POST /servicios/:id/equipos` con `{ unidad_id }` o `{ serie }` y, desde 0.5.0, `tecnico` (ver abajo) en lugar de `bodega_id` | `iris:instalacion:<orden_id>` · `iris:comodato:<orden_id>:<serie>` |
+| Materiales y equipos usados en una orden | `POST /inventario/consumos` con `{ tecnico, lineas[], servicio_id, origen_tipo: 'iris_orden', origen_id }` (0.5.0; `bodega_id` explícita sigue valiendo y manda sobre `tecnico`). Cada producto aplica su modalidad: `consumible_gasto` (gasto del ISP), `consumible_cobro` (Argos emite el cargo único al cliente con su precio) o `comodato` (equipo por serie al servicio) | `iris:consumo:<orden_id>` |
+| Técnico recibe una orden de traslado (0.5.0) | `POST /inventario/traslados/:id/recibir` con `{ recibido_por: tecnico, metodo_recepcion: 'firma_digital', firma: <PNG base64 del trazo>, lineas? }` (`lineas[]` solo si faltó algo, por línea y por serie) | `iris:recepcion:<traslado_id>` |
 | Retiro con equipo recuperado | `POST /servicios/:id/equipos/:unidad_id/devolver` con `{ bodega_id, condicion }` | `iris:devolucion:<orden_id>:<unidad_id>` |
 | Retiro sin equipo (perdido) | `POST /servicios/:id/equipos/:unidad_id/perdida` | `iris:perdida:<orden_id>:<unidad_id>` |
 | Retiro del servicio pedido por el cliente | `POST /servicios/:id/retirar` | `iris:retiro:<orden_id>` |
 | Cambio de equipo | Una devolución y una asignación, en ese orden | Las dos de arriba |
 | Prospecto ganado | `POST /clientes` y luego `POST /servicios` con `estado_inicial: pendiente_instalacion` (pedido A1), según §3.2 | `iris:cliente:<prospecto_id>` · `iris:servicio:<prospecto_id>` |
 | Visita o instalación cobrada | `POST /facturas/cargo-unico` (ya existe), con el producto si aplica | `iris:cargo:<orden_id>` |
+
+**`tecnico` (0.5.0).** `{ id_externo }` (el id del usuario de Argos que Iris guarda en su vínculo) o `{ correo }` (el del usuario de Argos, sin distinguir mayúsculas). `id_externo` manda si llegan los dos. Argos usa la bodega `tecnico` activa de ese usuario en la empresa del servicio. Errores (de negocio, no se reintentan): `422 tecnico_no_encontrado`, `422 tecnico_sin_bodega`, `409 unidad_en_otra_bodega` (comodato con una serie que no está en la bodega del técnico) y `409 existencia_insuficiente`.
 
 Iris nunca registra pagos ni asientos. Solo pide a Argos el cargo único, y Argos factura y contabiliza.
 
@@ -140,12 +147,14 @@ Iris nunca registra pagos ni asientos. Solo pide a Argos el cargo único, y Argo
 
 1. `POST /clientes`: `nombre` (2–200) obligatorio; opcionales `tipo` (`persona` | `empresa`), `tipo_documento_fiscal`, `nit_cui` (Argos valida el dígito verificador), `nombre_fiscal`, `direccion_fiscal`, `email`, `telefono`, `movil`, `direccion`, `coordenadas` (`"lat,lng"`), `zona_id`, `canal_preferido`, `codigo_externo` (Iris manda `iris:prospecto:<id>`). Sin `empresa_id`: el cliente es de la instalación. Argos genera el `codigo`.
 2. `POST /servicios`: `cliente_id`, `router_id` y `plan_id` obligatorios; Iris manda además `empresa_id` (la del prospecto), `estado_inicial: pendiente_instalacion`, `direccion` y `coordenadas`. Sin `origen_tipo`/`origen_id` (van solo en `activar-instalacion`). Si no llega `user_ppp`, Argos lo genera; `409 user_ppp_duplicado` es de negocio. La respuesta nunca trae la clave PPP.
-3. Iris guarda el `cliente_id` y el `servicio_id` de cada `2xx`; si los perdiera, repite la llamada con la misma clave (§3.1) para recuperarlos.
+3. **0.5.0:** `POST /clientes` acepta `referencia` (≤ 300), y `POST /servicios`, `referencia`, `contacto_nombre` (≤ 200) y `contacto_telefono`. `telefono`, `movil` y `contacto_telefono` se validan (Guatemala, 8 dígitos que empiezan en 2–7, con `+502` opcional; o internacional `+` y 8–15 dígitos), y Argos los guarda normalizados (`+502 5512-3344`). Si no es válido: `422 validacion` con `rule: 'telefono'` en el campo; es de negocio y no se reintenta.
+4. Iris guarda el `cliente_id` y el `servicio_id` de cada `2xx`; si los perdiera, repite la llamada con la misma clave (§3.1) para recuperarlos.
 
 ## 4. Versionado
 
-Semver. Esta versión 0.4.0 es un borrador hasta que los dos lados lo aprueben; desde 1.0.0, solo cambios compatibles en versiones menores.
+Semver. Esta versión 0.5.0 es un borrador hasta que los dos lados lo aprueben; desde 1.0.0, solo cambios compatibles en versiones menores.
 
+- **0.5.0** (31 oct): inventario del técnico (pedido del PM; contrato de inventario, Fase D): `GET /inventario/mi-bodega`, `tecnico` en lugar de `bodega_id` en consumos y comodatos, modalidades por producto (`consumible_gasto`, `consumible_cobro`, `comodato`), recepción de órdenes de traslado con firma digital y los webhooks `inventario.traslado_enviado` / `inventario.traslado_recibido`; permiso `inventario.recibir_traslado`. Pedidos de Iris A10–A15: `servicio.datos_cambiados`, `catalogo.cambiado`, `email` y `referencia` en `cliente.actualizado`, `referencia` en cliente y servicio, contacto en sitio del servicio y teléfonos validados (Guatemala `+502 NNNN-NNNN` o internacional `+` 8–15 dígitos; solo se validan al cambiar). Requiere Argos ≥ 1.6.0.
 - **0.4.0** (30 oct, pedido del PM): §1.4 «Conectar con un botón»: autorización desde el panel de Argos con `state` y PKCE S256, sin copiar enlaces. `panel_url` en la respuesta del canje. El enlace de §1.3 se mantiene.
 - **0.3.2** (30 oct): §2.3 «Confirmar un borrado»: solo `404 no_encontrado` es un borrado y fuera de alcance es `403 empresa_no_permitida`, nunca 404. La 0.3.1 requiere Argos ≥ 1.4.0.
 - **0.3.1** (30 oct): pedidos de la prueba de punta a punta contra Argos 1.3.0 y de la revisión de seguridad de Iris. `activar-instalacion` con `version` opcional y `409 servicio_no_pendiente` (antes 422); `cliente.actualizado` con `telefono`, `movil`, `direccion`, `coordenadas` y `zona_id`; `coordenadas` en `GET /routers`; el usuario técnico Iris solo con alcance por empresas (§1.1); `usuario.correo_verificado: false` en el ticket de autologin hacia Iris (§1.3); el canje del enlace informa `alcance_global` y `empresas[]` (`id`, `nombre`, `nit`); `servicio.eliminado` y `router.eliminado` en §2.3 (Argos elimina solo lo que nunca se usó; con historial, el servicio se retira y el router se desactiva). En Argos, `AAA_PPP_KEY` es obligatoria al arrancar.
