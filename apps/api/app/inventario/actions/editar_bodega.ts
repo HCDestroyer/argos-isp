@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { verBodega, type BodegaVista, type TipoBodega } from '#inventario/bodegas'
+import { exigirBodegaNoTransito, verBodega, type BodegaVista, type TipoBodega } from '#inventario/bodegas'
 import { validarDatosBodega, type DatosBodega } from '#inventario/actions/crear_bodega'
 
 /**
@@ -25,7 +25,7 @@ export default class EditarBodega extends DomainAction<EntradaEditarBodega, Bode
             id: number
             empresa_id: number
             nombre: string
-            tipo: TipoBodega
+            tipo: TipoBodega | 'transito'
             usuario_id: number | null
             zona_id: number | null
             router_id: number | null
@@ -33,6 +33,7 @@ export default class EditarBodega extends DomainAction<EntradaEditarBodega, Bode
             version: number
         } | null
         if (!actual) throw new NoEncontrado(`La bodega ${input.id} no existe`)
+        exigirBodegaNoTransito(actual)
         const empresaId = Number(actual.empresa_id)
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
@@ -53,7 +54,7 @@ export default class EditarBodega extends DomainAction<EntradaEditarBodega, Bode
             zona_id: input.zona_id === undefined ? antes.zona_id : input.zona_id,
             router_id: input.router_id === undefined ? antes.router_id : input.router_id,
         }
-        await validarDatosBodega(t, empresaId, { ...nuevo, tipo: actual.tipo }, input.id)
+        await validarDatosBodega(t, empresaId, { ...nuevo, tipo: actual.tipo as TipoBodega }, input.id)
         if (nuevo.usuario_id !== antes.usuario_id) {
             const existencia = await t.trx
                 .from('inventario.saldos')

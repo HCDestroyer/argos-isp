@@ -15,6 +15,7 @@ import { exigirAcceso } from '#billing/empresa'
 import * as v from '#inventario/validators'
 import {
     Bodega,
+    ConsumoInventario,
     ConteoInventario,
     ConteoInventarioDetalle,
     InventarioValorizado,
@@ -22,6 +23,7 @@ import {
     Existencia,
     MovimientoInventario,
     Producto,
+    ProductosLote,
     TrasladoInventario,
     Unidad,
     UnidadConHistorial,
@@ -34,10 +36,13 @@ import AsignarComodato from '#inventario/actions/asignar_comodato'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
-import { listarBodegas, verBodega } from '#inventario/bodegas'
+import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
+import { Prohibido } from '#shared/errores'
+import { exigirPermiso } from '#inventario/acceso_http'
 import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
+import CrearProductosLote from '#inventario/actions/crear_productos_lote'
 import EditarProducto from '#inventario/actions/editar_producto'
 import DesactivarProducto from '#inventario/actions/desactivar_producto'
 import CrearBodega from '#inventario/actions/crear_bodega'
@@ -55,6 +60,9 @@ import CancelarConteo from '#inventario/actions/cancelar_conteo'
 import MarcarReparada from '#inventario/actions/marcar_reparada'
 import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 import { inventarioValorizado } from '#inventario/reportes'
+import trasladosFaseD from '#start/routes/inventario_traslados'
+import catalogoFaseD from '#start/routes/inventario_catalogo'
+import comprasFaseD from '#start/routes/inventario_compras'
 
 const acceso = accesoBodegas
 
@@ -103,6 +111,26 @@ const productos: Ruta[] = [
             '409 sku_duplicado. clase_activo solo con seguimiento serie (por defecto equipo_red). cuenta_costo y cuenta_consumo: cuentas de gasto (por defecto 5.6.01 y 5.2.07).',
         respuesta: { status: 201, descripcion: 'Producto creado', esquema: Producto },
         handler: (ctx, { cuerpo }) => new CrearProducto().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/productos/lote',
+        operacion: 'productosCrearLote',
+        resumen: 'Crear productos por lotes, todo o nada (con su saldo inicial opcional)',
+        etiqueta: 'inventario',
+        permiso: 'productos.crear_lote',
+        cuerpo: v.crearProductosLoteValidator,
+        idempotente: 'obligatoria',
+        descripcion:
+            'Fase D: hasta 500 productos. Primero valida todas las filas y responde 422 con todos los errors[] (productos.<i>.campo: sku_duplicado en el lote o en la empresa, tipo, modalidad, bodega, series); luego crea todo en una transacción. entrada (opcional) = saldo inicial 1.1.14 / 2.9.01 en una bodega (por cantidad: cantidad y costo_unitario o costo_total; por serie: unidades con su costo) y exige además inventario.cargar_saldo_inicial. Un error al crear deshace todo y sale con productos.<i>.',
+        respuesta: { status: 201, descripcion: 'Productos creados', esquema: ProductosLote },
+        handler: async (ctx, { cuerpo }) => {
+            // la entrada es un saldo inicial: exige también su permiso
+            if (cuerpo.productos.some((p) => p.entrada)) {
+                await exigirPermiso(ctx, 'inventario.cargar_saldo_inicial')
+            }
+            return new CrearProductosLote().execute(cuerpo, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'post',
@@ -254,6 +282,20 @@ const lecturas: Ruta[] = [
     }),
 ]
 
+/**
+ * Bodega de un consumo o un comodato (fase D): la indicada se revisa como siempre; `tecnico` (la bodega
+ * del técnico de una orden de Iris) solo lo indica un usuario con alcance global.
+ */
+async function exigirBodegaDeConsumo(
+    ctx: Parameters<typeof exigirBodega>[0],
+    cuerpo: { bodega_id?: number | null; tecnico?: unknown },
+) {
+    if (cuerpo.bodega_id) await exigirBodega(ctx, cuerpo.bodega_id)
+    else if (cuerpo.tecnico && !alcanceGlobal(ctx.alcance)) {
+        throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
+    }
+}
+
 const operaciones: Ruta[] = [
     definirRuta({
         metodo: 'post',
@@ -264,10 +306,10 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.consumir',
         cuerpo: v.consumoValidator,
         idempotente: true,
-        descripcion: `servicio_id opcional (misma empresa). ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
-        respuesta: { status: 201, descripcion: 'Movimiento', esquema: MovimientoInventario },
+        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
+        respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoInventario },
         handler: async (ctx, { cuerpo }) => {
-            await exigirBodega(ctx, cuerpo.bodega_id)
+            await exigirBodegaDeConsumo(ctx, cuerpo)
             return new ConsumirInventario().execute(cuerpo, ctx.contextoAccion())
         },
     }),
@@ -452,10 +494,13 @@ const comodato: Ruta[] = [
             await exigirServicio(ctx, id)
             const unidadId = await unidadParaComodato(id, cuerpo)
             await exigirUnidad(ctx, unidadId)
+            await exigirBodegaDeConsumo(ctx, cuerpo)
             return new AsignarComodato().execute(
                 {
                     unidad_id: unidadId,
                     fecha: cuerpo.fecha,
+                    bodega_id: cuerpo.bodega_id,
+                    tecnico: cuerpo.tecnico,
                     servicio_id: id,
                     origen_tipo: cuerpo.origen_tipo,
                     origen_id: cuerpo.origen_id,
@@ -479,7 +524,10 @@ const comodato: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             await exigirServicio(ctx, id)
-            await exigirBodega(ctx, cuerpo.bodega_id, true)
+            if (cuerpo.bodega_id) await exigirBodega(ctx, cuerpo.bodega_id, true)
+            else if (cuerpo.tecnico && !alcanceGlobal(ctx.alcance)) {
+                throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
+            }
             return new DevolverComodato().execute(
                 { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
                 ctx.contextoAccion(),
@@ -616,4 +664,15 @@ const conteos: Ruta[] = [
     }),
 ]
 
-export default [...productos, ...bodegas, ...lecturas, ...operaciones, ...unidades, ...comodato, ...conteos]
+export default [
+    ...productos,
+    ...bodegas,
+    ...lecturas,
+    ...operaciones,
+    ...trasladosFaseD,
+    ...catalogoFaseD,
+    ...comprasFaseD,
+    ...unidades,
+    ...comodato,
+    ...conteos,
+]

@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Problema } from '#shared/errores'
+import { Problema, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec } from '#ledger/dinero'
 import { inicioDeMes } from '#ledger/fechas'
 import { CUOTA_VIGENTE, LOCK_ACTIVO, acumuladaDe, sumarMeses } from '#ledger/activos'
@@ -30,6 +30,7 @@ import {
     unidadVista,
 } from '#inventario/comodato'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
+import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 
 /**
  * `inventario.devolver_comodato` (`POST /servicios/:id/equipos/:unidad_id/devolver`): la unidad en
@@ -51,7 +52,9 @@ import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '
 export interface EntradaDevolverComodato {
     servicio_id: number
     unidad_id: number
-    bodega_id: number
+    /** la bodega que recibe; o, con `tecnico` (contrato Iris 0.5.0), la del técnico en la empresa del servicio */
+    bodega_id?: number | null
+    tecnico?: TecnicoExterno | null
     condicion?: Condicion | null
     en_reparacion?: boolean | null
     fecha?: string | null
@@ -70,7 +73,16 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
         const empresaId = await empresaDeLaUnidad(t, input.unidad_id)
         t.fijarEmpresa(empresaId)
         const servicio = await servicioDe(t, input.servicio_id, empresaId)
-        const bodega = await bodegaMovible(t, input.bodega_id, empresaId, { entrada: true })
+        let bodegaId = input.bodega_id ?? null
+        if (!bodegaId && input.tecnico) {
+            bodegaId = await bodegaDelTecnico(t.trx, await resolverTecnico(t, input.tecnico), empresaId)
+        }
+        if (!bodegaId) {
+            throw new ValidacionFallida([
+                { field: 'bodega_id', message: 'Indica la bodega (o el técnico)', rule: 'required' },
+            ])
+        }
+        const bodega = await bodegaMovible(t, bodegaId, empresaId, { entrada: true })
         // locks en el orden de todo el inventario: producto primero, después la fila de la unidad
         const previa = await productoDeUnidad(t, input.unidad_id)
         const producto = await productoMovible(t, previa)

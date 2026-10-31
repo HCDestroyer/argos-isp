@@ -19,6 +19,7 @@ import {
     unidadVista,
 } from '#inventario/comodato'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
@@ -42,6 +43,13 @@ export interface EntradaAsignarComodato {
     servicio_id: number
     unidad_id: number
     fecha?: string | null
+    /**
+     * fase D (D.6): la bodega de la que debe salir (409 `unidad_en_otra_bodega` si está en otra). Sin
+     * ella, con `tecnico`, la bodega del técnico; sin ninguna, la bodega donde esté la unidad.
+     */
+    bodega_id?: number | null
+    /** técnico de Argos de la orden de Iris (`id_externo` o `correo`) */
+    tecnico?: TecnicoExterno | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
@@ -68,10 +76,15 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
         const producto = await productoMovible(t, previa)
         await bloquearProducto(t, producto.id)
         // con el lock del producto la unidad ya no cambia: se vuelve a leer
+        let bodegaId = input.bodega_id ?? undefined
+        if (bodegaId === undefined && input.tecnico) {
+            bodegaId = await bodegaDelTecnico(t.trx, await resolverTecnico(t, input.tecnico), empresaId)
+        }
         const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
             empresaId,
             estados: ['disponible'],
             campo: 'unidad_id',
+            bodegaId,
         })
         // un equipo que volvió totalmente depreciado vale Q0: su activo nace en Q0, sin depreciación ni
         // asiento (decisión del líder, fase B)

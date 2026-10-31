@@ -1,97 +1,87 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado } from '#shared/errores'
-import { CUENTA_CONSUMO_POR_DEFECTO } from '#inventario/productos'
-import {
-    bloquearProducto,
-    bodegaMovible,
-    cantidadValida,
-    costoSalida,
-    exigirExistenciaDesde,
-    exigirPromedioSinCambiosDesde,
-    exigirSeguimiento,
-    fechaDeOperacion,
-    productoMovible,
-    registrarMovimientoConAsiento,
-    saldoDe,
-    verMovimiento,
-    type MovimientoVista,
-} from '#inventario/kardex'
+import { ValidacionFallida } from '#shared/errores'
+import { verMovimiento, type MovimientoVista } from '#inventario/kardex'
 import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
+import { aplicarConsumos, type CargoConsumo, type LineaConsumo } from '#inventario/consumos'
+import type { TecnicoExterno } from '#inventario/tecnicos'
 
 /**
  * `inventario.consumir` (`POST /inventario/consumos`): materiales usados en una instalación o una
- * reparación (`servicio_id` opcional, de la misma empresa). Sale de la bodega al costo promedio;
- * asiento `cuenta_consumo` del producto (por defecto `5.2.07`) / `1.1.14`. Más que la existencia: 409
- * `existencia_insuficiente` sin escribir nada.
+ * reparación. Una línea (`producto_id` arriba) o varias (`lineas[]`, lo que manda Iris al cerrar una
+ * orden; contrato Iris 0.5.0 §3.3), todo o nada. Desde la fase D aplica la **modalidad del producto**
+ * (`contratos/inventario.md` D.3, `#inventario/consumos`):
  *
- * `fecha` (fase C, decisión del líder; por defecto hoy): una pasada solo dentro de un periodo abierto
- * (422 `periodo_cerrado`) y si después de ella no hay movimientos que cambiaran el promedio (H55: 409
- * `fecha_con_movimientos_posteriores`); se valúa al promedio, que es el de esa fecha. Nunca deja
- * existencia ni valor negativos en ninguna fecha (409 `existencia_insuficiente_en_fecha`).
+ * - `consumible_gasto` (lo de siempre): sale de la bodega al costo promedio; asiento `cuenta_consumo`
+ *   del producto (por defecto `5.2.07`) / `1.1.14`. Más que la existencia: 409
+ *   `existencia_insuficiente` sin escribir nada. `fecha` (fase C; por defecto hoy): una pasada solo
+ *   dentro de un periodo abierto (422 `periodo_cerrado`) y si después de ella no hay movimientos que
+ *   cambiaran el promedio (H55: 409 `fecha_con_movimientos_posteriores`); nunca deja existencia ni valor
+ *   negativos en ninguna fecha (409 `existencia_insuficiente_en_fecha`).
+ * - `consumible_cobro` (con `servicio_id`; si no, 422 `cobro_sin_cliente`): un cargo único inmediato al
+ *   cliente del servicio por todas las líneas cobradas, con la venta del kardex (`5.6.01 / 1.1.14`), la
+ *   orden de Iris y `cargos[]` en la respuesta.
+ * - `comodato`: 422 `producto_es_comodato` (los equipos van por `POST /servicios/:id/equipos`).
  *
- * - `origen_tipo` = `iris_orden` + `origen_id` (orden de Iris, `#inventario/origen_externo`): se guardan
- *   en el movimiento (`origen_externo_*`) y salen en el kardex y en los eventos; solo trazabilidad.
+ * Responde el movimiento de la primera línea (lo de siempre) más `movimientos[]`, `cargos[]` y
+ * `factura_id`. `tecnico` sin `bodega_id`: la bodega del técnico en la empresa de la operación.
  */
 
-export interface EntradaConsumo {
-    producto_id: number
-    bodega_id: number
-    cantidad: string
+export interface EntradaConsumo extends LineaConsumo {
+    producto_id?: number | null
+    /** varias líneas (en lugar de `producto_id` arriba) */
+    lineas?: LineaConsumo[] | null
+    bodega_id?: number | null
     servicio_id?: number | null
     motivo?: string | null
     fecha?: string | null
+    /** técnico de Argos de la orden de Iris (su bodega es la de salida si no hay bodega_id) */
+    tecnico?: TecnicoExterno | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
 }
 
-export default class ConsumirInventario extends DomainAction<EntradaConsumo, MovimientoVista> {
+export type MovimientoConsumo = MovimientoVista & {
+    /** la factura del cargo único (consumible_cobro); null si no hubo cobro */
+    factura_id: number | null
+    /** un movimiento por línea, en el orden de las líneas */
+    movimientos: MovimientoVista[]
+    cargos: CargoConsumo[]
+}
+
+export default class ConsumirInventario extends DomainAction<EntradaConsumo, MovimientoConsumo> {
     readonly nombre = 'inventario.consumir'
 
-    protected async handle(input: EntradaConsumo, t: Transaccion): Promise<MovimientoVista> {
+    protected async handle(input: EntradaConsumo, t: Transaccion): Promise<MovimientoConsumo> {
         const origenExterno = origenExternoDe(input)
-        const producto = await productoMovible(t, input.producto_id)
-        const empresaId = producto.empresa_id
-        t.fijarEmpresa(empresaId)
-        // un equipo de serie no se consume: se presta en comodato o se da de baja
-        exigirSeguimiento(producto, false)
-        const bodega = await bodegaMovible(t, input.bodega_id, empresaId)
-        const cantidad = cantidadValida(input.cantidad)
-        if (input.servicio_id) {
-            const servicio = await t.trx
-                .from('core.servicios')
-                .where({ id: input.servicio_id, empresa_id: empresaId })
-                .select('id')
-                .first()
-            if (!servicio) {
-                throw new NoEncontrado(`El servicio ${input.servicio_id} no existe en esta empresa`)
-            }
+        const conLineas = input.lineas !== undefined && input.lineas !== null
+        if (conLineas === Boolean(input.producto_id)) {
+            throw new ValidacionFallida([
+                {
+                    field: conLineas ? 'producto_id' : 'lineas',
+                    message: 'Indica producto_id (una línea) o lineas[] (varias), no las dos',
+                    rule: 'producto_o_lineas',
+                },
+            ])
         }
-        const fecha = await fechaDeOperacion(t, empresaId, input.fecha)
-        await bloquearProducto(t, producto.id)
-        const costo = costoSalida(await saldoDe(t, producto.id, bodega.id), cantidad, producto, bodega.id)
-        await exigirPromedioSinCambiosDesde(t, producto, bodega.id, fecha)
-        await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad, costo)
-        const id = await registrarMovimientoConAsiento(
-            t,
-            {
-                empresaId,
-                tipo: 'consumo',
-                fecha,
-                producto,
-                bodegaId: bodega.id,
-                cantidad: cantidad.neg(),
-                costoTotal: costo.neg(),
-                servicioId: input.servicio_id ?? null,
-                motivo: input.motivo ?? null,
-                origenExterno,
-            },
-            {
-                contrapartida: producto.cuenta_consumo ?? CUENTA_CONSUMO_POR_DEFECTO,
-                descripcion: `Consumo de ${producto.sku} · ${producto.nombre} (${bodega.nombre})${input.servicio_id ? ` · servicio ${input.servicio_id}` : ''}`,
-            },
+        const lineas: LineaConsumo[] = conLineas
+            ? input.lineas!
+            : [
+                  {
+                      producto_id: input.producto_id,
+                      cantidad: input.cantidad,
+                      unidad_id: input.unidad_id,
+                      serie: input.serie,
+                      precio_unitario: input.precio_unitario,
+                      concepto_id: input.concepto_id,
+                  },
+              ]
+        const resultado = await aplicarConsumos(t, input, lineas, origenExterno, (i, campo) =>
+            conLineas ? `lineas.${i}.${campo}` : campo,
         )
-        t.fijarEntidad('movimiento_inventario', id)
-        return verMovimiento(id, t.trx)
+        const movimientos: MovimientoVista[] = []
+        for (const id of resultado.movimientos) movimientos.push(await verMovimiento(id, t.trx))
+        t.fijarEntidad('movimiento_inventario', movimientos[0]!.id)
+        return { ...movimientos[0]!, factura_id: resultado.facturaId, movimientos, cargos: resultado.cargos }
     }
 }

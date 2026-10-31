@@ -920,6 +920,27 @@ export interface CatalogoEventos {
         sobrante: Dinero
         lineas: number
     }
+    /** Orden de traslado enviada (fase D, `contratos/inventario.md` D.1; contrato Iris 0.5.0 §2.3). */
+    'inventario.traslado_enviado': PayloadTraslado
+    /** El destino recibió la orden; `faltantes` volvieron al origen. */
+    'inventario.traslado_recibido': PayloadTraslado & {
+        recibido_en: string
+        /** el técnico que recibió (o el usuario, en una bodega que no es de técnico) */
+        recibido_por: { id_externo: string; correo: string } | null
+        registrado_por: number | null
+        metodo_recepcion: 'firma_digital' | 'firma_papel' | 'aceptacion_sistema'
+        origen: 'iris' | 'panel'
+        faltantes: Array<{ producto_id: number; cantidad: string; unidad_ids: number[] }>
+    }
+    /** Se canceló una orden en tránsito: todo volvió al origen. */
+    'inventario.traslado_cancelado': PayloadTraslado & { cancelado_en: string; motivo: string }
+    /** Cambió la configuración de la IA que lee facturas de compra (nunca valores ni la clave). */
+    'inventario.ia_config_cambiada': {
+        configuracion_id: number
+        /** null = global */
+        empresa_id: number | null
+        campos: string[]
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -1115,6 +1136,19 @@ interface OrigenExternoPayload {
     origen_externo_id: string | null
 }
 
+/** Orden de traslado (fase D; contrato Iris 0.5.0 §2.3). */
+interface PayloadTraslado {
+    traslado_id: number
+    empresa_id: number
+    numero: number
+    bodega_destino_id: number
+    /** técnico de la bodega destino; null si es una bodega */
+    tecnico: { id_externo: string; correo: string } | null
+    estado: 'en_transito' | 'recibida' | 'recibida_con_diferencias' | 'cancelada'
+    lineas: Array<{ producto_id: number; cantidad: string; series: string[] }>
+    enviado_en: string
+}
+
 /** Unidad de serie en comodato (`contratos/inventario.md` §7). */
 interface PayloadComodato {
     unidad_id: number
@@ -1262,6 +1296,10 @@ export const EVENTOS = [
     'inventario.equipo_por_recuperar',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
+    'inventario.ia_config_cambiada',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

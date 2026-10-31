@@ -2,7 +2,13 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { aTexto, dec } from '#ledger/dinero'
-import { verProducto, type ProductoVista } from '#inventario/productos'
+import { verProducto, type ProductoVista, type Seguimiento } from '#inventario/productos'
+import {
+    modalidadPorDefecto,
+    problemaModalidad,
+    resolverTipo,
+    type Modalidad,
+} from '#inventario/tipos_producto'
 import { exigirSkuLibre, validarDatosProducto, type DatosProducto } from '#inventario/actions/crear_producto'
 
 /**
@@ -23,6 +29,7 @@ const EDITABLES = [
     'unidad',
     'tipo',
     'seguimiento',
+    'modalidad',
     'clase_activo',
     'concepto_cargo_id',
     'cuenta_costo',
@@ -78,6 +85,24 @@ export default class EditarProducto extends DomainAction<EntradaEditarProducto, 
             const precio = dec(nuevo.precio_venta)
             if (!precio.isNegative() && precio.decimalPlaces() <= 2) nuevo.precio_venta = aTexto(precio)
         }
+        // tipo: el código del catálogo (de la empresa o global, activo)
+        let tipoId = Number(actual.tipo_id)
+        if (
+            input.tipo !== undefined &&
+            input.tipo !== null &&
+            input.tipo.trim().toLowerCase() !== antes.tipo
+        ) {
+            const tipo = await resolverTipo(t, empresaId, input.tipo)
+            nuevo.tipo = tipo.codigo
+            tipoId = tipo.id
+        }
+        // un cambio de seguimiento sin modalidad explícita deja la del nuevo seguimiento si la de antes no va
+        if (
+            (input.modalidad === undefined || input.modalidad === null) &&
+            problemaModalidad(nuevo.modalidad as Modalidad, nuevo.seguimiento as Seguimiento)
+        ) {
+            nuevo.modalidad = modalidadPorDefecto(nuevo.seguimiento as Seguimiento)
+        }
         if (nuevo.seguimiento === 'cantidad') nuevo.clase_activo = null
         if (nuevo.seguimiento === 'serie' && !nuevo.clase_activo) nuevo.clase_activo = 'equipo_red'
         if (nuevo.seguimiento !== antes.seguimiento) {
@@ -108,6 +133,7 @@ export default class EditarProducto extends DomainAction<EntradaEditarProducto, 
             .where('id', input.id)
             .update({
                 ...nuevo,
+                tipo_id: tipoId,
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)

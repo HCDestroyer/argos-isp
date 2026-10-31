@@ -3,20 +3,24 @@ import {
     auditable,
     booleano,
     definirEsquema,
+    entero,
     enumerado,
     fecha,
     id,
     instante,
+    jsonLibre,
     nulable,
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
 import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
+import { MODALIDADES } from '#inventario/tipos_producto'
 import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
+import { ESTADOS_ORDEN_TRASLADO, METODOS_RECEPCION } from '#inventario/ordenes_traslado'
 import { lista } from '#shared/openapi/esquemas'
 
 /**
@@ -28,28 +32,42 @@ const DineroConSigno = { ...Dinero, description: 'Monto con signo (+ entra, − 
 
 export const Producto = definirEsquema(
     'Producto',
-    objeto({
-        id,
-        empresa_id: id,
-        sku: texto,
-        nombre: texto,
-        unidad: texto,
-        tipo: enumerado(TIPOS_PRODUCTO),
-        seguimiento: enumerado(SEGUIMIENTOS),
-        clase_activo: nulable(texto),
-        concepto_cargo_id: nulable(id),
-        cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
-        cuenta_consumo: { ...nulable(texto), description: 'null = 5.2.07' },
-        existencia_minima: nulable(Cantidad),
-        precio_venta: {
-            ...nulable(Dinero),
-            description: 'Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            sku: texto,
+            nombre: texto,
+            unidad: texto,
+            tipo: {
+                ...enumerado(TIPOS_PRODUCTO),
+                description:
+                    'Código del tipo de producto. Fase D: el catálogo es editable (GET /inventario/tipos-producto) y puede traer el código de un tipo de la empresa; el enum de las semillas se quita cuando el panel adopte el catálogo',
+            },
+            tipo_id: id,
+            tipo_nombre: texto,
+            seguimiento: enumerado(SEGUIMIENTOS),
+            modalidad: {
+                ...enumerado(MODALIDADES),
+                description: 'Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)',
+            },
+            clase_activo: nulable(texto),
+            concepto_cargo_id: nulable(id),
+            cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
+            cuenta_consumo: { ...nulable(texto), description: 'null = 5.2.07' },
+            existencia_minima: nulable(Cantidad),
+            precio_venta: {
+                ...nulable(Dinero),
+                description: 'Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio',
+            },
+            activo: booleano,
+            existencia: { ...Cantidad, description: 'Existencia total en todas las bodegas' },
+            valor: { ...Dinero, description: 'Valor del kardex del producto' },
+            ...auditable,
         },
-        activo: booleano,
-        existencia: { ...Cantidad, description: 'Existencia total en todas las bodegas' },
-        valor: { ...Dinero, description: 'Valor del kardex del producto' },
-        ...auditable,
-    }),
+        // fase D: siempre presentes; opcionales en el esquema hasta que los fixtures del panel los lleven
+        ['tipo_id', 'tipo_nombre', 'modalidad'],
+    ),
 )
 
 export const Bodega = definirEsquema(
@@ -58,7 +76,11 @@ export const Bodega = definirEsquema(
         id,
         empresa_id: id,
         nombre: texto,
-        tipo: enumerado(TIPOS_BODEGA),
+        tipo: {
+            ...enumerado(TIPOS_BODEGA),
+            description:
+                'bodega o tecnico. La bodega virtual transito (fase D) solo sale con ?tipo=transito; el enum se amplía cuando el panel la adopte',
+        },
         usuario_id: nulable(id),
         usuario_nombre: nulable(texto),
         zona_id: nulable(id),
@@ -70,77 +92,110 @@ export const Bodega = definirEsquema(
 
 export const Existencia = definirEsquema(
     'ExistenciaInventario',
-    objeto({
-        id,
-        empresa_id: id,
-        producto_id: id,
-        producto_sku: texto,
-        producto_nombre: texto,
-        unidad: texto,
-        bodega_id: id,
-        bodega_nombre: texto,
-        bodega_tipo: enumerado(TIPOS_BODEGA),
-        cantidad: Cantidad,
-        valor: Dinero,
-        costo_promedio: {
-            ...nulable(texto),
-            description: 'valor / cantidad de la bodega, 6 decimales; null sin existencia',
-        },
-        existencia_total: Cantidad,
-        existencia_minima: nulable(Cantidad),
-        bajo_minimo: booleano,
-    }),
-)
-
-export const MovimientoInventario = definirEsquema(
-    'MovimientoInventario',
     objeto(
         {
             id,
             empresa_id: id,
-            tipo: enumerado(TIPOS_MOVIMIENTO),
-            fecha,
             producto_id: id,
             producto_sku: texto,
             producto_nombre: texto,
+            unidad: texto,
             bodega_id: id,
             bodega_nombre: texto,
-            cantidad: { ...Cantidad, description: 'Con signo: + entra, − sale' },
-            costo_unitario: { ...texto, description: 'Costo unitario con 6 decimales' },
-            costo_total: DineroConSigno,
-            unidad_id: nulable(id),
-            servicio_id: nulable(id),
-            asiento_id: {
-                ...nulable(id),
-                description: 'Asiento del movimiento (o el de su compra); null sin efecto contable',
+            bodega_tipo: {
+                ...enumerado(TIPOS_BODEGA),
+                description: 'La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true',
             },
-            origen_tipo: {
+            cantidad: Cantidad,
+            valor: Dinero,
+            costo_promedio: {
                 ...nulable(texto),
-                description: 'Origen interno: compra, factura, conteo, nota_credito…',
+                description: 'valor / cantidad de la bodega, 6 decimales; null sin existencia',
             },
-            origen_id: nulable(id),
-            origen_externo_tipo: {
-                ...nulable(enumerado(ORIGENES_EXTERNOS)),
+            existencia_total: Cantidad,
+            existencia_minima: nulable(Cantidad),
+            bajo_minimo: booleano,
+            modalidad: {
+                ...enumerado(MODALIDADES),
                 description:
-                    'Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris',
+                    'Modalidad del producto (fase D, contrato Iris 0.5.0); opcional en el esquema hasta que el panel la adopte',
             },
-            origen_externo_id: {
-                ...nulable(texto),
-                description:
-                    'Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él)',
-            },
-            traslado_id: nulable(id),
-            reverso_de: nulable(id),
-            causa: nulable(enumerado(CAUSAS_BAJA)),
-            motivo: nulable(texto),
-            actor_tipo: texto,
-            actor_id: nulable(id),
-            created_at: instante,
-            saldo_cantidad: { ...Cantidad, description: 'Saldo corrido después del movimiento' },
-            saldo_valor: { ...Dinero, description: 'Valor corrido después del movimiento' },
         },
-        // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
-        ['origen_externo_tipo', 'origen_externo_id'],
+        ['modalidad'],
+    ),
+)
+
+const camposMovimiento = {
+    id,
+    empresa_id: id,
+    tipo: enumerado(TIPOS_MOVIMIENTO),
+    fecha,
+    producto_id: id,
+    producto_sku: texto,
+    producto_nombre: texto,
+    bodega_id: id,
+    bodega_nombre: texto,
+    cantidad: { ...Cantidad, description: 'Con signo: + entra, − sale' },
+    costo_unitario: { ...texto, description: 'Costo unitario con 6 decimales' },
+    costo_total: DineroConSigno,
+    unidad_id: nulable(id),
+    servicio_id: nulable(id),
+    asiento_id: {
+        ...nulable(id),
+        description: 'Asiento del movimiento (o el de su compra); null sin efecto contable',
+    },
+    origen_tipo: {
+        ...nulable(texto),
+        description: 'Origen interno: compra, factura, conteo, nota_credito…',
+    },
+    origen_id: nulable(id),
+    origen_externo_tipo: {
+        ...nulable(enumerado(ORIGENES_EXTERNOS)),
+        description: 'Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris',
+    },
+    origen_externo_id: {
+        ...nulable(texto),
+        description: 'Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él)',
+    },
+    traslado_id: nulable(id),
+    reverso_de: nulable(id),
+    causa: nulable(enumerado(CAUSAS_BAJA)),
+    motivo: nulable(texto),
+    actor_tipo: texto,
+    actor_id: nulable(id),
+    created_at: instante,
+    saldo_cantidad: { ...Cantidad, description: 'Saldo corrido después del movimiento' },
+    saldo_valor: { ...Dinero, description: 'Valor corrido después del movimiento' },
+    factura_id: {
+        ...nulable(id),
+        description:
+            'Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)',
+    },
+}
+
+export const MovimientoInventario = definirEsquema(
+    'MovimientoInventario',
+    // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
+    objeto(camposMovimiento, ['origen_externo_tipo', 'origen_externo_id', 'factura_id']),
+)
+
+/** Respuesta de `POST /inventario/consumos` (fase D): el movimiento de la primera línea más el lote. */
+export const ConsumoInventario = definirEsquema(
+    'ConsumoInventario',
+    objeto(
+        {
+            ...camposMovimiento,
+            movimientos: {
+                ...lista(MovimientoInventario),
+                description: 'Un movimiento por línea (consumo o venta), en el orden de las líneas',
+            },
+            cargos: {
+                ...lista(objeto({ id, producto_id: id, monto: Dinero })),
+                description:
+                    'Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único)',
+            },
+        },
+        ['origen_externo_tipo', 'origen_externo_id', 'factura_id', 'movimientos', 'cargos'],
     ),
 )
 
@@ -307,5 +362,273 @@ export const InventarioValorizado = definirEsquema(
                 diferencia: { ...Dinero, description: 'saldo_libro − valor_kardex (0 si cuadra)' },
             }),
         ),
+    }),
+)
+
+/*
+| Órdenes de traslado (fase D, `contratos/inventario.md` D.1)
+*/
+
+const camposOrdenTraslado = {
+    id,
+    empresa_id: id,
+    numero: { ...entero, description: 'Correlativo por empresa' },
+    estado: enumerado(ESTADOS_ORDEN_TRASLADO),
+    bodega_origen_id: id,
+    bodega_origen_nombre: texto,
+    bodega_destino_id: id,
+    bodega_destino_nombre: texto,
+    bodega_destino_tipo: enumerado(TIPOS_BODEGA),
+    usuario_destino_id: {
+        ...nulable(id),
+        description: 'Técnico de la bodega destino; null si es una bodega',
+    },
+    usuario_destino_nombre: nulable(texto),
+    motivo: nulable(texto),
+    enviado_por: nulable(id),
+    enviado_por_nombre: nulable(texto),
+    enviado_en: instante,
+    metodo_recepcion: nulable(enumerado(METODOS_RECEPCION)),
+    recibido_por: { ...nulable(id), description: 'Quien recibió (el técnico de la bodega destino)' },
+    recibido_por_nombre: nulable(texto),
+    registrado_por: {
+        ...nulable(id),
+        description: 'Quien registró la recepción (el técnico, un encargado o Iris)',
+    },
+    registrado_por_nombre: nulable(texto),
+    recibido_en: nulable(instante),
+    observaciones: nulable(texto),
+    firma_sha256: { ...nulable(texto), description: 'SHA-256 de la firma digital (GET …/firma la devuelve)' },
+    firma_en: nulable(instante),
+    documento_sha256: { ...nulable(texto), description: 'SHA-256 del papel firmado (GET …/documento)' },
+    documento_tipo: nulable(texto),
+    documento_en: nulable(instante),
+    cancelado_por: nulable(id),
+    cancelado_en: nulable(instante),
+    motivo_cancelacion: nulable(texto),
+    lineas_total: entero,
+    costo_total: { ...Dinero, description: 'Costo de lo enviado' },
+    version: entero,
+    created_at: instante,
+    updated_at: instante,
+}
+
+export const OrdenTraslado = definirEsquema('OrdenTraslado', objeto(camposOrdenTraslado))
+
+export const OrdenTrasladoDetalle = definirEsquema(
+    'OrdenTrasladoDetalle',
+    objeto({
+        ...camposOrdenTraslado,
+        lineas: lista(
+            objeto({
+                id,
+                producto_id: id,
+                producto_sku: texto,
+                producto_nombre: texto,
+                unidad: texto,
+                seguimiento: enumerado(SEGUIMIENTOS),
+                modalidad: enumerado(MODALIDADES),
+                cantidad: Cantidad,
+                costo_total: Dinero,
+                cantidad_recibida: nulable(Cantidad),
+                costo_recibido: nulable(Dinero),
+                faltante: {
+                    ...nulable(Cantidad),
+                    description: 'Enviado − recibido; null en tránsito o cancelada',
+                },
+                unidades: lista(
+                    objeto({
+                        unidad_id: id,
+                        serie: nulable(texto),
+                        mac: nulable(texto),
+                        costo: Dinero,
+                        recibida: { ...nulable(booleano), description: 'null en tránsito; false = faltó' },
+                    }),
+                ),
+            }),
+        ),
+    }),
+)
+
+export const ConfiguracionInventario = definirEsquema(
+    'ConfiguracionInventario',
+    objeto({
+        empresa_id: id,
+        traslado_firma_obligatoria: booleano,
+        version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
+    }),
+)
+
+export const TipoProducto = definirEsquema(
+    'TipoProducto',
+    objeto({
+        id,
+        empresa_id: { ...nulable(id), description: 'null = global' },
+        codigo: texto,
+        nombre: texto,
+        seguimiento_defecto: enumerado(SEGUIMIENTOS),
+        modalidad_defecto: enumerado(MODALIDADES),
+        activo: booleano,
+        ...auditable,
+    }),
+)
+
+export const ProductosLote = definirEsquema(
+    'ProductosLote',
+    objeto({
+        data: lista(Producto),
+        movimientos: { ...lista(MovimientoInventario), description: 'Los saldos iniciales de las entradas' },
+    }),
+)
+
+/*
+| Factura de compra desde un archivo (fase D, `contratos/inventario.md` D.5)
+*/
+
+const MontoTexto = {
+    type: 'string',
+    pattern: '^-?\\d{1,12}(\\.\\d{1,2})?$',
+    description: 'Monto con 2 decimales',
+}
+
+export const ExtraccionCompra = definirEsquema(
+    'ExtraccionCompra',
+    objeto({
+        emisor: objeto({ nit: texto, nombre: texto }),
+        receptor: objeto({ nit: nulable(texto), nombre: nulable(texto) }),
+        tipo_documento: { ...texto, description: 'FACT, FCAM, FPEQ, FCAP, FESP, NCRE, NDEB o RECIBO' },
+        serie: nulable(texto),
+        numero: texto,
+        autorizacion: { ...nulable(texto), description: 'UUID FEL de la SAT' },
+        fecha: fecha,
+        moneda: texto,
+        lineas: lista(
+            objeto({
+                codigo: { ...nulable(texto), description: 'Código del producto del proveedor' },
+                descripcion: texto,
+                cantidad: { ...texto, description: 'Hasta 6 decimales' },
+                unidad: nulable(texto),
+                precio_unitario: MontoTexto,
+                descuento: MontoTexto,
+                total: { ...MontoTexto, description: 'Total de la línea con IVA' },
+                iva: MontoTexto,
+                bien_o_servicio: enumerado(['B', 'S']),
+            }),
+        ),
+        totales: objeto({ total: MontoTexto, iva: MontoTexto }),
+    }),
+)
+
+const DatosBorrador = {
+    ...jsonLibre,
+    description: 'Los datos corregidos: ExtraccionCompra (vacío {} en un borrador manual o si la IA falló)',
+}
+
+export const BorradorCompra = definirEsquema(
+    'BorradorCompra',
+    objeto({
+        id,
+        empresa_id: id,
+        estado: enumerado(['borrador', 'confirmado', 'descartado']),
+        fuente: enumerado(['xml_fel', 'ia', 'manual']),
+        archivo_tipo: nulable(texto),
+        archivo_tamano: nulable(entero),
+        archivo_nombre: nulable(texto),
+        archivo_sha256: nulable(texto),
+        extraccion: {
+            ...nulable(ExtraccionCompra),
+            description: 'Lo que leyó el parser o la IA (no cambia)',
+        },
+        confianza: { ...nulable(jsonLibre), description: 'Confianza de la IA (0 a 1) por campo y por línea' },
+        error_extraccion: {
+            ...nulable(texto),
+            description: 'ia_no_configurada: … o ia_fallo: …; el usuario captura a mano',
+        },
+        ia_proveedor: nulable(texto),
+        ia_modelo: nulable(texto),
+        datos: DatosBorrador,
+        propuesta: objeto({
+            proveedor: nulable(objeto({ id: nulable(id), nit: texto, nombre: texto, crear: booleano })),
+            lineas: lista(
+                objeto({
+                    indice: entero,
+                    coincidencia: nulable(enumerado(['codigo_proveedor', 'sku', 'nombre'])),
+                    producto_id: nulable(id),
+                    producto_sku: nulable(texto),
+                    producto_nombre: nulable(texto),
+                    crear: nulable(objeto({ sku: texto, nombre: texto, tipo: texto, unidad: texto })),
+                    gasto: booleano,
+                }),
+            ),
+        }),
+        emisor_nit: nulable(texto),
+        serie: nulable(texto),
+        numero: nulable(texto),
+        compra_id: nulable(id),
+        motivo_descarte: nulable(texto),
+        creado_por: nulable(id),
+        confirmado_por: nulable(id),
+        confirmado_en: nulable(instante),
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+export const ConfiguracionIa = definirEsquema(
+    'ConfiguracionIa',
+    objeto({
+        id,
+        empresa_id: { ...nulable(id), description: 'null = global' },
+        proveedor: enumerado(['privada', 'anthropic', 'deepseek', 'openai']),
+        modelo: texto,
+        url_base: nulable(texto),
+        activo: booleano,
+        clave_configurada: { ...booleano, description: 'Hay clave guardada (nunca se devuelve)' },
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+export const MiBodega = definirEsquema(
+    'MiBodegaInventario',
+    objeto(
+        {
+            bodega: Bodega,
+            existencias: { ...lista(Existencia), description: 'Completas' },
+            unidades: {
+                ...lista(Unidad),
+                description: 'Unidades en la bodega (disponibles o en reparación), completas',
+            },
+            traslados_pendientes: {
+                ...lista(OrdenTraslado),
+                description: 'Órdenes en tránsito hacia la bodega, completas',
+            },
+            kardex: {
+                ...lista(MovimientoInventario),
+                description:
+                    'Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id=',
+            },
+            bodegas: {
+                ...lista(Bodega),
+                description:
+                    'Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)',
+            },
+        },
+        ['bodega', 'existencias', 'unidades', 'traslados_pendientes', 'kardex', 'bodegas'],
+    ),
+)
+
+export const Tecnico = definirEsquema(
+    'TecnicoInventario',
+    objeto({
+        id_externo: {
+            ...texto,
+            description: 'Id del usuario de Argos (lo que Iris manda en tecnico.id_externo)',
+        },
+        correo: texto,
+        nombre: texto,
+        bodegas: lista(objeto({ id, empresa_id: id, activa: booleano })),
     }),
 )
