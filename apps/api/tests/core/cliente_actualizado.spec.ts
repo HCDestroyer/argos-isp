@@ -54,7 +54,7 @@ test.group('Iris 0.3.1 · cliente.actualizado con teléfono, dirección y coorde
             .whereIn('campo', ['telefono', 'direccion', 'coordenadas'])
         assert.lengthOf(cambios, 3)
 
-        // quitar la ubicación también avisa; el correo no (nadie lo muestra fuera de Argos)
+        // quitar la ubicación también avisa; el correo también desde Iris 0.5.0 (pedido A11)
         const sinUbicacion = await new EditarCliente().execute(
             {
                 id: cliente.id,
@@ -66,10 +66,11 @@ test.group('Iris 0.3.1 · cliente.actualizado con teléfono, dirección y coorde
         )
         const eventos = await eventosCliente(cliente.id)
         assert.lengthOf(eventos, 2)
-        assert.deepEqual(eventos[1].payload.campos, ['coordenadas'])
+        assert.deepEqual(eventos[1].payload.campos, ['coordenadas', 'email'])
 
+        // un campo que nadie muestra fuera de Argos (canal preferido) no avisa
         await new EditarCliente().execute(
-            { id: cliente.id, version: sinUbicacion.version, email: `${unico('c')}@ejemplo.gt` },
+            { id: cliente.id, version: sinUbicacion.version, canal_preferido: 'whatsapp' },
             ctx,
         )
         assert.lengthOf(await eventosCliente(cliente.id), 2)

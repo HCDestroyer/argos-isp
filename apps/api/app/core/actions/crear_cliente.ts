@@ -5,6 +5,7 @@ import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { resolverCodigoReferido } from '#core/referidos'
 import { exigeRequeridos, validarCamposPersonalizados } from '#core/campos_personalizados'
+import { telefonoParaGuardar } from '#core/telefonos'
 
 export interface DatosCliente {
     nombre?: string
@@ -20,6 +21,8 @@ export interface DatosCliente {
     telefono?: string | null
     movil?: string | null
     direccion?: string | null
+    /** cómo llegar, texto libre («casa verde frente a la iglesia»; pedido A12 de Iris) */
+    referencia?: string | null
     coordenadas?: string | null
     zona_id?: number | null
     campos_personalizados?: Record<string, unknown>
@@ -41,12 +44,16 @@ export interface EntradaCrearCliente extends DatosCliente {
 
 const CAMPOS_DOCUMENTO = ['tipo_documento_fiscal', 'nit_cui', 'pais_fiscal'] as const
 
-/** Documento fiscal guardado del cliente que se edita. */
+/** Documento fiscal (y teléfonos) guardados del cliente que se edita. */
 export interface DocumentoAnterior {
     tipo_documento_fiscal: TipoDocumentoFiscal
     nit_cui: string | null
     pais_fiscal: string
+    telefono?: unknown
+    movil?: unknown
 }
+
+const CAMPOS_TELEFONO = ['telefono', 'movil'] as const
 
 /**
  * Documento fiscal validado (`validarDocumentoFiscal`). En el alta siempre; al editar, solo si
@@ -79,7 +86,10 @@ function conservaPasaporte(antes: DocumentoAnterior, nitCui: string | null): boo
     return limpio !== '' && limpio !== 'CF'
 }
 
-/** Columnas de `core.clientes` que se escriben a partir de la entrada (documento fiscal validado). */
+/**
+ * Columnas de `core.clientes` que se escriben a partir de la entrada (documento fiscal validado).
+ * `telefono` y `movil` se validan y normalizan solo si cambian (`#core/telefonos`, pedido A14).
+ */
 export async function columnasCliente(
     t: Transaccion,
     datos: DatosCliente,
@@ -94,6 +104,12 @@ export async function columnasCliente(
     }
     for (const [clave, valor] of Object.entries(datos)) {
         if (valor === undefined || (CAMPOS_DOCUMENTO as readonly string[]).includes(clave)) continue
+        if ((CAMPOS_TELEFONO as readonly string[]).includes(clave)) {
+            const campo = clave as (typeof CAMPOS_TELEFONO)[number]
+            const telefono = telefonoParaGuardar(campo, datos[campo], antes?.[campo], t.ctx)
+            if (telefono !== undefined) columnas[campo] = telefono
+            continue
+        }
         if (clave === 'campos_personalizados') columnas.campos_personalizados = JSON.stringify(valor)
         else columnas[clave] = valor
     }

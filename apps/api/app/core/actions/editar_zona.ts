@@ -12,7 +12,10 @@ export interface EntradaEditarZona {
     empresa_sugerida_id?: number | null
 }
 
-/** Renombra una zona o cambia su empresa sugerida (control optimista por `version`). */
+/**
+ * Renombra una zona o cambia su empresa sugerida (control optimista por `version`). Si cambia el
+ * nombre emite `catalogo.cambiado` (`catalogo: 'zona'`, `campos: ['nombre']`; pedido A15 de Iris).
+ */
 export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<ReturnType<typeof verZona>>> {
     readonly nombre = 'zonas.editar'
 
@@ -35,6 +38,14 @@ export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<
         await actualizarConVersion(t.trx, 'core.zonas', input.id, input.version, cambios)
         const despues = await verZona(input.id, t.trx)
         await t.registrarCambios({ tipo: 'zona', id: input.id }, antes, despues)
+        if (despues.nombre !== antes.nombre) {
+            await t.emit('catalogo.cambiado', {
+                catalogo: 'zona',
+                id: input.id,
+                empresa_id: despues.empresa_sugerida_id === null ? null : Number(despues.empresa_sugerida_id),
+                campos: ['nombre'],
+            })
+        }
         return despues
     }
 }

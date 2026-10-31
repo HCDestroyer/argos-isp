@@ -8679,14 +8679,16 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 30
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
                   },
                   "movil": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "maxLength": 30
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
                   },
                   "direccion": {
                     "type": [
@@ -8694,6 +8696,14 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Cómo llegar, texto libre (hasta 300 caracteres); null lo borra"
                   },
                   "coordenadas": {
                     "type": [
@@ -8997,14 +9007,16 @@
                       "string",
                       "null"
                     ],
-                    "maxLength": 30
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
                   },
                   "movil": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "maxLength": 30
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
                   },
                   "direccion": {
                     "type": [
@@ -9012,6 +9024,14 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Cómo llegar, texto libre (hasta 300 caracteres); null lo borra"
                   },
                   "coordenadas": {
                     "type": [
@@ -64130,6 +64150,30 @@
                     ],
                     "maxLength": 300
                   },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Cómo llegar, texto libre (hasta 300 caracteres); null lo borra"
+                  },
+                  "contacto_nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra"
+                  },
+                  "contacto_telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
+                  },
                   "coordenadas": {
                     "type": [
                       "string",
@@ -64565,6 +64609,30 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "referencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Cómo llegar, texto libre (hasta 300 caracteres); null lo borra"
+                  },
+                  "contacto_nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra"
+                  },
+                  "contacto_telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "description": "8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra"
                   },
                   "coordenadas": {
                     "type": [
@@ -76961,19 +77029,28 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>`"
           },
           "movil": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>`"
           },
           "direccion": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo llegar, texto libre (hasta 300 caracteres)"
           },
           "coordenadas": {
             "type": [
@@ -104010,6 +104087,27 @@
               "string",
               "null"
             ]
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo llegar, texto libre (hasta 300 caracteres)"
+          },
+          "contacto_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Contacto en sitio: quien recibe al técnico"
+          },
+          "contacto_telefono": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>`"
           },
           "coordenadas": {
             "type": [

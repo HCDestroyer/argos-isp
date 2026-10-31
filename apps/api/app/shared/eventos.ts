@@ -130,8 +130,8 @@ export const CAMPOS_CLIENTE_IDENTIDAD = [
 /**
  * Campos de `core.clientes` que emiten `cliente.actualizado`: los de identidad y, desde el contrato
  * Iris 0.3.1, los de contacto y ubicación de la instantánea de Iris (§2.2): `telefono`, `movil`,
- * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`. El evento lleva solo los nombres, nunca los
- * valores.
+ * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`; desde el contrato Iris 0.5.0, `email`
+ * (pedido A11) y `referencia` (A12). El evento lleva solo los nombres, nunca los valores.
  */
 export const CAMPOS_CLIENTE_ACTUALIZADO = [
     ...CAMPOS_CLIENTE_IDENTIDAD,
@@ -140,6 +140,8 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
     'direccion',
     'coordenadas',
     'zona_id',
+    'email',
+    'referencia',
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
@@ -228,6 +230,30 @@ export interface CatalogoEventos {
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
         plan_temporal_id?: number
+    }
+    /**
+     * Cambiaron datos de ubicación o contacto del servicio (contrato Iris 0.5.0, pedidos A10, A12 y
+     * A13): `direccion`, `coordenadas`, `referencia`, `contacto_nombre`, `contacto_telefono`. Solo
+     * nombres, nunca valores. Evento propio y no `servicio.config_cambiada`: no cambian nada en la
+     * red, y así RouterOS, coa y aaa-cache no reaccionan. No se emite al crear (va en `servicio.creado`).
+     */
+    'servicio.datos_cambiados': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        campos: Array<'direccion' | 'coordenadas' | 'referencia' | 'contacto_nombre' | 'contacto_telefono'>
+    }
+    /**
+     * Cambió el nombre de una zona, un plan o un router (contrato Iris 0.5.0, pedido A15): los otros
+     * sistemas muestran esos catálogos por nombre. Un solo evento para los tres; `catalogo` dice cuál
+     * e `id` su id. `empresa_id`: la sugerida de la zona o del router (null = compartido; los planes
+     * no son de una empresa). `campos`: hoy solo `nombre` (aditivo: se pueden sumar otros).
+     */
+    'catalogo.cambiado': {
+        catalogo: 'zona' | 'plan' | 'router'
+        id: number
+        empresa_id: number | null
+        campos: Array<'nombre'>
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
@@ -467,7 +493,8 @@ export interface CatalogoEventos {
      * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
      * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar); y, para la
      * instantánea de Iris (contrato Iris 0.3.1 §2.2), `telefono`, `movil`, `direccion`,
-     * `coordenadas` y `zona_id`. Solo nombres de campos, nunca valores. Sin `empresa_id`: el cliente
+     * `coordenadas` y `zona_id`; desde Iris 0.5.0, `email` (A11) y `referencia` (A12). Solo nombres de
+     * campos, nunca valores. Sin `empresa_id`: el cliente
      * no es de una empresa, sus servicios sí. Lo consumen los workers de webhooks a Horus (solo los
      * campos de identidad; sin ellos no envía) y a Iris (todos) (A6).
      */
@@ -1134,6 +1161,7 @@ export const EVENTOS = [
     'servicio.creado',
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
+    'servicio.datos_cambiados',
     'asignacion.cambiada',
     'servicio.adicional_agregado',
     'servicio.adicional_cambiado',
@@ -1152,6 +1180,7 @@ export const EVENTOS = [
     'router.conexion_eliminada',
     'router.radius_cambiado',
     'cliente.actualizado',
+    'catalogo.cambiado',
     'sesion.iniciada',
     'sesion.terminada',
     'servicio.caidas_repetidas',

@@ -40,6 +40,9 @@ export function camposVelocidadCambiados(
  *
  * `tipo` se edita como cualquier campo (diff en `audit.cambios`); no cambia la velocidad, así que no
  * emite evento. La respuesta trae `warnings[]` (`advertenciasPlan`).
+ *
+ * Renombrar el plan emite `catalogo.cambiado` (`catalogo: 'plan'`, `campos: ['nombre']`, pedido A15
+ * de Iris); `plan.velocidad_cambiada` no lo cubre.
  */
 export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConAdvertencias> {
     readonly nombre = 'planes.editar'
@@ -78,6 +81,9 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         await t.registrarCambios({ tipo: 'plan', id }, antes, despues)
         if (campos.length > 0) {
             await t.emit('plan.velocidad_cambiada', { plan_id: id, router_id: null, campos })
+        }
+        if (despues.nombre !== antes.nombre) {
+            await t.emit('catalogo.cambiado', { catalogo: 'plan', id, empresa_id: null, campos: ['nombre'] })
         }
         refrescarAaaAlConfirmar(t, { planId: id })
         return { ...despues, warnings: advertenciasPlan(despues) }

@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { actualizarConVersion } from '#shared/version'
+import { actualizarConVersion, verificarVersion } from '#shared/version'
 import { columnasCliente, type DatosCliente, type DocumentoAnterior } from '#core/actions/crear_cliente'
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { CAMPOS_CLIENTE_ACTUALIZADO } from '#shared/eventos'
@@ -11,7 +11,8 @@ export interface EntradaEditarCliente extends DatosCliente {
 
 /**
  * Edita datos generales y fiscales de un cliente. Control optimista por `version` (409).
- * `campos_personalizados` se reemplaza completo. El documento fiscal se valida solo si llega
+ * `campos_personalizados` se reemplaza completo. `telefono` y `movil` se validan y normalizan solo
+ * si cambian (`#core/telefonos`, pedido A14). El documento fiscal se valida solo si llega
  * `tipo_documento_fiscal`, `nit_cui` o `pais_fiscal` (`columnasCliente`).
  *
  * Si el número cambia sin tipo explícito, el tipo de documento se reclasifica con la regla del
@@ -19,7 +20,8 @@ export interface EntradaEditarCliente extends DatosCliente {
  * `audit.cambios`.
  *
  * Si cambia el nombre, el tipo, el código, el NIT/CUI, el tipo de documento, el teléfono, el
- * móvil, la dirección, las coordenadas o la zona emite `cliente.actualizado` (`cliente_id`,
+ * móvil, la dirección, las coordenadas, la zona, el correo o la referencia (`CAMPOS_CLIENTE_ACTUALIZADO`)
+ * emite `cliente.actualizado` (`cliente_id`,
  * `campos[]`, solo los nombres) para los sistemas que muestran al cliente (Horus refresca sus
  * identidades; Iris, su instantánea) o lo usan como receptor (FEL).
  */
@@ -30,6 +32,8 @@ export default class EditarCliente extends DomainAction<EntradaEditarCliente, Cl
         const { id, version, ...datos } = input
         t.fijarEntidad('cliente', id)
         const antes = await verCliente(id, t.trx)
+        // 409 antes de validar: los teléfonos se validan contra lo guardado en esa versión
+        verificarVersion('core.clientes', id, antes.version, version)
         const columnas = await columnasCliente(t, datos, antes as unknown as DocumentoAnterior)
         await actualizarConVersion(t.trx, 'core.clientes', id, version, columnas)
         const despues = await verCliente(id, t.trx)

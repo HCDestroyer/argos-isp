@@ -123,6 +123,7 @@ async function exigirModoSeguridad(t: Transaccion, antes: RouterVista, datos: Da
  * campo cambiado con valor `***`, nunca en claro. Cambiar la capacidad del enlace emite
  * `router.control_cambiado` con `campos: ['capacidad']` (A2 recalcula el padre global). El
  * control de velocidad no se edita aquí: `CambiarControlVelocidad` (`routers.cambiar_control_velocidad`).
+ * Renombrarlo emite `catalogo.cambiado` (`catalogo: 'router'`, `campos: ['nombre']`, pedido A15 de Iris).
  */
 export default class EditarRouter extends DomainAction<EntradaEditarRouter, RouterVista> {
     readonly nombre = 'routers.editar'
@@ -163,6 +164,14 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
                 capacidad_subida_kbps: despues.capacidad_subida_kbps,
                 campos: ['capacidad'],
                 motivo: null,
+            })
+        }
+        if (despues.nombre !== antes.nombre) {
+            await t.emit('catalogo.cambiado', {
+                catalogo: 'router',
+                id,
+                empresa_id: despues.empresa_sugerida_id === null ? null : Number(despues.empresa_sugerida_id),
+                campos: ['nombre'],
             })
         }
         return despues

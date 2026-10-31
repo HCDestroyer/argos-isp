@@ -34,6 +34,7 @@ export const COLUMNAS_CLIENTE = [
     'telefono',
     'movil',
     'direccion',
+    'referencia',
     'coordenadas',
     'zona_id',
     'campos_personalizados',

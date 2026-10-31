@@ -282,90 +282,105 @@ export const CampoPersonalizado = definirEsquema(
 
 export const Cliente = definirEsquema(
     'Cliente',
-    objeto({
-        id,
-        codigo: {
-            type: 'string',
-            pattern: '^C-\\d{6,}$',
-            description:
-                'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable',
+    objeto(
+        {
+            id,
+            codigo: {
+                type: 'string',
+                pattern: '^C-\\d{6,}$',
+                description:
+                    'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable',
+            },
+            codigo_externo: {
+                ...nulable(texto),
+                description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
+            },
+            nombre: texto,
+            tipo: enumerado(['persona', 'empresa']),
+            tipo_documento_fiscal: {
+                ...enumerado(TIPOS_DOCUMENTO_FISCAL),
+                description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
+            },
+            nit_cui: {
+                ...nulable(texto),
+                description:
+                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
+            },
+            nit_cui_invalido: {
+                ...booleano,
+                description:
+                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
+                    'se apaga al corregirlo',
+            },
+            nombre_fiscal: nulable(texto),
+            direccion_fiscal: nulable(texto),
+            pais_fiscal: {
+                ...texto,
+                pattern: '^[A-Z]{2}$',
+                description: 'País del receptor (ISO 3166-1 alfa-2)',
+            },
+            agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
+            sector_publico: { ...booleano, description: 'Entidad del sector público' },
+            email: nulable(texto),
+            telefono: {
+                ...nulable(texto),
+                description: 'Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>`',
+            },
+            movil: {
+                ...nulable(texto),
+                description: 'Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>`',
+            },
+            direccion: nulable(texto),
+            referencia: { ...nulable(texto), description: 'Cómo llegar, texto libre (hasta 300 caracteres)' },
+            coordenadas: nulable(texto),
+            zona_id: nulable(id),
+            campos_personalizados: {
+                ...jsonLibre,
+                description:
+                    'Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera ' +
+                    'del catálogo (importador, campos desactivados)',
+            },
+            canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
+            telegram_chat_id: nulable(texto),
+            responsable_pago_id: {
+                ...nulable(id),
+                description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
+            },
+            responsable_pago_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del responsable de pago (solo lectura)',
+            },
+            referido_por_id: {
+                ...nulable(id),
+                description:
+                    'Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta',
+            },
+            referido_empresa_id: {
+                ...nulable(id),
+                description: 'Empresa (NIT) en la que cuenta el referido: la del código usado',
+            },
+            codigos_referido: {
+                ...lista(objeto({ empresa_id: id, codigo: { ...texto, pattern: '^[2-9A-HJKMNP-Z]{8}$' } })),
+                description:
+                    'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
+                    'con el primer servicio en cada empresa)',
+            },
+            externo: {
+                ...nulable(
+                    objeto({
+                        sistema: { ...texto, description: 'Sistema de origen: `mikrowisp`' },
+                        id: texto,
+                    }),
+                ),
+                description:
+                    'Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos',
+            },
+            ...auditable,
         },
-        codigo_externo: {
-            ...nulable(texto),
-            description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
-        },
-        nombre: texto,
-        tipo: enumerado(['persona', 'empresa']),
-        tipo_documento_fiscal: {
-            ...enumerado(TIPOS_DOCUMENTO_FISCAL),
-            description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
-        },
-        nit_cui: {
-            ...nulable(texto),
-            description:
-                'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
-        },
-        nit_cui_invalido: {
-            ...booleano,
-            description:
-                'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
-                'se apaga al corregirlo',
-        },
-        nombre_fiscal: nulable(texto),
-        direccion_fiscal: nulable(texto),
-        pais_fiscal: {
-            ...texto,
-            pattern: '^[A-Z]{2}$',
-            description: 'País del receptor (ISO 3166-1 alfa-2)',
-        },
-        agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
-        sector_publico: { ...booleano, description: 'Entidad del sector público' },
-        email: nulable(texto),
-        telefono: nulable(texto),
-        movil: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        zona_id: nulable(id),
-        campos_personalizados: {
-            ...jsonLibre,
-            description:
-                'Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera ' +
-                'del catálogo (importador, campos desactivados)',
-        },
-        canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
-        telegram_chat_id: nulable(texto),
-        responsable_pago_id: {
-            ...nulable(id),
-            description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
-        },
-        responsable_pago_nombre: {
-            ...nulable(texto),
-            description: 'Nombre del responsable de pago (solo lectura)',
-        },
-        referido_por_id: {
-            ...nulable(id),
-            description:
-                'Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta',
-        },
-        referido_empresa_id: {
-            ...nulable(id),
-            description: 'Empresa (NIT) en la que cuenta el referido: la del código usado',
-        },
-        codigos_referido: {
-            ...lista(objeto({ empresa_id: id, codigo: { ...texto, pattern: '^[2-9A-HJKMNP-Z]{8}$' } })),
-            description:
-                'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
-                'con el primer servicio en cada empresa)',
-        },
-        externo: {
-            ...nulable(
-                objeto({ sistema: { ...texto, description: 'Sistema de origen: `mikrowisp`' }, id: texto }),
-            ),
-            description:
-                'Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos',
-        },
-        ...auditable,
-    }),
+        // `referencia` (Iris 0.5.0): la API siempre la envía; opcional en el esquema hasta que las
+        // fixtures del panel la traigan (pedido a A4 en `a1.md`)
+        ['referencia'],
+    ),
 )
 
 /** Fila de `GET /clientes/:id/dependientes`. */
@@ -443,6 +458,12 @@ export const Servicio = definirEsquema(
             amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
             mac: nulable(texto),
             direccion: nulable(texto),
+            referencia: { ...nulable(texto), description: 'Cómo llegar, texto libre (hasta 300 caracteres)' },
+            contacto_nombre: { ...nulable(texto), description: 'Contacto en sitio: quien recibe al técnico' },
+            contacto_telefono: {
+                ...nulable(texto),
+                description: 'Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>`',
+            },
             coordenadas: nulable(texto),
             fecha_instalacion: nulable(fecha),
             instalado_en: {
@@ -524,8 +545,10 @@ export const Servicio = definirEsquema(
                 description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
             },
         },
-        // `warnings` es opcional de verdad: solo viene al crear o editar
-        ['warnings'],
+        // `warnings` es opcional de verdad: solo viene al crear o editar. `referencia`, `contacto_nombre` y
+        // `contacto_telefono` (Iris 0.5.0): la API siempre los envía; opcionales en el esquema hasta que
+        // las fixtures del panel los traigan (pedido a A4 en `a1.md`)
+        ['warnings', 'referencia', 'contacto_nombre', 'contacto_telefono'],
     ),
 )
 

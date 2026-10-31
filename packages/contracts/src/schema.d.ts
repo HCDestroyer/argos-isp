@@ -11229,9 +11229,13 @@ export interface components {
             /** @description Entidad del sector público */
             sector_publico: boolean;
             email: string | null;
+            /** @description Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>` */
             telefono: string | null;
+            /** @description Normalizado al guardarlo: `+502 5512-3344` o `+<dígitos>` */
             movil: string | null;
             direccion: string | null;
+            /** @description Cómo llegar, texto libre (hasta 300 caracteres) */
+            referencia?: string | null;
             coordenadas: string | null;
             zona_id: number | null;
             /** @description Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera del catálogo (importador, campos desactivados) */
@@ -17763,6 +17767,12 @@ export interface components {
             amarre_ip_mac: boolean;
             mac: string | null;
             direccion: string | null;
+            /** @description Cómo llegar, texto libre (hasta 300 caracteres) */
+            referencia?: string | null;
+            /** @description Contacto en sitio: quien recibe al técnico */
+            contacto_nombre?: string | null;
+            /** @description Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>` */
+            contacto_telefono?: string | null;
             coordenadas: string | null;
             /** Format: date */
             fecha_instalacion: string | null;
@@ -23505,9 +23515,13 @@ export interface operations {
                     sector_publico?: boolean;
                     /** Format: email */
                     email?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
                     telefono?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
                     movil?: string | null;
                     direccion?: string | null;
+                    /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
+                    referencia?: string | null;
                     /** @description Latitud y longitud: "14.6349,-90.5069" */
                     coordenadas?: string | null;
                     zona_id?: number | null;
@@ -23653,9 +23667,13 @@ export interface operations {
                     sector_publico?: boolean;
                     /** Format: email */
                     email?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
                     telefono?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
                     movil?: string | null;
                     direccion?: string | null;
+                    /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
+                    referencia?: string | null;
                     /** @description Latitud y longitud: "14.6349,-90.5069" */
                     coordenadas?: string | null;
                     zona_id?: number | null;
@@ -52868,6 +52886,12 @@ export interface operations {
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
+                    /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
+                    referencia?: string | null;
+                    /** @description Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra */
+                    contacto_nombre?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
+                    contacto_telefono?: string | null;
                     /** @description Latitud y longitud: "14.6349,-90.5069" */
                     coordenadas?: string | null;
                     /** Format: date */
@@ -53043,6 +53067,12 @@ export interface operations {
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
+                    /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
+                    referencia?: string | null;
+                    /** @description Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra */
+                    contacto_nombre?: string | null;
+                    /** @description 8 dígitos de Guatemala (2-7 al inicio) con +502 opcional, o internacional con + y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guarda normalizado (`+502 5512-3344`, `+15551234567`); 422 si cambia a un valor que no cumple. null o vacío lo borra */
+                    contacto_telefono?: string | null;
                     /** @description Latitud y longitud: "14.6349,-90.5069" */
                     coordenadas?: string | null;
                     /** Format: date */

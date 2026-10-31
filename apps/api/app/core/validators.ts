@@ -25,6 +25,7 @@ import { ESTADOS_SERVICIO, MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } 
 import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
+import { FORMATO_TELEFONO } from '#core/telefonos'
 
 /*
 |--------------------------------------------------------------------------
@@ -69,6 +70,34 @@ const pais = () =>
         .toUpperCase()
         .regex(/^[A-Z]{2}$/)
 
+/**
+ * Teléfono de cliente o de contacto en sitio (pedido A14). El formato lo valida y normaliza la acción
+ * (`#core/telefonos`) solo cuando el valor cambia: reenviar el teléfono viejo guardado, aunque no
+ * cumpla, no falla.
+ */
+const telefonoCliente = () =>
+    vine
+        .string()
+        .trim()
+        .maxLength(30)
+        .nullable()
+        .optional()
+        .meta({
+            description:
+                `${FORMATO_TELEFONO}. Se guarda normalizado (\`+502 5512-3344\`, \`+15551234567\`); ` +
+                '422 si cambia a un valor que no cumple. null o vacío lo borra',
+        })
+
+/** Cómo llegar: texto libre («casa verde frente a la iglesia»; pedido A12 de Iris). */
+const referencia = () =>
+    vine
+        .string()
+        .trim()
+        .maxLength(300)
+        .nullable()
+        .optional()
+        .meta({ description: 'Cómo llegar, texto libre (hasta 300 caracteres); null lo borra' })
+
 const camposCliente = {
     nombre: vine.string().trim().minLength(2).maxLength(200),
     tipo: vine.enum(['persona', 'empresa'] as const).optional(),
@@ -93,9 +122,10 @@ const camposCliente = {
         description: 'Entidad del sector público (reglas propias de retención)',
     }),
     email: vine.string().trim().email().nullable().optional(),
-    telefono: vine.string().trim().maxLength(30).nullable().optional(),
-    movil: vine.string().trim().maxLength(30).nullable().optional(),
+    telefono: telefonoCliente(),
+    movil: telefonoCliente(),
     direccion: vine.string().trim().maxLength(300).nullable().optional(),
+    referencia: referencia(),
     coordenadas: coordenadas().nullable().optional(),
     zona_id: idEntidad().nullable().optional(),
     campos_personalizados: vine
@@ -352,6 +382,11 @@ export const crearServicioValidator = vine.compile(
             .nullable()
             .optional(),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
+        referencia: referencia(),
+        contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({
+            description: 'Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra',
+        }),
+        contacto_telefono: telefonoCliente(),
         coordenadas: coordenadas().nullable().optional(),
         fecha_instalacion: fechaIso().nullable().optional(),
         costo_override: dinero().nullable().optional(),
@@ -400,6 +435,11 @@ export const editarServicioValidator = vine.compile(
             .nullable()
             .optional(),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
+        referencia: referencia(),
+        contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({
+            description: 'Contacto en sitio: quien recibe al técnico (pedido A13); null lo borra',
+        }),
+        contacto_telefono: telefonoCliente(),
         coordenadas: coordenadas().nullable().optional(),
         fecha_instalacion: fechaIso().nullable().optional(),
         costo_override: dinero().nullable().optional(),

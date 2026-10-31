@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirRadiusParaPppoe } from '#network/modo_seguridad'
 import { cifrar } from '#shared/cifrado'
-import { actualizarConVersion } from '#shared/version'
+import { actualizarConVersion, verificarVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
 import { verServicio, type ModoIpv6, type TipoConexion } from '#core/consultas/servicios'
@@ -29,6 +29,7 @@ import { planTemporalActivo } from '#core/planes_temporales'
 import { reconciliarIncluidos } from '#core/adicionales'
 import { advertenciasServicio } from '#network/tipos_plan'
 import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
+import { telefonoParaGuardar } from '#core/telefonos'
 
 export interface EntradaEditarServicio {
     id: number
@@ -43,6 +44,11 @@ export interface EntradaEditarServicio {
     pass_ppp?: string
     mac?: string | null
     direccion?: string | null
+    /** cómo llegar, texto libre (pedido A12 de Iris) */
+    referencia?: string | null
+    /** contacto en sitio (pedido A13); el teléfono se valida y normaliza solo si cambia */
+    contacto_nombre?: string | null
+    contacto_telefono?: string | null
     coordenadas?: string | null
     fecha_instalacion?: string | null
     costo_override?: string | null
@@ -62,6 +68,16 @@ export interface EntradaEditarServicio {
 }
 
 type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
+type CampoDatos = CatalogoEventos['servicio.datos_cambiados']['campos'][number]
+
+/** Datos de ubicación y contacto que emiten `servicio.datos_cambiados` (pedidos A10, A12, A13). */
+export const CAMPOS_DATOS_SERVICIO = [
+    'direccion',
+    'coordenadas',
+    'referencia',
+    'contacto_nombre',
+    'contacto_telefono',
+] as const satisfies readonly CampoDatos[]
 
 /**
  * Edita un servicio (control optimista por `version`: la segunda sesión con la misma versión
@@ -75,6 +91,12 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  * - desde `pppoe`: borra las credenciales y escribe la lápida en `aaa:user:<user_ppp viejo>`;
  *   los modos IPv6 por RADIUS pasan a `ninguno` si no se pidió otro modo.
  * Cambiar `mac` o `amarre_ip_mac` emite `servicio.config_cambiada` con ese campo (lease y ARP).
+ *
+ * Cambiar `direccion`, `coordenadas`, `referencia`, `contacto_nombre` o `contacto_telefono` (pedidos
+ * A10, A12 y A13 de Iris) emite `servicio.datos_cambiados` con `campos[]` (solo nombres, nunca
+ * valores), aparte de `servicio.config_cambiada`: no cambian nada en la red y así ningún consumidor
+ * de red reacciona por ellos. `contacto_telefono` se valida y normaliza solo si cambia
+ * (`#core/telefonos`).
  *
  * `excepciones` (tarea 11) se valida con `validarExcepcion` de A3 y se guarda en
  * `core.servicios_excepciones` con diff por campo (`excepcion_<campo>`). Si cambia una que afecta
@@ -109,6 +131,8 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (antes.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado: no se edita', 'servicio_retirado')
         }
+        // 409 antes de validar: el teléfono de contacto se valida contra lo guardado en esa versión
+        verificarVersion('core.servicios', id, antes.version, version)
 
         const routerId = datos.router_id ?? antes.router_id
         const planId = datos.plan_id ?? antes.plan_id
@@ -193,6 +217,15 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         const columnas: Record<string, unknown> = Object.fromEntries(
             Object.entries(datos).filter(([, valor]) => valor !== undefined),
         )
+        // el teléfono de contacto se valida solo si cambia (un valor viejo reenviado pasa; `#core/telefonos`)
+        delete columnas.contacto_telefono
+        const contactoTelefono = telefonoParaGuardar(
+            'contacto_telefono',
+            datos.contacto_telefono,
+            antes.contacto_telefono,
+            t.ctx,
+        )
+        if (contactoTelefono !== undefined) columnas.contacto_telefono = contactoTelefono
         columnas.ipv6_modo = modo
         columnas.amarre_ip_mac = amarre
         if (passPpp !== undefined) columnas.pass_ppp = cifrar(passPpp)
@@ -279,6 +312,17 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 prefijo_delegado_v6: asignaciones.prefijo_delegado_v6,
                 inicio: new Date().toISOString(),
                 fin: null,
+            })
+        }
+        // Dirección, coordenadas, referencia y contacto: evento propio, nunca `servicio.config_cambiada`
+        // (sus consumidores de red, RouterOS, coa y aaa-cache, no tienen nada que hacer con ellos).
+        const camposDatos = CAMPOS_DATOS_SERVICIO.filter((campo) => despues[campo] !== antes[campo])
+        if (camposDatos.length > 0) {
+            await t.emit('servicio.datos_cambiados', {
+                servicio_id: id,
+                empresa_id: despues.empresa_id,
+                cliente_id: despues.cliente_id,
+                campos: camposDatos,
             })
         }
         const objetivos: ObjetivoAaa[] = [{ servicioId: id }]

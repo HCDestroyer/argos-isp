@@ -21,6 +21,7 @@ import { resolverEmpresaServicio } from '#core/empresas'
 import { reconciliarIncluidos } from '#core/adicionales'
 import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
+import { telefonoParaGuardar } from '#core/telefonos'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -47,6 +48,11 @@ export interface EntradaCrearServicio {
     pass_ppp?: string
     mac?: string | null
     direccion?: string | null
+    /** cómo llegar, texto libre (pedido A12 de Iris) */
+    referencia?: string | null
+    /** contacto en sitio (pedido A13 de Iris); el teléfono se normaliza (`#core/telefonos`) */
+    contacto_nombre?: string | null
+    contacto_telefono?: string | null
     coordenadas?: string | null
     fecha_instalacion?: string | null
     costo_override?: string | null
@@ -162,6 +168,9 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         // un router sin RADIUS (`modo_seguridad = 'api'`) no admite PPPoE (`#network/modo_seguridad`)
         await exigirRadiusParaPppoe(t.trx, input.router_id, tipo)
 
+        const contactoTelefono =
+            telefonoParaGuardar('contacto_telefono', input.contacto_telefono, undefined, t.ctx) ?? null
+
         let userPpp: string | null = null
         let passPpp: string | null = null
         if (tipo === 'pppoe') {
@@ -185,6 +194,9 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 pass_ppp: passPpp,
                 mac: input.mac ?? null,
                 direccion: input.direccion ?? null,
+                referencia: input.referencia ?? null,
+                contacto_nombre: input.contacto_nombre ?? null,
+                contacto_telefono: contactoTelefono,
                 coordenadas: input.coordenadas ?? null,
                 fecha_instalacion: input.fecha_instalacion ?? null,
                 costo_override: input.costo_override ?? null,
