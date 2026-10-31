@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/HCDestroyer/argos-isp/compare/v1.5.0...v1.5.1) (2026-10-31)
+
+
+### Correcciones
+
+* **infra:** actualizar no se cae cuando cambia la red de compose ([#208](https://github.com/HCDestroyer/argos-isp/issues/208)) ([faf6c04](https://github.com/HCDestroyer/argos-isp/commit/faf6c04b36ed00a062ee000827b3ae8e5ed1a3e1))
+
 ## [1.5.0](https://github.com/HCDestroyer/argos-isp/compare/v1.4.1...v1.5.0) (2026-10-31)
 
 
