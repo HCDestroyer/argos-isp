@@ -6,6 +6,10 @@ import { crearCliente, crearServicio, eventoOutbox } from '#tests/notify/ayudas_
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { HorusSimulado, urlSinServidor } from '#tests/integraciones/horus_simulado'
 import EditarCliente from '#core/actions/editar_cliente'
+import EditarServicio from '#core/actions/editar_servicio'
+import EditarZona from '#core/actions/editar_zona'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, crearZonaFila } from '#tests/core/fabricas'
+import CrearServicio from '#core/actions/crear_servicio'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
 import { firmar, verificarFirma } from '#integraciones/horus/firma'
@@ -19,8 +23,8 @@ import {
 import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
 
 /**
- * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los nueve eventos (con los eliminados
- * de `contratos/eliminar.md`), firma HMAC `v1=`,
+ * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los once eventos (con los eliminados
+ * de `contratos/eliminar.md` y los de datos y catálogos del contrato 0.5.0), firma HMAC `v1=`,
  * id estable y deduplicación, reintentos a 1 min, 5 min, 30 min, 2 h y 12 h, fallos visibles en
  * el panel, conector apagado, alcance de empresas del usuario técnico y nada de secretos. Iris es
  * un servidor HTTP local.
@@ -88,7 +92,7 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
         }
     })
 
-    test('los nueve eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
+    test('los once eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
         assert,
     }) => {
         const iris = await new HorusSimulado().iniciar()
@@ -176,6 +180,22 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
             ids['router.eliminado'] = await evento('router.eliminado', {
                 router_id: s.router_id,
                 empresa_id: 1,
+                ...extra,
+            })
+            ids['servicio.datos_cambiados'] = await evento('servicio.datos_cambiados', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                cliente_id: clienteId,
+                campos: ['direccion', 'contacto_telefono'],
+                direccion: 'Km 17.5',
+                ...extra,
+            })
+            ids['catalogo.cambiado'] = await evento('catalogo.cambiado', {
+                catalogo: 'router',
+                id: s.router_id,
+                empresa_id: 1,
+                campos: ['nombre'],
+                nombre: 'Router nuevo',
                 ...extra,
             })
             // un evento que no es de §2.3 no va a Iris
@@ -271,6 +291,21 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 router_id: Number(s.router_id),
                 empresa_id: 1,
             })
+            assert.deepEqual(porEvento.get('servicio.datos_cambiados')!.json.payload, {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                cliente_id: clienteId,
+                campos: ['direccion', 'contacto_telefono'],
+            })
+            assert.deepEqual(porEvento.get('catalogo.cambiado')!.json.payload, {
+                catalogo: 'router',
+                id: Number(s.router_id),
+                empresa_id: 1,
+                campos: ['nombre'],
+            })
+            // solo nombres de campo, nunca valores
+            assert.notInclude(porEvento.get('servicio.datos_cambiados')!.cuerpo, 'Km 17.5')
+            assert.notInclude(porEvento.get('catalogo.cambiado')!.cuerpo, 'Router nuevo')
             assert.containsSubset(porEvento.get('asignacion.cambiada')!.json.payload, {
                 ipv4: ['100.70.0.9'],
                 prefijo_delegado_v6: '2001:db8:2:100::/56',
@@ -576,6 +611,151 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 evento: 'cliente.actualizado',
                 payload: { cliente_id: clienteId, empresa_id: 1, campos: ['nombre'] },
             })
+        } finally {
+            await iris.detener()
+        }
+    })
+
+    test('alcance de servicio.datos_cambiados y catalogo.cambiado: sin empresa es compartido; con empresa, solo la del alcance', async ({
+        assert,
+    }) => {
+        const iris = await new HorusSimulado().iniciar()
+        try {
+            iris.responder(RECEPTOR, () => ({ status: 200 }))
+            await fijarConector(iris.url)
+            const empresa2 = await crearEmpresaFila()
+            await usuarioTecnico([empresa2])
+            const clienteId = await crearCliente()
+            const enLa1 = await crearServicio(clienteId, undefined, 1)
+            const enLa2 = await crearServicio(clienteId, undefined, empresa2)
+
+            const datos = (servicioId: number, empresaId: number) => ({
+                servicio_id: servicioId,
+                empresa_id: empresaId,
+                cliente_id: clienteId,
+                campos: ['referencia'],
+            })
+            const catalogo = (cat: string, id: number, empresaId: number | null) => ({
+                catalogo: cat,
+                id,
+                empresa_id: empresaId,
+                campos: ['nombre'],
+            })
+            await evento('servicio.datos_cambiados', datos(enLa1, 1))
+            const idDatos2 = await evento('servicio.datos_cambiados', datos(enLa2, empresa2))
+            // plan (siempre sin empresa) y zona compartida: llegan aunque el alcance sea solo la 2
+            const idPlan = await evento('catalogo.cambiado', catalogo('plan', 11, null))
+            const idZona = await evento('catalogo.cambiado', catalogo('zona', 12, null))
+            // router sugerido a la 1: fuera del alcance; a la 2: dentro
+            await evento('catalogo.cambiado', catalogo('router', 13, 1))
+            const idRouter2 = await evento('catalogo.cambiado', catalogo('router', 14, empresa2))
+            // catálogo desconocido o sin id: no se envía
+            await evento('catalogo.cambiado', catalogo('caja_nap', 15, null))
+            await evento('catalogo.cambiado', { catalogo: 'zona', empresa_id: null, campos: ['nombre'] })
+
+            const filas = await db.from('integraciones.iris_envios').orderBy('id')
+            assert.deepEqual(
+                filas.map((f) => f.evento_id),
+                [idWebhook(idDatos2), idWebhook(idPlan), idWebhook(idZona), idWebhook(idRouter2)],
+            )
+            assert.deepEqual(
+                filas.map((f) => (f.empresa_id === null ? null : Number(f.empresa_id))),
+                [empresa2, null, null, empresa2],
+            )
+            await entregarPendientesIris()
+            const recibidos = iris.de(RECEPTOR).map((p) => p.json)
+            assert.deepEqual(
+                recibidos.filter((j) => j.evento === 'catalogo.cambiado').map((j) => j.payload),
+                [catalogo('plan', 11, null), catalogo('zona', 12, null), catalogo('router', 14, empresa2)],
+            )
+
+            // con alcance global pasa todo
+            await usuarioTecnico()
+            const idRouter1 = await evento('catalogo.cambiado', catalogo('router', 13, 1))
+            const idDatos1 = await evento('servicio.datos_cambiados', datos(enLa1, 1))
+            const ultimos = await db.from('integraciones.iris_envios').orderBy('id').offset(4)
+            assert.deepEqual(
+                ultimos.map((f) => f.evento_id),
+                [idWebhook(idRouter1), idWebhook(idDatos1)],
+            )
+        } finally {
+            await iris.detener()
+        }
+    })
+
+    test('EditarServicio, EditarZona y EditarCliente reales (contrato 0.5.0) llegan a Iris sin valores', async ({
+        assert,
+    }) => {
+        const iris = await new HorusSimulado().iniciar()
+        try {
+            iris.responder(RECEPTOR, () => ({ status: 200 }))
+            await fijarConector(iris.url)
+            // servicio completo (router con red y plan), como lo crea el panel
+            const { routerId } = await crearEscenarioRouter()
+            const clienteId = await crearClienteFila()
+            const creado = await new CrearServicio().execute(
+                { cliente_id: clienteId, router_id: routerId, plan_id: await crearPlanFila() },
+                contextoPrueba(),
+            )
+            const servicioId = creado.id
+            const s = await servicioDe(servicioId)
+            const ctx = contextoPrueba()
+            await new EditarServicio().execute(
+                {
+                    id: servicioId,
+                    version: s.version,
+                    referencia: 'Portón negro',
+                    contacto_nombre: 'Doña Marta',
+                },
+                ctx,
+            )
+            const zonaId = await crearZonaFila()
+            await new EditarZona().execute({ id: zonaId, version: 1, nombre: `Zona Iris ${zonaId}` }, ctx)
+            const cliente = await db.from('core.clientes').where('id', clienteId).first()
+            await new EditarCliente().execute(
+                {
+                    id: clienteId,
+                    version: cliente.version,
+                    email: `iris${clienteId}@ejemplo.gt`,
+                    referencia: 'Junto a la tienda',
+                },
+                ctx,
+            )
+            const eventos = await db
+                .from('audit.outbox')
+                .where('request_id', ctx.requestId)
+                .whereIn('evento', ['servicio.datos_cambiados', 'catalogo.cambiado', 'cliente.actualizado'])
+                .orderBy('id')
+            assert.lengthOf(eventos, 3)
+            for (const ev of eventos) {
+                await consumidor.procesar({ id: ev.id, evento: ev.evento, payload: ev.payload })
+            }
+            await entregarPendientesIris()
+            const recibidos = iris.de(RECEPTOR)
+            const payloads = Object.fromEntries(recibidos.map((p) => [p.json.evento, p.json.payload]))
+            assert.deepEqual(payloads['servicio.datos_cambiados'], {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                cliente_id: clienteId,
+                campos: ['referencia', 'contacto_nombre'],
+            })
+            assert.deepEqual(payloads['catalogo.cambiado'], {
+                catalogo: 'zona',
+                id: zonaId,
+                empresa_id: null,
+                campos: ['nombre'],
+            })
+            assert.sameMembers(payloads['cliente.actualizado'].campos, ['email', 'referencia'])
+            const todo = recibidos.map((p) => p.cuerpo).join('\n')
+            for (const valor of [
+                'Portón negro',
+                'Doña Marta',
+                `Zona Iris ${zonaId}`,
+                'Junto a la tienda',
+                '@ejemplo.gt',
+            ]) {
+                assert.notInclude(todo, valor)
+            }
         } finally {
             await iris.detener()
         }

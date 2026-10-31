@@ -30,6 +30,9 @@ import {
  *   solo con el payload del evento (la fila ya no existe; nunca se busca). Un router sin empresa
  *   sugerida es infraestructura compartida: su `router.eliminado` llega a cualquier conector,
  *   como `GET /routers` se lo muestra a cualquier alcance.
+ * - **Catálogos** (`catalogo.cambiado`, contrato 0.5.0, pedido A15): no trae servicio; con
+ *   `empresa_id` null (zona o router compartido, o cualquier plan) es compartido y pasa con
+ *   cualquier alcance, igual que `router.eliminado`; con empresa, solo si está en el alcance.
  */
 
 /** Eventos del bus que van a Iris (§2.3). */
@@ -43,7 +46,12 @@ export const EVENTOS_A_IRIS = [
     'servicio.caidas_repetidas',
     'servicio.eliminado',
     'router.eliminado',
+    'servicio.datos_cambiados',
+    'catalogo.cambiado',
 ] as const
+
+/** Catálogos de `catalogo.cambiado` (contrato Iris 0.5.0, pedido A15). */
+const CATALOGOS = ['zona', 'plan', 'router'] as const
 
 export const TABLA_ENVIOS_IRIS = 'integraciones.iris_envios'
 
@@ -174,6 +182,18 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
     }
 
+    if (evento === 'catalogo.cambiado') {
+        const catalogo = texto(p.catalogo)
+        const id = entero(p.id)
+        if (!id || !catalogo || !(CATALOGOS as readonly string[]).includes(catalogo)) return null
+        const empresaId = entero(p.empresa_id)
+        return {
+            payload: { catalogo, id, empresa_id: empresaId, campos: textos(p.campos) },
+            empresas: empresaId ? [empresaId] : [],
+            compartido: empresaId === null,
+        }
+    }
+
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
 
@@ -229,6 +249,9 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                 empresas: anterior && anterior !== empresaId ? [...empresas, anterior] : empresas,
             }
         }
+        case 'servicio.datos_cambiados':
+            // Solo nombres de campo (dirección, coordenadas, referencia, contacto): Iris relee el servicio
+            return { payload: { ...base, campos: textos(p.campos) }, empresas }
         case 'asignacion.cambiada':
             return {
                 payload: {

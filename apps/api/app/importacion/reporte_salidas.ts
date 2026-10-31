@@ -116,6 +116,17 @@ export function lineasDiferencias(r: ReporteImportacion): LineaDiferencia[] {
             accion: 'Corregir el NIT en el origen',
         })
     }
+    for (const x of d.telefonos_invalidos ?? []) {
+        add({
+            entidad: 'cliente',
+            id_origen: x.cliente_origen,
+            tipo: 'telefono_invalido',
+            gravedad: 'aviso',
+            detalle: `${x.nombre}: ${x.campo} "${x.telefono}" se importa tal cual (sin normalizar)`,
+            causa: 'No es un teléfono de Guatemala de 8 dígitos (2-7 al inicio) ni internacional con +',
+            accion: 'Corregir el teléfono en el origen o editarlo después en ArgosIsp',
+        })
+    }
     for (const x of d.servicios_sin_plan) {
         add({
             entidad: 'servicio',

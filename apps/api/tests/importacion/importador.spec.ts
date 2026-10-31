@@ -5,6 +5,7 @@ import { leerCsv, ErrorCsv } from '#importacion/csv'
 import { leerDirectorio } from '#importacion/origenes/csv'
 import { importar } from '#importacion/importador'
 import { formatearReporte } from '#importacion/reporte'
+import { lineasDiferencias } from '#importacion/reporte_salidas'
 import type { EntidadExterna, IdsExternos } from '#importacion/ids_externos'
 import { descifrar } from '#shared/cifrado'
 import { crearPlantillaFila } from '#tests/billing/ayudas_billing'
@@ -434,6 +435,46 @@ test.group('importacion · Mikrowisp', () => {
                 .where('request_id', segunda.request_id)
                 .first()
             assert.isNull(sinAuditoria)
+        } finally {
+            await trx.rollback()
+        }
+    })
+
+    test('teléfonos (A14 de Iris): los válidos quedan normalizados; los inválidos, tal cual y en el reporte', async ({
+        assert,
+    }) => {
+        const plantillaId = await crearPlantillaFila()
+        const trx = await db.transaction()
+        try {
+            const fuente = await leerDirectorio(EJEMPLO)
+            const cambiada = {
+                ...fuente,
+                // sin archivo del origen: las filas se cambiaron a mano
+                archivo: undefined,
+                clientes: fuente.clientes.map((c) =>
+                    c.id === '101'
+                        ? { ...c, telefono: '2222-3333', movil: ' 12-34 ' }
+                        : c.id === '103'
+                          ? { ...c, movil: '+502 5555 1111' }
+                          : c,
+                ),
+            }
+            const r = await importar(cambiada, { sistema: 'mikrowisp', dryRun: false, trx, plantillaId })
+            assert.deepEqual(r.diferencias.telefonos_invalidos, [
+                { cliente_origen: '101', nombre: 'Ana López', campo: 'movil', telefono: '12-34' },
+            ])
+            const linea = lineasDiferencias(r).find((l) => l.tipo === 'telefono_invalido')!
+            assert.containsSubset(linea, { entidad: 'cliente', id_origen: '101', gravedad: 'aviso' })
+            assert.include(formatearReporte(r), 'movil "12-34"')
+
+            const telefonos = async (id: string) =>
+                trx
+                    .from('core.clientes')
+                    .whereRaw(`campos_personalizados->>'mikrowisp_id' = ?`, [id])
+                    .select('telefono', 'movil')
+                    .first()
+            assert.deepEqual(await telefonos('101'), { telefono: '+502 2222-3333', movil: '12-34' })
+            assert.deepEqual(await telefonos('103'), { telefono: null, movil: '+502 5555-1111' })
         } finally {
             await trx.rollback()
         }
