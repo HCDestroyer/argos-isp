@@ -95,6 +95,8 @@ function alDesactivar(producto: Producto) {
                 color="neutral"
                 variant="outline"
                 to="/inventario/productos-lote"
+                aria-label="Alta por lote"
+                :ui="{ label: 'hidden sm:inline' }"
                 data-prueba="productos-lote"
             />
             <UButton

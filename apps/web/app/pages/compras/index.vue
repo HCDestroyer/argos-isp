@@ -82,6 +82,8 @@ onMounted(() => void lista.recargar())
                 icon="i-lucide-file-up"
                 color="neutral"
                 variant="outline"
+                aria-label="Cargar factura"
+                :ui="{ label: 'hidden sm:inline' }"
                 data-prueba="cargar-factura"
             />
             <UButton

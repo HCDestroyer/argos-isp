@@ -132,7 +132,7 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
     <PanelPagina
         id="configuracion-inventario"
         titulo="Inventario"
-        icono="i-lucide-package-cog"
+        icono="i-lucide-package-search"
     >
         <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
             <UCard>
