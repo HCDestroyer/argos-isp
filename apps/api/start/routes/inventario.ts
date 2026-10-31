@@ -56,6 +56,7 @@ import MarcarReparada from '#inventario/actions/marcar_reparada'
 import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 import { inventarioValorizado } from '#inventario/reportes'
 import trasladosFaseD from '#start/routes/inventario_traslados'
+import catalogoFaseD from '#start/routes/inventario_catalogo'
 
 const acceso = accesoBodegas
 
@@ -623,6 +624,7 @@ export default [
     ...lecturas,
     ...operaciones,
     ...trasladosFaseD,
+    ...catalogoFaseD,
     ...unidades,
     ...comodato,
     ...conteos,

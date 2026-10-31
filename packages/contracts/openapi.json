@@ -29370,6 +29370,570 @@
         "x-implementado": true
       }
     },
+    "/api/v1/inventario/tipos-producto": {
+      "get": {
+        "operationId": "inventarioTiposProducto",
+        "summary": "Tipos de producto: los globales y los de la empresa",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de tipos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TipoProducto"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "inventarioCrearTipoProducto",
+        "summary": "Crear un tipo de producto (de la empresa o global)",
+        "description": "Código único entre los de la empresa y los globales (409 tipo_duplicado). global: true solo con alcance global de empresas (403). modalidad_defecto va con seguimiento_defecto: comodato solo serie, consumible_gasto solo cantidad (422 modalidad_defecto).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "global": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "true = tipo global (solo con alcance global de empresas)"
+                  },
+                  "codigo": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9_]{2,40}$",
+                    "description": "Minúsculas, dígitos y _ (no cambia)",
+                    "examples": [
+                      "fibra"
+                    ]
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "seguimiento_defecto": {
+                    "type": "string",
+                    "enum": [
+                      "cantidad",
+                      "serie"
+                    ]
+                  },
+                  "modalidad_defecto": {
+                    "type": "string",
+                    "enum": [
+                      "comodato",
+                      "consumible_gasto",
+                      "consumible_cobro"
+                    ]
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "nombre",
+                  "seguimiento_defecto",
+                  "modalidad_defecto"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tipo de producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipoProducto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso tipos_producto.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "tipos_producto.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/tipos-producto/{id}/desactivar": {
+      "post": {
+        "operationId": "inventarioDesactivarTipoProducto",
+        "summary": "Desactivar un tipo de producto (los productos que ya lo usan siguen igual)",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tipo de producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipoProducto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso tipos_producto.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "tipos_producto.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/tipos-producto/{id}/editar": {
+      "post": {
+        "operationId": "inventarioEditarTipoProducto",
+        "summary": "Editar un tipo de producto (nombre, seguimiento y modalidad por defecto)",
+        "description": "El código no cambia. Solo afecta a los productos nuevos. Con audit.cambios.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "seguimiento_defecto": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "cantidad",
+                          "serie"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "modalidad_defecto": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "comodato",
+                          "consumible_gasto",
+                          "consumible_cobro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tipo de producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipoProducto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso tipos_producto.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "tipos_producto.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/inventario/traslados": {
       "get": {
         "operationId": "inventarioOrdenesTraslado",
@@ -54045,12 +54609,12 @@
             "name": "tipo",
             "in": "query",
             "required": false,
+            "description": "Código del tipo de producto (GET /inventario/tipos-producto)",
             "schema": {
               "type": "string",
-              "enum": [
-                "equipo",
-                "material",
-                "otro"
+              "pattern": "^[a-z0-9_]{2,40}$",
+              "examples": [
+                "material"
               ]
             }
           },
@@ -54063,6 +54627,19 @@
               "enum": [
                 "cantidad",
                 "serie"
+              ]
+            }
+          },
+          {
+            "name": "modalidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "comodato",
+                "consumible_gasto",
+                "consumible_cobro"
               ]
             }
           },
@@ -54193,19 +54770,42 @@
                   },
                   "tipo": {
                     "type": "string",
-                    "enum": [
-                      "equipo",
-                      "material",
-                      "otro"
+                    "pattern": "^[a-z0-9_]{2,40}$",
+                    "description": "Código del tipo de producto (GET /inventario/tipos-producto)",
+                    "examples": [
+                      "material"
                     ]
                   },
                   "seguimiento": {
-                    "type": "string",
-                    "enum": [
-                      "cantidad",
-                      "serie"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "cantidad",
+                          "serie"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
                     ],
-                    "description": "cantidad (cable, conectores) o serie (router, ONU: unidades en la fase B)"
+                    "description": "cantidad (cable, conectores) o serie (router, ONU); por defecto la del tipo"
+                  },
+                  "modalidad": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "comodato",
+                          "consumible_gasto",
+                          "consumible_cobro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo"
                   },
                   "unidad": {
                     "type": [
@@ -54284,8 +54884,7 @@
                 "required": [
                   "sku",
                   "nombre",
-                  "tipo",
-                  "seguimiento"
+                  "tipo"
                 ],
                 "additionalProperties": false
               }
@@ -54619,18 +55218,14 @@
                     "maxLength": 200
                   },
                   "tipo": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "equipo",
-                          "material",
-                          "otro"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[a-z0-9_]{2,40}$",
+                    "description": "Código del tipo de producto (GET /inventario/tipos-producto)",
+                    "examples": [
+                      "material"
                     ]
                   },
                   "seguimiento": {
@@ -54647,6 +55242,22 @@
                       }
                     ],
                     "description": "No cambia si el producto tiene movimientos (409 producto_con_movimientos)"
+                  },
+                  "modalidad": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "comodato",
+                          "consumible_gasto",
+                          "consumible_cobro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo"
                   },
                   "unidad": {
                     "type": [
@@ -97662,7 +98273,10 @@
           "nombre",
           "unidad",
           "tipo",
+          "tipo_id",
+          "tipo_nombre",
           "seguimiento",
+          "modalidad",
           "clase_activo",
           "concepto_cargo_id",
           "cuenta_costo",
@@ -97696,11 +98310,14 @@
           },
           "tipo": {
             "type": "string",
-            "enum": [
-              "equipo",
-              "material",
-              "otro"
-            ]
+            "description": "Código del tipo de producto (catálogo editable, fase D)"
+          },
+          "tipo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo_nombre": {
+            "type": "string"
           },
           "seguimiento": {
             "type": "string",
@@ -97708,6 +98325,15 @@
               "cantidad",
               "serie"
             ]
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "comodato",
+              "consumible_gasto",
+              "consumible_cobro"
+            ],
+            "description": "Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)"
           },
           "clase_activo": {
             "type": [
@@ -108023,6 +108649,72 @@
             "description": "`https://<panel>/sso/entrar#<ticket>`: el ticket va en el fragmento; 60 s, un solo uso"
           },
           "expira_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TipoProducto": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "codigo",
+          "nombre",
+          "seguimiento_defecto",
+          "modalidad_defecto",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = global"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "seguimiento_defecto": {
+            "type": "string",
+            "enum": [
+              "cantidad",
+              "serie"
+            ]
+          },
+          "modalidad_defecto": {
+            "type": "string",
+            "enum": [
+              "comodato",
+              "consumible_gasto",
+              "consumible_cobro"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
             "type": "string",
             "format": "date-time"
           }

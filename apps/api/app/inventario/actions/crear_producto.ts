@@ -5,6 +5,12 @@ import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
 import { aTexto, dec } from '#ledger/dinero'
 import {
+    modalidadPorDefecto,
+    problemaModalidad,
+    resolverTipo,
+    type Modalidad,
+} from '#inventario/tipos_producto'
+import {
     CLASE_ACTIVO_POR_DEFECTO,
     problemaCuentaProducto,
     verProducto,
@@ -30,6 +36,8 @@ export interface DatosProducto {
     unidad?: string | null
     tipo?: TipoProducto | null
     seguimiento?: Seguimiento | null
+    /** fase D (D.3): por defecto la del tipo */
+    modalidad?: Modalidad | null
     clase_activo?: string | null
     concepto_cargo_id?: number | null
     cuenta_costo?: string | null
@@ -43,8 +51,10 @@ export interface EntradaCrearProducto extends DatosProducto {
     empresa_id?: number | null
     sku: string
     nombre: string
+    /** código del tipo (de la empresa o global, activo) */
     tipo: TipoProducto
-    seguimiento: Seguimiento
+    /** por defecto el del tipo (fase D) */
+    seguimiento?: Seguimiento | null
 }
 
 /** Valida las reglas comunes del alta y la edición (errores 422 de campo). */
@@ -54,6 +64,10 @@ export async function validarDatosProducto(
     datos: Required<Pick<DatosProducto, 'seguimiento' | 'clase_activo'>> & DatosProducto,
 ): Promise<void> {
     const errores: ErrorCampo[] = []
+    if (datos.modalidad) {
+        const problema = problemaModalidad(datos.modalidad, datos.seguimiento ?? 'cantidad')
+        if (problema) errores.push(problema)
+    }
     if (datos.clase_activo) {
         if (datos.seguimiento !== 'serie') {
             errores.push({
@@ -149,11 +163,24 @@ export default class CrearProducto extends DomainAction<EntradaCrearProducto, Pr
         t.fijarEmpresa(empresaId)
 
         const sku = input.sku.trim()
+        const tipo = await resolverTipo(t, empresaId, input.tipo)
+        const seguimiento = input.seguimiento ?? tipo.seguimiento_defecto
+        // la modalidad del tipo solo si va con el seguimiento elegido; si no, la de ese seguimiento
+        const modalidad =
+            input.modalidad ??
+            (problemaModalidad(tipo.modalidad_defecto, seguimiento)
+                ? modalidadPorDefecto(seguimiento)
+                : tipo.modalidad_defecto)
         const claseActivo =
-            input.seguimiento === 'serie'
+            seguimiento === 'serie'
                 ? (input.clase_activo ?? CLASE_ACTIVO_POR_DEFECTO)
                 : (input.clase_activo ?? null)
-        await validarDatosProducto(t, empresaId, { ...input, clase_activo: claseActivo })
+        await validarDatosProducto(t, empresaId, {
+            ...input,
+            seguimiento,
+            modalidad,
+            clase_activo: claseActivo,
+        })
         await exigirSkuLibre(t, empresaId, sku)
 
         const [fila] = (await t.trx
@@ -164,8 +191,10 @@ export default class CrearProducto extends DomainAction<EntradaCrearProducto, Pr
                 sku,
                 nombre: input.nombre.trim(),
                 unidad: input.unidad?.trim() || 'unidad',
-                tipo: input.tipo,
-                seguimiento: input.seguimiento,
+                tipo: tipo.codigo,
+                tipo_id: tipo.id,
+                seguimiento,
+                modalidad,
                 clase_activo: claseActivo,
                 concepto_cargo_id: input.concepto_cargo_id ?? null,
                 cuenta_costo: input.cuenta_costo?.trim() || null,
@@ -183,6 +212,7 @@ export default class CrearProducto extends DomainAction<EntradaCrearProducto, Pr
             unidad: producto.unidad,
             tipo: producto.tipo,
             seguimiento: producto.seguimiento,
+            modalidad: producto.modalidad,
             clase_activo: producto.clase_activo,
             concepto_cargo_id: producto.concepto_cargo_id,
             cuenta_costo: producto.cuenta_costo,

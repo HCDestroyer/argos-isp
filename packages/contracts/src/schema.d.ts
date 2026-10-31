@@ -4083,6 +4083,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventario/tipos-producto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tipos de producto: los globales y los de la empresa */
+        get: operations["inventarioTiposProducto"];
+        put?: never;
+        /**
+         * Crear un tipo de producto (de la empresa o global)
+         * @description Código único entre los de la empresa y los globales (409 tipo_duplicado). global: true solo con alcance global de empresas (403). modalidad_defecto va con seguimiento_defecto: comodato solo serie, consumible_gasto solo cantidad (422 modalidad_defecto).
+         */
+        post: operations["inventarioCrearTipoProducto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/tipos-producto/{id}/desactivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desactivar un tipo de producto (los productos que ya lo usan siguen igual) */
+        post: operations["inventarioDesactivarTipoProducto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/tipos-producto/{id}/editar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Editar un tipo de producto (nombre, seguimiento y modalidad por defecto)
+         * @description El código no cambia. Solo afecta a los productos nuevos. Con audit.cambios.
+         */
+        post: operations["inventarioEditarTipoProducto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventario/traslados": {
         parameters: {
             query?: never;
@@ -16236,10 +16294,17 @@ export interface components {
             sku: string;
             nombre: string;
             unidad: string;
-            /** @enum {string} */
-            tipo: "equipo" | "material" | "otro";
+            /** @description Código del tipo de producto (catálogo editable, fase D) */
+            tipo: string;
+            tipo_id: number;
+            tipo_nombre: string;
             /** @enum {string} */
             seguimiento: "cantidad" | "serie";
+            /**
+             * @description Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)
+             * @enum {string}
+             */
+            modalidad: "comodato" | "consumible_gasto" | "consumible_cobro";
             clase_activo: string | null;
             concepto_cargo_id: number | null;
             /** @description null = 5.6.01 */
@@ -18570,6 +18635,24 @@ export interface components {
             url: string;
             /** Format: date-time */
             expira_en: string;
+        };
+        TipoProducto: {
+            id: number;
+            /** @description null = global */
+            empresa_id: number | null;
+            codigo: string;
+            nombre: string;
+            /** @enum {string} */
+            seguimiento_defecto: "cantidad" | "serie";
+            /** @enum {string} */
+            modalidad_defecto: "comodato" | "consumible_gasto" | "consumible_cobro";
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         TokenApi: {
             id: number;
@@ -35082,6 +35165,300 @@ export interface operations {
             };
         };
     };
+    inventarioTiposProducto: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                activo?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de tipos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TipoProducto"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioCrearTipoProducto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /** @description true = tipo global (solo con alcance global de empresas) */
+                    global?: boolean | null;
+                    /**
+                     * @description Minúsculas, dígitos y _ (no cambia)
+                     * @example fibra
+                     */
+                    codigo: string;
+                    nombre: string;
+                    /** @enum {string} */
+                    seguimiento_defecto: "cantidad" | "serie";
+                    /** @enum {string} */
+                    modalidad_defecto: "comodato" | "consumible_gasto" | "consumible_cobro";
+                };
+            };
+        };
+        responses: {
+            /** @description Tipo de producto */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoProducto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso tipos_producto.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioDesactivarTipoProducto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Tipo de producto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoProducto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso tipos_producto.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioEditarTipoProducto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string | null;
+                    seguimiento_defecto?: ("cantidad" | "serie") | null;
+                    modalidad_defecto?: ("comodato" | "consumible_gasto" | "consumible_cobro") | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Tipo de producto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoProducto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso tipos_producto.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     inventarioOrdenesTraslado: {
         parameters: {
             query?: {
@@ -48557,8 +48934,10 @@ export interface operations {
                 limit?: number;
                 /** @description Nombre (contiene) o SKU exacto */
                 q?: string;
-                tipo?: "equipo" | "material" | "otro";
+                /** @description Código del tipo de producto (GET /inventario/tipos-producto) */
+                tipo?: string;
                 seguimiento?: "cantidad" | "serie";
+                modalidad?: "comodato" | "consumible_gasto" | "consumible_cobro";
                 activo?: boolean;
             };
             header?: never;
@@ -48625,13 +49004,15 @@ export interface operations {
                     empresa_id?: number | null;
                     sku: string;
                     nombre: string;
-                    /** @enum {string} */
-                    tipo: "equipo" | "material" | "otro";
                     /**
-                     * @description cantidad (cable, conectores) o serie (router, ONU: unidades en la fase B)
-                     * @enum {string}
+                     * @description Código del tipo de producto (GET /inventario/tipos-producto)
+                     * @example material
                      */
-                    seguimiento: "cantidad" | "serie";
+                    tipo: string;
+                    /** @description cantidad (cable, conectores) o serie (router, ONU); por defecto la del tipo */
+                    seguimiento?: ("cantidad" | "serie") | null;
+                    /** @description comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo */
+                    modalidad?: ("comodato" | "consumible_gasto" | "consumible_cobro") | null;
                     /** @description unidad (por defecto), metro, caja… */
                     unidad?: string | null;
                     /** @description Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red) */
@@ -48846,9 +49227,15 @@ export interface operations {
                     version: number;
                     sku?: string | null;
                     nombre?: string | null;
-                    tipo?: ("equipo" | "material" | "otro") | null;
+                    /**
+                     * @description Código del tipo de producto (GET /inventario/tipos-producto)
+                     * @example material
+                     */
+                    tipo?: string | null;
                     /** @description No cambia si el producto tiene movimientos (409 producto_con_movimientos) */
                     seguimiento?: ("cantidad" | "serie") | null;
+                    /** @description comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo */
+                    modalidad?: ("comodato" | "consumible_gasto" | "consumible_cobro") | null;
                     /** @description unidad (por defecto), metro, caja… */
                     unidad?: string | null;
                     /** @description Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red) */

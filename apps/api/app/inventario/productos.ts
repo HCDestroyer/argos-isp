@@ -5,14 +5,17 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import type { Modalidad } from '#inventario/tipos_producto'
 
 /**
  * Productos del inventario (`contratos/inventario.md` §4): lectura y validación común de las
  * acciones `productos.crear` y `productos.editar`.
  */
 
+/** Los tipos semilla (globales); desde la fase D el catálogo es editable (`#inventario/tipos_producto`). */
 export const TIPOS_PRODUCTO = ['equipo', 'material', 'otro'] as const
-export type TipoProducto = (typeof TIPOS_PRODUCTO)[number]
+/** Código de un tipo del catálogo (`inventario.tipos_producto.codigo`). */
+export type TipoProducto = string
 export const SEGUIMIENTOS = ['cantidad', 'serie'] as const
 export type Seguimiento = (typeof SEGUIMIENTOS)[number]
 
@@ -29,7 +32,12 @@ export interface ProductoVista {
     nombre: string
     unidad: string
     tipo: TipoProducto
+    /** el tipo del catálogo (fase D) */
+    tipo_id: number
+    tipo_nombre: string
     seguimiento: Seguimiento
+    /** fase D: qué hace un consumo a un servicio (comodato, gasto o cobro al cliente) */
+    modalidad: Modalidad
     clase_activo: string | null
     concepto_cargo_id: number | null
     /** null = la del plan (`5.6.01`) */
@@ -52,6 +60,7 @@ export interface ProductoVista {
 function consulta(cliente: QueryClientContract) {
     return cliente
         .from('inventario.productos as p')
+        .join('inventario.tipos_producto as tp', 'tp.id', 'p.tipo_id')
         .select(
             'p.id',
             'p.empresa_id',
@@ -59,7 +68,10 @@ function consulta(cliente: QueryClientContract) {
             'p.nombre',
             'p.unidad',
             'p.tipo',
+            'p.tipo_id',
+            'tp.nombre as tipo_nombre',
             'p.seguimiento',
+            'p.modalidad',
             'p.clase_activo',
             'p.concepto_cargo_id',
             'p.cuenta_costo',
@@ -84,6 +96,7 @@ function normalizar(fila: ProductoVista): ProductoVista {
         ...fila,
         id: Number(fila.id),
         empresa_id: Number(fila.empresa_id),
+        tipo_id: Number(fila.tipo_id),
         concepto_cargo_id: fila.concepto_cargo_id === null ? null : Number(fila.concepto_cargo_id),
         version: Number(fila.version),
     }
@@ -99,6 +112,7 @@ export interface FiltrosProductos extends OpcionesPaginacion {
     q?: string
     tipo?: TipoProducto
     seguimiento?: Seguimiento
+    modalidad?: Modalidad
     activo?: boolean
 }
 
@@ -113,6 +127,7 @@ export async function listarProductos(filtros: FiltrosProductos, empresas: numbe
         )
         .if(filtros.tipo, (c) => c.where('p.tipo', filtros.tipo!))
         .if(filtros.seguimiento, (c) => c.where('p.seguimiento', filtros.seguimiento!))
+        .if(filtros.modalidad, (c) => c.where('p.modalidad', filtros.modalidad!))
         .if(filtros.activo !== undefined, (c) => c.where('p.activo', filtros.activo!))
     filtrarPorEmpresa(q, empresas, (c, ids) => c.whereIn('p.empresa_id', ids))
     const pagina = await paginar<ProductoVista>(q, filtros, { columna: 'p.id' })

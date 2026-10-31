@@ -2,7 +2,8 @@ import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada } from '#shared/validadores'
 import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
-import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
+import { SEGUIMIENTOS } from '#inventario/productos'
+import { MODALIDADES } from '#inventario/tipos_producto'
 import { TIPOS_BODEGA, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
@@ -58,7 +59,23 @@ const unidadNueva = () =>
 | Productos
 */
 
+/** Código de un tipo del catálogo (fase D): `equipo`, `material`, `otro` o uno de la empresa. */
+const codigoTipo = () =>
+    vine
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(/^[a-z0-9_]{2,40}$/)
+        .meta({
+            description: 'Código del tipo de producto (GET /inventario/tipos-producto)',
+            examples: ['material'],
+        })
+
 const datosProducto = {
+    modalidad: vine.enum(MODALIDADES).nullable().optional().meta({
+        description:
+            'comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo',
+    }),
     unidad: texto(30).nullable().optional().meta({ description: 'unidad (por defecto), metro, caja…' }),
     clase_activo: vine.enum(CLAVES_CLASE_ACTIVO).nullable().optional().meta({
         description:
@@ -97,9 +114,9 @@ export const crearProductoValidator = vine.compile(
         empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
         sku: vine.string().trim().minLength(1).maxLength(60),
         nombre: vine.string().trim().minLength(2).maxLength(200),
-        tipo: vine.enum(TIPOS_PRODUCTO),
-        seguimiento: vine.enum(SEGUIMIENTOS).meta({
-            description: 'cantidad (cable, conectores) o serie (router, ONU: unidades en la fase B)',
+        tipo: codigoTipo(),
+        seguimiento: vine.enum(SEGUIMIENTOS).nullable().optional().meta({
+            description: 'cantidad (cable, conectores) o serie (router, ONU); por defecto la del tipo',
         }),
         ...datosProducto,
     }),
@@ -110,7 +127,7 @@ export const editarProductoValidator = vine.compile(
         version: versionEsperada(),
         sku: vine.string().trim().minLength(1).maxLength(60).nullable().optional(),
         nombre: vine.string().trim().minLength(2).maxLength(200).nullable().optional(),
-        tipo: vine.enum(TIPOS_PRODUCTO).nullable().optional(),
+        tipo: codigoTipo().nullable().optional(),
         seguimiento: vine.enum(SEGUIMIENTOS).nullable().optional().meta({
             description: 'No cambia si el producto tiene movimientos (409 producto_con_movimientos)',
         }),
@@ -130,8 +147,9 @@ export const listarProductosValidator = vine.compile(
         empresas: empresasConsulta(),
         ...reglasPaginacion,
         q: texto(100).optional().meta({ description: 'Nombre (contiene) o SKU exacto' }),
-        tipo: vine.enum(TIPOS_PRODUCTO).optional(),
+        tipo: codigoTipo().optional(),
         seguimiento: vine.enum(SEGUIMIENTOS).optional(),
+        modalidad: vine.enum(MODALIDADES).optional(),
         activo: vine.boolean().optional(),
     }),
 )
@@ -529,5 +547,51 @@ export const documentoTrasladoValidator = vine.compile(
             .nullable()
             .optional()
             .meta({ description: 'Nota de quien adjunta (queda en la auditoría)' }),
+    }),
+)
+
+/*
+| Tipos de producto (fase D, `contratos/inventario.md` D.2)
+*/
+
+export const crearTipoProductoValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        global: vine.boolean().nullable().optional().meta({
+            description: 'true = tipo global (solo con alcance global de empresas)',
+        }),
+        codigo: vine
+            .string()
+            .trim()
+            .toLowerCase()
+            .regex(/^[a-z0-9_]{2,40}$/)
+            .meta({ description: 'Minúsculas, dígitos y _ (no cambia)', examples: ['fibra'] }),
+        nombre: vine.string().trim().minLength(2).maxLength(80),
+        seguimiento_defecto: vine.enum(SEGUIMIENTOS),
+        modalidad_defecto: vine.enum(MODALIDADES),
+    }),
+)
+
+export const editarTipoProductoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(2).maxLength(80).nullable().optional(),
+        seguimiento_defecto: vine.enum(SEGUIMIENTOS).nullable().optional(),
+        modalidad_defecto: vine.enum(MODALIDADES).nullable().optional(),
+    }),
+)
+
+export const desactivarTipoProductoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        motivo: texto(500).nullable().optional(),
+    }),
+)
+
+export const listarTiposProductoValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        activo: vine.boolean().optional(),
     }),
 )

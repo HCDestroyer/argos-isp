@@ -12,7 +12,8 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
-import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
+import { SEGUIMIENTOS } from '#inventario/productos'
+import { MODALIDADES } from '#inventario/tipos_producto'
 import { TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
@@ -36,8 +37,14 @@ export const Producto = definirEsquema(
         sku: texto,
         nombre: texto,
         unidad: texto,
-        tipo: enumerado(TIPOS_PRODUCTO),
+        tipo: { ...texto, description: 'Código del tipo de producto (catálogo editable, fase D)' },
+        tipo_id: id,
+        tipo_nombre: texto,
         seguimiento: enumerado(SEGUIMIENTOS),
+        modalidad: {
+            ...enumerado(MODALIDADES),
+            description: 'Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)',
+        },
         clase_activo: nulable(texto),
         concepto_cargo_id: nulable(id),
         cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
@@ -402,5 +409,19 @@ export const ConfiguracionInventario = definirEsquema(
         empresa_id: id,
         traslado_firma_obligatoria: booleano,
         version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
+    }),
+)
+
+export const TipoProducto = definirEsquema(
+    'TipoProducto',
+    objeto({
+        id,
+        empresa_id: { ...nulable(id), description: 'null = global' },
+        codigo: texto,
+        nombre: texto,
+        seguimiento_defecto: enumerado(SEGUIMIENTOS),
+        modalidad_defecto: enumerado(MODALIDADES),
+        activo: booleano,
+        ...auditable,
     }),
 )
