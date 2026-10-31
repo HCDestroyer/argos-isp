@@ -62,10 +62,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    '25.compra_de_borrador_distinta_de_la_factura':
-        'H78 (inventario fase D): la tolerancia de Q0.01 por línea al confirmar un borrador registra la compra por Σ líneas y no por el total de la factura',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 

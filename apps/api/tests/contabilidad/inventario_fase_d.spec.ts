@@ -700,7 +700,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         const status = await statusDe(r)
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(status, 422, 'totales_descuadrados')
-    }).fails('H78: la tolerancia por línea deja la compra por un monto distinto del total de la factura')
+    })
 
     test('H76 · media: después del cierre de la apertura, un lote con entrada vuelve a mover 2.9.01 (inventario contra patrimonio sin compra)', async ({
         assert,
