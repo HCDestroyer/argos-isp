@@ -331,6 +331,21 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'inventario.contar': 'Conteo registrado',
     'inventario.cerrar_conteo': 'Conteo de inventario cerrado',
     'inventario.cancelar_conteo': 'Conteo de inventario cancelado',
+    // Fase D (`contratos/inventario.md`)
+    'inventario.crear_traslado': 'Orden de traslado enviada',
+    'inventario.recibir_traslado': 'Orden de traslado recibida',
+    'inventario.cancelar_traslado': 'Orden de traslado cancelada',
+    'inventario.adjuntar_documento_traslado': 'Papel firmado de una orden de traslado adjuntado',
+    'inventario.configurar': 'Configuración del inventario cambiada',
+    'inventario.configurar_ia': 'IA de facturas de compra configurada',
+    'tipos_producto.crear': 'Tipo de producto creado',
+    'tipos_producto.editar': 'Tipo de producto editado',
+    'tipos_producto.desactivar': 'Tipo de producto desactivado',
+    'productos.crear_lote': 'Productos creados por lote',
+    'compras.cargar_borrador': 'Factura de compra cargada como borrador',
+    'compras.editar_borrador': 'Borrador de compra corregido',
+    'compras.confirmar_borrador': 'Borrador de compra confirmado',
+    'compras.descartar_borrador': 'Borrador de compra descartado',
 }
 
 /** Todas las acciones con texto propio (para comprobar que ninguna de la API queda sin traducir). */

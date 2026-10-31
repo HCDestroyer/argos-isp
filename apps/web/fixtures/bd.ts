@@ -47,7 +47,8 @@ import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
 import { nodosPortal } from './nodosPortal/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
-import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales } from './inventario/datos'
+import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
+import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
@@ -167,8 +168,10 @@ interface BaseFixtures {
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
-    productos: Schema<'Producto'>[]
+    productos: ProductoFixture[]
     bodegas: Schema<'Bodega'>[]
+    /** Inventario fase D: tipos de producto, órdenes de traslado, configuración, IA y borradores de compra. */
+    inventarioFaseD: InventarioFaseDFixtures
     movimientosInventario: Schema<'MovimientoInventario'>[]
     unidadesInventario: Schema<'UnidadInventario'>[]
     conteosInventario: Schema<'ConteoInventarioDetalle'>[]
@@ -357,6 +360,7 @@ function inicial(): BaseFixtures {
         movimientosInventario: movimientosIniciales(),
         unidadesInventario: unidadesIniciales(),
         conteosInventario: conteosIniciales(),
+        inventarioFaseD: faseDInicial(),
         conciliacionesPasarela,
         roles,
         tokensApi,

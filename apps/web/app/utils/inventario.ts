@@ -14,10 +14,33 @@ type ProductoApi = Schema<'Producto'>
 type MovimientoApi = Schema<'MovimientoInventario'>
 type UnidadApi = Schema<'UnidadInventario'>
 
-export const TIPOS_PRODUCTO: Record<ProductoApi['tipo'], string> = {
+/** Nombres de los tipos semilla; los demás salen del catálogo (`tipo_nombre`, D.2). */
+export const TIPOS_PRODUCTO: Record<string, string> = {
     equipo: 'Equipo',
     material: 'Material',
     otro: 'Otro',
+}
+
+/** El nombre del tipo de un producto: el del catálogo o, si no llegó, el de la semilla o el código. */
+export function nombreTipoProducto(producto: Pick<ProductoApi, 'tipo' | 'tipo_nombre'>): string {
+    return producto.tipo_nombre ?? TIPOS_PRODUCTO[producto.tipo] ?? producto.tipo
+}
+
+export type ModalidadProducto = NonNullable<ProductoApi['modalidad']>
+
+/**
+ * Modalidad del producto (D.3): qué pasa cuando se usa con un servicio. `comodato` solo por serie,
+ * `consumible_gasto` solo por cantidad, `consumible_cobro` con los dos (por serie es la venta del equipo).
+ */
+export const MODALIDADES: Record<ModalidadProducto, { etiqueta: string, descripcion: string, icono: string, color: BadgeColor, seguimientos: ProductoApi['seguimiento'][] }> = {
+    comodato: { etiqueta: 'Comodato', descripcion: 'Se presta al cliente y vuelve al retirarlo (activo fijo).', icono: 'i-lucide-house', color: 'info', seguimientos: ['serie'] },
+    consumible_gasto: { etiqueta: 'Gasto', descripcion: 'Se consume en la instalación y lo absorbe el ISP (5.2.07).', icono: 'i-lucide-hammer', color: 'neutral', seguimientos: ['cantidad'] },
+    consumible_cobro: { etiqueta: 'Cobro', descripcion: 'Se consume y se cobra al cliente con un cargo único (precio con IVA).', icono: 'i-lucide-receipt', color: 'warning', seguimientos: ['cantidad', 'serie'] },
+}
+
+/** La modalidad va con el seguimiento (la API responde 422 `modalidad` si no). */
+export function modalidadCompatible(modalidad: ModalidadProducto, seguimiento: ProductoApi['seguimiento']): boolean {
+    return MODALIDADES[modalidad].seguimientos.includes(seguimiento)
 }
 
 export const SEGUIMIENTOS: Record<ProductoApi['seguimiento'], { etiqueta: string, descripcion: string, icono: string }> = {
@@ -25,9 +48,20 @@ export const SEGUIMIENTOS: Record<ProductoApi['seguimiento'], { etiqueta: string
     serie: { etiqueta: 'Por serie', descripcion: 'Router, ONU, antena: una unidad por serie o MAC, se presta en comodato.', icono: 'i-lucide-barcode' },
 }
 
-export const TIPOS_BODEGA: Record<Schema<'Bodega'>['tipo'], { etiqueta: string, icono: string }> = {
+/**
+ * Tipos de bodega; `transito` es la bodega virtual de lo que viaja en una orden de traslado (D.1): no
+ * se edita, no se desactiva ni se elige como origen o destino. El OpenAPI la declarará al cerrar la
+ * transición; la clave ya está aquí para mostrarla.
+ */
+export const TIPOS_BODEGA: Record<Schema<'Bodega'>['tipo'] | 'transito', { etiqueta: string, icono: string }> = {
     bodega: { etiqueta: 'Bodega', icono: 'i-lucide-warehouse' },
     tecnico: { etiqueta: 'Técnico', icono: 'i-lucide-hard-hat' },
+    transito: { etiqueta: 'En tránsito', icono: 'i-lucide-truck' },
+}
+
+/** La bodega virtual de tránsito (D.1). */
+export function esBodegaTransito(bodega: { tipo: string }): boolean {
+    return bodega.tipo === 'transito'
 }
 
 /** Tipo de movimiento del kardex con su texto; `entrada` dice de qué lado suele caer. */
@@ -120,8 +154,9 @@ function textoONulo(maximo: number, mensaje = `Máximo ${maximo} caracteres`) {
 export const esquemaProducto = z.object({
     sku: z.string().trim().min(1, 'Escribe el SKU').max(60, 'Máximo 60 caracteres'),
     nombre: z.string().trim().min(2, 'Escribe al menos 2 caracteres').max(200, 'Máximo 200 caracteres'),
-    tipo: z.enum(['equipo', 'material', 'otro']),
+    tipo: z.string().regex(/^[a-z0-9_]{2,40}$/, 'Elige el tipo de producto'),
     seguimiento: z.enum(['cantidad', 'serie']),
+    modalidad: z.enum(['comodato', 'consumible_gasto', 'consumible_cobro']),
     unidad: textoONulo(30),
     clase_activo: z.enum(['equipo_red', 'computacion', 'mobiliario', 'vehiculos', 'herramientas', 'edificios', 'otros']),
     cuenta_costo: z.string().trim().max(30).refine(v => v === '' || CUENTA.test(v), 'Código de cuenta: 5.6.01').transform(v => v || null),
@@ -129,6 +164,10 @@ export const esquemaProducto = z.object({
     existencia_minima: z.string().trim().refine(v => v === '' || CANTIDAD.test(v), 'Hasta 3 decimales').transform(v => v || null),
     /** Precio de venta con IVA que sugiere el cargo único (A3); vacío = sin precio. */
     precio_venta: z.string().trim().refine(v => v === '' || /^\d{1,12}(\.\d{1,2})?$/.test(v), 'Precio con hasta 2 decimales, sin signo').transform(v => v || null),
+}).superRefine((d, ctx) => {
+    if (!modalidadCompatible(d.modalidad, d.seguimiento)) {
+        ctx.addIssue({ code: 'custom', path: ['modalidad'], message: d.modalidad === 'comodato' ? 'El comodato es solo para productos por serie' : 'El gasto es solo para productos por cantidad' })
+    }
 })
 
 export type EntradaProducto = z.input<typeof esquemaProducto>
@@ -140,6 +179,7 @@ export function entradaProducto(producto: ProductoApi | null): EntradaProducto {
         nombre: producto?.nombre ?? '',
         tipo: producto?.tipo ?? 'material',
         seguimiento: producto?.seguimiento ?? 'cantidad',
+        modalidad: producto?.modalidad ?? (producto?.seguimiento === 'serie' ? 'comodato' : 'consumible_gasto'),
         unidad: producto?.unidad ?? 'unidad',
         clase_activo: (producto?.clase_activo as EntradaProducto['clase_activo'] | null) ?? 'equipo_red',
         cuenta_costo: producto?.cuenta_costo ?? '',
@@ -182,6 +222,9 @@ export const esquemaOperacion = z.object({
     operacion: z.enum(['saldo_inicial', 'consumo', 'traslado', 'ajuste', 'baja']),
     producto_id: z.number({ message: 'Elige el producto' }).int().positive('Elige el producto'),
     seguimiento: z.enum(['cantidad', 'serie']),
+    /** La del producto (D.3): un consumo de `consumible_cobro` genera un cargo único al cliente del servicio. */
+    modalidad: z.enum(['comodato', 'consumible_gasto', 'consumible_cobro']).nullable(),
+    precio_unitario: z.string().trim(),
     bodega_id: z.number({ message: 'Elige la bodega' }).int().positive('Elige la bodega'),
     bodega_destino_id: z.number().int().positive().nullable(),
     cantidad: z.string().trim(),
@@ -204,9 +247,17 @@ export const esquemaOperacion = z.object({
             error('bodega_destino_id', 'El destino debe ser otra bodega')
         }
     }
+    if (d.operacion === 'consumo' && d.modalidad === 'consumible_cobro') {
+        if (!d.servicio_id) {
+            error('servicio_id', 'Indica el servicio: este producto se cobra al cliente')
+        }
+        if (d.precio_unitario && !/^\d{1,12}(\.\d{1,2})?$/.test(d.precio_unitario)) {
+            error('precio_unitario', 'Precio con hasta 2 decimales, sin signo')
+        }
+    }
     if (serie) {
         if (d.operacion === 'consumo') {
-            error('producto_id', 'Un producto por serie no se consume: se presta en comodato o se da de baja')
+            error('producto_id', d.modalidad === 'comodato' ? 'Un equipo en comodato no se consume: va por los equipos del servicio' : 'Un producto por serie no se consume desde aquí: se presta en comodato o se da de baja')
         }
         if ((d.operacion === 'traslado' && !d.unidad_ids.length)) {
             error('unidad_ids', 'Elige al menos un equipo')
@@ -239,7 +290,7 @@ export type EntradaOperacion = z.input<typeof esquemaOperacion>
 export type SalidaOperacion = z.output<typeof esquemaOperacion>
 
 export function operacionVacia(operacion: OperacionInventario): EntradaOperacion {
-    return { operacion, producto_id: 0, seguimiento: 'cantidad', bodega_id: 0, bodega_destino_id: null, cantidad: '', unidad_ids: [], serie: '', mac: '', costo_unitario: '', servicio_id: null, causa: 'danado', fecha: '', motivo: '' }
+    return { operacion, producto_id: 0, seguimiento: 'cantidad', modalidad: null, precio_unitario: '', bodega_id: 0, bodega_destino_id: null, cantidad: '', unidad_ids: [], serie: '', mac: '', costo_unitario: '', servicio_id: null, causa: 'danado', fecha: '', motivo: '' }
 }
 
 /** Cuerpo de cada operación (lo que pide su validador en la API), desde el formulario validado. */
@@ -255,7 +306,15 @@ export function cuerpoOperacion(d: SalidaOperacion) {
                 ? { ...base, unidad: unidadNueva, costo_total: new Decimal(d.costo_unitario || '0').toFixed(2), fecha, motivo }
                 : { ...base, cantidad: d.cantidad, costo_unitario: d.costo_unitario, fecha, motivo } } as const
         case 'consumo':
-            return { operacion: d.operacion, cuerpo: { ...base, cantidad: d.cantidad, servicio_id: d.servicio_id, motivo, fecha } } as const
+            return { operacion: d.operacion, cuerpo: {
+                ...base,
+                cantidad: d.cantidad,
+                servicio_id: d.servicio_id,
+                motivo,
+                // Un cobro va con la fecha de hoy (422 `fecha` `no_aplica` con una pasada) y su precio, si se cambió.
+                fecha: d.modalidad === 'consumible_cobro' ? null : fecha,
+                ...(d.modalidad === 'consumible_cobro' && d.precio_unitario ? { precio_unitario: d.precio_unitario } : {}),
+            } } as const
         case 'traslado':
             return { operacion: d.operacion, cuerpo: {
                 producto_id: d.producto_id,
@@ -279,3 +338,62 @@ export function cuerpoOperacion(d: SalidaOperacion) {
             return { operacion: d.operacion, cuerpo: { ...base, ...(serie ? { unidad_id: d.unidad_ids[0] ?? null } : { cantidad: d.cantidad }), causa: d.causa, motivo: d.motivo } } as const
     }
 }
+
+/* Tipos de producto (D.2): espejo de `crearTipoProductoValidator` */
+
+export const esquemaTipoProducto = z.object({
+    codigo: z.string().trim().regex(/^[a-z0-9_]{2,40}$/, 'Minúsculas, dígitos y _ (de 2 a 40)'),
+    nombre: z.string().trim().min(2, 'Escribe al menos 2 caracteres').max(80, 'Máximo 80 caracteres'),
+    seguimiento_defecto: z.enum(['cantidad', 'serie']),
+    modalidad_defecto: z.enum(['comodato', 'consumible_gasto', 'consumible_cobro']),
+    global: z.boolean(),
+}).superRefine((d, ctx) => {
+    if (!modalidadCompatible(d.modalidad_defecto, d.seguimiento_defecto)) {
+        ctx.addIssue({ code: 'custom', path: ['modalidad_defecto'], message: d.modalidad_defecto === 'comodato' ? 'El comodato es solo para productos por serie' : 'El gasto es solo para productos por cantidad' })
+    }
+})
+
+export type EntradaTipoProducto = z.input<typeof esquemaTipoProducto>
+export type SalidaTipoProducto = z.output<typeof esquemaTipoProducto>
+
+export function entradaTipoProducto(tipo: Schema<'TipoProducto'> | null): EntradaTipoProducto {
+    return {
+        codigo: tipo?.codigo ?? '',
+        nombre: tipo?.nombre ?? '',
+        seguimiento_defecto: tipo?.seguimiento_defecto ?? 'cantidad',
+        modalidad_defecto: tipo?.modalidad_defecto ?? 'consumible_gasto',
+        global: tipo ? tipo.empresa_id === null : false,
+    }
+}
+
+/** Código sugerido a partir del nombre («Fibra óptica» → `fibra_optica`). */
+export function codigoDesdeNombre(nombre: string): string {
+    return nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)
+}
+
+/* IA que lee facturas de compra (D.5): espejo de `configurarIaValidator` */
+
+export type ProveedorIa = Schema<'ConfiguracionIa'>['proveedor']
+
+export const PROVEEDORES_IA: Record<ProveedorIa, { etiqueta: string, descripcion: string, modelo: string }> = {
+    privada: { etiqueta: 'IA privada', descripcion: 'Un servidor propio compatible con OpenAI (Ollama, vLLM…). Pide la URL base.', modelo: 'llama3.2-vision' },
+    anthropic: { etiqueta: 'Claude (Anthropic)', descripcion: 'Lee PDF e imágenes directamente.', modelo: 'claude-sonnet-4-5' },
+    deepseek: { etiqueta: 'DeepSeek', descripcion: 'Compatible con OpenAI; el PDF va como texto (un escaneo, súbelo como imagen).', modelo: 'deepseek-chat' },
+    openai: { etiqueta: 'ChatGPT (OpenAI)', descripcion: 'Compatible con OpenAI; el PDF va como texto.', modelo: 'gpt-4o-mini' },
+}
+
+export const esquemaIa = z.object({
+    proveedor: z.enum(['privada', 'anthropic', 'deepseek', 'openai']),
+    modelo: z.string().trim().min(1, 'Escribe el modelo').max(100, 'Máximo 100 caracteres'),
+    url_base: z.string().trim().max(300, 'Máximo 300 caracteres'),
+    activo: z.boolean(),
+}).superRefine((d, ctx) => {
+    if (d.proveedor === 'privada' && !d.url_base) {
+        ctx.addIssue({ code: 'custom', path: ['url_base'], message: 'La URL base es obligatoria en una IA privada' })
+    }
+    if (d.url_base && !/^https?:\/\/[^\s]+$/.test(d.url_base)) {
+        ctx.addIssue({ code: 'custom', path: ['url_base'], message: 'Una URL que empiece con http:// o https://' })
+    }
+})
+
+export type EntradaIa = z.input<typeof esquemaIa>

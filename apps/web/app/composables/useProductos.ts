@@ -3,6 +3,8 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Producto = Schema<'Producto'>
 export type FiltrosProductos = Omit<NonNullable<paths['/api/v1/productos']['get']['parameters']['query']>, 'cursor'>
 export type DatosProducto = paths['/api/v1/productos']['post']['requestBody']['content']['application/json']
+export type CuerpoProductosLote = paths['/api/v1/productos/lote']['post']['requestBody']['content']['application/json']
+export type ProductosLote = Schema<'ProductosLote'>
 export type CambiosProducto = paths['/api/v1/productos/{id}/editar']['post']['requestBody']['content']['application/json']
 
 /**
@@ -46,5 +48,13 @@ export function useProductos() {
         return resolver(api.POST('/api/v1/productos/{id}/desactivar', { params: { path: { id: producto.id } }, body: { version: producto.version, motivo } }))
     }
 
-    return { listar, activos, ver, crear, editar, desactivar }
+    /**
+     * `POST /productos/lote` (`productos.crear_lote`, D.4): hasta 500, todo o nada; la `Idempotency-Key`
+     * es obligatoria (400 sin ella). Errores por fila en `productos.<i>.campo`.
+     */
+    function crearLote(cuerpo: CuerpoProductosLote, claveIdempotencia: string): Promise<Resultado<ProductosLote>> {
+        return resolver(api.POST('/api/v1/productos/lote', { body: cuerpo, params: { header: { 'Idempotency-Key': claveIdempotencia } } }))
+    }
+
+    return { listar, activos, ver, crear, crearLote, editar, desactivar }
 }

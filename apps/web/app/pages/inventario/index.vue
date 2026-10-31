@@ -22,6 +22,8 @@ const numero = (valor: unknown) => (typeof valor === 'string' && Number(valor) >
 const bodega = ref<number>(numero(route.query.bodega))
 const producto = ref<number>(numero(route.query.producto))
 const bajoMinimo = ref(route.query.bajo_minimo === 'true')
+/** Lo que viaja en órdenes de traslado (bodega `transito`, D.1); la API lo deja fuera si no se pide. */
+const conTransito = ref(route.query.transito === 'true')
 
 const productos = shallowRef<Producto[]>([])
 const bodegas = shallowRef<Bodega[]>([])
@@ -42,13 +44,14 @@ function filtros(): FiltrosExistencias {
         ...(bodega.value ? { bodega_id: bodega.value } : {}),
         ...(producto.value ? { producto_id: producto.value } : {}),
         ...(bajoMinimo.value ? { bajo_minimo: true } : {}),
+        ...(conTransito.value ? { incluir_transito: true } : {}),
     }
 }
 
 const lista = usePaginacionCursor(cursor => useInventario().existencias(filtros(), cursor))
 
-watch([bodega, producto, bajoMinimo], async () => {
-    await router.replace({ query: { ...(bodega.value ? { bodega: String(bodega.value) } : {}), ...(producto.value ? { producto: String(producto.value) } : {}), ...(bajoMinimo.value ? { bajo_minimo: 'true' } : {}) } })
+watch([bodega, producto, bajoMinimo, conTransito], async () => {
+    await router.replace({ query: { ...(bodega.value ? { bodega: String(bodega.value) } : {}), ...(producto.value ? { producto: String(producto.value) } : {}), ...(bajoMinimo.value ? { bajo_minimo: 'true' } : {}), ...(conTransito.value ? { transito: 'true' } : {}) } })
     await lista.recargar()
 })
 
@@ -134,6 +137,12 @@ function alHacer(o: OperacionInventario) {
                     label="Bajo mínimo"
                     data-prueba="filtro-bajo-minimo"
                 />
+                <USwitch
+                    v-model="conTransito"
+                    label="En tránsito"
+                    description="Lo que viaja en órdenes de traslado"
+                    data-prueba="filtro-transito"
+                />
             </div>
             <ProblemaAlerta
                 v-if="problemaCatalogos"
@@ -171,6 +180,11 @@ function alHacer(o: OperacionInventario) {
                                 />
                             </span>
                             <span class="font-mono text-xs text-muted">{{ row.original.producto_sku }}</span>
+                            <ModalidadBadge
+                                v-if="row.original.modalidad"
+                                :modalidad="row.original.modalidad"
+                                class="self-start"
+                            />
                             <span class="text-xs text-muted sm:hidden">{{ row.original.bodega_nombre }} · {{ formatearQuetzales(row.original.valor) }}</span>
                         </div>
                     </template>
@@ -199,7 +213,19 @@ function alHacer(o: OperacionInventario) {
                         <span class="text-sm tabular-nums">{{ formatearQuetzales(row.original.valor) }}</span>
                     </template>
                     <template #acciones-cell="{ row }">
-                        <UDropdownMenu :items="menuFila(row.original)">
+                        <UButton
+                            v-if="esBodegaTransito({ tipo: row.original.bodega_tipo })"
+                            icon="i-lucide-truck"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            to="/inventario/traslados?estado=en_transito"
+                            :aria-label="`Ver las órdenes en tránsito de ${row.original.producto_nombre}`"
+                        />
+                        <UDropdownMenu
+                            v-else
+                            :items="menuFila(row.original)"
+                        >
                             <UButton
                                 icon="i-lucide-ellipsis-vertical"
                                 color="neutral"

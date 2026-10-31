@@ -24,6 +24,26 @@ const props = withDefaults(defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ hecho: [operacion: OperacionInventario] }>()
 
+const toast = useToast()
+const { puede } = usePermisos()
+
+/** Los cargos que generó un consumo de `consumible_cobro` (D.3), con el enlace a su factura. */
+function avisarCargos(consumo: ConsumoInventario) {
+    const cargos = consumo.cargos ?? []
+    if (!cargos.length) {
+        return
+    }
+    const total = cargos.reduce((suma, c) => suma.plus(c.monto), new Decimal(0))
+    toast.add({
+        title: `Se cobró ${formatearQuetzales(total.toFixed(2))} al cliente`,
+        description: `${cargos.length === 1 ? 'Un cargo único' : `${cargos.length} cargos únicos`} en la factura #${consumo.factura_id ?? cargos[0]?.id}.`,
+        icon: 'i-lucide-receipt',
+        color: 'info',
+        duration: 10_000,
+        actions: consumo.factura_id && puede('facturas.ver') ? [{ label: 'Ver factura', to: `/facturas/${consumo.factura_id}`, color: 'neutral', variant: 'outline' }] : [],
+    })
+}
+
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaOperacion>(operacionVacia(props.operacion))
 const enviando = ref(false)
@@ -47,6 +67,8 @@ watch(abierto, (valor) => {
 
 watch(producto, (p) => {
     estado.seguimiento = p?.seguimiento ?? 'cantidad'
+    estado.modalidad = p?.modalidad ?? null
+    estado.precio_unitario = ''
     estado.unidad_ids = []
     if (p?.seguimiento === 'serie' && estado.operacion === 'ajuste') {
         estado.cantidad = '1'
@@ -118,9 +140,14 @@ async function enviar(evento: FormSubmitEvent<SalidaOperacion>) {
         case 'saldo_inicial':
             resultado = await inventario.saldoInicial(pedido.cuerpo, clave)
             break
-        case 'consumo':
-            resultado = await inventario.consumir(pedido.cuerpo, clave)
+        case 'consumo': {
+            const consumo = await inventario.consumir(pedido.cuerpo, clave)
+            if (consumo.ok) {
+                avisarCargos(consumo.data)
+            }
+            resultado = consumo
             break
+        }
         case 'traslado':
             resultado = await inventario.trasladar(pedido.cuerpo, clave)
             break
@@ -349,10 +376,39 @@ async function enviar(evento: FormSubmitEvent<SalidaOperacion>) {
                         />
                     </UFormField>
                 </div>
+                <UAlert
+                    v-if="estado.operacion === 'consumo' && estado.modalidad === 'consumible_cobro'"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-receipt"
+                    title="Se cobra al cliente del servicio"
+                    :description="`Al registrarlo se emite un cargo único${producto?.precio_venta ? ` a ${formatearQuetzales(producto.precio_venta)} cada uno (con IVA)` : ''}, con la fecha de hoy.`"
+                    data-prueba="mov-aviso-cobro"
+                />
+                <UFormField
+                    v-if="estado.operacion === 'consumo' && estado.modalidad === 'consumible_cobro'"
+                    label="Precio unitario"
+                    name="precio_unitario"
+                    :help="producto?.precio_venta ? 'Vacío = el precio de venta del producto.' : 'El producto no tiene precio de venta: escríbelo.'"
+                    :required="!producto?.precio_venta"
+                >
+                    <UInput
+                        v-model="estado.precio_unitario"
+                        inputmode="decimal"
+                        :placeholder="producto?.precio_venta ?? '0.00'"
+                        class="w-full sm:w-48"
+                        data-prueba="mov-precio"
+                    >
+                        <template #leading>
+                            <span class="text-sm text-muted">Q</span>
+                        </template>
+                    </UInput>
+                </UFormField>
                 <UFormField
                     v-if="estado.operacion === 'consumo'"
-                    label="Servicio (opcional)"
+                    :label="estado.modalidad === 'consumible_cobro' ? 'Servicio' : 'Servicio (opcional)'"
                     name="servicio_id"
+                    :required="estado.modalidad === 'consumible_cobro'"
                     help="El número del servicio donde se instaló."
                 >
                     <UInputNumber

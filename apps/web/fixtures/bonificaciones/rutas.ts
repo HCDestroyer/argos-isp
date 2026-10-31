@@ -51,7 +51,7 @@ interface LineaLeida {
 }
 
 /** Como `EmitirCargoUnico` (A3): valida y responde factura o, con total Q0, bonificación. */
-function emitirCargoUnico(solicitud: SolicitudFixture): RespuestaFixture {
+export function emitirCargoUnico(solicitud: SolicitudFixture): RespuestaFixture {
     const cuerpo = cuerpoObjeto(solicitud)
     const errores: Errores = []
     const servicioId = typeof cuerpo.servicio_id === 'number' ? cuerpo.servicio_id : null
