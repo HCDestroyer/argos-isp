@@ -126,7 +126,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 | Archivo | Qué hace |
 | --- | --- |
-| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados` y `catalogo.cambiado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado` e `inventario.traslado_enviado` / `_recibido` / `_cancelado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
 | `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
 | `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
 
@@ -144,13 +144,27 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   cualquier conector, como `GET /routers` muestra esos routers a cualquier alcance; con empresa,
   solo si está en el alcance.
 - **Datos del servicio y catálogos** (contrato 0.5.0, pedidos A10 a A15):
-  `servicio.datos_cambiados` (`servicio_id`, `empresa_id`, `cliente_id`, `campos[]` ⊂ `direccion`,
-  `coordenadas`, `referencia`, `contacto_nombre`, `contacto_telefono`; solo nombres) sigue el alcance
-  de la empresa del servicio. `catalogo.cambiado` (`catalogo`: `zona`·`plan`·`router`, `id`,
-  `empresa_id`, `campos[]`, hoy `['nombre']`) no trae servicio: con `empresa_id` null (zona o router
-  compartido; los planes siempre) llega a cualquier conector, como `router.eliminado`; con empresa,
-  solo si está en el alcance. Un `catalogo` desconocido no se envía. `cliente.actualizado` reenvía
-  todos sus `campos[]` (también `email` y `referencia` desde 0.5.0); nunca valores.
+  `servicio.datos_cambiados` (`servicio_id`, `empresa_id`, `empresas[]` = `[empresa_id]`,
+  `cliente_id`, `campos[]` ⊂ `direccion`, `coordenadas`, `referencia`, `contacto_nombre`,
+  `contacto_telefono`; solo nombres) sigue el alcance de la empresa del servicio.
+  `catalogo.cambiado` (`catalogo`: `zona`·`plan`·`router`, `id`, `empresa_id`, `campos[]`:
+  `nombre`, `activo` y, en routers, `coordenadas`; se reenvían todos los que traiga) no trae
+  servicio: con `empresa_id` null (zona o router compartido; los planes siempre) llega a cualquier
+  conector, como `router.eliminado`; con empresa, solo si está en el alcance. Un `catalogo`
+  desconocido no se envía. `cliente.actualizado` reenvía todos sus `campos[]` (también `email` y
+  `referencia` desde 0.5.0); nunca valores.
+- **Traslados** (contrato 0.5.0, §2.3 y §3.3; los emite A3): `inventario.traslado_enviado`
+  (`traslado_id`, `empresa_id`, `bodega_destino_id`, `tecnico` `{ id_externo, correo }` o null,
+  `estado`, `lineas[]` `{ producto_id, cantidad, series[] }`, `enviado_en`), `_recibido` (más
+  `recibido_en`, `recibido_por`, `metodo_recepcion`, `origen` `iris`·`panel`) y `_cancelado` (más
+  `cancelado_en`, `motivo`). Lista cerrada de §2.3 con los valores tal cual los emite A3: no salen
+  `numero`, `registrado_por` ni `faltantes` (Iris lee la orden con `GET /inventario/traslados/:id`),
+  y nunca la firma. Siguen el alcance de la empresa de la orden.
+- **Filtro por contrato** (0.5.0): `servicio.datos_cambiados`, `catalogo.cambiado` y los tres de
+  traslado (`EVENTOS_DESDE_050`) solo se registran si `conectorAdmite('0.5.0')` (contrato informado
+  por Iris ≥ 0.5.0); con un conector sin contrato (Iris anterior) o con uno menor no salen, como un
+  evento fuera de alcance. Los demás eventos no cambian. Un envío ya registrado sale aunque el
+  contrato cambie después (el contrato solo sube).
 - **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
   `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
   queda null si el evento no lo trae); Iris lo trata como «no existe».

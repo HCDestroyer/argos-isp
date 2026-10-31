@@ -23,8 +23,8 @@ import {
 import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
 
 /**
- * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los once eventos (con los eliminados
- * de `contratos/eliminar.md` y los de datos y catálogos del contrato 0.5.0), firma HMAC `v1=`,
+ * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los catorce eventos (con los eliminados
+ * de `contratos/eliminar.md` y los de datos, catálogos y traslados del contrato 0.5.0), firma HMAC `v1=`,
  * id estable y deduplicación, reintentos a 1 min, 5 min, 30 min, 2 h y 12 h, fallos visibles en
  * el panel, conector apagado, alcance de empresas del usuario técnico y nada de secretos. Iris es
  * un servidor HTTP local.
@@ -41,7 +41,14 @@ async function limpiar() {
     fijarFetchEnviosIris()
 }
 
-async function fijarConector(url: string, datos: { activo?: boolean; receptor?: boolean } = {}) {
+/**
+ * Conector con receptor. `contrato` = la versión que informó Iris; por defecto 0.5.0 para que salgan
+ * todos los eventos (el filtro por contrato se prueba en `iris_webhooks_050.spec.ts`).
+ */
+async function fijarConector(
+    url: string,
+    datos: { activo?: boolean; receptor?: boolean; contrato?: string | null } = {},
+) {
     await db.from('integraciones.iris_conector').delete()
     await db.table('integraciones.iris_conector').insert({
         id: 1,
@@ -50,6 +57,7 @@ async function fijarConector(url: string, datos: { activo?: boolean; receptor?: 
         token_cifrado: cifrar(`iris_pat_${'Zx9Yw8Vu'.repeat(5)}`),
         webhook_salida_url: datos.receptor === false ? null : `${url}${RECEPTOR}`,
         webhook_salida_secreto_cifrado: datos.receptor === false ? null : cifrar(SECRETO),
+        contrato: datos.contrato === undefined ? '0.5.0' : datos.contrato,
     })
 }
 
@@ -92,7 +100,7 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
         }
     })
 
-    test('los once eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
+    test('los catorce eventos de §2.3: cuerpo { id, evento, ocurrido_en, payload } firmado, con empresa_id y sin secretos', async ({
         assert,
     }) => {
         const iris = await new HorusSimulado().iniciar()
@@ -198,6 +206,39 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 nombre: 'Router nuevo',
                 ...extra,
             })
+            const traslado = {
+                traslado_id: 70,
+                empresa_id: 1,
+                numero: 3,
+                bodega_destino_id: 31,
+                tecnico: { id_externo: '77', correo: 'tecnico@isp.gt' },
+                lineas: [{ producto_id: 5, cantidad: '2.000', series: ['ZTE-1', 'ZTE-2'] }],
+                enviado_en: '2026-10-31T14:00:00.000Z',
+            }
+            ids['inventario.traslado_enviado'] = await evento('inventario.traslado_enviado', {
+                ...traslado,
+                estado: 'en_transito',
+                ...extra,
+            })
+            ids['inventario.traslado_recibido'] = await evento('inventario.traslado_recibido', {
+                ...traslado,
+                estado: 'recibida',
+                recibido_en: '2026-10-31T15:00:00.000Z',
+                recibido_por: { id_externo: '77', correo: 'tecnico@isp.gt' },
+                registrado_por: 9,
+                metodo_recepcion: 'firma_digital',
+                origen: 'iris',
+                faltantes: [],
+                firma_sha256: 'ab'.repeat(32),
+                ...extra,
+            })
+            ids['inventario.traslado_cancelado'] = await evento('inventario.traslado_cancelado', {
+                ...traslado,
+                estado: 'cancelada',
+                cancelado_en: '2026-10-31T16:00:00.000Z',
+                motivo: 'No hizo falta',
+                ...extra,
+            })
             // un evento que no es de §2.3 no va a Iris
             await evento('sesion.terminada', {
                 servicio_id: servicioId,
@@ -295,7 +336,34 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 servicio_id: servicioId,
                 empresa_id: 1,
                 cliente_id: clienteId,
+                empresas: [1],
                 campos: ['direccion', 'contacto_telefono'],
+            })
+            const trasladoIris = {
+                traslado_id: 70,
+                empresa_id: 1,
+                bodega_destino_id: 31,
+                tecnico: { id_externo: '77', correo: 'tecnico@isp.gt' },
+                lineas: [{ producto_id: 5, cantidad: '2.000', series: ['ZTE-1', 'ZTE-2'] }],
+                enviado_en: '2026-10-31T14:00:00.000Z',
+            }
+            assert.deepEqual(porEvento.get('inventario.traslado_enviado')!.json.payload, {
+                ...trasladoIris,
+                estado: 'en_transito',
+            })
+            assert.deepEqual(porEvento.get('inventario.traslado_recibido')!.json.payload, {
+                ...trasladoIris,
+                estado: 'recibida',
+                recibido_en: '2026-10-31T15:00:00.000Z',
+                recibido_por: { id_externo: '77', correo: 'tecnico@isp.gt' },
+                metodo_recepcion: 'firma_digital',
+                origen: 'iris',
+            })
+            assert.deepEqual(porEvento.get('inventario.traslado_cancelado')!.json.payload, {
+                ...trasladoIris,
+                estado: 'cancelada',
+                cancelado_en: '2026-10-31T16:00:00.000Z',
+                motivo: 'No hizo falta',
             })
             assert.deepEqual(porEvento.get('catalogo.cambiado')!.json.payload, {
                 catalogo: 'router',
@@ -737,6 +805,7 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 servicio_id: servicioId,
                 empresa_id: 1,
                 cliente_id: clienteId,
+                empresas: [1],
                 campos: ['referencia', 'contacto_nombre'],
             })
             assert.deepEqual(payloads['catalogo.cambiado'], {
