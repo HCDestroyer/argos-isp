@@ -146,14 +146,15 @@ test.group('Horus · A3 código de cliente estable', () => {
 })
 
 test.group('Horus · A2 evento cliente.actualizado', () => {
-    test('se emite por outbox al cambiar nombre o tipo, no por el correo', async ({ assert }) => {
+    test('se emite por outbox al cambiar nombre o tipo, no por el canal preferido', async ({ assert }) => {
         const ctx = contextoPrueba()
         const cliente = await new CrearCliente().execute({ nombre: unico('Cliente') }, ctx)
         assert.isNull(await ultimoEventoCliente(cliente.id))
 
-        // el correo no lo muestra nadie fuera de Argos (teléfono y dirección sí: Iris 0.3.1)
+        // el canal preferido no lo muestra nadie fuera de Argos (teléfono y dirección sí: Iris 0.3.1;
+        // el correo también desde Iris 0.5.0, pedido A11)
         const correo = await new EditarCliente().execute(
-            { id: cliente.id, version: cliente.version, email: `${unico('c')}@ejemplo.gt` },
+            { id: cliente.id, version: cliente.version, canal_preferido: 'whatsapp' },
             ctx,
         )
         assert.isNull(await ultimoEventoCliente(cliente.id))
