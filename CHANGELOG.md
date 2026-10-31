@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/HCDestroyer/argos-isp/compare/v1.5.1...v1.6.0) (2026-10-31)
+
+
+### Funcionalidades
+
+* **inventario:** inventario fase D, contrato Iris 0.5.0 y pedidos A10–A15 ([#210](https://github.com/HCDestroyer/argos-isp/issues/210)) ([f7fae86](https://github.com/HCDestroyer/argos-isp/commit/f7fae86ef057ade345c20ee48de288b5a18e4858))
+
 ## [1.5.1](https://github.com/HCDestroyer/argos-isp/compare/v1.5.0...v1.5.1) (2026-10-31)
 
 
