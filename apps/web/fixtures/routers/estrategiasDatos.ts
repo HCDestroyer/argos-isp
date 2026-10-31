@@ -64,6 +64,7 @@ export const MATRIZ: MatrizControlVelocidad = {
         { rule: 'qos_familia', mensaje: 'qos (prioridad por clases) solo con arbol_pcq' },
         { rule: 'qos_fasttrack', mensaje: 'qos exige excluir_fasttrack' },
         { rule: 'qos_costo', mensaje: `como máximo ${QOS_MAX_HOJAS} hojas de QoS por router (planes con qos × 4 × clases)` },
+        { rule: 'pppoe_sin_radius', mensaje: 'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre) o arbol_pcq' },
     ],
     advertencias: ['sin_techo', 'reuso_dedicado', 'sin_padre_prioridad', 'fasttrack', 'version_desconocida', 'fuera_del_techo', 'qos_sin_cuello'],
     atajos: { simple: estrategiaSimple(), arbol_pcq: estrategiaArbol() },

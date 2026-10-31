@@ -20,7 +20,8 @@ export interface SesionVista {
     id: number
     servicio_id: number | null
     router_id: number | null
-    nas_ip: string
+    /** null solo en una sesión de sondeo de un router sin RADIUS y sin `nas_ip` */
+    nas_ip: string | null
     acct_session_id: string
     user_ppp: string
     ipv4: string | null
@@ -31,6 +32,8 @@ export interface SesionVista {
     bytes_in: number
     bytes_out: number
     causa_fin: string | null
+    /** `accounting` (RADIUS) o `sondeo` (router sin RADIUS: sin contadores, `contratos/pppoe-local.md`) */
+    origen: 'accounting' | 'sondeo'
 }
 
 export interface FiltrosSesiones extends OpcionesPaginacion {
@@ -59,6 +62,7 @@ function columnas(cliente: QueryClientContract) {
         cliente.raw('ses.bytes_in::float8 AS bytes_in'),
         cliente.raw('ses.bytes_out::float8 AS bytes_out'),
         'ses.causa_fin',
+        'ses.origen',
     ]
 }
 

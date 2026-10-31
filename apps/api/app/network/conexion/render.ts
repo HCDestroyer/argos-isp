@@ -24,7 +24,18 @@ const VARIABLE = /\{\{([a-z0-9_]+)\}\}/g
 export const PLANTILLAS = {
     conexion: 'plantillas/conexion.rsc.tpl',
     servicio: 'plantillas/conexion-servicio.rsc.tpl',
+    /** routers con `modo_seguridad = 'api'`: sin `/radius` ni CoA, `use-radius=no`, grupo con `sensitive` */
+    conexion_sin_radius: 'plantillas/conexion-sin-radius.rsc.tpl',
+    servicio_sin_radius: 'plantillas/conexion-servicio-sin-radius.rsc.tpl',
 } as const
+
+/** Plantilla del script según el modo del router y si suma el servicio (`?incluir=servicio`). */
+export function plantillaConexion(modoSeguridad: string, incluirServicio: boolean): string {
+    if (modoSeguridad === 'api') {
+        return incluirServicio ? PLANTILLAS.servicio_sin_radius : PLANTILLAS.conexion_sin_radius
+    }
+    return incluirServicio ? PLANTILLAS.servicio : PLANTILLAS.conexion
+}
 
 export interface DefinicionVariable {
     patron: string

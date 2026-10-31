@@ -18,7 +18,8 @@ import type { ServicioRed } from '#network/routeros/estado_deseado'
  * también lo es (las de `pcq_plan` o `arbol_pcq` no tienen cola por sesión: cambia el PCQ del plan),
  * y solo con el servicio `activo` o `limitado` (el suspendido conserva su rate-limit mínimo).
  * RouterOS no reasigna el perfil PPP a una sesión viva: en `perfil_ppp` el CoA le pone la misma
- * velocidad que el perfil nuevo.
+ * velocidad que el perfil nuevo. Una sesión de sondeo (router sin RADIUS, `contratos/pppoe-local.md`)
+ * no recibe CoA: toma el perfil `plan-<id>` nuevo al reconectar.
  */
 
 export interface ResultadoVelocidadSesiones {
@@ -45,7 +46,8 @@ export async function sesionesConEstrategia(
 ): Promise<Array<FilaSesion & { estrategia: Estrategia | null }>> {
     const { rows } = (await t.trx.rawQuery(
         `SELECT id::int AS id, host(nas_ip) AS nas_ip, acct_session_id, user_ppp, estrategia_velocidad
-           FROM network.sesiones WHERE servicio_id = ? AND fin IS NULL ORDER BY inicio FOR UPDATE`,
+           FROM network.sesiones WHERE servicio_id = ? AND fin IS NULL AND origen = 'accounting'
+          ORDER BY inicio FOR UPDATE`,
         [servicioId],
     )) as { rows: FilaSesion[] }
     return rows.map((r) => ({ ...r, estrategia: estrategiaDeCopia(r.estrategia_velocidad) }))

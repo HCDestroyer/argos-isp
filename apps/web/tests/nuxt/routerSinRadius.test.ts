@@ -8,8 +8,6 @@ import { bd } from '~~/fixtures/bd'
 import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import RouterConexionSeccion from '~/components/RouterConexionSeccion.vue'
 import RouterEditarModal from '~/components/RouterEditarModal.vue'
-import ServicioAltaFormulario from '~/components/ServicioAltaFormulario.vue'
-import ServicioEditar from '~/components/ServicioEditar.vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 
@@ -21,8 +19,8 @@ function enApp(componente: Component, props: Record<string, unknown> = {}) {
 /**
  * Router sin RADIUS (`modo_seguridad = 'api'`, A1, rama `a1/router-sin-radius`): el alta y la edición
  * ocultan la IP del NAS y el secreto, la API acepta `nas_ip: null`, el 422 `servicios_pppoe_en_router`
- * se lista con enlaces, el alta y la edición de servicios no ofrecen PPPoE y el script de conexión
- * queda deshabilitado.
+ * se lista con enlaces y el script de conexión queda deshabilitado. PPPoE en ese router (secrets
+ * locales): `pppoeLocal.test.ts`.
  */
 
 /** Un router sin RADIUS como lo devuelve la API: `nas_ip: null` y sin secreto. */
@@ -83,7 +81,7 @@ describe('router sin RADIUS', () => {
             // El modo es el primer campo, con las dos opciones del PM.
             expect(formulario.querySelector('[data-prueba]')?.getAttribute('data-prueba')).toBe('router-modo')
             expect(formulario.textContent).toContain('RADIUS (recomendado)')
-            expect(formulario.textContent).toContain('Sin RADIUS (solo API: IP estática y DHCP fija)')
+            expect(formulario.textContent).toContain('Sin RADIUS (todo por la API REST)')
             expect(formulario.querySelector('[data-prueba="router-nas"]')).not.toBeNull()
             expect(formulario.textContent).toContain('Secreto RADIUS')
 
@@ -197,17 +195,26 @@ describe('router sin RADIUS', () => {
     })
 
     describe('script de conexión (RouterConexionSeccion)', () => {
-        it('deshabilitado con su motivo en un router sin RADIUS; la API responde 422 script_requiere_radius', async () => {
-            const router = routerSinRadius(94)
+        it('habilitado en un router sin RADIUS, con su texto; la API entrega la variante sin RADIUS (también al rotar)', async () => {
+            const router = routerSinRadius(94, { tiene_radius_secret: false })
             bd.routers.push(router)
+            bd.conexionesRouter.push({ router_id: router.id, estado: 'conectado', ip_tunel: '10.255.0.94', public_key: 'kH3sZ0pR1m9bQyU5wT8xVv2cLgN4dJf6aE7iO0rS1tA=', ultimo_handshake: '2026-10-29T15:58:30.000Z', handshake_reciente: true, registrado_en: '2026-10-20T16:00:00.000Z', routeros_version: '7.24.5 (stable)', token_vence: null, version: 1 })
             const wrapper = await mountSuspended(enApp(RouterConexionSeccion, { router }))
-            await esperar(() => expect(wrapper.find('[data-prueba="script-sin-radius"]').exists()).toBe(true))
-            expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeDefined()
-            expect(wrapper.find('[data-prueba="script-sin-radius"]').text()).toContain('el script de conexión configura RADIUS y CoA')
+            await esperar(() => expect(wrapper.find('[data-prueba="abrir-rotar"]').exists()).toBe(true))
+            expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeUndefined()
+            expect(wrapper.find('[data-prueba="abrir-rotar"]').attributes('disabled')).toBeUndefined()
+            expect(wrapper.find('[data-prueba="script-sin-radius"]').text()).toBe('Este router no usa RADIUS: el script conecta el túnel y la API, y deja use-radius=no.')
+            expect(wrapper.text()).not.toContain('No disponible')
 
+            // Sin secreto RADIUS no hay 422: el secreto solo se exige con RADIUS.
             const resultado = await useRouters().scriptConexion(router.id, {})
-            expect(resultado.ok).toBe(false)
-            expect(!resultado.ok && esScriptRequiereRadius(resultado.problema)).toBe(true)
+            expect(resultado.ok).toBe(true)
+            if (resultado.ok) {
+                expect(resultado.data).toContain('use-radius=no')
+                expect(resultado.data).not.toContain('/radius add')
+            }
+            const rotado = await useRouters().rotarConexion(router.id, {})
+            expect(rotado.ok).toBe(true)
         })
 
         it('con RADIUS el botón sigue habilitado', async () => {
@@ -215,62 +222,8 @@ describe('router sin RADIUS', () => {
             await esperar(() => expect(wrapper.find('[data-prueba="abrir-script"]').exists()).toBe(true))
             expect(wrapper.find('[data-prueba="abrir-script"]').attributes('disabled')).toBeUndefined()
             expect(wrapper.find('[data-prueba="script-sin-radius"]').exists()).toBe(false)
-        })
-    })
-
-    describe('servicios en un router sin RADIUS', () => {
-        function prepararRouter(): Schema<'Router'> {
-            const router = routerSinRadius(95)
-            bd.routers.push(router)
-            bd.planesPorRouter[router.id] = [1, 2]
-            bd.redesIpv4.push({ ...structuredClone(bd.redesIpv4[0]!), id: 95, router_id: router.id, nombre: 'Fijas norte', cidr: '100.64.95.0/24', gateway: '100.64.95.1' })
-            return router
-        }
-
-        it('el alta deshabilita PPPoE y preselecciona IP estática', async () => {
-            const router = prepararRouter()
-            const cliente = structuredClone(bd.clientes[0]!)
-            const wrapper = await mountSuspended(ServicioAltaFormulario, { props: { cliente, compacto: true } })
-            const raiz = wrapper.element.parentElement ?? wrapper.element
-            await esperar(() => expect(radio('[data-prueba="alta-servicio"]', router.id, raiz)).not.toBeNull())
-            // Con RADIUS (el primero) PPPoE está disponible.
-            elegir('[data-prueba="alta-servicio"]', 1, raiz)
-            await esperar(() => expect(radio('[data-prueba="tipo-conexion"]', 'pppoe', raiz)).not.toBeNull())
-            expect(radio('[data-prueba="tipo-conexion"]', 'pppoe', raiz)!.hasAttribute('data-disabled')).toBe(false)
-            expect(radio('[data-prueba="tipo-conexion"]', 'pppoe', raiz)!.getAttribute('aria-checked')).toBe('true')
-
-            elegir('[data-prueba="alta-servicio"]', router.id, raiz)
-            await esperar(() => expect(raiz.querySelector('[data-prueba="router-sin-radius"]')).not.toBeNull())
-            expect(radio('[data-prueba="tipo-conexion"]', 'pppoe', raiz)!.hasAttribute('data-disabled')).toBe(true)
-            expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('No disponible: este router no usa RADIUS.')
-            expect(radio('[data-prueba="tipo-conexion"]', 'ip_estatica', raiz)!.getAttribute('aria-checked')).toBe('true')
-            expect(wrapper.text()).toContain('RB-Norte no usa RADIUS')
-        })
-
-        it('la API responde 422 pppoe_requiere_radius a un PPPoE en ese router', async () => {
-            const router = prepararRouter()
-            const resultado = await useServicios().crear({ cliente_id: bd.clientes[0]!.id, router_id: router.id, plan_id: 1, ipv6_modo: 'ninguno', plantilla_facturacion_id: bd.plantillas[0]!.id }, nuevaClaveIdempotencia())
-            expect(resultado.ok).toBe(false)
-            if (!resultado.ok) {
-                expect(esPppoeRequiereRadius(resultado.problema)).toBe(true)
-                expect(resultado.problema.errors?.[0]?.field).toBe('tipo_conexion')
-                expect(resultado.problema.detail).toBe(MENSAJE_PPPOE_SIN_RADIUS)
-            }
-        })
-
-        it('la edición de un servicio en ese router no ofrece pasar a PPPoE', async () => {
-            const router = prepararRouter()
-            const base = bd.servicios.find(s => s.tipo_conexion === 'ip_estatica') ?? bd.servicios[0]!
-            const servicio = { ...structuredClone(base), id: 950, router_id: router.id, tipo_conexion: 'ip_estatica' as const, user_ppp: null, ipv6_modo: 'ninguno' as const }
-            bd.servicios.push(servicio)
-            const vista = (await useServicios().ver(servicio.id))
-            expect(vista.ok).toBe(true)
-            if (!vista.ok) {
-                return
-            }
-            await mountSuspended(ServicioEditar, { props: { servicio: vista.data, open: true } })
-            await esperar(() => expect(radio('[data-prueba="editar-tipo-conexion"]', 'pppoe')?.hasAttribute('data-disabled')).toBe(true))
-            expect(document.body.querySelector('[data-prueba="editar-tipo-conexion"]')!.textContent).toContain('RB-Norte no usa RADIUS')
+            const resultado = await useRouters().scriptConexion(1, {})
+            expect(resultado.ok && resultado.data).toContain('use-radius=yes')
         })
     })
 
@@ -288,8 +241,8 @@ describe('router sin RADIUS', () => {
                 type: 'urn:argosisp:problema:servicios_pppoe_en_router',
                 title: 'Regla de negocio',
                 status: 422,
-                detail: 'El router tiene 73 servicios PPPoE sin retirar, y PPPoE necesita RADIUS.',
-                errors: [{ field: 'servicios.4', message: 'Servicio 4 (PPPoE ana, activo)', rule: 'pppoe_requiere_radius' }],
+                detail: 'El router tiene 73 servicios PPPoE sin retirar que hoy autentican por RADIUS.',
+                errors: [{ field: 'servicios.4', message: 'Servicio 4 (PPPoE ana, activo)', rule: 'servicios_pppoe_en_router' }],
             })
             expect(lectura).toEqual({ total: 73, servicios: [{ id: 4, texto: 'Servicio 4 (PPPoE ana, activo)' }] })
             expect(serviciosPppoeEnRouter({ type: 'urn:argosisp:problema:validacion', title: 'x', status: 422 })).toBeNull()

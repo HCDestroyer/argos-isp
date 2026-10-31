@@ -35,6 +35,7 @@ import {
     type RouterVelocidad,
 } from '#network/routeros/velocidad_router'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
+import { estrategiaLocal } from '#network/routeros/pppoe_local'
 import { perfilQosRouter } from '#network/consultas/qos'
 
 /**
@@ -99,7 +100,19 @@ function consultaServicios(cliente: QueryClientContract) {
             'pr.prioridad as pr_prioridad',
             'r.control_velocidad',
             'r.estrategia_velocidad',
+            'r.modo_seguridad',
             'pr.estrategia_velocidad as pr_estrategia_velocidad',
+            // PPPoE sin RADIUS (contratos/pppoe-local.md): secret y pools del perfil del plan.
+            's.user_ppp',
+            's.pass_ppp',
+            'pr.pool_ipv4',
+            'pr.pool_ipv6_enlace',
+            'pr.pool_ipv6_delegacion',
+            cliente.raw(
+                `(SELECT a.prefijo::text FROM network.ipv6_asignaciones a
+                   WHERE a.servicio_id = s.id AND a.fin IS NULL AND a.tipo = 'enlace'
+                     AND s.ipv6_modo = 'radius_servicio' ORDER BY a.id DESC LIMIT 1) AS prefijo_enlace`,
+            ),
             cliente.raw(
                 `(SELECT host(a.ip) FROM network.ipv4_asignaciones a
                    WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
@@ -144,17 +157,32 @@ function aServicio(fila: FilaServicio): ServicioRed {
         rafaga_segundos: fila.pr_rafaga_segundos as number | null,
         prioridad: fila.pr_prioridad as number | null,
     }
-    const estrategia = estrategiaDeFila(fila, fila.tipo_conexion)
+    // Router sin RADIUS: PPPoE va por perfil (`radius_rate_limit` → `perfil_ppp`, pppoe-local.md §5).
+    const local = fila.modo_seguridad === 'api'
+    const ppp = (e: Estrategia) => (local ? estrategiaLocal(e) : e)
+    const estrategia =
+        fila.tipo_conexion === 'pppoe'
+            ? ppp(estrategiaDeFila(fila, 'pppoe'))
+            : estrategiaDeFila(fila, fila.tipo_conexion)
+    const texto = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null)
     return {
         servicio_id: Number(fila.servicio_id),
         estado: fila.estado,
         estrategia,
-        estrategia_pppoe: estrategiaDeFila(fila, 'pppoe'),
+        estrategia_pppoe: ppp(estrategiaDeFila(fila, 'pppoe')),
         // Una sesión PPPoE conserva la estrategia con la que entró hasta reconectar (control-velocidad.md §4).
         estrategia_sesion:
             fila.tipo_conexion === 'pppoe' && fila.sesion
-                ? (estrategiaDeCopia(fila.sesion.estrategia) ?? estrategia)
+                ? ppp(estrategiaDeCopia(fila.sesion.estrategia) ?? estrategia)
                 : null,
+        user_ppp: texto(fila.user_ppp),
+        pass_ppp: texto(fila.pass_ppp),
+        prefijo_enlace: texto(fila.prefijo_enlace),
+        pools: {
+            ipv4: texto(fila.pool_ipv4),
+            enlace: texto(fila.pool_ipv6_enlace),
+            delegado: texto(fila.pool_ipv6_delegacion),
+        },
         tipo_conexion: fila.tipo_conexion,
         router_id: Number(fila.router_id),
         plan_id: Number(fila.plan_id),
@@ -239,7 +267,8 @@ function targetsServicio(s: ServicioRed): string[] {
  * estrategia vigente: lo nuevo se crea antes de que reconecte (`contratos/control-velocidad.md` §4).
  * Las sesiones PPPoE no hacen falta para las colas dinámicas: se leen del router.
  */
-export function planesDeRouter(_router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
+export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
+    const local = router.modo_seguridad === 'api'
     const grupos = new Map<string, PlanRouter>()
     const grupo = (s: ServicioRed, e: Estrategia): PlanRouter => {
         const fam = familia(e.aplicacion)
@@ -292,6 +321,15 @@ export function planesDeRouter(_router: RouterVelocidad, servicios: ServicioRed[
             necesitaPerfil(vigente, s.plan_id, s.velocidad.reuso)
         ) {
             g.perfil = vigente
+        }
+        // Sin RADIUS todo plan con PPPoE necesita sus perfiles (`plan-<id>[-limitado]`): el secret
+        // apunta a ellos, también en el árbol (`address-list` del plan). Pools: los del plan.
+        if (local && s.tipo_conexion === 'pppoe') {
+            if (!g.perfil && !nuevo?.perfil) g.perfil = vigente
+            const p = nuevo?.perfil ? nuevo : g
+            if (!p.pools && s.pools && (s.pools.ipv4 || s.pools.enlace || s.pools.delegado)) {
+                p.pools = s.pools
+            }
         }
         g.servicios++
         if (s.estado === 'suspendido') continue
@@ -375,6 +413,34 @@ export async function routersConServiciosSinPppoe(
     return filas.map((f) => Number(f.router_id)).sort((a, b) => a - b)
 }
 
+/**
+ * Routers que se sondean por `/ppp/active` (`contratos/pppoe-local.md` §6): activos, con credenciales
+ * de la API y sin RADIUS, más los que pasaron a RADIUS con sesiones de sondeo todavía abiertas.
+ */
+export async function routersConSesionesPpp(
+    cliente: QueryClientContract = db.connection(),
+): Promise<number[]> {
+    const filas = (await cliente
+        .from('network.routers as r')
+        .where('r.activo', true)
+        .whereNotNull('r.api_usuario')
+        .whereNotNull('r.api_password')
+        .where((q) =>
+            q
+                .where('r.modo_seguridad', 'api')
+                .orWhereExists((e) =>
+                    e
+                        .from('network.sesiones as ses')
+                        .whereRaw('ses.router_id = r.id')
+                        .where('ses.origen', 'sondeo')
+                        .whereNull('ses.fin'),
+                ),
+        )
+        .orderBy('r.id')
+        .select('r.id')) as Array<{ id: number }>
+    return filas.map((f) => Number(f.id))
+}
+
 /** Valores para routers que no definen `dhcp_servidor` / `interfaz_clientes` (antes que el entorno). */
 export interface PredeterminadosRed {
     dhcp_servidor?: string
@@ -409,6 +475,7 @@ interface FilaRouterDispatcher {
     capacidad_bajada_kbps: number | null
     capacidad_subida_kbps: number | null
     qos_perfil_id: number | string | null
+    modo_seguridad: 'radius' | 'api'
 }
 
 /**
@@ -443,6 +510,7 @@ export async function routerDispatcher(
             'r.capacidad_bajada_kbps',
             'r.capacidad_subida_kbps',
             'r.qos_perfil_id',
+            'r.modo_seguridad',
         )
         .first()) as FilaRouterDispatcher | null
     if (!r) return null
@@ -478,9 +546,11 @@ export async function routerDispatcher(
                 env.get('ROUTEROS_INTERFAZ_CLIENTES') ??
                 null,
             control_velocidad: control,
+            modo_seguridad: r.modo_seguridad,
         },
         velocidad: {
             router_id: Number(r.id),
+            modo_seguridad: r.modo_seguridad,
             control,
             estrategias,
             routeros_version: texto(r.routeros_version),

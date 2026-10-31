@@ -8,19 +8,23 @@ import type { Transaccion } from '#shared/domain_action'
  * transacción que la auditoría, y `services/coa` (grupo `coa`) manda el Disconnect-Request al
  * `nas_ip` de la sesión y registra el envío y la respuesta en `audit.red` (`coa.fallido` si no hay
  * ACK). La fila de `network.sesiones` la cierra el Stop que manda el NAS al cortar, no esta acción.
+ * Una sesión de sondeo (router sin RADIUS) lleva `origen: 'sondeo'`: la quita el dispatcher de
+ * RouterOS (`/ppp active remove`) y la cierra el siguiente sondeo.
  */
 
 export interface SesionDesconectable {
     id: number
     servicio_id: number | null
-    nas_ip: string
+    nas_ip: string | null
     acct_session_id: string
     user_ppp: string
     fin: Date | null
+    /** `sondeo`: router sin RADIUS; la desconexión la hace el dispatcher de RouterOS, no `coa` */
+    origen: 'accounting' | 'sondeo'
 }
 
 const COLUMNAS = `id::int AS id, servicio_id::int AS servicio_id, host(nas_ip) AS nas_ip, acct_session_id,
-    user_ppp, fin`
+    user_ppp, fin, origen`
 
 /** Sesión bloqueada para la transacción (dos desconexiones simultáneas se serializan). */
 export async function bloquearSesion(t: Transaccion, id: number): Promise<SesionDesconectable | null> {
@@ -56,6 +60,9 @@ export async function solicitarDesconexion(
         acct_session_id: sesion.acct_session_id,
         user_ppp: sesion.user_ppp,
         motivo,
+        // Router sin RADIUS (`contratos/pppoe-local.md` §4): `coa` la ignora y la ejecuta el
+        // dispatcher de RouterOS con `/ppp active remove`.
+        ...(sesion.origen === 'sondeo' ? { origen: 'sondeo' as const } : {}),
     })
 }
 

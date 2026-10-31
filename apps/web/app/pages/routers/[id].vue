@@ -240,8 +240,15 @@ const control = computed(() => {
                     <p
                         v-if="esSinRadius(nas)"
                         class="mt-1 text-xs text-muted"
+                        data-prueba="router-pppoe-sin-radius"
                     >
-                        Solo IP estática y DHCP fija, por la API REST.
+                        {{ PPPOE_EN_ROUTER_SIN_RADIUS }}
+                    </p>
+                    <p
+                        v-if="esSinRadius(nas) && !tieneCredencialesApi(nas)"
+                        class="mt-1 text-xs text-warning"
+                    >
+                        Sin usuario y contraseña de la API no se pueden crear servicios PPPoE aquí.
                     </p>
                 </DatoFicha>
                 <DatoFicha etiqueta="Estado">

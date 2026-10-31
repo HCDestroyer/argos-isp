@@ -5,6 +5,10 @@
 //   lab.rsc                               laboratorio (se edita su cabecera y se importa a mano)
 //   plantillas/conexion.rsc.tpl           script de conexión (GET /routers/:id/script-conexion)
 //   plantillas/conexion-servicio.rsc.tpl  el mismo con ?incluir=servicio (PPPoE, perfiles y corte)
+//   lab-sin-radius.rsc y plantillas/*-sin-radius.rsc.tpl
+//                                         las mismas para un router sin RADIUS (modo_seguridad = api,
+//                                         contratos/pppoe-local.md): /ppp secret locales, sin /radius
+//                                         ni CoA y el grupo argosisp-api con "sensitive"
 //
 // Uso:  node infra/mikrotik/armar.mjs              escribe los tres archivos
 //       node infra/mikrotik/armar.mjs --verificar  falla si alguno no coincide con las piezas (CI)
@@ -30,7 +34,10 @@ export const SALIDAS = {
         'lab-pie.rsc',
     ],
     'plantillas/conexion.rsc.tpl': [
+        'conexion-intro.rsc',
         'conexion-cabecera.rsc.tpl',
+        'conexion-radius.rsc.tpl',
+        'conexion-cabecera-api.rsc.tpl',
         'conexion-limpieza.rsc',
         'conexion-tunel.rsc',
         'comun-api-rest.rsc',
@@ -42,7 +49,10 @@ export const SALIDAS = {
         'conexion-pie.rsc',
     ],
     'plantillas/conexion-servicio.rsc.tpl': [
+        'conexion-intro.rsc',
         'conexion-cabecera.rsc.tpl',
+        'conexion-radius.rsc.tpl',
+        'conexion-cabecera-api.rsc.tpl',
         'conexion-servicio.rsc.tpl',
         'conexion-limpieza.rsc',
         'servicio-limpieza.rsc',
@@ -51,6 +61,59 @@ export const SALIDAS = {
         'conexion-registro.rsc',
         'comun-certificado.rsc',
         'comun-radius.rsc',
+        'servicio-base.rsc',
+        'servicio-firewall.rsc',
+        'conexion-gestion.rsc',
+        'servicio-orden.rsc',
+        'conexion-orden.rsc',
+        'servicio-fasttrack.rsc',
+        'conexion-pie.rsc',
+    ],
+    'lab-sin-radius.rsc': [
+        'lab-cabecera.rsc',
+        'lab-sin-radius.rsc',
+        'servicio-limpieza.rsc',
+        'lab-wireguard.rsc',
+        'servicio-base.rsc',
+        'comun-sin-radius.rsc',
+        'servicio-firewall.rsc',
+        'comun-api-rest.rsc',
+        'comun-api-sensitive.rsc',
+        'comun-certificado.rsc',
+        'servicio-orden.rsc',
+        'servicio-fasttrack.rsc',
+        'lab-pie.rsc',
+    ],
+    'plantillas/conexion-sin-radius.rsc.tpl': [
+        'conexion-intro-sin-radius.rsc',
+        'conexion-cabecera.rsc.tpl',
+        'conexion-sin-radius.rsc',
+        'conexion-cabecera-api.rsc.tpl',
+        'conexion-limpieza.rsc',
+        'conexion-tunel.rsc',
+        'comun-api-rest.rsc',
+        'comun-api-sensitive.rsc',
+        'conexion-registro.rsc',
+        'comun-certificado.rsc',
+        'comun-sin-radius.rsc',
+        'conexion-gestion.rsc',
+        'conexion-orden.rsc',
+        'conexion-pie.rsc',
+    ],
+    'plantillas/conexion-servicio-sin-radius.rsc.tpl': [
+        'conexion-intro-sin-radius.rsc',
+        'conexion-cabecera.rsc.tpl',
+        'conexion-sin-radius.rsc',
+        'conexion-cabecera-api.rsc.tpl',
+        'conexion-servicio.rsc.tpl',
+        'conexion-limpieza.rsc',
+        'servicio-limpieza.rsc',
+        'conexion-tunel.rsc',
+        'comun-api-rest.rsc',
+        'comun-api-sensitive.rsc',
+        'conexion-registro.rsc',
+        'comun-certificado.rsc',
+        'comun-sin-radius.rsc',
         'servicio-base.rsc',
         'servicio-firewall.rsc',
         'conexion-gestion.rsc',

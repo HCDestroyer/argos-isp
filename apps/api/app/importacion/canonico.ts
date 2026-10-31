@@ -25,10 +25,13 @@ export interface RouterOrigen {
     id: string
     nombre: string
     host: string
-    nas_ip: string
+    /** null solo en un router sin RADIUS (`modo_seguridad = 'api'`) */
+    nas_ip: string | null
     api_usuario: string | null
     api_password: string | null
     radius_secret: string | null
+    /** `radius` (por defecto) o `api`: PPPoE con `/ppp secret` locales (`contratos/pppoe-local.md`) */
+    modo_seguridad: 'radius' | 'api'
 }
 
 export interface RedOrigen {
@@ -257,10 +260,21 @@ export const COLUMNAS: Record<Entidad, Columna[]> = {
         col('id', 'si', 'Id del router en el sistema de origen', 'R1'),
         col('nombre', 'si', 'Nombre del router', 'Torre Norte'),
         col('host', 'si', 'IP o nombre con que se alcanza su API REST', '10.0.0.1'),
-        col('nas_ip', 'si', 'IPv4 con la que el router habla RADIUS', '10.0.0.1'),
+        col(
+            'nas_ip',
+            'condicional',
+            'IPv4 con la que el router habla RADIUS; obligatoria salvo con `modo_seguridad` = `api`',
+            '10.0.0.1',
+        ),
         col('api_usuario', 'no', 'Usuario de la API de RouterOS', 'argos'),
         col('api_password', 'no', 'Clave de la API de RouterOS', 'clave-api'),
         col('radius_secret', 'no', 'Secreto RADIUS del router', 'secreto-radius'),
+        col(
+            'modo_seguridad',
+            'no',
+            '`radius` (por defecto) o `api`: router sin RADIUS, PPPoE con `/ppp secret` locales por la API REST',
+            'radius',
+        ),
     ],
     redes: [
         col('router_id', 'si', 'Router (id del origen) al que pertenece la red', 'R1'),
@@ -406,15 +420,21 @@ export function normalizarFuente(
         return salida
     }
 
-    const routers = procesar(leer('routers'), (f) => ({
-        id: f.requerido('id'),
-        nombre: f.requerido('nombre'),
-        host: f.requerido('host'),
-        nas_ip: f.ipv4('nas_ip', true)!,
-        api_usuario: f.opcional('api_usuario'),
-        api_password: f.opcional('api_password'),
-        radius_secret: f.opcional('radius_secret'),
-    }))
+    const routers = procesar(leer('routers'), (f) => {
+        // Sin la columna (formato anterior o volcados de Mikrowisp y SmartISP): `radius`, que exige
+        // `nas_ip` como antes. Con `api` la `nas_ip` es opcional (CrearRouter la acepta vacía).
+        const modo = f.enumerado('modo_seguridad', ['radius', 'api'] as const, 'radius')
+        return {
+            id: f.requerido('id'),
+            nombre: f.requerido('nombre'),
+            host: f.requerido('host'),
+            nas_ip: f.ipv4('nas_ip', modo === 'radius'),
+            api_usuario: f.opcional('api_usuario'),
+            api_password: f.opcional('api_password'),
+            radius_secret: f.opcional('radius_secret'),
+            modo_seguridad: modo,
+        }
+    })
 
     const redes = procesar(leer('redes'), (f) => ({
         linea: f.linea,

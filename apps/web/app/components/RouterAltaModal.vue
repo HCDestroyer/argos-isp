@@ -177,6 +177,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     <UFormField
                         label="Usuario de la API"
                         name="api_usuario"
+                        :help="conRadius ? undefined : 'Sin RADIUS, PPPoE se crea como secret con este usuario: sin él no hay servicios PPPoE.'"
                     >
                         <UInput
                             v-model="estado.api_usuario"

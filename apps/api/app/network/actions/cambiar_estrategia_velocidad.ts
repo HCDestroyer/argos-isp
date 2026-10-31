@@ -104,11 +104,13 @@ export async function validarRouter(
     router: Pick<
         RouterVista,
         'id' | 'routeros_version' | 'capacidad_bajada_kbps' | 'capacidad_subida_kbps' | 'qos_perfil_id'
-    >,
+    > &
+        Partial<Pick<RouterVista, 'modo_seguridad'>>,
     estrategias: EstrategiasRouter,
     cliente: QueryClientContract,
     planes?: PlanValidacion[],
     campoPlan?: (planId: number) => string,
+    revisarRouterSinRadius = true,
 ): Promise<ResultadoValidacion> {
     const perfil = await perfilQosRouter(router.qos_perfil_id ?? null, cliente)
     return validarEstrategias({
@@ -118,6 +120,8 @@ export async function validarRouter(
         capacidad_bajada_kbps: router.capacidad_bajada_kbps,
         capacidad_subida_kbps: router.capacidad_subida_kbps,
         qos_clases: perfil?.clases.length ?? 0,
+        modo_seguridad: router.modo_seguridad,
+        revisar_router_sin_radius: revisarRouterSinRadius,
         campoPlan,
     })
 }
@@ -191,6 +195,7 @@ export class CambiarEstrategiaPlanRouter extends DomainAction<EntradaEstrategiaP
                 t.trx,
                 planes,
                 () => 'estrategia_velocidad',
+                false,
             ),
         )
 

@@ -155,7 +155,7 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
         )
     })
 
-    test('opera los quince menús administrados', async ({ assert }) => {
+    test('opera los dieciséis menús administrados', async ({ assert }) => {
         const c = cliente(falso)
         const props: Record<RutaRouterOS, Record<string, string>> = {
             '/queue/simple': { target: '10.0.0.1/32', 'max-limit': '1M/2M' },
@@ -188,6 +188,7 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
             },
             // `parent-queue` debe nombrar una cola simple que exista (el falso lo valida como RouterOS)
             '/ppp/profile': { name: 'plan-1', 'local-address': '10.0.0.1' },
+            '/ppp/secret': { name: 'cliente-1', password: 'clave', service: 'pppoe', profile: 'default' },
             '/ip/firewall/filter': {
                 chain: 'argos-corte',
                 action: 'accept',

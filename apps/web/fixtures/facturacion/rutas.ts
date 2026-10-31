@@ -295,7 +295,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
                 sesion.causa_fin = 'Admin-Reset'
             }
         }
-        bd.sesiones.push(nuevaSesion(siguienteId(bd.sesiones), activo, momento))
+        bd.sesiones.push(nuevaSesion(siguienteId(bd.sesiones), activo, momento, bd.routers.find(r => r.id === activo.router_id)))
         const id = siguienteId(bd.acciones)
         bd.acciones.push({
             id,

@@ -27,6 +27,8 @@ Una **estrategia** es un objeto con cuatro capas:
 | `pcq_plan` | Una cola simple por plan y estado (`argosisp-plan-<id>-pcq`, `argosisp-plan-<id>-pcq-limitado`) con `queue=` dos tipos PCQ (`pcq-rate` = MIR del plan). El cliente se identifica por el `target` de esa cola: IPv4 y prefijos de cada servicio (WISP) o de cada sesión abierta (PPPoE) | todos |
 | `arbol_pcq` | Queue tree + mangle + address-list `argosisp-plan-<id>[-limitado]` (lo de hoy) | todos |
 
+**Router sin RADIUS** (`modo_seguridad = 'api'`, `contratos/pppoe-local.md`): PPPoE con secrets locales. `perfil_ppp` crea además `plan-<id>-limitado` (rate-limit limitado) y el secret apunta a uno u otro según el estado; `arbol_pcq` pone `address-list = argosisp-plan-<id>[-limitado]` en esos perfiles. `radius_rate_limit` y `pcq_plan` no se admiten (regla 12).
+
 **Ajuste al diseño del líder (RouterOS 7):** `pcq_plan` no identifica al cliente por address-list porque una cola simple no acepta una address-list como `target`, y con `packet-marks` y `target=0.0.0.0/0` la cola no distingue subida de bajada. La identificación por address-list + mangle es justamente `arbol_pcq`. Por eso `pcq_plan` usa el `target` con las direcciones (las mantiene el dispatcher, igual que el `target` de los padres de hoy).
 
 ### Capa 2 · `padre` (agregación)
@@ -93,6 +95,7 @@ La valida `validarEstrategias()` y la publica `GET /api/v1/red/control-velocidad
 | 6 | Un mismo plan, dentro de una familia, usa el mismo `padre` y los mismos `extras` en los tipos que comparten objetos del plan (en el árbol, todos; en colas simples, los que cuelgan de un padre y los `pcq_plan`) | `plan_consistente` | «PPPoE e IP estática del plan 3 comparten argosisp-plan-3: usa el mismo padre y los mismos extras» |
 | 7 | Un mismo plan con `por_plan`/`jerarquico` no mezcla familias | `familia_plan` | «el reuso del plan 3 se partiría entre colas simples y queue tree» |
 | 8 | Los valores existen | `enum` | «aplicacion debe ser una de …» |
+| 12 | Router sin RADIUS (`modo_seguridad = 'api'`, `contratos/pppoe-local.md` §5): PPPoE solo con `perfil_ppp` (cualquier `padre`) o `arbol_pcq`; ni `radius_rate_limit` (no hay `Mikrotik-Rate-Limit`) ni `pcq_plan` (sin accounting no hay direcciones de la sesión al conectar). Se revisa al cambiar la estrategia del router y la excepción PPPoE de un plan. Datos anteriores con `radius_rate_limit` o `pcq_plan` se aplican como `perfil_ppp` (`estrategiaLocal`) | `pppoe_sin_radius` | «el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit» |
 
 | Advertencia | Cuándo |
 | --- | --- |

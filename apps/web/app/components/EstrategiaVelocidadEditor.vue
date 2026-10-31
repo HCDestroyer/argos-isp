@@ -12,6 +12,10 @@ import type { Disponibilidad } from '~/utils/estrategiaVelocidad'
  * - Modo router (`router`): edita las tres estrategias completas; «Igual para todos» copia una a las
  *   demás ajustada a lo que admite cada tipo.
  * - Modo plan (`plan`): edita la excepción del plan en el router; cada capa tiene «Heredar del router».
+ *
+ * Router sin RADIUS (`sinRadius`, `contratos/pppoe-local.md` §5): en la pestaña PPPoE se muestra el
+ * porqué con el mensaje de la regla `pppoe_sin_radius` de la matriz (el panel no copia la regla); si
+ * se elige algo que no admite, el 422 de la vista previa sale junto a la capa.
  */
 const props = withDefaults(defineProps<{
     matriz: MatrizControlVelocidad
@@ -23,8 +27,11 @@ const props = withDefaults(defineProps<{
     errores?: Record<string, string[]>
     /** Tipos de conexión con servicios en el router: se muestra primero el primero de ellos. */
     tipos?: TipoConexionVelocidad[]
+    /** El router no usa RADIUS (`modo_seguridad = 'api'`): PPPoE va con secrets locales. */
+    sinRadius?: boolean
 }>(), {
     errores: () => ({}),
+    sinRadius: false,
     tipos: () => [...TIPOS_CONEXION_VELOCIDAD],
 })
 
@@ -49,6 +56,11 @@ const efectiva = computed<Estrategia>(() => (modoPlan.value
     : (estrategias.value ?? props.router)[tipo.value]))
 
 const parcial = computed<EstrategiaParcial>(() => excepcion.value?.[tipo.value] ?? {})
+
+/** El porqué de la regla `pppoe_sin_radius`, tal como la publica la matriz. */
+const reglaSinRadius = computed(() => (props.sinRadius && tipo.value === 'pppoe'
+    ? props.matriz.reglas.find(r => r.rule === 'pppoe_sin_radius')?.mensaje ?? null
+    : null))
 
 function fijar<C extends 'aplicacion' | 'padre' | 'tipo_cola'>(capa: C, valor: Estrategia[C] | typeof HEREDAR) {
     if (modoPlan.value) {
@@ -213,6 +225,16 @@ function erroresDe(capa: string): string | undefined {
             <span class="font-medium text-highlighted">{{ ETIQUETAS_TIPO_CONEXION[tipo] }}:</span>
             {{ resumenEstrategia(efectiva) }}
         </p>
+
+        <UAlert
+            v-if="reglaSinRadius"
+            color="info"
+            variant="subtle"
+            icon="i-lucide-plug"
+            title="Router sin RADIUS: PPPoE va con secrets locales"
+            :description="`${reglaSinRadius.charAt(0).toUpperCase()}${reglaSinRadius.slice(1)}. Una estrategia guardada que no lo admite se aplica con el perfil PPP del plan hasta que la cambies.`"
+            data-prueba="estrategia-sin-radius"
+        />
 
         <UFormField
             label="1 · Cómo se limita a cada cliente"

@@ -24,8 +24,10 @@
 # ============================================================================
 :put "argosisp: firewall IPv4"
 # Reglas "argosisp:top" se mueven al inicio de su tabla al final del script.
-/ip firewall filter
-add chain=input protocol=udp dst-port=3799 src-address=$radiusAddr action=accept comment="argosisp:top CoA desde aaa nodo 1"
+# Sin RADIUS (router modo_seguridad = api) no hay CoA: radiusAddr y radiusAddr2 vienen vacíos.
+:if ($radiusAddr != "") do={
+    /ip firewall filter add chain=input protocol=udp dst-port=3799 src-address=$radiusAddr action=accept comment="argosisp:top CoA desde aaa nodo 1"
+}
 :if ($radiusAddr2 != "") do={
     /ip firewall filter add chain=input protocol=udp dst-port=3799 src-address=$radiusAddr2 action=accept comment="argosisp:top CoA desde aaa nodo 2"
 }

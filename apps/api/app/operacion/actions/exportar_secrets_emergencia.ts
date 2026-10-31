@@ -45,7 +45,7 @@ export default class ExportarSecretsEmergencia extends DomainAction<
             .from('network.routers')
             .where('id', input.router_id)
             .select('id', 'nombre', t.trx.raw('host(nas_ip) AS nas_ip'))
-            .first()) as { id: number; nombre: string; nas_ip: string } | null
+            .first()) as { id: number; nombre: string; nas_ip: string | null } | null
         if (!router) throw new NoEncontrado(`No existe el router ${input.router_id}`)
         t.fijarEntidad('router', router.id)
 

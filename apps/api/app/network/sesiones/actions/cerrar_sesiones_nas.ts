@@ -23,7 +23,11 @@ export default class CerrarSesionesNas extends DomainAction<RegistroAccounting, 
         await anotarAccounting(t.trx, r)
         const cerradas = await cerrarSesiones(
             t,
-            { sql: 'nas_ip = ?::inet AND inicio <= ?::timestamptz', valores: [r.nas_ip, r.evento_en] },
+            {
+                // Las de sondeo (router sin RADIUS) no las cierra un Accounting-On/Off.
+                sql: "nas_ip = ?::inet AND inicio <= ?::timestamptz AND origen = 'accounting'",
+                valores: [r.nas_ip, r.evento_en],
+            },
             r.evento_en,
             CAUSA_NAS,
         )

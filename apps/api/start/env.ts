@@ -96,6 +96,8 @@ export default await Env.create(new URL('../', import.meta.url), {
      * entre dos escrituras del mismo router desde un proceso (60)
      */
     ROUTEROS_SONDEO_CADA_MS: Env.schema.number.optional(),
+    /** Sondeo de `/ppp/active` de los routers sin RADIUS (`contratos/pppoe-local.md` §6): ms (60000); 0 lo apaga */
+    ROUTEROS_SESIONES_PPP_CADA_MS: Env.schema.number.optional(),
     ROUTERS_CONTACTO_MINIMO_S: Env.schema.number.optional(),
 
     /*

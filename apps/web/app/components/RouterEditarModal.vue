@@ -16,7 +16,8 @@ import * as z from 'zod'
  * NAS y el secreto RADIUS. Al pasar un router de RADIUS a «Sin RADIUS», la IP del NAS se conserva
  * salvo que el operador marque «Quitar la IP del NAS» (entonces va `nas_ip: null`, como acepta A1).
  * Si el router tiene servicios PPPoE sin retirar, la API responde 422 `servicios_pppoe_en_router`
- * y aquí se listan con su enlace.
+ * y aquí se listan con su enlace. Al volver de «Sin RADIUS» a RADIUS se avisa que el reconciliador
+ * borra los secrets PPPoE de Argos (`contratos/pppoe-local.md` §9).
  */
 const props = defineProps<{
     router: RouterNas
@@ -101,6 +102,8 @@ const sinCampos = computed(() => problema.value?.status === 422 && !(problema.va
 const conRadius = computed(() => estado.modo_seguridad === 'radius')
 /** Pasa de RADIUS a «Sin RADIUS» en esta edición. */
 const pasaASinRadius = computed(() => actual.value.modo_seguridad === 'radius' && estado.modo_seguridad === 'api')
+/** Vuelve de «Sin RADIUS» a RADIUS: el reconciliador borra los secrets PPPoE de Argos (`pppoe-local.md` §9). */
+const pasaARadius = computed(() => actual.value.modo_seguridad === 'api' && estado.modo_seguridad === 'radius')
 /** Con «Sin RADIUS» y una IP del NAS guardada: se ofrece quitarla (por defecto se conserva). */
 const ofreceQuitarNas = computed(() => !conRadius.value && Boolean(actual.value.nas_ip))
 
@@ -343,8 +346,17 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     variant="subtle"
                     icon="i-lucide-triangle-alert"
                     title="El router deja de usar RADIUS"
-                    description="Sale de FreeRADIUS y ya no recibe CoA. Solo admite servicios con IP estática o DHCP fija; si tiene servicios PPPoE sin retirar, no se puede cambiar hasta pasarlos a otro tipo, moverlos o retirarlos."
+                    description="Sale de FreeRADIUS y ya no recibe CoA: todo va por la API REST y PPPoE por secrets locales. Si tiene servicios PPPoE sin retirar que hoy autentican por RADIUS, no se puede cambiar: muévelos a un router sin RADIUS, pásalos a IP estática o DHCP fija, o retíralos."
                     data-prueba="aviso-sin-radius"
+                />
+                <UAlert
+                    v-if="pasaARadius"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-triangle-alert"
+                    title="Se borran los secrets PPPoE del router"
+                    :description="AVISO_SIN_RADIUS_A_RADIUS"
+                    data-prueba="aviso-a-radius"
                 />
                 <UFormField
                     v-if="ofreceQuitarNas"

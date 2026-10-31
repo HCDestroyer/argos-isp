@@ -55,11 +55,13 @@ function serviciosPppoe(routerId: number): RespuestaFixture | null {
         422,
         'servicios_pppoe_en_router',
         'Regla de negocio',
-        `El router tiene ${total} ${total === 1 ? 'servicio PPPoE' : 'servicios PPPoE'} sin retirar, y PPPoE necesita RADIUS. `
-        + 'Pásalos a IP estática o DHCP fija, muévelos a un router con RADIUS o retíralos antes de cambiar el router a «api»',
+        `El router tiene ${total} ${total === 1 ? 'servicio PPPoE' : 'servicios PPPoE'} sin retirar que hoy `
+        + 'autentican por RADIUS. Pasar el router a «api» con clientes conectados no es seguro (se quedarían '
+        + 'sin autenticar hasta tener sus secrets): muévelos a un router sin RADIUS, pásalos a IP estática o '
+        + 'DHCP fija, o retíralos antes de cambiarlo',
         servicios.slice(0, MAXIMO_SERVICIOS_LISTADOS).map(s => ({
             field: `servicios.${s.id}`,
-            rule: 'pppoe_requiere_radius',
+            rule: 'servicios_pppoe_en_router',
             message: `Servicio ${s.id} (PPPoE${s.user_ppp ? ` ${s.user_ppp}` : ''}, ${s.estado})`,
         })),
     )
