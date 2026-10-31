@@ -8,6 +8,8 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  * "Datos adicionales": un control por cada campo activo del catálogo de campos personalizados
  * (`GET /campos-personalizados?activo=true`, A1), en su orden y con su regla; si el catálogo no se
  * pudo leer, el error se ve con "Reintentar" y el guardado no toca los valores guardados.
+ * Teléfono y móvil se validan con la regla de la API (`utils/telefonos.ts`) solo si cambiaron; un
+ * 422 `rule: 'telefono'` de la API se muestra junto al campo.
  */
 const props = withDefaults(defineProps<{
     cliente?: Cliente | null
@@ -32,7 +34,8 @@ const estado = reactive<EntradaCliente>(entradaDesdeCliente(props.cliente ?? und
 const catalogo = shallowRef<CampoPersonalizado[] | null>(null)
 const cargandoCatalogo = ref(false)
 const problemaCatalogo = ref<Problem | null>(null)
-const esquema = computed(() => esquemaClienteCon(catalogo.value ?? []))
+/** Con el cliente guardado: su teléfono y su móvil no se validan si no cambiaron (datos viejos). */
+const esquema = computed(() => esquemaClienteCon(catalogo.value ?? [], props.cliente))
 
 async function cargarCatalogo() {
     if (!puede('clientes.ver')) {
@@ -255,6 +258,7 @@ onMounted(async () => {
                         v-model="estado.movil"
                         type="tel"
                         inputmode="tel"
+                        placeholder="5512 3344"
                         icon="i-lucide-smartphone"
                         class="w-full"
                     />
@@ -320,6 +324,24 @@ onMounted(async () => {
                         :rows="2"
                         autoresize
                         class="w-full"
+                    />
+                </UFormField>
+
+                <UFormField
+                    name="referencia"
+                    label="Referencia"
+                    hint="Opcional"
+                    help="Cómo llegar. Se propone en sus servicios y la ve el técnico."
+                    class="sm:col-span-2"
+                >
+                    <UTextarea
+                        v-model="estado.referencia"
+                        :rows="2"
+                        :maxlength="300"
+                        autoresize
+                        placeholder="Casa verde frente a la iglesia"
+                        class="w-full"
+                        data-prueba="cliente-referencia"
                     />
                 </UFormField>
             </div>

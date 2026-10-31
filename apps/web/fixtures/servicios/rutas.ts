@@ -26,6 +26,7 @@ import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambio
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
 import { pendienteInstalacion } from './instalacion'
 import { planTemporalDe } from './planesTemporales'
+import { errorTelefono, telefonoGuardado } from '../telefonos'
 
 type Servicio = Schema<'Servicio'>
 type Errores = NonNullable<Problem['errors']>
@@ -134,6 +135,22 @@ function pppoeSinRadius(routerId: number, tipo: Servicio['tipo_conexion']): Resp
     ])
 }
 
+/** Ubicación y contacto en sitio (pedidos A12–A14 de Iris): largo y teléfono solo si cambia. */
+function erroresContacto(cuerpo: Record<string, unknown>, actual?: Servicio): Errores {
+    const errores: Errores = []
+    for (const [campo, maximo] of [['referencia', 300], ['contacto_nombre', 200]] as const) {
+        const valor = cuerpo[campo]
+        if (typeof valor === 'string' && valor.trim().length > maximo) {
+            errores.push({ field: campo, message: `Máximo ${maximo} caracteres`, rule: 'maxLength' })
+        }
+    }
+    const telefono = errorTelefono('contacto_telefono', cuerpo.contacto_telefono, actual?.contacto_telefono)
+    if (telefono) {
+        errores.push(telefono)
+    }
+    return errores
+}
+
 function validarAlta(cuerpo: Record<string, unknown>): Errores {
     const errores: Errores = []
     const tipo = cuerpo.tipo_conexion === undefined ? 'pppoe' : tipoDe(cuerpo.tipo_conexion)
@@ -163,6 +180,7 @@ function validarAlta(cuerpo: Record<string, unknown>): Errores {
     if (typeof usuario === 'string' && bd.servicios.some(s => s.user_ppp === usuario)) {
         errores.push({ field: 'user_ppp', message: 'Ese usuario PPP ya existe', rule: 'unique' })
     }
+    errores.push(...erroresContacto(cuerpo))
     if (cuerpo.estado_inicial !== undefined && cuerpo.estado_inicial !== 'activo' && cuerpo.estado_inicial !== 'pendiente_instalacion') {
         errores.push({ field: 'estado_inicial', message: 'Debe ser activo o pendiente_instalacion', rule: 'enum' })
     }
@@ -232,6 +250,9 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         user_ppp: tipo === 'pppoe' ? (texto(cuerpo.user_ppp) ?? `cliente${cliente?.id ?? id}.${id}`) : null,
         mac: texto(cuerpo.mac),
         direccion: texto(cuerpo.direccion),
+        referencia: texto(cuerpo.referencia),
+        contacto_nombre: texto(cuerpo.contacto_nombre),
+        contacto_telefono: telefonoGuardado(cuerpo.contacto_telefono, null),
         coordenadas: texto(cuerpo.coordenadas),
         fecha_instalacion: texto(cuerpo.fecha_instalacion),
         // Un pendiente no tiene fecha de activación hasta `activar-instalacion`.
@@ -688,6 +709,7 @@ export const rutasServicios: RutasFixture = {
         if (!(bd.planesPorRouter[actual.router_id] ?? []).includes(planId)) {
             errores.push({ field: 'plan_id', message: 'El plan no está implementado en ese router', rule: 'plan_router' })
         }
+        errores.push(...erroresContacto(cuerpo, actual))
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -706,6 +728,9 @@ export const rutasServicios: RutasFixture = {
             ipv6_modo: modo,
             ipv6_duid: 'ipv6_duid' in cuerpo ? texto(cuerpo.ipv6_duid) : actual.ipv6_duid,
             direccion: 'direccion' in cuerpo ? texto(cuerpo.direccion) : actual.direccion,
+            referencia: 'referencia' in cuerpo ? texto(cuerpo.referencia) : (actual.referencia ?? null),
+            contacto_nombre: 'contacto_nombre' in cuerpo ? texto(cuerpo.contacto_nombre) : (actual.contacto_nombre ?? null),
+            contacto_telefono: telefonoGuardado(cuerpo.contacto_telefono, actual.contacto_telefono),
             coordenadas: 'coordenadas' in cuerpo ? texto(cuerpo.coordenadas) : actual.coordenadas,
             fecha_instalacion: 'fecha_instalacion' in cuerpo ? texto(cuerpo.fecha_instalacion) : actual.fecha_instalacion,
             costo_override: 'costo_override' in cuerpo ? texto(cuerpo.costo_override) : actual.costo_override,
