@@ -62,7 +62,16 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    '25.compra_de_borrador_con_otro_emisor':
+        'H74 (inventario fase D): confirmar un borrador acepta un proveedor cuyo NIT no es el del emisor y no revisa la autorización FEL',
+    '25.compra_con_autorizacion_repetida':
+        'H74 (inventario fase D): la misma factura (misma autorización FEL) entra dos veces si el NIT del borrador no es el de la primera',
+    '25.compra_de_borrador_distinta_de_la_factura':
+        'H75 (inventario fase D): confirmar un borrador no exige moneda GTQ ni que Σ líneas = total de la factura',
+    '25.saldo_inicial_despues_del_cierre_de_apertura':
+        'H76 (inventario fase D): un saldo inicial (o un lote con entrada) entra contra 2.9.01 después del cierre de la apertura',
+}
 
 type Fila = Record<string, unknown>
 
@@ -4308,6 +4317,214 @@ async function verificarLibroCon(
            FROM inventario.movimientos r LEFT JOIN inventario.movimientos m ON m.id = r.reverso_de
           WHERE r.tipo = 'reverso_premio' AND ${E('r.empresa_id')} AND (m.id IS NULL OR m.tipo <> 'premio')`,
     )
+
+    /*
+    | 25 · Inventario, fase D (`contratos/inventario.md` D.8; rama a3/inventario-v2). Los checks D.8 a–e
+    | que propuso A3, revisados por el auditor. D.8.a (cada `traslado_id` suma 0 y sin asiento) ya lo
+    | cubren 24.traslado_mal_formado y 24.movimiento_mal_formado; aquí van b–e reforzados: cada orden
+    | contra su kardex por línea y bodega (no solo el total de la bodega de tránsito), las unidades en los
+    | dos sentidos, la bodega de tránsito que solo mueven las órdenes y los borradores de compra. Las
+    | tablas son de la fase D: en una base sin ellas, estos checks no corren.
+    */
+    const [faseD] = await filas(
+        `SELECT to_regclass('inventario.ordenes_traslado') IS NOT NULL AND to_regclass('inventario.compras_borradores') IS NOT NULL AS existe`,
+    )
+    if (faseD?.existe) {
+        await revisar(
+            '25.orden_de_traslado_mal_formada (origen y destino de su empresa y que no son de tránsito; su bodega de tránsito, la de su empresa; recibida ⇔ cada línea con cantidad y costo recibidos; en tránsito o cancelada, sin ellos; el costo recibido de una línea por cantidad es su parte redondeada del costo enviado)',
+            `SELECT o.id AS orden_id, o.empresa_id, o.estado, l.id AS linea_id, bo.tipo AS origen_tipo, bd.tipo AS destino_tipo,
+                    bt.tipo AS transito_tipo, l.cantidad::text, l.costo_total::text, l.cantidad_recibida::text, l.costo_recibido::text
+               FROM inventario.ordenes_traslado o
+               JOIN inventario.bodegas bo ON bo.id = o.bodega_origen_id
+               JOIN inventario.bodegas bd ON bd.id = o.bodega_destino_id
+               JOIN inventario.bodegas bt ON bt.id = o.bodega_transito_id
+               LEFT JOIN inventario.ordenes_traslado_lineas l ON l.orden_id = o.id
+              WHERE ${E('o.empresa_id')}
+                AND (l.id IS NULL OR bo.empresa_id <> o.empresa_id OR bd.empresa_id <> o.empresa_id OR bt.empresa_id <> o.empresa_id
+                     OR bo.tipo = 'transito' OR bd.tipo = 'transito' OR bt.tipo <> 'transito'
+                     OR NOT EXISTS (SELECT 1 FROM inventario.productos p WHERE p.id = l.producto_id AND p.empresa_id = o.empresa_id)
+                     OR (l.cantidad_recibida IS NOT NULL) <> (o.estado IN ('recibida', 'recibida_con_diferencias'))
+                     OR (o.estado = 'recibida' AND (l.cantidad_recibida <> l.cantidad OR l.costo_recibido <> l.costo_total))
+                     OR (o.estado = 'recibida_con_diferencias' AND NOT EXISTS (
+                            SELECT 1 FROM inventario.ordenes_traslado_lineas x
+                             WHERE x.orden_id = o.id AND x.cantidad_recibida < x.cantidad))
+                     OR (l.cantidad_recibida IS NOT NULL AND l.cantidad_recibida <> l.cantidad
+                         AND NOT EXISTS (SELECT 1 FROM inventario.ordenes_traslado_unidades u WHERE u.linea_id = l.id)
+                         AND l.costo_recibido <> round(l.cantidad_recibida * l.costo_total / l.cantidad, 2)))`,
+        )
+        await revisar(
+            '25.orden_de_traslado_distinta_de_su_kardex (D.8.b por línea: Σ kardex de la orden por producto y bodega = en tránsito: origen −enviado y tránsito +enviado; recibida: origen −recibido y destino +recibido (el faltante volvió al origen); cancelada: todo en 0; en cantidad y en costo)',
+            `WITH l AS (
+                 SELECT o.id AS orden_id, o.estado, o.bodega_origen_id, o.bodega_destino_id, o.bodega_transito_id,
+                        l.producto_id, l.cantidad, l.costo_total,
+                        coalesce(l.cantidad_recibida, 0) AS cr, coalesce(l.costo_recibido, 0) AS vr
+                   FROM inventario.ordenes_traslado o JOIN inventario.ordenes_traslado_lineas l ON l.orden_id = o.id
+                  WHERE ${E('o.empresa_id')}
+             ), esperado AS (
+                 SELECT orden_id, producto_id, bodega_origen_id AS bodega_id, 'origen' AS papel,
+                        CASE estado WHEN 'en_transito' THEN -cantidad WHEN 'cancelada' THEN 0 ELSE -cr END AS cantidad,
+                        CASE estado WHEN 'en_transito' THEN -costo_total WHEN 'cancelada' THEN 0 ELSE -vr END AS costo
+                   FROM l
+                 UNION ALL
+                 SELECT orden_id, producto_id, bodega_destino_id, 'destino',
+                        CASE WHEN estado IN ('recibida', 'recibida_con_diferencias') THEN cr ELSE 0 END,
+                        CASE WHEN estado IN ('recibida', 'recibida_con_diferencias') THEN vr ELSE 0 END
+                   FROM l
+                 UNION ALL
+                 SELECT orden_id, producto_id, bodega_transito_id, 'transito',
+                        CASE WHEN estado = 'en_transito' THEN cantidad ELSE 0 END,
+                        CASE WHEN estado = 'en_transito' THEN costo_total ELSE 0 END
+                   FROM l
+             ), k AS (
+                 SELECT m.origen_id AS orden_id, m.producto_id, m.bodega_id, sum(m.cantidad) AS cantidad, sum(m.costo_total) AS costo
+                   FROM inventario.movimientos m
+                  WHERE m.origen_tipo = 'orden_traslado' AND ${E('m.empresa_id')}
+                  GROUP BY 1, 2, 3
+             )
+             SELECT coalesce(e.orden_id, k.orden_id) AS orden_id, coalesce(e.producto_id, k.producto_id) AS producto_id,
+                    coalesce(e.bodega_id, k.bodega_id) AS bodega_id, e.papel,
+                    e.cantidad::text AS esperado, k.cantidad::text AS kardex, e.costo::text AS costo_esperado, k.costo::text AS costo_kardex
+               FROM esperado e FULL JOIN k ON k.orden_id = e.orden_id AND k.producto_id = e.producto_id AND k.bodega_id = e.bodega_id
+              WHERE coalesce(e.cantidad, 0) <> coalesce(k.cantidad, 0) OR coalesce(e.costo, 0) <> coalesce(k.costo, 0)
+                 OR (e.orden_id IS NULL AND k.orden_id IS NOT NULL)`,
+        )
+        await revisar(
+            '25.transito_distinto_de_sus_ordenes (D.8.b por empresa y producto: saldo de la bodega de tránsito = Σ líneas de órdenes en tránsito, en cantidad y en valor; en 0 sin órdenes en tránsito)',
+            `WITH s AS (
+                 SELECT s.empresa_id, s.producto_id, sum(s.cantidad) AS cantidad, sum(s.valor) AS valor
+                   FROM inventario.saldos s JOIN inventario.bodegas b ON b.id = s.bodega_id
+                  WHERE b.tipo = 'transito' AND ${E('s.empresa_id')}
+                  GROUP BY 1, 2
+             ), l AS (
+                 SELECT o.empresa_id, l.producto_id, sum(l.cantidad) AS cantidad, sum(l.costo_total) AS valor
+                   FROM inventario.ordenes_traslado o JOIN inventario.ordenes_traslado_lineas l ON l.orden_id = o.id
+                  WHERE o.estado = 'en_transito' AND ${E('o.empresa_id')}
+                  GROUP BY 1, 2
+             )
+             SELECT coalesce(s.empresa_id, l.empresa_id) AS empresa_id, coalesce(s.producto_id, l.producto_id) AS producto_id,
+                    s.cantidad::text AS saldo, l.cantidad::text AS lineas, s.valor::text AS valor, l.valor::text AS valor_lineas
+               FROM s FULL JOIN l ON l.empresa_id = s.empresa_id AND l.producto_id = s.producto_id
+              WHERE coalesce(s.cantidad, 0) <> coalesce(l.cantidad, 0) OR coalesce(s.valor, 0) <> coalesce(l.valor, 0)`,
+        )
+        await revisar(
+            '25.unidad_de_orden_mal_ligada (D.8.c en los dos sentidos: una unidad en la bodega de tránsito viaja en una línea de una orden en tránsito de su empresa, y cada unidad de una orden en tránsito está en esa bodega, disponible o en reparación; la línea de serie tiene tantas unidades como su cantidad y su costo es su Σ; recibida: Σ recibidas = cantidad y costo recibidos; en tránsito o cancelada, sin marcar)',
+            `SELECT u.id AS unidad_id, u.bodega_id, u.estado, NULL::bigint AS orden_id, NULL AS detalle
+               FROM inventario.unidades u JOIN inventario.bodegas b ON b.id = u.bodega_id
+              WHERE b.tipo = 'transito' AND ${E('u.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM inventario.ordenes_traslado_unidades x
+                                  JOIN inventario.ordenes_traslado_lineas l ON l.id = x.linea_id
+                                  JOIN inventario.ordenes_traslado o ON o.id = l.orden_id
+                                 WHERE x.unidad_id = u.id AND o.estado = 'en_transito' AND x.recibida IS NULL
+                                   AND o.bodega_transito_id = u.bodega_id AND o.empresa_id = u.empresa_id)
+             UNION ALL
+             SELECT u.id, u.bodega_id, u.estado, o.id, 'en_transito'
+               FROM inventario.ordenes_traslado o
+               JOIN inventario.ordenes_traslado_lineas l ON l.orden_id = o.id
+               JOIN inventario.ordenes_traslado_unidades x ON x.linea_id = l.id
+               JOIN inventario.unidades u ON u.id = x.unidad_id
+              WHERE o.estado = 'en_transito' AND ${E('o.empresa_id')}
+                AND (u.bodega_id IS DISTINCT FROM o.bodega_transito_id OR u.estado NOT IN ('disponible', 'en_reparacion')
+                     OR x.recibida IS NOT NULL OR u.producto_id <> l.producto_id)
+             UNION ALL
+             SELECT NULL, NULL, NULL, o.id, 'linea ' || l.id || ': ' || count(x.id) || ' unidades, Σ ' || coalesce(sum(x.costo), 0)
+                    || ', recibidas ' || count(x.id) FILTER (WHERE x.recibida)
+               FROM inventario.ordenes_traslado o
+               JOIN inventario.ordenes_traslado_lineas l ON l.orden_id = o.id
+               JOIN inventario.productos p ON p.id = l.producto_id
+               LEFT JOIN inventario.ordenes_traslado_unidades x ON x.linea_id = l.id
+              WHERE ${E('o.empresa_id')}
+              GROUP BY o.id, o.estado, l.id, l.cantidad, l.costo_total, l.cantidad_recibida, l.costo_recibido, p.seguimiento
+             HAVING (p.seguimiento = 'serie') <> (count(x.id) > 0)
+                 OR (count(x.id) > 0 AND (count(x.id) <> l.cantidad OR coalesce(sum(x.costo), 0) <> l.costo_total
+                     OR (o.estado IN ('recibida', 'recibida_con_diferencias')
+                         AND (bool_or(x.recibida IS NULL) OR count(x.id) FILTER (WHERE x.recibida) <> l.cantidad_recibida
+                              OR coalesce(sum(x.costo) FILTER (WHERE x.recibida), 0) <> l.costo_recibido))
+                     OR (o.estado IN ('en_transito', 'cancelada') AND bool_or(x.recibida IS NOT NULL))))`,
+        )
+        await revisar(
+            '25.movimiento_de_orden_ajeno (D.8.d: cada movimiento con origen orden_traslado es un traslado sin asiento que cita una orden de su empresa, de un producto de sus líneas y en su origen, destino o tránsito; y la bodega de tránsito solo la mueven las órdenes)',
+            `SELECT m.id AS movimiento_id, m.tipo, m.origen_tipo, m.origen_id, m.bodega_id, m.producto_id, m.empresa_id
+               FROM inventario.movimientos m
+               LEFT JOIN inventario.ordenes_traslado o ON o.id = m.origen_id
+              WHERE m.origen_tipo = 'orden_traslado' AND ${E('m.empresa_id')}
+                AND (o.id IS NULL OR o.empresa_id <> m.empresa_id OR m.tipo <> 'traslado' OR m.asiento_id IS NOT NULL
+                     OR m.traslado_id IS NULL
+                     OR m.bodega_id NOT IN (o.bodega_origen_id, o.bodega_destino_id, o.bodega_transito_id)
+                     OR NOT EXISTS (SELECT 1 FROM inventario.ordenes_traslado_lineas l
+                                     WHERE l.orden_id = o.id AND l.producto_id = m.producto_id))
+             UNION ALL
+             SELECT m.id, m.tipo, m.origen_tipo, m.origen_id, m.bodega_id, m.producto_id, m.empresa_id
+               FROM inventario.movimientos m JOIN inventario.bodegas b ON b.id = m.bodega_id
+              WHERE b.tipo = 'transito' AND ${E('m.empresa_id')} AND m.origen_tipo IS DISTINCT FROM 'orden_traslado'`,
+        )
+        await revisar(
+            '25.borrador_de_compra_mal_ligado (D.8.e: confirmado ⇔ compra de su empresa, una compra por borrador, con su serie y su número)',
+            `SELECT b.id AS borrador_id, b.empresa_id, b.estado, b.compra_id, c.empresa_id AS empresa_compra,
+                    b.serie, c.serie AS serie_compra, b.numero, c.numero AS numero_compra
+               FROM inventario.compras_borradores b
+               LEFT JOIN ledger.compras c ON c.id = b.compra_id
+              WHERE ${E('b.empresa_id')}
+                AND ((b.estado = 'confirmado') <> (c.id IS NOT NULL)
+                     OR (c.id IS NOT NULL AND (c.empresa_id <> b.empresa_id
+                         OR upper(coalesce(c.serie, '')) <> upper(coalesce(b.serie, ''))
+                         OR upper(c.numero) <> upper(coalesce(b.numero, ''))))
+                     OR EXISTS (SELECT 1 FROM inventario.compras_borradores x WHERE x.compra_id = b.compra_id AND x.id <> b.id))`,
+        )
+        await revisar(
+            '25.compra_de_borrador_con_otro_emisor (hallazgo H74: la compra confirmada desde un borrador es del proveedor cuyo NIT emitió la factura, sin distinguir guiones ni mayúsculas)',
+            `SELECT b.id AS borrador_id, b.empresa_id, b.emisor_nit, p.nit AS nit_proveedor, c.id AS compra_id
+               FROM inventario.compras_borradores b
+               JOIN ledger.compras c ON c.id = b.compra_id
+               JOIN ledger.proveedores p ON p.id = c.proveedor_id
+              WHERE ${E('b.empresa_id')}
+                AND upper(regexp_replace(p.nit, '[\\s-]', '', 'g')) <> upper(regexp_replace(coalesce(b.emisor_nit, ''), '[\\s-]', '', 'g'))`,
+        )
+        await revisar(
+            '25.compra_con_autorizacion_repetida (hallazgo H74: una autorización FEL (UUID) es de un solo documento; dos compras vigentes de la empresa con la misma son la misma factura registrada dos veces)',
+            `SELECT c.empresa_id, upper(btrim(c.autorizacion)) AS autorizacion, array_agg(c.id ORDER BY c.id) AS compras
+               FROM ledger.compras c
+              WHERE c.autorizacion IS NOT NULL AND btrim(c.autorizacion) <> '' AND NOT ${compraAnulada('c')}
+                AND ${E('c.empresa_id')}
+              GROUP BY 1, 2
+             HAVING count(*) > 1`,
+        )
+        await revisar(
+            '25.compra_de_borrador_distinta_de_la_factura (hallazgo H75: la compra de un borrador está en la moneda del libro (GTQ) y su total es el de la factura leída: Σ líneas = totales.total)',
+            `SELECT b.id AS borrador_id, b.datos->>'moneda' AS moneda, b.datos->'totales'->>'total' AS total_factura,
+                    c.total::text AS total_compra
+               FROM inventario.compras_borradores b JOIN ledger.compras c ON c.id = b.compra_id
+              WHERE ${E('b.empresa_id')}
+                AND (upper(coalesce(b.datos->>'moneda', 'GTQ')) <> 'GTQ'
+                     OR (b.datos->'totales'->>'total') IS NULL
+                     OR (b.datos->'totales'->>'total')::numeric <> c.total)`,
+        )
+        await revisar(
+            '25.saldo_inicial_despues_del_cierre_de_apertura (hallazgo H76: un saldo inicial del kardex (1.1.14 / 2.9.01) es la existencia con la que la empresa empezó; después de cerrar la apertura (2.9.01 trasladado a patrimonio) ya no entra: lo comprado va por una compra)',
+            `SELECT m.id AS movimiento_id, m.empresa_id, to_char(m.fecha, 'YYYY-MM-DD') AS fecha, m.costo_total::text,
+                    a.id AS cierre_apertura, to_char(a.fecha, 'YYYY-MM-DD') AS fecha_cierre
+               FROM inventario.movimientos m
+               JOIN ledger.asientos a ON a.empresa_id = m.empresa_id AND a.origen_tipo = 'ajuste' AND a.origen_id IS NULL
+                AND a.reversa_de IS NULL AND a.created_at < m.created_at
+                AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+                AND (SELECT count(*) FROM ledger.movimientos x WHERE x.asiento_id = a.id) = 2
+                AND EXISTS (SELECT 1 FROM ledger.movimientos x JOIN ledger.cuentas c ON c.id = x.cuenta_id
+                             WHERE x.asiento_id = a.id AND c.codigo = '${APERTURA}')
+                AND EXISTS (SELECT 1 FROM ledger.movimientos x JOIN ledger.cuentas c ON c.id = x.cuenta_id
+                             WHERE x.asiento_id = a.id AND c.codigo IN ('${CUENTAS_GT.UTILIDADES_ACUMULADAS}', '${CUENTAS_GT.CAPITAL_SOCIAL}'))
+              WHERE m.tipo = 'saldo_inicial' AND ${E('m.empresa_id')}`,
+        )
+        await revisar(
+            '25.cobro_por_modalidad_mal_formado (D.3: la factura de un consumo consumible_cobro es un cargo único cuyas líneas venden todas del kardex, una por producto, con la orden de Iris de la factura en cada venta)',
+            `SELECT f.id AS factura_id, f.empresa_id, l.id AS linea_id, l.producto_id, m.id AS movimiento_id,
+                    f.origen_externo_id, m.origen_externo_id AS origen_venta
+               FROM billing.facturas f
+               JOIN billing.facturas_lineas l ON l.factura_id = f.id AND l.tipo <> 'descuento'
+               LEFT JOIN inventario.movimientos m ON m.factura_linea_id = l.id AND m.tipo = 'venta'
+              WHERE f.reglas_snapshot->>'cobro_por_modalidad' = 'true' AND ${E('f.empresa_id')}
+                AND (l.producto_id IS NULL OR m.id IS NULL OR (f.reglas_snapshot->>'cargo_unico') IS DISTINCT FROM 'true'
+                     OR m.origen_externo_id IS DISTINCT FROM f.origen_externo_id)`,
+        )
+    }
 
     /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
