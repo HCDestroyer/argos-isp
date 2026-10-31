@@ -44,6 +44,11 @@ export interface ServicioVista {
     amarre_ip_mac: boolean
     mac: string | null
     direccion: string | null
+    /** cómo llegar, texto libre (pedido A12 de Iris) */
+    referencia: string | null
+    /** contacto en sitio (pedido A13 de Iris): quien recibe al técnico y su teléfono normalizado */
+    contacto_nombre: string | null
+    contacto_telefono: string | null
     coordenadas: string | null
     fecha_instalacion: string | null
     /** activación de la instalación (inicio de facturación); null mientras está pendiente */
@@ -108,6 +113,9 @@ function columnas(cliente: QueryClientContract) {
         's.amarre_ip_mac',
         cliente.raw('s.mac::text AS mac'),
         's.direccion',
+        's.referencia',
+        's.contacto_nombre',
+        's.contacto_telefono',
         's.coordenadas',
         cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
         's.instalado_en',

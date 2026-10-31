@@ -3,6 +3,7 @@ import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { dec, redondear } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import { cierresApertura } from '#ledger/apertura'
 import {
     bloquearProducto,
     bodegaMovible,
@@ -62,6 +63,16 @@ export default class CargarSaldoInicial extends DomainAction<EntradaSaldoInicial
             throw new ValidacionFallida([
                 { field: 'fecha', message: 'La fecha no puede ser futura', rule: 'futuro' },
             ])
+        }
+        // H76 (auditor): con la apertura cerrada (2.9.01 ya trasladado a patrimonio) no entra otro saldo
+        // inicial: lo comprado va por una compra y una diferencia de conteo, por un ajuste
+        const [cierre] = await cierresApertura(t.trx, empresaId)
+        if (cierre) {
+            throw new Conflicto(
+                `La apertura de la empresa se cerró el ${cierre.fecha} (asiento ${cierre.asiento_id}): registra la mercadería con una compra (o un ajuste si salió en un conteo)`,
+                'apertura_cerrada',
+                'Apertura cerrada',
+            )
         }
         const dado = [input.costo_unitario, input.costo_total].filter((v) => v !== undefined && v !== null)
         if (dado.length !== 1) {

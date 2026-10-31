@@ -1,3 +1,4 @@
+import type { OrigenExterno } from '#inventario/origen_externo'
 import type { Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { dec, type Dec } from '#ledger/dinero'
@@ -152,7 +153,14 @@ export async function prepararVentas(
 export async function registrarVentas(
     t: Transaccion,
     ventas: VentaPreparada[],
-    factura: { id: number; empresa_id: number; fecha: string; servicio_id: number | null },
+    factura: {
+        id: number
+        empresa_id: number
+        fecha: string
+        servicio_id: number | null
+        /** fase D: la orden de Iris del cargo también queda en el movimiento (kardex por orden) */
+        origenExterno?: OrigenExterno | null
+    },
 ): Promise<void> {
     if (ventas.length === 0) return
     const lineas = (await t.trx
@@ -184,6 +192,7 @@ export async function registrarVentas(
                 servicioId: factura.servicio_id,
                 facturaLineaId,
                 origen: { tipo: 'factura', id: factura.id },
+                origenExterno: factura.origenExterno ?? null,
                 motivo: `venta en la factura ${factura.id}`,
             },
             {

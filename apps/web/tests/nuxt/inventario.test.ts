@@ -76,8 +76,9 @@ describe('fixtures del inventario (como la API)', () => {
         expect(consumo.ok && [consumo.data.costo_total, consumo.data.saldo_cantidad, consumo.data.saldo_valor]).toEqual(['-25.00', '270.000', '675.00'])
         const demasiado = await inv.consumir({ producto_id: 1, bodega_id: 1, cantidad: '1000' }, clave())
         expect(!demasiado.ok && demasiado.problema).toMatchObject({ status: 409, type: 'urn:argosisp:problema:existencia_insuficiente', title: 'Existencia insuficiente' })
+        // Un equipo en comodato no va por consumos (D.3): va por los equipos del servicio.
         const serie = await inv.consumir({ producto_id: 3, bodega_id: 1, cantidad: '1' }, clave())
-        expect(!serie.ok && serie.problema.errors?.[0]).toMatchObject({ field: 'cantidad', rule: 'requiere_unidades' })
+        expect(!serie.ok && serie.problema.errors?.[0]).toMatchObject({ field: 'producto_id', rule: 'producto_es_comodato' })
         const bajo = await inv.existencias({ bajo_minimo: true })
         expect(bajo.ok && bajo.data.data.map(e => e.producto_sku)).toEqual(['CON-RJ45'])
     })
@@ -169,7 +170,8 @@ describe('fixtures del inventario (como la API)', () => {
 
     it('valorizado a una fecha con el cuadre contra 1.1.14', async () => {
         const antes = await useReportesInventario().valorizado({ fecha: '2026-09-01' })
-        expect(antes.ok && antes.data.total).toBe('2637.50')
+        // Incluye la ONU que viaja en la orden N.º 3 (bodega de tránsito, D.1).
+        expect(antes.ok && antes.data.total).toBe('2987.50')
         const hoy = await useReportesInventario().valorizado({ fecha: '2026-12-31' })
         expect(hoy.ok && hoy.data.cuadre).toEqual([{ empresa_id: 1, valor_kardex: hoy.ok ? hoy.data.total : '', saldo_libro: hoy.ok ? hoy.data.total : '', diferencia: '0.00' }])
     })
@@ -184,7 +186,8 @@ describe('pantallas', () => {
         expect(pagina.find('[data-prueba="existencias-total"]').exists()).toBe(true)
         pagina.unmount()
         const kardex = await mountSuspended(conApp(PaginaKardex), { route: '/inventario/kardex?producto=1' })
-        await esperar(() => expect(kardex.findAll('[data-movimiento]').length).toBe(2))
+        // Saldo inicial, consumo y los cuatro tramos de la orden N.º 2 (cancelada) en la central.
+        await esperar(() => expect(kardex.findAll('[data-movimiento]').length).toBe(6))
         expect(kardex.find('[data-prueba="tabla-kardex"]').text()).toContain('Consumo')
     })
 
@@ -211,7 +214,7 @@ describe('pantallas', () => {
         await esperar(() => expect(recuperar.find('[data-prueba="tabla-por-recuperar"]').text()).toContain('HWTC1A2B3C05'))
         recuperar.unmount()
         const valorizado = await mountSuspended(conApp(PaginaValorizado), { route: '/inventario/valorizado?fecha=2026-09-01' })
-        await esperar(() => expect(valorizado.find('[data-prueba="valorizado-total"]').text()).toContain('2,637.50'))
+        await esperar(() => expect(valorizado.find('[data-prueba="valorizado-total"]').text()).toContain('2,987.50'))
         expect(valorizado.find('[data-prueba="valorizado-cuadre"]').text()).toContain('cuadra')
         valorizado.unmount()
         const servicio = bd.servicios.find(s => s.cliente_id === 1)!

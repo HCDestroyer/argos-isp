@@ -32,8 +32,10 @@ function exigirCampos(assert: any, esquema: Esquema, valor: Record<string, unkno
  * obligatorio en el esquema; ya no quedan pendientes por fixtures del panel.
  */
 const OPCIONALES: Record<string, string[]> = {
-    // `warnings` solo viene al crear o editar
-    Servicio: ['warnings'],
+    // `warnings` solo viene al crear o editar; `referencia` y el contacto en sitio (31 oct, Iris 0.5.0):
+    // la API siempre los envía; obligatorios cuando las fixtures del panel los traigan (fila en `a1.md`)
+    Servicio: ['warnings', 'referencia', 'contacto_nombre', 'contacto_telefono'],
+    Cliente: ['referencia'],
     Plan: ['warnings'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],

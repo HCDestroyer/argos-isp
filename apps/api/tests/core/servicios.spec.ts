@@ -418,8 +418,12 @@ test.group('Servicios · edición y retiro', () => {
             200,
         )
         assert.equal(primera.body().version, 2)
-        // solo datos: no hay eventos de configuración
-        assert.deepEqual(await eventos(requestId), [])
+        // solo datos: no hay eventos de configuración, sí `servicio.datos_cambiados` (Iris 0.5.0, A10)
+        const emitidos = await eventos(requestId)
+        assert.deepEqual(
+            emitidos.map((e) => e.evento),
+            ['servicio.datos_cambiados'],
+        )
         const segunda = await estado(
             client
                 .put(`/api/v1/servicios/${servicio.id}`)

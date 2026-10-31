@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { verBodega, type BodegaVista } from '#inventario/bodegas'
+import { exigirBodegaNoTransito, verBodega, type BodegaVista } from '#inventario/bodegas'
 import { LOCK_PRODUCTO } from '#inventario/kardex'
 
 /**
@@ -25,18 +25,35 @@ export default class DesactivarBodega extends DomainAction<EntradaDesactivarBode
             .from('inventario.bodegas')
             .where('id', input.id)
             .forUpdate()
-            .select('id', 'empresa_id', 'nombre', 'activo', 'version')
+            .select('id', 'empresa_id', 'nombre', 'tipo', 'activo', 'version')
             .first()) as {
             id: number
             empresa_id: number
             nombre: string
+            tipo: string
             activo: boolean
             version: number
         } | null
         if (!actual) throw new NoEncontrado(`La bodega ${input.id} no existe`)
+        exigirBodegaNoTransito(actual)
         exigirAccesoEmpresa(t.ctx, Number(actual.empresa_id))
         t.fijarEmpresa(Number(actual.empresa_id))
         if (Number(actual.version) !== input.version) throw new ConflictoVersion('bodega', input.id)
+        // H77 (auditor): mientras viaje algo desde o hacia ella, la bodega no se desactiva (el faltante o
+        // la cancelación vuelven al origen; la recepción entra al destino)
+        const enTransito = await t.trx
+            .from('inventario.ordenes_traslado')
+            .where('estado', 'en_transito')
+            .where((q) => q.where('bodega_origen_id', input.id).orWhere('bodega_destino_id', input.id))
+            .select('numero')
+            .first()
+        if (enTransito) {
+            throw new Conflicto(
+                `La bodega ${actual.nombre} tiene la orden de traslado ${enTransito.numero} en tránsito: recíbela o cancélala antes`,
+                'bodega_con_traslados',
+                'Bodega con traslados en tránsito',
+            )
+        }
         if (!actual.activo) {
             throw new Conflicto(
                 `La bodega ${actual.nombre} ya está desactivada`,

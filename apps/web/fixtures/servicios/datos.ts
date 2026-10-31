@@ -62,6 +62,10 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         user_ppp: sucursal ? `${usuarioPpp(cliente.nombre, cliente.id)}-b` : usuarioPpp(cliente.nombre, cliente.id),
         mac: `4C:5E:0C:${String(10 + id).padStart(2, '0')}:A${id % 10}:${String(id).padStart(2, '0')}`,
         direccion: sucursal ? 'Sucursal 2, local 4' : cliente.direccion,
+        // Pedidos A12 y A13 de Iris: la API siempre los envía; null hasta que alguien los escriba.
+        referencia: null,
+        contacto_nombre: null,
+        contacto_telefono: null,
         coordenadas: cliente.coordenadas,
         fecha_instalacion: instalado.toISOString().slice(0, 10),
         // Como la API (A1, instalación): la migración rellenó `instalado_en` con `created_at`; la

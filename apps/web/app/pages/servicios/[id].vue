@@ -65,6 +65,17 @@ const puedeSimular = computed(() => puede('promesas.ver') && !sinPromesas.value)
 const puedeActivarInstalacion = computed(() => puede('servicios.activar_instalacion') && pendiente.value)
 const activarAbierto = ref(false)
 const planta = computed(() => (servicio.value ? datosPlanta(servicio.value) : []))
+/** Coordenadas del servicio en el mapa (como en la ficha del cliente). */
+const mapaServicio = computed(() => {
+    const coordenadas = servicio.value?.coordenadas?.replace(/\s/g, '')
+    return coordenadas ? `https://www.google.com/maps?q=${encodeURIComponent(coordenadas)}` : null
+})
+/** Contacto en sitio (pedido A13 de Iris): quien recibe al técnico; null si no hay nombre ni teléfono. */
+const contactoSitio = computed(() => {
+    const nombre = servicio.value?.contacto_nombre?.trim()
+    const telefono = servicio.value?.contacto_telefono?.trim()
+    return nombre || telefono ? [nombre, telefono].filter(Boolean).join(' · ') : null
+})
 
 function alActivarInstalacion(actualizado: Servicio) {
     servicio.value = actualizado
@@ -757,9 +768,10 @@ onMounted(cargar)
                 </UPageCard>
 
                 <UPageCard
-                    title="Instalación"
+                    title="Ubicación y contacto en sitio"
                     icon="i-lucide-map-pin"
                     variant="subtle"
+                    data-prueba="ubicacion-contacto-servicio"
                 >
                     <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <DatoFicha
@@ -768,10 +780,63 @@ onMounted(cargar)
                             class="sm:col-span-2"
                         />
                         <DatoFicha
+                            etiqueta="Referencia"
+                            :valor="servicio.referencia ?? null"
+                            class="sm:col-span-2 whitespace-pre-line"
+                            data-prueba="referencia-servicio"
+                        />
+                        <DatoFicha
                             etiqueta="Coordenadas"
                             :valor="servicio.coordenadas"
                             mono
+                        >
+                            <ULink
+                                v-if="mapaServicio"
+                                :to="mapaServicio"
+                                target="_blank"
+                                class="inline-flex items-center gap-1 text-primary"
+                            >
+                                {{ servicio.coordenadas }}
+                                <UIcon
+                                    name="i-lucide-external-link"
+                                    class="size-3.5"
+                                />
+                            </ULink>
+                            <template v-else>
+                                —
+                            </template>
+                        </DatoFicha>
+                        <DatoFicha
+                            etiqueta="Contacto en sitio"
+                            :valor="contactoSitio"
+                            data-prueba="contacto-servicio"
+                        >
+                            <template v-if="!contactoSitio">
+                                —
+                            </template>
+                            <span v-else-if="servicio.contacto_nombre">{{ servicio.contacto_nombre }}</span>
+                            <ULink
+                                v-if="servicio.contacto_telefono"
+                                :to="`tel:${servicio.contacto_telefono.replace(/[^\d+]/g, '')}`"
+                                :class="servicio.contacto_nombre ? 'ms-2' : ''"
+                                class="inline-flex items-center gap-1 text-primary"
+                            >
+                                <UIcon
+                                    name="i-lucide-phone"
+                                    class="size-3.5"
+                                />
+                                {{ servicio.contacto_telefono }}
+                            </ULink>
+                        </DatoFicha>
+                    </dl>
+                    <p class="mt-4 flex items-center gap-1.5 border-t border-default pt-4 text-xs font-medium text-muted">
+                        <UIcon
+                            name="i-lucide-wrench"
+                            class="size-3.5 shrink-0"
                         />
+                        Instalación
+                    </p>
+                    <dl class="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <DatoFicha
                             etiqueta="Instalado el (inicio de la facturación)"
                             :valor="servicio.instalado_en ? formatearFechaHora(servicio.instalado_en) : 'Pendiente: se fija al activar la instalación'"

@@ -40,13 +40,44 @@ export const ConectorIris = definirEsquema(
         },
         conectado_por_enlace_en: nulable(instante),
         token_argos_id: { ...nulable(id), description: 'Token atk_ entregado a Iris en el último canje' },
+        contrato: {
+            ...nulable(texto),
+            description:
+                'Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca ' +
+                '(un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0)',
+        },
         version: { type: 'integer', minimum: 0 },
     }),
 )
 
+/** `version_argos` y `contrato`: canje y estado (contrato Iris 0.5.0, «Versión y compatibilidad»). */
+const versiones = {
+    version_argos: {
+        ...texto,
+        description:
+            'Versión instalada de Argos (`ARGOSISP_VERSION` de la imagen, p. ej. `1.6.0`; `desarrollo` fuera de ' +
+            'una imagen publicada). La misma de `GET /version` (contrato Iris 0.5.0)',
+    },
+    contrato: {
+        ...texto,
+        description: 'Versión del contrato Iris ↔ Argos que habla este Argos, p. ej. `0.5.0`',
+    },
+}
+
 export const EstadoConectorIris = definirEsquema(
     'EstadoConectorIris',
-    objeto({ activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' } }),
+    objeto({ activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' }, ...versiones }),
+)
+
+export const ContratoConectorIris = definirEsquema(
+    'ContratoConectorIris',
+    objeto({
+        contrato_iris: {
+            ...texto,
+            description: 'Versión del contrato que habla Iris, tal como quedó guardada en el conector',
+        },
+        ...versiones,
+    }),
 )
 
 export const EnlaceConexionIris = definirEsquema(
@@ -93,6 +124,7 @@ export const CanjeConexionIris = definirEsquema(
             description:
                 'URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0)',
         },
+        ...versiones,
     }),
 )
 

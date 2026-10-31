@@ -134,7 +134,7 @@ test.group('Clientes', () => {
         )
         assert.containsSubset(editado.body(), {
             nombre: 'Para editar',
-            telefono: '4444-0000',
+            telefono: '+502 4444-0000',
             nit_cui: 'CF',
             version: 2,
             campos_personalizados: { a: 1 },
@@ -152,7 +152,7 @@ test.group('Clientes', () => {
         assert.sameDeepMembers(
             cambios.map((c) => [c.campo, c.antes, c.despues]),
             [
-                ['telefono', null, '4444-0000'],
+                ['telefono', null, '+502 4444-0000'],
                 ['nit_cui', null, 'CF'],
                 ['campos_personalizados', {}, { a: 1 }],
             ],

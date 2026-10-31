@@ -15,6 +15,7 @@ import { exigirSinPppoe } from '#network/modo_seguridad'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { extremoApi, exigirRouterUnico } from '#network/routers_duplicados'
+import type { CampoCatalogoCambiado } from '#shared/eventos'
 
 export interface EntradaEditarRouter extends DatosRouter {
     id: number
@@ -123,6 +124,9 @@ async function exigirModoSeguridad(t: Transaccion, antes: RouterVista, datos: Da
  * campo cambiado con valor `***`, nunca en claro. Cambiar la capacidad del enlace emite
  * `router.control_cambiado` con `campos: ['capacidad']` (A2 recalcula el padre global). El
  * control de velocidad no se edita aquí: `CambiarControlVelocidad` (`routers.cambiar_control_velocidad`).
+ * Renombrarlo, desactivarlo o reactivarlo, o cambiar sus coordenadas emite `catalogo.cambiado`
+ * (`catalogo: 'router'`, `campos` con `nombre`, `activo` y/o `coordenadas`; contrato Iris 0.5.0,
+ * pedido A15). También cuando `routers.unir` desactiva el absorbido (pasa por aquí).
  */
 export default class EditarRouter extends DomainAction<EntradaEditarRouter, RouterVista> {
     readonly nombre = 'routers.editar'
@@ -163,6 +167,18 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
                 capacidad_subida_kbps: despues.capacidad_subida_kbps,
                 campos: ['capacidad'],
                 motivo: null,
+            })
+        }
+        const camposCatalogo: CampoCatalogoCambiado[] = []
+        if (despues.nombre !== antes.nombre) camposCatalogo.push('nombre')
+        if (despues.activo !== antes.activo) camposCatalogo.push('activo')
+        if (despues.coordenadas !== antes.coordenadas) camposCatalogo.push('coordenadas')
+        if (camposCatalogo.length > 0) {
+            await t.emit('catalogo.cambiado', {
+                catalogo: 'router',
+                id,
+                empresa_id: despues.empresa_sugerida_id === null ? null : Number(despues.empresa_sugerida_id),
+                campos: camposCatalogo,
             })
         }
         return despues

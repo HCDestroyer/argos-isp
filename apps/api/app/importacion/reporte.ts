@@ -169,6 +169,16 @@ export interface ReporteImportacion {
         }>
         clientes_sin_nit: Array<{ cliente_origen: string; nombre: string }>
         nit_invalidos: Array<{ cliente_origen: string; nombre: string; nit: string; motivo: string }>
+        /**
+         * teléfono o celular que no cumple `#core/telefonos` (pedido A14 de Iris): se importa tal
+         * cual vino (recortado); los válidos quedan normalizados (`+502 5512-3344`)
+         */
+        telefonos_invalidos: Array<{
+            cliente_origen: string
+            nombre: string
+            campo: 'telefono' | 'movil'
+            telefono: string
+        }>
         user_ppp_duplicados: Array<{ user_ppp: string; servicios_origen: string[]; motivo: string }>
         /** estado en el origen distinto de activo: se aplicará con las facturas (A3) */
         servicios_suspendidos_origen: Array<{ servicio_origen: string; user_ppp: string }>
@@ -366,6 +376,12 @@ export function formatearReporte(r: ReporteImportacion): string {
     seccion(
         `NIT inválidos (se importan sin NIT; el original queda en campos_personalizados.${r.origen}_nit)`,
         d.nit_invalidos.map((x) => `cliente ${x.cliente_origen}: ${x.nombre} · "${x.nit}" · ${x.motivo}`),
+    )
+    seccion(
+        'Teléfonos inválidos (se importan tal cual; los válidos quedan como +502 5512-3344)',
+        (d.telefonos_invalidos ?? []).map(
+            (x) => `cliente ${x.cliente_origen}: ${x.nombre} · ${x.campo} "${x.telefono}"`,
+        ),
     )
     seccion(
         'user_ppp duplicados',

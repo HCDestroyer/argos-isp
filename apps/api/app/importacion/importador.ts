@@ -27,6 +27,7 @@ import type {
     ServicioOrigen,
     TipoConexionOrigen,
 } from '#importacion/canonico'
+import { normalizarTelefono } from '#core/telefonos'
 import { conteoVacio, type ReporteImportacion } from '#importacion/reporte'
 import { idsExternosDe, type EntidadExterna, type IdsExternos } from '#importacion/ids_externos'
 import { cargaFinancieraA3, type CargaFinanciera } from '#importacion/carga_financiera'
@@ -429,6 +430,7 @@ class Importador {
                 planes_sin_equivalente: [],
                 clientes_sin_nit: [],
                 nit_invalidos: [],
+                telefonos_invalidos: [],
                 user_ppp_duplicados: [],
                 servicios_suspendidos_origen: [],
                 servicios_retirados_origen: [],
@@ -823,6 +825,19 @@ class Importador {
             const { nit, motivo } = revisarNit(c)
             if (!c.nit) d.clientes_sin_nit.push({ cliente_origen: c.id, nombre: c.nombre })
             if (motivo) d.nit_invalidos.push({ cliente_origen: c.id, nombre: c.nombre, nit: c.nit!, motivo })
+            // Teléfonos (pedido A14 de Iris): `CrearCliente` normaliza los válidos y, en canal
+            // `consola`, guarda tal cual los que no cumplen; aquí solo se reportan.
+            for (const campo of ['telefono', 'movil'] as const) {
+                const valor = c[campo]?.trim()
+                if (valor && normalizarTelefono(valor) === null) {
+                    d.telefonos_invalidos.push({
+                        cliente_origen: c.id,
+                        nombre: c.nombre,
+                        campo,
+                        telefono: valor,
+                    })
+                }
+            }
 
             if (existente) {
                 this.#clientes.set(c.id, existente)

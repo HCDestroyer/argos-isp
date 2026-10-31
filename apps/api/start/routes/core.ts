@@ -700,8 +700,9 @@ const clientes: Ruta[] = [
         resumen: 'Listar zonas',
         etiqueta: 'clientes',
         permiso: 'zonas.ver',
+        query: v.listarZonasValidator,
         respuesta: { status: 200, descripcion: 'Zonas', esquema: { type: 'array', items: Zona } },
-        handler: () => listarZonas(),
+        handler: (_ctx, { query }) => listarZonas(query),
     }),
     definirRuta({
         metodo: 'post',

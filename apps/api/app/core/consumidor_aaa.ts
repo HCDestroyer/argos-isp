@@ -15,8 +15,10 @@ export class ConsumidorAaaCache implements ConsumidorEventos {
 
     acepta(evento: string): boolean {
         return (
-            // los adicionales (streaming, IPTV) no cambian nada de RADIUS
-            (evento.startsWith('servicio.') && !evento.startsWith('servicio.adicional_')) ||
+            // los adicionales (streaming, IPTV) y los datos de ubicación y contacto no cambian nada de RADIUS
+            (evento.startsWith('servicio.') &&
+                !evento.startsWith('servicio.adicional_') &&
+                evento !== 'servicio.datos_cambiados') ||
             evento === 'asignacion.cambiada' ||
             evento === 'plan.velocidad_cambiada' ||
             // estrategia por capas (perfil y rate-limit por servicio; contratos/control-velocidad.md §7)

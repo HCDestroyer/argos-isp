@@ -34,6 +34,7 @@ export const COLUMNAS_CLIENTE = [
     'telefono',
     'movil',
     'direccion',
+    'referencia',
     'coordenadas',
     'zona_id',
     'campos_personalizados',
@@ -307,14 +308,23 @@ export async function dimensionesDeCliente(
     return { zona: [fila.zona_id], router: routers.map((r) => r.router_id) }
 }
 
-const COLUMNAS_ZONA = ['id', 'nombre', 'empresa_sugerida_id', 'version', 'created_at', 'updated_at']
+const COLUMNAS_ZONA = ['id', 'nombre', 'empresa_sugerida_id', 'activo', 'version', 'created_at', 'updated_at']
 
-export async function listarZonas() {
-    return db.from('core.zonas').orderBy('nombre').select(COLUMNAS_ZONA)
+/** Zonas por nombre; `activo` filtra (sin él, todas: activas e inactivas). */
+export async function listarZonas(filtros: { activo?: boolean } = {}) {
+    const consulta = db.from('core.zonas').orderBy('nombre').select(COLUMNAS_ZONA)
+    if (filtros.activo !== undefined) consulta.where('activo', filtros.activo)
+    return consulta
 }
 
 export async function verZona(id: number, cliente: QueryClientContract = db.connection()) {
     const fila = await cliente.from('core.zonas').where('id', id).select(COLUMNAS_ZONA).first()
     if (!fila) throw new NoEncontrado(`La zona ${id} no existe`)
-    return fila as { id: number; nombre: string; empresa_sugerida_id: number | null; version: number }
+    return fila as {
+        id: number
+        nombre: string
+        empresa_sugerida_id: number | null
+        activo: boolean
+        version: number
+    }
 }

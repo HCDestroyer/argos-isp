@@ -197,7 +197,12 @@ export const rutasIris: RutasFixture = {
     'GET /api/v1/integraciones/iris': conPermiso('iris.ver', () => ({ status: 200, cuerpo: bd.iris.conector })),
     'GET /api/v1/integraciones/iris/estado': conPermiso('iris.abrir', () => {
         const { activo, url_base, token } = bd.iris.conector
-        const estado: Schema<'EstadoConectorIris'> = { activo: activo && url_base !== null && token !== null }
+        // fuera de una imagen publicada la API responde `version_argos: 'desarrollo'` (contrato Iris 0.5.0)
+        const estado: Schema<'EstadoConectorIris'> = {
+            activo: activo && url_base !== null && token !== null,
+            version_argos: 'desarrollo',
+            contrato: '0.5.0',
+        }
         return { status: 200, cuerpo: estado }
     }),
     'PUT /api/v1/integraciones/iris': conPermiso('iris.configurar', guardar),

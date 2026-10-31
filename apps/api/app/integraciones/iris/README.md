@@ -23,6 +23,7 @@ Horus (`app/integraciones/horus`, contrato `horus.md` §1), con sus propias tabl
 | `actions/configurar_iris.ts`                                       | `iris.configurar`: URL, token y receptor a mano (alternativa al enlace)                                                                                    |
 | `actions/generar_enlace_iris.ts`, `actions/canjear_enlace_iris.ts` | Enlace de conexión: Argos genera, Iris canjea (15 min, un uso, un enlace nuevo anula los anteriores, la misma petición repetida recibe la misma respuesta). Desde el contrato 0.3.1 el canje informa `alcance_global` y `empresas[]` (`id`, `nombre` comercial, `nit` o null) del alcance del usuario técnico Iris |
 | `actions/autorizar_iris.ts`, `autorizacion.ts`                     | «Conectar con un botón» (contrato 0.4.0 §1.4): origen de Iris, PKCE S256, `crearCodigoIris` (el mismo código del enlace, compartido con `generar_enlace_iris.ts`) y la vista previa de la pantalla. Ver abajo |
+| `actions/informar_contrato_iris.ts`                                | `PUT /integraciones/iris/contrato` (contrato 0.5.0): Iris informa la versión del contrato que habla; ver «Versión y compatibilidad» |
 | `actions/abrir_en_iris.ts`                                         | «Ver en Iris»: el servidor pide el ticket a `POST <iris>/api/v1/integraciones/argosisp/sso/tickets` con el `iris_pat_`; `usuario.correo_verificado` siempre `false` (0.3.1)                                  |
 | `#core/integraciones_iris.ts`, `#core/usuario_tecnico.ts`          | Usuario técnico «Iris» (rol `integracion_iris`, `PERMISOS_IRIS` = §1.1 que existen en `permisos.ts`); el helper es el mismo que usa Horus                  |
 | `#core/actions/emitir_ticket_sso.ts`                               | Autologin con Argos de destino, compartido con Horus (`conector: 'iris'`)                                                                                  |
@@ -37,7 +38,8 @@ validador (`canjearEnlaceIrisValidator`: el de Horus más `code_verifier`); el c
 | Ruta                                                               | Permiso                                                | Acción                                                 |
 | ------------------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------ |
 | `GET /integraciones/iris`                                          | `iris.ver`                                             | vista (secretos `***`)                                 |
-| `GET /integraciones/iris/estado`                                   | `iris.abrir`                                           | `{ activo }` para el botón «Ver en Iris»               |
+| `GET /integraciones/iris/estado`                                   | `iris.abrir` o el `atk_` de Iris                       | `{ activo, version_argos, contrato }` (botón «Ver en Iris»; Iris lee las versiones) |
+| `PUT /integraciones/iris/contrato`                                 | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_contrato`                               |
 | `PUT /integraciones/iris`                                          | `iris.configurar`                                      | `iris.configurar` (con `version`)                      |
 | `POST /integraciones/iris/enlace`                                  | `iris.configurar`                                      | `iris.generar_enlace`                                  |
 | `GET /integraciones/iris/autorizar/vista-previa?iris=`             | `iris.configurar`                                      | lectura (sin auditoría): origen, `origen_conocido`, empresas |
@@ -81,6 +83,33 @@ y el admin aprueba en Argos.
   Iris; si aún no existe, nacerá global: todas las activas).
 - Rechazar no llama a la API: el panel navega a `<iris>/…/vuelta#error=rechazado&state=…`.
 
+## Versión y compatibilidad (contrato 0.5.0, §3.3)
+
+- **`version_argos` y `contrato`.** El canje (las dos variantes, §1.3 y §1.4) y
+  `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
+  `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
+  `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
+  `"0.5.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  valores actuales.
+- **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
+  lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
+  null: un Iris anterior a 0.5.0. Reconectar sin `contrato` lo vuelve a null. Entra en el hash de
+  idempotencia del canje solo si viene (el de una petición sin él no cambia).
+- **`PUT /integraciones/iris/contrato { contrato }`** (`iris.informar_contrato`): lo actualiza, p. ej.
+  cuando Iris se actualiza sin reconectar. Solo el `atk_` del usuario técnico Iris (403 a cualquier
+  otra credencial, aunque sea admin; con conector preparado por enlace, solo el `atk_` de ese canje,
+  como el autologin); funciona con el conector apagado. Permiso de la ruta: **`sso.emitir`**, el mínimo
+  que el token de Iris ya tiene (§1.1): un permiso nuevo no llegaría a los tokens ya emitidos (el
+  token recorta a `PERMISOS_IRIS` al crearse) y obligaría a reconectar cada Iris. Responde
+  `{ contrato_iris, version_argos, contrato }`.
+- **`GET /integraciones/iris/estado`** acepta `iris.abrir` (panel) o el `atk_` de Iris (que no tiene
+  `iris.abrir`); la ruta es `permiso: null` y lo comprueba `exigirEstadoIris`. Cualquier otro: 403.
+- **`conectorAdmite(version)`** (`configuracion.ts`, para A6): true si el contrato guardado es ≥
+  `version` (semver con prerelease: `0.5.0-rc.1 < 0.5.0`); sin conector, sin contrato o con uno que
+  no es semver, false. Los webhooks nuevos de 0.5.0 (`servicio.datos_cambiados`,
+  `catalogo.cambiado`, `inventario.traslado_*`) solo deben salir con `conectorAdmite('0.5.0')`.
+  `compararSemver` y `contratoAdmite` son las funciones puras.
+
 ## Eventos
 
 No emite ni consume eventos propios. Los webhooks salientes Argos → Iris (§2.3: `cliente.actualizado`,
@@ -97,7 +126,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 | Archivo | Qué hace |
 | --- | --- |
-| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado` y `router.eliminado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado` e `inventario.traslado_enviado` / `_recibido` / `_cancelado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
 | `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
 | `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
 
@@ -114,6 +143,28 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   Iris quita su instantánea. Un `router.eliminado` sin empresa (router compartido) llega a
   cualquier conector, como `GET /routers` muestra esos routers a cualquier alcance; con empresa,
   solo si está en el alcance.
+- **Datos del servicio y catálogos** (contrato 0.5.0, pedidos A10 a A15):
+  `servicio.datos_cambiados` (`servicio_id`, `empresa_id`, `empresas[]` = `[empresa_id]`,
+  `cliente_id`, `campos[]` ⊂ `direccion`, `coordenadas`, `referencia`, `contacto_nombre`,
+  `contacto_telefono`; solo nombres) sigue el alcance de la empresa del servicio.
+  `catalogo.cambiado` (`catalogo`: `zona`·`plan`·`router`, `id`, `empresa_id`, `campos[]`:
+  `nombre`, `activo` y, en routers, `coordenadas`; se reenvían todos los que traiga) no trae
+  servicio: con `empresa_id` null (zona o router compartido; los planes siempre) llega a cualquier
+  conector, como `router.eliminado`; con empresa, solo si está en el alcance. Un `catalogo`
+  desconocido no se envía. `cliente.actualizado` reenvía todos sus `campos[]` (también `email` y
+  `referencia` desde 0.5.0); nunca valores.
+- **Traslados** (contrato 0.5.0, §2.3 y §3.3; los emite A3): `inventario.traslado_enviado`
+  (`traslado_id`, `empresa_id`, `bodega_destino_id`, `tecnico` `{ id_externo, correo }` o null,
+  `estado`, `lineas[]` `{ producto_id, cantidad, series[] }`, `enviado_en`), `_recibido` (más
+  `recibido_en`, `recibido_por`, `metodo_recepcion`, `origen` `iris`·`panel`) y `_cancelado` (más
+  `cancelado_en`, `motivo`). Lista cerrada de §2.3 con los valores tal cual los emite A3: no salen
+  `numero`, `registrado_por` ni `faltantes` (Iris lee la orden con `GET /inventario/traslados/:id`),
+  y nunca la firma. Siguen el alcance de la empresa de la orden.
+- **Filtro por contrato** (0.5.0): `servicio.datos_cambiados`, `catalogo.cambiado` y los tres de
+  traslado (`EVENTOS_DESDE_050`) solo se registran si `conectorAdmite('0.5.0')` (contrato informado
+  por Iris ≥ 0.5.0); con un conector sin contrato (Iris anterior) o con uno menor no salen, como un
+  evento fuera de alcance. Los demás eventos no cambian. Un envío ya registrado sale aunque el
+  contrato cambie después (el contrato solo sube).
 - **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
   `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
   queda null si el evento no lo trae); Iris lo trata como «no existe».

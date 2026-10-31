@@ -241,6 +241,8 @@ export async function unidadesDeBodega(
         bodegaId?: number
         estados?: readonly EstadoUnidad[]
         campo?: string
+        /** solo las órdenes de traslado mueven unidades que están en la bodega «en tránsito» */
+        transito?: boolean
     },
 ): Promise<UnidadFila[]> {
     const campo = datos.campo ?? 'unidad_ids'
@@ -265,6 +267,22 @@ export async function unidadesDeBodega(
             .select('*')) as UnidadFila[]
     ).map(normalizarFila)
     const estados = datos.estados ?? EN_BODEGA
+    const bodegas = [...new Set(filas.map((f) => f.bodega_id).filter((b): b is number => b !== null))]
+    if (!datos.transito && bodegas.length > 0) {
+        const transito = (await t.trx
+            .from('inventario.bodegas')
+            .whereIn('id', bodegas)
+            .where('tipo', 'transito')
+            .select('id')) as Array<{ id: number }>
+        const viaja = filas.find((f) => transito.some((b) => Number(b.id) === f.bodega_id))
+        if (viaja) {
+            throw new Conflicto(
+                `La unidad ${viaja.serie ?? viaja.mac} viaja en una orden de traslado: recíbela o cancela la orden antes`,
+                'unidad_en_transito',
+                'Unidad en tránsito',
+            )
+        }
+    }
     for (const id of ids) {
         const unidad = filas.find((f) => f.id === id)
         if (!unidad) throw new NoEncontrado(`La unidad ${id} no existe`)

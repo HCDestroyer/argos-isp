@@ -76,6 +76,17 @@ onMounted(() => void lista.recargar())
     >
         <template #acciones>
             <UButton
+                v-if="puede('compras.cargar_borrador')"
+                to="/compras/cargar"
+                label="Cargar factura"
+                icon="i-lucide-file-up"
+                color="neutral"
+                variant="outline"
+                aria-label="Cargar factura"
+                :ui="{ label: 'hidden sm:inline' }"
+                data-prueba="cargar-factura"
+            />
+            <UButton
                 v-if="puede('compras.registrar')"
                 to="/compras/nueva"
                 label="Registrar compra"

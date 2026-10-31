@@ -57,9 +57,10 @@ export async function servicioDe(
  */
 export async function unidadParaComodato(
     servicioId: number,
-    entrada: { unidad_id?: number; serie?: string },
+    entrada: { unidad_id?: number | null; serie?: string | null },
+    cliente: QueryClientContract = db.connection(),
 ): Promise<number> {
-    const conId = entrada.unidad_id !== undefined
+    const conId = entrada.unidad_id !== undefined && entrada.unidad_id !== null
     const serie = normalizarSerie(entrada.serie)
     if (conId === (serie !== null)) {
         throw new ValidacionFallida([
@@ -71,7 +72,7 @@ export async function unidadParaComodato(
         ])
     }
     if (serie === null) return entrada.unidad_id!
-    const fila = (await db
+    const fila = (await cliente
         .from('inventario.unidades as u')
         .join('core.servicios as s', 's.empresa_id', 'u.empresa_id')
         .where('s.id', servicioId)

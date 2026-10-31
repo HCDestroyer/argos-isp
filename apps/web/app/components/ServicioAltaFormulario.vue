@@ -89,7 +89,7 @@ const pasos = computed<Paso[]>(() => [
         title: 'Instalación y cobro',
         description: 'Estado, lugar y plantilla',
         icon: 'i-lucide-receipt-text',
-        campos: ['estado_inicial', 'fecha_instalacion', 'direccion', 'coordenadas', 'plantilla_facturacion_id', 'costo_override', 'excluir_firewall', ...(conPppoe.value ? ['mac'] as const : [])],
+        campos: ['estado_inicial', 'fecha_instalacion', 'direccion', 'referencia', 'coordenadas', 'contacto_nombre', 'contacto_telefono', 'plantilla_facturacion_id', 'costo_override', 'excluir_firewall', ...(conPppoe.value ? ['mac'] as const : [])],
     },
     { id: 'resumen', title: 'Resumen', description: 'Revisa y crea', icon: 'i-lucide-list-checks', campos: [] },
 ])
@@ -280,6 +280,7 @@ function alElegirCliente(elegido: Cliente) {
         estado.user_ppp = generarUsuarioPpp(elegido.nombre)
     }
     estado.direccion ||= elegido.direccion ?? ''
+    estado.referencia ||= elegido.referencia ?? ''
     estado.coordenadas ||= elegido.coordenadas ?? ''
 }
 
@@ -977,30 +978,89 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 class="w-full font-mono"
                             />
                         </UFormField>
-                        <UFormField
-                            name="direccion"
-                            label="Dirección de instalación"
-                            help="Por defecto, la del cliente."
-                            class="sm:col-span-2"
-                        >
-                            <UInput
-                                v-model="estado.direccion"
-                                class="w-full"
-                            />
-                        </UFormField>
-                        <UFormField
-                            name="coordenadas"
-                            label="Coordenadas"
-                            hint="Opcional"
-                            help="Para la visita del técnico."
-                        >
-                            <UInput
-                                v-model="estado.coordenadas"
-                                placeholder="14.6349,-90.5069"
-                                class="w-full"
-                            />
-                        </UFormField>
                     </div>
+
+                    <section
+                        class="flex flex-col gap-4"
+                        data-prueba="alta-ubicacion-contacto"
+                    >
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Ubicación y contacto en sitio
+                        </h3>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <UFormField
+                                name="direccion"
+                                label="Dirección de instalación"
+                                help="Por defecto, la del cliente."
+                                class="sm:col-span-2"
+                            >
+                                <UInput
+                                    v-model="estado.direccion"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                name="referencia"
+                                label="Referencia"
+                                hint="Opcional"
+                                help="Cómo llegar: lo lee el técnico en la orden. Por defecto, la del cliente."
+                                class="sm:col-span-2"
+                            >
+                                <UTextarea
+                                    v-model="estado.referencia"
+                                    :rows="2"
+                                    :maxlength="300"
+                                    autoresize
+                                    placeholder="Casa verde frente a la iglesia"
+                                    class="w-full"
+                                    data-prueba="alta-referencia"
+                                />
+                            </UFormField>
+                            <UFormField
+                                name="coordenadas"
+                                label="Coordenadas"
+                                hint="Opcional"
+                                help="Para la visita del técnico."
+                                class="sm:col-span-2"
+                            >
+                                <UInput
+                                    v-model="estado.coordenadas"
+                                    placeholder="14.6349,-90.5069"
+                                    icon="i-lucide-locate"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                name="contacto_nombre"
+                                label="Contacto en sitio"
+                                hint="Opcional"
+                                help="Quién recibe al técnico, si no es el cliente."
+                            >
+                                <UInput
+                                    v-model="estado.contacto_nombre"
+                                    :maxlength="200"
+                                    icon="i-lucide-user-round"
+                                    class="w-full"
+                                    data-prueba="alta-contacto-nombre"
+                                />
+                            </UFormField>
+                            <UFormField
+                                name="contacto_telefono"
+                                label="Teléfono del contacto"
+                                hint="Opcional"
+                            >
+                                <UInput
+                                    v-model="estado.contacto_telefono"
+                                    type="tel"
+                                    inputmode="tel"
+                                    placeholder="5512 3344"
+                                    icon="i-lucide-phone"
+                                    class="w-full"
+                                    data-prueba="alta-contacto-telefono"
+                                />
+                            </UFormField>
+                        </div>
+                    </section>
 
                     <USeparator />
 
@@ -1213,6 +1273,17 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             <DatoFicha
                                 etiqueta="Dirección"
                                 :valor="estado.direccion"
+                            />
+                            <DatoFicha
+                                v-if="estado.referencia.trim()"
+                                etiqueta="Referencia"
+                                :valor="estado.referencia"
+                            />
+                            <DatoFicha
+                                v-if="estado.contacto_nombre.trim() || estado.contacto_telefono.trim()"
+                                etiqueta="Contacto en sitio"
+                                :valor="[estado.contacto_nombre.trim(), estado.contacto_telefono.trim()].filter(Boolean).join(' · ')"
+                                data-prueba="resumen-contacto"
                             />
                             <DatoFicha
                                 v-if="estado.excluir_firewall"

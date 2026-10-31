@@ -6,6 +6,7 @@ import { descifrar } from '#shared/cifrado'
 import { MASCARA } from '#shared/enmascarar'
 import { ConflictoVersion } from '#shared/errores'
 import { urlPublicaApi } from '#integraciones/horus/panel'
+import { versionInstalada } from '#monitoreo/version'
 
 /**
  * Configuración del conector Iris (`integraciones.iris_conector`, una sola fila), editable desde el
@@ -24,6 +25,79 @@ export const RUTA_RECEPTOR_IRIS = '/api/v1/integraciones/iris/webhook'
 /** Formato del token de Iris para Argos (§1.2): `iris_pat_<32B base62>`. */
 export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
 
+/**
+ * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
+ * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
+ */
+export const CONTRATO_IRIS = '0.5.0'
+
+/** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
+export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
+
+/**
+ * Compara dos versiones semver (`FORMATO_SEMVER`): negativo si `a < b`, 0 si son iguales, positivo
+ * si `a > b`. Una prerelease es menor que su versión (`0.5.0-rc.1 < 0.5.0`). null si alguna no es
+ * semver.
+ */
+export function compararSemver(a: string, b: string): number | null {
+    const pa = FORMATO_SEMVER.exec(a)
+    const pb = FORMATO_SEMVER.exec(b)
+    if (!pa || !pb) return null
+    for (let i = 1; i <= 3; i++) {
+        const d = Number(pa[i]) - Number(pb[i])
+        if (d !== 0) return d
+    }
+    const ra = pa[4]
+    const rb = pb[4]
+    if (ra === undefined && rb === undefined) return 0
+    if (ra === undefined) return 1
+    if (rb === undefined) return -1
+    const sa = ra.split('.')
+    const sb = rb.split('.')
+    for (let i = 0; i < Math.max(sa.length, sb.length); i++) {
+        const x = sa[i]
+        const y = sb[i]
+        if (x === undefined) return -1
+        if (y === undefined) return 1
+        const nx = /^\d+$/.test(x)
+        const ny = /^\d+$/.test(y)
+        if (nx && ny) {
+            const d = Number(x) - Number(y)
+            if (d !== 0) return d
+        } else if (nx !== ny) {
+            return nx ? -1 : 1
+        } else if (x !== y) {
+            return x < y ? -1 : 1
+        }
+    }
+    return 0
+}
+
+/**
+ * ¿Un conector que habla el contrato `contrato` admite lo que nació en `minima`? Sin contrato
+ * (null: un Iris anterior a 0.5.0 que nunca lo informó) o con uno que no es semver: no.
+ */
+export function contratoAdmite(contrato: string | null | undefined, minima: string): boolean {
+    if (!contrato) return false
+    const comparacion = compararSemver(contrato, minima)
+    return comparacion !== null && comparacion >= 0
+}
+
+/**
+ * Interfaz para A6 (contrato Iris 0.5.0, «Versión y compatibilidad»): si el Iris conectado habla un
+ * contrato ≥ `version`. Los webhooks nuevos de 0.5.0 (`servicio.datos_cambiados`,
+ * `catalogo.cambiado`, `inventario.traslado_*`) solo se envían si `conectorAdmite('0.5.0')`; así un
+ * Iris anterior no los recibe como desconocidos. Sin fila de conector, o sin `contrato`: false. Se
+ * lee de la base en cada llamada (sin caché, regla 5).
+ */
+export async function conectorAdmite(
+    version: string,
+    cliente: QueryClientContract = db.connection(),
+): Promise<boolean> {
+    const fila = await leerFilaIris(cliente)
+    return contratoAdmite(fila?.contrato, version)
+}
+
 export interface FilaConectorIris {
     id: number
     activo: boolean
@@ -35,6 +109,8 @@ export interface FilaConectorIris {
     conector_id: string
     token_argos_id: number | null
     conectado_por_enlace_en: Date | null
+    /** versión del contrato que habla el Iris conectado (semver); null = anterior a 0.5.0 */
+    contrato: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -216,6 +292,8 @@ export interface VistaConectorIris {
     conector_id: string | null
     conectado_por_enlace_en: string | null
     token_argos_id: number | null
+    /** versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca */
+    contrato: string | null
     version: number
 }
 
@@ -241,6 +319,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
             fila?.token_argos_id === null || fila?.token_argos_id === undefined
                 ? null
                 : Number(fila.token_argos_id),
+        contrato: fila?.contrato ?? null,
         version: fila?.version ?? 0,
     }
 }
@@ -249,8 +328,27 @@ export async function verConectorIris(): Promise<VistaConectorIris> {
     return vistaConectorIris(await leerFilaIris())
 }
 
-/** Para quien solo tiene `iris.abrir`: si "Ver en Iris" puede funcionar. Sin URL ni secretos. */
-export async function estadoConectorIris(): Promise<{ activo: boolean }> {
+export interface EstadoConectorIris {
+    /** si "Ver en Iris" puede funcionar (conector encendido con URL y token) */
+    activo: boolean
+    /** versión instalada de Argos (`ARGOSISP_VERSION` de la imagen; `desarrollo` fuera de una imagen) */
+    version_argos: string
+    /** versión del contrato Iris que habla este Argos (`CONTRATO_IRIS`) */
+    contrato: string
+}
+
+/**
+ * Para quien solo tiene `iris.abrir` (botón "Ver en Iris") y para el token de Iris (contrato 0.5.0,
+ * «Versión y compatibilidad»): si el conector puede funcionar, la versión de Argos y la del
+ * contrato. Sin URL ni secretos.
+ */
+export async function estadoConectorIris(): Promise<EstadoConectorIris> {
     const config = await configIris()
-    return { activo: config.activo && Boolean(config.urlBase && config.token) }
+    return { activo: config.activo && Boolean(config.urlBase && config.token), ...(await versionesIris()) }
+}
+
+/** `version_argos` y `contrato` (canje, estado y `PUT /integraciones/iris/contrato`). */
+export async function versionesIris(): Promise<Omit<EstadoConectorIris, 'activo'>> {
+    const { version } = await versionInstalada()
+    return { version_argos: version, contrato: CONTRATO_IRIS }
 }

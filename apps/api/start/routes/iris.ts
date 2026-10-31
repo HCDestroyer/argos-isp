@@ -19,13 +19,16 @@ import ResolverIps from '#core/actions/resolver_ips'
 import EmitirTicketSso from '#core/actions/emitir_ticket_sso'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import RevocarTokenIris from '#core/actions/revocar_token_iris'
-import { listarTokensIris } from '#core/integraciones_iris'
+import { listarTokensIris, usuarioIris } from '#core/integraciones_iris'
+import { alcanceDePermiso } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { definirEsquema, id, objeto } from '#shared/openapi/esquemas'
 import ConfigurarIris from '#integraciones/iris/actions/configurar_iris'
 import GenerarEnlaceIris from '#integraciones/iris/actions/generar_enlace_iris'
 import CanjearEnlaceIris from '#integraciones/iris/actions/canjear_enlace_iris'
 import AbrirEnIris from '#integraciones/iris/actions/abrir_en_iris'
 import AutorizarIris from '#integraciones/iris/actions/autorizar_iris'
+import InformarContratoIris from '#integraciones/iris/actions/informar_contrato_iris'
 import { vistaPreviaAutorizacionIris } from '#integraciones/iris/autorizacion'
 import { estadoConectorIris, verConectorIris } from '#integraciones/iris/configuracion'
 import * as vi from '#integraciones/iris/validators'
@@ -33,6 +36,7 @@ import {
     AutorizacionIris,
     CanjeConexionIris,
     ConectorIris,
+    ContratoConectorIris,
     EnlaceConexionIris,
     EstadoConectorIris,
     TicketIris,
@@ -47,6 +51,24 @@ const TokenIrisCreado = definirEsquema(
         usuario_id: { ...id, description: 'Usuario técnico Iris' },
     }),
 )
+
+/** Id del token `atk_` con que se autenticó la petición; null con sesión o cookie. */
+function tokenDeLaPeticion(ctx: HttpContext): number | null {
+    if (ctx.auth.authenticatedViaGuard !== 'tokens') return null
+    const tokenId = ctx.auth.use('tokens').token?.id
+    return tokenId === undefined ? null : Number(tokenId)
+}
+
+/**
+ * `GET /integraciones/iris/estado`: el panel con `iris.abrir` (botón «Ver en Iris») o el token del
+ * usuario técnico Iris, que lee ahí `version_argos` y `contrato` (contrato 0.5.0). 403 a los demás.
+ */
+async function exigirEstadoIris(ctx: HttpContext) {
+    const usuario = ctx.auth.user!
+    if ((await alcanceDePermiso(usuario.id, 'iris.abrir', alcancesDelToken(ctx))) !== null) return
+    if (tokenDeLaPeticion(ctx) !== null && (await usuarioIris()) === usuario.id) return
+    throw new Prohibido('Se requiere el permiso iris.abrir o el token de la integración Iris')
+}
 
 /** URL pública de la API de Argos (donde Iris canjea el enlace). */
 function baseArgos(ctx: HttpContext): string {
@@ -68,11 +90,40 @@ const iris: Ruta[] = [
         metodo: 'get',
         ruta: '/integraciones/iris/estado',
         operacion: 'irisEstado',
-        resumen: 'Si "Ver en Iris" puede funcionar (sin URL ni secretos)',
+        resumen: 'Si "Ver en Iris" puede funcionar, versión de Argos y del contrato (sin URL ni secretos)',
+        descripcion:
+            'Con el permiso `iris.abrir` (botón «Ver en Iris» del panel) o con el token `atk_` del usuario ' +
+            'técnico Iris (403 a cualquier otro). `version_argos` es la versión instalada (`GET /version`) y ' +
+            '`contrato` la del contrato Iris ↔ Argos que habla este Argos (contrato Iris 0.5.0).',
         etiqueta: 'integraciones',
-        permiso: 'iris.abrir',
+        // `iris.abrir` o el token de Iris (que no lo tiene): lo comprueba `exigirEstadoIris`
+        permiso: null,
         respuesta: { status: 200, descripcion: 'Estado', esquema: EstadoConectorIris },
-        handler: () => estadoConectorIris(),
+        handler: async (ctx) => {
+            await exigirEstadoIris(ctx)
+            return estadoConectorIris()
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/integraciones/iris/contrato',
+        operacion: 'irisInformarContrato',
+        resumen: 'Iris informa la versión del contrato que habla (servidor a servidor)',
+        descripcion:
+            'Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico ' +
+            'Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ' +
+            'ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de ' +
+            '0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. ' +
+            'Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).',
+        etiqueta: 'integraciones',
+        permiso: 'sso.emitir',
+        cuerpo: vi.contratoIrisValidator,
+        respuesta: { status: 200, descripcion: 'Contrato guardado', esquema: ContratoConectorIris },
+        handler: (ctx, { cuerpo }) =>
+            new InformarContratoIris().execute(
+                { contrato: cuerpo.contrato, atk_id: tokenDeLaPeticion(ctx) },
+                ctx.contextoAccion(),
+            ),
     }),
     definirRuta({
         metodo: 'put',
@@ -169,6 +220,7 @@ const iris: Ruta[] = [
                     token: cuerpo.token,
                     webhook: cuerpo.webhook,
                     code_verifier: cuerpo.code_verifier ?? null,
+                    contrato: cuerpo.contrato ?? null,
                 },
                 ctx.contextoAccion('webhook'),
             ),

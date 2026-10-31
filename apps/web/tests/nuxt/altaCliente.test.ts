@@ -125,7 +125,7 @@ describe('useClientes · alta y edición', () => {
     it('editar sube la versión y una versión vieja responde 409', async () => {
         const editado = await useClientes().editar(5, { telefono: '55550000', version: 1 })
         expect(editado.ok && editado.data.version).toBe(2)
-        expect(editado.ok && editado.data.telefono).toBe('55550000')
+        expect(editado.ok && editado.data.telefono).toBe('+502 5555-0000')
 
         const viejo = await useClientes().editar(5, { telefono: '55551111', version: 1 })
         expect(!viejo.ok && viejo.problema.status).toBe(409)

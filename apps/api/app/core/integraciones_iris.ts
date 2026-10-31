@@ -41,6 +41,8 @@ export const PERMISOS_IRIS_CONTRATO = [
     'inventario.devolver_comodato',
     'inventario.declarar_perdida_comodato',
     'inventario.consumir',
+    // recepción de órdenes de traslado en la app de campo (contrato 0.5.0 §3.3)
+    'inventario.recibir_traslado',
     'facturas.emitir_cargo_unico',
     // comercial
     'clientes.crear',

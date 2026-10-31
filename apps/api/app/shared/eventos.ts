@@ -136,8 +136,8 @@ export const CAMPOS_CLIENTE_IDENTIDAD = [
 /**
  * Campos de `core.clientes` que emiten `cliente.actualizado`: los de identidad y, desde el contrato
  * Iris 0.3.1, los de contacto y ubicación de la instantánea de Iris (§2.2): `telefono`, `movil`,
- * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`. El evento lleva solo los nombres, nunca los
- * valores.
+ * `direccion`, `coordenadas` (`"lat,lng"`) y `zona_id`; desde el contrato Iris 0.5.0, `email`
+ * (pedido A11) y `referencia` (A12). El evento lleva solo los nombres, nunca los valores.
  */
 export const CAMPOS_CLIENTE_ACTUALIZADO = [
     ...CAMPOS_CLIENTE_IDENTIDAD,
@@ -146,6 +146,8 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
     'direccion',
     'coordenadas',
     'zona_id',
+    'email',
+    'referencia',
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
@@ -191,6 +193,9 @@ interface PayloadAdicional {
     modalidad: ModalidadAdicional
 }
 
+/** Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers. */
+export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas'
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -234,6 +239,33 @@ export interface CatalogoEventos {
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
         plan_temporal_id?: number
+    }
+    /**
+     * Cambiaron datos de ubicación o contacto del servicio (contrato Iris 0.5.0, pedidos A10, A12 y
+     * A13): `direccion`, `coordenadas`, `referencia`, `contacto_nombre`, `contacto_telefono`. Solo
+     * nombres, nunca valores. Evento propio y no `servicio.config_cambiada`: no cambian nada en la
+     * red, y así RouterOS, coa y aaa-cache no reaccionan. No se emite al crear (va en `servicio.creado`).
+     * `empresas` = `[empresa_id]`, con la misma forma que `cliente.actualizado` (contrato Iris 0.5.0).
+     */
+    'servicio.datos_cambiados': {
+        servicio_id: number
+        empresa_id: number
+        empresas: number[]
+        cliente_id: number
+        campos: Array<'direccion' | 'coordenadas' | 'referencia' | 'contacto_nombre' | 'contacto_telefono'>
+    }
+    /**
+     * Cambió una zona, un plan o un router en lo que otros sistemas muestran (contrato Iris 0.5.0,
+     * pedido A15): `nombre` (los tres), `activo` (desactivar o reactivar, los tres) y `coordenadas`
+     * (router). Un solo evento para los tres; `catalogo` dice cuál e `id` su id. `empresa_id`: la
+     * sugerida de la zona o del router (null = compartido); en `plan` siempre null (los planes no son
+     * de una empresa). `campos`: solo nombres, nunca valores (aditivo: se pueden sumar otros).
+     */
+    'catalogo.cambiado': {
+        catalogo: 'zona' | 'plan' | 'router'
+        id: number
+        empresa_id: number | null
+        campos: CampoCatalogoCambiado[]
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
@@ -478,7 +510,8 @@ export interface CatalogoEventos {
      * `tipo` o `codigo` (hoy inmutable; se reserva para un cambio futuro), o su identificación de
      * receptor FEL: `nit_cui` y `tipo_documento_fiscal` (reclasificado al editar); y, para la
      * instantánea de Iris (contrato Iris 0.3.1 §2.2), `telefono`, `movil`, `direccion`,
-     * `coordenadas` y `zona_id`. Solo nombres de campos, nunca valores. Sin `empresa_id`: el cliente
+     * `coordenadas` y `zona_id`; desde Iris 0.5.0, `email` (A11) y `referencia` (A12). Solo nombres de
+     * campos, nunca valores. Sin `empresa_id`: el cliente
      * no es de una empresa, sus servicios sí. Lo consumen los workers de webhooks a Horus (solo los
      * campos de identidad; sin ellos no envía) y a Iris (todos) (A6).
      */
@@ -887,6 +920,27 @@ export interface CatalogoEventos {
         sobrante: Dinero
         lineas: number
     }
+    /** Orden de traslado enviada (fase D, `contratos/inventario.md` D.1; contrato Iris 0.5.0 §2.3). */
+    'inventario.traslado_enviado': PayloadTraslado
+    /** El destino recibió la orden; `faltantes` volvieron al origen. */
+    'inventario.traslado_recibido': PayloadTraslado & {
+        recibido_en: string
+        /** el técnico que recibió (o el usuario, en una bodega que no es de técnico) */
+        recibido_por: { id_externo: string; correo: string } | null
+        registrado_por: number | null
+        metodo_recepcion: 'firma_digital' | 'firma_papel' | 'aceptacion_sistema'
+        origen: 'iris' | 'panel'
+        faltantes: Array<{ producto_id: number; cantidad: string; unidad_ids: number[] }>
+    }
+    /** Se canceló una orden en tránsito: todo volvió al origen. */
+    'inventario.traslado_cancelado': PayloadTraslado & { cancelado_en: string; motivo: string }
+    /** Cambió la configuración de la IA que lee facturas de compra (nunca valores ni la clave). */
+    'inventario.ia_config_cambiada': {
+        configuracion_id: number
+        /** null = global */
+        empresa_id: number | null
+        campos: string[]
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -1082,6 +1136,19 @@ interface OrigenExternoPayload {
     origen_externo_id: string | null
 }
 
+/** Orden de traslado (fase D; contrato Iris 0.5.0 §2.3). */
+interface PayloadTraslado {
+    traslado_id: number
+    empresa_id: number
+    numero: number
+    bodega_destino_id: number
+    /** técnico de la bodega destino; null si es una bodega */
+    tecnico: { id_externo: string; correo: string } | null
+    estado: 'en_transito' | 'recibida' | 'recibida_con_diferencias' | 'cancelada'
+    lineas: Array<{ producto_id: number; cantidad: string; series: string[] }>
+    enviado_en: string
+}
+
 /** Unidad de serie en comodato (`contratos/inventario.md` §7). */
 interface PayloadComodato {
     unidad_id: number
@@ -1145,6 +1212,7 @@ export const EVENTOS = [
     'servicio.creado',
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
+    'servicio.datos_cambiados',
     'asignacion.cambiada',
     'servicio.adicional_agregado',
     'servicio.adicional_cambiado',
@@ -1163,6 +1231,7 @@ export const EVENTOS = [
     'router.conexion_eliminada',
     'router.radius_cambiado',
     'cliente.actualizado',
+    'catalogo.cambiado',
     'sesion.iniciada',
     'sesion.terminada',
     'servicio.caidas_repetidas',
@@ -1227,6 +1296,10 @@ export const EVENTOS = [
     'inventario.equipo_por_recuperar',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
+    'inventario.ia_config_cambiada',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

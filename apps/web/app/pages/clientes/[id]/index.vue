@@ -396,6 +396,12 @@ onMounted(cargar)
                         </ULink>
                     </DatoFicha>
                     <DatoFicha
+                        etiqueta="Referencia"
+                        :valor="cliente.referencia ?? null"
+                        class="whitespace-pre-line sm:col-span-2 lg:col-span-3"
+                        data-prueba="referencia-cliente"
+                    />
+                    <DatoFicha
                         v-for="campo in camposPersonalizados"
                         :key="campo.clave"
                         :etiqueta="campo.etiqueta"

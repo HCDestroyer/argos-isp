@@ -3,7 +3,7 @@ import logger from '@adonisjs/core/services/logger'
 import type { EventoEntrante } from '#shared/eventos_bus'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
-import { destinoWebhooksIris } from '#integraciones/iris/configuracion'
+import { conectorAdmite, destinoWebhooksIris } from '#integraciones/iris/configuracion'
 import {
     entregarPendientesDe,
     insertarEnvio,
@@ -30,6 +30,17 @@ import {
  *   solo con el payload del evento (la fila ya no existe; nunca se busca). Un router sin empresa
  *   sugerida es infraestructura compartida: su `router.eliminado` llega a cualquier conector,
  *   como `GET /routers` se lo muestra a cualquier alcance.
+ * - **Catálogos** (`catalogo.cambiado`, contrato 0.5.0, pedido A15): no trae servicio; con
+ *   `empresa_id` null (zona o router compartido, o cualquier plan) es compartido y pasa con
+ *   cualquier alcance, igual que `router.eliminado`; con empresa, solo si está en el alcance.
+ * - **Traslados** (`inventario.traslado_enviado` / `_recibido` / `_cancelado`, contrato 0.5.0 §2.3 y
+ *   §3.3): los campos de §2.3 tal cual los emite A3 (`payloadTraslado`), con la empresa de la
+ *   orden para el alcance. No salen `numero`, `registrado_por` (usuario interno) ni `faltantes`:
+ *   §2.3 no los lista; Iris lee la orden completa con `GET /inventario/traslados/:id`.
+ * - **Versión del contrato**: los eventos de `EVENTOS_DESDE_050` solo se registran si el Iris
+ *   conectado habla un contrato ≥ 0.5.0 (`conectorAdmite`, A1); a uno anterior (o sin contrato
+ *   informado) no le llegan como desconocidos. Un pendiente ya registrado sale igual: el contrato
+ *   solo sube.
  */
 
 /** Eventos del bus que van a Iris (§2.3). */
@@ -43,7 +54,27 @@ export const EVENTOS_A_IRIS = [
     'servicio.caidas_repetidas',
     'servicio.eliminado',
     'router.eliminado',
+    'servicio.datos_cambiados',
+    'catalogo.cambiado',
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
 ] as const
+
+/** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
+export const EVENTOS_DESDE_050 = [
+    'servicio.datos_cambiados',
+    'catalogo.cambiado',
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+/** Versión mínima del contrato para `EVENTOS_DESDE_050`. */
+export const CONTRATO_EVENTOS_050 = '0.5.0'
+
+/** Catálogos de `catalogo.cambiado` (contrato Iris 0.5.0, pedido A15). */
+const CATALOGOS = ['zona', 'plan', 'router'] as const
 
 export const TABLA_ENVIOS_IRIS = 'integraciones.iris_envios'
 
@@ -174,6 +205,20 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
     }
 
+    if (evento === 'catalogo.cambiado') {
+        const catalogo = texto(p.catalogo)
+        const id = entero(p.id)
+        if (!id || !catalogo || !(CATALOGOS as readonly string[]).includes(catalogo)) return null
+        const empresaId = entero(p.empresa_id)
+        return {
+            payload: { catalogo, id, empresa_id: empresaId, campos: textos(p.campos) },
+            empresas: empresaId ? [empresaId] : [],
+            compartido: empresaId === null,
+        }
+    }
+
+    if (TRASLADOS.has(evento)) return payloadTraslado(evento, p)
+
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
 
@@ -229,6 +274,10 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                 empresas: anterior && anterior !== empresaId ? [...empresas, anterior] : empresas,
             }
         }
+        case 'servicio.datos_cambiados':
+            // Solo nombres de campo (dirección, coordenadas, referencia, contacto): Iris relee el servicio.
+            // `empresas` = [empresa_id], la forma de `cliente.actualizado` (§2.3)
+            return { payload: { ...base, empresas, campos: textos(p.campos) }, empresas }
         case 'asignacion.cambiada':
             return {
                 payload: {
@@ -269,6 +318,82 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
     }
 }
 
+const TRASLADOS = new Set<string>([
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
+])
+
+const METODOS_RECEPCION = ['firma_digital', 'firma_papel', 'aceptacion_sistema'] as const
+const ORIGENES_RECEPCION = ['iris', 'panel'] as const
+
+/** `{ id_externo, correo }` del técnico o de quien recibió; null si no viene completo. */
+function persona(valor: unknown): { id_externo: string; correo: string } | null {
+    if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return null
+    const v = valor as Record<string, unknown>
+    const idExterno = texto(v.id_externo)
+    const correo = texto(v.correo)
+    return idExterno && correo ? { id_externo: idExterno, correo } : null
+}
+
+/** Líneas `{ producto_id, cantidad, series[] }`: la cantidad es texto (3 decimales), tal cual. */
+function lineasTraslado(valor: unknown): Array<{ producto_id: number; cantidad: string; series: string[] }> {
+    if (!Array.isArray(valor)) return []
+    return valor.flatMap((l) => {
+        if (!l || typeof l !== 'object') return []
+        const linea = l as Record<string, unknown>
+        const productoId = entero(linea.producto_id)
+        const cantidad = typeof linea.cantidad === 'number' ? String(linea.cantidad) : texto(linea.cantidad)
+        if (!productoId || cantidad === null) return []
+        return [{ producto_id: productoId, cantidad, series: textos(linea.series) }]
+    })
+}
+
+function unoDe<T extends string>(valor: unknown, permitidos: readonly T[]): T | null {
+    return typeof valor === 'string' && (permitidos as readonly string[]).includes(valor)
+        ? (valor as T)
+        : null
+}
+
+/**
+ * `inventario.traslado_*` (0.5.0, §2.3): lista cerrada de los campos del contrato, con los valores
+ * tal cual los emite A3. La empresa de la orden decide el alcance.
+ */
+function payloadTraslado(evento: string, p: Payload): WebhookIris | null {
+    const trasladoId = entero(p.traslado_id)
+    const empresaId = entero(p.empresa_id)
+    if (!trasladoId || !empresaId) return null
+    const comun = {
+        traslado_id: trasladoId,
+        empresa_id: empresaId,
+        bodega_destino_id: entero(p.bodega_destino_id),
+        tecnico: persona(p.tecnico),
+        estado: texto(p.estado),
+        lineas: lineasTraslado(p.lineas),
+        enviado_en: texto(p.enviado_en),
+    }
+    const empresas = [empresaId]
+    if (evento === 'inventario.traslado_recibido') {
+        return {
+            payload: {
+                ...comun,
+                recibido_en: texto(p.recibido_en),
+                recibido_por: persona(p.recibido_por),
+                metodo_recepcion: unoDe(p.metodo_recepcion, METODOS_RECEPCION),
+                origen: unoDe(p.origen, ORIGENES_RECEPCION),
+            },
+            empresas,
+        }
+    }
+    if (evento === 'inventario.traslado_cancelado') {
+        return {
+            payload: { ...comun, cancelado_en: texto(p.cancelado_en), motivo: texto(p.motivo) },
+            empresas,
+        }
+    }
+    return { payload: comun, empresas }
+}
+
 /**
  * Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global,
  * salvo el de infraestructura compartida (`compartido`), que pasa siempre.
@@ -282,12 +407,22 @@ export function enAlcance(alcance: AlcanceConectorIris, empresas: number[], comp
 
 /**
  * Registra el webhook de un evento del bus (lo llama `ConsumidorIris`). Idempotente por id del
- * outbox. Devuelve el id del envío o null si no aplica (otro evento, conector sin destino, fuera
- * del alcance) o ya existía.
+ * outbox. Devuelve el id del envío o null si no aplica (otro evento, conector sin destino, evento
+ * de 0.5.0 con un conector anterior, fuera del alcance) o ya existía.
  */
 export async function registrarEnvioIris(evento: EventoEntrante): Promise<number | null> {
     if (!(EVENTOS_A_IRIS as readonly string[]).includes(evento.evento)) return null
     if (!(await destinoWebhooksIris())) return null
+    if (
+        (EVENTOS_DESDE_050 as readonly string[]).includes(evento.evento) &&
+        !(await conectorAdmite(CONTRATO_EVENTOS_050))
+    ) {
+        logger.debug(
+            { outboxId: evento.id, evento: evento.evento },
+            'iris: el conector habla un contrato anterior a 0.5.0; webhook no enviado',
+        )
+        return null
+    }
     const alcance = await alcanceConectorIris()
     if (!alcance) {
         logger.debug({ outboxId: evento.id }, 'iris: sin usuario técnico activo; webhook no enviado')
