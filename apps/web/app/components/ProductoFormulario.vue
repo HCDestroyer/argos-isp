@@ -24,16 +24,59 @@ const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
 
+/* Tipos del catálogo (D.2): sin leerlos no se puede elegir el tipo */
+const tipos = shallowRef<TipoProducto[]>([])
+const problemaTipos = ref<Problem | null>(null)
+const cargandoTipos = ref(false)
+
+async function cargarTipos() {
+    cargandoTipos.value = true
+    const resultado = await useTiposProducto().activos()
+    cargandoTipos.value = false
+    tipos.value = resultado.ok ? resultado.data : []
+    problemaTipos.value = resultado.ok ? null : resultado.problema
+}
+
 watch(abierto, (valor) => {
     if (valor) {
         Object.assign(estado, entradaProducto(props.producto))
         problema.value = null
         clave = nuevaClaveIdempotencia()
+        void cargarTipos()
     }
 }, { immediate: true })
 
+/** Un producto nuevo toma el seguimiento y la modalidad del tipo (luego se pueden cambiar). */
+function elegirTipo(codigo: unknown) {
+    if (typeof codigo !== 'string') {
+        return
+    }
+    estado.tipo = codigo
+    const tipo = tipos.value.find(t => t.codigo === codigo)
+    if (tipo && !props.producto) {
+        estado.seguimiento = tipo.seguimiento_defecto
+        estado.modalidad = tipo.modalidad_defecto
+    }
+}
+
+watch(() => estado.seguimiento, (seguimiento) => {
+    if (!modalidadCompatible(estado.modalidad, seguimiento)) {
+        estado.modalidad = seguimiento === 'serie' ? 'comodato' : 'consumible_gasto'
+    }
+})
+
 const conMovimientos = computed(() => props.producto !== null && !new Decimal(props.producto.existencia).isZero())
-const itemsTipo: SelectItem[] = Object.entries(TIPOS_PRODUCTO).map(([value, label]) => ({ label, value }))
+const itemsTipo = computed<SelectItem[]>(() => {
+    const items: SelectItem[] = tipos.value.map(t => ({ label: t.nombre, value: t.codigo, description: `${SEGUIMIENTOS[t.seguimiento_defecto].etiqueta} · ${MODALIDADES[t.modalidad_defecto].etiqueta}` }))
+    // El tipo actual aunque esté desactivado (los productos que ya lo usan siguen igual).
+    if (props.producto && !tipos.value.some(t => t.codigo === props.producto?.tipo)) {
+        items.push({ label: nombreTipoProducto(props.producto), value: props.producto.tipo })
+    }
+    return items
+})
+const itemsModalidad = computed<SelectItem[]>(() => (Object.keys(MODALIDADES) as ModalidadProducto[])
+    .filter(m => modalidadCompatible(m, estado.seguimiento))
+    .map(m => ({ label: MODALIDADES[m].etiqueta, value: m, description: MODALIDADES[m].descripcion, icon: MODALIDADES[m].icono })))
 const itemsSeguimiento: SelectItem[] = (Object.keys(SEGUIMIENTOS) as Producto['seguimiento'][]).map(s => ({ label: SEGUIMIENTOS[s].etiqueta, value: s, description: SEGUIMIENTOS[s].descripcion, icon: SEGUIMIENTOS[s].icono }))
 const itemsClase: SelectItem[] = Object.entries(CLASES_ACTIVO).map(([value, label]) => ({ label, value }))
 
@@ -104,12 +147,15 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                     <UFormField
                         label="Tipo"
                         name="tipo"
+                        required
                     >
                         <USelect
-                            v-model="estado.tipo"
+                            :model-value="estado.tipo"
                             :items="itemsTipo"
+                            :loading="cargandoTipos"
                             class="w-full"
                             data-prueba="producto-tipo"
+                            @update:model-value="elegirTipo"
                         />
                     </UFormField>
                     <UFormField
@@ -138,7 +184,19 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                     />
                 </UFormField>
                 <UFormField
-                    v-if="estado.seguimiento === 'serie'"
+                    label="Modalidad"
+                    name="modalidad"
+                    :help="MODALIDADES[estado.modalidad].descripcion + (producto ? ' Cambiarla afecta solo lo que se registre después.' : '')"
+                >
+                    <USelect
+                        v-model="estado.modalidad"
+                        :items="itemsModalidad"
+                        class="w-full"
+                        data-prueba="producto-modalidad"
+                    />
+                </UFormField>
+                <UFormField
+                    v-if="estado.seguimiento === 'serie' && estado.modalidad === 'comodato'"
                     label="Clase de activo al prestarlo"
                     name="clase_activo"
                     help="En comodato pasa a activo fijo de esta clase y se deprecia."
@@ -152,7 +210,8 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                 <UFormField
                     label="Precio de venta"
                     name="precio_venta"
-                    help="Con IVA. Lo sugiere el cargo único al vender el producto; vacío = sin precio."
+                    :help="estado.modalidad === 'consumible_cobro' ? 'Con IVA. Es el precio del cargo único al consumirlo con un servicio; sin precio, quien consume debe escribirlo.' : 'Con IVA. Lo sugiere el cargo único al vender el producto; vacío = sin precio.'"
+                    :required="estado.modalidad === 'consumible_cobro'"
                 >
                     <UInput
                         v-model="estado.precio_venta"
@@ -202,6 +261,12 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                         />
                     </UFormField>
                 </div>
+                <ProblemaAlerta
+                    v-if="problemaTipos"
+                    :problema="problemaTipos"
+                    :reintentar="cargarTipos"
+                    :reintentando="cargandoTipos"
+                />
                 <ProblemaAlerta
                     v-if="problema"
                     :problema="problema"

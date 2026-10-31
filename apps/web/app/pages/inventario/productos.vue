@@ -37,6 +37,7 @@ onMounted(() => void lista.recargar())
 const columnas: TableColumn<Producto>[] = [
     { accessorKey: 'nombre', header: 'Producto', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'seguimiento', header: 'Seguimiento', meta: SOLO_ANCHO },
+    { accessorKey: 'modalidad', header: 'Modalidad', meta: SOLO_ANCHO },
     { accessorKey: 'existencia', header: 'Existencia', meta: { class: { th: 'text-right', td: 'text-right' } } },
     { accessorKey: 'valor', header: 'Valor', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
@@ -87,6 +88,15 @@ function alDesactivar(producto: Producto) {
         icono="i-lucide-box"
     >
         <template #acciones>
+            <UButton
+                v-if="puede('productos.crear_lote')"
+                label="Alta por lote"
+                icon="i-lucide-sheet"
+                color="neutral"
+                variant="outline"
+                to="/inventario/productos-lote"
+                data-prueba="productos-lote"
+            />
             <UButton
                 v-if="puede('productos.crear')"
                 label="Nuevo producto"
@@ -147,8 +157,13 @@ function alDesactivar(producto: Producto) {
                                     size="sm"
                                 />
                             </span>
-                            <span class="font-mono text-xs text-muted">{{ row.original.sku }} · {{ TIPOS_PRODUCTO[row.original.tipo] }}</span>
+                            <span class="font-mono text-xs text-muted">{{ row.original.sku }} · {{ nombreTipoProducto(row.original) }}</span>
                             <span class="text-xs text-muted sm:hidden">{{ SEGUIMIENTOS[row.original.seguimiento].etiqueta }}</span>
+                            <ModalidadBadge
+                                v-if="row.original.modalidad"
+                                :modalidad="row.original.modalidad"
+                                class="self-start sm:hidden"
+                            />
                         </div>
                     </template>
                     <template #seguimiento-cell="{ row }">
@@ -159,6 +174,18 @@ function alDesactivar(producto: Producto) {
                             variant="subtle"
                             size="sm"
                         />
+                    </template>
+                    <template #modalidad-cell="{ row }">
+                        <div class="flex flex-col items-start gap-0.5">
+                            <ModalidadBadge
+                                v-if="row.original.modalidad"
+                                :modalidad="row.original.modalidad"
+                            />
+                            <span
+                                v-if="row.original.modalidad === 'consumible_cobro'"
+                                class="text-xs text-muted tabular-nums"
+                            >{{ row.original.precio_venta ? formatearQuetzales(row.original.precio_venta) : 'Sin precio' }}</span>
+                        </div>
                     </template>
                     <template #existencia-cell="{ row }">
                         <div class="flex flex-col items-end text-sm tabular-nums">
