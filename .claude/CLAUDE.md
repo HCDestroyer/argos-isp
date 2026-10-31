@@ -95,6 +95,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
     - Telemetría de alta frecuencia que no es una acción de nadie: el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores.
     - Evaluaciones sin efecto: `servicios.evaluar_estado` solo deja fila cuando cambió el estado (decisión del PM, día 4). La acción que la llamó (pago, promesa, corte) queda auditada igual, y el corte deja su corrida en `registrar_corrida`.
     - Barrido de sesiones colgadas: `sesiones.cerrar_colgadas` (cron cada 5 min) solo deja fila cuando cerró alguna sesión; cada sesión cerrada deja su diff (`fin`, `causa_fin`) en `audit.cambios`.
+    - Sondeo de sesiones PPPoE de routers sin RADIUS: `sesiones.sondear_ppp` (cron cada minuto) solo deja fila si abrió o cerró alguna sesión o falló.
     - Sondeo de contacto de los routers: `routeros.sondear` (cron cada 5 min) solo deja fila si algún router no respondió o falló; cada GET enviado queda igual en `audit.red`.
     - Proyecciones derivadas que se refrescan por evento (el refresco del dashboard): no dejan fila; son una caché del dato, no una acción de nadie.
     - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
@@ -158,7 +159,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `servicio.adicional_agregado` / `servicio.adicional_cambiado` / `servicio.adicional_quitado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, modalidad; agregado: origen, primer_periodo, bloqueo; cambiado: campos[], modalidad_anterior; quitado: origen, motivo. Nunca la credencial (`contratos/adicionales.md`) |
 | `adicional.bloqueado` / `adicional.desbloqueado` | núcleo | servicio_id, cliente_id, empresa_id, asignacion_id, adicional_id, identificador, modalidad, estado_servicio, motivo (`contratos/adicionales.md`) |
-| `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6; `sesion.terminada` además motivo (causa de fin) |
+| `sesion.iniciada` / `sesion.terminada` | aaa (o network: sondeo de PPPoE sin RADIUS) | servicio_id, nas_ip (null en sesiones por sondeo), acct_session_id, ipv4, prefijos_v6, origen (`accounting` \| `sondeo`); `sesion.terminada` además motivo (causa de fin) |
 | `servicio.caidas_repetidas` | aaa (sesiones) | servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas (una vez por servicio y ventana; `contratos/eventos.md`) |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
 | `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
@@ -180,8 +181,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `router.estrategia_cambiada` | núcleo (control de velocidad) | router_id, plan_id (null = la del router), de, a, capas[] (aplicacion, padre, tipo_cola, extras), reconectar, motivo (`contratos/control-velocidad.md`) |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `router.conexion_generada` / `router.conexion_registrada` / `router.conexion_rotada` / `router.conexion_eliminada` | núcleo (conexión WireGuard) | router_id, empresa_id; generada: actor; registrada: ip_tunel. Nunca claves ni secretos (`contratos/conexion-routers.md`) |
-| `router.radius_cambiado` | núcleo | router_id, empresa_id, campos[] (`nas_ip`, `radius_secret`; nunca el valor); al crear, editar o registrar el túnel. Lo consume `aaa` para regenerar los clientes de FreeRADIUS |
+| `router.radius_cambiado` | núcleo | router_id, empresa_id, campos[] (`nas_ip`, `radius_secret`, `modo_seguridad`; nunca el valor); al crear, editar o registrar el túnel. Lo consume `aaa` para regenerar los clientes de FreeRADIUS |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
+| `qos.config_cambiada` | network (QoS) | perfil_id, empresa_id, clase_id, router_id, campos[], routers[] (`contratos/qos.md`) |
+| `servicio.datos_cambiados` | núcleo | servicio_id, empresa_id, empresas[], cliente_id, campos[] (direccion, coordenadas, referencia, contacto_nombre, contacto_telefono; solo nombres). No lleva cambios de red |
+| `catalogo.cambiado` | núcleo | catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido; en plan siempre null), campos[] (nombre, activo, coordenadas) |
 | `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
 | `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
@@ -223,7 +227,9 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `inventario.equipo_por_recuperar` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac |
 | `inventario.existencia_minima` | inventario | empresa_id, producto_id, bodega_id (o null), cantidad, minimo |
 | `inventario.conteo_cerrado` | inventario | conteo_id, empresa_id, bodega_id, faltante, sobrante, lineas |
-| `cliente.actualizado` | núcleo | cliente_id, empresa_id, empresas[], campos[] (nombre, tipo, codigo, nit_cui, tipo_documento_fiscal, telefono, movil, direccion, coordenadas, zona_id; solo nombres, nunca valores) |
+| `inventario.traslado_enviado` / `inventario.traslado_recibido` / `inventario.traslado_cancelado` | inventario (órdenes de traslado) | traslado_id, empresa_id, bodega_destino_id, tecnico, estado, lineas[], enviado_en; recibido: recibido_en, recibido_por, metodo_recepcion, origen; cancelado: cancelado_en, motivo (`contratos/inventario.md` Fase D) |
+| `inventario.ia_config_cambiada` | inventario | empresa_id (o null), campos[] (nunca la clave) |
+| `cliente.actualizado` | núcleo | cliente_id, empresa_id, empresas[], campos[] (nombre, tipo, codigo, nit_cui, tipo_documento_fiscal, telefono, movil, email, direccion, coordenadas, zona_id, referencia; solo nombres, nunca valores) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
 | `horus.estado_seguridad_cambiado` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, estado, estado_anterior, hallazgos_abiertos |
