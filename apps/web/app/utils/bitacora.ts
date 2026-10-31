@@ -267,6 +267,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'iris.generar_enlace': 'Enlace de conexión con Iris generado',
     'iris.canjear_enlace': 'Iris se conectó con el enlace de Argos',
     'iris.autorizar': 'Conexión con Iris aprobada',
+    'iris.informar_contrato': 'Iris informó su versión del contrato',
     'horus.conectar_enlace': 'Conectado con un enlace de Horus',
     'horus.recibir_webhook': 'Aviso de Horus recibido',
     'nodos_portal.crear': 'Nodo portal creado',
