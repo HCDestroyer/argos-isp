@@ -147,9 +147,14 @@ export const MovimientoInventario = definirEsquema(
             created_at: instante,
             saldo_cantidad: { ...Cantidad, description: 'Saldo corrido después del movimiento' },
             saldo_valor: { ...Dinero, description: 'Valor corrido después del movimiento' },
+            factura_id: {
+                ...nulable(id),
+                description:
+                    'Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)',
+            },
         },
         // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
-        ['origen_externo_tipo', 'origen_externo_id'],
+        ['origen_externo_tipo', 'origen_externo_id', 'factura_id'],
     ),
 )
 
@@ -423,5 +428,21 @@ export const TipoProducto = definirEsquema(
         modalidad_defecto: enumerado(MODALIDADES),
         activo: booleano,
         ...auditable,
+    }),
+)
+
+export const ConsumoLote = definirEsquema(
+    'ConsumoInventarioLote',
+    objeto({
+        empresa_id: id,
+        movimientos: {
+            ...lista(MovimientoInventario),
+            description: 'Un movimiento por línea: consumo, venta o asignación en comodato',
+        },
+        factura_id: {
+            ...nulable(id),
+            description: 'La factura del cargo único de los cobros; null si no hubo',
+        },
+        comodatos: { ...lista(Unidad), description: 'Las unidades prestadas en comodato' },
     }),
 )

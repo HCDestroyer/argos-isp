@@ -48,6 +48,17 @@ const cuenta = () =>
         .regex(/^\d+(\.\d+)*$/)
         .maxLength(30)
 
+/** Técnico de Argos identificado desde Iris (D.6): `id_externo` (su usuario de Argos) o `correo`. */
+export const tecnicoExterno = () =>
+    vine.object({
+        id_externo: vine.string().trim().maxLength(30).nullable().optional().meta({
+            description: 'Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)',
+        }),
+        correo: vine.string().trim().maxLength(254).nullable().optional().meta({
+            description: 'Correo del usuario de Argos del técnico (sin distinguir mayúsculas)',
+        }),
+    })
+
 /** Unidad nueva de un producto de serie: serie o MAC (al menos una). */
 const unidadNueva = () =>
     vine.object({
@@ -226,20 +237,57 @@ export const kardexValidator = vine.compile(
 | Operaciones
 */
 
+/** Lo de cada línea de un consumo (fase D: la modalidad del producto decide). */
+const lineaConsumo = {
+    cantidad: cantidad().nullable().optional().meta({ description: 'Producto por cantidad' }),
+    unidad_id: idEntidad().nullable().optional().meta({
+        description: 'Equipo por serie (comodato o venta según la modalidad); o, en su lugar, `serie`',
+    }),
+    serie: texto(100)
+        .nullable()
+        .optional()
+        .meta({ description: 'Serie de la unidad en la empresa del servicio' }),
+    precio_unitario: dinero().nullable().optional().meta({
+        description: 'consumible_cobro: precio con IVA incluido (por defecto el precio_venta del producto)',
+    }),
+    concepto_id: idEntidad().nullable().optional().meta({
+        description:
+            'consumible_cobro: concepto del cargo único (por defecto el concepto_cargo_id del producto)',
+    }),
+}
+
+const datosConsumo = {
+    bodega_id: idEntidad().nullable().optional().meta({
+        description: 'Bodega de salida; sin ella, con `tecnico`, la del técnico de la orden',
+    }),
+    tecnico: tecnicoExterno().nullable().optional(),
+    servicio_id: idEntidad().nullable().optional().meta({
+        description:
+            'Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato',
+    }),
+    motivo: texto(500).nullable().optional(),
+    fecha: fechaIso().nullable().optional().meta({
+        description:
+            'Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy',
+    }),
+    ...reglasOrigenExterno(),
+}
+
 export const consumoValidator = vine.compile(
     vine.object({
         producto_id: idEntidad(),
-        bodega_id: idEntidad(),
-        cantidad: cantidad(),
-        servicio_id: idEntidad().nullable().optional().meta({
-            description: 'Instalación o reparación en la que se usó (misma empresa)',
-        }),
-        motivo: texto(500).nullable().optional(),
-        fecha: fechaIso().nullable().optional().meta({
-            description:
-                'Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después',
-        }),
-        ...reglasOrigenExterno(),
+        ...lineaConsumo,
+        ...datosConsumo,
+    }),
+)
+
+export const consumoLoteValidator = vine.compile(
+    vine.object({
+        lineas: vine
+            .array(vine.object({ producto_id: idEntidad().nullable().optional(), ...lineaConsumo }))
+            .minLength(1)
+            .maxLength(200),
+        ...datosConsumo,
     }),
 )
 
@@ -333,6 +381,12 @@ export const asignarComodatoValidator = vine.compile(
         fecha: fechaIso().nullable().optional().meta({
             description:
                 'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)',
+        }),
+        bodega_id: idEntidad().nullable().optional().meta({
+            description: 'Fase D: la bodega de la que debe salir (409 unidad_en_otra_bodega si está en otra)',
+        }),
+        tecnico: tecnicoExterno().nullable().optional().meta({
+            description: 'Fase D: sin bodega_id, la unidad debe estar en la bodega de este técnico',
         }),
         ...reglasOrigenExterno(),
     }),
@@ -428,17 +482,6 @@ export const valorizadoValidator = vine.compile(
 /*
 | Órdenes de traslado (fase D, `contratos/inventario.md` D.1)
 */
-
-/** Técnico de Argos identificado desde Iris (D.6): `id_externo` (su usuario de Argos) o `correo`. */
-export const tecnicoExterno = () =>
-    vine.object({
-        id_externo: vine.string().trim().maxLength(30).nullable().optional().meta({
-            description: 'Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)',
-        }),
-        correo: vine.string().trim().maxLength(254).nullable().optional().meta({
-            description: 'Correo del usuario de Argos del técnico (sin distinguir mayúsculas)',
-        }),
-    })
 
 export const enviarTrasladoValidator = vine.compile(
     vine.object({

@@ -3928,6 +3928,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventario/consumos/lote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consumo de varias líneas a un servicio según la modalidad de cada producto (todo o nada)
+         * @description Fase D: lo instalado en una orden. Cada línea aplica la modalidad de su producto: consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un solo cargo único al cliente del servicio con la venta del kardex 5.6.01 / 1.1.14; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido) o comodato (unidad_id o serie: inventario.asignar_comodato). Sin bodega_id, con tecnico (solo un usuario con alcance global, p. ej. Iris), la bodega del técnico (422 tecnico_no_encontrado, tecnico_sin_bodega). Errores lineas.N.*.
+         */
+        post: operations["inventarioConsumirLote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventario/conteos": {
         parameters: {
             query?: never;
@@ -12163,6 +12183,15 @@ export interface components {
                 direcciones: string[];
             }[];
         };
+        ConsumoInventarioLote: {
+            empresa_id: number;
+            /** @description Un movimiento por línea: consumo, venta o asignación en comodato */
+            movimientos: components["schemas"]["MovimientoInventario"][];
+            /** @description La factura del cargo único de los cobros; null si no hubo */
+            factura_id: number | null;
+            /** @description Las unidades prestadas en comodato */
+            comodatos: components["schemas"]["UnidadInventario"][];
+        };
         ConteoInventario: {
             id: number;
             empresa_id: number;
@@ -14739,6 +14768,8 @@ export interface components {
             saldo_cantidad: string;
             /** @description Valor corrido después del movimiento */
             saldo_valor: components["schemas"]["Dinero"];
+            /** @description Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro) */
+            factura_id?: number | null;
         };
         MovimientoPuntos: {
             id: number;
@@ -34463,18 +34494,36 @@ export interface operations {
             content: {
                 "application/json": {
                     producto_id: number;
-                    bodega_id: number;
                     /**
-                     * @description Cantidad mayor que 0 con hasta 3 decimales, como string
+                     * @description Producto por cantidad
                      * @example 12.5
                      */
-                    cantidad: string;
-                    /** @description Instalación o reparación en la que se usó (misma empresa) */
+                    cantidad?: string | null;
+                    /** @description Equipo por serie (comodato o venta según la modalidad); o, en su lugar, `serie` */
+                    unidad_id?: number | null;
+                    /** @description Serie de la unidad en la empresa del servicio */
+                    serie?: string | null;
+                    /**
+                     * @description consumible_cobro: precio con IVA incluido (por defecto el precio_venta del producto)
+                     * @example 150.00
+                     */
+                    precio_unitario?: string | null;
+                    /** @description consumible_cobro: concepto del cargo único (por defecto el concepto_cargo_id del producto) */
+                    concepto_id?: number | null;
+                    /** @description Bodega de salida; sin ella, con `tecnico`, la del técnico de la orden */
+                    bodega_id?: number | null;
+                    tecnico?: {
+                        /** @description Id del usuario de Argos del técnico (el id_externo del vínculo en Iris) */
+                        id_externo?: string | null;
+                        /** @description Correo del usuario de Argos del técnico (sin distinguir mayúsculas) */
+                        correo?: string | null;
+                    } | null;
+                    /** @description Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato */
                     servicio_id?: number | null;
                     motivo?: string | null;
                     /**
                      * Format: date
-                     * @description Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después
+                     * @description Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy
                      */
                     fecha?: string | null;
                     /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
@@ -34495,6 +34544,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MovimientoInventario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.consumir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioConsumirLote: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    lineas: {
+                        producto_id?: number | null;
+                        /**
+                         * @description Producto por cantidad
+                         * @example 12.5
+                         */
+                        cantidad?: string | null;
+                        /** @description Equipo por serie (comodato o venta según la modalidad); o, en su lugar, `serie` */
+                        unidad_id?: number | null;
+                        /** @description Serie de la unidad en la empresa del servicio */
+                        serie?: string | null;
+                        /**
+                         * @description consumible_cobro: precio con IVA incluido (por defecto el precio_venta del producto)
+                         * @example 150.00
+                         */
+                        precio_unitario?: string | null;
+                        /** @description consumible_cobro: concepto del cargo único (por defecto el concepto_cargo_id del producto) */
+                        concepto_id?: number | null;
+                    }[];
+                    /** @description Bodega de salida; sin ella, con `tecnico`, la del técnico de la orden */
+                    bodega_id?: number | null;
+                    tecnico?: {
+                        /** @description Id del usuario de Argos del técnico (el id_externo del vínculo en Iris) */
+                        id_externo?: string | null;
+                        /** @description Correo del usuario de Argos del técnico (sin distinguir mayúsculas) */
+                        correo?: string | null;
+                    } | null;
+                    /** @description Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato */
+                    servicio_id?: number | null;
+                    motivo?: string | null;
+                    /**
+                     * Format: date
+                     * @description Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy
+                     */
+                    fecha?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Consumo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumoInventarioLote"];
                 };
             };
             /** @description No autenticado */
@@ -55616,6 +55771,15 @@ export interface operations {
                      * @description Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)
                      */
                     fecha?: string | null;
+                    /** @description Fase D: la bodega de la que debe salir (409 unidad_en_otra_bodega si está en otra) */
+                    bodega_id?: number | null;
+                    /** @description Fase D: sin bodega_id, la unidad debe estar en la bodega de este técnico */
+                    tecnico?: {
+                        /** @description Id del usuario de Argos del técnico (el id_externo del vínculo en Iris) */
+                        id_externo?: string | null;
+                        /** @description Correo del usuario de Argos del técnico (sin distinguir mayúsculas) */
+                        correo?: string | null;
+                    } | null;
                     /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
                     origen_tipo?: "iris_orden" | null;
                     /**

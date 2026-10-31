@@ -403,6 +403,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
             empresa_id: empresaId,
             fecha: hoy,
             servicio_id: servicio?.id ?? null,
+            origenExterno,
         })
         t.fijarEntidad('factura', facturaId)
         return { ...(await verFactura(facturaId, t.trx)), documento: 'factura' as const }

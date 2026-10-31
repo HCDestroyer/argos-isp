@@ -15,6 +15,7 @@ import { exigirAcceso } from '#billing/empresa'
 import * as v from '#inventario/validators'
 import {
     Bodega,
+    ConsumoLote,
     ConteoInventario,
     ConteoInventarioDetalle,
     InventarioValorizado,
@@ -34,7 +35,8 @@ import AsignarComodato from '#inventario/actions/asignar_comodato'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
-import { listarBodegas, verBodega } from '#inventario/bodegas'
+import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
+import { Prohibido } from '#shared/errores'
 import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
@@ -44,6 +46,7 @@ import CrearBodega from '#inventario/actions/crear_bodega'
 import EditarBodega from '#inventario/actions/editar_bodega'
 import DesactivarBodega from '#inventario/actions/desactivar_bodega'
 import ConsumirInventario from '#inventario/actions/consumir_inventario'
+import ConsumirInventarioLote from '#inventario/actions/consumir_inventario_lote'
 import TrasladarInventario from '#inventario/actions/trasladar_inventario'
 import AjustarInventario from '#inventario/actions/ajustar_inventario'
 import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
@@ -256,6 +259,20 @@ const lecturas: Ruta[] = [
     }),
 ]
 
+/**
+ * Bodega de un consumo o un comodato (fase D): la indicada se revisa como siempre; `tecnico` (la bodega
+ * del técnico de una orden de Iris) solo lo indica un usuario con alcance global.
+ */
+async function exigirBodegaDeConsumo(
+    ctx: Parameters<typeof exigirBodega>[0],
+    cuerpo: { bodega_id?: number | null; tecnico?: unknown },
+) {
+    if (cuerpo.bodega_id) await exigirBodega(ctx, cuerpo.bodega_id)
+    else if (cuerpo.tecnico && !alcanceGlobal(ctx.alcance)) {
+        throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
+    }
+}
+
 const operaciones: Ruta[] = [
     definirRuta({
         metodo: 'post',
@@ -269,8 +286,25 @@ const operaciones: Ruta[] = [
         descripcion: `servicio_id opcional (misma empresa). ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
         respuesta: { status: 201, descripcion: 'Movimiento', esquema: MovimientoInventario },
         handler: async (ctx, { cuerpo }) => {
-            await exigirBodega(ctx, cuerpo.bodega_id)
+            await exigirBodegaDeConsumo(ctx, cuerpo)
             return new ConsumirInventario().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/consumos/lote',
+        operacion: 'inventarioConsumirLote',
+        resumen: 'Consumo de varias líneas a un servicio según la modalidad de cada producto (todo o nada)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.consumir',
+        cuerpo: v.consumoLoteValidator,
+        idempotente: true,
+        descripcion:
+            'Fase D: lo instalado en una orden. Cada línea aplica la modalidad de su producto: consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un solo cargo único al cliente del servicio con la venta del kardex 5.6.01 / 1.1.14; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido) o comodato (unidad_id o serie: inventario.asignar_comodato). Sin bodega_id, con tecnico (solo un usuario con alcance global, p. ej. Iris), la bodega del técnico (422 tecnico_no_encontrado, tecnico_sin_bodega). Errores lineas.N.*.',
+        respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoLote },
+        handler: async (ctx, { cuerpo }) => {
+            await exigirBodegaDeConsumo(ctx, cuerpo)
+            return new ConsumirInventarioLote().execute(cuerpo, ctx.contextoAccion())
         },
     }),
     definirRuta({
@@ -454,10 +488,13 @@ const comodato: Ruta[] = [
             await exigirServicio(ctx, id)
             const unidadId = await unidadParaComodato(id, cuerpo)
             await exigirUnidad(ctx, unidadId)
+            await exigirBodegaDeConsumo(ctx, cuerpo)
             return new AsignarComodato().execute(
                 {
                     unidad_id: unidadId,
                     fecha: cuerpo.fecha,
+                    bodega_id: cuerpo.bodega_id,
+                    tecnico: cuerpo.tecnico,
                     servicio_id: id,
                     origen_tipo: cuerpo.origen_tipo,
                     origen_id: cuerpo.origen_id,
