@@ -26121,6 +26121,12 @@
                     "maxLength": 128,
                     "pattern": "^[A-Za-z0-9._~-]+$",
                     "description": "PKCE (RFC 7636): obligatorio si el código nació en «Conectar con un botón» (§1.4). Falta o no coincide con el code_challenge → 401 `codigo_invalido` y el código queda gastado"
+                  },
+                  "contrato": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?$",
+                    "description": "Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, Argos no envía los webhooks nuevos de 0.5.0"
                   }
                 },
                 "required": [
@@ -26157,6 +26163,90 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/contrato": {
+      "put": {
+        "operationId": "irisInformarContrato",
+        "summary": "Iris informa la versión del contrato que habla (servidor a servidor)",
+        "description": "Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de 0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contrato": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?$",
+                    "description": "Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`)"
+                  }
+                },
+                "required": [
+                  "contrato"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contrato guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContratoConectorIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sso.emitir",
         "x-implementado": true
       }
     },
@@ -26392,7 +26482,8 @@
     "/api/v1/integraciones/iris/estado": {
       "get": {
         "operationId": "irisEstado",
-        "summary": "Si \"Ver en Iris\" puede funcionar (sin URL ni secretos)",
+        "summary": "Si \"Ver en Iris\" puede funcionar, versión de Argos y del contrato (sin URL ni secretos)",
+        "description": "Con el permiso `iris.abrir` (botón «Ver en Iris» del panel) o con el token `atk_` del usuario técnico Iris (403 a cualquier otro). `version_argos` es la versión instalada (`GET /version`) y `contrato` la del contrato Iris ↔ Argos que habla este Argos (contrato Iris 0.5.0).",
         "tags": [
           "integraciones"
         ],
@@ -26424,19 +26515,8 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Sin el permiso iris.abrir",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
-        "x-permiso": "iris.abrir",
         "x-implementado": true
       }
     },
@@ -70339,6 +70419,17 @@
             "panel": []
           }
         ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "description": "true: solo las activas; false: solo las inactivas; ausente: todas",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Zonas",
@@ -70365,6 +70456,16 @@
           },
           "403": {
             "description": "Sin el permiso zonas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -70511,6 +70612,10 @@
                     ],
                     "minimum": 1,
                     "description": "Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa)"
+                  },
+                  "activo": {
+                    "description": "false la desactiva y true la reactiva; ausente no la cambia",
+                    "type": "boolean"
                   },
                   "version": {
                     "type": "integer",
@@ -75675,7 +75780,9 @@
           "conector_id",
           "alcance_global",
           "empresas",
-          "panel_url"
+          "panel_url",
+          "version_argos",
+          "contrato"
         ],
         "properties": {
           "token": {
@@ -75736,6 +75843,14 @@
           "panel_url": {
             "type": "string",
             "description": "URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0)"
+          },
+          "version_argos": {
+            "type": "string",
+            "description": "Versión instalada de Argos (`ARGOSISP_VERSION` de la imagen, p. ej. `1.6.0`; `desarrollo` fuera de una imagen publicada). La misma de `GET /version` (contrato Iris 0.5.0)"
+          },
+          "contrato": {
+            "type": "string",
+            "description": "Versión del contrato Iris ↔ Argos que habla este Argos, p. ej. `0.5.0`"
           }
         }
       },
@@ -78678,6 +78793,7 @@
           "conector_id",
           "conectado_por_enlace_en",
           "token_argos_id",
+          "contrato",
           "version"
         ],
         "properties": {
@@ -78760,6 +78876,13 @@
             ],
             "minimum": 1,
             "description": "Token atk_ entregado a Iris en el último canje"
+          },
+          "contrato": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca (un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0)"
           },
           "version": {
             "type": "integer",
@@ -80057,6 +80180,28 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ContratoConectorIris": {
+        "type": "object",
+        "required": [
+          "contrato_iris",
+          "version_argos",
+          "contrato"
+        ],
+        "properties": {
+          "contrato_iris": {
+            "type": "string",
+            "description": "Versión del contrato que habla Iris, tal como quedó guardada en el conector"
+          },
+          "version_argos": {
+            "type": "string",
+            "description": "Versión instalada de Argos (`ARGOSISP_VERSION` de la imagen, p. ej. `1.6.0`; `desarrollo` fuera de una imagen publicada). La misma de `GET /version` (contrato Iris 0.5.0)"
+          },
+          "contrato": {
+            "type": "string",
+            "description": "Versión del contrato Iris ↔ Argos que habla este Argos, p. ej. `0.5.0`"
           }
         }
       },
@@ -84403,12 +84548,22 @@
       "EstadoConectorIris": {
         "type": "object",
         "required": [
-          "activo"
+          "activo",
+          "version_argos",
+          "contrato"
         ],
         "properties": {
           "activo": {
             "type": "boolean",
             "description": "Si \"Ver en Iris\" puede funcionar"
+          },
+          "version_argos": {
+            "type": "string",
+            "description": "Versión instalada de Argos (`ARGOSISP_VERSION` de la imagen, p. ej. `1.6.0`; `desarrollo` fuera de una imagen publicada). La misma de `GET /version` (contrato Iris 0.5.0)"
+          },
+          "contrato": {
+            "type": "string",
+            "description": "Versión del contrato Iris ↔ Argos que habla este Argos, p. ej. `0.5.0`"
           }
         }
       },
@@ -108430,6 +108585,7 @@
           "id",
           "nombre",
           "empresa_sugerida_id",
+          "activo",
           "version",
           "created_at",
           "updated_at"
@@ -108449,6 +108605,10 @@
             ],
             "minimum": 1,
             "description": "Empresa por defecto de los servicios nuevos de clientes de esta zona"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false: desactivada (no se ofrece en el panel; sus clientes y routers no cambian)"
           },
           "version": {
             "type": "integer",

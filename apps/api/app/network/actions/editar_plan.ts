@@ -12,6 +12,7 @@ import { velocidadDePlan } from '#network/actions/obtener_implementacion_plan'
 import { columnasPlanRouter, verPlan, type PlanRouterVista, type PlanVista } from '#network/consultas/planes'
 import { CAMPOS_VELOCIDAD } from '#network/velocidad'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import type { CampoCatalogoCambiado } from '#shared/eventos'
 
 export interface EntradaEditarPlan extends DatosPlan {
     id: number
@@ -41,8 +42,9 @@ export function camposVelocidadCambiados(
  * `tipo` se edita como cualquier campo (diff en `audit.cambios`); no cambia la velocidad, así que no
  * emite evento. La respuesta trae `warnings[]` (`advertenciasPlan`).
  *
- * Renombrar el plan emite `catalogo.cambiado` (`catalogo: 'plan'`, `campos: ['nombre']`, pedido A15
- * de Iris); `plan.velocidad_cambiada` no lo cubre.
+ * Renombrarlo, desactivarlo o reactivarlo emite `catalogo.cambiado` (`catalogo: 'plan'`, `campos`
+ * con `nombre` y/o `activo`, `empresa_id: null`; contrato Iris 0.5.0, pedido A15);
+ * `plan.velocidad_cambiada` no lo cubre.
  */
 export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConAdvertencias> {
     readonly nombre = 'planes.editar'
@@ -82,8 +84,17 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         if (campos.length > 0) {
             await t.emit('plan.velocidad_cambiada', { plan_id: id, router_id: null, campos })
         }
-        if (despues.nombre !== antes.nombre) {
-            await t.emit('catalogo.cambiado', { catalogo: 'plan', id, empresa_id: null, campos: ['nombre'] })
+        const camposCatalogo: CampoCatalogoCambiado[] = []
+        if (despues.nombre !== antes.nombre) camposCatalogo.push('nombre')
+        if (despues.activo !== antes.activo) camposCatalogo.push('activo')
+        if (camposCatalogo.length > 0) {
+            // los planes no son de una empresa: `empresa_id` siempre null (contrato Iris 0.5.0)
+            await t.emit('catalogo.cambiado', {
+                catalogo: 'plan',
+                id,
+                empresa_id: null,
+                campos: camposCatalogo,
+            })
         }
         refrescarAaaAlConfirmar(t, { planId: id })
         return { ...despues, warnings: advertenciasPlan(despues) }

@@ -3,6 +3,7 @@ import { Conflicto } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { verZona } from '#core/consultas/clientes'
 import { exigirEmpresaActiva } from '#core/empresas'
+import type { CampoCatalogoCambiado } from '#shared/eventos'
 
 export interface EntradaEditarZona {
     id: number
@@ -10,11 +11,15 @@ export interface EntradaEditarZona {
     nombre: string
     /** `null` la quita; ausente no la cambia */
     empresa_sugerida_id?: number | null
+    /** desactivar (`false`) o reactivar (`true`); ausente no la cambia */
+    activo?: boolean
 }
 
 /**
- * Renombra una zona o cambia su empresa sugerida (control optimista por `version`). Si cambia el
- * nombre emite `catalogo.cambiado` (`catalogo: 'zona'`, `campos: ['nombre']`; pedido A15 de Iris).
+ * Renombra una zona, cambia su empresa sugerida o la desactiva y reactiva (control optimista por
+ * `version`). Si cambia el nombre o `activo` emite `catalogo.cambiado` (`catalogo: 'zona'`,
+ * `campos` con `nombre` y/o `activo`; contrato Iris 0.5.0, pedido A15). Desactivar una zona no
+ * toca a sus clientes ni routers: solo deja de ofrecerse en el panel (`GET /zonas?activo=true`).
  */
 export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<ReturnType<typeof verZona>>> {
     readonly nombre = 'zonas.editar'
@@ -35,15 +40,19 @@ export default class EditarZona extends DomainAction<EntradaEditarZona, Awaited<
             }
             cambios.empresa_sugerida_id = input.empresa_sugerida_id
         }
+        if (input.activo !== undefined) cambios.activo = input.activo
         await actualizarConVersion(t.trx, 'core.zonas', input.id, input.version, cambios)
         const despues = await verZona(input.id, t.trx)
         await t.registrarCambios({ tipo: 'zona', id: input.id }, antes, despues)
-        if (despues.nombre !== antes.nombre) {
+        const campos: CampoCatalogoCambiado[] = []
+        if (despues.nombre !== antes.nombre) campos.push('nombre')
+        if (despues.activo !== antes.activo) campos.push('activo')
+        if (campos.length > 0) {
             await t.emit('catalogo.cambiado', {
                 catalogo: 'zona',
                 id: input.id,
                 empresa_id: despues.empresa_sugerida_id === null ? null : Number(despues.empresa_sugerida_id),
-                campos: ['nombre'],
+                campos,
             })
         }
         return despues

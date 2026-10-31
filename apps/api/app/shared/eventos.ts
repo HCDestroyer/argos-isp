@@ -187,6 +187,9 @@ interface PayloadAdicional {
     modalidad: ModalidadAdicional
 }
 
+/** Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers. */
+export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas'
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -236,24 +239,27 @@ export interface CatalogoEventos {
      * A13): `direccion`, `coordenadas`, `referencia`, `contacto_nombre`, `contacto_telefono`. Solo
      * nombres, nunca valores. Evento propio y no `servicio.config_cambiada`: no cambian nada en la
      * red, y así RouterOS, coa y aaa-cache no reaccionan. No se emite al crear (va en `servicio.creado`).
+     * `empresas` = `[empresa_id]`, con la misma forma que `cliente.actualizado` (contrato Iris 0.5.0).
      */
     'servicio.datos_cambiados': {
         servicio_id: number
         empresa_id: number
+        empresas: number[]
         cliente_id: number
         campos: Array<'direccion' | 'coordenadas' | 'referencia' | 'contacto_nombre' | 'contacto_telefono'>
     }
     /**
-     * Cambió el nombre de una zona, un plan o un router (contrato Iris 0.5.0, pedido A15): los otros
-     * sistemas muestran esos catálogos por nombre. Un solo evento para los tres; `catalogo` dice cuál
-     * e `id` su id. `empresa_id`: la sugerida de la zona o del router (null = compartido; los planes
-     * no son de una empresa). `campos`: hoy solo `nombre` (aditivo: se pueden sumar otros).
+     * Cambió una zona, un plan o un router en lo que otros sistemas muestran (contrato Iris 0.5.0,
+     * pedido A15): `nombre` (los tres), `activo` (desactivar o reactivar, los tres) y `coordenadas`
+     * (router). Un solo evento para los tres; `catalogo` dice cuál e `id` su id. `empresa_id`: la
+     * sugerida de la zona o del router (null = compartido); en `plan` siempre null (los planes no son
+     * de una empresa). `campos`: solo nombres, nunca valores (aditivo: se pueden sumar otros).
      */
     'catalogo.cambiado': {
         catalogo: 'zona' | 'plan' | 'router'
         id: number
         empresa_id: number | null
-        campos: Array<'nombre'>
+        campos: CampoCatalogoCambiado[]
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,

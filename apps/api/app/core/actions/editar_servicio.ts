@@ -321,6 +321,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             await t.emit('servicio.datos_cambiados', {
                 servicio_id: id,
                 empresa_id: despues.empresa_id,
+                empresas: [despues.empresa_id],
                 cliente_id: despues.cliente_id,
                 campos: camposDatos,
             })

@@ -19,6 +19,7 @@ import {
     errorUrlIris,
     guardarConectorIris,
     origenIris,
+    versionesIris,
 } from '#integraciones/iris/configuracion'
 
 export interface EntradaCanjearEnlaceIris {
@@ -33,6 +34,8 @@ export interface EntradaCanjearEnlaceIris {
     webhook: { url: string; secreto: string }
     /** PKCE (§1.4): obligatorio si el código nació con `code_challenge` (Conectar con un botón) */
     code_verifier?: string | null
+    /** versión del contrato que habla Iris (semver, 0.5.0); se guarda en el conector. Ausente: null */
+    contrato?: string | null
 }
 
 export interface SalidaCanjearEnlaceIris {
@@ -50,6 +53,10 @@ export interface SalidaCanjearEnlaceIris {
     empresas: EmpresaDelAlcance[]
     /** URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (0.4.0) */
     panel_url: string
+    /** versión instalada de Argos (contrato Iris 0.5.0, «Versión y compatibilidad») */
+    version_argos: string
+    /** versión del contrato que habla este Argos (`CONTRATO_IRIS`) */
+    contrato: string
 }
 
 export interface EmpresaDelAlcance {
@@ -99,6 +106,10 @@ export async function empresasDelAlcance(
  *   `base64url(SHA-256(verifier)) = challenge` (tiempo constante); si falta o no coincide, 401
  *   `codigo_invalido` y el código queda gastado. Un código de §1.3 no lo pide.
  * - Responde además `panel_url` (`PANEL_URL_PUBLICA`, contrato Iris 0.4.0 §1.4 paso 6).
+ * - Contrato 0.5.0 («Versión y compatibilidad»): guarda en el conector el `contrato` que informa Iris
+ *   (o null si no lo manda: un Iris anterior, que no recibe los webhooks nuevos) y responde
+ *   `version_argos` y `contrato` (la versión de Argos y la del contrato que habla). En una
+ *   repetición salen con el valor actual, no el guardado.
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
@@ -167,9 +178,13 @@ export default class CanjearEnlaceIris extends DomainAction<
             t.anotarAuditoria({ repeticion: true })
             const guardada = JSON.parse(descifrar(enlace.respuesta_cifrada)) as Omit<
                 SalidaCanjearEnlaceIris,
-                'panel_url'
+                'panel_url' | 'version_argos' | 'contrato'
             > & { panel_url?: string }
-            const completa = { ...guardada, panel_url: guardada.panel_url ?? urlPanel() }
+            const completa = {
+                ...guardada,
+                panel_url: guardada.panel_url ?? urlPanel(),
+                ...(await versionesIris()),
+            }
             if (completa.empresas) return completa
             // canje guardado antes de 0.3.1: se completa con el alcance actual del usuario Iris
             const usuarioId = await usuarioIris(t.trx)
@@ -197,6 +212,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             webhook_entrada_secreto_cifrado: cifrar(secretoEntrada),
             token_argos_id: Number(emitido.datos.id),
             conectado_por_enlace_en: t.trx.knexRawQuery('now()'),
+            contrato: input.contrato ?? null,
         })
         const salida: SalidaCanjearEnlaceIris = {
             token: emitido.token,
@@ -204,6 +220,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             conector_id: despues.conector_id,
             ...(await empresasDelAlcance(emitido.usuario_id, t.trx)),
             panel_url: urlPanel(),
+            ...(await versionesIris()),
         }
         await t.trx
             .from('integraciones.iris_enlaces')
@@ -237,9 +254,13 @@ async function revocarSiVigente(t: Transaccion, tokenId: number) {
     await new RevocarTokenIris().execute({ id: tokenId }, t.ctx, { trx: t.trx })
 }
 
-/** SHA-256 de la petición de canje (sin el código, que ya identifica el enlace): idempotencia. */
+/**
+ * SHA-256 de la petición de canje (sin el código, que ya identifica el enlace): idempotencia. El
+ * `contrato` (0.5.0) entra solo si viene: el hash de una petición sin él no cambia.
+ */
 export function hashPeticionIris(input: EntradaCanjearEnlaceIris): string {
     const campos = [input.sistema, input.base_url, input.token, input.webhook.url, input.webhook.secreto]
+    if (input.contrato) campos.push(input.contrato)
     return createHash('sha256').update(JSON.stringify(campos), 'utf8').digest('hex')
 }
 

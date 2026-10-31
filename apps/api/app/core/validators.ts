@@ -242,7 +242,21 @@ export const editarZonaValidator = vine.compile(
     vine.object({
         nombre: vine.string().trim().minLength(2).maxLength(100),
         empresa_sugerida_id: empresaSugerida(),
+        activo: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'false la desactiva y true la reactiva; ausente no la cambia' }),
         version: versionEsperada(),
+    }),
+)
+
+/** `GET /zonas`. */
+export const listarZonasValidator = vine.compile(
+    vine.object({
+        activo: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: solo las activas; false: solo las inactivas; ausente: todas' }),
     }),
 )
 

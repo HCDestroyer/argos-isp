@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 import { TIPOS_DESTINO_IRIS } from '#integraciones/iris/actions/abrir_en_iris'
+import { FORMATO_SEMVER } from '#integraciones/iris/configuracion'
 
 /**
  * Validadores del conector Iris (`contratos/iris.md` §1). El canje del enlace es el de Horus más el
@@ -42,6 +43,18 @@ export const abrirEnIrisValidator = vine.compile(
     }),
 )
 
+/** Versión del contrato que habla Iris (semver, contrato 0.5.0 «Versión y compatibilidad»). */
+const contratoIris = () =>
+    vine
+        .string()
+        .trim()
+        .maxLength(64)
+        .regex(FORMATO_SEMVER)
+        .meta({ description: 'Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`)' })
+
+/** `PUT /integraciones/iris/contrato` (con el token de Iris). */
+export const contratoIrisValidator = vine.compile(vine.object({ contrato: contratoIris() }))
+
 /** Caracteres seguros en URL (RFC 3986 «unreserved»): `state` y `code_verifier`. */
 const URL_SEGURO = /^[A-Za-z0-9._~-]+$/
 
@@ -66,6 +79,13 @@ export const canjearEnlaceIrisValidator = vine.compile(
                 description:
                     'PKCE (RFC 7636): obligatorio si el código nació en «Conectar con un botón» (§1.4). ' +
                     'Falta o no coincide con el code_challenge → 401 `codigo_invalido` y el código queda gastado',
+            }),
+        contrato: contratoIris()
+            .optional()
+            .meta({
+                description:
+                    'Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, ' +
+                    'Argos no envía los webhooks nuevos de 0.5.0',
             }),
     }),
 )

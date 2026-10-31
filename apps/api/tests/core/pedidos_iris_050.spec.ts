@@ -28,8 +28,10 @@ import { verPlan } from '#network/consultas/planes'
  *   `servicio.config_cambiada`).
  * - A11: `email` en `campos[]` de `cliente.actualizado`.
  * - A12/A13: `referencia` en cliente y servicio; contacto en sitio del servicio.
- * - A14: teléfonos validados y normalizados solo cuando cambian.
- * - A15: `catalogo.cambiado` al renombrar zona, plan o router.
+ * - A14: teléfonos validados y normalizados solo cuando cambian (también en el alta de clientes
+ *   y servicios por la API).
+ * - A15: `catalogo.cambiado` al renombrar, desactivar o reactivar zona, plan o router, y al cambiar
+ *   las coordenadas de un router (ajustes 0.5.0).
  */
 
 function contextoPanel(): ContextoAccion {
@@ -39,6 +41,12 @@ function contextoPanel(): ContextoAccion {
 async function eventosDe(requestId: string) {
     const filas = await db.from('audit.outbox').where('request_id', requestId).orderBy('id')
     return filas.map((f) => ({ evento: f.evento as string, payload: f.payload as Record<string, unknown> }))
+}
+
+/** `campos` de cada `catalogo.cambiado` de la petición. */
+async function camposCatalogo(requestId: string) {
+    const eventos = await eventosDe(requestId)
+    return eventos.filter((e) => e.evento === 'catalogo.cambiado').map((e) => e.payload.campos)
 }
 
 async function servicioDePrueba() {
@@ -244,6 +252,52 @@ test.group('A10, A12, A13 · servicio', (group) => {
         })
     })
 
+    test('alta por la API (POST /servicios): teléfono de contacto normalizado; 422 si es inválido', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const { routerId } = await crearEscenarioRouter()
+        const planId = await crearPlanFila()
+        const clienteId = await crearClienteFila()
+        const cuerpo = {
+            plantilla_facturacion_id: null,
+            cliente_id: clienteId,
+            router_id: routerId,
+            plan_id: planId,
+            contacto_nombre: 'Doña Marta',
+        }
+        const malo = await estado(
+            client
+                .post('/api/v1/servicios')
+                .bearerToken(token)
+                .json({ ...cuerpo, contacto_telefono: '12-34' }),
+            422,
+        )
+        assert.deepEqual(
+            malo.body().errors.map((e: { field: string; rule: string }) => [e.field, e.rule]),
+            [['contacto_telefono', 'telefono']],
+        )
+        assert.lengthOf(await db.from('core.servicios').where('cliente_id', clienteId), 0)
+
+        const creado = await estado(
+            client
+                .post('/api/v1/servicios')
+                .bearerToken(token)
+                .json({ ...cuerpo, contacto_telefono: '(502) 4123 9087' }),
+            201,
+        )
+        assert.equal(creado.body().contacto_telefono, '+502 4123-9087')
+        const internacional = await estado(
+            client
+                .post('/api/v1/servicios')
+                .bearerToken(token)
+                .json({ ...cuerpo, contacto_telefono: '+1 555 123 4567' }),
+            201,
+        )
+        assert.equal(internacional.body().contacto_telefono, '+15551234567')
+    })
+
     test('dirección y coordenadas emiten servicio.datos_cambiados, nunca servicio.config_cambiada', async ({
         assert,
     }) => {
@@ -265,6 +319,8 @@ test.group('A10, A12, A13 · servicio', (group) => {
                 payload: {
                     servicio_id: servicio.id,
                     empresa_id: servicio.empresa_id,
+                    // contrato 0.5.0: igual que `cliente.actualizado`
+                    empresas: [servicio.empresa_id],
                     cliente_id: servicio.cliente_id,
                     campos: ['direccion', 'coordenadas'],
                 },
@@ -413,5 +469,102 @@ test.group('A15 · catalogo.cambiado', () => {
                 payload: { catalogo: 'router', id: routerId, empresa_id: 1, campos: ['nombre'] },
             },
         ])
+    })
+
+    test('desactivar o reactivar zona, plan o router y mover un router emiten catalogo.cambiado', async ({
+        client,
+        assert,
+    }) => {
+        // zona: desactivar y reactivar (`campos: ['activo']`); a la vez que el nombre, los dos
+        const zonaId = await crearZonaFila()
+        const fila = await db.from('core.zonas').where('id', zonaId).firstOrFail()
+        const ctxZona = contextoPanel()
+        const zona = await new EditarZona().execute(
+            { id: zonaId, version: 1, nombre: fila.nombre, activo: false },
+            ctxZona,
+        )
+        assert.isFalse(zona.activo)
+        assert.deepEqual(await eventosDe(ctxZona.requestId), [
+            {
+                evento: 'catalogo.cambiado',
+                payload: { catalogo: 'zona', id: zonaId, empresa_id: null, campos: ['activo'] },
+            },
+        ])
+        const ctxZona2 = contextoPanel()
+        await new EditarZona().execute(
+            { id: zonaId, version: zona.version, nombre: unico('Zona otra'), activo: true },
+            ctxZona2,
+        )
+        assert.deepEqual(await camposCatalogo(ctxZona2.requestId), [['nombre', 'activo']])
+
+        // la API: `activo` en la zona y filtro `?activo=`
+        const { token } = await usuarioConRoles(['admin'])
+        const zonaApi = await crearZonaFila()
+        const desactivada = await estado(
+            client
+                .put(`/api/v1/zonas/${zonaApi}`)
+                .bearerToken(token)
+                .json({ version: 1, nombre: unico('Zona API'), activo: false }),
+            200,
+        )
+        assert.isFalse(desactivada.body().activo)
+        const activas = await estado(client.get('/api/v1/zonas?activo=true').bearerToken(token), 200)
+        const ids = (activas.body() as Array<{ id: number; activo: boolean }>).map((z) => Number(z.id))
+        assert.notInclude(ids, zonaApi)
+        assert.include(ids, zonaId)
+        const todas = await estado(client.get('/api/v1/zonas').bearerToken(token), 200)
+        assert.include(
+            (todas.body() as Array<{ id: number }>).map((z) => Number(z.id)),
+            zonaApi,
+        )
+
+        // plan: `empresa_id` siempre null
+        const planId = await crearPlanFila()
+        const plan = await verPlan(planId)
+        const ctxPlan = contextoPanel()
+        await new EditarPlan().execute({ id: planId, version: plan.version, activo: false }, ctxPlan)
+        const eventosPlan = await eventosDe(ctxPlan.requestId)
+        assert.deepEqual(
+            eventosPlan.filter((e) => e.evento === 'catalogo.cambiado'),
+            [
+                {
+                    evento: 'catalogo.cambiado',
+                    payload: { catalogo: 'plan', id: planId, empresa_id: null, campos: ['activo'] },
+                },
+            ],
+        )
+        const ctxPlan2 = contextoPanel()
+        await new EditarPlan().execute({ id: planId, version: plan.version + 1, activo: true }, ctxPlan2)
+        assert.deepEqual(await camposCatalogo(ctxPlan2.requestId), [['activo']])
+
+        // router: coordenadas y activo
+        const routerId = await crearRouterFila({ empresa_sugerida_id: 1 })
+        const router = await verRouter(routerId)
+        const ctxCoord = contextoPanel()
+        const movido = await new EditarRouter().execute(
+            { id: routerId, version: router.version, coordenadas: '14.6349,-90.5069' },
+            ctxCoord,
+        )
+        const eventosCoord = await eventosDe(ctxCoord.requestId)
+        assert.deepEqual(
+            eventosCoord.filter((e) => e.evento === 'catalogo.cambiado'),
+            [
+                {
+                    evento: 'catalogo.cambiado',
+                    payload: { catalogo: 'router', id: routerId, empresa_id: 1, campos: ['coordenadas'] },
+                },
+            ],
+        )
+        assert.notInclude(JSON.stringify(eventosCoord), '14.6349')
+        const ctxApagar = contextoPanel()
+        await new EditarRouter().execute(
+            { id: routerId, version: movido.version, activo: false, coordenadas: null },
+            ctxApagar,
+        )
+        assert.deepEqual(await camposCatalogo(ctxApagar.requestId), [['activo', 'coordenadas']])
+        // sin cambios en catálogo: nada
+        const ctxNada = contextoPanel()
+        await new EditarRouter().execute({ id: routerId, version: movido.version + 1 }, ctxNada)
+        assert.deepEqual(await camposCatalogo(ctxNada.requestId), [])
     })
 })

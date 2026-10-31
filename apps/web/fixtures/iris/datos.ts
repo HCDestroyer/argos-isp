@@ -17,6 +17,7 @@ export const conectorIrisInicial: Schema<'ConectorIris'> = {
     conector_id: null,
     conectado_por_enlace_en: null,
     token_argos_id: null,
+    contrato: null,
     version: 0,
 }
 

@@ -245,6 +245,10 @@ export const Zona = definirEsquema(
             ...nulable(id),
             description: 'Empresa por defecto de los servicios nuevos de clientes de esta zona',
         },
+        activo: {
+            ...booleano,
+            description: 'false: desactivada (no se ofrece en el panel; sus clientes y routers no cambian)',
+        },
         ...auditable,
     }),
 )
