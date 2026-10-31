@@ -13,9 +13,9 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
-import { SEGUIMIENTOS } from '#inventario/productos'
+import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
 import { MODALIDADES } from '#inventario/tipos_producto'
-import { TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
+import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
@@ -32,34 +32,42 @@ const DineroConSigno = { ...Dinero, description: 'Monto con signo (+ entra, − 
 
 export const Producto = definirEsquema(
     'Producto',
-    objeto({
-        id,
-        empresa_id: id,
-        sku: texto,
-        nombre: texto,
-        unidad: texto,
-        tipo: { ...texto, description: 'Código del tipo de producto (catálogo editable, fase D)' },
-        tipo_id: id,
-        tipo_nombre: texto,
-        seguimiento: enumerado(SEGUIMIENTOS),
-        modalidad: {
-            ...enumerado(MODALIDADES),
-            description: 'Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            sku: texto,
+            nombre: texto,
+            unidad: texto,
+            tipo: {
+                ...enumerado(TIPOS_PRODUCTO),
+                description:
+                    'Código del tipo de producto. Fase D: el catálogo es editable (GET /inventario/tipos-producto) y puede traer el código de un tipo de la empresa; el enum de las semillas se quita cuando el panel adopte el catálogo',
+            },
+            tipo_id: id,
+            tipo_nombre: texto,
+            seguimiento: enumerado(SEGUIMIENTOS),
+            modalidad: {
+                ...enumerado(MODALIDADES),
+                description: 'Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)',
+            },
+            clase_activo: nulable(texto),
+            concepto_cargo_id: nulable(id),
+            cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
+            cuenta_consumo: { ...nulable(texto), description: 'null = 5.2.07' },
+            existencia_minima: nulable(Cantidad),
+            precio_venta: {
+                ...nulable(Dinero),
+                description: 'Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio',
+            },
+            activo: booleano,
+            existencia: { ...Cantidad, description: 'Existencia total en todas las bodegas' },
+            valor: { ...Dinero, description: 'Valor del kardex del producto' },
+            ...auditable,
         },
-        clase_activo: nulable(texto),
-        concepto_cargo_id: nulable(id),
-        cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
-        cuenta_consumo: { ...nulable(texto), description: 'null = 5.2.07' },
-        existencia_minima: nulable(Cantidad),
-        precio_venta: {
-            ...nulable(Dinero),
-            description: 'Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio',
-        },
-        activo: booleano,
-        existencia: { ...Cantidad, description: 'Existencia total en todas las bodegas' },
-        valor: { ...Dinero, description: 'Valor del kardex del producto' },
-        ...auditable,
-    }),
+        // fase D: siempre presentes; opcionales en el esquema hasta que los fixtures del panel los lleven
+        ['tipo_id', 'tipo_nombre', 'modalidad'],
+    ),
 )
 
 export const Bodega = definirEsquema(
@@ -68,7 +76,11 @@ export const Bodega = definirEsquema(
         id,
         empresa_id: id,
         nombre: texto,
-        tipo: enumerado(TIPOS_BODEGA_VISTA),
+        tipo: {
+            ...enumerado(TIPOS_BODEGA),
+            description:
+                'bodega o tecnico. La bodega virtual transito (fase D) solo sale con ?tipo=transito; el enum se amplía cuando el panel la adopte',
+        },
         usuario_id: nulable(id),
         usuario_nombre: nulable(texto),
         zona_id: nulable(id),
@@ -89,7 +101,10 @@ export const Existencia = definirEsquema(
         unidad: texto,
         bodega_id: id,
         bodega_nombre: texto,
-        bodega_tipo: enumerado(TIPOS_BODEGA_VISTA),
+        bodega_tipo: {
+            ...enumerado(TIPOS_BODEGA),
+            description: 'La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true',
+        },
         cantidad: Cantidad,
         valor: Dinero,
         costo_promedio: {
@@ -338,7 +353,7 @@ const camposOrdenTraslado = {
     bodega_origen_nombre: texto,
     bodega_destino_id: id,
     bodega_destino_nombre: texto,
-    bodega_destino_tipo: enumerado(TIPOS_BODEGA_VISTA),
+    bodega_destino_tipo: enumerado(TIPOS_BODEGA),
     usuario_destino_id: {
         ...nulable(id),
         description: 'Técnico de la bodega destino; null si es una bodega',

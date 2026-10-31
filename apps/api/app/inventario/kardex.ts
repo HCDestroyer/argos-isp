@@ -774,6 +774,8 @@ export interface FiltrosExistencias extends OpcionesPaginacion {
     producto_id?: number
     bodega_id?: number
     bajo_minimo?: boolean
+    /** fase D: sin `bodega_id`, la bodega `transito` solo sale con esto */
+    incluir_transito?: boolean
 }
 
 /** Existencias por producto × bodega (la proyección `inventario.saldos`). */
@@ -790,6 +792,7 @@ export async function listarExistencias(
         .join('inventario.bodegas as b', 'b.id', 's.bodega_id')
         .if(filtros.producto_id, (q) => q.where('s.producto_id', filtros.producto_id!))
         .if(filtros.bodega_id, (q) => q.where('s.bodega_id', filtros.bodega_id!))
+        .if(!filtros.bodega_id && !filtros.incluir_transito, (q) => q.whereNot('b.tipo', 'transito'))
         .if(filtros.bajo_minimo === true, (q) =>
             q.whereNotNull('p.existencia_minima').whereRaw(`${total} < p.existencia_minima`),
         )

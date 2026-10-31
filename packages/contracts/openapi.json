@@ -30547,6 +30547,15 @@
             }
           },
           {
+            "name": "incluir_transito",
+            "in": "query",
+            "required": false,
+            "description": "Fase D: también lo que viaja en órdenes de traslado (bodega transito); sin bodega_id, no sale",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "bajo_minimo",
             "in": "query",
             "required": false,
@@ -30858,6 +30867,112 @@
           }
         },
         "x-permiso": "inventario.configurar_ia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/mi-bodega": {
+      "get": {
+        "operationId": "inventarioMiBodega",
+        "summary": "La bodega del técnico: existencias, unidades, traslados por recibir y kardex",
+        "description": "Fase D: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). 404 sin_bodega; 422 tecnico_no_encontrado.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "description": "Otro técnico (solo con alcance global)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "id_externo",
+            "in": "query",
+            "required": false,
+            "description": "Otro técnico por su id de Argos (el id_externo del vínculo en Iris; solo con alcance global)",
+            "schema": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          {
+            "name": "correo",
+            "in": "query",
+            "required": false,
+            "description": "Otro técnico por su correo (solo con alcance global)",
+            "schema": {
+              "type": "string",
+              "maxLength": 254
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bodega del técnico",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiBodegaInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
         "x-implementado": true
       }
     },
@@ -79205,9 +79320,9 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico",
-              "transito"
-            ]
+              "tecnico"
+            ],
+            "description": "bodega o tecnico. La bodega virtual transito (fase D) solo sale con ?tipo=transito; el enum se amplía cuando el panel la adopte"
           },
           "usuario_id": {
             "type": [
@@ -90307,9 +90422,9 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico",
-              "transito"
-            ]
+              "tecnico"
+            ],
+            "description": "La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true"
           },
           "cantidad": {
             "type": "string",
@@ -93915,6 +94030,63 @@
           }
         }
       },
+      "MiBodegaInventario": {
+        "type": "object",
+        "required": [
+          "bodega",
+          "existencias",
+          "unidades",
+          "traslados_pendientes",
+          "kardex"
+        ],
+        "properties": {
+          "bodega": {
+            "$ref": "#/components/schemas/Bodega"
+          },
+          "existencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExistenciaInventario"
+            }
+          },
+          "unidades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnidadInventario"
+            },
+            "description": "Unidades en la bodega (disponibles o en reparación)"
+          },
+          "traslados_pendientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrdenTraslado"
+            },
+            "description": "Órdenes en tránsito hacia la bodega"
+          },
+          "kardex": {
+            "type": "object",
+            "required": [
+              "data",
+              "nextCursor"
+            ],
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MovimientoInventario"
+                }
+              },
+              "nextCursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "description": "Primera página; el resto con GET /inventario/movimientos?bodega_id="
+          }
+        }
+      },
       "MigracionAaaRouter": {
         "type": "object",
         "required": [
@@ -95880,8 +96052,7 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico",
-              "transito"
+              "tecnico"
             ]
           },
           "usuario_destino_id": {
@@ -96127,8 +96298,7 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico",
-              "transito"
+              "tecnico"
             ]
           },
           "usuario_destino_id": {
@@ -101107,10 +101277,7 @@
           "nombre",
           "unidad",
           "tipo",
-          "tipo_id",
-          "tipo_nombre",
           "seguimiento",
-          "modalidad",
           "clase_activo",
           "concepto_cargo_id",
           "cuenta_costo",
@@ -101144,7 +101311,12 @@
           },
           "tipo": {
             "type": "string",
-            "description": "Código del tipo de producto (catálogo editable, fase D)"
+            "enum": [
+              "equipo",
+              "material",
+              "otro"
+            ],
+            "description": "Código del tipo de producto. Fase D: el catálogo es editable (GET /inventario/tipos-producto) y puede traer el código de un tipo de la empresa; el enum de las semillas se quita cuando el panel adopte el catálogo"
           },
           "tipo_id": {
             "type": "integer",

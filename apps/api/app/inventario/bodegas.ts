@@ -188,6 +188,8 @@ export async function listarBodegas(
 ) {
     const q = consulta(db.connection())
         .if(filtros.tipo, (c) => c.where('b.tipo', filtros.tipo!))
+        // fase D: la bodega virtual «en tránsito» solo con ?tipo=transito
+        .if(!filtros.tipo, (c) => c.whereNot('b.tipo', 'transito'))
         .if(filtros.activo !== undefined, (c) => c.where('b.activo', filtros.activo!))
         .if(filtros.usuario_id, (c) => c.where('b.usuario_id', filtros.usuario_id!))
     filtrarPorEmpresa(q, empresas, (c, ids) => c.whereIn('b.empresa_id', ids))

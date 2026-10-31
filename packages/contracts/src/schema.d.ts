@@ -4196,6 +4196,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventario/mi-bodega": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La bodega del técnico: existencias, unidades, traslados por recibir y kardex
+         * @description Fase D: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). 404 sin_bodega; 422 tecnico_no_encontrado.
+         */
+        get: operations["inventarioMiBodega"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventario/movimientos": {
         parameters: {
             query?: never;
@@ -11099,8 +11119,11 @@ export interface components {
             id: number;
             empresa_id: number;
             nombre: string;
-            /** @enum {string} */
-            tipo: "bodega" | "tecnico" | "transito";
+            /**
+             * @description bodega o tecnico. La bodega virtual transito (fase D) solo sale con ?tipo=transito; el enum se amplía cuando el panel la adopte
+             * @enum {string}
+             */
+            tipo: "bodega" | "tecnico";
             usuario_id: number | null;
             usuario_nombre: string | null;
             zona_id: number | null;
@@ -13908,8 +13931,11 @@ export interface components {
             unidad: string;
             bodega_id: number;
             bodega_nombre: string;
-            /** @enum {string} */
-            bodega_tipo: "bodega" | "tecnico" | "transito";
+            /**
+             * @description La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true
+             * @enum {string}
+             */
+            bodega_tipo: "bodega" | "tecnico";
             /** @description Cantidad con 3 decimales */
             cantidad: string;
             valor: components["schemas"]["Dinero"];
@@ -14873,6 +14899,19 @@ export interface components {
                 clics: number;
             }[];
         };
+        MiBodegaInventario: {
+            bodega: components["schemas"]["Bodega"];
+            existencias: components["schemas"]["ExistenciaInventario"][];
+            /** @description Unidades en la bodega (disponibles o en reparación) */
+            unidades: components["schemas"]["UnidadInventario"][];
+            /** @description Órdenes en tránsito hacia la bodega */
+            traslados_pendientes: components["schemas"]["OrdenTraslado"][];
+            /** @description Primera página; el resto con GET /inventario/movimientos?bodega_id= */
+            kardex: {
+                data: components["schemas"]["MovimientoInventario"][];
+                nextCursor: string | null;
+            };
+        };
         MigracionAaaRouter: {
             router_id: number;
             /**
@@ -15266,7 +15305,7 @@ export interface components {
             bodega_destino_id: number;
             bodega_destino_nombre: string;
             /** @enum {string} */
-            bodega_destino_tipo: "bodega" | "tecnico" | "transito";
+            bodega_destino_tipo: "bodega" | "tecnico";
             /** @description Técnico de la bodega destino; null si es una bodega */
             usuario_destino_id: number | null;
             usuario_destino_nombre: string | null;
@@ -15320,7 +15359,7 @@ export interface components {
             bodega_destino_id: number;
             bodega_destino_nombre: string;
             /** @enum {string} */
-            bodega_destino_tipo: "bodega" | "tecnico" | "transito";
+            bodega_destino_tipo: "bodega" | "tecnico";
             /** @description Técnico de la bodega destino; null si es una bodega */
             usuario_destino_id: number | null;
             usuario_destino_nombre: string | null;
@@ -16601,17 +16640,20 @@ export interface components {
             sku: string;
             nombre: string;
             unidad: string;
-            /** @description Código del tipo de producto (catálogo editable, fase D) */
-            tipo: string;
-            tipo_id: number;
-            tipo_nombre: string;
+            /**
+             * @description Código del tipo de producto. Fase D: el catálogo es editable (GET /inventario/tipos-producto) y puede traer el código de un tipo de la empresa; el enum de las semillas se quita cuando el panel adopte el catálogo
+             * @enum {string}
+             */
+            tipo: "equipo" | "material" | "otro";
+            tipo_id?: number;
+            tipo_nombre?: string;
             /** @enum {string} */
             seguimiento: "cantidad" | "serie";
             /**
              * @description Qué hace un consumo a un servicio: comodato, gasto o cargo al cliente (fase D)
              * @enum {string}
              */
-            modalidad: "comodato" | "consumible_gasto" | "consumible_cobro";
+            modalidad?: "comodato" | "consumible_gasto" | "consumible_cobro";
             clase_activo: string | null;
             concepto_cargo_id: number | null;
             /** @description null = 5.6.01 */
@@ -35959,6 +36001,8 @@ export interface operations {
                 limit?: number;
                 producto_id?: number;
                 bodega_id?: number;
+                /** @description Fase D: también lo que viaja en órdenes de traslado (bodega transito); sin bodega_id, no sale */
+                incluir_transito?: boolean;
                 /** @description Solo productos cuya existencia total está bajo su existencia mínima */
                 bajo_minimo?: boolean;
             };
@@ -36122,6 +36166,62 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioMiBodega: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Otro técnico (solo con alcance global) */
+                usuario_id?: number;
+                /** @description Otro técnico por su id de Argos (el id_externo del vínculo en Iris; solo con alcance global) */
+                id_externo?: string;
+                /** @description Otro técnico por su correo (solo con alcance global) */
+                correo?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bodega del técnico */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MiBodegaInventario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

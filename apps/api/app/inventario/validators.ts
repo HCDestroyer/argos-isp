@@ -260,6 +260,9 @@ export const existenciasValidator = vine.compile(
         ...reglasPaginacion,
         producto_id: idEntidad().optional(),
         bodega_id: idEntidad().optional(),
+        incluir_transito: vine.boolean().optional().meta({
+            description: 'Fase D: también lo que viaja en órdenes de traslado (bodega transito); sin bodega_id, no sale',
+        }),
         bajo_minimo: vine.boolean().optional().meta({
             description: 'Solo productos cuya existencia total está bajo su existencia mínima',
         }),
