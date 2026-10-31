@@ -8,6 +8,7 @@ import {
     fecha,
     id,
     instante,
+    jsonLibre,
     nulable,
     objeto,
     texto,
@@ -452,5 +453,115 @@ export const ProductosLote = definirEsquema(
     objeto({
         data: lista(Producto),
         movimientos: { ...lista(MovimientoInventario), description: 'Los saldos iniciales de las entradas' },
+    }),
+)
+
+/*
+| Factura de compra desde un archivo (fase D, `contratos/inventario.md` D.5)
+*/
+
+const MontoTexto = {
+    type: 'string',
+    pattern: '^-?\\d{1,12}(\\.\\d{1,2})?$',
+    description: 'Monto con 2 decimales',
+}
+
+export const ExtraccionCompra = definirEsquema(
+    'ExtraccionCompra',
+    objeto({
+        emisor: objeto({ nit: texto, nombre: texto }),
+        receptor: objeto({ nit: nulable(texto), nombre: nulable(texto) }),
+        tipo_documento: { ...texto, description: 'FACT, FCAM, FPEQ, FCAP, FESP, NCRE, NDEB o RECIBO' },
+        serie: nulable(texto),
+        numero: texto,
+        autorizacion: { ...nulable(texto), description: 'UUID FEL de la SAT' },
+        fecha: fecha,
+        moneda: texto,
+        lineas: lista(
+            objeto({
+                codigo: { ...nulable(texto), description: 'Código del producto del proveedor' },
+                descripcion: texto,
+                cantidad: { ...texto, description: 'Hasta 6 decimales' },
+                unidad: nulable(texto),
+                precio_unitario: MontoTexto,
+                descuento: MontoTexto,
+                total: { ...MontoTexto, description: 'Total de la línea con IVA' },
+                iva: MontoTexto,
+                bien_o_servicio: enumerado(['B', 'S']),
+            }),
+        ),
+        totales: objeto({ total: MontoTexto, iva: MontoTexto }),
+    }),
+)
+
+const DatosBorrador = {
+    ...jsonLibre,
+    description: 'Los datos corregidos: ExtraccionCompra (vacío {} en un borrador manual o si la IA falló)',
+}
+
+export const BorradorCompra = definirEsquema(
+    'BorradorCompra',
+    objeto({
+        id,
+        empresa_id: id,
+        estado: enumerado(['borrador', 'confirmado', 'descartado']),
+        fuente: enumerado(['xml_fel', 'ia', 'manual']),
+        archivo_tipo: nulable(texto),
+        archivo_tamano: nulable(entero),
+        archivo_nombre: nulable(texto),
+        archivo_sha256: nulable(texto),
+        extraccion: {
+            ...nulable(ExtraccionCompra),
+            description: 'Lo que leyó el parser o la IA (no cambia)',
+        },
+        confianza: { ...nulable(jsonLibre), description: 'Confianza de la IA (0 a 1) por campo y por línea' },
+        error_extraccion: {
+            ...nulable(texto),
+            description: 'ia_no_configurada: … o ia_fallo: …; el usuario captura a mano',
+        },
+        ia_proveedor: nulable(texto),
+        ia_modelo: nulable(texto),
+        datos: DatosBorrador,
+        propuesta: objeto({
+            proveedor: nulable(objeto({ id: nulable(id), nit: texto, nombre: texto, crear: booleano })),
+            lineas: lista(
+                objeto({
+                    indice: entero,
+                    coincidencia: nulable(enumerado(['codigo_proveedor', 'sku', 'nombre'])),
+                    producto_id: nulable(id),
+                    producto_sku: nulable(texto),
+                    producto_nombre: nulable(texto),
+                    crear: nulable(objeto({ sku: texto, nombre: texto, tipo: texto, unidad: texto })),
+                    gasto: booleano,
+                }),
+            ),
+        }),
+        emisor_nit: nulable(texto),
+        serie: nulable(texto),
+        numero: nulable(texto),
+        compra_id: nulable(id),
+        motivo_descarte: nulable(texto),
+        creado_por: nulable(id),
+        confirmado_por: nulable(id),
+        confirmado_en: nulable(instante),
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+export const ConfiguracionIa = definirEsquema(
+    'ConfiguracionIa',
+    objeto({
+        id,
+        empresa_id: { ...nulable(id), description: 'null = global' },
+        proveedor: enumerado(['privada', 'anthropic', 'deepseek', 'openai']),
+        modelo: texto,
+        url_base: nulable(texto),
+        activo: booleano,
+        clave_configurada: { ...booleano, description: 'Hay clave guardada (nunca se devuelve)' },
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
     }),
 )

@@ -63,6 +63,7 @@ import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 import { inventarioValorizado } from '#inventario/reportes'
 import trasladosFaseD from '#start/routes/inventario_traslados'
 import catalogoFaseD from '#start/routes/inventario_catalogo'
+import comprasFaseD from '#start/routes/inventario_compras'
 
 const acceso = accesoBodegas
 
@@ -685,6 +686,7 @@ export default [
     ...operaciones,
     ...trasladosFaseD,
     ...catalogoFaseD,
+    ...comprasFaseD,
     ...unidades,
     ...comodato,
     ...conteos,

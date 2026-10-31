@@ -4,6 +4,8 @@ import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada 
 import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
 import { SEGUIMIENTOS } from '#inventario/productos'
 import { MODALIDADES } from '#inventario/tipos_producto'
+import { reglasExtraccion } from '#inventario/facturas_compra/extraccion'
+import { PROVEEDORES_IA } from '#inventario/facturas_compra/ia'
 import { TIPOS_BODEGA, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
@@ -682,5 +684,134 @@ export const listarTiposProductoValidator = vine.compile(
         empresas: empresasConsulta(),
         ...reglasPaginacion,
         activo: vine.boolean().optional(),
+    }),
+)
+
+/*
+| Factura de compra desde un archivo (fase D, `contratos/inventario.md` D.5)
+*/
+
+export const cargarBorradorValidator = vine.compile(
+    vine.object({
+        empresa_id: vine.number().withoutDecimals().min(1).nullable().optional().meta({
+            description: 'Por defecto la empresa activa',
+        }),
+    }),
+)
+
+export const editarBorradorValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        datos: vine.object(reglasExtraccion),
+    }),
+)
+
+const proveedorNuevo = () =>
+    vine.object({
+        nit: vine
+            .string()
+            .trim()
+            .maxLength(30)
+            .nullable()
+            .optional()
+            .meta({ description: 'Por defecto el del emisor' }),
+        nombre: vine.string().trim().minLength(2).maxLength(200),
+        tipo: vine
+            .enum(['general', 'pequeno_contribuyente', 'sin_documento', 'no_residente'] as const)
+            .nullable()
+            .optional(),
+        dias_credito: vine.number().withoutDecimals().min(0).max(365).nullable().optional(),
+    })
+
+export const confirmarBorradorValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        proveedor: vine.object({
+            id: idEntidad().nullable().optional(),
+            crear: proveedorNuevo().nullable().optional(),
+        }),
+        condicion: vine.enum(['contado', 'credito'] as const),
+        vence_en: fechaIso().nullable().optional(),
+        metodo: vine
+            .enum(['caja', 'banco', 'cuenta_bancaria'] as const)
+            .nullable()
+            .optional(),
+        caja_id: idEntidad().nullable().optional(),
+        banco_id: idEntidad().nullable().optional(),
+        cuenta_bancaria_id: idEntidad().nullable().optional(),
+        periodo_iva: fechaIso().nullable().optional(),
+        credito_fiscal: vine.boolean().nullable().optional(),
+        forzar_receptor: vine.boolean().nullable().optional().meta({
+            description: 'Confirmar aunque el NIT del receptor no sea el de la empresa',
+        }),
+        lineas: vine
+            .array(
+                vine.object({
+                    indice: vine.number().withoutDecimals().min(0),
+                    producto: vine
+                        .object({
+                            id: idEntidad().nullable().optional(),
+                            crear: vine
+                                .object({
+                                    sku: vine.string().trim().minLength(1).maxLength(60),
+                                    nombre: vine.string().trim().minLength(2).maxLength(200),
+                                    tipo: codigoTipo(),
+                                    seguimiento: vine.enum(SEGUIMIENTOS).nullable().optional(),
+                                    ...datosProducto,
+                                })
+                                .nullable()
+                                .optional(),
+                        })
+                        .nullable()
+                        .optional(),
+                    bodega_id: idEntidad().nullable().optional(),
+                    unidades: vine.array(unidadNueva()).maxLength(500).nullable().optional(),
+                    cuenta: cuenta().nullable().optional(),
+                    categoria: texto(60).nullable().optional(),
+                }),
+            )
+            .maxLength(500)
+            .nullable()
+            .optional()
+            .meta({ description: 'Por línea de la factura (indice); las que no se indican van a gasto' }),
+    }),
+)
+
+export const descartarBorradorValidator = vine.compile(
+    vine.object({ version: versionEsperada(), motivo: motivo() }),
+)
+
+export const listarBorradoresValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine.enum(['borrador', 'confirmado', 'descartado'] as const).optional(),
+    }),
+)
+
+export const configurarIaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        global: vine.boolean().nullable().optional().meta({
+            description: 'true = configuración global (solo con alcance global de empresas)',
+        }),
+        proveedor: vine.enum(PROVEEDORES_IA),
+        modelo: vine.string().trim().minLength(1).maxLength(100),
+        url_base: vine.string().trim().url({ require_tld: false }).maxLength(300).nullable().optional().meta({
+            description:
+                'Obligatoria en privada (endpoint compatible con OpenAI, p. ej. http://ollama:11434/v1)',
+        }),
+        api_key: vine.string().trim().maxLength(500).nullable().optional().meta({
+            description: 'Se escribe y nunca se lee (cifrada). Sin el campo se conserva; null la borra',
+        }),
+        activo: vine.boolean(),
+        version: vine.number().withoutDecimals().min(0).meta({ description: '0 la primera vez' }),
+    }),
+)
+
+export const verIaValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().optional(),
+        global: vine.boolean().optional(),
     }),
 )

@@ -1476,6 +1476,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compras/borradores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Borradores de compra */
+        get: operations["comprasBorradores"];
+        put?: never;
+        /**
+         * Cargar una factura de compra (XML FEL, PDF o imagen) como borrador para revisar
+         * @description Fase D. XML: parser FEL determinístico (422 xml_no_fel). PDF o imagen: la IA configurada; si no hay o falla, el borrador se crea vacío con error_extraccion (ia_no_configurada, ia_fallo) para capturar a mano. Sin archivo: borrador manual. Nunca crea la compra. 409 archivo_duplicado (mismo SHA-256), compra_duplicada o borrador_duplicado (mismo NIT, serie y número).
+         */
+        post: operations["comprasCargarBorrador"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/borradores/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Un borrador de compra con lo leído, los datos corregidos y la propuesta */
+        get: operations["comprasBorradorVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/borradores/{id}/archivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** El archivo de la factura del borrador */
+        get: operations["comprasBorradorArchivo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/borradores/{id}/confirmar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar un borrador revisado: crea la compra (compras.registrar) y su entrada al inventario
+         * @description Exige además compras.registrar, y proveedores.editar o productos.crear si pide crearlos. Proveedor { id } o { crear }; por línea (indice) producto { id } o { crear } con bodega_id (y unidades si es de serie), o cuenta/categoria para gasto; las líneas que no se indican van a gasto. 422 cantidad_entera (una compra a inventario va en unidades enteras), receptor_distinto (salvo forzar_receptor), datos.* incompletos; 409 compra_duplicada, borrador_cerrado.
+         */
+        post: operations["comprasConfirmarBorrador"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/borradores/{id}/descartar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Descartar un borrador de compra */
+        post: operations["comprasDescartarBorrador"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/borradores/{id}/editar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Corregir los datos de un borrador de compra (recalcula la propuesta) */
+        post: operations["comprasEditarBorrador"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compras/desde-egreso/{egresoId}": {
         parameters: {
             query?: never;
@@ -4057,6 +4166,30 @@ export interface paths {
         get: operations["inventarioExistencias"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventario/ia/configuracion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La IA que lee facturas de compra (de la empresa o la global), sin la clave
+         * @description Sin configuración: 404. La clave nunca sale: clave_configurada dice si hay una.
+         */
+        get: operations["inventarioConfiguracionIa"];
+        put?: never;
+        /**
+         * Configurar la IA que lee facturas de compra (proveedor, modelo, URL y clave)
+         * @description Por empresa o global (global: true, solo con alcance global de empresas). privada (compatible con OpenAI: Ollama, vLLM) exige url_base. api_key se guarda cifrada, en la auditoría como *** y nunca se devuelve. Emite inventario.ia_config_cambiada (campos, sin valores).
+         */
+        post: operations["inventarioConfigurarIa"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11021,6 +11154,69 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        BorradorCompra: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            estado: "borrador" | "confirmado" | "descartado";
+            /** @enum {string} */
+            fuente: "xml_fel" | "ia" | "manual";
+            archivo_tipo: string | null;
+            archivo_tamano: number | null;
+            archivo_nombre: string | null;
+            archivo_sha256: string | null;
+            /** @description Lo que leyó el parser o la IA (no cambia) */
+            extraccion: components["schemas"]["ExtraccionCompra"] | null;
+            /** @description Confianza de la IA (0 a 1) por campo y por línea */
+            confianza: {
+                [key: string]: unknown;
+            } | null;
+            /** @description ia_no_configurada: … o ia_fallo: …; el usuario captura a mano */
+            error_extraccion: string | null;
+            ia_proveedor: string | null;
+            ia_modelo: string | null;
+            /** @description Los datos corregidos: ExtraccionCompra (vacío {} en un borrador manual o si la IA falló) */
+            datos: {
+                [key: string]: unknown;
+            };
+            propuesta: {
+                proveedor: {
+                    id: number | null;
+                    nit: string;
+                    nombre: string;
+                    crear: boolean;
+                } | null;
+                lineas: {
+                    indice: number;
+                    /** @enum {string|null} */
+                    coincidencia: "codigo_proveedor" | "sku" | "nombre" | null;
+                    producto_id: number | null;
+                    producto_sku: string | null;
+                    producto_nombre: string | null;
+                    crear: {
+                        sku: string;
+                        nombre: string;
+                        tipo: string;
+                        unidad: string;
+                    } | null;
+                    gasto: boolean;
+                }[];
+            };
+            emisor_nit: string | null;
+            serie: string | null;
+            numero: string | null;
+            compra_id: number | null;
+            motivo_descarte: string | null;
+            creado_por: number | null;
+            confirmado_por: number | null;
+            /** Format: date-time */
+            confirmado_en: string | null;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         Caja: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -12016,6 +12212,23 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             credenciales: components["schemas"]["CredencialesFel"][];
+        };
+        ConfiguracionIa: {
+            id: number;
+            /** @description null = global */
+            empresa_id: number | null;
+            /** @enum {string} */
+            proveedor: "privada" | "anthropic" | "deepseek" | "openai";
+            modelo: string;
+            url_base: string | null;
+            activo: boolean;
+            /** @description Hay clave guardada (nunca se devuelve) */
+            clave_configurada: boolean;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         ConfiguracionInventario: {
             empresa_id: number;
@@ -13707,6 +13920,49 @@ export interface components {
             /** @description Cantidad con 3 decimales */
             existencia_minima: string | null;
             bajo_minimo: boolean;
+        };
+        ExtraccionCompra: {
+            emisor: {
+                nit: string;
+                nombre: string;
+            };
+            receptor: {
+                nit: string | null;
+                nombre: string | null;
+            };
+            /** @description FACT, FCAM, FPEQ, FCAP, FESP, NCRE, NDEB o RECIBO */
+            tipo_documento: string;
+            serie: string | null;
+            numero: string;
+            /** @description UUID FEL de la SAT */
+            autorizacion: string | null;
+            /** Format: date */
+            fecha: string;
+            moneda: string;
+            lineas: {
+                /** @description Código del producto del proveedor */
+                codigo: string | null;
+                descripcion: string;
+                /** @description Hasta 6 decimales */
+                cantidad: string;
+                unidad: string | null;
+                /** @description Monto con 2 decimales */
+                precio_unitario: string;
+                /** @description Monto con 2 decimales */
+                descuento: string;
+                /** @description Total de la línea con IVA */
+                total: string;
+                /** @description Monto con 2 decimales */
+                iva: string;
+                /** @enum {string} */
+                bien_o_servicio: "B" | "S";
+            }[];
+            totales: {
+                /** @description Monto con 2 decimales */
+                total: string;
+                /** @description Monto con 2 decimales */
+                iva: string;
+            };
         };
         Extracto: {
             id: number;
@@ -25670,6 +25926,571 @@ export interface operations {
             };
         };
     };
+    comprasBorradores: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "borrador" | "confirmado" | "descartado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de borradores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BorradorCompra"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasCargarBorrador: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /**
+                     * Format: binary
+                     * @description XML FEL, PDF, JPG, PNG o WebP, hasta 10 MB
+                     */
+                    archivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Borrador */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorCompra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.cargar_borrador; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasBorradorVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Borrador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorCompra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasBorradorArchivo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasConfirmarBorrador: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    proveedor: {
+                        id?: number | null;
+                        crear?: {
+                            /** @description Por defecto el del emisor */
+                            nit?: string | null;
+                            nombre: string;
+                            tipo?: ("general" | "pequeno_contribuyente" | "sin_documento" | "no_residente") | null;
+                            dias_credito?: number | null;
+                        } | null;
+                    };
+                    /** @enum {string} */
+                    condicion: "contado" | "credito";
+                    /** Format: date */
+                    vence_en?: string | null;
+                    metodo?: ("caja" | "banco" | "cuenta_bancaria") | null;
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                    /** Format: date */
+                    periodo_iva?: string | null;
+                    credito_fiscal?: boolean | null;
+                    /** @description Confirmar aunque el NIT del receptor no sea el de la empresa */
+                    forzar_receptor?: boolean | null;
+                    /** @description Por línea de la factura (indice); las que no se indican van a gasto */
+                    lineas?: {
+                        indice: number;
+                        producto?: {
+                            id?: number | null;
+                            crear?: {
+                                sku: string;
+                                nombre: string;
+                                /**
+                                 * @description Código del tipo de producto (GET /inventario/tipos-producto)
+                                 * @example material
+                                 */
+                                tipo: string;
+                                seguimiento?: ("cantidad" | "serie") | null;
+                                /** @description comodato (serie), consumible_gasto (cantidad) o consumible_cobro (las dos: cargo único al cliente al consumirlo). Por defecto la del tipo */
+                                modalidad?: ("comodato" | "consumible_gasto" | "consumible_cobro") | null;
+                                /** @description unidad (por defecto), metro, caja… */
+                                unidad?: string | null;
+                                /** @description Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red) */
+                                clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                                /** @description Concepto de cargo único con que se vende (fase C) */
+                                concepto_cargo_id?: number | null;
+                                /** @description Cuenta de costo de ventas (gasto); por defecto 5.6.01 */
+                                cuenta_costo?: string | null;
+                                /** @description Cuenta del consumo interno (gasto); por defecto 5.2.07 */
+                                cuenta_consumo?: string | null;
+                                /** @description Existencia total bajo la cual se avisa (inventario.existencia_minima) */
+                                existencia_minima?: string | null;
+                                /**
+                                 * @description Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)
+                                 * @example 450.00
+                                 */
+                                precio_venta?: string | null;
+                            } | null;
+                        } | null;
+                        bodega_id?: number | null;
+                        unidades?: {
+                            serie?: string | null;
+                            /** @description Con o sin separadores */
+                            mac?: string | null;
+                        }[] | null;
+                        cuenta?: string | null;
+                        categoria?: string | null;
+                    }[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Borrador confirmado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorCompra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.confirmar_borrador; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasDescartarBorrador: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Borrador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorCompra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.descartar_borrador; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasEditarBorrador: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    datos: {
+                        emisor: {
+                            nit: string;
+                            nombre: string;
+                        };
+                        receptor: {
+                            nit?: string | null;
+                            nombre?: string | null;
+                        };
+                        tipo_documento: string;
+                        serie?: string | null;
+                        numero: string;
+                        autorizacion?: string | null;
+                        fecha: string;
+                        moneda: string;
+                        lineas: {
+                            codigo?: string | null;
+                            descripcion: string;
+                            cantidad: string;
+                            unidad?: string | null;
+                            precio_unitario: string;
+                            descuento: string;
+                            total: string;
+                            iva: string;
+                            /** @enum {string} */
+                            bien_o_servicio: "B" | "S";
+                        }[];
+                        totales: {
+                            total: string;
+                            iva: string;
+                        };
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Borrador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorCompra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.editar_borrador; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     comprasDesdeEgreso: {
         parameters: {
             query?: never;
@@ -35170,6 +35991,137 @@ export interface operations {
             };
             /** @description Sin el permiso inventario.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioConfiguracionIa: {
+        parameters: {
+            query?: {
+                empresa_id?: number;
+                global?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuración */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionIa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.configurar_ia */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    inventarioConfigurarIa: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /** @description true = configuración global (solo con alcance global de empresas) */
+                    global?: boolean | null;
+                    /** @enum {string} */
+                    proveedor: "privada" | "anthropic" | "deepseek" | "openai";
+                    modelo: string;
+                    /**
+                     * Format: uri
+                     * @description Obligatoria en privada (endpoint compatible con OpenAI, p. ej. http://ollama:11434/v1)
+                     */
+                    url_base?: string | null;
+                    /** @description Se escribe y nunca se lee (cifrada). Sin el campo se conserva; null la borra */
+                    api_key?: string | null;
+                    activo: boolean;
+                    /** @description 0 la primera vez */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Configuración */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionIa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso inventario.configurar_ia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

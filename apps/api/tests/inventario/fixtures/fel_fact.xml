@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dte:GTDocumento xmlns:dte="http://www.sat.gob.gt/dte/fel/0.2.0" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Version="0.1">
+  <dte:SAT ClaseDocumento="dte">
+    <dte:DTE ID="DatosCertificados">
+      <dte:DatosEmision ID="DatosEmision">
+        <dte:DatosGenerales CodigoMoneda="GTQ" FechaHoraEmision="{{FECHA}}T10:15:00-06:00" Tipo="FACT"/>
+        <dte:Emisor AfiliacionIVA="GEN" CodigoEstablecimiento="1" CorreoEmisor="ventas@distribuidora.gt" NITEmisor="{{NIT}}" NombreComercial="DISTRIBUIDORA DE REDES" NombreEmisor="DISTRIBUIDORA DE REDES, SOCIEDAD ANONIMA">
+          <dte:DireccionEmisor>
+            <dte:Direccion>2 CALLE 3-45 ZONA 1</dte:Direccion>
+            <dte:CodigoPostal>01001</dte:CodigoPostal>
+            <dte:Municipio>GUATEMALA</dte:Municipio>
+            <dte:Departamento>GUATEMALA</dte:Departamento>
+            <dte:Pais>GT</dte:Pais>
+          </dte:DireccionEmisor>
+        </dte:Emisor>
+        <dte:Receptor IDReceptor="{{RECEPTOR}}" NombreReceptor="ISP DE PRUEBA, S.A."/>
+        <dte:Frases>
+          <dte:Frase CodigoEscenario="1" TipoFrase="1"/>
+        </dte:Frases>
+        <dte:Items>
+          <dte:Item BienOServicio="B" NumeroLinea="1">
+            <dte:Cantidad>100</dte:Cantidad>
+            <dte:UnidadMedida>MTS</dte:UnidadMedida>
+            <dte:Descripcion>{{DESC1}}</dte:Descripcion>
+            <dte:PrecioUnitario>2.24</dte:PrecioUnitario>
+            <dte:Precio>224.00</dte:Precio>
+            <dte:Descuento>0.00</dte:Descuento>
+            <dte:Impuestos>
+              <dte:Impuesto>
+                <dte:NombreCorto>IVA</dte:NombreCorto>
+                <dte:CodigoUnidadGravable>1</dte:CodigoUnidadGravable>
+                <dte:MontoGravable>200.00</dte:MontoGravable>
+                <dte:MontoImpuesto>24.00</dte:MontoImpuesto>
+              </dte:Impuesto>
+            </dte:Impuestos>
+            <dte:Total>224.00</dte:Total>
+          </dte:Item>
+          <dte:Item BienOServicio="B" NumeroLinea="2">
+            <dte:Cantidad>{{CANT2}}</dte:Cantidad>
+            <dte:UnidadMedida>UND</dte:UnidadMedida>
+            <dte:Descripcion>Conector RJ45 blindado</dte:Descripcion>
+            <dte:PrecioUnitario>1.20</dte:PrecioUnitario>
+            <dte:Precio>60.00</dte:Precio>
+            <dte:Descuento>4.00</dte:Descuento>
+            <dte:Impuestos>
+              <dte:Impuesto>
+                <dte:NombreCorto>IVA</dte:NombreCorto>
+                <dte:CodigoUnidadGravable>1</dte:CodigoUnidadGravable>
+                <dte:MontoGravable>50.00</dte:MontoGravable>
+                <dte:MontoImpuesto>6.00</dte:MontoImpuesto>
+              </dte:Impuesto>
+            </dte:Impuestos>
+            <dte:Total>56.00</dte:Total>
+          </dte:Item>
+          <dte:Item BienOServicio="S" NumeroLinea="3">
+            <dte:Cantidad>1</dte:Cantidad>
+            <dte:UnidadMedida>UND</dte:UnidadMedida>
+            <dte:Descripcion>Flete</dte:Descripcion>
+            <dte:PrecioUnitario>112.00</dte:PrecioUnitario>
+            <dte:Precio>112.00</dte:Precio>
+            <dte:Descuento>0.00</dte:Descuento>
+            <dte:Impuestos>
+              <dte:Impuesto>
+                <dte:NombreCorto>IVA</dte:NombreCorto>
+                <dte:CodigoUnidadGravable>1</dte:CodigoUnidadGravable>
+                <dte:MontoGravable>100.00</dte:MontoGravable>
+                <dte:MontoImpuesto>12.00</dte:MontoImpuesto>
+              </dte:Impuesto>
+            </dte:Impuestos>
+            <dte:Total>112.00</dte:Total>
+          </dte:Item>
+        </dte:Items>
+        <dte:Totales>
+          <dte:TotalImpuestos>
+            <dte:TotalImpuesto NombreCorto="IVA" TotalMontoImpuesto="42.00"/>
+          </dte:TotalImpuestos>
+          <dte:GranTotal>392.00</dte:GranTotal>
+        </dte:Totales>
+      </dte:DatosEmision>
+      <dte:Certificacion>
+        <dte:NITCertificador>12521337</dte:NITCertificador>
+        <dte:NombreCertificador>INFILE, S.A.</dte:NombreCertificador>
+        <dte:NumeroAutorizacion Numero="{{NUMERO}}" Serie="{{SERIE}}">{{SERIE}}-1A2B-4C3D-9E8F-0123456789AB</dte:NumeroAutorizacion>
+        <dte:FechaHoraCertificacion>{{FECHA}}T10:15:05-06:00</dte:FechaHoraCertificacion>
+      </dte:Certificacion>
+    </dte:DTE>
+  </dte:SAT>
+</dte:GTDocumento>
