@@ -62,16 +62,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    '25.compra_de_borrador_con_otro_emisor':
-        'H74 (inventario fase D): confirmar un borrador acepta un proveedor cuyo NIT no es el del emisor y no revisa la autorización FEL',
-    '25.compra_con_autorizacion_repetida':
-        'H74 (inventario fase D): la misma factura (misma autorización FEL) entra dos veces si el NIT del borrador no es el de la primera',
-    '25.compra_de_borrador_distinta_de_la_factura':
-        'H75 (inventario fase D): confirmar un borrador no exige moneda GTQ ni que Σ líneas = total de la factura',
-    '25.saldo_inicial_despues_del_cierre_de_apertura':
-        'H76 (inventario fase D): un saldo inicial (o un lote con entrada) entra contra 2.9.01 después del cierre de la apertura',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 

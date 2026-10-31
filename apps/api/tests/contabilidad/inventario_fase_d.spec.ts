@@ -611,7 +611,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         const status = await statusDe(r)
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(status, 409, 'compra_duplicada por la autorización FEL')
-    }).fails('H74: compra_duplicada solo mira NIT emisor, serie y número; la autorización FEL no')
+    })
 
     test('H74 · alta: confirmar con un proveedor de otro NIT deja la compra en el libro de compras con un NIT que no emitió la factura', async ({
         client,
@@ -628,7 +628,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         const status = await statusDe(r)
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(status, 422, 'proveedor_distinto')
-    }).fails('H74: el proveedor elegido no se compara con el NIT emisor')
+    })
 
     test('H75 · alta: una factura en USD se registra con sus montos como quetzales', async ({
         client,
@@ -645,7 +645,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         const status = await statusDe(r)
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(status, 422, 'moneda')
-    }).fails('H75: confirmar no revisa la moneda')
+    })
 
     test('H75 · alta: un borrador cuyas líneas no suman el total de la factura se confirma por lo que suman las líneas', async ({
         client,
@@ -671,7 +671,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         const status = await statusDe(r)
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(status, 422, 'totales_descuadrados')
-    }).fails('H75: confirmar no compara Σ líneas con totales.total')
+    })
 
     test('H76 · media: después del cierre de la apertura, un lote con entrada vuelve a mover 2.9.01 (inventario contra patrimonio sin compra)', async ({
         assert,
@@ -714,7 +714,7 @@ test.group('Auditor contable · inventario fase D', (group) => {
         assert.deepEqual(await invariantes([e.B]), [])
         assert.equal(lote?.status, 409, 'apertura_cerrada')
         assert.equal(await saldoCuenta(e.B, CUENTAS.SALDOS_APERTURA), '0.00')
-    }).fails('H76: el saldo inicial no mira el cierre de la apertura')
+    })
 
     test('H77 · baja: el origen con todo en tránsito se desactiva y el faltante vuelve a una bodega inactiva', async ({
         assert,
@@ -747,5 +747,5 @@ test.group('Auditor contable · inventario fase D', (group) => {
             'una bodega con órdenes en tránsito no se desactiva',
         )
         await recibir(e, orden.id, [{ linea_id: orden.lineas[0]!.id, cantidad_recibida: '1' }])
-    }).fails('H77: desactivar_bodega solo mira inventario.saldos, no las órdenes en tránsito')
+    })
 })

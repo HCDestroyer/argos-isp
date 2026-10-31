@@ -178,10 +178,28 @@ export function nombreNormalizado(nombre: string): string {
 export async function exigirFacturaNueva(
     cliente: QueryClientContract,
     empresaId: number,
-    documento: { nit: string; serie: string | null; numero: string },
+    documento: { nit: string; serie: string | null; numero: string; autorizacion?: string | null },
     exceptoBorrador?: number,
 ): Promise<void> {
     const nit = nitLimpio(documento.nit)
+    // H74: la misma autorización FEL (UUID) es la misma factura aunque el NIT o el número difieran
+    const autorizacion = (documento.autorizacion ?? '').trim().toUpperCase()
+    if (autorizacion) {
+        const misma = await cliente
+            .from('ledger.compras as c')
+            .where('c.empresa_id', empresaId)
+            .whereRaw('upper(c.autorizacion) = ?', [autorizacion])
+            .whereNotExists((q) => q.from('ledger.compras_anulaciones as a').whereRaw('a.compra_id = c.id'))
+            .select('c.id')
+            .first()
+        if (misma) {
+            throw new Conflicto(
+                `La factura con autorización FEL ${autorizacion} ya está registrada (compra ${misma.id})`,
+                'compra_duplicada',
+                'Compra duplicada',
+            )
+        }
+    }
     const serie = (documento.serie ?? '').trim().toUpperCase()
     const numero = documento.numero.trim().toUpperCase()
     if (!nit || !numero) return
@@ -189,7 +207,7 @@ export async function exigirFacturaNueva(
         .from('ledger.compras as c')
         .join('ledger.proveedores as p', 'p.id', 'c.proveedor_id')
         .where('c.empresa_id', empresaId)
-        .whereRaw(`upper(replace(p.nit, '-', '')) = ?`, [nit])
+        .whereRaw(`upper(regexp_replace(p.nit, '[\\s-]', '', 'g')) = ?`, [nit])
         .whereRaw(`upper(coalesce(c.serie, '')) = ?`, [serie])
         .whereRaw('upper(c.numero) = ?', [numero])
         .select('c.id')
@@ -250,7 +268,7 @@ export async function proponer(
         const fila = await cliente
             .from('ledger.proveedores')
             .where({ empresa_id: empresaId, activo: true })
-            .whereRaw(`upper(replace(nit, '-', '')) = ?`, [nit])
+            .whereRaw(`upper(regexp_replace(nit, '[\\s-]', '', 'g')) = ?`, [nit])
             .select('id', 'nombre')
             .first()
         proveedorId = fila ? Number(fila.id) : null

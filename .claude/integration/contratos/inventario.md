@@ -480,3 +480,13 @@ Checks nuevos propuestos para `verificar_libro.ts`:
 - **e.** Cada borrador `confirmado` tiene su `compra_id`, y cada consumo `consumible_cobro` (movimiento `venta` con `origen_externo` o sin él) tiene su factura vigente o su reverso (ya cubierto por los checks de la fase C).
 
 Lo demás (§8.1 a §8.5) no cambia y sigue verificándose igual.
+
+### D.9 Hallazgos del auditor (fase D)
+
+Rama `auditor/inventario-d` (85a00f6, pruebas en `tests/contabilidad/inventario_fase_d.spec.ts` y checks 25.*), corregidos en `a3/inventario-v2`:
+
+- **H74 · alta.** Al confirmar un borrador, el proveedor es el emisor: `proveedor.id` con otro NIT, o `proveedor.crear.nit` distinto del emisor, responde 422 `proveedor_distinto` (sin `nit`, el proveedor nuevo toma el del emisor). La misma autorización FEL (UUID) de una compra vigente de la empresa responde 409 `compra_duplicada` al confirmar (`exigirFacturaNueva`) y en `compras.registrar` (`prepararCompra`), aunque el NIT o el número se hayan capturado distinto. Al **cargar** el archivo solo se mira NIT, serie y número (la prueba del auditor carga la misma factura con otro NIT y espera el 409 al confirmar). `exigirFacturaNueva` normaliza el NIT sin espacios ni guiones, como `nitLimpio`.
+- **H75 · alta.** Confirmar exige `moneda = GTQ` (422 `moneda`) y que la suma de los totales de las líneas sea `totales.total`, con una tolerancia de Q0.01 por línea (422 `totales_descuadrados`).
+- **H76 · media.** Con un cierre de la apertura vigente (`libro.cerrar_apertura`), un saldo inicial (`inventario.cargar_saldo_inicial` o la entrada de un lote) responde 409 `apertura_cerrada`, sin importar la fecha: lo comprado entra por una compra y una diferencia de conteo por un ajuste.
+- **H77 · baja.** `bodegas.desactivar` responde 409 `bodega_con_traslados` mientras la bodega sea origen o destino de una orden en tránsito.
+- **Fecha de los movimientos de la recepción:** la de hoy (la del registro), como el traslado inmediato y el envío (desvío A.4); `recibido_en` (hora del teléfono) es la fecha de recepción del documento y se guarda en la orden. Así ningún movimiento queda antes de otro posterior del kardex del destino y no hay que revisar existencias por fecha; los traslados no tienen asiento, así que el periodo contable no cambia nada.
