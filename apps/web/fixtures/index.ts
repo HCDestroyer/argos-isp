@@ -54,6 +54,7 @@ import { rutasPlanes } from './planes/rutas'
 import { rutasNodosPortal } from './nodosPortal/rutas'
 import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
 import { rutasInventario } from './inventario/rutas'
+import { rutasInventarioFaseD } from './inventario/faseD'
 import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
@@ -498,6 +499,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return { status: 200, cuerpo: me }
     },
 
+    // Inventario fase D: antes que `GET /compras/:id` (los borradores) y que las rutas de siempre del inventario.
+    ...rutasInventarioFaseD,
     // Antes que `POST /facturas/:id/…` y que los reportes genéricos (`GET /reportes/:reporte`).
     ...rutasBonificaciones,
     // Fase 4 primero: `GET /cobros/por-liquidar` antes que el recibo `GET /cobros/:id`, y

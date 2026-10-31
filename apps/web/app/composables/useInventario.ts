@@ -2,6 +2,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type ExistenciaInventario = Schema<'ExistenciaInventario'>
 export type MovimientoInventario = Schema<'MovimientoInventario'>
+export type ConsumoInventario = Schema<'ConsumoInventario'>
 export type TrasladoInventario = Schema<'TrasladoInventario'>
 export type TipoMovimientoInventario = MovimientoInventario['tipo']
 export type FiltrosExistencias = Omit<NonNullable<paths['/api/v1/inventario/existencias']['get']['parameters']['query']>, 'cursor'>
@@ -44,8 +45,12 @@ export function useInventario() {
         return resolver(api.POST('/api/v1/inventario/saldos-iniciales', { body: datos, params: conClave(clave) }))
     }
 
-    /** `POST /inventario/consumos` (`inventario.consumir`): materiales de una instalación o reparación. */
-    function consumir(datos: DatosConsumo, clave: string): Promise<Resultado<MovimientoInventario>> {
+    /**
+     * `POST /inventario/consumos` (`inventario.consumir`): materiales de una instalación o reparación. Según
+     * la modalidad del producto (D.3): gasto, o cobro con un cargo único (`cargos[]`, `factura_id`); un
+     * comodato responde 422 `producto_es_comodato`.
+     */
+    function consumir(datos: DatosConsumo, clave: string): Promise<Resultado<ConsumoInventario>> {
         return resolver(api.POST('/api/v1/inventario/consumos', { body: datos, params: conClave(clave) }))
     }
 

@@ -259,7 +259,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'CertificarLoteModal.vue': { permisos: ['fel.certificar'], desde: ['pages/dte/index.vue'] },
     'PremioLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/premios.vue'] },
     'BodegaFormulario.vue': { permisos: ['bodegas.crear', 'bodegas.editar'], desde: ['pages/inventario/bodegas.vue'] },
-    'ProductoFormulario.vue': { permisos: ['productos.crear', 'productos.editar'], desde: ['pages/inventario/productos.vue'] },
+    'ProductoFormulario.vue': { permisos: ['productos.crear', 'productos.editar', 'inventario.ver'], desde: ['pages/inventario/productos.vue'] },
+    'TipoProductoFormulario.vue': { permisos: ['tipos_producto.crear', 'tipos_producto.editar'], desde: ['pages/inventario/tipos-producto.vue'] },
     'MovimientoInventarioModal.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue'] },
     'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id].vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
@@ -277,6 +278,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'QosClaseModal.vue': { permisos: ['qos.gestionar'], desde: ['pages/red/qos/[id].vue'] },
     'QosPerfilModal.vue': { permisos: ['qos.gestionar'], desde: ['pages/red/qos/index.vue', 'pages/red/qos/[id].vue'] },
     'RouterQos.vue': { permisos: ['qos.ver'], desde: ['pages/routers/[id].vue'] },
+    // Inventario fase D (`contratos/inventario.md` D.1): recibir y el papel firmado se abren desde el detalle
+    // de la orden y desde «Mi bodega», que comprueban el permiso de la acción; leen con el `inventario.ver` de la página.
+    'TrasladoRecibirSlideover.vue': { permisos: ['inventario.recibir_traslado', 'inventario.ver'], desde: ['pages/inventario/traslados/[id].vue', 'pages/inventario/mi-bodega.vue'] },
+    'TrasladoDocumentoModal.vue': { permisos: ['inventario.adjuntar_documento_traslado'], desde: ['pages/inventario/traslados/[id].vue'] },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 

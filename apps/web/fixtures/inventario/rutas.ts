@@ -4,9 +4,10 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { agregarMovimiento, cantidad3, costoSalida, monto2, saldoDe } from './kardex'
-import { FECHAS_COMODATO } from './datos'
+import { FECHAS_COMODATO, TIPO_BODEGA_TRANSITO, type ProductoFixture } from './datos'
+import { codigoTipoProducto, tipoDeProducto } from './faseD'
 
-type Producto = Schema<'Producto'>
+type Producto = ProductoFixture
 type Bodega = Schema<'Bodega'>
 type Movimiento = Schema<'MovimientoInventario'>
 type Unidad = Schema<'UnidadInventario'>
@@ -18,25 +19,25 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/
 const hoy = () => ahora().slice(0, 10)
 
 /** 409 con el título del código, como la API (`existencia_insuficiente` → «Existencia insuficiente»). */
-const conflicto = (codigo: string, detalle: string, titulo?: string): RespuestaFixture => {
+export const conflicto = (codigo: string, detalle: string, titulo?: string): RespuestaFixture => {
     const texto = codigo.replaceAll('_', ' ')
     return problemaTipado(409, codigo, titulo ?? texto.charAt(0).toUpperCase() + texto.slice(1), detalle)
 }
-const regla = (codigo: string, detalle: string, campo?: string): RespuestaFixture => problemaTipado(422, codigo, 'Regla de negocio', detalle, campo ? [{ field: campo, message: detalle, rule: codigo }] : undefined)
+export const regla = (codigo: string, detalle: string, campo?: string): RespuestaFixture => problemaTipado(422, codigo, 'Regla de negocio', detalle, campo ? [{ field: campo, message: detalle, rule: codigo }] : undefined)
 
 /** Producto con su existencia y valor totales (todas sus bodegas), como `GET /productos`. */
-function vistaProducto(p: Producto): Producto {
+export function vistaProducto(p: Producto): Producto {
     const propios = bd.movimientosInventario.filter(m => m.producto_id === p.id)
     const cantidad = propios.reduce((t, m) => t.plus(m.cantidad), new Decimal(0))
     const valor = propios.reduce((t, m) => t.plus(m.costo_total), new Decimal(0))
     return { ...p, existencia: cantidad3(cantidad), valor: monto2(valor) }
 }
 
-function productoDe(id: unknown): Producto | undefined {
+export function productoDe(id: unknown): Producto | undefined {
     return bd.productos.find(p => p.id === id)
 }
 
-function bodegaDe(id: unknown): Bodega | undefined {
+export function bodegaDe(id: unknown): Bodega | undefined {
     return bd.bodegas.find(b => b.id === id)
 }
 
@@ -44,12 +45,12 @@ function nombres(producto: Producto, bodega: Bodega) {
     return { producto, bodega: bodega.nombre }
 }
 
-function mover(producto: Producto, bodega: Bodega, datos: Omit<Parameters<typeof agregarMovimiento>[2], 'producto_id' | 'bodega_id' | 'fecha'> & { fecha?: string }): Movimiento {
+export function mover(producto: Producto, bodega: Bodega, datos: Omit<Parameters<typeof agregarMovimiento>[2], 'producto_id' | 'bodega_id' | 'fecha'> & { fecha?: string }): Movimiento {
     return agregarMovimiento(bd.movimientosInventario, nombres(producto, bodega), { ...datos, fecha: datos.fecha || hoy(), producto_id: producto.id, bodega_id: bodega.id }, ahora())
 }
 
 /** Producto y bodega de la petición, de la misma empresa (404 si no). */
-function productoYBodega(cuerpo: Record<string, unknown>, campoBodega = 'bodega_id'): { producto: Producto, bodega: Bodega } | RespuestaFixture {
+export function productoYBodega(cuerpo: Record<string, unknown>, campoBodega = 'bodega_id'): { producto: Producto, bodega: Bodega } | RespuestaFixture {
     const producto = productoDe(cuerpo.producto_id)
     const bodega = bodegaDe(cuerpo[campoBodega])
     if (!producto) {
@@ -58,13 +59,16 @@ function productoYBodega(cuerpo: Record<string, unknown>, campoBodega = 'bodega_
     if (!bodega || bodega.empresa_id !== producto.empresa_id) {
         return noEncontrado('la bodega')
     }
+    if (bodega.tipo === TIPO_BODEGA_TRANSITO) {
+        return regla('bodega_transito', 'La bodega de tránsito no se opera a mano: lo que viaja se recibe o se cancela en su orden', campoBodega)
+    }
     if (!bodega.activo || !producto.activo) {
         return regla('inactivo', 'El producto o la bodega están desactivados')
     }
     return { producto, bodega }
 }
 
-function esRespuesta<T extends object>(valor: T | RespuestaFixture): valor is RespuestaFixture {
+export function esRespuesta<T extends object>(valor: T | RespuestaFixture): valor is RespuestaFixture {
     return 'status' in valor && 'cuerpo' in valor
 }
 
@@ -113,7 +117,7 @@ export function normalizarMac(mac: string): string {
 }
 
 /** Unidad disponible (o en reparación, para bajas y traslados) en la bodega pedida. */
-function unidadEnBodega(id: unknown, producto: Producto, bodega: Bodega, enReparacion = false): Unidad | RespuestaFixture {
+export function unidadEnBodega(id: unknown, producto: Producto, bodega: Bodega, enReparacion = false): Unidad | RespuestaFixture {
     const unidad = bd.unidadesInventario.find(u => u.id === id && u.producto_id === producto.id)
     if (!unidad) {
         return noEncontrado('el equipo')
@@ -128,14 +132,14 @@ function unidadEnBodega(id: unknown, producto: Producto, bodega: Bodega, enRepar
     return unidad
 }
 
-function cantidadDe(valor: unknown, campo = 'cantidad', conSigno = false): Decimal | RespuestaFixture {
+export function cantidadDe(valor: unknown, campo = 'cantidad', conSigno = false): Decimal | RespuestaFixture {
     if (typeof valor !== 'string' || !(conSigno ? CANTIDAD_CON_SIGNO : CANTIDAD).test(valor) || new Decimal(valor).isZero()) {
         return datosInvalidos([{ field: campo, message: 'Cantidad mayor que 0, hasta 3 decimales', rule: 'regex' }])
     }
     return new Decimal(valor)
 }
 
-function fechaDe(valor: unknown): string | RespuestaFixture {
+export function fechaDe(valor: unknown): string | RespuestaFixture {
     if (valor === undefined || valor === null || valor === '') {
         return hoy()
     }
@@ -146,7 +150,7 @@ function fechaDe(valor: unknown): string | RespuestaFixture {
 }
 
 /** Salida por cantidad al promedio; 409 si no alcanza. */
-function salida(producto: Producto, bodega: Bodega, cantidad: Decimal, datos: Omit<Parameters<typeof mover>[2], 'cantidad' | 'costo_total'>): Movimiento | RespuestaFixture {
+export function salida(producto: Producto, bodega: Bodega, cantidad: Decimal, datos: Omit<Parameters<typeof mover>[2], 'cantidad' | 'costo_total'>): Movimiento | RespuestaFixture {
     const costo = costoSalida(bd.movimientosInventario, producto.id, bodega.id, cantidad)
     if (costo === null) {
         return conflicto('existencia_insuficiente', `No alcanza la existencia de ${producto.nombre} en ${bodega.nombre}`)
@@ -159,7 +163,7 @@ function equipoDe(unidad: Unidad): Schema<'EquipoServicio'> {
     return { ...unidad, valor_libros: unidad.activo_id ? unidad.costo : null, fecha_asignacion: asignado?.fecha ?? FECHAS_COMODATO[unidad.id] ?? null }
 }
 
-function actualizarUnidad(unidad: Unidad, cambios: Partial<Unidad>): Unidad {
+export function actualizarUnidad(unidad: Unidad, cambios: Partial<Unidad>): Unidad {
     Object.assign(unidad, cambios, { version: unidad.version + 1, updated_at: ahora() })
     return unidad
 }
@@ -242,6 +246,58 @@ function lineaConteo(conteo: Schema<'ConteoInventarioDetalle'>, producto: Produc
     }
 }
 
+/**
+ * Crea un producto como `CrearProducto` (A3) y lo guarda: el tipo sale del catálogo (422 `tipo`), el
+ * seguimiento y la modalidad toman los del tipo si faltan (422 `modalidad` si no son compatibles).
+ * `prefijo` antepone el índice del lote a los campos de error (`productos.3.`).
+ */
+export function crearProductoFixture(cuerpo: Record<string, unknown>, empresaId: number, prefijo: string): Producto | RespuestaFixture {
+    const errores = textoProducto(cuerpo, false).map(e => ({ ...e, field: `${prefijo}${e.field}` }))
+    const tipo = tipoDeProducto(cuerpo.tipo, empresaId)
+    if (!tipo) {
+        errores.push({ field: `${prefijo}tipo`, message: 'El tipo de producto no existe o está desactivado', rule: 'tipo' })
+    }
+    const seguimiento = cuerpo.seguimiento === 'serie' || cuerpo.seguimiento === 'cantidad' ? cuerpo.seguimiento : (tipo?.seguimiento_defecto ?? 'cantidad')
+    const modalidad = cuerpo.modalidad === 'comodato' || cuerpo.modalidad === 'consumible_gasto' || cuerpo.modalidad === 'consumible_cobro' ? cuerpo.modalidad : (tipo?.modalidad_defecto ?? 'consumible_gasto')
+    if ((modalidad === 'comodato' && seguimiento !== 'serie') || (modalidad === 'consumible_gasto' && seguimiento !== 'cantidad')) {
+        errores.push({ field: `${prefijo}modalidad`, message: modalidad === 'comodato' ? 'El comodato es solo para productos por serie' : 'El consumo como gasto es solo para productos por cantidad', rule: 'modalidad' })
+    }
+    if (errores.length || !tipo) {
+        return datosInvalidos(errores)
+    }
+    const sku = String(cuerpo.sku).trim()
+    if (bd.productos.some(p => p.empresa_id === empresaId && p.sku.toLowerCase() === sku.toLowerCase())) {
+        return conflicto('sku_duplicado', `${prefijo ? `${prefijo.slice(0, -1)}: ` : ''}La empresa ya tiene un producto con el SKU ${sku}`, 'SKU duplicado')
+    }
+    const momento = ahora()
+    const producto: Producto = {
+        id: Math.max(0, ...bd.productos.map(p => p.id)) + 1,
+        empresa_id: empresaId,
+        sku,
+        nombre: String(cuerpo.nombre).trim(),
+        unidad: typeof cuerpo.unidad === 'string' && cuerpo.unidad.trim() ? cuerpo.unidad.trim() : 'unidad',
+        tipo: codigoTipoProducto(tipo.codigo),
+        tipo_id: tipo.id,
+        tipo_nombre: tipo.nombre,
+        seguimiento,
+        modalidad,
+        clase_activo: seguimiento === 'serie' ? (typeof cuerpo.clase_activo === 'string' ? cuerpo.clase_activo : 'equipo_red') : null,
+        concepto_cargo_id: typeof cuerpo.concepto_cargo_id === 'number' ? cuerpo.concepto_cargo_id : null,
+        cuenta_costo: typeof cuerpo.cuenta_costo === 'string' ? cuerpo.cuenta_costo : null,
+        cuenta_consumo: typeof cuerpo.cuenta_consumo === 'string' ? cuerpo.cuenta_consumo : null,
+        existencia_minima: typeof cuerpo.existencia_minima === 'string' ? cantidad3(cuerpo.existencia_minima) : null,
+        precio_venta: typeof cuerpo.precio_venta === 'string' ? monto2(cuerpo.precio_venta) : null,
+        activo: true,
+        existencia: '0.000',
+        valor: '0.00',
+        version: 1,
+        created_at: momento,
+        updated_at: momento,
+    }
+    bd.productos.push(producto)
+    return producto
+}
+
 export const rutasInventario: RutasFixture = {
     /* Productos */
     'GET /api/v1/productos': conPermiso('inventario.ver', solicitud => ({ status: 200, cuerpo: paginar(filtrarProductos(solicitud), solicitud) })),
@@ -251,42 +307,14 @@ export const rutasInventario: RutasFixture = {
         return producto ? { status: 200, cuerpo: vistaProducto(producto) } : noEncontrado('el producto')
     }),
 
-    /** Como `CrearProducto` (A3): SKU único por empresa (409 `sku_duplicado`). */
+    /** Como `CrearProducto` (A3): SKU único por empresa (409 `sku_duplicado`); tipo del catálogo y modalidad (D.2, D.3). */
     'POST /api/v1/productos': conPermiso('productos.crear', conIdempotencia((solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
-        const errores = textoProducto(cuerpo, false)
-        if (errores.length) {
-            return datosInvalidos(errores)
-        }
         const empresaId = typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : (empresaActivaDe(solicitud) ?? 1)
-        const sku = String(cuerpo.sku).trim()
-        if (bd.productos.some(p => p.empresa_id === empresaId && p.sku.toLowerCase() === sku.toLowerCase())) {
-            return conflicto('sku_duplicado', `La empresa ya tiene un producto con el SKU ${sku}`, 'SKU duplicado')
+        const producto = crearProductoFixture(cuerpo, empresaId, '')
+        if (esRespuesta(producto)) {
+            return producto
         }
-        const seguimiento = cuerpo.seguimiento === 'serie' ? 'serie' : 'cantidad'
-        const momento = ahora()
-        const producto: Producto = {
-            id: Math.max(0, ...bd.productos.map(p => p.id)) + 1,
-            empresa_id: empresaId,
-            sku,
-            nombre: String(cuerpo.nombre).trim(),
-            unidad: typeof cuerpo.unidad === 'string' && cuerpo.unidad.trim() ? cuerpo.unidad.trim() : 'unidad',
-            tipo: cuerpo.tipo === 'equipo' || cuerpo.tipo === 'otro' ? cuerpo.tipo : 'material',
-            seguimiento,
-            clase_activo: seguimiento === 'serie' ? (typeof cuerpo.clase_activo === 'string' ? cuerpo.clase_activo : 'equipo_red') : null,
-            concepto_cargo_id: typeof cuerpo.concepto_cargo_id === 'number' ? cuerpo.concepto_cargo_id : null,
-            cuenta_costo: typeof cuerpo.cuenta_costo === 'string' ? cuerpo.cuenta_costo : null,
-            cuenta_consumo: typeof cuerpo.cuenta_consumo === 'string' ? cuerpo.cuenta_consumo : null,
-            existencia_minima: typeof cuerpo.existencia_minima === 'string' ? cantidad3(cuerpo.existencia_minima) : null,
-            precio_venta: typeof cuerpo.precio_venta === 'string' ? monto2(cuerpo.precio_venta) : null,
-            activo: true,
-            existencia: '0.000',
-            valor: '0.00',
-            version: 1,
-            created_at: momento,
-            updated_at: momento,
-        }
-        bd.productos.push(producto)
         registrarAccion(solicitud, 'productos.crear', { tipo: 'producto', id: producto.id }, cuerpo)
         return { status: 201, cuerpo: vistaProducto(producto) }
     })),
@@ -308,13 +336,23 @@ export const rutasInventario: RutasFixture = {
         if (typeof cuerpo.seguimiento === 'string' && cuerpo.seguimiento !== producto.seguimiento && bd.movimientosInventario.some(m => m.producto_id === producto.id)) {
             return conflicto('seguimiento_con_movimientos', 'El producto ya tiene movimientos: su seguimiento no cambia')
         }
+        const tipo = typeof cuerpo.tipo === 'string' ? tipoDeProducto(cuerpo.tipo, producto.empresa_id) : null
+        if (typeof cuerpo.tipo === 'string' && !tipo) {
+            return datosInvalidos([{ field: 'tipo', message: 'El tipo de producto no existe o está desactivado', rule: 'tipo' }])
+        }
+        const seguimientoNuevo = cuerpo.seguimiento === 'serie' || cuerpo.seguimiento === 'cantidad' ? cuerpo.seguimiento : producto.seguimiento
+        const modalidadNueva = cuerpo.modalidad === 'comodato' || cuerpo.modalidad === 'consumible_gasto' || cuerpo.modalidad === 'consumible_cobro' ? cuerpo.modalidad : producto.modalidad
+        if ((modalidadNueva === 'comodato' && seguimientoNuevo !== 'serie') || (modalidadNueva === 'consumible_gasto' && seguimientoNuevo !== 'cantidad')) {
+            return datosInvalidos([{ field: 'modalidad', message: modalidadNueva === 'comodato' ? 'El comodato es solo para productos por serie' : 'El consumo como gasto es solo para productos por cantidad', rule: 'modalidad' }])
+        }
         const texto = (campo: 'sku' | 'nombre' | 'unidad') => (typeof cuerpo[campo] === 'string' ? String(cuerpo[campo]).trim() : producto[campo])
         Object.assign(producto, {
             sku: texto('sku'),
             nombre: texto('nombre'),
             unidad: texto('unidad'),
-            tipo: cuerpo.tipo === 'equipo' || cuerpo.tipo === 'material' || cuerpo.tipo === 'otro' ? cuerpo.tipo : producto.tipo,
-            seguimiento: cuerpo.seguimiento === 'serie' || cuerpo.seguimiento === 'cantidad' ? cuerpo.seguimiento : producto.seguimiento,
+            ...(tipo ? { tipo: codigoTipoProducto(tipo.codigo), tipo_id: tipo.id, tipo_nombre: tipo.nombre } : {}),
+            seguimiento: seguimientoNuevo,
+            modalidad: modalidadNueva,
             clase_activo: 'clase_activo' in cuerpo ? (typeof cuerpo.clase_activo === 'string' ? cuerpo.clase_activo : null) : producto.clase_activo,
             cuenta_costo: 'cuenta_costo' in cuerpo ? (typeof cuerpo.cuenta_costo === 'string' ? cuerpo.cuenta_costo : null) : producto.cuenta_costo,
             cuenta_consumo: 'cuenta_consumo' in cuerpo ? (typeof cuerpo.cuenta_consumo === 'string' ? cuerpo.cuenta_consumo : null) : producto.cuenta_consumo,
@@ -350,7 +388,8 @@ export const rutasInventario: RutasFixture = {
         const activo = solicitud.query.get('activo')
         const usuario = numeroQuery(solicitud, 'usuario_id')
         const filas = deLaEmpresa(bd.bodegas, solicitud)
-            .filter(b => !tipo || b.tipo === tipo)
+            // Como la API (transición D.1): la bodega de tránsito solo sale con `?tipo=transito`.
+            .filter(b => (tipo ? b.tipo === tipo : b.tipo !== TIPO_BODEGA_TRANSITO))
             .filter(b => activo === null || String(b.activo) === activo)
             .filter(b => usuario === undefined || b.usuario_id === usuario)
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -445,11 +484,12 @@ export const rutasInventario: RutasFixture = {
         const productoId = numeroQuery(solicitud, 'producto_id')
         const bodegaId = numeroQuery(solicitud, 'bodega_id')
         const bajoMinimo = solicitud.query.get('bajo_minimo') === 'true'
+        const conTransito = solicitud.query.get('incluir_transito') === 'true' || bodegaId !== undefined
         const pares = new Map<string, { producto: Producto, bodega: Bodega }>()
         for (const m of deLaEmpresa(bd.movimientosInventario, solicitud)) {
             const producto = productoDe(m.producto_id)
             const bodega = bodegaDe(m.bodega_id)
-            if (producto && bodega) {
+            if (producto && bodega && (conTransito || bodega.tipo !== TIPO_BODEGA_TRANSITO)) {
                 pares.set(`${producto.id}/${bodega.id}`, { producto, bodega })
             }
         }
@@ -472,6 +512,7 @@ export const rutasInventario: RutasFixture = {
                 existencia_total: cantidad3(total),
                 existencia_minima: producto.existencia_minima,
                 bajo_minimo: producto.existencia_minima !== null && total.lessThan(producto.existencia_minima),
+                modalidad: producto.modalidad,
             }
         })
             .filter(f => productoId === undefined || f.producto_id === productoId)
@@ -541,32 +582,6 @@ export const rutasInventario: RutasFixture = {
         }
         const movimiento = mover(producto, bodega, { tipo: 'saldo_inicial', fecha, cantidad, costo_total: costo, motivo: typeof cuerpo.motivo === 'string' ? cuerpo.motivo : null })
         registrarAccion(solicitud, 'inventario.cargar_saldo_inicial', { tipo: 'movimiento_inventario', id: movimiento.id }, cuerpo)
-        return { status: 201, cuerpo: movimiento }
-    })),
-
-    /** Como `Consumir`: solo por cantidad (422 `requiere_unidades` con serie), al promedio. */
-    'POST /api/v1/inventario/consumos': conPermiso('inventario.consumir', conIdempotencia((solicitud) => {
-        const cuerpo = cuerpoObjeto(solicitud)
-        const par = productoYBodega(cuerpo)
-        if (esRespuesta(par)) {
-            return par
-        }
-        if (par.producto.seguimiento === 'serie') {
-            return datosInvalidos([{ field: 'cantidad', message: `El producto ${par.producto.sku} se lleva por serie: indica sus unidades`, rule: 'requiere_unidades' }])
-        }
-        const cantidad = cantidadDe(cuerpo.cantidad)
-        const fecha = fechaDe(cuerpo.fecha)
-        if (esRespuesta(cantidad)) {
-            return cantidad
-        }
-        if (typeof fecha !== 'string') {
-            return fecha
-        }
-        const movimiento = salida(par.producto, par.bodega, cantidad, { tipo: 'consumo', fecha, servicio_id: typeof cuerpo.servicio_id === 'number' ? cuerpo.servicio_id : null, motivo: typeof cuerpo.motivo === 'string' ? cuerpo.motivo : null })
-        if (esRespuesta(movimiento)) {
-            return movimiento
-        }
-        registrarAccion(solicitud, 'inventario.consumir', { tipo: 'movimiento_inventario', id: movimiento.id }, cuerpo)
         return { status: 201, cuerpo: movimiento }
     })),
 
