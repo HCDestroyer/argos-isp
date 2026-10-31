@@ -9,7 +9,7 @@ ArgosIsp como producto instalable (PLAN, "Distribución e instalación"): imáge
 | `docker-compose.nodo-portal.yml` | Compose de un nodo portal remoto: solo `portal` y `proxy` (`instalar.sh --rol portal`) |
 | `config/` | Init de Postgres sin base de pruebas, Caddyfile de producción (API, panel, portal por HTTPS y `/corte` por HTTP), `Caddyfile.nodo-portal` y `clients.conf` de FreeRADIUS sin el cliente del laboratorio |
 | `instalar.sh` | Instalador para Ubuntu/Debian |
-| `argosisp` | CLI del servidor: `estado`, `actualizar`, `revertir`, `respaldar`, `levantar`, `auto`, `radius-clientes`, `nodo-portal`, `logs`, `compose` |
+| `argosisp` | CLI del servidor: `estado`, `actualizar`, `revertir`, `respaldar`, `levantar`, `reparar-red` (`docs/runbooks/red-compose.md`), `auto`, `radius-clientes`, `nodo-portal`, `logs`, `compose` |
 | `systemd/` | Timer de parches automáticos (apagado por defecto) |
 | `empaquetar.sh` | Arma `argosisp-<v>.tar.gz` (reproducible) con todo lo anterior + `mods-enabled` y `sites-enabled` de `services/aaa/freeradius` |
 

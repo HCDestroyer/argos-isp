@@ -24,7 +24,7 @@ Qué hace, en orden, y qué pasa si falla cada paso:
 | --- | --- |
 | 1. Descarga y verifica (sha256) el paquete de la versión nueva y `docker compose config` con el `.env` actual | No cambia nada. Si el compose nuevo pide una variable que el `.env` no tiene, el error la nombra: agrégala y repite |
 | 2. Descarga las imágenes nuevas (`docker compose pull`), con todo arriba | No cambia nada |
-| 3. Detiene la aplicación (Postgres y Redis siguen) y hace un **respaldo** en `respaldos/actualizaciones/` (sin cifrar y sin copia remota: es para revertir en este servidor) | Vuelve a levantar la versión instalada y termina con error |
+| 3. Detiene la aplicación (Postgres y Redis siguen) y hace un **respaldo** en `respaldos/actualizaciones/` (sin cifrar y sin copia remota: es para revertir en este servidor). Si la red de compose ya no coincide con el `.env` (p. ej. `COMPOSE_SUBNET_V4` cambiado), antes la rehace con un down completo (`red-compose.md`) | Vuelve a levantar la versión instalada y termina con error |
 | 4. Cambia `ARGOSISP_VERSION` y `actual`, levanta: `migrate` corre las migraciones, después todo lo demás | ↓ |
 | 5. Espera a que cada servicio quede sano y que la API responda `/health` con la versión nueva | **Revierte solo**: detiene la versión nueva, vuelve a la anterior, **restaura el respaldo del paso 3** (base y comprobantes) y la levanta. Termina con error y el registro dice por qué falló |
 
@@ -65,7 +65,7 @@ Vuelve a la versión anterior a la **última** actualización y restaura el resp
 
 El comando termina con `NO SE PUDO RESTAURAR …` o `LA VERSIÓN … NO QUEDÓ SANA`. ArgosIsp queda en la versión anterior (`.env` y `actual`), con la aplicación detenida.
 
-1. `sudo argosisp logs migrate api backup` y el registro de `/opt/argosisp/registros/`.
+1. `sudo argosisp logs migrate api backup` y el registro de `/opt/argosisp/registros/`. Si el error habla de la red (`has active endpoints`, `network … not found`), `sudo argosisp reparar-red` y seguir con `red-compose.md`.
 2. Restaurar a mano el respaldo previo (nombre en el registro, o el más nuevo de `respaldos/actualizaciones/`):
    ```sh
    sudo argosisp compose run --rm backup restaurar.sh /backups/actualizaciones/argosisp-<marca>.dump \

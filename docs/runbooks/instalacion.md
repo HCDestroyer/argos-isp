@@ -123,6 +123,7 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 | --- | --- |
 | `sudo argosisp estado` | Versión instalada, última publicada, parches automáticos y estado de cada servicio |
 | `sudo argosisp levantar` | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`) |
+| `sudo argosisp reparar-red [--si]` | Baja todo el proyecto (los datos quedan), borra la red de compose y vuelve a levantar. Para `has active endpoints` o `network … not found`: `docs/runbooks/red-compose.md` |
 | `sudo argosisp logs [servicio]` | Registros en vivo |
 | `sudo argosisp admin-clave <correo> [--stdin]` | Clave nueva para ese usuario del panel (si no existe, lo crea con el rol `admin`) y la muestra **una sola vez**; con `--stdin` la toma de la entrada estándar (`echo 'clave' \| sudo argosisp admin-clave …`). Cierra sus sesiones y queda en la auditoría (actor sistema, canal consola, la clave como `***`) |
 | `sudo argosisp desinstalar [--borrar-datos] [--si]` | Baja todo el proyecto y quita el comando y el timer. Sin `--borrar-datos` conserva volúmenes y `/opt/argosisp` (se vuelve con `/opt/argosisp/actual/argosisp levantar`); con él borra todo, previa confirmación y respaldo final |

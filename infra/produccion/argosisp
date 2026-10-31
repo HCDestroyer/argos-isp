@@ -12,7 +12,10 @@
 #   argosisp revertir [--si]              vuelve a la versión anterior a la última actualización y
 #                                         restaura el respaldo que se tomó antes de ella
 #   argosisp respaldar                    respaldo ahora (el mismo del respaldo diario)
-#   argosisp levantar                     levanta la versión instalada y espera a que esté sana
+#   argosisp levantar                     levanta la versión instalada y espera a que esté sana (si la
+#                                         red de compose no coincide con el .env, la rehace antes)
+#   argosisp reparar-red [--si]           baja todo el proyecto (sin tocar volúmenes), borra la red de
+#                                         compose (y las duplicadas o huérfanas) y vuelve a levantar
 #   argosisp auto activar|desactivar|estado
 #                                         parches automáticos (timer de systemd, apagado por defecto)
 #   argosisp radius-clientes              regenera los clientes de FreeRADIUS desde network.routers
@@ -362,6 +365,135 @@ servicios_app() {
 }
 
 # ---------------------------------------------------------------------------
+# Red de compose (docs/runbooks/red-compose.md)
+# ---------------------------------------------------------------------------
+# Compose recrea la red del proyecto cuando su config ya no coincide con la del compose (p. ej.
+# COMPOSE_SUBNET_V4 cambiado en el .env), pero solo detiene los contenedores de los servicios del
+# comando. Con `up -d --wait postgres` o `run backup` y redis y backup arriba, borrar la red falla
+# («has active endpoints») y deja contenedores desconectados o con el id de una red que ya no existe
+# («network … not found», «is not connected to the network»). Por eso, antes de cualquier `up`
+# parcial o completo: si la red no coincide, down completo (todos los perfiles) y red nueva.
+ERRORES_RED='has active endpoints|network [^ ]+ not found|failed to set up container networking|is not connected to the network|has incorrect label|network with name [^ ]+ already exists|is ambiguous'
+
+# Config de la red default según el compose de <versión> y el .env: {name, v6, subredes[]}
+red_config() {
+    dc_v "$1" config --format json 2> /dev/null |
+        jq -c '.networks.default // empty | {name, v6: (.enable_ipv6 // false), subredes: [.ipam.config[]?.subnet // empty]}'
+}
+
+# IDs de las redes con ese nombre exacto (Docker viejo permitía duplicadas)
+ids_red() {
+    { docker network ls --no-trunc --format '{{.ID}} {{.Name}}' 2> /dev/null || true; } | awk -v n="$1" '$2 == n {print $1}'
+}
+
+# diagnostico_red <versión>: imprime por qué la red del proyecto no sirve; nada si está bien o si no
+# existe (compose la crea)
+diagnostico_red() {
+    local v="$1" config nombre actual id nid redes p
+    config="$(red_config "$v" || true)"
+    [ -n "$config" ] || return 0
+    nombre="$(jq -r .name <<< "$config")"
+    local -a ids
+    mapfile -t ids < <(ids_red "$nombre")
+    if [ "${#ids[@]}" -gt 1 ]; then
+        echo "hay ${#ids[@]} redes $nombre"
+        return 0
+    fi
+    if [ "${#ids[@]}" = 1 ]; then
+        actual="$(docker network inspect "${ids[0]}" 2> /dev/null |
+            jq -c '.[0] | {v6: (.EnableIPv6 // false), subredes: [.IPAM.Config[]?.Subnet // empty]}' || true)"
+        if [ -n "$actual" ]; then
+            # IPv4: la misma lista. IPv6: la del compose tiene que estar (Docker puede agregar otra).
+            # Sin IPv6, Docker no guarda la subred v6 del compose: no cuenta.
+            jq -rn --argjson e "$config" --argjson a "$actual" '
+                def v4: map(select(contains(":") | not)) | sort;
+                def v6: map(select(contains(":")) | ascii_downcase) | sort;
+                if $e.v6 != $a.v6 then "IPv6 \(if $a.v6 then "activo" else "apagado" end) y el compose lo pide \(if $e.v6 then "activo" else "apagado" end)"
+                elif ($e.subredes | v4) != [] and ($e.subredes | v4) != ($a.subredes | v4) then
+                    "subred \($a.subredes | v4 | join(",")) y el .env pide \($e.subredes | v4 | join(","))"
+                elif $e.v6 and (($e.subredes | v6) - ($a.subredes | v6)) != [] then
+                    "subred IPv6 \($a.subredes | v6 | join(",")) y el .env pide \($e.subredes | v6 | join(","))"
+                else empty end'
+        fi
+    fi
+    # Contenedores del proyecto que apuntan a una red que ya no existe (quedan así después de un
+    # recreado de red a medias y no vuelven a arrancar: «network … not found»)
+    p="$(proyecto)"
+    redes=" $(docker network ls -q --no-trunc 2> /dev/null | tr '\n' ' ') "
+    for id in $(docker ps -aq --filter "label=com.docker.compose.project=$p" 2> /dev/null); do
+        for nid in $(docker inspect -f '{{range .NetworkSettings.Networks}}{{.NetworkID}} {{end}}' "$id" 2> /dev/null); do
+            case "$redes" in
+                *" $nid "*) ;;
+                *) echo "hay contenedores de $p conectados a una red que ya no existe"; return 0 ;;
+            esac
+        done
+    done
+}
+
+# Borra las redes con ese nombre (o del proyecto) que no tienen contenedores conectados. Falla si
+# alguna sigue con contenedores (de fuera del proyecto: un proxy conectado a mano, p. ej.).
+limpiar_redes() {
+    local nombre="$1" p id n fallo=0
+    p="$(proyecto)"
+    for id in $( { ids_red "$nombre"; docker network ls -q --no-trunc --filter "label=com.docker.compose.project=$p" 2> /dev/null; } | sort -u); do
+        n="$(docker network inspect -f '{{len .Containers}}' "$id" 2> /dev/null)" || continue
+        if [ "$n" = 0 ]; then
+            if docker network rm "$id" > /dev/null 2>&1; then
+                log "red ${id:0:12} ($nombre) borrada"
+            else
+                log "no pude borrar la red ${id:0:12} ($nombre)"
+                fallo=1
+            fi
+        else
+            log "la red ${id:0:12} ($nombre) sigue con contenedores conectados: $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$id")"
+            log "desconéctalos (docker network disconnect $nombre <contenedor>) y corre argosisp reparar-red"
+            fallo=1
+        fi
+    done
+    return "$fallo"
+}
+
+# reparar_red <versión> <motivo>: down completo (todos los perfiles y huérfanos; los volúmenes y los
+# datos quedan) y red borrada. El `up` que sigue la crea con la config del .env.
+reparar_red() {
+    local v="$1" p nombre
+    p="$(proyecto)"
+    nombre="$(red_config "$v" | jq -r '.name // empty' || true)"
+    nombre="${nombre:-${p}_default}"
+    log "red de compose $nombre: $2. Bajo todo el proyecto (los datos quedan) y la creo de nuevo"
+    dc_v "$v" down --remove-orphans || log "aviso: docker compose down falló; sigo por etiqueta"
+    # Contenedores que down no vio (de otra versión del compose, de un `run` cortado)
+    local -a ids
+    mapfile -t ids < <(docker ps -aq --filter "label=com.docker.compose.project=$p")
+    [ "${#ids[@]}" = 0 ] || docker rm -f "${ids[@]}" > /dev/null
+    limpiar_redes "$nombre"
+}
+
+# asegurar_red <versión>: si la red no coincide con la config, la rehace (down completo)
+asegurar_red() {
+    local motivo
+    motivo="$(diagnostico_red "$1")"
+    [ -z "$motivo" ] || reparar_red "$1" "$motivo"
+}
+
+# dc_red <versión> <args de docker compose...>: como dc_v (salida a stderr), y si falla por la red,
+# la rehace y lo intenta una vez más. Para los `up` y `run` parciales del respaldo y la restauración.
+dc_red() {
+    local v="$1" salida rc=0
+    shift
+    salida="$(mktemp)"
+    # Con pipefail (arriba), el código del pipe es el de compose; tee termina antes del grep
+    if ! dc_v "$v" "$@" 2>&1 | tee "$salida" >&2; then rc=1; fi
+    if [ "$rc" != 0 ] && grep -qiE "$ERRORES_RED" "$salida"; then
+        reparar_red "$v" "docker compose $1 falló por la red" || { rm -f "$salida"; return 1; }
+        rc=0
+        dc_v "$v" "$@" >&2 || rc=$?
+    fi
+    rm -f "$salida"
+    return "$rc"
+}
+
+# ---------------------------------------------------------------------------
 # Versiones publicadas
 # ---------------------------------------------------------------------------
 ultima_version() {
@@ -433,15 +565,20 @@ inspeccionar() {
     docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}} {{.RestartCount}} {{.State.FinishedAt}} {{.State.StartedAt}}' "$@"
 }
 
-# esperar_sano <versión> <instante UTC en que empezó el `up`>
+# esperar_sano <versión> <instante UTC en que empezó el `up`> [archivo con el código del `up`]
 # Espera a que todos los servicios de <versión> estén sanos (o terminados con 0 los de una vez).
 # Falla en cuanto uno queda unhealthy, termina con error después del arranque o se reinicia 3 veces
-# (un contenedor detenido antes del `up`, o que compose detiene para recrearlo, es solo pendiente).
+# (un contenedor detenido antes del `up`, o que compose detiene para recrearlo, es solo pendiente),
+# o en cuanto el `up` termina con error (antes esperaba los ESPERA_S completos).
 esperar_sano() {
-    local v="$1" t0="$2" limite=$((SECONDS + ESPERA_S)) pendientes linea
+    local v="$1" t0="$2" rc_up="${3:-}" limite=$((SECONDS + ESPERA_S)) pendientes linea
     local -a ids
     while :; do
         pendientes=""
+        if [ -n "$rc_up" ] && [ -s "$rc_up" ] && [ "$(cat "$rc_up")" != 0 ]; then
+            log "docker compose up terminó con $(cat "$rc_up")"
+            return 1
+        fi
         mapfile -t ids < <(dc_v "$v" ps -a -q 2> /dev/null || true)
         [ "${#ids[@]}" -gt 0 ] || pendientes=" (sin contenedores todavía)"
         while read -r linea; do
@@ -522,34 +659,63 @@ verificar_version() {
 
 # `up -d` en segundo plano mientras se vigila la salud: compose espera indefinidamente a una
 # dependencia que se reinicia en bucle (service_healthy), y así la falla se ve en segundos.
-levantar_version() {
-    local v="$1" t0 pid salida
-    log "levantando $v"
+# levantar_intento <versión> <archivo para la salida del up>
+levantar_intento() {
+    local v="$1" salida="$2" t0 pid rc
     t0="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
-    salida="$(mktemp)"
+    rc="$salida.rc"
+    : > "$salida"
+    rm -f "$rc"
     entorno_compose
     # Apagado: compose no trata como huérfano el contenedor de un perfil inactivo; se quita aquí.
     if ! api_portal_activo; then
         docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" --profile api-portal \
             rm -sf api-portal < /dev/null > /dev/null 2>&1 || true
     fi
-    timeout "$ESPERA_S" docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
-        up -d --remove-orphans < /dev/null > "$salida" 2>&1 &
+    # El código del `up` queda en $rc para que esperar_sano corte en cuanto falle
+    (
+        c=0
+        timeout "$ESPERA_S" docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
+            up -d --remove-orphans < /dev/null > "$salida" 2>&1 || c=$?
+        echo "$c" > "$rc"
+    ) &
     pid=$!
-    if ! esperar_sano "$v" "$t0"; then
+    if ! esperar_sano "$v" "$t0" "$rc"; then
         kill "$pid" 2> /dev/null || true
         wait "$pid" 2> /dev/null || true
         sed 's/^/  | /' "$salida" >&2
-        rm -f "$salida"
+        rm -f "$rc"
         return 1
     fi
-    if ! wait "$pid"; then
+    wait "$pid" 2> /dev/null || true
+    if [ "$(cat "$rc" 2> /dev/null)" != 0 ]; then
         sed 's/^/  | /' "$salida" >&2
-        rm -f "$salida"
+        rm -f "$rc"
         log "docker compose up falló"
         return 1
     fi
+    rm -f "$rc"
+}
+
+# levantar_version <versión>: red de compose al día (asegurar_red), `up` y verificación. Si el `up`
+# falla por la red («network … not found», «has active endpoints»…), rehace la red y lo intenta una
+# vez más.
+levantar_version() {
+    local v="$1" salida ok=true
+    log "levantando $v"
+    asegurar_red "$v" || return 1
+    salida="$(mktemp)"
+    if ! levantar_intento "$v" "$salida"; then
+        ok=false
+        if grep -qiE "$ERRORES_RED" "$salida"; then
+            if reparar_red "$v" "docker compose up falló por la red"; then
+                log "levantando $v otra vez, con la red nueva"
+                levantar_intento "$v" "$salida" && ok=true
+            fi
+        fi
+    fi
     rm -f "$salida"
+    $ok || return 1
     verificar_version "$v"
 }
 
@@ -573,12 +739,15 @@ dir_respaldos() {
 # Respaldo previo a una actualización: en respaldos/actualizaciones, sin cifrar ni copiar al remoto
 # (es para revertir en este mismo servidor, que ya tiene la base en claro; el diario sigue igual).
 # Imprime el nombre del archivo.
+# Sin recrear nada: si la red no coincide, se rehace primero (con la app ya detenida); --no-recreate
+# deja postgres como está aunque su config haya cambiado (lo recrea el `up` de la versión nueva).
 respaldo_previo() {
     local v="$1" archivo f
     log "respaldo previo a la actualización"
-    dc_v "$v" up -d --wait postgres > /dev/null
-    dc_v "$v" run --rm -T -e BACKUP_DIR=/backups/actualizaciones -e BACKUP_AGE_RECIPIENTS= \
-        -e BACKUP_RCLONE_DESTINO= backup respaldar.sh >&2 || return 1
+    asegurar_red "$v" || return 1
+    dc_red "$v" up -d --no-recreate --wait postgres || return 1
+    dc_red "$v" run --rm -T -e BACKUP_DIR=/backups/actualizaciones -e BACKUP_AGE_RECIPIENTS= \
+        -e BACKUP_RCLONE_DESTINO= backup respaldar.sh || return 1
     # argosisp-<AAAAMMDDTHHMMSSZ>.dump: el último en orden alfabético es el más nuevo
     archivo=""
     for f in "$(dir_respaldos)"/actualizaciones/argosisp-*.dump; do
@@ -591,8 +760,9 @@ respaldo_previo() {
 restaurar_respaldo() {
     local v="$1" archivo="$2"
     log "restaurando el respaldo $archivo con la imagen de $v"
-    dc_v "$v" up -d --wait postgres redis > /dev/null
-    dc_v "$v" run --rm -T backup restaurar.sh "/backups/$archivo" --base argosisp --reemplazar \
+    asegurar_red "$v" || return 1
+    dc_red "$v" up -d --no-recreate --wait postgres redis || return 1
+    dc_red "$v" run --rm -T backup restaurar.sh "/backups/$archivo" --base argosisp --reemplazar \
         --comprobantes-dir /comprobantes
 }
 
@@ -645,6 +815,11 @@ cmd_estado() {
     if ! es_nodo_portal; then
         estado_wireguard
     fi
+    local red
+    red="$(diagnostico_red "$v" 2> /dev/null || true)"
+    if [ -n "$red" ]; then
+        echo "AVISO: la red de compose no coincide con el .env ($red): argosisp levantar la rehace (o argosisp reparar-red)"
+    fi
     local avisos
     avisos="$(avisos_puertos)"
     if [ -n "$avisos" ]; then
@@ -662,6 +837,32 @@ cmd_levantar() {
     fijar_api_portal
     levantar_version "$(version_instalada)" || morir "la versión $(version_instalada) no quedó sana (argosisp logs)"
     log "ArgosIsp $(version_instalada) arriba y sano"
+}
+
+cmd_reparar_red() {
+    local si=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --si) si=true; shift ;;
+            -h | --help) uso 0 ;;
+            *) morir "opción desconocida: $1" ;;
+        esac
+    done
+    requiere_instalacion
+    bloquear
+    registrar reparar-red
+    fijar_api_portal
+    local v motivo
+    v="$(version_instalada)"
+    motivo="$(diagnostico_red "$v")"
+    log "red de compose: ${motivo:-coincide con el .env}"
+    if ! $si && hay_terminal; then
+        confirmar "ArgosIsp se baja por completo (los datos quedan) y vuelve a levantar. ¿Seguir? [s/N]" ||
+            morir "cancelado (sin preguntar: --si)"
+    fi
+    reparar_red "$v" "${motivo:-argosisp reparar-red}" || morir "no pude dejar la red limpia (arriba dice por qué)"
+    levantar_version "$v" || morir "la versión $v no quedó sana después de rehacer la red (argosisp logs)"
+    log "ArgosIsp $v arriba y sano, con la red de compose nueva"
 }
 
 cmd_respaldar() {
@@ -741,8 +942,9 @@ cmd_actualizar() {
         respaldo=-
     elif ! respaldo="$(respaldo_previo "$instalada")"; then
         log "el respaldo falló: no se actualiza; vuelvo a levantar $instalada"
-        levantar_version "$instalada" || true
-        morir "actualización cancelada: no se pudo respaldar"
+        levantar_version "$instalada" ||
+            morir "actualización cancelada: no se pudo respaldar y $instalada NO QUEDÓ ARRIBA. Prueba argosisp reparar-red; runbook: docs/runbooks/red-compose.md"
+        morir "actualización cancelada: no se pudo respaldar ($instalada sigue arriba)"
     fi
     log "respaldo: $respaldo"
     printf 'anterior=%s\nversion=%s\nrespaldo=%s\nfecha=%s\n' "$instalada" "$objetivo" "$respaldo" \
@@ -774,7 +976,7 @@ revertir_a() {
     detener_app "$mala"
     cambiar_a "$buena"
     [ "$respaldo" = - ] || restaurar_respaldo "$buena" "$respaldo" || morir "NO SE PUDO RESTAURAR $respaldo. ArgosIsp está detenido en $buena; runbook: docs/runbooks/actualizacion.md"
-    levantar_version "$buena" || morir "LA VERSIÓN $buena NO QUEDÓ SANA después de restaurar. Runbook: docs/runbooks/actualizacion.md"
+    levantar_version "$buena" || morir "LA VERSIÓN $buena NO QUEDÓ SANA después de restaurar. Prueba argosisp reparar-red; runbooks: docs/runbooks/actualizacion.md y red-compose.md"
     log "ArgosIsp de vuelta en $buena"
 }
 
@@ -1009,6 +1211,7 @@ principal() {
         revertir) cmd_revertir "$@" ;;
         respaldar) cmd_respaldar ;;
         levantar) cmd_levantar ;;
+        reparar-red) cmd_reparar_red "$@" ;;
         auto) cmd_auto "$@" ;;
         radius-clientes) cmd_radius_clientes ;;
         admin-clave) cmd_admin_clave "$@" ;;
