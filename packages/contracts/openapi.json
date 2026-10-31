@@ -29272,7 +29272,7 @@
       "post": {
         "operationId": "inventarioConsumir",
         "summary": "Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)",
-        "description": "servicio_id opcional (misma empresa). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
+        "description": "Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
         "tags": [
           "inventario"
         ],
@@ -29305,8 +29305,12 @@
                 "type": "object",
                 "properties": {
                   "producto_id": {
-                    "type": "integer",
-                    "minimum": 1
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Una línea (o lineas[])"
                   },
                   "cantidad": {
                     "type": [
@@ -29354,194 +29358,11 @@
                     "minimum": 1,
                     "description": "consumible_cobro: concepto del cargo único (por defecto el concepto_cargo_id del producto)"
                   },
-                  "bodega_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Bodega de salida; sin ella, con `tecnico`, la del técnico de la orden"
-                  },
-                  "tecnico": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "id_externo": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 30,
-                        "description": "Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)"
-                      },
-                      "correo": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "maxLength": 254,
-                        "description": "Correo del usuario de Argos del técnico (sin distinguir mayúsculas)"
-                      }
-                    },
-                    "required": [],
-                    "additionalProperties": false
-                  },
-                  "servicio_id": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "minimum": 1,
-                    "description": "Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato"
-                  },
-                  "motivo": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500
-                  },
-                  "fecha": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date",
-                    "description": "Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy"
-                  },
-                  "origen_tipo": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "iris_orden"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
-                  },
-                  "origen_id": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "minLength": 1,
-                    "maxLength": 100,
-                    "pattern": "^[A-Za-z0-9._:-]+$",
-                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
-                    "examples": [
-                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
-                    ]
-                  }
-                },
-                "required": [
-                  "producto_id"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Movimiento",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MovimientoInventario"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No autenticado",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Sin el permiso inventario.consumir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Petición idempotente en curso",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Datos inválidos",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "x-permiso": "inventario.consumir",
-        "x-implementado": true
-      }
-    },
-    "/api/v1/inventario/consumos/lote": {
-      "post": {
-        "operationId": "inventarioConsumirLote",
-        "summary": "Consumo de varias líneas a un servicio según la modalidad de cada producto (todo o nada)",
-        "description": "Fase D: lo instalado en una orden. Cada línea aplica la modalidad de su producto: consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un solo cargo único al cliente del servicio con la venta del kardex 5.6.01 / 1.1.14; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido) o comodato (unidad_id o serie: inventario.asignar_comodato). Sin bodega_id, con tecnico (solo un usuario con alcance global, p. ej. Iris), la bodega del técnico (422 tecnico_no_encontrado, tecnico_sin_bodega). Errores lineas.N.*.",
-        "tags": [
-          "inventario"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "panel": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
                   "lineas": {
-                    "type": "array",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
                     "items": {
                       "type": "object",
                       "properties": {
@@ -29603,7 +29424,8 @@
                       "additionalProperties": false
                     },
                     "minItems": 1,
-                    "maxItems": 200
+                    "maxItems": 200,
+                    "description": "Varias líneas, todo o nada (contrato Iris 0.5.0 §3.3); en lugar de producto_id"
                   },
                   "bodega_id": {
                     "type": [
@@ -29691,9 +29513,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "lineas"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -29705,7 +29525,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConsumoInventarioLote"
+                  "$ref": "#/components/schemas/ConsumoInventario"
                 }
               }
             }
@@ -30874,7 +30694,7 @@
       "get": {
         "operationId": "inventarioMiBodega",
         "summary": "La bodega del técnico: existencias, unidades, traslados por recibir y kardex",
-        "description": "Fase D: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). 404 sin_bodega; 422 tecnico_no_encontrado.",
+        "description": "Fase D y contrato Iris 0.5.0 §3.3: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). Empresa: empresa_id o X-Empresa-Id; sin ninguna y con bodegas en varias empresas responde { bodegas }. Existencias, unidades y traslados pendientes completos; kardex con los últimos 50. 404 tecnico_sin_bodega; 422 tecnico_no_encontrado, tecnico_ambiguo.",
         "tags": [
           "inventario"
         ],
@@ -30897,6 +30717,16 @@
               "enum": [
                 "todas"
               ]
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa (X-Empresa-Id)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           {
@@ -31347,6 +31177,121 @@
           }
         },
         "x-permiso": "inventario.cargar_saldo_inicial",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/tecnicos": {
+      "get": {
+        "operationId": "inventarioTecnicos",
+        "summary": "Técnicos con bodega (para vincularlos desde Iris: id_externo, correo y sus bodegas)",
+        "description": "Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de técnicos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TecnicoInventario"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
         "x-implementado": true
       }
     },
@@ -32771,7 +32716,7 @@
       "post": {
         "operationId": "inventarioRecibirTraslado",
         "summary": "Recibir una orden de traslado (firma digital, firma en papel o aceptación), con faltantes",
-        "description": "Solo en_transito (409 orden_no_en_transito). Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }, p. ej. desde Iris); una bodega, quien pueda operarla. Métodos: firma_digital (firma PNG en base64, o el archivo `firma` en multipart/form-data con `lineas` como texto JSON; hasta 256 KB, 50 a 4000 px), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige: 422 firma required). Faltantes por línea (cantidad_recibida) o por serie (unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias. Emite inventario.traslado_recibido.",
+        "description": "Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, o el archivo `firma` en multipart/form-data con `lineas` como texto JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.",
         "tags": [
           "inventario"
         ],
@@ -32870,11 +32815,35 @@
                   },
                   "firma": {
                     "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "png_base64": {
+                        "type": "string",
+                        "maxLength": 300000,
+                        "description": "PNG del trazo en base64 (con o sin data:image/png;base64,)"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "description": "SHA-256 del PNG decodificado"
+                      }
+                    },
+                    "required": [
+                      "png_base64",
+                      "sha256"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). En multipart/form-data (panel) va como archivo `firma`, y `lineas` y `recibido_por` como texto JSON"
+                  },
+                  "recibido_en": {
+                    "type": [
                       "string",
                       "null"
                     ],
-                    "maxLength": 400000,
-                    "description": "PNG del trazo en base64 (con o sin data:image/png;base64,), hasta 256 KB y de 50 a 4000 px por lado. En multipart/form-data va como archivo `firma` y `lineas` como texto JSON"
+                    "maxLength": 40,
+                    "description": "RFC 3339, hora del teléfono: no anterior al envío ni futura (5 min de tolerancia). Por defecto ahora"
                   },
                   "lineas": {
                     "type": [
@@ -32896,6 +32865,19 @@
                           "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
                           "description": "Por cantidad: lo recibido (0 a lo enviado); por defecto todo"
                         },
+                        "series_faltantes": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "maxItems": 500,
+                          "description": "Por serie: las series o MAC que no llegaron (contrato Iris 0.5.0)"
+                        },
                         "unidad_ids_faltantes": {
                           "type": [
                             "array",
@@ -32906,7 +32888,7 @@
                             "minimum": 1
                           },
                           "maxItems": 500,
-                          "description": "Por serie: las unidades que no llegaron"
+                          "description": "Por serie (panel): las unidades que no llegaron"
                         }
                       },
                       "required": [
@@ -71188,8 +71170,39 @@
                 "type": "object",
                 "properties": {
                   "bodega_id": {
-                    "type": "integer",
-                    "minimum": 1
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "La bodega que recibe (o tecnico)"
+                  },
+                  "tecnico": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id_externo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30,
+                        "description": "Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)"
+                      },
+                      "correo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 254,
+                        "description": "Correo del usuario de Argos del técnico (sin distinguir mayúsculas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Contrato Iris 0.5.0: a la bodega activa del técnico en la empresa del servicio"
                   },
                   "condicion": {
                     "anyOf": [
@@ -71259,9 +71272,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "bodega_id"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -84377,25 +84388,206 @@
           }
         }
       },
-      "ConsumoInventarioLote": {
+      "ConsumoInventario": {
         "type": "object",
         "required": [
+          "id",
           "empresa_id",
-          "movimientos",
-          "factura_id",
-          "comodatos"
+          "tipo",
+          "fecha",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "bodega_id",
+          "bodega_nombre",
+          "cantidad",
+          "costo_unitario",
+          "costo_total",
+          "unidad_id",
+          "servicio_id",
+          "asiento_id",
+          "origen_tipo",
+          "origen_id",
+          "traslado_id",
+          "reverso_de",
+          "causa",
+          "motivo",
+          "actor_tipo",
+          "actor_id",
+          "created_at",
+          "saldo_cantidad",
+          "saldo_valor"
         ],
         "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
           "empresa_id": {
             "type": "integer",
             "minimum": 1
           },
-          "movimientos": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MovimientoInventario"
-            },
-            "description": "Un movimiento por línea: consumo, venta o asignación en comodato"
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "entrada_compra",
+              "reverso_compra",
+              "devolucion_proveedor",
+              "venta",
+              "reverso_venta",
+              "consumo",
+              "traslado",
+              "asignacion_comodato",
+              "devolucion_comodato",
+              "ajuste_conteo",
+              "ajuste",
+              "baja",
+              "saldo_inicial",
+              "premio",
+              "reverso_premio"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Con signo: + entra, − sale"
+          },
+          "costo_unitario": {
+            "type": "string",
+            "description": "Costo unitario con 6 decimales"
+          },
+          "costo_total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Monto con signo (+ entra, − sale)"
+          },
+          "unidad_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento del movimiento (o el de su compra); null sin efecto contable"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Origen interno: compra, factura, conteo, nota_credito…"
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen_externo_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris_orden"
+            ],
+            "description": "Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris"
+          },
+          "origen_externo_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él)"
+          },
+          "traslado_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "reverso_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "causa": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "danado",
+              "robado",
+              "obsoleto",
+              "otro"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor_tipo": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "saldo_cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Saldo corrido después del movimiento"
+          },
+          "saldo_valor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor corrido después del movimiento"
           },
           "factura_id": {
             "type": [
@@ -84403,14 +84595,39 @@
               "null"
             ],
             "minimum": 1,
-            "description": "La factura del cargo único de los cobros; null si no hubo"
+            "description": "Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)"
           },
-          "comodatos": {
+          "movimientos": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UnidadInventario"
+              "$ref": "#/components/schemas/MovimientoInventario"
             },
-            "description": "Las unidades prestadas en comodato"
+            "description": "Un movimiento por línea (consumo o venta), en el orden de las líneas"
+          },
+          "cargos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "producto_id",
+                "monto"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producto_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            },
+            "description": "Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único)"
           }
         }
       },
@@ -90456,6 +90673,15 @@
           },
           "bajo_minimo": {
             "type": "boolean"
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "comodato",
+              "consumible_gasto",
+              "consumible_cobro"
+            ],
+            "description": "Modalidad del producto (fase D, contrato Iris 0.5.0); opcional en el esquema hasta que el panel la adopte"
           }
         }
       },
@@ -94032,13 +94258,7 @@
       },
       "MiBodegaInventario": {
         "type": "object",
-        "required": [
-          "bodega",
-          "existencias",
-          "unidades",
-          "traslados_pendientes",
-          "kardex"
-        ],
+        "required": [],
         "properties": {
           "bodega": {
             "$ref": "#/components/schemas/Bodega"
@@ -94047,43 +94267,36 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ExistenciaInventario"
-            }
+            },
+            "description": "Completas"
           },
           "unidades": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UnidadInventario"
             },
-            "description": "Unidades en la bodega (disponibles o en reparación)"
+            "description": "Unidades en la bodega (disponibles o en reparación), completas"
           },
           "traslados_pendientes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OrdenTraslado"
             },
-            "description": "Órdenes en tránsito hacia la bodega"
+            "description": "Órdenes en tránsito hacia la bodega, completas"
           },
           "kardex": {
-            "type": "object",
-            "required": [
-              "data",
-              "nextCursor"
-            ],
-            "properties": {
-              "data": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/MovimientoInventario"
-                }
-              },
-              "nextCursor": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoInventario"
             },
-            "description": "Primera página; el resto con GET /inventario/movimientos?bodega_id="
+            "description": "Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id="
+          },
+          "bodegas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Bodega"
+            },
+            "description": "Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)"
           }
         }
       },
@@ -96473,6 +96686,7 @@
                 "producto_nombre",
                 "unidad",
                 "seguimiento",
+                "modalidad",
                 "cantidad",
                 "costo_total",
                 "cantidad_recibida",
@@ -96503,6 +96717,14 @@
                   "enum": [
                     "cantidad",
                     "serie"
+                  ]
+                },
+                "modalidad": {
+                  "type": "string",
+                  "enum": [
+                    "comodato",
+                    "consumible_gasto",
+                    "consumible_cobro"
                   ]
                 },
                 "cantidad": {
@@ -108991,12 +109213,8 @@
               "cobros.liquidar",
               "compras.anular",
               "compras.cargar_borrador",
-              "compras.cargar_borrador",
-              "compras.confirmar_borrador",
               "compras.confirmar_borrador",
               "compras.descartar_borrador",
-              "compras.descartar_borrador",
-              "compras.editar_borrador",
               "compras.editar_borrador",
               "compras.pagar",
               "compras.registrar",
@@ -111608,6 +111826,51 @@
                       "$ref": "#/components/schemas/BloqueDepreciacion"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TecnicoInventario": {
+        "type": "object",
+        "required": [
+          "id_externo",
+          "correo",
+          "nombre",
+          "bodegas"
+        ],
+        "properties": {
+          "id_externo": {
+            "type": "string",
+            "description": "Id del usuario de Argos (lo que Iris manda en tecnico.id_externo)"
+          },
+          "correo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "bodegas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "empresa_id",
+                "activa"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "activa": {
+                  "type": "boolean"
                 }
               }
             }

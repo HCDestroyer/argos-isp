@@ -14,13 +14,20 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
-import { NoEncontrado, Prohibido, ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, Problema, Prohibido, ValidacionFallida } from '#shared/errores'
 import { exigirAcceso } from '#billing/empresa'
 import { filaEmpresa } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
 import * as v from '#inventario/validators'
-import { ConfiguracionInventario, MiBodega, OrdenTraslado, OrdenTrasladoDetalle } from '#inventario/esquemas'
+import {
+    ConfiguracionInventario,
+    MiBodega,
+    OrdenTraslado,
+    OrdenTrasladoDetalle,
+    Tecnico,
+} from '#inventario/esquemas'
 import { miBodega } from '#inventario/mi_bodega'
+import { listarTecnicos } from '#inventario/tecnicos'
 import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { alcanceGlobal, puedeOperarBodega, verBodega } from '#inventario/bodegas'
 import {
@@ -121,7 +128,7 @@ const rutas: Ruta[] = [
         permiso: 'inventario.ver',
         query: v.miBodegaValidator,
         descripcion:
-            'Fase D: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). 404 sin_bodega; 422 tecnico_no_encontrado.',
+            'Fase D y contrato Iris 0.5.0 §3.3: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). Empresa: empresa_id o X-Empresa-Id; sin ninguna y con bodegas en varias empresas responde { bodegas }. Existencias, unidades y traslados pendientes completos; kardex con los últimos 50. 404 tecnico_sin_bodega; 422 tecnico_no_encontrado, tecnico_ambiguo.',
         respuesta: { status: 200, descripcion: 'Bodega del técnico', esquema: MiBodega },
         handler: async (ctx, { query }) => {
             const usuario = ctx.auth.user
@@ -129,13 +136,28 @@ const rutas: Ruta[] = [
             if ((query.usuario_id || query.id_externo || query.correo) && !alcanceGlobal(ctx.alcance)) {
                 throw new Prohibido('Solo un usuario con alcance global ve la bodega de otro técnico')
             }
+            if (query.empresa_id) exigirAcceso(ctx, { empresa_id: query.empresa_id })
             return miBodega(
                 query,
                 usuario.id,
+                ctx.empresa?.activa ?? null,
                 empresasDeLaLista(ctx.empresa, query.empresas),
                 accesoBodegas(ctx),
             )
         },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/tecnicos',
+        operacion: 'inventarioTecnicos',
+        resumen: 'Técnicos con bodega (para vincularlos desde Iris: id_externo, correo y sus bodegas)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.tecnicosValidator,
+        descripcion:
+            'Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa).',
+        respuesta: { status: 200, descripcion: 'Página de técnicos', esquema: pagina(Tecnico) },
+        handler: (ctx, { query }) => listarTecnicos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'post',
@@ -194,7 +216,7 @@ const rutas: Ruta[] = [
         idempotente: true,
         antes: camposJsonDelMultipart,
         descripcion:
-            'Solo en_transito (409 orden_no_en_transito). Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }, p. ej. desde Iris); una bodega, quien pueda operarla. Métodos: firma_digital (firma PNG en base64, o el archivo `firma` en multipart/form-data con `lineas` como texto JSON; hasta 256 KB, 50 a 4000 px), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige: 422 firma required). Faltantes por línea (cantidad_recibida) o por serie (unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias. Emite inventario.traslado_recibido.',
+            'Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, o el archivo `firma` en multipart/form-data con `lineas` como texto JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.',
         respuesta: { status: 200, descripcion: 'Orden de traslado', esquema: OrdenTrasladoDetalle },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
@@ -213,12 +235,27 @@ const rutas: Ruta[] = [
                     },
                 ])
             }
-            const firma = archivo ?? (cuerpo.firma ? firmaDesdeBase64(cuerpo.firma) : null)
+            let firma = archivo
+            if (!firma && cuerpo.firma) {
+                try {
+                    firma = firmaDesdeBase64(cuerpo.firma.png_base64, 'firma.png_base64')
+                } catch (error) {
+                    if (!(error instanceof ValidacionFallida)) throw error
+                    throw new Problema(
+                        422,
+                        'firma_invalida',
+                        'Firma inválida',
+                        'La firma no es base64',
+                        error.errores,
+                    )
+                }
+            }
             return new RecibirTraslado().execute(
                 {
                     ...cuerpo,
                     id,
                     firma,
+                    firma_sha256: cuerpo.firma?.sha256 ?? null,
                     firma_ip: ctx.request.ip(),
                     registro_global: alcanceGlobal(ctx.alcance),
                 },

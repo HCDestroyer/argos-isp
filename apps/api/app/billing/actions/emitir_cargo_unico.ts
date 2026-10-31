@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { Conflicto, ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { CERO, dec, redondear, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
@@ -85,6 +85,11 @@ export interface EntradaEmitirCargoUnico {
     /** orden de Iris (`iris_orden`); con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
+    /**
+     * interno (no viene de la API): el cargo lo emite un consumo `consumible_cobro` (inventario fase D).
+     * Queda en `reglas_snapshot.cobro_por_modalidad`.
+     */
+    por_modalidad?: boolean
 }
 
 interface ConceptoFila {
@@ -266,6 +271,28 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
             })
         })
         if (errores.length > 0) throw new ValidacionFallida(errores)
+        // contrato Iris 0.5.0 §3.3: lo que un consumo de esa orden ya cobró por modalidad no se cobra otra vez
+        const productosCobrados = input.lineas
+            .map((l) => l.producto_id)
+            .filter((p): p is number => Boolean(p))
+        if (!input.por_modalidad && origenExterno && productosCobrados.length > 0) {
+            const ya = await t.trx
+                .from('billing.facturas as f')
+                .join('billing.facturas_lineas as l', 'l.factura_id', 'f.id')
+                .where({ 'f.empresa_id': empresaId, 'f.origen_externo_id': origenExterno.id })
+                .whereNot('f.estado', 'anulada')
+                .whereRaw(`f.reglas_snapshot->>'cobro_por_modalidad' = 'true'`)
+                .whereIn('l.producto_id', productosCobrados)
+                .select('f.id', 'l.producto_id')
+                .first()
+            if (ya) {
+                throw new Conflicto(
+                    `El producto ${ya.producto_id} de la orden ${origenExterno.id} ya se cobró con su consumo (factura ${ya.id})`,
+                    'cargo_duplicado',
+                    'Cargo duplicado',
+                )
+            }
+        }
         // inventario (fase C): valida y costea lo que se vende, con el lock de cada producto
         const ventas = await prepararVentas(
             t,
@@ -392,6 +419,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 ...MORA_NINGUNA,
                 certificar_al: certificarAl,
                 cargo_unico: true,
+                ...(input.por_modalidad ? { cobro_por_modalidad: true } : {}),
             },
             certificar_al: certificarAl,
             descripcion: `cargo único ${servicio ? `servicio ${servicio.id}` : `cliente ${clienteId}`}`,

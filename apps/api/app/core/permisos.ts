@@ -594,10 +594,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'tipos_producto.editar',
             'tipos_producto.desactivar',
             'productos.crear_lote',
-            'compras.cargar_borrador',
-            'compras.editar_borrador',
-            'compras.confirmar_borrador',
-            'compras.descartar_borrador',
+            // compras.cargar_borrador, .editar_borrador, .confirmar_borrador y .descartar_borrador llegan
+            // con PERMISOS_FISCALES_CONTABILIDAD (todo compras.*)
             ...PERMISOS_FISCALES_CONTABILIDAD,
             ...PERMISOS_LEALTAD_CONTABILIDAD,
         ],

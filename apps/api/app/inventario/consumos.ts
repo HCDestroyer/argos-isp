@@ -1,6 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ValidacionFallida, type ErrorCampo } from '#shared/errores'
-import { dec } from '#ledger/dinero'
+import { NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { dec, redondear } from '#ledger/dinero'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTA_CONSUMO_POR_DEFECTO } from '#inventario/productos'
 import {
@@ -18,23 +18,27 @@ import {
 } from '#inventario/kardex'
 import { unidadParaComodato } from '#inventario/comodato'
 import type { OrigenExterno, OrigenExternoTipo } from '#inventario/origen_externo'
-import type { UnidadVista } from '#inventario/unidades'
-import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
+import {
+    bodegaDelTecnico,
+    empresaDelTecnico,
+    resolverTecnico,
+    type TecnicoExterno,
+} from '#inventario/tecnicos'
 import type { Modalidad } from '#inventario/tipos_producto'
-import AsignarComodato from '#inventario/actions/asignar_comodato'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 
 /**
  * Consumo a un servicio según la modalidad de cada producto (fase D, `contratos/inventario.md` D.3 y
- * D.6). Lo usan `inventario.consumir` (una línea, `POST /inventario/consumos`) y su lote
- * (`POST /inventario/consumos/lote`):
+ * D.6; contrato Iris 0.5.0 §3.3). Lo usa `inventario.consumir` (`POST /inventario/consumos`, una
+ * línea o `lineas[]`, todo o nada):
  *
  * - `consumible_gasto`: el consumo de siempre (`cuenta_consumo` / 1.1.14), con fecha pasada opcional.
  * - `consumible_cobro`: un **cargo único inmediato** al cliente del servicio por
  *   `facturas.emitir_cargo_unico` (una factura por petición, una línea por producto cobrado): venta del
  *   kardex con `5.6.01 / 1.1.14` al costo y la factura `CxC / ingreso + IVA`. Precio: el de la línea o el
  *   `precio_venta` del producto; concepto: el de la línea o el `concepto_cargo_id` del producto.
- * - `comodato`: `inventario.asignar_comodato` de la unidad (`unidad_id` o `serie`) desde la bodega.
+ * - `comodato`: 422 `producto_es_comodato` (contrato Iris 0.5.0 §3.3): los equipos van por
+ *   `POST /servicios/:id/equipos`. Un cobro sin servicio: 422 `cobro_sin_cliente`.
  *
  * La bodega: `bodega_id` o, con `tecnico` (orden de Iris), la del técnico. Todo o nada.
  */
@@ -58,12 +62,24 @@ export interface DatosConsumo {
     origen_id?: string | null
 }
 
+export interface CargoConsumo {
+    /** la factura del cargo único */
+    id: number
+    producto_id: number
+    /** precio × cantidad, IVA incluido */
+    monto: string
+}
+
 export interface ResultadoConsumos {
     empresaId: number
     /** un movimiento por línea, en el orden de las líneas */
     movimientos: number[]
     facturaId: number | null
-    comodatos: UnidadVista[]
+    cargos: CargoConsumo[]
+}
+
+function problema(status: number, codigo: string, titulo: string, campo: string, message: string): Problema {
+    return new Problema(status, codigo, titulo, message, [{ field: campo, message, rule: codigo }])
 }
 
 function error(campo: string, message: string, rule: string): ValidacionFallida {
@@ -101,6 +117,11 @@ async function empresaDelConsumo(
         if (!bodega) throw new NoEncontrado(`La bodega ${datos.bodega_id} no existe`)
         return Number(bodega.empresa_id)
     }
+    if (datos.tecnico) {
+        const usuarioId = await resolverTecnico(t, datos.tecnico)
+        return empresaDelTecnico(t.trx, usuarioId, t.ctx.empresaId, t.ctx.empresasPermitidas ?? null)
+    }
+    if (t.ctx.empresaId) return t.ctx.empresaId
     const primero = lineas.find((l) => l.producto_id)
     if (primero) {
         const producto = await productoMovible(t, primero.producto_id!)
@@ -150,12 +171,13 @@ export async function aplicarConsumos(
         let unidadId: number | null = null
         if (conUnidad) {
             if (!datos.servicio_id) {
-                errores.push({
-                    field: campoLinea(i, 'unidad_id'),
-                    message: 'Un equipo por serie se consume en un servicio: indica servicio_id',
-                    rule: 'servicio_requerido',
-                })
-                continue
+                throw problema(
+                    422,
+                    'cobro_sin_cliente',
+                    'Cobro sin cliente',
+                    'servicio_id',
+                    'Un equipo por serie solo se consume cobrándolo al cliente de un servicio: indica servicio_id',
+                )
             }
             unidadId = await unidadParaComodato(
                 datos.servicio_id,
@@ -195,6 +217,16 @@ export async function aplicarConsumos(
             ...extra,
             concepto_cargo_id: extra.concepto_cargo_id === null ? null : Number(extra.concepto_cargo_id),
         }
+        // contrato Iris 0.5.0 §3.3: los equipos en comodato van por POST /servicios/:id/equipos
+        if (producto.modalidad === 'comodato') {
+            throw problema(
+                422,
+                'producto_es_comodato',
+                'Producto en comodato',
+                campoLinea(i, 'producto_id'),
+                `El producto ${base.sku} se presta en comodato: va por POST /servicios/:id/equipos`,
+            )
+        }
         if (base.seguimiento === 'serie' && !unidadId) {
             errores.push({
                 field: campoLinea(i, 'unidad_id'),
@@ -211,13 +243,14 @@ export async function aplicarConsumos(
             })
             continue
         }
-        if (producto.modalidad !== 'consumible_gasto' && !datos.servicio_id) {
-            errores.push({
-                field: 'servicio_id',
-                message: `El producto ${base.sku} es ${producto.modalidad.replaceAll('_', ' ')}: se consume en un servicio`,
-                rule: 'servicio_requerido',
-            })
-            continue
+        if (producto.modalidad === 'consumible_cobro' && !datos.servicio_id) {
+            throw problema(
+                422,
+                'cobro_sin_cliente',
+                'Cobro sin cliente',
+                'servicio_id',
+                `El producto ${base.sku} se cobra al cliente: indica el servicio`,
+            )
         }
         let precio: string | null = null
         let concepto: number | null = null
@@ -261,9 +294,9 @@ export async function aplicarConsumos(
         planes.push({ i, producto, unidadId, cantidad, precio, concepto })
     }
     if (errores.length > 0) throw new ValidacionFallida(errores)
-    const hayVenta = planes.some((p) => p.producto.modalidad !== 'consumible_gasto')
+    const hayVenta = planes.some((p) => p.producto.modalidad === 'consumible_cobro')
     if (hayVenta && datos.fecha && datos.fecha !== hoyGuatemala()) {
-        throw error('fecha', 'Un cobro o un comodato van con la fecha de hoy', 'no_aplica')
+        throw error('fecha', 'Un cobro va con la fecha de hoy', 'no_aplica')
     }
 
     // 2. los gastos (con el lock de su producto, en orden de id)
@@ -307,30 +340,6 @@ export async function aplicarConsumos(
         }
     }
 
-    // 3. los comodatos (la acción de siempre, desde esta bodega)
-    const comodatos: UnidadVista[] = []
-    for (const p of planes.filter((x) => x.producto.modalidad === 'comodato')) {
-        const unidad = await new AsignarComodato().execute(
-            {
-                servicio_id: datos.servicio_id!,
-                unidad_id: p.unidadId!,
-                bodega_id: bodega.id,
-                origen_tipo: datos.origen_tipo ?? null,
-                origen_id: datos.origen_id ?? null,
-            },
-            t.ctx,
-            { trx: t.trx },
-        )
-        comodatos.push(unidad)
-        const mov = await t.trx
-            .from('inventario.movimientos')
-            .where({ unidad_id: p.unidadId!, tipo: 'asignacion_comodato' })
-            .orderBy('id', 'desc')
-            .select('id')
-            .firstOrFail()
-        movimientos.set(p.i, Number(mov.id))
-    }
-
     // 4. los cobros: un cargo único con una línea por producto (venta del kardex con su costo)
     let facturaId: number | null = null
     const cobros = planes.filter((p) => p.producto.modalidad === 'consumible_cobro')
@@ -340,6 +349,7 @@ export async function aplicarConsumos(
                 servicio_id: datos.servicio_id!,
                 origen_tipo: datos.origen_tipo ?? null,
                 origen_id: datos.origen_id ?? null,
+                por_modalidad: true,
                 lineas: cobros.map((p) => ({
                     concepto_id: p.concepto!,
                     descripcion: `${p.producto.nombre} (${p.producto.sku})`,
@@ -371,6 +381,12 @@ export async function aplicarConsumos(
         empresaId,
         movimientos: planes.map((p) => movimientos.get(p.i)!).filter((id) => id !== undefined),
         facturaId,
-        comodatos,
+        cargos: facturaId
+            ? cobros.map((p) => ({
+                  id: facturaId!,
+                  producto_id: p.producto.id,
+                  monto: redondear(dec(p.precio!).times(dec(p.cantidad))).toFixed(2),
+              }))
+            : [],
     }
 }

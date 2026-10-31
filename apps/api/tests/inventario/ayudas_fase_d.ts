@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { deflateSync } from 'node:zlib'
 import db from '@adonisjs/lucid/services/db'
 import { usuarioConRoles } from '#tests/ayudas'
@@ -154,4 +155,9 @@ export async function comprarSeries(
         estado: string
         bodega_id: number
     }>
+}
+
+/** Firma como la manda Iris (contrato 0.5.0): `{ png_base64, sha256 }`. */
+export function firmaIris(png: Buffer = pngFirma()) {
+    return { png_base64: png.toString('base64'), sha256: createHash('sha256').update(png).digest('hex') }
 }

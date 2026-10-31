@@ -169,7 +169,7 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
                 .json({ producto_id: conector.id, bodega_id: central.id, cantidad: '1' }),
             422,
         )
-        assert.equal(sinServicio.body().errors[0].rule, 'servicio_requerido')
+        assert.equal(sinServicio.body().type, 'urn:argosisp:problema:cobro_sin_cliente')
         // gasto con precio: no aplica
         const gastoConPrecio = await estado(
             client.post('/api/v1/inventario/consumos').bearerToken(e.token).headers(cabecera).json({
@@ -249,11 +249,11 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
         await afirmarCuadre(assert, e.B)
     })
 
-    test('lote de una orden de Iris desde la bodega del técnico: gasto, cobro y comodato, todo o nada', async ({
+    test('orden de Iris desde la bodega del técnico: gasto y cobro en una petición, todo o nada; el comodato no va por consumos', async ({
         client,
         assert,
     }) => {
-        const { e, cabecera, central, cable, conector, onu, onus, servicioId } = await preparar()
+        const { e, cabecera, concepto, central, cable, conector, onu, onus, servicioId } = await preparar()
         const tecnico = await tecnicoConBodega(e.B, e.ctx)
         // le llega su material por una orden de traslado recibida
         const orden = await estado(
@@ -292,13 +292,23 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
             lineas: [
                 { producto_id: cable.id, cantidad: cantidadCable },
                 { producto_id: conector.id, cantidad: '2' },
-                { serie: onus[0]!.serie },
             ],
         })
+        // un equipo en comodato no va por consumos (contrato Iris 0.5.0)
+        const conEquipo = await estado(
+            client
+                .post('/api/v1/inventario/consumos')
+                .bearerToken(e.token)
+                .headers(cabecera)
+                .json({ ...cuerpo('5'), lineas: [...cuerpo('5').lineas, { serie: onus[0]!.serie }] }),
+            422,
+        )
+        assert.equal(conEquipo.body().type, 'urn:argosisp:problema:producto_es_comodato')
+        assert.equal(conEquipo.body().errors[0].field, 'lineas.2.producto_id')
         // el técnico (sin alcance global) no indica la bodega por el técnico
         await estado(
             client
-                .post('/api/v1/inventario/consumos/lote')
+                .post('/api/v1/inventario/consumos')
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
                 .json(cuerpo('5')),
@@ -308,7 +318,7 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
         const antes = await contarMovimientos(e.B)
         const falla = await estado(
             client
-                .post('/api/v1/inventario/consumos/lote')
+                .post('/api/v1/inventario/consumos')
                 .bearerToken(e.token)
                 .headers(cabecera)
                 .json(cuerpo('31')),
@@ -319,7 +329,7 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
         // un técnico desconocido
         const desconocido = await estado(
             client
-                .post('/api/v1/inventario/consumos/lote')
+                .post('/api/v1/inventario/consumos')
                 .bearerToken(e.token)
                 .headers(cabecera)
                 .json({ ...cuerpo('5'), tecnico: { correo: `${unico('nadie')}@x.local` } }),
@@ -329,7 +339,7 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
 
         const lote = await estado(
             client
-                .post('/api/v1/inventario/consumos/lote')
+                .post('/api/v1/inventario/consumos')
                 .bearerToken(e.token)
                 .headers(cabecera)
                 .header('Idempotency-Key', `iris:consumo:${ordenIris}`)
@@ -342,12 +352,49 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
             [
                 ['consumo', tecnico.bodega.id],
                 ['venta', tecnico.bodega.id],
-                ['asignacion_comodato', tecnico.bodega.id],
             ],
         )
         assert.isNumber(r.factura_id)
-        assert.lengthOf(r.comodatos, 1)
-        assert.equal(r.comodatos[0].estado, 'en_comodato')
+        assert.equal(r.tipo, 'consumo', 'el movimiento de la primera línea, como siempre')
+        assert.deepEqual(r.cargos, [{ id: r.factura_id, producto_id: conector.id, monto: '22.40' }])
+        const factura = await db.from('billing.facturas').where('id', r.factura_id).firstOrFail()
+        assert.equal(factura.origen_externo_id, ordenIris)
+        // un cargo único directo de la misma orden con el mismo producto: ya se cobró
+        const duplicado = await estado(
+            client
+                .post('/api/v1/facturas/cargo-unico')
+                .bearerToken(e.token)
+                .headers(cabecera)
+                .json({
+                    servicio_id: servicioId,
+                    origen_tipo: 'iris_orden',
+                    origen_id: ordenIris,
+                    lineas: [
+                        {
+                            concepto_id: concepto,
+                            precio_unitario: '11.20',
+                            producto_id: conector.id,
+                            bodega_id: tecnico.bodega.id,
+                        },
+                    ],
+                }),
+            409,
+        )
+        assert.equal(duplicado.body().type, 'urn:argosisp:problema:cargo_duplicado')
+        // la visita de la misma orden (sin ese producto) sí se cobra
+        await estado(
+            client
+                .post('/api/v1/facturas/cargo-unico')
+                .bearerToken(e.token)
+                .headers(cabecera)
+                .json({
+                    servicio_id: servicioId,
+                    origen_tipo: 'iris_orden',
+                    origen_id: ordenIris,
+                    lineas: [{ concepto_id: concepto, precio_unitario: '100.00' }],
+                }),
+            201,
+        )
         assert.isTrue(
             r.movimientos.every((m: { origen_externo_id: string }) => m.origen_externo_id === ordenIris),
         )
@@ -357,7 +404,7 @@ test.group('Inventario · consumos según la modalidad (fase D)', (group) => {
         const despues = await contarMovimientos(e.B)
         const repetida = await estado(
             client
-                .post('/api/v1/inventario/consumos/lote')
+                .post('/api/v1/inventario/consumos')
                 .bearerToken(e.token)
                 .headers(cabecera)
                 .header('Idempotency-Key', `iris:consumo:${ordenIris}`)

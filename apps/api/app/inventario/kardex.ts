@@ -757,6 +757,8 @@ export interface ExistenciaVista {
     producto_sku: string
     producto_nombre: string
     unidad: string
+    /** fase D (Iris 0.5.0): comodato, consumible_gasto o consumible_cobro */
+    modalidad: string
     bodega_id: number
     bodega_nombre: string
     bodega_tipo: string
@@ -803,6 +805,7 @@ export async function listarExistencias(
             'p.sku as producto_sku',
             'p.nombre as producto_nombre',
             'p.unidad',
+            'p.modalidad',
             's.bodega_id',
             'b.nombre as bodega_nombre',
             'b.tipo as bodega_tipo',

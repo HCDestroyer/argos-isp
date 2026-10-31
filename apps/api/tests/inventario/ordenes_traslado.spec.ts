@@ -10,7 +10,13 @@ import {
     productoEn,
     saldoInventario,
 } from '#tests/inventario/ayudas_inventario'
-import { afirmarTransito, comprarSeries, pngFirma, tecnicoConBodega } from '#tests/inventario/ayudas_fase_d'
+import {
+    afirmarTransito,
+    comprarSeries,
+    firmaIris,
+    pngFirma,
+    tecnicoConBodega,
+} from '#tests/inventario/ayudas_fase_d'
 import { sha256 } from '#inventario/archivos'
 
 /**
@@ -173,10 +179,20 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
         const evento = await db
             .from('audit.outbox')
             .where('evento', 'inventario.traslado_enviado')
-            .whereRaw(`payload->>'orden_id' = ?`, [String(orden.id)])
+            .whereRaw(`payload->>'traslado_id' = ?`, [String(orden.id)])
             .firstOrFail()
-        assert.equal(evento.payload.usuario_destino_id, tecnico.usuario.id)
+        // payload del contrato Iris 0.5.0 §2.3
+        assert.equal(evento.payload.traslado_id, orden.id)
+        assert.equal(evento.payload.bodega_destino_id, tecnico.bodega.id)
+        assert.deepEqual(evento.payload.tecnico, {
+            id_externo: String(tecnico.usuario.id),
+            correo: tecnico.usuario.email,
+        })
+        assert.equal(evento.payload.estado, 'en_transito')
+        assert.isString(evento.payload.enviado_en)
         assert.lengthOf(evento.payload.lineas, 2)
+        assert.deepEqual(evento.payload.lineas[0], { producto_id: cable.id, cantidad: '10.000', series: [] })
+        assert.lengthOf(evento.payload.lineas[1].series, 2)
         await afirmarTransito(assert, e.B)
         await afirmarCuadre(assert, e.B)
     })
@@ -212,7 +228,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
                 .bearerToken(otro.token)
                 .headers(cabecera)
-                .json({ firma: pngFirma().toString('base64') }),
+                .json({ firma: firmaIris() }),
             403,
         )
         // por defecto la empresa exige firma: aceptar sin firma no se puede
@@ -231,7 +247,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
-                .json({ firma: Buffer.from('no soy un png').toString('base64') }),
+                .json({ firma: firmaIris(Buffer.from('no soy un png')) }),
             422,
         )
         const chica = await estado(
@@ -239,10 +255,46 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
-                .json({ firma: pngFirma(20, 10).toString('base64') }),
+                .json({ firma: firmaIris(pngFirma(1200, 100)) }),
             422,
         )
+        assert.equal(chica.body().type, 'urn:argosisp:problema:firma_invalida')
         assert.equal(chica.body().errors[0].rule, 'dimensiones')
+        // el sha256 no es el del PNG
+        const otroHash = await estado(
+            client
+                .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
+                .bearerToken(tecnico.token)
+                .headers(cabecera)
+                .json({ firma: { ...firmaIris(), sha256: 'a'.repeat(64) } }),
+            422,
+        )
+        assert.equal(otroHash.body().type, 'urn:argosisp:problema:firma_invalida')
+        // recibido_en antes del envío o futuro
+        for (const recibidoEn of ['2020-01-01T10:00:00-06:00', '2099-01-01T10:00:00Z']) {
+            const fuera = await estado(
+                client
+                    .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
+                    .bearerToken(tecnico.token)
+                    .headers(cabecera)
+                    .json({ firma: firmaIris(), recibido_en: recibidoEn }),
+                422,
+            )
+            assert.equal(fuera.body().errors[0].field, 'recibido_en')
+        }
+        // series que no son de la línea
+        const invalidas = await estado(
+            client
+                .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
+                .bearerToken(tecnico.token)
+                .headers(cabecera)
+                .json({
+                    firma: firmaIris(),
+                    lineas: [{ linea_id: orden.lineas[1].id, series_faltantes: ['NO-EXISTE'] }],
+                }),
+            422,
+        )
+        assert.equal(invalidas.body().type, 'urn:argosisp:problema:lineas_invalidas')
 
         const firma = pngFirma()
         const recibida = await estado(
@@ -252,11 +304,19 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .headers(cabecera)
                 .header('Idempotency-Key', unico('rec'))
                 .json({
-                    firma: `data:image/png;base64,${firma.toString('base64')}`,
+                    firma: {
+                        ...firmaIris(firma),
+                        png_base64: `data:image/png;base64,${firma.toString('base64')}`,
+                    },
+                    recibido_en: new Date(Date.now() - 60_000).toISOString(),
                     observaciones: 'Faltaron 3 metros y una ONU',
                     lineas: [
                         { linea_id: orden.lineas[0].id, cantidad_recibida: '7' },
-                        { linea_id: orden.lineas[1].id, unidad_ids_faltantes: [onus[2]!.id] },
+                        {
+                            linea_id: orden.lineas[1].id,
+                            cantidad_recibida: '2',
+                            series_faltantes: [onus[2]!.serie.toLowerCase()],
+                        },
                     ],
                 }),
             200,
@@ -285,10 +345,13 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
-                .json({ firma: firma.toString('base64') }),
+                .header('Idempotency-Key', unico('otra'))
+                .json({ firma: firmaIris(firma) }),
             409,
         )
-        assert.equal(otraVez.body().type, 'urn:argosisp:problema:orden_no_en_transito')
+        assert.equal(otraVez.body().type, 'urn:argosisp:problema:traslado_ya_recibido')
+        assert.equal(otraVez.body().recepcion.id, orden.id)
+        assert.equal(otraVez.body().recepcion.estado, 'recibida_con_diferencias')
 
         // auditoría: la huella de la firma, nunca el binario
         const auditoria = await db
@@ -304,10 +367,18 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
         const evento = await db
             .from('audit.outbox')
             .where('evento', 'inventario.traslado_recibido')
-            .whereRaw(`payload->>'orden_id' = ?`, [String(orden.id)])
+            .whereRaw(`payload->>'traslado_id' = ?`, [String(orden.id)])
             .firstOrFail()
         assert.equal(evento.payload.estado, 'recibida_con_diferencias')
         assert.lengthOf(evento.payload.faltantes, 2)
+        assert.equal(evento.payload.traslado_id, orden.id)
+        assert.equal(evento.payload.origen, 'panel')
+        assert.equal(evento.payload.metodo_recepcion, 'firma_digital')
+        assert.deepEqual(evento.payload.recibido_por, {
+            id_externo: String(tecnico.usuario.id),
+            correo: tecnico.usuario.email,
+        })
+        assert.isString(evento.payload.recibido_en)
 
         // la firma y el PDF
         const png = await estado(
@@ -383,7 +454,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .headers(cabecera)
                 .json({ metodo_recepcion: 'firma_papel', recibido_por: { id_externo: String(e.usuarioId) } }),
             422,
-        )
+        ).then((r) => assert.equal(r.body().type, 'urn:argosisp:problema:traslado_de_otro_tecnico'))
         const papel = await estado(
             client
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
@@ -554,9 +625,9 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .post(`/api/v1/inventario/traslados/${orden.id}/recibir`)
                 .bearerToken(tecnico.token)
                 .headers(cabecera)
-                .json({ firma: pngFirma().toString('base64') }),
+                .json({ firma: firmaIris() }),
             409,
-        )
+        ).then((r) => assert.equal(r.body().type, 'urn:argosisp:problema:traslado_cancelado'))
         await estado(
             client
                 .post(`/api/v1/inventario/traslados/${orden.id}/cancelar`)
@@ -568,7 +639,7 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
         const evento = await db
             .from('audit.outbox')
             .where('evento', 'inventario.traslado_cancelado')
-            .whereRaw(`payload->>'orden_id' = ?`, [String(orden.id)])
+            .whereRaw(`payload->>'traslado_id' = ?`, [String(orden.id)])
             .firstOrFail()
         assert.equal(evento.payload.motivo, 'Ya no se necesita')
         // la unidad vuelve a poder moverse

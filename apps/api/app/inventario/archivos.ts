@@ -14,11 +14,12 @@ import { NoEncontrado, ValidacionFallida } from '#shared/errores'
  * En la auditoría un archivo va como `{ bytes, sha256 }` (`ArchivoAdjunto.toJSON`), nunca el binario.
  */
 
-export const TAMANO_MAXIMO_FIRMA = 256 * 1024
+export const TAMANO_MAXIMO_FIRMA = 200 * 1024
 export const TAMANO_MAXIMO_DOCUMENTO = 5 * 1024 * 1024
 export const TAMANO_MAXIMO_FACTURA = 10 * 1024 * 1024
-export const LADO_MINIMO_FIRMA = 50
-export const LADO_MAXIMO_FIRMA = 4000
+/** Firma del trazo (contrato Iris 0.5.0): de 50×20 a 1000×400 px. */
+export const ANCHO_FIRMA = { minimo: 50, maximo: 1000 }
+export const ALTO_FIRMA = { minimo: 20, maximo: 400 }
 
 export type TipoArchivoInventario =
     'image/png' | 'image/jpeg' | 'image/webp' | 'application/pdf' | 'application/xml'
@@ -77,7 +78,7 @@ export function firmaDesdeBase64(valor: string, campo = 'firma'): ArchivoAdjunto
     return new ArchivoAdjunto(Buffer.from(limpio, 'base64'), 'firma.png')
 }
 
-/** Firma del técnico: PNG por su contenido, hasta 256 KB y de 50 a 4000 px por lado. */
+/** Firma del técnico: PNG por su contenido, hasta 200 KB y de 50×20 a 1000×400 px. */
 export function validarFirma(archivo: ArchivoAdjunto, campo = 'firma'): void {
     const b = archivo.contenido
     if (b.length === 0) throw invalido(campo, 'Falta la firma', 'required')
@@ -92,14 +93,14 @@ export function validarFirma(archivo: ArchivoAdjunto, campo = 'firma'): void {
     if (!dimensiones) throw invalido(campo, 'La firma debe ser una imagen PNG', 'tipo')
     const [ancho, alto] = dimensiones
     if (
-        ancho < LADO_MINIMO_FIRMA ||
-        alto < LADO_MINIMO_FIRMA ||
-        ancho > LADO_MAXIMO_FIRMA ||
-        alto > LADO_MAXIMO_FIRMA
+        ancho < ANCHO_FIRMA.minimo ||
+        alto < ALTO_FIRMA.minimo ||
+        ancho > ANCHO_FIRMA.maximo ||
+        alto > ALTO_FIRMA.maximo
     ) {
         throw invalido(
             campo,
-            `La firma mide ${ancho}×${alto} px; cada lado debe medir entre ${LADO_MINIMO_FIRMA} y ${LADO_MAXIMO_FIRMA} px`,
+            `La firma mide ${ancho}×${alto} px; debe medir de ${ANCHO_FIRMA.minimo}×${ALTO_FIRMA.minimo} a ${ANCHO_FIRMA.maximo}×${ALTO_FIRMA.maximo} px`,
             'dimensiones',
         )
     }

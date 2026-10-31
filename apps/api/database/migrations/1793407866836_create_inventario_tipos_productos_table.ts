@@ -57,11 +57,30 @@ export default class extends BaseSchema {
                     AND (modalidad <> 'consumible_gasto' OR seguimiento = 'cantidad')
                 );
             CREATE INDEX productos_tipo ON inventario.productos (tipo_id);
+
+            -- quien inserta con solo el código (filas de prueba, importadores) recibe el tipo de la
+            -- empresa o el global y la modalidad de su seguimiento, como las filas de antes
+            CREATE FUNCTION inventario.completar_tipo_producto() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.tipo_id IS NULL THEN
+                    SELECT t.id INTO NEW.tipo_id FROM inventario.tipos_producto t
+                     WHERE t.codigo = NEW.tipo AND (t.empresa_id = NEW.empresa_id OR t.empresa_id IS NULL)
+                     ORDER BY t.empresa_id NULLS LAST LIMIT 1;
+                END IF;
+                IF NEW.modalidad IS NULL THEN
+                    NEW.modalidad := CASE WHEN NEW.seguimiento = 'serie' THEN 'comodato' ELSE 'consumible_gasto' END;
+                END IF;
+                RETURN NEW;
+            END $$;
+            CREATE TRIGGER productos_completar_tipo BEFORE INSERT ON inventario.productos
+                FOR EACH ROW EXECUTE FUNCTION inventario.completar_tipo_producto();
         `)
     }
 
     async down() {
         this.schema.raw(`
+            DROP TRIGGER IF EXISTS productos_completar_tipo ON inventario.productos;
+            DROP FUNCTION IF EXISTS inventario.completar_tipo_producto();
             DROP INDEX IF EXISTS inventario.productos_tipo;
             ALTER TABLE inventario.productos
                 DROP CONSTRAINT IF EXISTS productos_modalidad_seguimiento,

@@ -68,7 +68,8 @@ desde XML FEL, PDF o imagen con IA; la bodega del técnico e Iris).
       ninguna otra operación la toca (`bodega_transito`, `unidad_en_transito`). Recibe el técnico o un
       usuario con alcance global en su nombre; lo faltante vuelve al origen al costo de la línea.
     - Consumo: `consumible_cobro` emite un cargo único inmediato (`facturas.emitir_cargo_unico`, venta
-      `5.6.01 / 1.1.14` e ingreso con IVA); `comodato` llama a `asignar_comodato`. `POST /inventario/consumos/lote`.
+      `5.6.01 / 1.1.14` e ingreso con IVA); `comodato` responde 422 `producto_es_comodato`.
+      `POST /inventario/consumos` acepta `lineas[]` (contrato Iris 0.5.0), todo o nada, con `cargos[]`.
     - Lote de productos: todo o nada; la entrada es saldo inicial (`1.1.14 / 2.9.01`).
     - Factura de compra: nunca se crea sin `compras.confirmar_borrador`; la clave de la IA va cifrada y
       no sale por la API; en pruebas, extractor falso o servidor local (nunca una API real).

@@ -21,6 +21,7 @@ import {
     LOCK_NUMERO_TRASLADO,
     ORIGEN_ORDEN_TRASLADO,
     bodegaTransito,
+    payloadTraslado,
     verOrdenTraslado,
     type OrdenTrasladoDetalle,
 } from '#inventario/ordenes_traslado'
@@ -222,7 +223,6 @@ export default class CrearTraslado extends DomainAction<EntradaCrearTraslado, Or
         }
         for (const id of [...productos.keys()].sort((a, b) => a - b)) await bloquearProducto(t, id)
 
-        const eventoLineas: Array<{ producto_id: number; cantidad: string; unidad_ids: number[] }> = []
         for (const [i, linea] of input.lineas.entries()) {
             const producto = productos.get(linea.producto_id)!
             const ids = linea.unidad_ids ?? []
@@ -264,11 +264,6 @@ export default class CrearTraslado extends DomainAction<EntradaCrearTraslado, Or
                     unidades: costos,
                     motivo: input.motivo,
                 })
-                eventoLineas.push({
-                    producto_id: producto.id,
-                    cantidad: aCantidad(dec(String(ids.length))),
-                    unidad_ids: ids,
-                })
             } else {
                 const cantidad = cantidadValida(linea.cantidad ?? '', `lineas.${i}.cantidad`)
                 const costo = costoSalida(
@@ -296,18 +291,9 @@ export default class CrearTraslado extends DomainAction<EntradaCrearTraslado, Or
                     costo,
                     motivo: input.motivo,
                 })
-                eventoLineas.push({ producto_id: producto.id, cantidad: aCantidad(cantidad), unidad_ids: [] })
             }
         }
-        await t.emit('inventario.traslado_enviado', {
-            orden_id: ordenId,
-            empresa_id: empresaId,
-            numero,
-            bodega_origen_id: origen.id,
-            bodega_destino_id: destino.id,
-            usuario_destino_id: destino.tipo === 'tecnico' ? destino.usuario_id : null,
-            lineas: eventoLineas,
-        })
+        await t.emit('inventario.traslado_enviado', await payloadTraslado(t.trx, ordenId))
         return verOrdenTraslado(ordenId, t.trx)
     }
 }

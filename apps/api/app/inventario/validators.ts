@@ -327,18 +327,17 @@ const datosConsumo = {
 
 export const consumoValidator = vine.compile(
     vine.object({
-        producto_id: idEntidad(),
+        producto_id: idEntidad().nullable().optional().meta({ description: 'Una línea (o lineas[])' }),
         ...lineaConsumo,
-        ...datosConsumo,
-    }),
-)
-
-export const consumoLoteValidator = vine.compile(
-    vine.object({
         lineas: vine
             .array(vine.object({ producto_id: idEntidad().nullable().optional(), ...lineaConsumo }))
             .minLength(1)
-            .maxLength(200),
+            .maxLength(200)
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Varias líneas, todo o nada (contrato Iris 0.5.0 §3.3); en lugar de producto_id',
+            }),
         ...datosConsumo,
     }),
 )
@@ -446,7 +445,13 @@ export const asignarComodatoValidator = vine.compile(
 
 export const devolverComodatoValidator = vine.compile(
     vine.object({
-        bodega_id: idEntidad(),
+        bodega_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'La bodega que recibe (o tecnico)' }),
+        tecnico: tecnicoExterno().nullable().optional().meta({
+            description: 'Contrato Iris 0.5.0: a la bodega activa del técnico en la empresa del servicio',
+        }),
         condicion: vine.enum(CONDICIONES).nullable().optional().meta({ description: 'Por defecto usado' }),
         en_reparacion: vine.boolean().nullable().optional(),
         fecha: fechaIso().nullable().optional(),
@@ -574,9 +579,29 @@ export const recibirTrasladoValidator = vine.compile(
             }),
         recibido_por: tecnicoExterno().nullable().optional(),
         observaciones: texto(1000).nullable().optional(),
-        firma: vine.string().maxLength(400_000).nullable().optional().meta({
+        firma: vine
+            .object({
+                png_base64: vine.string().maxLength(300_000).meta({
+                    description: 'PNG del trazo en base64 (con o sin data:image/png;base64,)',
+                }),
+                sha256: vine
+                    .string()
+                    .trim()
+                    .toLowerCase()
+                    .regex(/^[0-9a-f]{64}$/)
+                    .meta({
+                        description: 'SHA-256 del PNG decodificado',
+                    }),
+            })
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Firma digital: PNG de hasta 200 KB decodificado y de 50×20 a 1000×400 px (422 firma_invalida). En multipart/form-data (panel) va como archivo `firma`, y `lineas` y `recibido_por` como texto JSON',
+            }),
+        recibido_en: vine.string().trim().maxLength(40).nullable().optional().meta({
             description:
-                'PNG del trazo en base64 (con o sin data:image/png;base64,), hasta 256 KB y de 50 a 4000 px por lado. En multipart/form-data va como archivo `firma` y `lineas` como texto JSON',
+                'RFC 3339, hora del teléfono: no anterior al envío ni futura (5 min de tolerancia). Por defecto ahora',
         }),
         lineas: vine
             .array(
@@ -591,8 +616,16 @@ export const recibirTrasladoValidator = vine.compile(
                         .meta({
                             description: 'Por cantidad: lo recibido (0 a lo enviado); por defecto todo',
                         }),
+                    series_faltantes: vine
+                        .array(vine.string().trim().minLength(1).maxLength(100))
+                        .maxLength(500)
+                        .nullable()
+                        .optional()
+                        .meta({
+                            description: 'Por serie: las series o MAC que no llegaron (contrato Iris 0.5.0)',
+                        }),
                     unidad_ids_faltantes: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
-                        description: 'Por serie: las unidades que no llegaron',
+                        description: 'Por serie (panel): las unidades que no llegaron',
                     }),
                 }),
             )
@@ -824,9 +857,19 @@ export const verIaValidator = vine.compile(
 | Bodega del técnico (fase D, `contratos/inventario.md` D.6)
 */
 
+export const tecnicosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+    }),
+)
+
 export const miBodegaValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Por defecto la empresa activa (X-Empresa-Id)' }),
         usuario_id: idEntidad().optional().meta({ description: 'Otro técnico (solo con alcance global)' }),
         id_externo: vine.string().trim().maxLength(30).optional().meta({
             description:

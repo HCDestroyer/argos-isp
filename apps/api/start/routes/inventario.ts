@@ -15,7 +15,7 @@ import { exigirAcceso } from '#billing/empresa'
 import * as v from '#inventario/validators'
 import {
     Bodega,
-    ConsumoLote,
+    ConsumoInventario,
     ConteoInventario,
     ConteoInventarioDetalle,
     InventarioValorizado,
@@ -49,7 +49,6 @@ import CrearBodega from '#inventario/actions/crear_bodega'
 import EditarBodega from '#inventario/actions/editar_bodega'
 import DesactivarBodega from '#inventario/actions/desactivar_bodega'
 import ConsumirInventario from '#inventario/actions/consumir_inventario'
-import ConsumirInventarioLote from '#inventario/actions/consumir_inventario_lote'
 import TrasladarInventario from '#inventario/actions/trasladar_inventario'
 import AjustarInventario from '#inventario/actions/ajustar_inventario'
 import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
@@ -307,28 +306,11 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.consumir',
         cuerpo: v.consumoValidator,
         idempotente: true,
-        descripcion: `servicio_id opcional (misma empresa). ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
-        respuesta: { status: 201, descripcion: 'Movimiento', esquema: MovimientoInventario },
+        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
+        respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoInventario },
         handler: async (ctx, { cuerpo }) => {
             await exigirBodegaDeConsumo(ctx, cuerpo)
             return new ConsumirInventario().execute(cuerpo, ctx.contextoAccion())
-        },
-    }),
-    definirRuta({
-        metodo: 'post',
-        ruta: '/inventario/consumos/lote',
-        operacion: 'inventarioConsumirLote',
-        resumen: 'Consumo de varias líneas a un servicio según la modalidad de cada producto (todo o nada)',
-        etiqueta: 'inventario',
-        permiso: 'inventario.consumir',
-        cuerpo: v.consumoLoteValidator,
-        idempotente: true,
-        descripcion:
-            'Fase D: lo instalado en una orden. Cada línea aplica la modalidad de su producto: consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un solo cargo único al cliente del servicio con la venta del kardex 5.6.01 / 1.1.14; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido) o comodato (unidad_id o serie: inventario.asignar_comodato). Sin bodega_id, con tecnico (solo un usuario con alcance global, p. ej. Iris), la bodega del técnico (422 tecnico_no_encontrado, tecnico_sin_bodega). Errores lineas.N.*.',
-        respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoLote },
-        handler: async (ctx, { cuerpo }) => {
-            await exigirBodegaDeConsumo(ctx, cuerpo)
-            return new ConsumirInventarioLote().execute(cuerpo, ctx.contextoAccion())
         },
     }),
     definirRuta({
@@ -542,7 +524,10 @@ const comodato: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             await exigirServicio(ctx, id)
-            await exigirBodega(ctx, cuerpo.bodega_id, true)
+            if (cuerpo.bodega_id) await exigirBodega(ctx, cuerpo.bodega_id, true)
+            else if (cuerpo.tecnico && !alcanceGlobal(ctx.alcance)) {
+                throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
+            }
             return new DevolverComodato().execute(
                 { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
                 ctx.contextoAccion(),

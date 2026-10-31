@@ -1,7 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
-import { Conflicto, NoEncontrado } from '#shared/errores'
+import { Conflicto, NoEncontrado, Problema } from '#shared/errores'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { filtrarBodegasVisibles, type AccesoBodegas } from '#inventario/bodegas'
@@ -102,6 +102,7 @@ export interface LineaOrdenVista {
     producto_nombre: string
     unidad: string
     seguimiento: string
+    modalidad: string
     cantidad: string
     costo_total: string
     cantidad_recibida: string | null
@@ -226,6 +227,16 @@ function normalizar(f: OrdenTrasladoVista): OrdenTrasladoVista {
     }
 }
 
+/** 404 `traslado_no_encontrado` (contrato Iris 0.5.0 §3.3). */
+export function trasladoNoEncontrado(id: number): Problema {
+    return new Problema(
+        404,
+        'traslado_no_encontrado',
+        'Traslado no encontrado',
+        `La orden de traslado ${id} no existe`,
+    )
+}
+
 /** Empresa y bodegas de una orden (para revisar el acceso antes de la acción); 404 si no existe. */
 export async function datosDeOrden(id: number, cliente: QueryClientContract = db.connection()) {
     const fila = (await cliente
@@ -239,7 +250,7 @@ export async function datosDeOrden(id: number, cliente: QueryClientContract = db
         bodega_destino_id: number
         estado: EstadoOrdenTraslado
     } | null
-    if (!fila) throw new NoEncontrado(`La orden de traslado ${id} no existe`)
+    if (!fila) throw trasladoNoEncontrado(id)
     return {
         id: Number(fila.id),
         empresa_id: Number(fila.empresa_id),
@@ -262,6 +273,7 @@ async function lineasDe(ordenId: number, cliente: QueryClientContract): Promise<
             'p.nombre as producto_nombre',
             'p.unidad',
             'p.seguimiento',
+            'p.modalidad',
             cliente.raw('l.cantidad::text as cantidad'),
             cliente.raw('l.costo_total::text as costo_total'),
             cliente.raw('l.cantidad_recibida::text as cantidad_recibida'),
@@ -305,7 +317,7 @@ export async function verOrdenTraslado(
     cliente: QueryClientContract = db.connection(),
 ): Promise<OrdenTrasladoDetalle> {
     const fila = (await consulta(cliente).where('o.id', id).first()) as OrdenTrasladoVista | null
-    if (!fila) throw new NoEncontrado(`La orden de traslado ${id} no existe`)
+    if (!fila) throw trasladoNoEncontrado(id)
     return { ...normalizar(fila), lineas: await lineasDe(id, cliente) }
 }
 
@@ -367,4 +379,53 @@ export async function listarOrdenesTraslado(
     }
     const pagina = await paginar<OrdenTrasladoVista>(q, filtros, { columna: 'o.id' })
     return { data: pagina.data.map(normalizar), nextCursor: pagina.nextCursor }
+}
+
+/**
+ * Payload común de `inventario.traslado_enviado`, `_recibido` y `_cancelado` (contrato Iris 0.5.0
+ * §2.3): traslado_id, empresa_id, numero, bodega_destino_id, tecnico (`{ id_externo, correo }` del
+ * técnico de la bodega destino, o null), estado, lineas[] (`producto_id`, `cantidad` enviada, `series[]`)
+ * y enviado_en.
+ */
+export async function payloadTraslado(cliente: QueryClientContract, ordenId: number) {
+    const o = (await cliente
+        .from('inventario.ordenes_traslado as o')
+        .join('inventario.bodegas as b', 'b.id', 'o.bodega_destino_id')
+        .leftJoin('core.usuarios as u', 'u.id', 'b.usuario_id')
+        .where('o.id', ordenId)
+        .select(
+            'o.id',
+            'o.empresa_id',
+            'o.numero',
+            'o.bodega_destino_id',
+            'o.estado',
+            'o.enviado_en',
+            'u.id as usuario_id',
+            'u.email',
+        )
+        .firstOrFail()) as {
+        id: number
+        empresa_id: number
+        numero: number
+        bodega_destino_id: number
+        estado: EstadoOrdenTraslado
+        enviado_en: Date
+        usuario_id: number | null
+        email: string | null
+    }
+    const lineas = await lineasDe(ordenId, cliente)
+    return {
+        traslado_id: Number(o.id),
+        empresa_id: Number(o.empresa_id),
+        numero: Number(o.numero),
+        bodega_destino_id: Number(o.bodega_destino_id),
+        tecnico: o.usuario_id ? { id_externo: String(o.usuario_id), correo: String(o.email) } : null,
+        estado: o.estado,
+        lineas: lineas.map((l) => ({
+            producto_id: l.producto_id,
+            cantidad: l.cantidad,
+            series: l.unidades.map((u) => u.serie ?? u.mac ?? String(u.unidad_id)),
+        })),
+        enviado_en: new Date(o.enviado_en).toISOString(),
+    }
 }

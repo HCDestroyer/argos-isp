@@ -5,7 +5,7 @@ import { Conflicto, ConflictoVersion, NoEncontrado, ValidacionFallida } from '#s
 import { dec } from '#ledger/dinero'
 import { bloquearProducto, productoMovible } from '#inventario/kardex'
 import { moverDeOrden } from '#inventario/actions/crear_traslado'
-import { verOrdenTraslado, type OrdenTrasladoDetalle } from '#inventario/ordenes_traslado'
+import { payloadTraslado, verOrdenTraslado, type OrdenTrasladoDetalle } from '#inventario/ordenes_traslado'
 
 /**
  * `inventario.cancelar_traslado` (`POST /inventario/traslados/:id/cancelar`, fase D,
@@ -118,9 +118,8 @@ export default class CancelarTraslado extends DomainAction<EntradaCancelarTrasla
             { estado: 'cancelada', motivo_cancelacion: motivo },
         )
         await t.emit('inventario.traslado_cancelado', {
-            orden_id: orden.id,
-            empresa_id: empresaId,
-            numero: Number(orden.numero),
+            ...(await payloadTraslado(t.trx, orden.id)),
+            cancelado_en: new Date().toISOString(),
             motivo,
         })
         return verOrdenTraslado(orden.id, t.trx)

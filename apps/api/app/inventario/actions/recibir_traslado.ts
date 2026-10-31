@@ -1,12 +1,14 @@
+import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { Conflicto, ConflictoVersion, NoEncontrado, Prohibido, ValidacionFallida } from '#shared/errores'
+import { Conflicto, ConflictoVersion, Problema, Prohibido, ValidacionFallida } from '#shared/errores'
 import { aTexto, dec, redondear } from '#ledger/dinero'
 import { aCantidad, bloquearProducto, bodegaMovible, productoMovible } from '#inventario/kardex'
 import { moverDeOrden } from '#inventario/actions/crear_traslado'
 import {
     configuracionInventario,
+    payloadTraslado,
     verOrdenTraslado,
     type MetodoRecepcion,
     type OrdenTrasladoDetalle,
@@ -17,7 +19,9 @@ import {
     guardarArchivoInventario,
     validarFirma,
 } from '#inventario/archivos'
-import { resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
+import { resolverTecnico, tecnicoDeUsuario, type TecnicoExterno } from '#inventario/tecnicos'
+import { normalizarMac, normalizarSerie } from '#inventario/unidades'
+import { EMAIL_USUARIO_IRIS } from '#core/integraciones_iris'
 
 /**
  * `inventario.recibir_traslado` (`POST /inventario/traslados/:id/recibir`, fase D,
@@ -40,6 +44,9 @@ import { resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
 export interface LineaRecepcion {
     linea_id: number
     cantidad_recibida?: string | null
+    /** contrato Iris 0.5.0: las series (o MAC) que no llegaron */
+    series_faltantes?: string[] | null
+    /** el panel: las unidades que no llegaron */
     unidad_ids_faltantes?: number[] | null
 }
 
@@ -50,8 +57,12 @@ export interface EntradaRecibirTraslado {
     recibido_por?: TecnicoExterno | null
     observaciones?: string | null
     lineas?: LineaRecepcion[] | null
-    /** PNG del trazo (la ruta lo arma desde base64 o el archivo) */
+    /** PNG del trazo (la ruta lo arma desde `firma.png_base64` o el archivo) */
     firma?: ArchivoAdjunto | null
+    /** el `firma.sha256` que mandó el cliente (debe ser el del PNG decodificado) */
+    firma_sha256?: string | null
+    /** RFC 3339, hora del teléfono (contrato Iris 0.5.0); por defecto ahora */
+    recibido_en?: string | null
     /** IP de la petición (la pone la ruta) */
     firma_ip?: string | null
     /** el actor tiene el permiso con alcance global (la pone la ruta) */
@@ -89,7 +100,14 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                 'version',
             )
             .first()) as OrdenFila | null
-        if (!orden) throw new NoEncontrado(`La orden de traslado ${input.id} no existe`)
+        if (!orden) {
+            throw new Problema(
+                404,
+                'traslado_no_encontrado',
+                'Traslado no encontrado',
+                `La orden de traslado ${input.id} no existe`,
+            )
+        }
         const empresaId = Number(orden.empresa_id)
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
@@ -100,12 +118,16 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
         ) {
             throw new ConflictoVersion('orden_traslado', input.id)
         }
-        if (orden.estado !== 'en_transito') {
+        if (orden.estado === 'cancelada') {
             throw new Conflicto(
-                `La orden de traslado ${orden.numero} está ${orden.estado.replaceAll('_', ' ')}`,
-                'orden_no_en_transito',
-                'Orden no en tránsito',
+                `La orden de traslado ${orden.numero} se canceló`,
+                'traslado_cancelado',
+                'Traslado cancelado',
             )
+        }
+        if (orden.estado !== 'en_transito') {
+            // contrato Iris 0.5.0 §3.3: un 2xx es definitivo; otra recepción, con cualquier clave, recibe la guardada
+            throw new TrasladoYaRecibido(orden.numero, await verOrdenTraslado(orden.id, t.trx))
         }
         const destino = await bodegaMovible(t, Number(orden.bodega_destino_id), empresaId, {
             campo: 'bodega_destino_id',
@@ -121,13 +143,19 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             if (input.recibido_por) {
                 const indicado = await resolverTecnico(t, input.recibido_por, 'recibido_por')
                 if (indicado !== destino.usuario_id) {
-                    throw new ValidacionFallida([
-                        {
-                            field: 'recibido_por',
-                            message: 'Quien recibe es el técnico de la bodega destino',
-                            rule: 'no_es_el_tecnico',
-                        },
-                    ])
+                    throw new Problema(
+                        422,
+                        'traslado_de_otro_tecnico',
+                        'Traslado de otro técnico',
+                        `La orden ${orden.numero} va a la bodega de otro técnico`,
+                        [
+                            {
+                                field: 'recibido_por',
+                                message: 'Quien recibe es el técnico de la bodega destino',
+                                rule: 'traslado_de_otro_tecnico',
+                            },
+                        ],
+                    )
                 }
             }
             if (actor !== destino.usuario_id && !global) {
@@ -154,7 +182,27 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                     },
                 ])
             }
-            validarFirma(input.firma)
+            try {
+                validarFirma(input.firma)
+                if (input.firma_sha256 && input.firma_sha256.toLowerCase() !== input.firma.sha256) {
+                    throw new ValidacionFallida([
+                        {
+                            field: 'firma.sha256',
+                            message: 'El sha256 no es el del PNG enviado',
+                            rule: 'sha256',
+                        },
+                    ])
+                }
+            } catch (error) {
+                if (!(error instanceof ValidacionFallida)) throw error
+                throw new Problema(
+                    422,
+                    'firma_invalida',
+                    'Firma inválida',
+                    error.errores?.map((e) => e.message).join('; '),
+                    error.errores,
+                )
+            }
         } else if (input.firma) {
             throw new ValidacionFallida([
                 { field: 'firma', message: `Con ${metodo} no va firma digital`, rule: 'no_aplica' },
@@ -182,6 +230,32 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             }
         }
 
+        // contrato Iris 0.5.0: la hora del teléfono, ni antes del envío ni futura (5 min de tolerancia)
+        let recibidoEn = new Date()
+        if (input.recibido_en) {
+            const fecha = DateTime.fromISO(input.recibido_en, { setZone: true })
+            const enviado = await t.trx
+                .from('inventario.ordenes_traslado')
+                .where('id', orden.id)
+                .select('enviado_en')
+                .first()
+            const tolerancia = 5 * 60 * 1000
+            if (
+                !fecha.isValid ||
+                fecha.toMillis() < new Date(enviado.enviado_en).getTime() - tolerancia ||
+                fecha.toMillis() > Date.now() + tolerancia
+            ) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'recibido_en',
+                        message: 'recibido_en (RFC 3339) no puede ser anterior al envío ni futuro',
+                        rule: 'recibido_en',
+                    },
+                ])
+            }
+            recibidoEn = fecha.toJSDate()
+        }
+
         // líneas
         const lineas = (await t.trx
             .from('inventario.ordenes_traslado_lineas')
@@ -198,11 +272,14 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             .join('inventario.ordenes_traslado_lineas as l', 'l.id', 'x.linea_id')
             .where('l.orden_id', orden.id)
             .orderBy('x.id')
-            .select('x.id', 'x.linea_id', 'x.unidad_id', 'x.costo')) as Array<{
+            .join('inventario.unidades as u', 'u.id', 'x.unidad_id')
+            .select('x.id', 'x.linea_id', 'x.unidad_id', 'x.costo', 'u.serie', 'u.mac')) as Array<{
             id: number
             linea_id: number
             unidad_id: number
             costo: string
+            serie: string | null
+            mac: string | null
         }>
         const pedidas = input.lineas ?? []
         const errores: Array<{ field: string; message: string; rule: string }> = []
@@ -221,11 +298,31 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             }
             const deLinea = unidades.filter((u) => Number(u.linea_id) === Number(linea.id))
             if (deLinea.length > 0) {
-                if (p.cantidad_recibida !== undefined && p.cantidad_recibida !== null) {
+                // contrato Iris 0.5.0: las series que faltaron (serie o MAC) se vuelven unidades de la línea
+                for (const [k, texto] of (p.series_faltantes ?? []).entries()) {
+                    const serie = normalizarSerie(texto)
+                    const mac = normalizarMac(texto)
+                    const unidad = deLinea.find((u) => (serie && u.serie === serie) || (mac && u.mac === mac))
+                    if (!unidad) {
+                        errores.push({
+                            field: `lineas.${i}.series_faltantes.${k}`,
+                            message: `La serie ${texto} no viaja en esta línea`,
+                            rule: 'series_faltantes',
+                        })
+                        continue
+                    }
+                    p.unidad_ids_faltantes = [...(p.unidad_ids_faltantes ?? []), Number(unidad.unidad_id)]
+                }
+                const faltan = new Set(p.unidad_ids_faltantes ?? []).size
+                if (
+                    p.cantidad_recibida !== undefined &&
+                    p.cantidad_recibida !== null &&
+                    !dec(p.cantidad_recibida).eq(deLinea.length - faltan)
+                ) {
                     errores.push({
                         field: `lineas.${i}.cantidad_recibida`,
-                        message: 'Una línea de serie marca sus faltantes con unidad_ids_faltantes',
-                        rule: 'no_aplica',
+                        message: `Con ${faltan} serie(s) faltante(s) se reciben ${deLinea.length - faltan}`,
+                        rule: 'cantidad',
                     })
                 }
                 for (const id of p.unidad_ids_faltantes ?? []) {
@@ -238,9 +335,9 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                     }
                 }
             } else {
-                if ((p.unidad_ids_faltantes ?? []).length > 0) {
+                if ((p.unidad_ids_faltantes ?? []).length > 0 || (p.series_faltantes ?? []).length > 0) {
                     errores.push({
-                        field: `lineas.${i}.unidad_ids_faltantes`,
+                        field: `lineas.${i}.series_faltantes`,
                         message: 'Una línea por cantidad marca su faltante con cantidad_recibida',
                         rule: 'no_aplica',
                     })
@@ -257,7 +354,15 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                 }
             }
         }
-        if (errores.length > 0) throw new ValidacionFallida(errores)
+        if (errores.length > 0) {
+            throw new Problema(
+                422,
+                'lineas_invalidas',
+                'Líneas inválidas',
+                errores.map((e) => e.message).join('; '),
+                errores,
+            )
+        }
 
         const productos = [...new Set(lineas.map((l) => Number(l.producto_id)))].sort((a, b) => a - b)
         for (const id of productos) await bloquearProducto(t, id)
@@ -368,13 +473,13 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                 metodo_recepcion: metodo,
                 recibido_por: recibidoPor,
                 registrado_por: actor,
-                recibido_en: t.trx.knexRawQuery('now()'),
+                recibido_en: recibidoEn,
                 observaciones: input.observaciones?.trim() || null,
                 firma_ruta: firmaRuta,
                 firma_sha256: input.firma?.sha256 ?? null,
                 firma_tamano: input.firma?.contenido.length ?? null,
                 firma_ip: input.firma ? (input.firma_ip ?? null) : null,
-                firma_en: input.firma ? t.trx.knexRawQuery('now()') : null,
+                firma_en: input.firma ? recibidoEn : null,
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             }
@@ -392,14 +497,19 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                 firma_sha256: input.firma?.sha256 ?? null,
                 faltantes,
             })
+            const usuarioActor = actor
+                ? ((await t.trx.from('core.usuarios').where('id', actor).select('email').first()) as {
+                      email: string
+                  } | null)
+                : null
+            const actorEsIris = usuarioActor?.email === EMAIL_USUARIO_IRIS
             await t.emit('inventario.traslado_recibido', {
-                orden_id: orden.id,
-                empresa_id: empresaId,
-                numero: Number(orden.numero),
-                estado,
-                metodo_recepcion: metodo,
-                recibido_por: recibidoPor,
+                ...(await payloadTraslado(t.trx, orden.id)),
+                recibido_en: recibidoEn.toISOString(),
+                recibido_por: await tecnicoDeUsuario(t.trx, recibidoPor),
                 registrado_por: actor,
+                metodo_recepcion: metodo,
+                origen: actorEsIris ? 'iris' : 'panel',
                 faltantes,
             })
             return await verOrdenTraslado(orden.id, t.trx)
@@ -407,5 +517,24 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             if (firmaRuta) await borrarArchivoInventario(firmaRuta)
             throw error
         }
+    }
+}
+
+/** 409 `traslado_ya_recibido` con la recepción guardada en el cuerpo (`recepcion`). */
+export class TrasladoYaRecibido extends Problema {
+    constructor(
+        numero: number,
+        readonly recepcion: OrdenTrasladoDetalle,
+    ) {
+        super(
+            409,
+            'traslado_ya_recibido',
+            'Traslado ya recibido',
+            `La orden de traslado ${numero} ya se recibió`,
+        )
+    }
+
+    override toJSON() {
+        return { ...super.toJSON(), recepcion: this.recepcion }
     }
 }
