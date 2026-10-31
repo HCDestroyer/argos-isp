@@ -19,7 +19,8 @@ import { exigirAcceso } from '#billing/empresa'
 import { filaEmpresa } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
 import * as v from '#inventario/validators'
-import { ConfiguracionInventario, OrdenTraslado, OrdenTrasladoDetalle } from '#inventario/esquemas'
+import { ConfiguracionInventario, MiBodega, OrdenTraslado, OrdenTrasladoDetalle } from '#inventario/esquemas'
+import { miBodega } from '#inventario/mi_bodega'
 import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { alcanceGlobal, puedeOperarBodega, verBodega } from '#inventario/bodegas'
 import {
@@ -111,6 +112,31 @@ async function enviarArchivo(
 }
 
 const rutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/mi-bodega',
+        operacion: 'inventarioMiBodega',
+        resumen: 'La bodega del técnico: existencias, unidades, traslados por recibir y kardex',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.miBodegaValidator,
+        descripcion:
+            'Fase D: la del usuario que pregunta; con usuario_id, id_externo o correo, la de otro técnico (solo con alcance global, p. ej. el usuario técnico Iris: 403 si no). 404 sin_bodega; 422 tecnico_no_encontrado.',
+        respuesta: { status: 200, descripcion: 'Bodega del técnico', esquema: MiBodega },
+        handler: async (ctx, { query }) => {
+            const usuario = ctx.auth.user
+            if (!usuario) throw new Prohibido()
+            if ((query.usuario_id || query.id_externo || query.correo) && !alcanceGlobal(ctx.alcance)) {
+                throw new Prohibido('Solo un usuario con alcance global ve la bodega de otro técnico')
+            }
+            return miBodega(
+                query,
+                usuario.id,
+                empresasDeLaLista(ctx.empresa, query.empresas),
+                accesoBodegas(ctx),
+            )
+        },
+    }),
     definirRuta({
         metodo: 'post',
         ruta: '/inventario/traslados/enviar',

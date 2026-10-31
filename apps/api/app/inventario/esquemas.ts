@@ -21,7 +21,7 @@ import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 import { ESTADOS_ORDEN_TRASLADO, METODOS_RECEPCION } from '#inventario/ordenes_traslado'
-import { lista } from '#shared/openapi/esquemas'
+import { lista, pagina } from '#shared/openapi/esquemas'
 
 /**
  * Schemas de respuesta del inventario (`contratos/inventario.md` §6, fase A).
@@ -563,5 +563,19 @@ export const ConfiguracionIa = definirEsquema(
         version: entero,
         created_at: instante,
         updated_at: instante,
+    }),
+)
+
+export const MiBodega = definirEsquema(
+    'MiBodegaInventario',
+    objeto({
+        bodega: Bodega,
+        existencias: lista(Existencia),
+        unidades: { ...lista(Unidad), description: 'Unidades en la bodega (disponibles o en reparación)' },
+        traslados_pendientes: { ...lista(OrdenTraslado), description: 'Órdenes en tránsito hacia la bodega' },
+        kardex: {
+            ...pagina(MovimientoInventario),
+            description: 'Primera página; el resto con GET /inventario/movimientos?bodega_id=',
+        },
     }),
 )

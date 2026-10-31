@@ -815,3 +815,21 @@ export const verIaValidator = vine.compile(
         global: vine.boolean().optional(),
     }),
 )
+
+/*
+| Bodega del técnico (fase D, `contratos/inventario.md` D.6)
+*/
+
+export const miBodegaValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        usuario_id: idEntidad().optional().meta({ description: 'Otro técnico (solo con alcance global)' }),
+        id_externo: vine.string().trim().maxLength(30).optional().meta({
+            description:
+                'Otro técnico por su id de Argos (el id_externo del vínculo en Iris; solo con alcance global)',
+        }),
+        correo: vine.string().trim().maxLength(254).optional().meta({
+            description: 'Otro técnico por su correo (solo con alcance global)',
+        }),
+    }),
+)
