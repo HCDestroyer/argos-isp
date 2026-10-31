@@ -5,8 +5,9 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 /**
  * Edición de un servicio desde su ficha (`PUT /servicios/:id`, `servicios.editar`, con
  * `version`): plan del mismo router, tipo de conexión PPPoE / IP estática / DHCP fija, MAC,
- * amarre IP-MAC, modo IPv6, instalación y precio especial. Solo viaja lo que cambió; los 422 se
- * muestran junto a cada campo y el 409 ofrece recargar.
+ * amarre IP-MAC, modo IPv6, ubicación y contacto en sitio (pedidos A12–A14 de Iris), instalación y
+ * precio especial. Solo viaja lo que cambió; los 422 se muestran junto a cada campo (el teléfono con
+ * `rule: 'telefono'`) y el 409 ofrece recargar.
  *
  * En un router sin RADIUS (`modo_seguridad = 'api'`) no se puede pasar a PPPoE (422
  * `pppoe_requiere_radius`): la opción queda deshabilitada con su motivo. Un PPPoE que ya estaba en
@@ -26,6 +27,8 @@ const { puede } = usePermisos()
 const toast = useToast()
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaEdicionServicio>(entradaEdicionDesde(props.servicio))
+/** El teléfono guardado no se valida si no cambió (puede ser un dato viejo con otro formato). */
+const esquema = computed(() => esquemaEdicionServicioPara(props.servicio))
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 const planes = shallowRef<PlanEfectivo[]>([])
@@ -147,7 +150,7 @@ async function recargar() {
             <UForm
                 id="form-editar-servicio"
                 ref="formulario"
-                :schema="esquemaEdicionServicio"
+                :schema="esquema"
                 :state="estado"
                 class="flex flex-col gap-6"
                 @submit="enviar"
@@ -277,9 +280,25 @@ async function recargar() {
                             class="w-full"
                         />
                     </UFormField>
+                    <USwitch
+                        v-model="estado.excluir_firewall"
+                        label="Excluir del firewall de corte"
+                        class="sm:col-span-2"
+                    />
+                </div>
+
+                <USeparator
+                    label="Ubicación y contacto en sitio"
+                    :ui="{ label: 'text-highlighted font-medium' }"
+                />
+                <div
+                    class="grid gap-4 sm:grid-cols-2"
+                    data-prueba="editar-ubicacion-contacto"
+                >
                     <UFormField
                         name="direccion"
                         label="Dirección de instalación"
+                        class="sm:col-span-2"
                     >
                         <UInput
                             v-model="estado.direccion"
@@ -287,20 +306,57 @@ async function recargar() {
                         />
                     </UFormField>
                     <UFormField
+                        name="referencia"
+                        label="Referencia"
+                        help="Cómo llegar: lo lee el técnico en la orden."
+                        class="sm:col-span-2"
+                    >
+                        <UTextarea
+                            v-model="estado.referencia"
+                            :rows="2"
+                            :maxlength="300"
+                            autoresize
+                            placeholder="Casa verde frente a la iglesia"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField
                         name="coordenadas"
                         label="Coordenadas"
+                        class="sm:col-span-2"
                     >
                         <UInput
                             v-model="estado.coordenadas"
                             placeholder="14.6349,-90.5069"
+                            icon="i-lucide-locate"
                             class="w-full"
                         />
                     </UFormField>
-                    <USwitch
-                        v-model="estado.excluir_firewall"
-                        label="Excluir del firewall de corte"
-                        class="sm:col-span-2"
-                    />
+                    <UFormField
+                        name="contacto_nombre"
+                        label="Contacto en sitio"
+                        help="Quién recibe al técnico."
+                    >
+                        <UInput
+                            v-model="estado.contacto_nombre"
+                            :maxlength="200"
+                            icon="i-lucide-user-round"
+                            class="w-full"
+                        />
+                    </UFormField>
+                    <UFormField
+                        name="contacto_telefono"
+                        label="Teléfono del contacto"
+                    >
+                        <UInput
+                            v-model="estado.contacto_telefono"
+                            type="tel"
+                            inputmode="tel"
+                            placeholder="5512 3344"
+                            icon="i-lucide-phone"
+                            class="w-full"
+                        />
+                    </UFormField>
                 </div>
 
                 <ProblemaAlerta

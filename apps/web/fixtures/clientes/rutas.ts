@@ -2,6 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { errorValorCampo, type ValorCampoFormulario } from '~/utils/camposPersonalizados'
 import { deducirTipoDocumento, errorDocumentoFiscal, limpiarDocumento, type TipoDocumentoFiscal } from '~/utils/documentoFiscal'
+import { errorTelefono, telefonoGuardado } from '../telefonos'
 import { bd, siguienteId } from '../bd'
 import {
     ahora,
@@ -25,11 +26,23 @@ type Cliente = Schema<'Cliente'>
 type CamposCliente = Omit<Cliente, 'id' | 'codigo' | 'version' | 'created_at' | 'updated_at' | 'telegram_chat_id'>
 
 const TIPOS_DOCUMENTO: readonly TipoDocumentoFiscal[] = ['nit', 'cui', 'pasaporte', 'cf']
-const CAMPOS_TEXTO = ['nit_cui', 'nombre_fiscal', 'direccion_fiscal', 'email', 'telefono', 'movil', 'direccion', 'coordenadas'] as const
+const CAMPOS_TEXTO = ['nit_cui', 'nombre_fiscal', 'direccion_fiscal', 'email', 'direccion', 'referencia', 'coordenadas'] as const
+/** Teléfonos (pedido A14 de Iris): se validan y normalizan solo si cambian, como `telefonoParaGuardar`. */
+const CAMPOS_TELEFONO = ['telefono', 'movil'] as const
 
 /** Validación mínima, en el espíritu de `crearClienteValidator`, para probar el 422 en pantalla. */
-function validar(cuerpo: Record<string, unknown>, parcial: boolean): NonNullable<Problem['errors']> {
+function validar(cuerpo: Record<string, unknown>, anterior?: Cliente): NonNullable<Problem['errors']> {
+    const parcial = anterior !== undefined
     const errores: NonNullable<Problem['errors']> = []
+    for (const campo of CAMPOS_TELEFONO) {
+        const error = errorTelefono(campo, cuerpo[campo], anterior?.[campo])
+        if (error) {
+            errores.push(error)
+        }
+    }
+    if (typeof cuerpo.referencia === 'string' && cuerpo.referencia.trim().length > 300) {
+        errores.push({ field: 'referencia', message: 'Máximo 300 caracteres', rule: 'maxLength' })
+    }
     const { nombre, nit_cui: nit, email } = cuerpo
     if (!parcial || nombre !== undefined) {
         if (typeof nombre !== 'string' || nombre.trim().length < 2) {
@@ -100,6 +113,9 @@ function aplicar(base: CamposCliente, cuerpo: Record<string, unknown>): CamposCl
             resultado[campo] = texto(cuerpo[campo])
         }
     }
+    for (const campo of CAMPOS_TELEFONO) {
+        resultado[campo] = telefonoGuardado(cuerpo[campo], base[campo])
+    }
     if (resultado.nit_cui) {
         resultado.nit_cui = resultado.nit_cui.toUpperCase()
     }
@@ -139,6 +155,7 @@ const VACIO: CamposCliente = {
     telefono: null,
     movil: null,
     direccion: null,
+    referencia: null,
     coordenadas: null,
     zona_id: null,
     campos_personalizados: {},
@@ -370,7 +387,7 @@ export const rutasClientes: RutasFixture = {
 
     'POST /api/v1/clientes': conPermiso('clientes.crear', conIdempotencia((solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
-        const errores = validar(cuerpo, false)
+        const errores = validar(cuerpo)
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -400,7 +417,7 @@ export const rutasClientes: RutasFixture = {
         if (cuerpo.version !== actual.version) {
             return versionCambiada()
         }
-        const errores = validar(cuerpo, true)
+        const errores = validar(cuerpo, actual)
         if (errores.length) {
             return datosInvalidos(errores)
         }

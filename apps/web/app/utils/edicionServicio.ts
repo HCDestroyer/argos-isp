@@ -17,41 +17,54 @@ function patron(regex: RegExp, mensaje: string) {
  * Espejo de `editarServicioValidator` + `validarTipoConexion` (A1) para la edición desde la ficha:
  * plan del mismo router, tipo de conexión (al pasar a PPPoE la API genera las credenciales; al
  * salir de PPPoE las borra), MAC (obligatoria en `dhcp_fija` y con amarre), amarre IP-MAC (solo
- * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS) e instalación y facturación.
+ * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), ubicación y contacto en sitio, e instalación y
+ * facturación.
+ *
+ * `guardado` es el servicio que se edita: su `contacto_telefono` no se valida si no cambió (la API
+ * tampoco lo revisa; los teléfonos viejos no se migraron).
  */
-export const esquemaEdicionServicio = z.object({
-    plan_id: z.number().int().min(1, 'Elige el plan'),
-    tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
-    amarre_ip_mac: z.boolean(),
-    mac: patron(PATRON_MAC, 'MAC como 4C:5E:0C:12:34:56'),
-    ipv6_modo: z.enum(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-    ipv6_duid: z.string().trim().max(130, 'Máximo 130 caracteres'),
-    prefijo_delegado_v6: z.string().trim(),
-    direccion: z.string().trim().max(300, 'Máximo 300 caracteres'),
-    coordenadas: patron(PATRON_COORDENADAS, 'Latitud y longitud: 14.6349,-90.5069'),
-    fecha_instalacion: patron(PATRON_FECHA, 'Fecha AAAA-MM-DD'),
-    costo_override: patron(PATRON_DINERO, 'Monto con hasta 2 decimales, por ejemplo 150.00'),
-    excluir_firewall: z.boolean(),
-}).superRefine((datos, ctx) => {
-    if (datos.tipo_conexion === 'pppoe' && datos.amarre_ip_mac) {
-        ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
-    }
-    if (datos.tipo_conexion !== 'pppoe' && modoIpv6PorRadius(datos.ipv6_modo)) {
-        ctx.addIssue({ code: 'custom', path: ['ipv6_modo'], message: 'Sin PPPoE no hay RADIUS: el modo IPv6 debe ser DUID, estático o sin IPv6' })
-    }
-    if (datos.tipo_conexion === 'dhcp_fija' && !datos.mac) {
-        ctx.addIssue({ code: 'custom', path: ['mac'], message: 'DHCP con IP fija necesita la MAC del equipo' })
-    }
-    if (datos.amarre_ip_mac && !datos.mac) {
-        ctx.addIssue({ code: 'custom', path: ['mac'], message: 'El amarre IP-MAC necesita la MAC del equipo' })
-    }
-    if (datos.ipv6_modo === 'duid' && !datos.ipv6_duid) {
-        ctx.addIssue({ code: 'custom', path: ['ipv6_duid'], message: 'El modo DUID necesita el DUID del equipo' })
-    }
-    if (datos.ipv6_modo === 'estatico' && !PATRON_PREFIJO_V6.test(datos.prefijo_delegado_v6)) {
-        ctx.addIssue({ code: 'custom', path: ['prefijo_delegado_v6'], message: 'Prefijo IPv6 en notación CIDR, por ejemplo 2803:d100:1000:100::/56' })
-    }
-})
+export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_telefono'> | null) {
+    return z.object({
+        plan_id: z.number().int().min(1, 'Elige el plan'),
+        tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
+        amarre_ip_mac: z.boolean(),
+        mac: patron(PATRON_MAC, 'MAC como 4C:5E:0C:12:34:56'),
+        ipv6_modo: z.enum(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
+        ipv6_duid: z.string().trim().max(130, 'Máximo 130 caracteres'),
+        prefijo_delegado_v6: z.string().trim(),
+        direccion: z.string().trim().max(300, 'Máximo 300 caracteres'),
+        referencia: z.string().trim().max(300, 'Máximo 300 caracteres'),
+        contacto_nombre: z.string().trim().max(200, 'Máximo 200 caracteres'),
+        // Sin transformar a null: `cambiosServicio` compara el texto con el guardado.
+        contacto_telefono: telefonoFormulario(guardado?.contacto_telefono).transform(valor => valor ?? ''),
+        coordenadas: patron(PATRON_COORDENADAS, 'Latitud y longitud: 14.6349,-90.5069'),
+        fecha_instalacion: patron(PATRON_FECHA, 'Fecha AAAA-MM-DD'),
+        costo_override: patron(PATRON_DINERO, 'Monto con hasta 2 decimales, por ejemplo 150.00'),
+        excluir_firewall: z.boolean(),
+    }).superRefine((datos, ctx) => {
+        if (datos.tipo_conexion === 'pppoe' && datos.amarre_ip_mac) {
+            ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
+        }
+        if (datos.tipo_conexion !== 'pppoe' && modoIpv6PorRadius(datos.ipv6_modo)) {
+            ctx.addIssue({ code: 'custom', path: ['ipv6_modo'], message: 'Sin PPPoE no hay RADIUS: el modo IPv6 debe ser DUID, estático o sin IPv6' })
+        }
+        if (datos.tipo_conexion === 'dhcp_fija' && !datos.mac) {
+            ctx.addIssue({ code: 'custom', path: ['mac'], message: 'DHCP con IP fija necesita la MAC del equipo' })
+        }
+        if (datos.amarre_ip_mac && !datos.mac) {
+            ctx.addIssue({ code: 'custom', path: ['mac'], message: 'El amarre IP-MAC necesita la MAC del equipo' })
+        }
+        if (datos.ipv6_modo === 'duid' && !datos.ipv6_duid) {
+            ctx.addIssue({ code: 'custom', path: ['ipv6_duid'], message: 'El modo DUID necesita el DUID del equipo' })
+        }
+        if (datos.ipv6_modo === 'estatico' && !PATRON_PREFIJO_V6.test(datos.prefijo_delegado_v6)) {
+            ctx.addIssue({ code: 'custom', path: ['prefijo_delegado_v6'], message: 'Prefijo IPv6 en notación CIDR, por ejemplo 2803:d100:1000:100::/56' })
+        }
+    })
+}
+
+/** Sin servicio guardado (alta o pruebas): el teléfono se valida siempre que traiga algo. */
+export const esquemaEdicionServicio = esquemaEdicionServicioPara()
 
 export type EntradaEdicionServicio = z.input<typeof esquemaEdicionServicio>
 export type SalidaEdicionServicio = z.output<typeof esquemaEdicionServicio>
@@ -66,6 +79,9 @@ export function entradaEdicionDesde(servicio: Servicio): EntradaEdicionServicio 
         ipv6_duid: servicio.ipv6_duid ?? '',
         prefijo_delegado_v6: servicio.prefijo_delegado_v6 ?? '',
         direccion: servicio.direccion ?? '',
+        referencia: servicio.referencia ?? '',
+        contacto_nombre: servicio.contacto_nombre ?? '',
+        contacto_telefono: servicio.contacto_telefono ?? '',
         coordenadas: servicio.coordenadas ?? '',
         fecha_instalacion: servicio.fecha_instalacion ?? '',
         costo_override: servicio.costo_override ?? '',
@@ -108,6 +124,15 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     }
     if (datos.direccion !== antes.direccion) {
         cambios.direccion = nulo(datos.direccion)
+    }
+    if (datos.referencia !== antes.referencia) {
+        cambios.referencia = nulo(datos.referencia)
+    }
+    if (datos.contacto_nombre !== antes.contacto_nombre) {
+        cambios.contacto_nombre = nulo(datos.contacto_nombre)
+    }
+    if (datos.contacto_telefono !== antes.contacto_telefono.trim()) {
+        cambios.contacto_telefono = nulo(datos.contacto_telefono)
     }
     if (datos.coordenadas !== antes.coordenadas) {
         cambios.coordenadas = nulo(datos.coordenadas)

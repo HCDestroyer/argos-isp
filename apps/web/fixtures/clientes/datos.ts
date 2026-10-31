@@ -111,6 +111,8 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         telefono: telefono(indice),
         movil: indice % 3 === 0 ? telefono(indice + 100) : null,
         direccion: `Lote ${indice + 4}, sector ${String.fromCharCode(65 + (indice % 6))}`,
+        // Pedido A12 de Iris: la API siempre lo envía; null hasta que alguien lo escriba.
+        referencia: null,
         coordenadas: indice % 4 === 0 ? `14.${6300 + indice * 7},-90.${5000 + indice * 11}` : null,
         zona_id: semilla.zona,
         // El cliente 8 vino del importador (A6): su id de Mikrowisp queda aquí.

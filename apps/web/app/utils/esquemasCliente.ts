@@ -28,8 +28,11 @@ function textoOpcional(maximo: number) {
  * Esquema del formulario con los campos personalizados activos del catálogo (`campos`): cada
  * valor se valida con la misma regla que la API (tipo, opción de la lista, obligatorio) y el
  * error va en `campos_personalizados.<clave>`, el mismo nombre que el 422 de la API.
+ *
+ * `guardado` es el cliente que se edita: su `telefono` y su `movil` no se validan si no cambiaron
+ * (`telefonoParaGuardar` de la API; los teléfonos viejos no se migraron).
  */
-export function esquemaClienteCon(campos: Schema<'CampoPersonalizado'>[]) {
+export function esquemaClienteCon(campos: Schema<'CampoPersonalizado'>[], guardado?: Pick<Schema<'Cliente'>, 'telefono' | 'movil'> | null) {
     return z.object({
         nombre: z.string('Escribe el nombre')
             .trim()
@@ -50,9 +53,11 @@ export function esquemaClienteCon(campos: Schema<'CampoPersonalizado'>[]) {
             .trim()
             .refine(valor => valor === '' || z.email().safeParse(valor).success, 'Escribe un correo válido')
             .transform(valor => valor || null),
-        telefono: textoOpcional(30),
-        movil: textoOpcional(30),
+        telefono: telefonoFormulario(guardado?.telefono),
+        movil: telefonoFormulario(guardado?.movil),
         direccion: textoOpcional(300),
+        /** Cómo llegar, texto libre (pedido A12 de Iris). */
+        referencia: textoOpcional(300),
         coordenadas: z.string()
             .trim()
             .refine(valor => valor === '' || PATRON_COORDENADAS.test(valor), 'Latitud y longitud: 14.6349,-90.5069')
@@ -114,6 +119,7 @@ export function entradaDesdeCliente(cliente?: Schema<'Cliente'>, campos: Schema<
         telefono: cliente?.telefono ?? '',
         movil: cliente?.movil ?? '',
         direccion: cliente?.direccion ?? '',
+        referencia: cliente?.referencia ?? '',
         coordenadas: cliente?.coordenadas ?? '',
         zona: cliente?.zona_id ? String(cliente.zona_id) : SIN_ZONA,
         canal_preferido: cliente?.canal_preferido ?? 'correo',
