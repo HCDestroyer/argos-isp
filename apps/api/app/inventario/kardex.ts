@@ -214,12 +214,16 @@ export function exigirSeguimiento(
     }
 }
 
-/** Bodega de un movimiento: existe y es de la empresa (404 si no), activa para recibir. */
+/**
+ * Bodega de un movimiento: existe y es de la empresa (404 si no), activa para recibir. La bodega
+ * virtual «en tránsito» (fase D, `contratos/inventario.md` D.1) solo la mueven las órdenes de traslado
+ * (`transito: true`); cualquier otra operación sobre ella responde 422 `bodega_transito`.
+ */
 export async function bodegaMovible(
     t: Transaccion,
     bodegaId: number,
     empresaId: number,
-    opciones: { campo?: string; entrada?: boolean } = {},
+    opciones: { campo?: string; entrada?: boolean; transito?: boolean } = {},
 ): Promise<BodegaMovible> {
     const fila = (await t.trx
         .from('inventario.bodegas')
@@ -228,6 +232,15 @@ export async function bodegaMovible(
         .first()) as BodegaMovible | null
     if (!fila || Number(fila.empresa_id) !== empresaId) {
         throw new NoEncontrado(`La bodega ${bodegaId} no existe`)
+    }
+    if (fila.tipo === 'transito' && !opciones.transito) {
+        throw new ValidacionFallida([
+            {
+                field: opciones.campo ?? 'bodega_id',
+                message: `La bodega ${fila.nombre} es la de lo que viaja en órdenes de traslado: no se opera a mano`,
+                rule: 'bodega_transito',
+            },
+        ])
     }
     if (opciones.entrada && !fila.activo) {
         throw new ValidacionFallida([

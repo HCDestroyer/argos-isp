@@ -3,6 +3,7 @@ import {
     auditable,
     booleano,
     definirEsquema,
+    entero,
     enumerado,
     fecha,
     id,
@@ -12,11 +13,12 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
-import { TIPOS_BODEGA } from '#inventario/bodegas'
+import { TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
+import { ESTADOS_ORDEN_TRASLADO, METODOS_RECEPCION } from '#inventario/ordenes_traslado'
 import { lista } from '#shared/openapi/esquemas'
 
 /**
@@ -58,7 +60,7 @@ export const Bodega = definirEsquema(
         id,
         empresa_id: id,
         nombre: texto,
-        tipo: enumerado(TIPOS_BODEGA),
+        tipo: enumerado(TIPOS_BODEGA_VISTA),
         usuario_id: nulable(id),
         usuario_nombre: nulable(texto),
         zona_id: nulable(id),
@@ -79,7 +81,7 @@ export const Existencia = definirEsquema(
         unidad: texto,
         bodega_id: id,
         bodega_nombre: texto,
-        bodega_tipo: enumerado(TIPOS_BODEGA),
+        bodega_tipo: enumerado(TIPOS_BODEGA_VISTA),
         cantidad: Cantidad,
         valor: Dinero,
         costo_promedio: {
@@ -307,5 +309,98 @@ export const InventarioValorizado = definirEsquema(
                 diferencia: { ...Dinero, description: 'saldo_libro − valor_kardex (0 si cuadra)' },
             }),
         ),
+    }),
+)
+
+/*
+| Órdenes de traslado (fase D, `contratos/inventario.md` D.1)
+*/
+
+const camposOrdenTraslado = {
+    id,
+    empresa_id: id,
+    numero: { ...entero, description: 'Correlativo por empresa' },
+    estado: enumerado(ESTADOS_ORDEN_TRASLADO),
+    bodega_origen_id: id,
+    bodega_origen_nombre: texto,
+    bodega_destino_id: id,
+    bodega_destino_nombre: texto,
+    bodega_destino_tipo: enumerado(TIPOS_BODEGA_VISTA),
+    usuario_destino_id: {
+        ...nulable(id),
+        description: 'Técnico de la bodega destino; null si es una bodega',
+    },
+    usuario_destino_nombre: nulable(texto),
+    motivo: nulable(texto),
+    enviado_por: nulable(id),
+    enviado_por_nombre: nulable(texto),
+    enviado_en: instante,
+    metodo_recepcion: nulable(enumerado(METODOS_RECEPCION)),
+    recibido_por: { ...nulable(id), description: 'Quien recibió (el técnico de la bodega destino)' },
+    recibido_por_nombre: nulable(texto),
+    registrado_por: {
+        ...nulable(id),
+        description: 'Quien registró la recepción (el técnico, un encargado o Iris)',
+    },
+    registrado_por_nombre: nulable(texto),
+    recibido_en: nulable(instante),
+    observaciones: nulable(texto),
+    firma_sha256: { ...nulable(texto), description: 'SHA-256 de la firma digital (GET …/firma la devuelve)' },
+    firma_en: nulable(instante),
+    documento_sha256: { ...nulable(texto), description: 'SHA-256 del papel firmado (GET …/documento)' },
+    documento_tipo: nulable(texto),
+    documento_en: nulable(instante),
+    cancelado_por: nulable(id),
+    cancelado_en: nulable(instante),
+    motivo_cancelacion: nulable(texto),
+    lineas_total: entero,
+    costo_total: { ...Dinero, description: 'Costo de lo enviado' },
+    version: entero,
+    created_at: instante,
+    updated_at: instante,
+}
+
+export const OrdenTraslado = definirEsquema('OrdenTraslado', objeto(camposOrdenTraslado))
+
+export const OrdenTrasladoDetalle = definirEsquema(
+    'OrdenTrasladoDetalle',
+    objeto({
+        ...camposOrdenTraslado,
+        lineas: lista(
+            objeto({
+                id,
+                producto_id: id,
+                producto_sku: texto,
+                producto_nombre: texto,
+                unidad: texto,
+                seguimiento: enumerado(SEGUIMIENTOS),
+                cantidad: Cantidad,
+                costo_total: Dinero,
+                cantidad_recibida: nulable(Cantidad),
+                costo_recibido: nulable(Dinero),
+                faltante: {
+                    ...nulable(Cantidad),
+                    description: 'Enviado − recibido; null en tránsito o cancelada',
+                },
+                unidades: lista(
+                    objeto({
+                        unidad_id: id,
+                        serie: nulable(texto),
+                        mac: nulable(texto),
+                        costo: Dinero,
+                        recibida: { ...nulable(booleano), description: 'null en tránsito; false = faltó' },
+                    }),
+                ),
+            }),
+        ),
+    }),
+)
+
+export const ConfiguracionInventario = definirEsquema(
+    'ConfiguracionInventario',
+    objeto({
+        empresa_id: id,
+        traslado_firma_obligatoria: booleano,
+        version: { ...entero, description: '0 = sin configurar (valores por defecto)' },
     }),
 )

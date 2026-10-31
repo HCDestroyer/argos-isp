@@ -3,7 +3,7 @@ import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada } from '#shared/validadores'
 import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
 import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
-import { TIPOS_BODEGA } from '#inventario/bodegas'
+import { TIPOS_BODEGA, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
@@ -167,7 +167,7 @@ export const listarBodegasValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),
         ...reglasPaginacion,
-        tipo: vine.enum(TIPOS_BODEGA).optional(),
+        tipo: vine.enum(TIPOS_BODEGA_VISTA).optional(),
         activo: vine.boolean().optional(),
         usuario_id: idEntidad().optional(),
     }),
@@ -404,5 +404,130 @@ export const valorizadoValidator = vine.compile(
         bodega_id: idEntidad().optional(),
         producto_id: idEntidad().optional(),
         con_ceros: vine.boolean().optional().meta({ description: 'Incluir filas sin existencia ni valor' }),
+    }),
+)
+
+/*
+| Órdenes de traslado (fase D, `contratos/inventario.md` D.1)
+*/
+
+/** Técnico de Argos identificado desde Iris (D.6): `id_externo` (su usuario de Argos) o `correo`. */
+export const tecnicoExterno = () =>
+    vine.object({
+        id_externo: vine.string().trim().maxLength(30).nullable().optional().meta({
+            description: 'Id del usuario de Argos del técnico (el id_externo del vínculo en Iris)',
+        }),
+        correo: vine.string().trim().maxLength(254).nullable().optional().meta({
+            description: 'Correo del usuario de Argos del técnico (sin distinguir mayúsculas)',
+        }),
+    })
+
+export const enviarTrasladoValidator = vine.compile(
+    vine.object({
+        bodega_origen_id: idEntidad(),
+        bodega_destino_id: idEntidad(),
+        motivo: texto(500).nullable().optional(),
+        lineas: vine
+            .array(
+                vine.object({
+                    producto_id: idEntidad(),
+                    cantidad: cantidad().nullable().optional().meta({ description: 'Producto por cantidad' }),
+                    unidad_ids: vine
+                        .array(idEntidad())
+                        .minLength(1)
+                        .maxLength(500)
+                        .nullable()
+                        .optional()
+                        .meta({
+                            description: 'Producto de serie: las unidades que se envían',
+                        }),
+                }),
+            )
+            .minLength(1)
+            .maxLength(200),
+    }),
+)
+
+export const recibirTrasladoValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1).nullable().optional(),
+        metodo_recepcion: vine
+            .enum(['firma_digital', 'firma_papel', 'aceptacion_sistema'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Por defecto firma_digital si llega firma y aceptacion_sistema si no (solo si la empresa no exige firma)',
+            }),
+        recibido_por: tecnicoExterno().nullable().optional(),
+        observaciones: texto(1000).nullable().optional(),
+        firma: vine.string().maxLength(400_000).nullable().optional().meta({
+            description:
+                'PNG del trazo en base64 (con o sin data:image/png;base64,), hasta 256 KB y de 50 a 4000 px por lado. En multipart/form-data va como archivo `firma` y `lineas` como texto JSON',
+        }),
+        lineas: vine
+            .array(
+                vine.object({
+                    linea_id: idEntidad(),
+                    cantidad_recibida: vine
+                        .string()
+                        .trim()
+                        .regex(/^\d{1,11}(\.\d{1,3})?$/)
+                        .nullable()
+                        .optional()
+                        .meta({
+                            description: 'Por cantidad: lo recibido (0 a lo enviado); por defecto todo',
+                        }),
+                    unidad_ids_faltantes: vine.array(idEntidad()).maxLength(500).nullable().optional().meta({
+                        description: 'Por serie: las unidades que no llegaron',
+                    }),
+                }),
+            )
+            .maxLength(200)
+            .nullable()
+            .optional()
+            .meta({ description: 'Solo las líneas con faltantes; las demás se reciben completas' }),
+    }),
+)
+
+export const cancelarTrasladoValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        version: vine.number().withoutDecimals().min(1).nullable().optional(),
+    }),
+)
+
+export const listarOrdenesTrasladoValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine
+            .enum(['en_transito', 'recibida', 'recibida_con_diferencias', 'cancelada'] as const)
+            .optional(),
+        bodega_id: idEntidad().optional().meta({ description: 'Origen o destino' }),
+        numero: vine.number().withoutDecimals().min(1).optional(),
+    }),
+)
+
+export const configurarInventarioValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
+        traslado_firma_obligatoria: vine.boolean(),
+        version: vine.number().withoutDecimals().min(0).meta({ description: '0 la primera vez' }),
+    }),
+)
+
+export const verConfiguracionInventarioValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().optional().meta({ description: 'Por defecto la empresa activa' }),
+    }),
+)
+
+export const documentoTrasladoValidator = vine.compile(
+    vine.object({
+        nota: texto(500)
+            .nullable()
+            .optional()
+            .meta({ description: 'Nota de quien adjunta (queda en la auditoría)' }),
     }),
 )

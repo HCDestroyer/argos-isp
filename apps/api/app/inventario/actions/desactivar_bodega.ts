@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { verBodega, type BodegaVista } from '#inventario/bodegas'
+import { exigirBodegaNoTransito, verBodega, type BodegaVista } from '#inventario/bodegas'
 import { LOCK_PRODUCTO } from '#inventario/kardex'
 
 /**
@@ -25,15 +25,17 @@ export default class DesactivarBodega extends DomainAction<EntradaDesactivarBode
             .from('inventario.bodegas')
             .where('id', input.id)
             .forUpdate()
-            .select('id', 'empresa_id', 'nombre', 'activo', 'version')
+            .select('id', 'empresa_id', 'nombre', 'tipo', 'activo', 'version')
             .first()) as {
             id: number
             empresa_id: number
             nombre: string
+            tipo: string
             activo: boolean
             version: number
         } | null
         if (!actual) throw new NoEncontrado(`La bodega ${input.id} no existe`)
+        exigirBodegaNoTransito(actual)
         exigirAccesoEmpresa(t.ctx, Number(actual.empresa_id))
         t.fijarEmpresa(Number(actual.empresa_id))
         if (Number(actual.version) !== input.version) throw new ConflictoVersion('bodega', input.id)

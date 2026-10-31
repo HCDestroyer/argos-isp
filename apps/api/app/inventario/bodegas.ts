@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import type { Alcance } from '#core/acl'
-import { NoEncontrado, Prohibido } from '#shared/errores'
+import { Conflicto, NoEncontrado, Prohibido } from '#shared/errores'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 
@@ -19,12 +19,15 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 
 export const TIPOS_BODEGA = ['bodega', 'tecnico'] as const
 export type TipoBodega = (typeof TIPOS_BODEGA)[number]
+/** Tipos que se leen: además la bodega virtual «en tránsito» de las órdenes de traslado (fase D). */
+export const TIPOS_BODEGA_VISTA = ['bodega', 'tecnico', 'transito'] as const
+export type TipoBodegaVista = (typeof TIPOS_BODEGA_VISTA)[number]
 
 export interface BodegaVista {
     id: number
     empresa_id: number
     nombre: string
-    tipo: TipoBodega
+    tipo: TipoBodegaVista
     usuario_id: number | null
     usuario_nombre: string | null
     zona_id: number | null
@@ -173,7 +176,7 @@ export function filtrarBodegasVisibles<Q extends DatabaseQueryBuilderContract<an
 }
 
 export interface FiltrosBodegas extends OpcionesPaginacion {
-    tipo?: TipoBodega
+    tipo?: TipoBodegaVista
     activo?: boolean
     usuario_id?: number
 }
@@ -191,4 +194,15 @@ export async function listarBodegas(
     filtrarBodegasVisibles(q, acceso)
     const pagina = await paginar<BodegaVista>(q, filtros, { columna: 'b.id' })
     return { data: pagina.data.map(normalizar), nextCursor: pagina.nextCursor }
+}
+
+/** La bodega «en tránsito» la crea y la mueve el sistema: no se edita ni se desactiva (409). */
+export function exigirBodegaNoTransito(bodega: { id: number; tipo: string }): void {
+    if (bodega.tipo === 'transito') {
+        throw new Conflicto(
+            `La bodega ${bodega.id} es la bodega «en tránsito» de las órdenes de traslado: la mantiene el sistema`,
+            'bodega_transito',
+            'Bodega del sistema',
+        )
+    }
 }

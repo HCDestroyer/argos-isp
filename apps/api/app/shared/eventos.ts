@@ -876,6 +876,42 @@ export interface CatalogoEventos {
         sobrante: Dinero
         lineas: number
     }
+    /** Orden de traslado enviada (fase D, `contratos/inventario.md` D.1): lo enviado viaja en tránsito. */
+    'inventario.traslado_enviado': {
+        orden_id: number
+        empresa_id: number
+        numero: number
+        bodega_origen_id: number
+        bodega_destino_id: number
+        /** técnico de la bodega destino; null si es una bodega */
+        usuario_destino_id: number | null
+        lineas: Array<{ producto_id: number; cantidad: string; unidad_ids: number[] }>
+    }
+    /** El destino recibió la orden; `faltantes` volvieron al origen. */
+    'inventario.traslado_recibido': {
+        orden_id: number
+        empresa_id: number
+        numero: number
+        estado: 'recibida' | 'recibida_con_diferencias'
+        metodo_recepcion: 'firma_digital' | 'firma_papel' | 'aceptacion_sistema'
+        recibido_por: number | null
+        registrado_por: number | null
+        faltantes: Array<{ producto_id: number; cantidad: string; unidad_ids: number[] }>
+    }
+    /** Se canceló una orden en tránsito: todo volvió al origen. */
+    'inventario.traslado_cancelado': {
+        orden_id: number
+        empresa_id: number
+        numero: number
+        motivo: string
+    }
+    /** Cambió la configuración de la IA que lee facturas de compra (nunca valores ni la clave). */
+    'inventario.ia_config_cambiada': {
+        configuracion_id: number
+        /** null = global */
+        empresa_id: number | null
+        campos: string[]
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -1216,6 +1252,10 @@ export const EVENTOS = [
     'inventario.equipo_por_recuperar',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
+    'inventario.traslado_enviado',
+    'inventario.traslado_recibido',
+    'inventario.traslado_cancelado',
+    'inventario.ia_config_cambiada',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

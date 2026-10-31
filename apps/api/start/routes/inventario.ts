@@ -55,6 +55,7 @@ import CancelarConteo from '#inventario/actions/cancelar_conteo'
 import MarcarReparada from '#inventario/actions/marcar_reparada'
 import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 import { inventarioValorizado } from '#inventario/reportes'
+import trasladosFaseD from '#start/routes/inventario_traslados'
 
 const acceso = accesoBodegas
 
@@ -616,4 +617,13 @@ const conteos: Ruta[] = [
     }),
 ]
 
-export default [...productos, ...bodegas, ...lecturas, ...operaciones, ...unidades, ...comodato, ...conteos]
+export default [
+    ...productos,
+    ...bodegas,
+    ...lecturas,
+    ...operaciones,
+    ...trasladosFaseD,
+    ...unidades,
+    ...comodato,
+    ...conteos,
+]

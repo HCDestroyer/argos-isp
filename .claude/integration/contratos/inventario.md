@@ -327,7 +327,7 @@ Rama `a3/inventario-v2` (sale de `main` 10078a6). Decisiones del PM: **recibe qu
 
 - `inventario.ordenes_traslado`: `empresa_id`, `numero` (correlativo por empresa, único, sin huecos: `max + 1` con lock por empresa), `bodega_origen_id`, `bodega_destino_id`, `estado` (`en_transito` → `recibida` | `recibida_con_diferencias` | `cancelada`), `motivo` (del envío), `enviado_por`, `enviado_en`, recepción (`recibido_por` = usuario técnico o encargado que recibió, `registrado_por` = el usuario que hizo la llamada, `metodo_recepcion`, `recibido_en`, `observaciones`), firma (`firma_ruta`, `firma_sha256`, `firma_ip`, `firma_en`), documento firmado en papel (`documento_ruta`, `documento_sha256`, `documento_tipo`, `documento_tamano`), cancelación (`cancelado_por`, `cancelado_en`, `motivo_cancelacion`) y `version`. Se actualiza solo por sus tres acciones (y el adjunto), con `audit.cambios`.
 - `inventario.ordenes_traslado_lineas`: `producto_id`, `cantidad` enviada y `costo_total` enviado (lo que salió del origen), `cantidad_recibida` y `costo_recibido` (null en tránsito). Una línea por producto en la orden.
-- `inventario.ordenes_traslado_unidades` (líneas de serie): `unidad_id`, `estado_previo` (`disponible` o `en_reparacion`, el que recupera al llegar o al volver), `recibida` (null en tránsito, true/false al recibir).
+- `inventario.ordenes_traslado_unidades` (líneas de serie): `unidad_id`, `costo` (el de la unidad al enviarla), `recibida` (null en tránsito, true/false al recibir).
 
 **Dónde está lo enviado: bodega virtual «en tránsito» por empresa.** Una bodega `tipo = 'transito'` (una por empresa, índice único; nace la primera vez que se envía una orden). Por qué una bodega y no una reserva:
 
@@ -340,10 +340,12 @@ La bodega de tránsito no se opera a mano: `bodegaMovible` la rechaza en toda op
 
 | Paso | Par de movimientos | Unidad de serie |
 | --- | --- | --- |
-| Enviar (`inventario.crear_traslado`) | origen − / tránsito +, al costo promedio del origen (o el de la unidad) | `en_transito`, `bodega_id` = tránsito |
-| Recibir lo recibido (`inventario.recibir_traslado`) | tránsito − / destino +, al costo de la línea | `estado_previo`, `bodega_id` = destino |
-| Faltante al recibir | tránsito − / **origen** +, al costo de la línea | `estado_previo`, `bodega_id` = origen |
-| Cancelar (`inventario.cancelar_traslado`) | tránsito − / origen +, todo, al costo de la línea | `estado_previo`, `bodega_id` = origen |
+| Enviar (`inventario.crear_traslado`) | origen − / tránsito +, al costo promedio del origen (o el de la unidad) | `bodega_id` = tránsito |
+| Recibir lo recibido (`inventario.recibir_traslado`) | tránsito − / destino +, al costo de la línea | `bodega_id` = destino |
+| Faltante al recibir | tránsito − / **origen** +, al costo de la línea | `bodega_id` = origen |
+| Cancelar (`inventario.cancelar_traslado`) | tránsito − / origen +, todo, al costo de la línea | `bodega_id` = origen |
+
+**La unidad conserva su estado** (`disponible` o `en_reparacion`) mientras viaja; lo que dice que viaja es su bodega (la de tránsito). Así los checks de unidades del auditor (24.unidad_distinta_de_su_kardex, 24.saldo_de_serie_distinto_de_sus_unidades) siguen valiendo sin cambios. Ninguna operación la toca: `unidadesDeBodega` responde 409 `unidad_en_transito` para una unidad en la bodega de tránsito (salvo las órdenes).
 
 Costo de lo recibido por cantidad: `costo_recibido = redondear(cantidad_recibida × costo_total / cantidad)`; el faltante lleva el resto (`costo_total − costo_recibido`), así la línea sale de tránsito exactamente por lo que entró y el valor de la bodega de tránsito es siempre la suma de las líneas en tránsito (check D.8.b). Una unidad de serie se mueve a su costo.
 
@@ -368,7 +370,7 @@ Costo de lo recibido por cantidad: `costo_recibido = redondear(cantidad_recibida
     - **Firma** (`firma`): PNG del trazo, en base64 (con o sin `data:image/png;base64,`) en JSON, o el archivo `firma` en `multipart/form-data` (los demás campos como texto; `lineas` como JSON). Se valida por contenido (firma PNG, no por extensión), hasta 256 KB, ancho y alto entre 50 y 4000 px (IHDR); si no, 422 `firma`. Se guarda en el almacén de archivos (el de los comprobantes, `inventario/firmas/AAAA/MM/<uuid>.png`) con SHA-256, quién firmó (`recibido_por`), la fecha (`firma_en`) y la IP de la petición. En la auditoría va `{ firma_sha256, firma_bytes }`, nunca el binario ni el base64.
     - Emite `inventario.traslado_recibido`. Deja `audit.acciones` con método, quién recibió y quién registró.
 - `inventario.cancelar_traslado` (`POST /inventario/traslados/:id/cancelar`; `admin`, `contabilidad`, `tecnico`): solo `en_transito`, `motivo` obligatorio; quien pueda operar el origen o con alcance global. Todo vuelve al origen. Emite `inventario.traslado_cancelado`.
-- `inventario.adjuntar_documento_traslado` (`POST /inventario/traslados/:id/documento`, multipart `archivo`; permiso `inventario.recibir_traslado`): la foto o el escaneo del papel firmado, solo en una orden recibida con `firma_papel` y una sola vez (409 `documento_registrado`). JPG, PNG, WebP o PDF por contenido, hasta 5 MB, con SHA-256 (como los comprobantes). `GET /inventario/traslados/:id/documento` y `GET /inventario/traslados/:id/firma` lo devuelven (`inventario.ver` y poder ver la orden).
+- `inventario.adjuntar_documento_traslado` (`POST /inventario/traslados/:id/documento`, multipart `archivo`; permiso con el mismo nombre, `admin` y `contabilidad`): la foto o el escaneo del papel firmado, solo en una orden recibida con `firma_papel` y una sola vez (409 `documento_registrado`). JPG, PNG, WebP o PDF por contenido, hasta 5 MB, con SHA-256 (como los comprobantes). `GET /inventario/traslados/:id/documento` y `GET /inventario/traslados/:id/firma` lo devuelven (`inventario.ver` y poder ver la orden).
 - `inventario.configurar` (`POST /inventario/configuracion`; `admin`): `{ traslado_firma_obligatoria, version }` por empresa (`inventario.configuracion`, una fila por empresa; sin fila = valores por defecto). `GET /inventario/configuracion` (`inventario.ver`).
 
 **Lecturas.** `GET /inventario/traslados?estado=&bodega_id=&numero=` (orígenes o destinos visibles por el tope del técnico) y `GET /inventario/traslados/:id` (líneas, unidades con serie y MAC, recepción, hash corto de la firma; nunca rutas del almacén).
@@ -448,7 +450,7 @@ Costo de lo recibido por cantidad: `costo_recibido = redondear(cantidad_recibida
 
 ### D.7 Permisos y eventos nuevos
 
-- Permisos: `inventario.crear_traslado`, `inventario.recibir_traslado`, `inventario.cancelar_traslado`, `inventario.configurar`, `inventario.configurar_ia`, `tipos_producto.crear`, `tipos_producto.editar`, `tipos_producto.desactivar`, `productos.crear_lote`, `compras.cargar_borrador`, `compras.editar_borrador`, `compras.confirmar_borrador`, `compras.descartar_borrador`. Roles: `admin` todo; `contabilidad` todo salvo `inventario.configurar` e `inventario.configurar_ia`; `tecnico` `crear_traslado`, `recibir_traslado`, `cancelar_traslado`.
+- Permisos: `inventario.crear_traslado`, `inventario.recibir_traslado`, `inventario.cancelar_traslado`, `inventario.adjuntar_documento_traslado`, `inventario.configurar`, `inventario.configurar_ia`, `tipos_producto.crear`, `tipos_producto.editar`, `tipos_producto.desactivar`, `productos.crear_lote`, `compras.cargar_borrador`, `compras.editar_borrador`, `compras.confirmar_borrador`, `compras.descartar_borrador`. Roles: `admin` todo; `contabilidad` todo salvo `inventario.configurar` e `inventario.configurar_ia`; `tecnico` `crear_traslado`, `recibir_traslado`, `cancelar_traslado`. El usuario técnico «Iris» necesita `inventario.recibir_traslado` (pedido en `a3.md`).
 - Eventos: `inventario.traslado_enviado`, `inventario.traslado_recibido`, `inventario.traslado_cancelado`, `inventario.ia_config_cambiada` (en `contratos/eventos.md` y el catálogo de `CLAUDE.md`).
 
 ### D.8 Lo contable (para el auditor)
@@ -468,7 +470,7 @@ Checks nuevos propuestos para `verificar_libro.ts`:
 
 - **a.** Todo `traslado_id` suma 0 en cantidad y en `costo_total`, y no tiene `asiento_id`.
 - **b.** Por empresa y producto, el saldo de la bodega de tránsito (cantidad y valor) = la suma de las líneas de las órdenes `en_transito` (`cantidad`, `costo_total`); la bodega de tránsito queda en 0 cuando no hay órdenes en tránsito.
-- **c.** Cada unidad `en_transito` está en la bodega de tránsito de su empresa y en una orden `en_transito` con `recibida IS NULL`; ninguna otra unidad está en esa bodega.
+- **c.** Cada unidad en la bodega de tránsito está en una línea de una orden `en_transito` con `recibida IS NULL`, y al revés.
 - **d.** Cada movimiento con `origen_tipo = orden_traslado` cita una orden de su empresa cuyos origen o destino (o tránsito) son su bodega.
 - **e.** Cada borrador `confirmado` tiene su `compra_id`, y cada consumo `consumible_cobro` (movimiento `venta` con `origen_externo` o sin él) tiene su factura vigente o su reverso (ya cubierto por los checks de la fase C).
 
