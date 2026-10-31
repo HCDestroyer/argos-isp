@@ -14,7 +14,8 @@
 # (ARGOSISP_FUENTE). Instala en ARGOSISP_DIR (/opt/argosisp-ci) y lo borra todo al terminar.
 #
 # Comprueba: .env 600, versión por GET /api/v1/version a través del proxy (TLS de la CA interna),
-# que los datos sobreviven a una actualización, que la reversión automática deja la versión anterior
+# que los datos sobreviven a una actualización (con COMPOSE_SUBNET_V4 cambiado en el .env: la red se
+# rehace sola), que la reversión automática deja la versión anterior
 # con los datos del respaldo (sin la marca de la versión rota), que --auto no aplica un cambio mayor y
 # que `argosisp revertir` vuelve a la versión y a los datos de antes de la última actualización.
 # En cada versión, que las peticiones del portal (/api/v1/portal/*) las sirve api-portal y no api.
@@ -36,6 +37,9 @@ DOMINIO=argosisp.test
 CORREO=admin@argosisp.test
 # Red de compose distinta de la de siempre (172.30.0.0/24): la instalación la pasa a instalar.sh
 SUBRED_V4=10.213.60.0/24
+# Y la que el .env pide antes de actualizar a $V2, sin `argosisp levantar` (1.5.0: el respaldo previo
+# tropezaba con la red vieja y la actualización dejaba ArgosIsp caído)
+SUBRED_V4_NUEVA=10.213.61.0/24
 TMP="$(mktemp -d)"
 FUENTE="$TMP/fuente"
 mkdir -p "$FUENTE"
@@ -102,6 +106,12 @@ esperar_version() {
     [ "$leida" = "$esperada" ] || fallar "GET /api/v1/version dice '$leida' y se esperaba $esperada"
     [ "$(cli version)" = "$esperada" ] || fallar "argosisp version no es $esperada"
     echo "    versión $esperada (API y .env)"
+}
+
+# Subred IPv4 de la red a la que está conectado el proxy
+red_del_proxy() {
+    docker network inspect "$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' \
+        "$(cli compose ps -q proxy)")" -f '{{(index .IPAM.Config 0).Subnet}}'
 }
 
 # Una petición del portal (por el 80 con cualquier Host, como la página de corte, y por el host de
@@ -219,8 +229,7 @@ codigo="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: cualquiera.example' h
 # Red de compose: instalar.sh la deja en el .env y la API confía en ella (hasta la 1.4.0 la API
 # confiaba en 172.30.0.0/24 fijo y con otra red veía la IP de Caddy o del portal como cliente)
 sudo grep -qx "COMPOSE_SUBNET_V4=$SUBRED_V4" "$DIR/.env" || fallar "instalar.sh no escribió COMPOSE_SUBNET_V4 en el .env"
-red="$(docker network inspect "$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' \
-    "$(cli compose ps -q proxy)")" -f '{{(index .IPAM.Config 0).Subnet}}')"
+red="$(red_del_proxy)"
 [ "$red" = "$SUBRED_V4" ] || fallar "la red de compose es $red y se esperaba $SUBRED_V4"
 ip_vista="$(curl -s -H 'Host: cualquiera.example' http://127.0.0.1/api/v1/portal/quien-soy | jq -r '.ip // ""')"
 for s in proxy portal; do
@@ -270,10 +279,18 @@ psql_ci -c 'CREATE TABLE public.marca_ci (n int); INSERT INTO public.marca_ci VA
 cli compose exec -T api sh -c 'echo uno > /comprobantes/marca-ci-1.txt'
 
 # ---------------------------------------------------------------------------
-paso "actualizar $V1 → $V2"
+paso "actualizar $V1 → $V2 con COMPOSE_SUBNET_V4 cambiado en el .env ($SUBRED_V4_NUEVA, sin levantar)"
 echo "$V2" > "$FUENTE/estable"
+sudo sed -i "s|^COMPOSE_SUBNET_V4=.*|COMPOSE_SUBNET_V4=$SUBRED_V4_NUEVA|" "$DIR/.env"
+# A una variable antes de buscar (pipefail y SIGPIPE, como en servida_por_api_portal)
+estado="$(cli estado)"
+grep -q 'AVISO: la red de compose no coincide' <<< "$estado" || fallar "argosisp estado no avisa que la red no coincide"
 cli actualizar --si
 esperar_version "$V2"
+[ "$(red_del_proxy)" = "$SUBRED_V4_NUEVA" ] || fallar "después de actualizar la red es $(red_del_proxy) y el .env pide $SUBRED_V4_NUEVA"
+[ "$(docker network ls -q --filter "label=com.docker.compose.project=argosisp" | wc -l)" = 1 ] ||
+    fallar "quedó más de una red del proyecto"
+echo "    red $SUBRED_V4_NUEVA después de actualizar"
 probar_api_portal
 [ "$(marcas)" = 1 ] || fallar "los datos no sobrevivieron a la actualización: $(marcas)"
 sudo test -n "$(sudo ls "$DIR/respaldos/actualizaciones")" || fallar "no hay respaldo previo"
