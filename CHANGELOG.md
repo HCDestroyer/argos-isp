@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.0](https://github.com/HCDestroyer/argos-isp/compare/v1.8.0...v1.9.0) (2026-11-05)
+
+
+### Funcionalidades
+
+* **iris:** contrato Iris 0.6.2 — receptor_argos y aviso de volver a conectar; reintentar cualquier 409 de idempotencia de Iris ([#220](https://github.com/HCDestroyer/argos-isp/issues/220)) ([fbf2ed1](https://github.com/HCDestroyer/argos-isp/commit/fbf2ed1fa561b2b4a7e4f3d5e677ccec52036aed))
+* **iris:** contrato Iris 0.6.3 — revocar canje, vencimiento a 24 h y reconexión sin corte ([#222](https://github.com/HCDestroyer/argos-isp/issues/222)) ([258a6a1](https://github.com/HCDestroyer/argos-isp/commit/258a6a10f23d2007f97bc0712d951ec0469db315))
+
 ## [1.8.0](https://github.com/HCDestroyer/argos-isp/compare/v1.7.0...v1.8.0) (2026-11-05)
 
 
