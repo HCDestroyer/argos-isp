@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import logger from '@adonisjs/core/services/logger'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import { errors, symbols } from '@adonisjs/auth'
@@ -14,6 +15,34 @@ import type { AlcancesToken } from '#core/acl'
  * el usuario desactivado → 401.
  */
 export const PREFIJO_TOKEN_API = 'atk_'
+
+/** Ruta de Iris que no confirma un canje en su primera llamada (contrato Iris 0.6.3). */
+export const RUTA_REVOCAR_CONEXION_IRIS = '/api/v1/integraciones/iris/conexion/revocar'
+
+/**
+ * Si el token es el `atk_` de un canje de Iris por confirmar, lo confirma (`iris.confirmar_canje`,
+ * con el token como actor). Un fallo no corta la petición: el cron `iris_canjes_sin_uso` lo
+ * confirma después (ve `ultimo_uso`). Import dinámico: el guard no carga el módulo de Iris si no
+ * hace falta.
+ */
+async function confirmarCanjeIrisAlPrimerUso(tokenId: number, usuarioId: number, ctx: HttpContext) {
+    try {
+        const { esCanjeIrisPorConfirmar } = await import('#integraciones/iris/desconexion')
+        if (!(await esCanjeIrisPorConfirmar(Number(tokenId)))) return
+        const { default: ConfirmarCanjeIris } =
+            await import('#integraciones/iris/actions/confirmar_canje_iris')
+        const requestId = (ctx as { requestId?: string }).requestId ?? randomUUID()
+        await new ConfirmarCanjeIris().execute(
+            { atk_id: Number(tokenId) },
+            { actor: { tipo: 'token', id: Number(usuarioId) }, canal: 'api', requestId },
+        )
+    } catch (error) {
+        logger.error(
+            { err: error, token_api_id: tokenId },
+            'iris: no se pudo confirmar el canje en su primer uso',
+        )
+    }
+}
 
 export function generarTokenApi(): { valor: string; hash: string } {
     const valor = PREFIJO_TOKEN_API + randomBytes(32).toString('base64url')
@@ -64,8 +93,14 @@ export class TokenApiGuard implements GuardContract<Usuario> {
             .from('core.tokens_api')
             .where('hash', hashTokenApi(valor))
             .whereNull('revocado_en')
-            .select('id', 'usuario_id', 'nombre', 'alcances')
-            .first()) as { id: number; usuario_id: number; nombre: string; alcances: AlcancesToken } | null
+            .select('id', 'usuario_id', 'nombre', 'alcances', 'ultimo_uso')
+            .first()) as {
+            id: number
+            usuario_id: number
+            nombre: string
+            alcances: AlcancesToken
+            ultimo_uso: Date | null
+        } | null
         if (!fila) return this.getUserOrFail()
 
         const usuario = await Usuario.find(fila.usuario_id)
@@ -77,6 +112,12 @@ export class TokenApiGuard implements GuardContract<Usuario> {
             .where('id', fila.id)
             .where((q) => q.whereNull('ultimo_uso').orWhereRaw(`ultimo_uso < now() - interval '1 minute'`))
             .update({ ultimo_uso: db.knexRawQuery('now()') })
+
+        // Contrato Iris 0.6.3: la primera llamada con el atk_ de un canje lo confirma (y aplica una
+        // reconexión pendiente) antes de atender la petición. Salvo la de revocar: esa lo descarta.
+        if (fila.ultimo_uso === null && this.ctx.route?.pattern !== RUTA_REVOCAR_CONEXION_IRIS) {
+            await confirmarCanjeIrisAlPrimerUso(fila.id, fila.usuario_id, this.ctx)
+        }
 
         this.user = usuario
         this.token = { id: fila.id, usuarioId: fila.usuario_id, nombre: fila.nombre, alcances: fila.alcances }

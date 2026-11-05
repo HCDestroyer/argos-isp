@@ -45,6 +45,7 @@ validador (`canjearEnlaceIrisValidator`: el de Horus más `code_verifier`); el c
 | `GET /integraciones/iris/autorizar/vista-previa?iris=`             | `iris.configurar`                                      | lectura (sin auditoría): origen, `origen_conocido`, empresas |
 | `POST /integraciones/iris/autorizar`                               | `iris.configurar`                                      | `iris.autorizar`                                       |
 | `POST /integraciones/iris/conexion/canjear`                        | público (código del enlace)                            | `iris.canjear_enlace`                                  |
+| `POST /integraciones/iris/conexion/revocar`                        | `sso.emitir` (solo el `atk_` de Iris, que se revoca)   | `iris.revocar_conexion` (204; repetido → 401, 0.6.3)   |
 | `POST /integraciones/iris/abrir`                                   | `iris.abrir`                                           | `iris.abrir` (destinos `ticket`, `orden`, `prospecto`) |
 | `POST /integraciones/iris/sso/tickets`                             | `sso.emitir` (solo el `atk_` de Iris)                  | `sso.emitir` (destinos `cliente`, `servicio`)          |
 | `POST /integraciones/iris/resolver`                                | `ip.resolver`                                          | `ip.resolver` (pedido A8, igual que Horus)             |
@@ -89,7 +90,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.6.2"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.6.3"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
@@ -132,6 +133,60 @@ y el admin aprueba en Argos.
   de §1.3 es `<base>/conectar#…` y en §1.4 va como `api=<base>` en el fragmento. Por eso el host
   coincide siempre con la base de Argos que conoce Iris; **no** coincide con `panel_url` (en
   producción el panel y la API tienen dominios distintos). Prueba: `tests/core/iris_receptor_062.spec.ts`.
+
+## Token huérfano de un canje y reconexión (contrato 0.6.3)
+
+Si Iris rechaza la respuesta de un canje (por ejemplo `422 webhook_invalido`), el `atk_` y el
+conector ya existían en Argos. Y al reconectar, Iris sigue usando su conector anterior hasta activar
+el nuevo. Reglas:
+
+- **Confirmación = primera llamada autenticada** del `atk_` de un canje (cualquiera). La hace el guard
+  de tokens (`token_api_guard.ts` → `esCanjeIrisPorConfirmar` → `actions/confirmar_canje_iris.ts`,
+  `iris.confirmar_canje`) **antes** de atender esa llamada, así la llamada ya ve el conector nuevo.
+  Excepción: la primera llamada a `POST /integraciones/iris/conexion/revocar` no confirma. Si el guard
+  falla, el cron la confirma después (ve `core.tokens_api.ultimo_uso`).
+- **Canje directo** (no hay conector en uso: sin fila, desconectado, sin `iris_pat_`, o con un canje
+  que nadie confirmó): reemplaza el conector al momento, como antes: apagado, `atk_` anterior
+  revocado, canje pendiente de confirmar (`canje_confirmado_en = null`).
+- **Reconexión** (`conectorIrisEnUso`: conector con `iris_pat_`, no desconectado y, si vino de un
+  enlace, ya confirmado; también uno configurado a mano): el canje **no toca** el conector. Guarda el
+  juego nuevo en `pendiente_token_argos_id`, `pendiente_canjeado_en` y `pendiente_secreto_cifrado`
+  (`JuegoPendienteIris` cifrado entero: `url_base`, `iris_pat_`, receptor de Iris y su secreto,
+  secreto del receptor de Argos, `contrato`, `receptor_argos`; en `audit.cambios` sale `***`).
+  - Hasta confirmar, el conector sigue con su `atk_`, URL, `iris_pat_`, secretos, `contrato`,
+    `receptor_argos` y `activo`.
+  - Al confirmar (primera llamada del `atk_` nuevo) se aplica todo el juego, `token_argos_id` pasa al
+    nuevo, `conectado_por_enlace_en` = hora del canje nuevo, `canje_confirmado_en` = ahora, y se
+    **revoca el `atk_` anterior**. `activo` no cambia: la integración no se corta.
+  - Si el `atk_` nuevo se revoca (endpoint) o vence sin uso (24 h), el juego se descarta y el
+    conector anterior queda vivo y sin cambios.
+  - Un canje nuevo con una reconexión pendiente la reemplaza (revoca su `atk_`).
+  - `GET /integraciones/iris`: `reconexion_pendiente_desde` y `reconexion_vence_en` (opcionales).
+- **`POST /integraciones/iris/conexion/revocar`** (`actions/revocar_conexion_iris.ts`,
+  `iris.revocar_conexion`): con el mismo `atk_`, sin cuerpo, 204. Revoca ese token. Si es el de una
+  reconexión pendiente, la descarta (conector sin cambios). Si es el del conector, lo desconecta
+  (`desconexion.ts`): apagado, sin el `iris_pat_` ni los dos secretos de webhooks, `desconectado_en` y
+  `motivo_desconexion = revocado_por_iris`; conserva URL, receptor, `conector_id`, `token_argos_id` y
+  contrato. Repetido → 401 (ya no autentica). Otra credencial → 403. Sin evento: nadie consume el
+  estado del conector por evento y los envíos lo leen de la base. Repetir el canje cuyo token ya se
+  revocó → 410.
+- **Cron `iris_canjes_sin_uso`** (`app/core/jobs.ts`, cada 5 min, con lock) →
+  `actions/vencer_canje_iris.ts` (`iris.vencer_canje`): confirma lo que el guard no alcanzó, descarta
+  la reconexión sin uso a las 24 h (`PLAZO_CONFIRMAR_CANJE_IRIS_MS`) y desconecta el canje directo
+  sin uso a las 24 h (`motivo_desconexion = canje_sin_uso`). Solo llama a la acción (y solo audita)
+  si hay algo que hacer. No es un TTL de caché (regla 5): es el vencimiento auditado de una
+  credencial que nadie aceptó.
+- Migraciones `1793893516316_alter_iris_conector_canje_063_table` (las filas existentes quedan
+  confirmadas) y `1793894670907_alter_iris_conector_reconexion_table` (columnas `pendiente_*`).
+- **Compatibilidad.** Un Iris anterior nunca llama a revocar y usa el `atk_` al activar su conector
+  (PUT del contrato y primera carga de catálogos), antes de que venza su propio `iris_pat_` (15 min).
+- `GET /integraciones/iris` responde `estado_canje` (`pendiente` | `confirmado` | `desconectado` |
+  null sin enlace), `canje_vence_en`, `desconectado_en` y `motivo_desconexion` (opcionales en el
+  OpenAPI). Encender a mano un conector desconectado (`PUT /integraciones/iris` con `activo: true` y
+  un `iris_pat_` nuevo) lo deja **configurado a mano**: sin `conectado_por_enlace_en`, `token_argos_id`
+  ni `canje_confirmado_en` (`estado_canje: null`, `canje_vence_en: null`) y sin reconexión pendiente;
+  el barrido no lo vuelve a tomar. Iris usa entonces un `atk_` creado en el panel.
+- Prueba: `tests/core/iris_revocar_063.spec.ts`.
 
 ## Pagos y atención (contrato 0.6.0, §1.1, §7.1, §7.5, §7.6; parte de A1)
 
