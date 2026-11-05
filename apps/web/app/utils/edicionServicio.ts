@@ -17,13 +17,23 @@ function patron(regex: RegExp, mensaje: string) {
  * Espejo de `editarServicioValidator` + `validarTipoConexion` (A1) para la edición desde la ficha:
  * plan del mismo router, tipo de conexión (al pasar a PPPoE la API genera las credenciales; al
  * salir de PPPoE las borra), MAC (obligatoria en `dhcp_fija` y con amarre), amarre IP-MAC (solo
- * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), ubicación y contacto en sitio, e instalación y
- * facturación.
+ * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), IPv4 fija, contraseña PPPoE, ubicación y contacto
+ * en sitio, e instalación y facturación.
+ *
+ * IPv4 (`ipv4`, opcional en la API y nunca `null`): con `cambiar_ipv4` se escribe la nueva con la
+ * misma validación del alta (`problemasIpv4Fija`); la red es obligatoria si se ven las redes del
+ * router (`redes`) y no se manda: la API la busca por la IP. Quitar la IPv4 no lo admite la API.
+ *
+ * Contraseña PPPoE (`pass_ppp`, 6 a 64): vacía deja la que tiene. El usuario PPPoE no se edita: la
+ * API solo lo acepta al pasar el servicio a PPPoE (422 `user_ppp` en otro caso).
  *
  * `guardado` es el servicio que se edita: su `contacto_telefono` no se valida si no cambió (la API
  * tampoco lo revisa; los teléfonos viejos no se migraron).
  */
-export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_telefono'> | null) {
+export function esquemaEdicionServicioPara(
+    guardado?: Pick<Servicio, 'contacto_telefono'> | null,
+    redes: readonly { id: number, cidr: string }[] = [],
+) {
     return z.object({
         plan_id: z.number().int().min(1, 'Elige el plan'),
         tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
@@ -43,7 +53,21 @@ export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_t
         excluir_firewall: z.boolean(),
         /** Servidor PPPoE del router (`contratos/red-acceso.md` §3); 0 = sin servidor o que lo derive la API. */
         servidor_pppoe_id: z.number().int(),
+        /** Solo de la pantalla: se escribe una IPv4 nueva. */
+        cambiar_ipv4: z.boolean(),
+        /** Solo de la pantalla: la red de la IP nueva (no viaja). */
+        red_id: z.number().int().optional(),
+        ipv4: z.string().trim(),
+        pass_ppp: z.string(),
     }).superRefine((datos, ctx) => {
+        if (datos.cambiar_ipv4) {
+            for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: redes.length > 0, redes })) {
+                ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
+            }
+        }
+        if (datos.tipo_conexion === 'pppoe' && datos.pass_ppp !== '' && (datos.pass_ppp.length < 6 || datos.pass_ppp.length > 64)) {
+            ctx.addIssue({ code: 'custom', path: ['pass_ppp'], message: 'De 6 a 64 caracteres' })
+        }
         if (datos.tipo_conexion === 'pppoe' && datos.amarre_ip_mac) {
             ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
         }
@@ -89,6 +113,10 @@ export function entradaEdicionDesde(servicio: Servicio): EntradaEdicionServicio 
         costo_override: servicio.costo_override ?? '',
         excluir_firewall: servicio.excluir_firewall,
         servidor_pppoe_id: servicio.servidor_pppoe_id ?? 0,
+        cambiar_ipv4: false,
+        red_id: undefined,
+        ipv4: servicio.ipv4 ?? '',
+        pass_ppp: '',
     }
 }
 
@@ -153,6 +181,13 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     }
     if (datos.excluir_firewall !== antes.excluir_firewall) {
         cambios.excluir_firewall = datos.excluir_firewall
+    }
+    if (datos.cambiar_ipv4 && datos.ipv4 && datos.ipv4 !== (original.ipv4 ?? '')) {
+        cambios.ipv4 = datos.ipv4
+    }
+    // Solo un PPPoE que sigue siendo PPPoE; al pasar a PPPoE la API genera la contraseña.
+    if (datos.tipo_conexion === 'pppoe' && antes.tipo_conexion === 'pppoe' && datos.pass_ppp !== '') {
+        cambios.pass_ppp = datos.pass_ppp
     }
     return cambios
 }

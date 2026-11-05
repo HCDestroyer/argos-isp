@@ -85,11 +85,8 @@ export const esquemaServicio = z.object({
         ctx.addIssue({ code: 'custom', path: ['mac'], message: 'El amarre IP-MAC necesita la MAC del equipo' })
     }
     if (datos.asignacion === 'fija') {
-        if (!PATRON_IPV4.test(datos.ipv4)) {
-            ctx.addIssue({ code: 'custom', path: ['ipv4'], message: 'Escribe una IPv4 válida' })
-        }
-        if (datos.red_id === undefined) {
-            ctx.addIssue({ code: 'custom', path: ['red_id'], message: 'Elige la red de la IP fija' })
+        for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: true })) {
+            ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
         }
     }
     if (datos.ipv6_modo === 'duid' && !datos.ipv6_duid) {

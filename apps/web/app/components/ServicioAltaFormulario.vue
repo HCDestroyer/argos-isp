@@ -180,9 +180,11 @@ const nacePendiente = computed({
 
 /** El esquema base más la regla que necesita las redes cargadas: la IP fija cae en la red elegida. */
 const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
-    const elegida = redes.value.find(r => r.id === datos.red_id)
-    if (datos.asignacion === 'fija' && elegida && PATRON_IPV4.test(datos.ipv4) && !ipEnCidr(datos.ipv4, elegida.cidr)) {
-        ctx.addIssue({ code: 'custom', path: ['ipv4'], message: `Escribe una IP dentro de ${elegida.cidr} o elige otra red` })
+    // El formato y la red ya los revisa `esquemaServicio`; aquí, que la IP caiga en la red elegida.
+    if (datos.asignacion === 'fija' && PATRON_IPV4.test(datos.ipv4)) {
+        for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: false, redes: redes.value })) {
+            ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
+        }
     }
     const elegido = planes.value.find(p => p.id === datos.plan_id)
     if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
@@ -222,17 +224,11 @@ const itemsAsignacion: RadioGroupItem[] = [
     { label: 'IP fija', value: 'fija', description: 'Para IP pública o reglas por IP: la escribes tú.' },
 ]
 
-function etiquetaRed(r: RedIpv4): string {
-    return `${r.cidr} · ${r.tipo === 'pool' ? 'pool' : 'estática'}`
-}
-
-const itemsRed = computed<SelectItem[]>(() => redes.value.map(r => ({ label: etiquetaRed(r), value: r.id })))
-
 /** Asignación automática: red opcional (`red_ipv4_id`); "cualquiera" = la API elige. */
 const CUALQUIER_RED = 'cualquiera'
 const itemsRedAutomatica = computed<SelectItem[]>(() => [
     { label: 'Cualquier red del router', value: CUALQUIER_RED },
-    ...redes.value.map(r => ({ label: etiquetaRed(r), value: String(r.id) })),
+    ...redes.value.map(r => ({ label: etiquetaRedIpv4(r), value: String(r.id) })),
 ])
 const redAutomatica = computed({
     get: () => (estado.red_id === undefined ? CUALQUIER_RED : String(estado.red_id)),
@@ -746,37 +742,12 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             />
                         </UFormField>
 
-                        <div
+                        <ServicioIpv4Fija
                             v-if="estado.asignacion === 'fija'"
-                            class="grid gap-4 sm:grid-cols-2"
-                        >
-                            <UFormField
-                                name="red_id"
-                                label="Red"
-                                help="La red del router a la que pertenece la IP."
-                                required
-                            >
-                                <USelect
-                                    v-model="estado.red_id"
-                                    :items="itemsRed"
-                                    placeholder="Elige la red"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField
-                                name="ipv4"
-                                label="IP fija"
-                                :help="red ? `Dentro de ${red.cidr}.` : 'Elige primero la red.'"
-                                required
-                            >
-                                <UInput
-                                    v-model="estado.ipv4"
-                                    inputmode="decimal"
-                                    placeholder="100.64.10.50"
-                                    class="w-full font-mono"
-                                />
-                            </UFormField>
-                        </div>
+                            v-model:red-id="estado.red_id"
+                            v-model:ipv4="estado.ipv4"
+                            :redes="redes"
+                        />
 
                         <div
                             v-else
@@ -802,7 +773,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 <UBadge
                                     v-for="r in redes"
                                     :key="r.id"
-                                    :label="etiquetaRed(r)"
+                                    :label="etiquetaRedIpv4(r)"
                                     color="neutral"
                                     variant="outline"
                                     class="font-mono"

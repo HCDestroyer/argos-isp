@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { ManejadorFixture, RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import { ipEnCidr, ipv4ANumero } from '~/utils/red'
+import { ipEnCidr, ipv4ANumero, PATRON_IPV4 } from '~/utils/red'
 import { bd, siguienteId } from '../bd'
 import { localAddressServicio, resolverServidorServicio } from '../redAcceso/rutas'
 import {
@@ -618,6 +618,52 @@ function sincronizarRouter(solicitud: SolicitudFixture): ReturnType<ManejadorFix
     return { status: 200, cuerpo: { ...base, cambios, ya_estaba_bien: cambios.length === 0, avisos, error: null } satisfies Schema<'SincronizacionServicio'> }
 }
 
+/**
+ * La IPv4 nueva de `PUT /servicios/:id`, como `asignarIpv4` (A1, `network/ipam_v4.ts`): 422 en
+ * `ipv4` si no es IPv4, si no es de una red del router o si es red, broadcast o gateway; 409
+ * `ip_ocupada` si otro servicio la tiene.
+ */
+function ipv4DeEdicion(servicio: Servicio, ip: unknown): { errores: Errores } | { conflicto: RespuestaFixture } | { ip: string | null } {
+    if (ip === undefined) {
+        return { ip: servicio.ipv4 }
+    }
+    if (typeof ip !== 'string' || !PATRON_IPV4.test(ip)) {
+        return { errores: [{ field: 'ipv4', message: 'El campo ipv4 debe ser una dirección IPv4 válida', rule: 'ipAddress' }] }
+    }
+    const red = bd.redesIpv4.find(r => r.router_id === servicio.router_id && ipEnCidr(ip, r.cidr))
+    if (!red) {
+        return { errores: [{ field: 'ipv4', message: 'La IP no pertenece a ninguna red IPv4 del router', rule: 'red' }] }
+    }
+    const [base = '', prefijo = '32'] = red.cidr.split('/')
+    const inicio = ipv4ANumero(base) ?? 0
+    const numero = ipv4ANumero(ip) ?? 0
+    const tamano = 2 ** (32 - Number(prefijo))
+    if (numero === inicio || numero === inicio + tamano - 1 || ip === red.gateway) {
+        return { errores: [{ field: 'ipv4', message: 'Es la dirección de red, broadcast o gateway', rule: 'reservada' }] }
+    }
+    const otro = bd.servicios.find(s => s.id !== servicio.id && s.ipv4 === ip)
+    if (otro) {
+        return { conflicto: problemaTipado(409, 'ip_ocupada', 'Conflicto', `La IP ${ip} ya está asignada al servicio ${otro.id}`) }
+    }
+    return { ip }
+}
+
+/**
+ * Credenciales en `PUT /servicios/:id`, como `EditarServicio` (A1): `user_ppp` solo al pasar a
+ * PPPoE; `pass_ppp` de 6 a 64 (y solo en PPPoE, lo revisa `validarTipo`).
+ */
+function erroresCredencialesEdicion(cuerpo: Record<string, unknown>, tipoAntes: string, tipo: string): Errores {
+    const errores: Errores = []
+    if (cuerpo.user_ppp !== undefined && !(tipo === 'pppoe' && tipoAntes !== 'pppoe')) {
+        errores.push({ field: 'user_ppp', message: 'El user_ppp solo se indica al cambiar el servicio a pppoe', rule: 'tipo_conexion' })
+    }
+    const clave = cuerpo.pass_ppp
+    if (clave !== undefined && (typeof clave !== 'string' || clave.length < 6 || clave.length > 64)) {
+        errores.push({ field: 'pass_ppp', message: 'El campo pass_ppp debe tener de 6 a 64 caracteres', rule: 'minLength' })
+    }
+    return errores
+}
+
 export const rutasServicios: RutasFixture = {
     'POST /api/v1/servicios/:id/sincronizar-router': conPermiso('servicios.sincronizar_router', conIdempotencia(sincronizarRouter)),
     'POST /api/v1/servicios/:id/activar-instalacion': conPermiso('servicios.activar_instalacion', conIdempotenciaObligatoria(activarInstalacion)),
@@ -727,8 +773,13 @@ export const rutasServicios: RutasFixture = {
             amarre: cuerpo.amarre_ip_mac === true || amarre,
             planV6: bd.planes.find(p => p.id === planId)?.dual_stack === 'v6',
             conUsuario: false,
-            conClave: false,
+            conClave: cuerpo.pass_ppp !== undefined,
         })
+        errores.push(...erroresCredencialesEdicion(cuerpo, tipoAntes, tipo))
+        const ipv4 = ipv4DeEdicion(actual, cuerpo.ipv4)
+        if ('errores' in ipv4) {
+            errores.push(...ipv4.errores)
+        }
         if (!(bd.planesPorRouter[actual.router_id] ?? []).includes(planId)) {
             errores.push({ field: 'plan_id', message: 'El plan no está implementado en ese router', rule: 'plan_router' })
         }
@@ -740,6 +791,9 @@ export const rutasServicios: RutasFixture = {
         const sinRadius = tipo !== tipoAntes ? pppoeSinRadius(actual.router_id, tipo) : null
         if (sinRadius) {
             return sinRadius
+        }
+        if ('conflicto' in ipv4) {
+            return ipv4.conflicto
         }
         // Servidor PPPoE: se conserva; se elige o cambia con `servidor_pppoe_id`; al dejar PPPoE, null.
         let servidorId = tipo === 'pppoe' ? (actual.servidor_pppoe_id ?? null) : null
@@ -760,6 +814,7 @@ export const rutasServicios: RutasFixture = {
             amarre_ip_mac: amarre,
             user_ppp: tipo === 'pppoe' ? (actual.user_ppp ?? texto(cuerpo.user_ppp) ?? `cliente${actual.cliente_id}.${actual.id}`) : null,
             mac,
+            ipv4: 'ip' in ipv4 ? ipv4.ip : actual.ipv4,
             ipv6_modo: modo,
             ipv6_duid: 'ipv6_duid' in cuerpo ? texto(cuerpo.ipv6_duid) : actual.ipv6_duid,
             direccion: 'direccion' in cuerpo ? texto(cuerpo.direccion) : actual.direccion,
@@ -774,7 +829,10 @@ export const rutasServicios: RutasFixture = {
             updated_at: ahora(),
         }
         if (tipo === 'pppoe' && tipoAntes !== 'pppoe') {
-            bd.clavesPpp[actual.id] = claveGenerada(actual.id)
+            bd.clavesPpp[actual.id] = typeof cuerpo.pass_ppp === 'string' ? cuerpo.pass_ppp : claveGenerada(actual.id)
+        }
+        else if (tipo === 'pppoe' && typeof cuerpo.pass_ppp === 'string') {
+            bd.clavesPpp[actual.id] = cuerpo.pass_ppp
         }
         if (tipo !== 'pppoe') {
             bd.clavesPpp = Object.fromEntries(Object.entries(bd.clavesPpp).filter(([id]) => Number(id) !== actual.id))
@@ -783,7 +841,8 @@ export const rutasServicios: RutasFixture = {
         if (actualizado.plan_id !== actual.plan_id) {
             reconciliarIncluidos(actualizado)
         }
-        registrarAccion(solicitud, 'servicios.editar', { tipo: 'servicio', id: actual.id }, cuerpo)
+        // La contraseña nunca llega a la bitácora (A1: `***`).
+        registrarAccion(solicitud, 'servicios.editar', { tipo: 'servicio', id: actual.id }, 'pass_ppp' in cuerpo ? { ...cuerpo, pass_ppp: '***' } : cuerpo)
         return { status: 200, cuerpo: { ...vista(actualizado), warnings: advertenciasServicio(actualizado) } }
     }),
 
