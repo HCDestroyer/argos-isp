@@ -7,7 +7,8 @@ import { detalleOperador, exigirEstadoPromesa, motivoDeCierre } from '#billing/c
  * promesa `activa` o `pendiente_aprobacion` → `cancelada` (motivo y quién en
  * `resultado_evaluacion.cierre`). Si estaba activa, `evaluarEstadoServicio` corre en la misma
  * transacción: el servicio vuelve a limitarse o cortarse si sigue con vencidas (respetando la
- * hora de corte). 409 `promesa_no_pendiente` si ya estaba cerrada. Ver `cierre_promesa.ts`.
+ * hora de corte). Evento `promesa.cancelada` (`motivo = cancelada_por_supervisor`, `detalle` =
+ * el texto). 409 `promesa_no_pendiente` si ya estaba cerrada. Ver `cierre_promesa.ts`.
  */
 export default class CancelarPromesa extends ResolverPromesa {
     readonly nombre = 'promesas.cancelar'
@@ -20,6 +21,10 @@ export default class CancelarPromesa extends ResolverPromesa {
     ) {
         const motivo = motivoDeCierre(input)
         exigirEstadoPromesa(promesa, ['activa', 'pendiente_aprobacion'], 'cancelar')
-        return { estado: 'cancelada' as const, detalle: detalleOperador(t, motivo) }
+        return {
+            estado: 'cancelada' as const,
+            detalle: detalleOperador(t, motivo),
+            cancelacion: { motivo: 'cancelada_por_supervisor' as const, detalle: motivo },
+        }
     }
 }

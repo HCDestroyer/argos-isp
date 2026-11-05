@@ -15,6 +15,8 @@ export interface EntradaCambiarEstado {
     servicioId: number
     nuevo: EstadoOperativo
     motivo: string
+    /** billing (Iris 0.6.0): marca `origen: 'iris'` en `servicio.estado_cambiado`; no cambia la transición */
+    origen?: 'iris'
 }
 
 export interface ResultadoCambiarEstado {
@@ -86,6 +88,7 @@ export default class CambiarEstadoServicio extends DomainAction<
             de: fila.estado,
             a: input.nuevo,
             motivo: input.motivo,
+            ...(input.origen === 'iris' ? { origen: 'iris' as const } : {}),
         })
         await aplicarBloqueoPorEstado(
             t,

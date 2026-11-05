@@ -13,7 +13,7 @@ import { configPara } from '#notify/configuracion'
  *
  * - `POST <iris>/api/v1/mensajeria/consentimientos` con `{ empresa_id, cliente_id, canal, estado,
  *   origen, ocurrido_en }` (forma de Iris 0.6.1), el token del conector e `Idempotency-Key =
- *   argos:consentimiento:<cliente_id>:<canal>:<ocurrido_en>`. Mismos bytes en cada reintento.
+ *   argos:consentimiento:<empresa_id>:<cliente_id>:<canal>:<ocurrido_en>` (con la empresa: el mismo cliente en dos empresas son dos permisos). Mismos bytes en cada reintento.
  * - `201`/`200 { consentimiento_id, estado_vigente }`: se guardan. `estado_vigente` puede diferir de lo
  *   que se mandó (una baja dada en el chat manda): Argos lo adopta como último estado de contacto
  *   (`notify.contacto_iris`) para no pedir avisos a quien quedó de baja.
@@ -24,8 +24,13 @@ import { configPara } from '#notify/configuracion'
  *   sin reintento.
  */
 
-export function claveConsentimiento(clienteId: number, canal: string, ocurridoEn: string): string {
-    return `argos:consentimiento:${clienteId}:${canal}:${ocurridoEn}`
+export function claveConsentimiento(
+    empresaId: number,
+    clienteId: number,
+    canal: string,
+    ocurridoEn: string,
+): string {
+    return `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${ocurridoEn}`
 }
 
 export interface VistaConsentimiento {

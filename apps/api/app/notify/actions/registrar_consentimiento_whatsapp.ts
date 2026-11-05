@@ -24,7 +24,7 @@ export interface EntradaConsentimiento {
  * `notificaciones.registrar_consentimiento`: permiso de contacto por WhatsApp hacia Iris (contrato
  * Iris 0.6.0 §6.4, pedido A21). El registro vive **solo en Iris**: esta acción lo deja en la cola
  * `notify.consentimientos_iris` y `iris:worker` lo manda a `POST /mensajeria/consentimientos` con
- * `Idempotency-Key = argos:consentimiento:<cliente_id>:whatsapp:<ocurrido_en>`. Con el conector
+ * `Idempotency-Key = argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>`. Con el conector
  * apagado (o con contrato < 0.6.0) queda pendiente y sale al activarse.
  *
  * - Idempotente por esa clave: la misma marca repetida no crea otra fila.
@@ -49,7 +49,7 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
         t.fijarEmpresa(empresaId)
 
         const ocurrido = new Date(input.ocurrido_en ?? Date.now()).toISOString()
-        const clave = claveConsentimiento(input.cliente_id, 'whatsapp', ocurrido)
+        const clave = claveConsentimiento(empresaId, input.cliente_id, 'whatsapp', ocurrido)
         const insertadas = (await t.trx.rawQuery(
             `INSERT INTO notify.consentimientos_iris
                 (empresa_id, cliente_id, canal, estado, origen, ocurrido_en, idempotency_key, registrado_por, request_id)

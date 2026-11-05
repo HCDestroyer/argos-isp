@@ -1613,12 +1613,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Cola de comprobantes de depósito (portal y panel)
+         * Cola de comprobantes de depósito (portal, panel e Iris)
          * @description Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.
          */
         get: operations["comprobantesListar"];
         put?: never;
-        post?: never;
+        /**
+         * Registrar un comprobante de depósito (boleta) para la cola de caja
+         * @description Contrato Iris 0.6.0 §7.2 (pedido A16). Queda `pendiente` en la cola de caja (no mueve dinero ni el estado del servicio). Con el token de Iris: canal `iris`, X-Iris-Actor y X-Iris-Conversacion obligatorias (400 cabecera_iris_requerida), `canal_contacto` y `leido_por` obligatorios (422), y `leido_por`, `confianza`, `canal_contacto` y la conversación se muestran a caja. Con otro usuario: canal `panel` (los campos de Iris no se aceptan). La empresa es la de `cuenta_bancaria_id`: `empresa_id` distinto → 422 empresa_no_coincide; fuera del alcance → 403 empresa_no_permitida. 409 referencia_duplicada si la referencia (mismo método y cuenta) ya es un pago o está en otro comprobante pendiente; 422 por campo (`archivo` con rule required, tipo o tamano; `fecha_deposito` futura; `monto`); 422 cuenta_de_otra_empresa si la cuenta es de otra empresa que el servicio.
+         */
+        post: operations["comprobantesRegistrar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1693,9 +1697,29 @@ export interface paths {
         put?: never;
         /**
          * Rechazar comprobante con motivo (se notifica al cliente)
-         * @description Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.
+         * @description Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.
          */
         post: operations["comprobantesRechazar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comprobantes/{id}/reconexion-temporal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconectar temporalmente mientras caja revisa el comprobante (promesa reconexion_temporal)
+         * @description Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).
+         */
+        post: operations["comprobantesReconexionTemporal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8176,7 +8200,7 @@ export interface paths {
         put?: never;
         /**
          * Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)
-         * @description Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
+         * @description Contrato Iris 0.6.0 §7.4: con el token de Iris exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida); el canal sale de X-Iris-Actor (asistente_ia → ia, usuario:<id> → operador) y `canal` del cuerpo se ignora; la promesa queda con sistema_origen = iris. `empresa_id`, si viene, debe ser la del servicio (422 empresa_no_coincide). Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
          */
         post: operations["promesasCrear"];
         delete?: never;
@@ -8253,7 +8277,7 @@ export interface paths {
         put?: never;
         /**
          * Simular una promesa: evalúa todas las reglas sin crear nada
-         * @description Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.
+         * @description Con el token de Iris exige X-Iris-Actor y X-Iris-Conversacion y el canal sale de X-Iris-Actor (contrato Iris 0.6.0 §7.4). Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.
          */
         post: operations["promesasSimular"];
         delete?: never;
@@ -12415,12 +12439,36 @@ export interface components {
             archivo_tamano: number;
             /** @description Nombre original del archivo subido */
             archivo_nombre: string | null;
-            /** @enum {string} */
-            canal: "portal" | "panel";
+            /**
+             * @description iris: boleta que llegó por chat o llamada (contrato Iris 0.6.0 §7.2)
+             * @enum {string}
+             */
+            canal: "portal" | "panel" | "iris";
+            /**
+             * @description Solo Iris: quién leyó los datos de la foto. Caja lo ve; Argos nunca lo aplica solo
+             * @enum {string|null}
+             */
+            leido_por?: "ia" | "persona" | "cliente_dictado" | null;
+            /** @description Solo Iris: 0–1 (decimal como texto), qué tan seguro está Iris de los datos leídos */
+            confianza?: string | null;
+            /**
+             * @description Solo Iris: por dónde llegó la boleta
+             * @enum {string|null}
+             */
+            canal_contacto?: "whatsapp" | "telegram" | "correo" | "llamada" | null;
+            /** @description Solo Iris: X-Iris-Actor de la petición */
+            iris_actor?: string | null;
+            /** @description Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris») */
+            iris_conversacion?: string | null;
             nota: string | null;
             /** @enum {string} */
             estado: "pendiente" | "aprobado" | "rechazado";
             motivo_rechazo: string | null;
+            /**
+             * @description Al rechazar; null en los demás y en los rechazados antes de 0.6.0
+             * @enum {string|null}
+             */
+            causa_rechazo?: "no_aparece" | "monto_distinto" | "ilegible" | "falta_dato" | "duplicado" | "otro" | null;
             /** @description Pago creado al aprobarlo */
             pago_id: number | null;
             registrado_por: number | null;
@@ -12878,7 +12926,7 @@ export interface components {
             origen: "argos_panel" | "argos_portal";
             /** Format: date-time */
             ocurrido_en: string;
-            /** @description `argos:consentimiento:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4) */
+            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4) */
             idempotency_key: string;
             /**
              * @description `pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`
@@ -17475,6 +17523,18 @@ export interface components {
             estado: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
+            /**
+             * @description reconexion_temporal: ligada a un comprobante pendiente (contrato Iris 0.6.0 §7.3). Siempre viene
+             * @enum {string}
+             */
+            tipo?: "promesa" | "reconexion_temporal";
+            /** @description Solo en una reconexión temporal: el comprobante que la respalda */
+            comprobante_id?: number | null;
+            /**
+             * @description iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)
+             * @enum {string|null}
+             */
+            sistema_origen?: "iris" | null;
             aprobada_por: number | null;
             /** @description Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md */
             resultado_evaluacion: components["schemas"]["EvaluacionPromesa"] | null;
@@ -17667,6 +17727,25 @@ export interface components {
             job_id: string;
             /** @description false: ya había una esperando o en curso (no se encoló otra) */
             encolado: boolean;
+        };
+        ReconexionTemporal: {
+            /** @description La promesa de tipo reconexion_temporal (GET /promesas/:id) */
+            promesa_id: number;
+            /** @description Alias de promesa_id para Iris */
+            reconexion_id: number;
+            /**
+             * Format: date-time
+             * @description Vencimiento de la promesa: ahora + horas_max de la plantilla
+             */
+            hasta: string;
+            servicio: {
+                id: number;
+                /**
+                 * @description Estado tras re-evaluar (activo, salvo que la hora de corte no aplique)
+                 * @enum {string}
+                 */
+                estado: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
+            };
         };
         RecordatorioPago: {
             id: number;
@@ -17951,6 +18030,15 @@ export interface components {
                     max_por_periodo: number | null;
                     deuda_maxima: components["schemas"]["Dinero"] | null;
                 };
+            };
+            /** @description Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta */
+            reconexion_temporal?: {
+                /** @description Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3) */
+                permitida: boolean;
+                /** @description Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado) */
+                max_por_periodo: number;
+                /** @description Duración desde que se crea (por defecto 24) */
+                horas_max: number;
             };
         };
         RenglonCalculo: {
@@ -22316,7 +22404,12 @@ export interface operations {
     bancosListar: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -22329,6 +22422,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Banco"][];
+                };
+            };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No autenticado */
@@ -27730,6 +27832,8 @@ export interface operations {
                 metodo?: "deposito" | "transferencia" | "ach" | "remesa";
                 /** @description Cuenta bancaria propia de destino */
                 cuenta_bancaria_id?: number;
+                /** @description iris: boletas que llegaron por Iris (contrato Iris 0.6.0 §7.2) */
+                canal?: "portal" | "panel" | "iris";
                 /** @description Fecha de depósito desde (inclusive) */
                 desde?: string;
                 /** @description Fecha de depósito hasta (inclusive) */
@@ -27779,10 +27883,131 @@ export interface operations {
             };
         };
     };
+    comprobantesRegistrar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description El cliente verificado */
+                    cliente_id: number;
+                    /** @description Del mismo cliente; si viene, el pago se aplica primero a sus facturas */
+                    servicio_id?: number | null;
+                    /** @enum {string} */
+                    metodo: "deposito" | "transferencia" | "ach" | "remesa";
+                    /** @description Cuenta propia de destino (GET /cuentas-bancarias?activa=true); de ella sale la empresa */
+                    cuenta_bancaria_id: number;
+                    /** @description Con transferencia y ach (GET /bancos) */
+                    banco_origen_id?: number | null;
+                    referencia: string;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /** Format: date */
+                    fecha_deposito: string;
+                    /**
+                     * @description Obligatorio con el token de Iris: por dónde llegó la boleta
+                     * @enum {string}
+                     */
+                    canal_contacto?: "whatsapp" | "telegram" | "correo" | "llamada";
+                    /**
+                     * @description Obligatorio con el token de Iris: quién leyó los datos de la foto
+                     * @enum {string}
+                     */
+                    leido_por?: "ia" | "persona" | "cliente_dictado";
+                    /** @description 0–1 (hasta 3 decimales) o vacío: qué tan seguro está Iris de lo que leyó */
+                    confianza?: string | null;
+                    /** @description Si viene, debe ser la de la cuenta bancaria (422 empresa_no_coincide) */
+                    empresa_id?: number;
+                    /** @description Caja la ve */
+                    nota?: string | null;
+                    /**
+                     * Format: binary
+                     * @description Foto (JPG, PNG o WebP) o PDF de la boleta, hasta 5 MB; Argos decide el tipo por el contenido y guarda su copia
+                     */
+                    archivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Comprobante pendiente */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comprobante"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`); o Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     comprobantesVer: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
             path: {
                 id: number;
             };
@@ -27797,6 +28022,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Comprobante"];
+                };
+            };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No autenticado */
@@ -27971,6 +28205,11 @@ export interface operations {
             content: {
                 "application/json": {
                     motivo: string;
+                    /**
+                     * @description Por defecto otro. falta_dato: el cliente lo vuelve a mandar completo (la referencia queda libre)
+                     * @enum {string}
+                     */
+                    causa?: "no_aparece" | "monto_distinto" | "ilegible" | "falta_dato" | "duplicado" | "otro";
                 };
             };
         };
@@ -27994,6 +28233,98 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso comprobantes.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprobantesReconexionTemporal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Obligatorio solo si el comprobante no tiene servicio */
+                    servicio_id?: number | null;
+                    /** @enum {string} */
+                    motivo: "fuera_de_horario";
+                };
+            };
+        };
+        responses: {
+            /** @description Reconexión temporal */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconexionTemporal"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`); o Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso comprobantes.reconexion_temporal; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -28347,7 +28678,12 @@ export interface operations {
                 /** @description Solo activas (true) o inactivas */
                 activa?: boolean;
             };
-            header?: never;
+            header?: {
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -28360,6 +28696,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CuentaBancaria"][];
+                };
+            };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No autenticado */
@@ -49516,6 +49861,11 @@ export interface operations {
                                 deuda_maxima?: string | null;
                             };
                         };
+                        reconexion_temporal?: {
+                            permitida?: boolean;
+                            max_por_periodo?: number;
+                            horas_max?: number;
+                        };
                     };
                     /** @description Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior */
                     por_defecto?: boolean;
@@ -49706,6 +50056,11 @@ export interface operations {
                                  */
                                 deuda_maxima?: string | null;
                             };
+                        };
+                        reconexion_temporal?: {
+                            permitida?: boolean;
+                            max_por_periodo?: number;
+                            horas_max?: number;
                         };
                     };
                     /** @description true la marca por defecto (desmarca la anterior); false le quita la marca */
@@ -52451,6 +52806,8 @@ export interface operations {
                 servicio_id?: number;
                 cliente_id?: number;
                 estado?: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
+                /** @description reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3) */
+                tipo?: "promesa" | "reconexion_temporal";
             };
             header?: never;
             path?: never;
@@ -52505,6 +52862,10 @@ export interface operations {
             header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
             };
             path?: never;
             cookie?: never;
@@ -52521,8 +52882,13 @@ export interface operations {
                      * @example 150.00
                      */
                     monto?: string;
-                    /** @enum {string} */
+                    /**
+                     * @description Con el token de Iris se ignora: el canal sale de X-Iris-Actor (ia u operador, contrato Iris 0.6.0 §7.4)
+                     * @enum {string}
+                     */
                     canal?: "portal" | "ia" | "operador" | "supervisor";
+                    /** @description Si viene, debe ser la empresa del servicio (422 empresa_no_coincide) */
+                    empresa_id?: number;
                 };
             };
         };
@@ -52534,6 +52900,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Promesa"];
+                };
+            };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No autenticado */
@@ -52805,7 +53180,12 @@ export interface operations {
     promesasSimular: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -52898,6 +53278,11 @@ export interface operations {
                                 deuda_maxima?: string | null;
                             };
                         };
+                        reconexion_temporal?: {
+                            permitida?: boolean;
+                            max_por_periodo?: number;
+                            horas_max?: number;
+                        };
                     };
                 };
             };
@@ -52910,6 +53295,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimulacionPromesa"];
+                };
+            };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description No autenticado */

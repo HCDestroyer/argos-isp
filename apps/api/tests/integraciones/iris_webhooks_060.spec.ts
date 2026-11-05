@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
+import type { PayloadComprobante, PayloadPromesa, PayloadPromesaCancelada } from '#shared/eventos'
 import { contextoPrueba } from '#tests/ayudas'
 import { crearCliente, crearServicio, eventoOutbox } from '#tests/notify/ayudas_notify'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
@@ -73,23 +74,26 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
         assert.isNotNull(await evento('promesa.creada', payload))
     })
 
-    test('comprobante.aprobado / .rechazado: campos de §7.2', async ({ assert }) => {
+    test('comprobante.aprobado / .rechazado con el payload real de A3: campos de §7.2, sin `origen`', async ({
+        assert,
+    }) => {
         await fijarConector('0.6.0')
         const clienteId = await crearCliente()
         const servicioId = await crearServicio(clienteId)
-        const aprobado = await evento('comprobante.aprobado', {
+        const aprobado: PayloadComprobante = {
             comprobante_id: 1_999_999_991,
             empresa_id: 1,
             cliente_id: clienteId,
             servicio_id: servicioId,
             canal: 'iris',
-            monto: '300',
+            monto: '300.00',
             pago_id: 77,
             motivo: null,
-            referencia: '123456',
-        })
-        // sin servicio_estado en el evento: el estado actual del servicio
-        assert.deepEqual(aprobado, {
+            causa: null,
+            servicio_estado: 'activo',
+            origen: 'iris',
+        }
+        assert.deepEqual(await evento('comprobante.aprobado', { ...aprobado }), {
             comprobante_id: 1_999_999_991,
             empresa_id: 1,
             cliente_id: clienteId,
@@ -102,18 +106,19 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
             servicio_estado: 'activo',
         })
 
-        const rechazado = await evento('comprobante.rechazado', {
+        const rechazado: PayloadComprobante = {
+            ...aprobado,
             comprobante_id: 1_999_999_992,
-            empresa_id: 1,
-            cliente_id: clienteId,
             servicio_id: null,
             canal: 'portal',
             monto: '120.50',
             pago_id: null,
             motivo: 'No aparece en el banco',
             causa: 'no_aparece',
-        })
-        assert.deepEqual(rechazado, {
+            servicio_estado: null,
+            origen: null,
+        }
+        assert.deepEqual(await evento('comprobante.rechazado', { ...rechazado }), {
             comprobante_id: 1_999_999_992,
             empresa_id: 1,
             cliente_id: clienteId,
@@ -126,28 +131,34 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
             servicio_estado: null,
         })
 
-        // un rechazo sin causa (A3 anterior a 0.6.0) sale como `otro`
-        const sinCausa = await evento('comprobante.rechazado', {
+        // `servicio_estado` lo trae A3 (el de después del rechazo); un evento viejo sin causa sale `otro`
+        const conEstado = await evento('comprobante.rechazado', {
+            ...rechazado,
             comprobante_id: 1_999_999_993,
-            empresa_id: 1,
-            cliente_id: clienteId,
-            motivo: 'x',
+            servicio_id: servicioId,
+            servicio_estado: 'suspendido',
+            causa: undefined,
         })
-        assert.equal(sinCausa.causa, 'otro')
+        assert.containsSubset(conEstado, { servicio_estado: 'suspendido', causa: 'otro' })
     })
 
-    test('promesa.*: campos de §7.4; cancelada lleva motivo', async ({ assert }) => {
+    test('promesa.* con el payload real de A3: campos de §7.4; cancelada solo con motivo', async ({
+        assert,
+    }) => {
         await fijarConector('0.6.0')
-        const base = {
+        const base: PayloadPromesa = {
             promesa_id: 1_999_999_994,
             empresa_id: 1,
             cliente_id: 5,
             servicio_id: 9,
-            vence: '2026-11-10T05:59:59Z',
-            monto: '150',
+            tipo: 'promesa',
+            canal: 'ia',
+            comprobante_id: null,
+            vence: '2026-11-10T05:59:59.000Z',
+            monto: '150.00',
+            origen: 'iris',
         }
-        const creada = await evento('promesa.creada', { ...base, canal: 'ia' })
-        assert.deepEqual(creada, {
+        assert.deepEqual(await evento('promesa.creada', { ...base }), {
             promesa_id: 1_999_999_994,
             empresa_id: 1,
             cliente_id: 5,
@@ -158,18 +169,26 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
             vence: '2026-11-10T05:59:59.000Z',
             monto: '150.00',
         })
-        const cancelada = await evento('promesa.cancelada', {
+        const cancelada: PayloadPromesaCancelada = {
             ...base,
+            tipo: 'reconexion_temporal',
+            comprobante_id: 44,
+            estado: 'cancelada',
+            motivo: 'comprobante_rechazado',
+            detalle: 'texto interno del supervisor',
+        }
+        const enviado = await evento('promesa.cancelada', { ...cancelada })
+        assert.deepEqual(enviado, {
+            promesa_id: 1_999_999_994,
+            empresa_id: 1,
+            cliente_id: 5,
+            servicio_id: 9,
             tipo: 'reconexion_temporal',
             canal: 'ia',
             comprobante_id: 44,
+            vence: '2026-11-10T05:59:59.000Z',
+            monto: '150.00',
             motivo: 'comprobante_rechazado',
         })
-        assert.containsSubset(cancelada, {
-            tipo: 'reconexion_temporal',
-            comprobante_id: 44,
-            motivo: 'comprobante_rechazado',
-        })
-        assert.notProperty(creada, 'motivo')
     })
 })
