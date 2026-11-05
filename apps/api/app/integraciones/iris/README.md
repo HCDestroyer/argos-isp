@@ -89,7 +89,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.6.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.6.1"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
