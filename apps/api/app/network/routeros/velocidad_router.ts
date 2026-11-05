@@ -275,6 +275,11 @@ export function redesDelPlan(router: RouterVelocidad, plan: PlanRouter): RedesPl
     return plan.redes ?? { servicios: [], router: router.redes_ipv4 ?? [] }
 }
 
+/** Gateways efectivos distintos de las redes del router (`argos-dns`). */
+export function gatewaysDeRedes(redes: RedGateway[] | undefined): string[] {
+    return [...new Set((redes ?? []).flatMap((r) => (r.gateway ? [r.gateway] : [])))]
+}
+
 /** `local-address` del perfil de corte (`suspendido`): el único gateway de las redes del router. */
 export function localAddressCorte(redes: RedGateway[] | undefined): LocalAddress {
     return gatewayUnico(redes ?? [], 'perfil de corte')

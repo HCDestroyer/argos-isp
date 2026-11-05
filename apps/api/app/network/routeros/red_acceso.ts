@@ -125,6 +125,8 @@ export interface VlanArgos {
     mtu: number | null
     estado: 'administrado' | 'adoptado'
     descripcion?: string | null
+    /** `.id` en RouterOS (adoptada o tomada): si aún no lleva comment de Argos, se toma ese objeto */
+    ros_id?: string | null
 }
 
 /** Servidor PPPoE de Argos (`network.servidores_pppoe`) con lo derivado que necesita RouterOS. */
@@ -149,6 +151,8 @@ export interface ServidorArgos {
     pool_ipv4?: string | null
     pool_ipv6_enlace?: string | null
     pool_ipv6_delegacion?: string | null
+    /** `.id` en RouterOS (adoptado o tomado): si aún no lleva comment de Argos, se toma ese objeto */
+    ros_id?: string | null
 }
 
 /** Un objeto deseado en un menú de la red de acceso, identificado por su comment. */
@@ -158,6 +162,8 @@ export interface ObjetoAcceso {
     propiedades: Propiedades
     /** Propiedades que no deben quedar puestas (`unset`) */
     quitar?: string[]
+    /** Objeto existente del router que se toma si ninguno lleva todavía el comment (tomar control) */
+    ros_id?: string | null
 }
 
 /** Propiedades del perfil base que se copian al perfil del servidor: nunca direcciones ni velocidad. */
@@ -191,6 +197,7 @@ export function estadoRedAcceso(
         presentes.push({
             ruta: '/interface/vlan',
             comment: commentVlan(v.id),
+            ros_id: v.ros_id ?? null,
             propiedades: {
                 name: v.nombre,
                 'vlan-id': String(v.vlan_id),
@@ -234,6 +241,7 @@ export function estadoRedAcceso(
         presentes.push({
             ruta: '/interface/pppoe-server/server',
             comment: commentServidor(s.id),
+            ros_id: s.ros_id ?? null,
             propiedades: {
                 'service-name': s.service_name,
                 interface: s.interfaz,

@@ -705,7 +705,7 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         pools_ipv6: [],
     })
 
-    test('tomar control: 501 sin A2; vista previa, huella y versión; pasa a administrado', async ({
+    test('tomar control: 502 sin API (lector de A2); vista previa, huella y versión; pasa a administrado', async ({
         client,
         assert,
     }) => {
@@ -721,8 +721,10 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         )
         const srv = adoptado.servidores_pppoe[0]
         const url = `/api/v1/servidores-pppoe/${srv.id}`
-        const sinA2 = await client.get(`${url}/vista-previa-tomar-control`).bearerToken(tecnico)
-        sinA2.assertStatus(501)
+        // con la función de A2 (`routeros/inventario_acceso.ts`): el router de prueba no tiene API → 502
+        const sinApi = await client.get(`${url}/vista-previa-tomar-control`).bearerToken(tecnico)
+        sinApi.assertStatus(502)
+        assert.equal(sinApi.body().type.split(':').pop(), 'router_no_responde')
 
         let huella = 'h1'
         registrarDiffTomarControl(async (objeto) => ({

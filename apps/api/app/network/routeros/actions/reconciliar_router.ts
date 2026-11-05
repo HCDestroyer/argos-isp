@@ -19,7 +19,7 @@ import {
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
-import { estadoVelocidadRouter, localAddressCorte } from '#network/routeros/velocidad_router'
+import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
 import { guardarLecturaColas } from '#network/routeros/metricas'
@@ -209,6 +209,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                             fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                             redes_v4: await redesV4DeRouter(input.router_id, t.trx),
                             local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                            gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
                         },
                         lecturaCorte.get('/ppp/profile') ?? [],
                     )

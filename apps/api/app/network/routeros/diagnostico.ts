@@ -28,6 +28,7 @@ import {
 } from '#network/routeros/consultas'
 import {
     estadoVelocidadRouter,
+    gatewaysDeRedes,
     localAddressCorte,
     objetoAlDia,
     sobrantesVelocidad,
@@ -119,6 +120,7 @@ export async function vistaPreviaReconciliar(
                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                     redes_v4: await redesV4DeRouter(routerId),
                     local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
                 },
                 lecturaCorte.get('/ppp/profile') ?? [],
             )
@@ -841,6 +843,7 @@ export async function diagnosticoCorte(
                     fasttrack,
                     redes_v4: await redesV4DeRouter(routerId),
                     local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
                 },
                 lectura.get('/ppp/profile') ?? [],
             )

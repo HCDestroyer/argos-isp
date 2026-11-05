@@ -440,27 +440,34 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
         assert.lengthOf(activas(), 1)
 
-        // La red pierde su gateway: decisión del PM (5 nov, `contratos/red-acceso.md` §2) el local-address
-        // es la primera IP utilizable (aquí la misma .1, derivada). El secret toma `sqlLocalAddress` (A1).
-        // Los perfiles todavía leen el gateway crudo (pedido a A2 en `a1.md`): se quita con `unset` y avisa.
+        // Cambia el gateway de la red: secret y perfiles toman el nuevo, sin cortar la sesión.
+        await db
+            .from('network.redes_ipv4')
+            .where('router_id', routerId)
+            .update({ gateway: `${base}.254` })
+        let r = await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.isNull(r.error)
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.254`)
+        assert.equal(perfil(`plan-${planId}`)!['local-address'], `${base}.254`)
+        assert.equal(perfil(`plan-${planId}-limitado`)!['local-address'], `${base}.254`)
+        assert.lengthOf(activas(), 1)
+
+        // La red pierde su gateway: decisión del PM (5 nov, `contratos/red-acceso.md` §2), el gateway
+        // efectivo es la primera IP utilizable (.1, derivada), en el secret y en los perfiles; sin avisos.
         await db.from('network.redes_ipv4').where('router_id', routerId).update({ gateway: null })
-        const r = await new ReconciliarRouterOS(OPCIONES).execute(
+        r = await new ReconciliarRouterOS(OPCIONES).execute(
             { router_id: routerId, motivo: 'manual' },
             contextoPrueba(),
         )
         assert.isNull(r.error)
         assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}`)!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}-limitado`)!['local-address'], `${base}.1`)
         assert.lengthOf(activas(), 1)
-        assert.notProperty(perfil(`plan-${planId}`)!, 'local-address')
-        assert.notProperty(perfil(`plan-${planId}-limitado`)!, 'local-address')
-        // el servicio ya no avisa: su local-address es el derivado
-        assert.isFalse(r.avisos.some((a) => a.includes(`servicio ${servicio.id}`)))
-        const unset = await db
-            .from('audit.red')
-            .where('router_id', routerId)
-            .whereRaw("comando->>'comando' = 'unset'")
-        assert.isAbove(unset.length, 1)
-        assert.isTrue(unset.every((f) => f.comando.propiedades['value-name'] === 'local-address'))
+        assert.isFalse(r.avisos.some((a) => a.includes('local-address')))
 
         // Idempotente: otra pasada no escribe nada.
         const antes = falso.escrituras.length

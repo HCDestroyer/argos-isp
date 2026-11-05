@@ -228,6 +228,8 @@ export interface OpcionesCorte {
      * tenga el perfil se respeta: lo puede haber puesto `lab.rsc`).
      */
     local_address?: string | null
+    /** Gateways efectivos de las redes del router (sin repetir): van a `argos-dns` (DNS del router) */
+    gateways_v4?: string[]
 }
 
 /** Dirección de documentación (RFC 5737) que deja creada la lista de suspendidos. */
@@ -466,7 +468,11 @@ export function estadoCorteRouter(
     agregar(v4, lista, 'argosisp: corte lista suspendidos', [ENTRADA_SUSPENDIDOS])
     agregar(v4, 'argos-portal', 'argosisp: portal IP', [config.portal_v4])
     agregar(v4, 'argos-portal', 'argosisp: portal FQDN', [config.portal_fqdn])
-    agregar(v4, 'argos-dns', 'argosisp: DNS del router', [config.ppp_local_v4])
+    // DNS del router = el `local-address` que ve cada cliente: el gateway efectivo de cada red del router
+    // (contratos/red-acceso.md §2). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo si el router no tiene redes.
+    const dnsRouter =
+        opciones.gateways_v4 && opciones.gateways_v4.length > 0 ? opciones.gateways_v4 : [config.ppp_local_v4]
+    agregar(v4, 'argos-dns', 'argosisp: DNS del router', dnsRouter)
     agregar(v4, 'argos-dns', 'argosisp: DNS', config.dns_v4)
     agregar(v4, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
     agregar(v4, 'argos-clientes', 'argosisp: clientes PPPoE', config.clientes_v4)

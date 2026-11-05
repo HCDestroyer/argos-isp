@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { ServidorArgos, VlanArgos } from '#network/routeros/red_acceso'
+import { sqlHostGatewayEfectivo } from '#network/red_acceso/local_address'
 
 /**
  * Lo que Argos dice de la red de acceso de un router (`network.vlans`, `network.servidores_pppoe`,
@@ -21,9 +22,16 @@ export async function redAccesoDeRouter(
         .from('network.vlans')
         .where('router_id', routerId)
         .orderBy('id')
-        .select('id', 'nombre', 'vlan_id', 'interfaz_padre', 'mtu', 'estado', 'descripcion')) as Array<
-        Record<string, unknown>
-    >
+        .select(
+            'id',
+            'nombre',
+            'vlan_id',
+            'interfaz_padre',
+            'mtu',
+            'estado',
+            'descripcion',
+            'ros_id',
+        )) as Array<Record<string, unknown>>
     const servidores = (await cliente
         .from('network.servidores_pppoe as s')
         .leftJoin('network.redes_ipv4 as r4', 'r4.id', 's.red_ipv4_id')
@@ -33,7 +41,9 @@ export async function redAccesoDeRouter(
         .orderBy('s.id')
         .select(
             's.*',
-            cliente.raw('host(r4.gateway) AS local_address'),
+            cliente.raw(
+                `CASE WHEN r4.id IS NULL THEN NULL ELSE ${sqlHostGatewayEfectivo('r4')} END AS local_address`,
+            ),
             'pe.nombre_en_router as pool_ipv6_enlace',
             'pd.nombre_en_router as pool_ipv6_delegacion',
         )) as Array<Record<string, unknown>>
@@ -48,6 +58,7 @@ export async function redAccesoDeRouter(
             mtu: n(v.mtu),
             estado: v.estado === 'adoptado' ? 'adoptado' : 'administrado',
             descripcion: t(v.descripcion),
+            ros_id: t(v.ros_id),
         })),
         servidores: servidores.map((s) => ({
             id: Number(s.id),
@@ -69,6 +80,7 @@ export async function redAccesoDeRouter(
             local_address: t(s.local_address),
             pool_ipv6_enlace: t(s.pool_ipv6_enlace),
             pool_ipv6_delegacion: t(s.pool_ipv6_delegacion),
+            ros_id: t(s.ros_id),
         })),
     }
 }

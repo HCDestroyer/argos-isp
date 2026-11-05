@@ -10,7 +10,7 @@ import { bitacoraRed, type OpcionesDispatcher } from '#network/routeros/dispatch
 import { ConsumidorRouterOS } from '#network/routeros/consumidor'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
 import { vistaPreviaReconciliar } from '#network/routeros/diagnostico'
-import { leerInventarioAcceso } from '#network/routeros/inventario_acceso'
+import { leerInventarioAcceso, vistaPreviaTomarControl } from '#network/routeros/inventario_acceso'
 import type { EventoEntrante } from '#shared/eventos_bus'
 import {
     commentPerfilServidor,
@@ -471,6 +471,116 @@ test.group('red de acceso · RouterOS (integración)', (group) => {
             .bearerToken(tecnico)
         caido.assertStatus(502)
         assert.equal(caido.body().type.split(':').pop(), 'router_no_responde')
+    })
+
+    test('unset: quita una propiedad del objeto (POST /rest/<menú>/unset) y queda en audit.red', async ({
+        assert,
+    }) => {
+        const cliente = OPCIONES.clientes!({
+            id: routerId,
+            host: falso.url,
+            api_usuario: falso.usuario,
+            api_password: cifrar(falso.password),
+            api_url: null,
+            api_tls_verificar: false,
+            api_ca: null,
+        })
+        try {
+            await cliente.desasignar('/ppp/profile', '*0', ['local-address'], { request_id: 'req-unset' })
+        } finally {
+            cliente.cerrar()
+        }
+        assert.notProperty(falso.tabla('/ppp/profile')[0]!, 'local-address')
+        const fila = await db
+            .from('audit.red')
+            .where('router_id', routerId)
+            .whereRaw(`comando->>'comando' = 'unset'`)
+            .firstOrFail()
+        assert.equal(fila.comando.propiedades['value-name'], 'local-address')
+    })
+
+    test('tomar control de un adoptado: vista previa con huella, sin escribir; luego se toma el mismo objeto', async ({
+        assert,
+    }) => {
+        // el servidor existente del router (*S9 «viejo» en ether9) adoptado, con la red del router
+        const [srv] = (await db
+            .table('network.servidores_pppoe')
+            .insert({
+                router_id: routerId,
+                nombre: 'viejo',
+                interfaz: 'ether9',
+                service_name: 'viejo',
+                red_ipv4_id: redId,
+                estado: 'adoptado',
+                ros_id: '*S9',
+            })
+            .returning('id')) as Array<{ id: number }>
+        const id = Number(srv!.id)
+        falso.lectura('/interface/pppoe-server').push({
+            '.id': '*P2',
+            name: '<pppoe-x>',
+            service: 'viejo',
+            dynamic: 'true',
+        } as ObjetoRouterOS)
+        const objeto = { router_id: routerId, entidad: 'servidor_pppoe' as const, id, ros_id: '*S9' }
+        const antes = falso.escrituras.length
+        const diff = await vistaPreviaTomarControl(objeto, unico('req'), OPCIONES)
+        assert.equal(falso.escrituras.length, antes)
+        assert.equal(diff.sesiones, 1)
+        assert.match(diff.huella, /^[0-9a-f]{64}$/)
+        const perfilNuevo = diff.cambios.find((c) => c.ruta === '/ppp/profile')!
+        assert.equal(perfilNuevo.accion, 'crear')
+        assert.deepInclude(perfilNuevo.propiedades, {
+            propiedad: 'local-address',
+            actual: null,
+            deseado: `${base}.1`,
+        })
+        const delServidor = diff.cambios.find((c) => c.ruta === '/interface/pppoe-server/server')!
+        assert.equal(delServidor.accion, 'actualizar')
+        assert.equal(delServidor.ros_id, '*S9')
+        assert.deepInclude(delServidor.propiedades, {
+            propiedad: 'default-profile',
+            actual: 'default',
+            deseado: nombrePerfilServidor(id),
+        })
+        // misma lectura → misma huella; si el router cambia, otra
+        const otra = await vistaPreviaTomarControl(objeto, unico('req'), OPCIONES)
+        assert.equal(otra.huella, diff.huella)
+        falso.tabla('/interface/pppoe-server/server').find((o2) => o2['.id'] === '*S9')!['max-mtu'] = '1400'
+        const cambiada = await vistaPreviaTomarControl(objeto, unico('req'), OPCIONES)
+        assert.notEqual(cambiada.huella, diff.huella)
+
+        // A1 lo pasa a administrado y emite red_acceso.cambiada (tomar_control): se toma el mismo *S9
+        await db.from('network.servidores_pppoe').where('id', id).update({ estado: 'administrado' })
+        await new ConsumidorRouterOS(OPCIONES).procesar({
+            id: 2,
+            evento: 'red_acceso.cambiada',
+            requestId: unico('req'),
+            payload: {
+                router_id: routerId,
+                entidad: 'servidor_pppoe',
+                entidad_id: id,
+                accion: 'tomar_control',
+                estado: 'administrado',
+                campos: ['estado'],
+            },
+        })
+        const servidores = falso
+            .tabla('/interface/pppoe-server/server')
+            .filter((o2) => o2.interface === 'ether9')
+        assert.lengthOf(servidores, 1)
+        assert.equal(servidores[0]!['.id'], '*S9')
+        assert.equal(servidores[0]!.comment, commentServidor(id))
+        assert.equal(servidores[0]!['default-profile'], nombrePerfilServidor(id))
+        assert.equal(servidores[0]!['max-mtu'], '1480')
+        assert.lengthOf(falso.lectura('/interface/pppoe-server'), 1) // la sesión sigue
+        // y ya es administrado: la siguiente pasada no escribe
+        const despues = falso.escrituras.length
+        await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.isFalse(falso.escrituras.slice(despues).some((e) => e.ruta.includes('/interface/')))
     })
 
     test('vista previa: conflictos de formas de limitar (RADIUS + colas ajenas)', async ({ assert }) => {

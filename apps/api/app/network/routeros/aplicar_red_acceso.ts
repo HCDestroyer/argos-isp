@@ -45,6 +45,22 @@ export async function leerAcceso(cliente: ClienteRouterOS): Promise<LecturaAcces
 const porComment = (lectura: LecturaAcceso, o: ObjetoAcceso) =>
     (lectura.get(o.ruta) ?? []).filter((x) => x.comment === o.comment && x.dynamic !== 'true')
 
+/**
+ * El objeto del router que corresponde a lo deseado: los que llevan su comment o, si ninguno lo lleva
+ * todavía (recién tomado el control de un adoptado, §4.1), el de `ros_id` siempre que no sea de Argos.
+ */
+export function objetosDe(
+    lectura: LecturaAcceso,
+    o: ObjetoAcceso,
+): { actuales: ObjetoRouterOS[]; tomado: boolean } {
+    const actuales = porComment(lectura, o)
+    if (actuales.length > 0 || !o.ros_id) return { actuales, tomado: false }
+    const previo = (lectura.get(o.ruta) ?? []).find(
+        (x) => x['.id'] === o.ros_id && x.dynamic !== 'true' && !(x.comment ?? '').startsWith('argosisp:'),
+    )
+    return previo ? { actuales: [previo], tomado: true } : { actuales: [], tomado: false }
+}
+
 const puestas = (o: ObjetoAcceso, actual: ObjetoRouterOS) =>
     (o.quitar ?? []).filter((k) => actual[k] !== undefined && actual[k] !== '')
 
@@ -57,12 +73,12 @@ export function derivaAcceso(
     const { presentes, avisos } = estadoRedAcceso(vlans, servidores, lectura.get('/ppp/profile') ?? [])
     const deriva: DerivaAcceso[] = []
     for (const o of presentes) {
-        const actuales = porComment(lectura, o)
+        const { actuales, tomado } = objetosDe(lectura, o)
         if (actuales.length === 0) {
             deriva.push({ ruta: o.ruta, comment: o.comment, accion: 'crear' })
             continue
         }
-        const dif = diferencias(o.propiedades, actuales[0]!)
+        const dif = diferencias({ ...o.propiedades, ...(tomado ? { comment: o.comment } : {}) }, actuales[0]!)
         const quitar = puestas(o, actuales[0]!)
         if (Object.keys(dif).length > 0 || quitar.length > 0 || actuales.length > 1) {
             deriva.push({
@@ -96,7 +112,18 @@ export async function aplicarRedAcceso(
     const { presentes, avisos } = estadoRedAcceso(vlans, servidores, lectura.get('/ppp/profile') ?? [])
     const cambios: CambioAcceso[] = []
     for (const o of presentes) {
-        const actuales = porComment(lectura, o)
+        const { actuales, tomado } = objetosDe(lectura, o)
+        if (tomado) {
+            // Tomar control (§4.1): el mismo objeto pasa a llevar el comment de Argos y lo deseado; no se
+            // crea otro (chocaría por nombre o interfaz) ni se corta nada.
+            const actual = actuales[0]!
+            const dif = diferencias({ ...o.propiedades, comment: o.comment }, actual)
+            await cliente.actualizar(o.ruta, actual['.id'], dif, ctx)
+            const quitar = puestas(o, actual)
+            if (quitar.length > 0) await cliente.desasignar(o.ruta, actual['.id'], quitar, ctx)
+            cambios.push({ ruta: o.ruta, comment: o.comment, accion: 'actualizado' })
+            continue
+        }
         if (
             actuales.length === 1 &&
             Object.keys(diferencias(o.propiedades, actuales[0]!)).length === 0 &&

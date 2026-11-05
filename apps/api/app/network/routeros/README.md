@@ -121,7 +121,8 @@ El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gatew
 | `/ppp/profile suspendido` (corte)                         | el único gateway del router; si no se puede derivar, no se toca el que tenga (lo pone el script de conexión)                                                                                                                                        |
 | Secrets de emergencia (`operacion/secrets_emergencia.ts`) | el del secret (como en `api`); el perfil, el de la red de su pool                                                                                                                                                                                   |
 
-- **Sin gateway derivable** (red sin gateway, gateways distintos, ninguna red): el objeto no lleva `local-address`; si lo tenía, se quita con `unset` (`POST /rest/ppp/<menú>/unset`, en `audit.red`). Un cambio solo de `local-address` no quita la sesión del secret: rige al reconectar (así el despliegue no reconecta a todo un router). Queda un aviso en `routeros.reconciliar` y en la vista previa (`avisos[]`), y el dispatcher por evento emite `routeros.fallido` (`operacion: 'local_address'`, una vez por cambio; la pasada periódica solo avisa para no alertar cada 15 min): «la red X no tiene gateway… Define el gateway en Red → Pools» o «redes con gateways distintos…». Nunca se inventa uno.
+- **Gateway efectivo** (decisión del PM, `contratos/red-acceso.md` §2): todas las consultas usan `sqlGatewayEfectivo` / `sqlHostGatewayEfectivo` de A1: el `gateway` de la red o, si es null, su primera IP utilizable (reservada en IPAM). Una red sin gateway ya no deja nada sin `local-address`.
+- **Sin gateway derivable** (gateways distintos en un perfil que agrupa redes, o ninguna red): el objeto no lleva `local-address`; si lo tenía, se quita con `unset` (`POST /rest/ppp/<menú>/unset`, en `audit.red`). Un cambio solo de `local-address` no quita la sesión del secret: rige al reconectar (así el despliegue no reconecta a todo un router). Queda un aviso en `routeros.reconciliar` y en la vista previa (`avisos[]`), y el dispatcher por evento emite `routeros.fallido` (`operacion: 'local_address'`, una vez por cambio; la pasada periódica solo avisa para no alertar cada 15 min): «la red X no tiene gateway… Define el gateway en Red → Pools» o «redes con gateways distintos…». Nunca se inventa uno.
 - **RADIUS:** MikroTik no tiene atributo RADIUS para el `local-address` (solo `Framed-IP-Address`, el remoto), así que `aaa` no manda nada nuevo: vive en el perfil que elige `Mikrotik-Group` o, si `aaa` no manda grupo (`radius_rate_limit` sin padre ni tipo de cola), en el `default-profile` del servidor PPPoE. Con un plan repartido en redes de gateways distintos el perfil `plan-<id>` queda sin `local-address` (aviso) hasta los perfiles por servidor de la red de acceso (`contratos/red-acceso.md`).
 - Sin RADIUS, gateways distintos no son un problema (cada secret lleva el suyo) y no se avisa.
 
@@ -142,6 +143,7 @@ El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gatew
 | `/interface/pppoe-server/server`     | `comment = argosisp:pppoe:<id>`        | `service-name`, `interface`, `default-profile = argosisp-pppoe-<id>`, `max-mtu`, `max-mru`, `mrru`, `authentication`, `keepalive-timeout`, `one-session-per-host`, `max-sessions`, `disabled` (inactivo = `yes`) |
 
 - **Nunca** se toca lo `adoptado`, lo que no lleva comment de Argos, ni `default`/`default-encrypted`.
+- **Tomar control** (§4.1): `vistaPreviaTomarControl(objeto, requestId)` (en `inventario_acceso.ts`) lee el router (GET en `audit.red`, sin escribir) y devuelve `{ huella, cambios[], sesiones, advertencias[] }` comparando el objeto actual (por `ros_id`) con lo que Argos escribiría como administrado; `huella` = sha256 de lo leído de esos objetos. Con `red_acceso.cambiada` `accion: 'tomar_control'` el reconciliador **toma el mismo objeto** (`ros_id`, sin comment de Argos): le pone el comment y lo deseado con un `PATCH` (nunca crea otro ni corta sesiones); el perfil `argosisp-pppoe-<id>` se crea antes de apuntar el servidor a él.
 - Un servidor sobrante con sesiones vivas (`/interface/pppoe-server`, `service` = su service-name) queda con su perfil y su VLAN y se avisa; se borra cuando terminan.
 - Corre en `routeros.reconciliar` (periódico, manual y `red_acceso.cambiada` de `vlan` o `servidor_pppoe` no adoptado, `motivo = red_acceso`) y su deriva sale en la vista previa (`red_acceso[]`). Un evento de un `adoptado`, `olt` o `puerto_pon` no hace nada.
 
@@ -160,6 +162,10 @@ El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gatew
 | `arbol_y_simples`                  | Árbol de Argos con colas simples ajenas, o colas simples de Argos con nodos de árbol ajenos |
 | `perfil_con_rate_limit_y_colas`    | Perfiles PPP ajenos con `rate-limit` y colas simples estáticas ajenas                       |
 | `perfil_de_fabrica_con_rate_limit` | `default`/`default-encrypted` con `rate-limit`                                              |
+
+### Corte: `argos-dns`
+
+`argos-dns` (lo que un suspendido puede consultar) lleva el DNS del router = el `local-address` de los clientes: el **gateway efectivo de cada red** del router (`gatewaysDeRedes`). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo se usa si el router no tiene redes (compatibilidad), más los DNS de `ROUTERS_SERVICIO_DNS_V4`.
 
 ## PPPoE sin RADIUS (`contratos/pppoe-local.md`)
 
