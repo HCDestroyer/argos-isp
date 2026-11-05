@@ -203,6 +203,18 @@ export const listarClientesValidator = vine.compile(
         responsable_pago_id: idEntidad()
             .optional()
             .meta({ description: 'Dependientes de este responsable de pago' }),
+        telefono: vine
+            .string()
+            .trim()
+            .maxLength(30)
+            .optional()
+            .meta({
+                description:
+                    'Coincidencia exacta del número (contrato Iris 0.6.0 §7.6) sobre `telefono` y `movil` del ' +
+                    'cliente y `contacto_telefono` de sus servicios no retirados; se normaliza con la regla de ' +
+                    'los teléfonos (`422 validacion`, `rule: telefono`, si no es válido). Cada fila trae ' +
+                    '`coincide_en[]`. Con el token de Iris exige `X-Iris-Actor` y `X-Iris-Conversacion`',
+            }),
     }),
 )
 
@@ -709,6 +721,9 @@ export const listarAccionesValidator = vine.compile(
             .enum(CANALES)
             .optional()
             .meta({ description: 'Oculta las acciones de este canal (p. ej. portal)' }),
+        iris_conversacion: vine.string().trim().maxLength(128).optional().meta({
+            description: 'Acciones de esta conversación de Iris (`X-Iris-Conversacion`, contrato Iris 0.6.0)',
+        }),
         empresas: empresasConsulta(),
     }),
 )

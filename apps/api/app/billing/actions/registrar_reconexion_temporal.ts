@@ -8,7 +8,6 @@ import { bloquearCliente } from '#billing/cobros'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { periodosHasta } from '#billing/periodos'
 import { coberturaDeServicio, payloadPromesa } from '#billing/promesas'
-import type { CabecerasIris } from '#billing/iris'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
@@ -47,7 +46,6 @@ export interface EntradaReconexionTemporal {
     servicio_id?: number | null
     motivo: 'fuera_de_horario'
     canal: Extract<CanalPromesa, 'ia' | 'operador'>
-    iris?: CabecerasIris | null
     /** instante de referencia (pruebas); por defecto ahora */
     ahora?: Date
 }
@@ -289,7 +287,7 @@ export default class RegistrarReconexionTemporal extends DomainAction<
                 canal: input.canal,
                 tipo: 'reconexion_temporal',
                 comprobante_id: comprobante.id,
-                sistema_origen: input.iris ? 'iris' : null,
+                sistema_origen: t.ctx.iris ? 'iris' : null,
                 reglas_snapshot: JSON.stringify(config.reglas_promesa),
                 resultado_evaluacion: JSON.stringify(evaluacion),
                 ...(input.ahora ? { created_at: ahora, updated_at: ahora } : {}),

@@ -45,8 +45,9 @@ import {
  * - Evento `comprobante.recibido` (payload común de `payloadComprobante`: `pago_id`, `motivo` y
  *   `causa` en null).
  * - Canal `iris` (contrato Iris 0.6.0 §7.2, `POST /comprobantes` con el token de Iris): exige el
- *   bloque `iris` (`leido_por`, `canal_contacto`, `confianza` opcional y las cabeceras `actor` y
- *   `conversacion`), que se guarda y se muestra a caja; Argos nunca lo aplica solo. `empresa_id`,
+ *   bloque `iris` (`leido_por`, `canal_contacto`, `confianza` opcional) y las cabeceras de Iris en
+ *   el contexto (`ctx.iris`: actor y conversación); todo se guarda y se muestra a caja, y Argos
+ *   nunca lo aplica solo. `empresa_id`,
  *   si viene, debe ser la de la cuenta bancaria (422 `empresa_no_coincide`); fuera del alcance del
  *   actor, 403 `empresa_no_permitida`.
  *
@@ -91,10 +92,6 @@ export interface DatosIrisComprobante {
     /** 0–1 como string decimal (hasta 3 decimales), o null */
     confianza?: string | null
     canal_contacto: CanalContacto
-    /** X-Iris-Actor */
-    actor: string
-    /** X-Iris-Conversacion */
-    conversacion: string
 }
 
 /** En la auditoría el archivo se registra solo con su nombre y tamaño, nunca su contenido. */
@@ -176,7 +173,7 @@ export default class RegistrarComprobante extends DomainAction<
             })
         }
 
-        const iris = this.validarIris(input, errores)
+        const iris = this.validarIris(input, errores, t)
 
         const cliente = await t.trx.from('core.clientes').where('id', input.cliente_id).select('id').first()
         if (!cliente) {
@@ -319,7 +316,7 @@ export default class RegistrarComprobante extends DomainAction<
     }
 
     /** Bloque `iris`: obligatorio con `canal = iris`, prohibido en los demás canales. */
-    private validarIris(input: EntradaRegistrarComprobante, errores: ErrorCampo[]) {
+    private validarIris(input: EntradaRegistrarComprobante, errores: ErrorCampo[], t: Transaccion) {
         const iris = input.iris ?? null
         if (input.canal !== 'iris') {
             if (iris) {
@@ -364,14 +361,19 @@ export default class RegistrarComprobante extends DomainAction<
                 confianza = valor.toFixed(3)
             }
         }
-        if (!iris.actor || !iris.conversacion) {
+        if (!t.ctx.iris) {
             errores.push({
                 field: 'X-Iris-Conversacion',
                 message: 'Faltan las cabeceras de Iris',
                 rule: 'cabecera_iris',
             })
         }
-        return { ...iris, confianza }
+        return {
+            ...iris,
+            confianza,
+            actor: t.ctx.iris?.actor ?? null,
+            conversacion: t.ctx.iris?.conversacion ?? null,
+        }
     }
 
     private async exigirSinPendiente(

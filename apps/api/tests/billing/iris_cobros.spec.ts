@@ -14,7 +14,6 @@ import {
     servicioCortado,
     unicoBd,
 } from '#tests/billing/ayudas_billing'
-import Usuario from '#core/models/usuario'
 import { crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
@@ -42,50 +41,13 @@ const PNG = Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     Buffer.from('IHDR-boleta-de-iris'),
 ])
-const ROL_PRUEBA = 'prueba_a3_iris_060'
-const PERMISOS_PRUEBA = [
-    'comprobantes.registrar',
-    'comprobantes.ver',
-    'comprobantes.reconexion_temporal',
-    'cuentas_bancarias.ver',
-    'promesas.ver',
-    'promesas.crear',
-    'servicios.ver',
-]
-
-/** Usuario técnico Iris con un rol de prueba con los permisos de §7 y un token de sesión. */
+/** Token `atk_` del usuario técnico Iris (alcance global), con los permisos de §1.1 del 0.6.0. */
 async function tokenIris(): Promise<{ id: number; token: string }> {
-    let id = await usuarioIris()
-    if (id === null) {
-        await new GenerarTokenIris().execute({}, contextoPrueba())
-        id = (await usuarioIris())!
-    }
+    const { token } = await new GenerarTokenIris().execute({ nombre: unico('Iris') }, contextoPrueba())
+    const id = (await usuarioIris())!
     await db.from('core.usuarios').where('id', id).update({ activo: true, alcance_global: true })
-    let rol = (await db.from('core.roles').where('nombre', ROL_PRUEBA).select('id').first()) as
-        { id: number } | undefined
-    if (!rol) {
-        ;[rol] = (await db
-            .table('core.roles')
-            .insert({ nombre: ROL_PRUEBA, descripcion: 'Prueba A3 Iris 0.6.0' })
-            .returning('id')) as Array<{ id: number }>
-        await db.rawQuery(
-            `INSERT INTO core.roles_permisos (role_id, permiso_id)
-             SELECT ?, id FROM core.permisos WHERE nombre = ANY(?) ON CONFLICT DO NOTHING`,
-            [rol!.id, PERMISOS_PRUEBA],
-        )
-    }
-    await db.rawQuery(
-        `INSERT INTO core.usuarios_roles (usuario_id, role_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
-        [id, rol!.id],
-    )
-    const usuario = await Usuario.findOrFail(id)
-    const token = await Usuario.accessTokens.create(usuario)
-    return { id, token: token.value!.release() }
-}
-
-async function quitarRolPrueba() {
-    const rol = await db.from('core.roles').where('nombre', ROL_PRUEBA).select('id').first()
-    if (rol) await db.from('core.usuarios_roles').where('role_id', rol.id).delete()
+    await db.from('core.usuarios_empresas').where('usuario_id', id).delete()
+    return { id, token }
 }
 
 type Campos = Record<string, string | number | null | undefined>
@@ -205,9 +167,7 @@ async function cortadoConReconexion(
     }
 }
 
-test.group('Iris 0.6.0 · comprobantes (§7.2)', (group) => {
-    group.each.teardown(quitarRolPrueba)
-
+test.group('Iris 0.6.0 · comprobantes (§7.2)', () => {
     test('registrar por Iris: canal iris, lectura de Iris, cola filtrada, auditoría con las cabeceras y payload', async ({
         client,
         assert,
@@ -253,13 +213,11 @@ test.group('Iris 0.6.0 · comprobantes (§7.2)', (group) => {
             .from('audit.acciones')
             .where('accion', 'comprobantes.registrar')
             .where('entidad_id', r.body().id)
-            .select('canal', 'entrada')
+            .select('canal', 'iris_actor', 'iris_conversacion')
         assert.lengthOf(auditada, 1)
         assert.equal(auditada[0].canal, 'ia')
-        assert.include(auditada[0].entrada.iris, {
-            conversacion: 'wa:5025512-3344:c1',
-            actor: 'asistente_ia',
-        })
+        assert.equal(auditada[0].iris_actor, 'asistente_ia')
+        assert.equal(auditada[0].iris_conversacion, 'wa:5025512-3344:c1')
 
         const [evento] = await eventosDe('comprobante.recibido', 'comprobante_id', r.body().id)
         assert.deepEqual(evento.payload, {
@@ -294,7 +252,7 @@ test.group('Iris 0.6.0 · comprobantes (§7.2)', (group) => {
         assert.equal(sinActor.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
         const malActor = await subir(client, token, campos, { actor: 'robot' })
         malActor.assertStatus(400)
-        assert.equal(malActor.body().errors[0].field, 'X-Iris-Actor')
+        assert.equal(malActor.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
         const malaConversacion = await subir(client, token, campos, { conversacion: 'con espacios' })
         malaConversacion.assertStatus(400)
         const sinClave = await subir(client, token, campos, { clave: null })
@@ -401,9 +359,7 @@ test.group('Iris 0.6.0 · comprobantes (§7.2)', (group) => {
     })
 })
 
-test.group('Iris 0.6.0 · reconexión temporal (§7.3)', (group) => {
-    group.each.teardown(quitarRolPrueba)
-
+test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
     test('201: promesa reconexion_temporal ligada al comprobante; el servicio se reactiva por evaluarEstadoServicio', async ({
         client,
         assert,
@@ -813,9 +769,7 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', (group) => {
     })
 })
 
-test.group('Iris 0.6.0 · promesas (§7.4)', (group) => {
-    group.each.teardown(quitarRolPrueba)
-
+test.group('Iris 0.6.0 · promesas (§7.4)', () => {
     function prometer(
         client: ApiClient,
         token: string,
@@ -865,7 +819,7 @@ test.group('Iris 0.6.0 · promesas (§7.4)', (group) => {
             .where('entidad_id', r.body().id)
             .first()
         assert.equal(auditada.canal, 'ia')
-        assert.equal(auditada.entrada.iris.conversacion, 'wa:5025512-3344:c1')
+        assert.equal(auditada.iris_conversacion, 'wa:5025512-3344:c1')
 
         const abierta = await prometer(client, token, { servicio_id: datos.servicioId, vence_en: manana() })
         abierta.assertStatus(409)
@@ -885,7 +839,7 @@ test.group('Iris 0.6.0 · promesas (§7.4)', (group) => {
             .where('entidad_id', op.body().id)
             .first()
         assert.equal(auditOp.canal, 'api')
-        assert.equal(auditOp.entrada.iris.actor, 'usuario:ana_01')
+        assert.equal(auditOp.iris_actor, 'usuario:ana_01')
     })
 
     test('rechazada por política: 201 con estado rechazada y la regla; 400 sin cabeceras o sin clave; 422 empresa_no_coincide', async ({
@@ -999,5 +953,38 @@ test.group('Iris 0.6.0 · promesas (§7.4)', (group) => {
             detalle: 'El cliente pidió anularla',
         })
         assert.equal(await estadoServicio(datos.servicioId), 'suspendido')
+    })
+})
+
+test.group('Iris 0.6.0 · lecturas de §7 con el token de Iris', () => {
+    test('GET /cuentas-bancarias, GET /bancos y GET /comprobantes/:id exigen las cabeceras de Iris', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const { clienteId, servicioId } = await servicioCortado()
+        const cuenta = await cuentaBancariaPrueba()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(clienteId, servicioId, cuenta.id)),
+            201,
+        )
+        for (const ruta of [
+            '/api/v1/cuentas-bancarias?activa=true',
+            '/api/v1/bancos',
+            `/api/v1/comprobantes/${boleta.body().id}`,
+        ]) {
+            const sin = await client.get(ruta).bearerToken(token)
+            sin.assertStatus(400)
+            assert.equal(sin.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
+            await estado(cabeceras(client.get(ruta).bearerToken(token), null), 200)
+        }
+        const vista = await estado(
+            cabeceras(client.get(`/api/v1/comprobantes/${boleta.body().id}`).bearerToken(token), null),
+            200,
+        )
+        assert.equal(vista.body().iris_conversacion, 'wa:5025512-3344:c1')
+        // otro usuario no las necesita
+        const { token: admin } = await usuarioConRoles(['admin'])
+        await estado(client.get('/api/v1/bancos').bearerToken(admin), 200)
     })
 })

@@ -29,7 +29,7 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.5.0'
+export const CONTRATO_IRIS = '0.6.0'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -96,6 +96,31 @@ export async function conectorAdmite(
 ): Promise<boolean> {
     const fila = await leerFilaIris(cliente)
     return contratoAdmite(fila?.contrato, version)
+}
+
+/**
+ * Webhooks que nacieron con el contrato Iris 0.6.0 (§7.2 y §7.4): solo a conectores con contrato
+ * ≥ `CONTRATO_EVENTOS_060` (`conectorAdmite(CONTRATO_EVENTOS_060)`), igual que los de 0.5.0. Un Iris
+ * anterior nunca los recibe como desconocidos. `promesa.cancelada` es nuevo en el catálogo (A3).
+ */
+export const EVENTOS_IRIS_DESDE_060 = [
+    'comprobante.aprobado',
+    'comprobante.rechazado',
+    'promesa.creada',
+    'promesa.cumplida',
+    'promesa.incumplida',
+    'promesa.cancelada',
+] as const
+
+/** Versión mínima del contrato para `EVENTOS_IRIS_DESDE_060`. */
+export const CONTRATO_EVENTOS_060 = '0.6.0'
+
+/**
+ * Versión mínima del contrato que necesita un webhook (`null`: lo recibe cualquier conector). Para
+ * los de 0.5.0 manda la lista `EVENTOS_DESDE_050` de `envios.ts`.
+ */
+export function contratoMinimoEventoIris(evento: string): string | null {
+    return (EVENTOS_IRIS_DESDE_060 as readonly string[]).includes(evento) ? CONTRATO_EVENTOS_060 : null
 }
 
 export interface FilaConectorIris {

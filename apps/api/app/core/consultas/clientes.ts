@@ -8,6 +8,7 @@ import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacio
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
+import type { COINCIDENCIAS_TELEFONO } from '#core/telefonos'
 
 /**
  * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, código (`C-000455`) o código
@@ -58,6 +59,8 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
     codigos_referido: Array<{ empresa_id: number; codigo: string }>
     /** id en el sistema de origen (`core.ids_externos`, importador) o null */
     externo: IdExterno | null
+    /** solo con el filtro `telefono` (contrato Iris 0.6.0 §7.6) */
+    coincide_en?: Array<(typeof COINCIDENCIAS_TELEFONO)[number]>
 }
 
 /** Nombre del responsable de pago de `core.clientes as c` (subconsulta escalar). */
@@ -92,6 +95,79 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     responsable_pago_id?: number
     /** documento fiscal marcado inválido por la migración (true) o no (false) */
     nit_cui_invalido?: boolean
+    /**
+     * Teléfono ya normalizado (`normalizarTelefono`, contrato Iris 0.6.0 §7.6): coincidencia exacta
+     * de dígitos sobre `telefono`, `movil` y el `contacto_telefono` de sus servicios no retirados.
+     * Cada fila trae además `coincide_en[]`.
+     */
+    telefono?: string
+}
+
+/** Opciones de lectura que no son filtros del usuario. */
+export interface OpcionesBusquedaClientes {
+    /**
+     * La búsqueda `q` no compara contra `nit_cui` (usuario técnico Iris, contrato 0.6.0 §1.1: si
+     * buscar por el documento encontrara al cliente, Iris podría probar documentos sin el límite de
+     * `clientes.verificar_identidad`).
+     */
+    sinDocumento?: boolean
+}
+
+/**
+ * Clave de comparación de un teléfono: solo dígitos, sin `00` internacional delante y con `502`
+ * delante si quedan 8 dígitos (teléfonos viejos guardados sin normalizar, `5512-3344`).
+ */
+export function claveTelefono(valor: string): string {
+    let digitos = valor.replace(/\D/g, '')
+    if (digitos.startsWith('00')) digitos = digitos.slice(2)
+    return digitos.length === 8 ? `502${digitos}` : digitos
+}
+
+/** La misma `claveTelefono` en SQL sobre una columna. */
+function sqlClaveTelefono(columna: string): string {
+    const d = `regexp_replace(coalesce(${columna}, ''), '\\D', '', 'g')`
+    return `(CASE WHEN ${d} LIKE '00%' THEN substr(${d}, 3) WHEN length(${d}) = 8 THEN '502' || ${d} ELSE ${d} END)`
+}
+
+/** Servicio no retirado del cliente `c` cuyo contacto en sitio tiene esa clave (y empresas, si hay). */
+function sqlContactoServicio(empresas: number[] | null): { sql: string; extra: number[] } {
+    // un placeholder por empresa: knex expande los arreglos de los bindings
+    const filtroEmpresa = !empresas
+        ? ''
+        : empresas.length === 0
+          ? ' AND false'
+          : ` AND s_tel.empresa_id IN (${empresas.map(() => '?').join(', ')})`
+    return {
+        sql: `EXISTS (SELECT 1 FROM core.servicios s_tel WHERE s_tel.cliente_id = c.id AND s_tel.estado <> 'retirado'${filtroEmpresa} AND ${sqlClaveTelefono('s_tel.contacto_telefono')} = ?)`,
+        extra: empresas ?? [],
+    }
+}
+
+function aplicarTelefono(
+    consulta: DatabaseQueryBuilderContract<any>,
+    telefono: string,
+    empresas: number[] | null,
+) {
+    const clave = claveTelefono(telefono)
+    const contacto = sqlContactoServicio(empresas)
+    const tel = sqlClaveTelefono('c.telefono')
+    const movil = sqlClaveTelefono('c.movil')
+    consulta.select(
+        db.raw(
+            `array_remove(ARRAY[
+                CASE WHEN ${tel} = ? THEN 'telefono' END,
+                CASE WHEN ${movil} = ? THEN 'movil' END,
+                CASE WHEN ${contacto.sql} THEN 'contacto_servicio' END
+            ], NULL) AS coincide_en`,
+            [clave, clave, ...contacto.extra, clave],
+        ),
+    )
+    consulta.where((w) =>
+        w
+            .whereRaw(`${tel} = ?`, [clave])
+            .orWhereRaw(`${movil} = ?`, [clave])
+            .orWhereRaw(contacto.sql, [...contacto.extra, clave]),
+    )
 }
 
 /** Cómo se filtra `core.clientes as c` por alcance. */
@@ -113,7 +189,7 @@ function escaparLike(texto: string): string {
 /** Búsqueda con forma de teléfono: `5512-3344`, `+502 7777 6655`, `(502) 2233.4455`. */
 const PARECE_TELEFONO = /^\+?[\d\s().-]+$/
 
-function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string) {
+function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string, sinDocumento = false) {
     const texto = q.trim()
     if (texto === '') return
 
@@ -152,13 +228,13 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string)
             .orWhereRaw('lower(c.codigo_externo) = ?', [texto.toLowerCase()])
             .orWhereILike('c.nombre_fiscal', patron)
             .orWhereILike('c.email', patron)
-            .orWhere('c.nit_cui', nit)
-            .orWhereExists((s) =>
-                s
-                    .from('core.servicios as s_q')
-                    .whereRaw('s_q.cliente_id = c.id')
-                    .whereILike('s_q.user_ppp', patron),
-            )
+        if (!sinDocumento) w.orWhere('c.nit_cui', nit)
+        w.orWhereExists((s) =>
+            s
+                .from('core.servicios as s_q')
+                .whereRaw('s_q.cliente_id = c.id')
+                .whereILike('s_q.user_ppp', patron),
+        )
         // Teléfono solo si la búsqueda tiene forma de teléfono (dígitos, espacios, guiones, `+`,
         // paréntesis o puntos). Con texto mezclado («Pagina1234abcd», un código, un correo) sus
         // dígitos sueltos encontraban clientes ajenos por su teléfono.
@@ -222,12 +298,14 @@ export async function buscarClientes(
     filtros: FiltrosClientes,
     alcance?: Alcance,
     empresas: number[] | null = null,
+    opciones: OpcionesBusquedaClientes = {},
 ): Promise<Pagina<ClienteVista>> {
     const consulta = db.from('core.clientes as c').select(columnasVista(db.connection()))
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
     if (filtros.responsable_pago_id) consulta.where('c.responsable_pago_id', filtros.responsable_pago_id)
     if (filtros.nit_cui_invalido !== undefined) consulta.where('c.nit_cui_invalido', filtros.nit_cui_invalido)
-    if (filtros.q) aplicarBusqueda(consulta, filtros.q)
+    if (filtros.q) aplicarBusqueda(consulta, filtros.q, opciones.sinDocumento)
+    if (filtros.telefono) aplicarTelefono(consulta, filtros.telefono, empresas)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)
     filtrarPorEmpresa(consulta, empresas, clienteEnEmpresas)

@@ -18,7 +18,6 @@ import type { CanalPromesa } from '#billing/reglas_promesa'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { ServicioPendienteInstalacion } from '#core/instalacion'
 import type { EstadoServicio } from '#shared/eventos'
-import type { CabecerasIris } from '#billing/iris'
 
 /**
  * `promesas.crear` = `crearPromesaPago` (`POST /promesas`; el portal de A5 la llama directo con
@@ -57,12 +56,6 @@ export interface EntradaCrearPromesa {
     canal: CanalPromesa
     /** instante de referencia (pruebas y simulador); por defecto ahora */
     ahora?: Date
-    /**
-     * Cabeceras de Iris (contrato Iris 0.6.0 §7.4): la promesa queda con `origen = iris` (Argos no
-     * avisa al cliente por su cuenta) y las cabeceras en la auditoría. El canal (`ia` u `operador`)
-     * ya viene decidido por `X-Iris-Actor`.
-     */
-    iris?: CabecerasIris | null
     /** si viene, debe ser la empresa del servicio (422 `empresa_no_coincide`, contrato Iris §7.1) */
     empresa_id?: number | null
 }
@@ -182,7 +175,8 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
                 estado,
                 regla_cumplimiento: 'facturas',
                 canal: input.canal,
-                sistema_origen: input.iris ? 'iris' : null,
+                // Iris 0.6.0 §7.4: creada por Iris (`ctx.iris`): Argos no avisa al cliente por su cuenta
+                sistema_origen: t.ctx.iris ? 'iris' : null,
                 aprobada_por:
                     estado === 'activa' && input.canal === 'supervisor' ? usuarioDelActor(t.ctx.actor) : null,
                 reglas_snapshot: JSON.stringify(config.reglas_promesa),
