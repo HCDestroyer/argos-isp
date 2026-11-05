@@ -200,7 +200,10 @@ test.group('Portal: avisos por WhatsApp (Iris 0.6.0 §6.4)', (group) => {
         assert.equal(filas[0].origen, 'argos_portal')
         assert.equal(Number(filas[0].empresa_id), inicial.empresas[0].id)
         assert.isNull(filas[0].registrado_por)
-        assert.match(filas[0].idempotency_key, new RegExp(`^argos:consentimiento:${inicial.empresas[0].id}:${c.clienteId}:whatsapp:`))
+        assert.match(
+            filas[0].idempotency_key,
+            new RegExp(`^argos:consentimiento:${inicial.empresas[0].id}:${c.clienteId}:whatsapp:`),
+        )
 
         const acciones = await db
             .from('audit.acciones')
