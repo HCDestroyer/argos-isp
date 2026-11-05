@@ -1003,3 +1003,27 @@ export const asignarPerfilQosValidator = vine.compile(
         motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Modo de velocidad único por router (`contratos/control-velocidad.md` §11)
+|--------------------------------------------------------------------------
+*/
+
+export const vistaPreviaUnificarVelocidadValidator = vine.compile(
+    vine.object({
+        reconectar: vine.boolean().optional().meta({
+            description: 'Calcular cuántas sesiones se desconectarían con reconectar',
+        }),
+    }),
+)
+
+export const unificarControlVelocidadValidator = vine.compile(
+    vine.object({
+        planes: vine.array(idEntidad()).maxLength(1000).meta({
+            description: 'Los plan_id con excepción que mostró la vista previa (409 si cambiaron)',
+        }),
+        reconectar: reconectar(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+    }),
+)

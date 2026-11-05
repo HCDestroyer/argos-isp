@@ -1431,3 +1431,46 @@ export const PerfilQosDetalle = definirEsquema(
         routers: { ...lista(UsoPerfilQos), description: 'Routers activos que usan el perfil y su costo' },
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Modo de velocidad único por router (A1, `contratos/control-velocidad.md` §11)
+|--------------------------------------------------------------------------
+*/
+
+export const VistaPreviaUnificarVelocidad = definirEsquema(
+    'VistaPreviaUnificarVelocidad',
+    objeto({
+        router_id: id,
+        router_version: { ...entero, description: 'version del router al calcular la vista previa' },
+        planes: {
+            ...lista(
+                objeto({
+                    plan_id: id,
+                    nombre: texto,
+                    implementacion_id: { ...id, description: 'Fila de planes_routers' },
+                    version: { ...entero, description: 'version de la implementación' },
+                    excepcion: ExcepcionEstrategia,
+                    capas: lista(enumerado(['aplicacion', 'padre', 'tipo_cola', 'extras'])),
+                    de: {
+                        ...EstrategiasRouter,
+                        description: 'Estrategia efectiva hoy del plan en el router',
+                    },
+                    a: { ...EstrategiasRouter, description: 'La del router (lo que queda al unificar)' },
+                    servicios: { ...entero, description: 'Servicios no retirados del plan en el router' },
+                    sesiones_abiertas: entero,
+                }),
+            ),
+            description: 'Planes con excepción; vacío = el router ya usa un solo modo',
+        },
+        vista_previa: VistaPreviaEstrategia,
+    }),
+)
+
+export const ResultadoUnificarVelocidad = definirEsquema(
+    'ResultadoUnificarVelocidad',
+    objeto({
+        router_id: id,
+        planes: { ...lista(id), description: 'Planes cuya excepción se quitó (un evento por plan)' },
+    }),
+)

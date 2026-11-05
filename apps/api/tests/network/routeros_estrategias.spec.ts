@@ -358,26 +358,23 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         const arbol = await plan()
         const simple = await plan()
         const router = await db.from('network.routers').where('id', routerId).firstOrFail()
-        // Inválida primero (perfil_ppp para IP estática): 422 con el porqué
+        // Modo único por router (§11): la API ya no crea excepciones por plan (422); una que ya existía
+        // (dato anterior) sigue aplicándose hasta unificar.
         const mal = await client
             .post(`/api/v1/planes/${arbol}/routers/${routerId}/estrategia-velocidad`)
             .bearerToken(tokenAdmin)
             .json({ estrategia_velocidad: { ip_estatica: { aplicacion: 'perfil_ppp' } } })
         mal.assertStatus(422)
-        assert.equal(mal.body().errors[0].rule, 'aplicacion_tipo')
-        await estado(
-            client
-                .post(`/api/v1/planes/${arbol}/routers/${routerId}/estrategia-velocidad`)
-                .bearerToken(tokenAdmin)
-                .json({
-                    estrategia_velocidad: {
-                        pppoe: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                        ip_estatica: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                        dhcp_fija: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                    },
-                }),
-            200,
-        )
+        assert.equal(mal.body().errors[0].rule, 'estrategia_por_router')
+        await db.table('network.planes_routers').insert({
+            plan_id: arbol,
+            router_id: routerId,
+            estrategia_velocidad: JSON.stringify({
+                pppoe: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+                ip_estatica: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+                dhcp_fija: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+            }),
+        })
         assert.equal(router.control_velocidad, 'simple')
         const a = await wisp(client, arbol)
         const b = await wisp(client, simple)

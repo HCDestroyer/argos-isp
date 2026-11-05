@@ -125,9 +125,16 @@ async function primerIndiceLibre(trx: TransactionClientContract, pool: PoolFila,
  */
 export async function reservarPrefijo(
     trx: TransactionClientContract,
-    entrada: { servicioId: number; routerId: number; tipo: TipoPrefijo; tamano: number },
+    entrada: {
+        servicioId: number
+        routerId: number
+        tipo: TipoPrefijo
+        tamano: number
+        /** pool del servidor PPPoE del servicio: se prueba primero (`contratos/red-acceso.md` §3) */
+        poolPreferido?: number | null
+    },
 ): Promise<string> {
-    const pools = (await trx
+    const todos = (await trx
         .from('network.ipv6_pools as p')
         .join('network.ipv6_bloques as b', 'b.id', 'p.bloque_id')
         .where('b.router_id', entrada.routerId)
@@ -135,6 +142,11 @@ export async function reservarPrefijo(
         .where('p.tamano_entrega', entrada.tamano)
         .orderBy('p.id')
         .select('p.id', trx.raw('p.prefijo::text AS prefijo'))) as PoolFila[]
+    const preferido = entrada.poolPreferido ? Number(entrada.poolPreferido) : null
+    const pools = [
+        ...todos.filter((p) => Number(p.id) === preferido),
+        ...todos.filter((p) => Number(p.id) !== preferido),
+    ]
 
     const actual = await prefijoVigente(trx, entrada.servicioId, entrada.tipo)
     if (actual && actual.pool_id !== null && pools.some((p) => p.id === actual.pool_id)) {

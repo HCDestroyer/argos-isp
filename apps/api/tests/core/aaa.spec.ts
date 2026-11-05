@@ -95,6 +95,8 @@ test.group('AAA · registro de autorización RADIUS', (group) => {
                 prefijo_enlace: `${raiz}00::/64`,
                 prefijo_delegado: `${raiz}10::/56`,
             },
+            // router sin servidores PPPoE registrados: el local-address sale del gateway de la red de su IP
+            red_acceso: { servidor_pppoe_id: null, local_address: `${base}.1` },
         })
         // cifrada v1, nunca en claro
         assert.match(r.body().pass_ppp, /^v1\.[\w-]+\.[\w-]+\.[\w-]+$/)

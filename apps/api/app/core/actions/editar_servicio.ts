@@ -30,6 +30,11 @@ import { reconciliarIncluidos } from '#core/adicionales'
 import { advertenciasServicio } from '#network/tipos_plan'
 import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
 import { telefonoParaGuardar } from '#core/telefonos'
+import {
+    exigirLocalAddress,
+    leerServidorServicio,
+    resolverServidorServicio,
+} from '#network/red_acceso/servicio'
 
 export interface EntradaEditarServicio {
     id: number
@@ -54,6 +59,11 @@ export interface EntradaEditarServicio {
     costo_override?: string | null
     excluir_firewall?: boolean
     ipv4?: string
+    /**
+     * Servidor PPPoE (`contratos/red-acceso.md` §3). Ausente: se conserva, salvo al cambiar de router o
+     * pasar a PPPoE, donde se deriva de la red (varios candidatos → 422 `servidor_pppoe_requerido`).
+     */
+    servidor_pppoe_id?: number | null
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
@@ -123,6 +133,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             user_ppp: userPppEntrada,
             excepciones: excepcionesEntrada,
             mismo_equipo: mismoEquipo,
+            servidor_pppoe_id: servidorEntrada,
             ...datos
         } = input
         t.fijarEntidad('servicio', id)
@@ -214,9 +225,24 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         // estaba en el router se sigue editando; `#network/modo_seguridad`)
         if (routerId !== antes.router_id || cambiaTipo) await exigirPppoeAdmitido(t.trx, routerId, tipo)
 
+        // Servidor PPPoE: se conserva salvo que se pida otro, cambie el router (otro equipo) o pase a PPPoE.
+        const derivar = (routerId !== antes.router_id && !mismoEquipo) || (cambiaTipo && tipo === 'pppoe')
+        const servidor =
+            servidorEntrada !== undefined || derivar || tipo !== 'pppoe'
+                ? await resolverServidorServicio(t.trx, {
+                      routerId,
+                      tipo,
+                      empresaId: antes.empresa_id,
+                      servidorId: servidorEntrada ?? null,
+                      ipv4,
+                  })
+                : await leerServidorServicio(t.trx, antes.servidor_pppoe_id)
+        const cambiaServidor = (servidor?.id ?? null) !== antes.servidor_pppoe_id
+
         const columnas: Record<string, unknown> = Object.fromEntries(
             Object.entries(datos).filter(([, valor]) => valor !== undefined),
         )
+        if (cambiaServidor) columnas.servidor_pppoe_id = servidor?.id ?? null
         // el teléfono de contacto se valida solo si cambia (un valor viejo reenviado pasa; `#core/telefonos`)
         delete columnas.contacto_telefono
         const contactoTelefono = telefonoParaGuardar(
@@ -257,8 +283,16 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                   modo,
                   tipoConexion: tipo,
                   ipv4,
+                  // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
+                  redIpv4Id: cambiaServidor && !ipv4 ? servidor?.red_ipv4_id : undefined,
                   prefijoEstatico,
+                  poolsV6: servidor
+                      ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
+                      : undefined,
               })
+        if (!mismoEquipo && (cambiaServidor || ipv4 !== undefined || routerId !== antes.router_id)) {
+            await exigirLocalAddress(t.trx, id, servidor)
+        }
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 
@@ -278,6 +312,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (despues.tipo_conexion !== antes.tipo_conexion) campos.push('tipo_conexion')
         if (despues.mac !== antes.mac) campos.push('mac')
         if (despues.amarre_ip_mac !== antes.amarre_ip_mac) campos.push('amarre_ip_mac')
+        if (despues.servidor_pppoe_id !== antes.servidor_pppoe_id) campos.push('servidor_pppoe')
         if (asignaciones.ipv4 !== asignacionesAntes.ipv4) campos.push('ips')
         if (
             asignaciones.prefijo_enlace_v6 !== asignacionesAntes.prefijo_enlace_v6 ||

@@ -90,7 +90,13 @@ export default class EliminarRouter extends DomainAction<EntradaEliminarRouter, 
         foto.ids_externos = await t.trx
             .from('core.ids_externos')
             .where({ entidad_tipo: 'router', entidad_id: id })
+        // red de acceso (`contratos/red-acceso.md`): servidores PPPoE y VLAN del router (sin servicios vigentes)
+        foto.servidores_pppoe = await t.trx.from('network.servidores_pppoe').where('router_id', id)
+        foto.vlans = await t.trx.from('network.vlans').where('router_id', id)
         t.anotarAuditoria({ foto: enmascarar(foto) as Record<string, unknown> })
+
+        await t.trx.from('network.servidores_pppoe').where('router_id', id).delete()
+        await t.trx.from('network.vlans').where('router_id', id).delete()
 
         if (bloqueIds.length) await t.trx.from('network.ipv6_pools').whereIn('bloque_id', bloqueIds).delete()
         await t.trx.from('network.ipv6_bloques').where('router_id', id).delete()
