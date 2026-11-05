@@ -42,6 +42,7 @@ export async function plantillasActivas(
 export function destinoDe(canal: CanalNotificacion, destinatario: Destinatario): string | null {
     if (canal === 'correo') return destinatario.email
     if (canal === 'telegram') return destinatario.telegramChatId
+    if (canal === 'whatsapp') return destinatario.whatsapp ?? null
     return null
 }
 

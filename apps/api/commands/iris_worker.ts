@@ -7,6 +7,10 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * segundos entrega los pendientes, firmados, con reintentos a 1 min, 5 min, 30 min, 2 h y 12 h.
  * Sin conector activo con receptor no envía nada. Lógica en `app/integraciones/iris/envios.ts`
  * (motor común con Horus: `app/integraciones/webhooks_salientes.ts`).
+ *
+ * Contrato 0.6.0 (§6): en la misma vuelta entrega los permisos de contacto por WhatsApp pendientes
+ * (`#notify/consentimientos`) y, cada hora, concilia los avisos de WhatsApp que esperan acuse de
+ * Iris hace más de 24 h (`ConciliarAvisosIris`).
  */
 export default class IrisWorker extends BaseCommand {
     static commandName = 'iris:worker'
@@ -24,6 +28,11 @@ export default class IrisWorker extends BaseCommand {
         const { EjecutorGrupo } = await import('#shared/eventos_bus')
         const { ConsumidorIris, GRUPO_IRIS } = await import('#integraciones/iris/consumidor')
         const { entregarPendientesIris } = await import('#integraciones/iris/envios')
+        const { entregarConsentimientosIris } = await import('#notify/consentimientos')
+        const { default: ConciliarAvisosIris } = await import('#notify/actions/conciliar_avisos_iris')
+        const { contextoSistema } = await import('#shared/contexto')
+        const CADA_CONCILIACION_MS = 3600 * 1000
+        let ultimaConciliacion = 0
 
         const grupo = new EjecutorGrupo({ grupo: GRUPO_IRIS, consumidores: [new ConsumidorIris()] })
         grupo.iniciar()
@@ -41,6 +50,26 @@ export default class IrisWorker extends BaseCommand {
                     }
                 } catch (error) {
                     this.logger.error(`iris:worker: error entregando webhooks: ${(error as Error).message}`)
+                }
+                try {
+                    await entregarConsentimientosIris({ limite: 50 })
+                } catch (error) {
+                    this.logger.error(
+                        `iris:worker: error entregando consentimientos: ${(error as Error).message}`,
+                    )
+                }
+                if (Date.now() - ultimaConciliacion >= CADA_CONCILIACION_MS) {
+                    ultimaConciliacion = Date.now()
+                    try {
+                        await new ConciliarAvisosIris().execute(
+                            {},
+                            contextoSistema('worker', `iris-conciliar-${ultimaConciliacion}`),
+                        )
+                    } catch (error) {
+                        this.logger.error(
+                            `iris:worker: error conciliando avisos: ${(error as Error).message}`,
+                        )
+                    }
                 }
                 await new Promise((r) => setTimeout(r, this.cadaMs))
             }

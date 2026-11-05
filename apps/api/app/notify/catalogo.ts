@@ -221,6 +221,8 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
             es_limitado: false,
             es_suspendido: false,
             es_retirado: false,
+            por_falta_de_pago: false,
+            reactivado: false,
         }
     }
     if (evento === 'servicio.estado_cambiado') {
@@ -228,11 +230,13 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
         v.estado = {
             de: 'activo',
             a: 'suspendido',
-            motivo: 'saldo vencido',
+            motivo: '2 facturas vencidas (se corta con 2)',
             es_activo: false,
             es_limitado: false,
             es_suspendido: true,
             es_retirado: false,
+            por_falta_de_pago: true,
+            reactivado: false,
         }
     }
     if (evento.startsWith('pago.')) {

@@ -49,6 +49,8 @@ export async function listarEnvios(filtros: FiltrosEnvios): Promise<Pagina<Fila>
             'proveedor_id',
             'fallback_de',
             'enviado_en',
+            'entregado_en',
+            'leido_en',
             'created_at',
             'updated_at',
         )

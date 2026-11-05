@@ -14,7 +14,12 @@ import {
     RecordatorioPago,
     ResultadoPruebaCanal,
     TelegramWebhookRespuesta,
+    ConsentimientoWhatsapp,
+    WhatsappCliente,
 } from '#notify/esquemas'
+import { exigirCliente } from '#core/acceso_empresa'
+import { verWhatsappCliente } from '#notify/consentimientos'
+import RegistrarConsentimientoWhatsapp from '#notify/actions/registrar_consentimiento_whatsapp'
 import { listarEnvios, listarPlantillas, listarRecordatorios } from '#notify/consultas'
 import { catalogoEventos, vistaPrevia } from '#notify/catalogo'
 import db from '@adonisjs/lucid/services/db'
@@ -40,6 +45,57 @@ const DESCRIPCION_CONFIGURACION =
     '`.claude/integration/a6.md` (pantallas de A4).'
 
 const notify: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/notificaciones/consentimientos',
+        operacion: 'notificacionesConsentimientoRegistrar',
+        resumen: 'Registrar «Acepta avisos por WhatsApp» de un cliente (permiso de contacto hacia Iris)',
+        descripcion:
+            'Contrato Iris 0.6.0 §6.4 (A21). Lo llama el panel al crear o editar un cliente con la casilla ' +
+            '(`origen = argos_panel`; el portal usa la misma acción con `argos_portal`). El registro vive ' +
+            'solo en Iris: queda en la cola hacia `POST <iris>/mensajeria/consentimientos` ' +
+            '(`entrega: pendiente`) y sale con el conector activo y contrato ≥ 0.6.0. Con `baja`, Argos ' +
+            'deja de pedir avisos por WhatsApp al instante. Queda en la línea de tiempo del cliente.',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.registrar_consentimiento',
+        cuerpo: v.registrarConsentimientoValidator,
+        idempotente: true,
+        respuesta: {
+            status: 201,
+            descripcion: 'Consentimiento en la cola hacia Iris',
+            esquema: ConsentimientoWhatsapp,
+        },
+        handler: async (ctx, { cuerpo }) => {
+            await exigirCliente(ctx, cuerpo.cliente_id)
+            return new RegistrarConsentimientoWhatsapp().execute(
+                {
+                    cliente_id: cuerpo.cliente_id,
+                    estado: cuerpo.estado,
+                    origen: 'argos_panel',
+                    empresa_id: cuerpo.empresa_id ?? ctx.empresa?.activa ?? null,
+                },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notificaciones/whatsapp/clientes/:id',
+        operacion: 'notificacionesWhatsappCliente',
+        resumen:
+            'WhatsApp de un cliente: canal disponible, último estado de contacto y última marca enviada a Iris',
+        descripcion:
+            'Para la ficha del cliente y la casilla «Acepta avisos por WhatsApp» (A4). `contacto.estado = baja` ' +
+            'con `origen` `iris_*` es una baja que el cliente dio en el chat (`contacto.baja`, §6.4): Argos ya ' +
+            'no le pide avisos por WhatsApp. No muestra el número: lo tiene Iris.',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.ver',
+        respuesta: { status: 200, descripcion: 'WhatsApp del cliente', esquema: WhatsappCliente },
+        handler: async (ctx, { params }) => {
+            await exigirCliente(ctx, Number(params.id))
+            return verWhatsappCliente(Number(params.id), ctx.empresa?.activa ?? null)
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/notificaciones/plantillas',
