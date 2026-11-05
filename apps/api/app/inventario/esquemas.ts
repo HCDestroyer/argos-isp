@@ -628,6 +628,13 @@ export const Tecnico = definirEsquema(
         },
         correo: texto,
         nombre: texto,
-        bodegas: lista(objeto({ id, empresa_id: id, activa: booleano })),
+        bodegas: lista(
+            objeto({
+                id,
+                empresa_id: id,
+                activa: booleano,
+                nombre: { ...texto, description: 'Nombre de la bodega (contrato Iris 0.6.4, A22)' },
+            }),
+        ),
     }),
 )

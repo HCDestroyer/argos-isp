@@ -173,12 +173,13 @@ export interface TecnicoVista {
     id_externo: string
     correo: string
     nombre: string
-    bodegas: Array<{ id: number; empresa_id: number; activa: boolean }>
+    bodegas: Array<{ id: number; empresa_id: number; activa: boolean; nombre: string }>
 }
 
 /**
  * `GET /inventario/tecnicos` (0.5.0): usuarios con al menos una bodega `tecnico` en las empresas
  * visibles, con sus bodegas (activas o no). `id_externo` = el id del usuario de Argos, como texto.
+ * `bodegas[].nombre` (contrato Iris 0.6.4, A22): para elegir la bodega de una lista sin teclear su id.
  */
 export async function listarTecnicos(filtros: OpcionesPaginacion, empresas: number[] | null) {
     const q = db
@@ -200,11 +201,12 @@ export async function listarTecnicos(filtros: OpcionesPaginacion, empresas: numb
               .where('tipo', 'tecnico')
               .if(empresas !== null, (c) => c.whereIn('empresa_id', empresas!))
               .orderBy('id')
-              .select('id', 'empresa_id', 'usuario_id', 'activo')) as Array<{
+              .select('id', 'empresa_id', 'usuario_id', 'activo', 'nombre')) as Array<{
               id: number
               empresa_id: number
               usuario_id: number
               activo: boolean
+              nombre: string
           }>)
         : []
     return {
@@ -218,6 +220,7 @@ export async function listarTecnicos(filtros: OpcionesPaginacion, empresas: numb
                     id: Number(b.id),
                     empresa_id: Number(b.empresa_id),
                     activa: Boolean(b.activo),
+                    nombre: String(b.nombre),
                 })),
         })),
         nextCursor: pagina.nextCursor,
