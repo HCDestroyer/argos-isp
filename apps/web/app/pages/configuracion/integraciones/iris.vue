@@ -137,6 +137,14 @@ const accionesReconectar = computed(() => (puedeConfigurar.value
     ? [{ label: 'Generar enlace de conexión', icon: 'i-lucide-link-2', color: 'warning' as const, variant: 'solid' as const, loading: generandoEnlace.value, onClick: generarEnlace }]
     : []))
 
+/* ---------- Estado del canje (contrato Iris 0.6.3) ---------- */
+
+/** `pendiente`: marca informativa; `desconectado`: aviso con el motivo y el enlace (`iris.configurar`). */
+const avisoCanje = computed(() => (conector.value ? avisoCanjeIris(conector.value) : null))
+const accionesDesconectado = computed(() => (puedeConfigurar.value
+    ? [{ label: 'Generar enlace de conexión', icon: 'i-lucide-link-2', color: 'error' as const, variant: 'solid' as const, loading: generandoEnlace.value, onClick: generarEnlace }]
+    : []))
+
 /* ---------- Lo que se muestra una sola vez ---------- */
 
 const unaVez = shallowRef<{ titulo: string, descripcion: string, valores: { etiqueta: string, valor: string }[], venceEn: string | null } | null>(null)
@@ -378,6 +386,46 @@ onMounted(() => {
                     </template>
                 </UAlert>
 
+                <UAlert
+                    v-if="avisoCanje?.estado === 'desconectado'"
+                    color="error"
+                    variant="subtle"
+                    :icon="MARCA_DESCONECTADO_IRIS.icono"
+                    :title="avisoCanje.titulo"
+                    :actions="accionesDesconectado"
+                    :ui="{
+                        actions: 'flex-wrap',
+                    }"
+                    role="alert"
+                    data-prueba="aviso-desconectado-iris"
+                >
+                    <template #description>
+                        <p
+                            v-if="avisoCanje.motivo"
+                            class="font-medium"
+                            data-prueba="motivo-desconexion-iris"
+                        >
+                            {{ avisoCanje.motivo }}
+                        </p>
+                        <p
+                            v-if="avisoCanje.desconectadoEn"
+                            class="mt-1"
+                            data-prueba="desconectado-en-iris"
+                        >
+                            Desconectado el {{ formatearFechaHora(avisoCanje.desconectadoEn) }}.
+                        </p>
+                        <p class="mt-1">
+                            {{ INSTRUCCION_DESCONECTADO_IRIS }}
+                        </p>
+                        <p
+                            v-if="!puedeConfigurar"
+                            class="mt-1"
+                        >
+                            Generar el enlace requiere el permiso para configurar Iris.
+                        </p>
+                    </template>
+                </UAlert>
+
                 <!-- Estado -->
                 <section
                     class="surface-card flex flex-col gap-4 p-4 sm:p-6"
@@ -407,6 +455,23 @@ onMounted(() => {
                                     variant="subtle"
                                     data-prueba="marca-reconectar-iris"
                                 />
+                                <UBadge
+                                    v-if="avisoCanje?.estado === 'pendiente'"
+                                    :label="MARCA_CANJE_PENDIENTE_IRIS.etiqueta"
+                                    :icon="MARCA_CANJE_PENDIENTE_IRIS.icono"
+                                    :color="MARCA_CANJE_PENDIENTE_IRIS.color"
+                                    variant="subtle"
+                                    class="whitespace-normal"
+                                    data-prueba="marca-canje-pendiente-iris"
+                                />
+                                <UBadge
+                                    v-else-if="avisoCanje?.estado === 'desconectado'"
+                                    :label="MARCA_DESCONECTADO_IRIS.etiqueta"
+                                    :icon="MARCA_DESCONECTADO_IRIS.icono"
+                                    :color="MARCA_DESCONECTADO_IRIS.color"
+                                    variant="subtle"
+                                    data-prueba="marca-desconectado-iris"
+                                />
                             </h2>
                             <p class="text-sm text-muted">
                                 Apagada no hay llamadas a Iris ni webhooks. Nada del cobro, el corte o el AAA espera a Iris.
@@ -420,6 +485,13 @@ onMounted(() => {
                             data-prueba="interruptor-iris"
                         />
                     </div>
+                    <p
+                        v-if="avisoCanje?.estado === 'pendiente' && avisoCanje.venceEn"
+                        class="text-sm text-muted"
+                        data-prueba="canje-vence-iris"
+                    >
+                        Si Iris no la activa antes del {{ formatearFechaHora(avisoCanje.venceEn) }}, Argos revoca el token y desconecta el conector.
+                    </p>
                     <p
                         v-if="conector.version === 0"
                         class="text-sm text-muted"

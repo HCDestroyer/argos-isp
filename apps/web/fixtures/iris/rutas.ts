@@ -7,7 +7,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
-import { conectorIrisPorReconectar, ORIGENES_IRIS_FIXTURES } from './datos'
+import { conectorIrisAnterior063, conectorIrisCanjeConfirmado, conectorIrisCanjePendiente, conectorIrisDesconectado, conectorIrisPorReconectar, ORIGENES_IRIS_FIXTURES, PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS } from './datos'
 
 type Conector = Schema<'ConectorIris'>
 
@@ -26,12 +26,57 @@ function reconexionPedida(): boolean {
     }
 }
 
-/** Lo que responde `GET /integraciones/iris`; con la clave, el conector por reconectar (una vez). */
+/**
+ * Clave de `localStorage` para Playwright (contrato Iris 0.6.3): su valor elige el estado del canje
+ * con que `GET /integraciones/iris` toma el conector: `pendiente`, `confirmado`,
+ * `revocado_por_iris`, `canje_sin_uso` o `anterior` (API anterior a 0.6.3, sin los campos).
+ */
+export const CLAVE_IRIS_CANJE = 'argos_fixtures_iris_canje'
+
+const ESCENARIOS_CANJE: Record<string, () => Conector> = {
+    pendiente: () => conectorIrisCanjePendiente(new Date(Date.now() - 2 * 60 * 60_000)),
+    confirmado: () => conectorIrisCanjeConfirmado(new Date(Date.now() - 2 * 60 * 60_000)),
+    revocado_por_iris: () => conectorIrisDesconectado('revocado_por_iris', new Date(Date.now() - 30 * 60_000)),
+    canje_sin_uso: () => conectorIrisDesconectado('canje_sin_uso', new Date(Date.now() - 30 * 60_000)),
+    anterior: () => conectorIrisAnterior063(),
+}
+
+function escenarioCanje(): (() => Conector) | null {
+    try {
+        const valor = globalThis.localStorage?.getItem(CLAVE_IRIS_CANJE) ?? null
+        return valor === null ? null : (ESCENARIOS_CANJE[valor] ?? null)
+    }
+    catch {
+        return null
+    }
+}
+
+/** Lo que responde `GET /integraciones/iris`; con una clave, el conector de ese escenario (una vez). */
 function leerConector(): Conector {
-    if (reconexionPedida() && !bd.iris.conector.requiere_reconectar && bd.iris.conector.version === 0) {
-        bd.iris.conector = structuredClone(conectorIrisPorReconectar)
+    if (bd.iris.conector.version === 0) {
+        const escenario = escenarioCanje()
+        if (escenario) {
+            bd.iris.conector = escenario()
+        }
+        else if (reconexionPedida() && !bd.iris.conector.requiere_reconectar) {
+            bd.iris.conector = structuredClone(conectorIrisPorReconectar)
+        }
     }
     return bd.iris.conector
+}
+
+/**
+ * 0.6.3, como `ConfigurarIris`: encender un conector desconectado lo saca de ese estado. El estado
+ * del canje sale como en `estadoCanjeIris` de la API: si el `atk_` nunca se usó (`canje_sin_uso`),
+ * vuelve a pendiente con el vencimiento ya pasado; con `revocado_por_iris` Iris sí lo usó (para
+ * revocarlo) y el barrido lo da por confirmado.
+ */
+function salirDeDesconexion(actual: Conector): Pick<Conector, 'estado_canje' | 'canje_vence_en' | 'desconectado_en' | 'motivo_desconexion'> {
+    if (actual.motivo_desconexion === 'canje_sin_uso' && actual.conectado_por_enlace_en) {
+        const vence = new Date(new Date(actual.conectado_por_enlace_en).getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS)
+        return { estado_canje: 'pendiente', canje_vence_en: vence.toISOString(), desconectado_en: null, motivo_desconexion: null }
+    }
+    return { estado_canje: actual.conectado_por_enlace_en ? 'confirmado' : null, canje_vence_en: null, desconectado_en: null, motivo_desconexion: null }
 }
 
 /** Los permisos de §1.1 del contrato que existen en Argos (rol `integracion_iris`). */
@@ -90,6 +135,7 @@ function guardar(solicitud: SolicitudFixture): RespuestaFixture {
         token: secreto('token'),
         webhook_salida_url: receptor,
         webhook_salida_secreto: secreto('webhook_salida_secreto'),
+        ...(cuerpo.activo === true && actual.desconectado_en ? salirDeDesconexion(actual) : {}),
         version: actual.version + 1,
     }
     bd.iris.conector = siguiente

@@ -20,6 +20,10 @@ export const conectorIrisInicial: Schema<'ConectorIris'> = {
     contrato: null,
     requiere_reconectar: false,
     motivo_reconectar: null,
+    estado_canje: null,
+    canje_vence_en: null,
+    desconectado_en: null,
+    motivo_desconexion: null,
     version: 0,
 }
 
@@ -48,7 +52,78 @@ export const conectorIrisPorReconectar: Schema<'ConectorIris'> = {
     contrato: '0.6.2',
     requiere_reconectar: true,
     motivo_reconectar: MOTIVO_RECONECTAR_RECEPTOR_FIXTURE,
+    // Iris ya usó el `atk_` del canje (el PUT del contrato): canje confirmado
+    estado_canje: 'confirmado',
+    canje_vence_en: null,
+    desconectado_en: null,
+    motivo_desconexion: null,
     version: 4,
+}
+
+/** Contrato Iris 0.6.3: el plazo para que Iris use el `atk_` del canje (`PLAZO_CONFIRMAR_CANJE_IRIS_MS`). */
+export const PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS = 24 * 60 * 60_000
+
+/**
+ * Conector recién canjeado con un enlace, como lo deja `CanjearEnlaceIris`: Iris ya tiene su
+ * `iris_pat_` puesto en Argos pero aún no usó el `atk_`. `canje_vence_en` = canje + 24 h.
+ */
+export function conectorIrisCanjePendiente(canjeadoEn: Date = new Date()): Schema<'ConectorIris'> {
+    return {
+        activo: true,
+        url_base: 'https://iris.argosnet.gt',
+        token: '***',
+        webhook_salida_url: 'https://iris.argosnet.gt/api/v1/integraciones/argosisp/webhook/cnx_9b21',
+        webhook_salida_secreto: '***',
+        webhook_entrada_url: null,
+        webhook_entrada_secreto: null,
+        conector_id: 'cnx_9b21',
+        conectado_por_enlace_en: canjeadoEn.toISOString(),
+        token_argos_id: 2,
+        contrato: '0.6.3',
+        requiere_reconectar: false,
+        motivo_reconectar: null,
+        estado_canje: 'pendiente',
+        canje_vence_en: new Date(canjeadoEn.getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS).toISOString(),
+        desconectado_en: null,
+        motivo_desconexion: null,
+        version: 1,
+    }
+}
+
+/** El canje confirmado: Iris ya usó el `atk_` (nada nuevo en la pantalla). */
+export function conectorIrisCanjeConfirmado(canjeadoEn: Date = new Date()): Schema<'ConectorIris'> {
+    return { ...conectorIrisCanjePendiente(canjeadoEn), estado_canje: 'confirmado', canje_vence_en: null, version: 2 }
+}
+
+/**
+ * Conector desconectado (`desconexion.ts` de A1): apagado, sin `iris_pat_` ni secretos de
+ * webhooks; conserva URL, receptor, `conector_id`, `token_argos_id` y contrato.
+ */
+export function conectorIrisDesconectado(
+    motivo: NonNullable<Schema<'ConectorIris'>['motivo_desconexion']>,
+    desconectadoEn: Date = new Date(),
+): Schema<'ConectorIris'> {
+    return {
+        ...conectorIrisCanjePendiente(new Date(desconectadoEn.getTime() - (motivo === 'canje_sin_uso' ? PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS : 5 * 60_000))),
+        activo: false,
+        token: null,
+        webhook_salida_secreto: null,
+        webhook_entrada_secreto: null,
+        estado_canje: 'desconectado',
+        canje_vence_en: null,
+        desconectado_en: desconectadoEn.toISOString(),
+        motivo_desconexion: motivo,
+        version: 2,
+    }
+}
+
+/**
+ * Lo que responde una API anterior a 0.6.3: sin `estado_canje`, `canje_vence_en`,
+ * `desconectado_en` ni `motivo_desconexion` (opcionales en el OpenAPI).
+ */
+export function conectorIrisAnterior063(): Schema<'ConectorIris'> {
+    const { estado_canje: _estado, canje_vence_en: _vence, desconectado_en: _desconectado, motivo_desconexion: _motivo, ...resto } = conectorIrisCanjePendiente()
+    return { ...resto, contrato: '0.6.2' }
 }
 
 export interface IrisFixtures {
