@@ -42,6 +42,7 @@ async function cargarIris() {
 const presentacionIris = computed(() => (conectorIris.value ? presentacionConectorIris(conectorIris.value) : null))
 /** Contrato Iris 0.6.3: canje pendiente o conector desconectado; sin `estado_canje`, nada. */
 const avisoCanjeTarjeta = computed(() => (conectorIris.value ? avisoCanjeIris(conectorIris.value) : null))
+const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconexionIris(conectorIris.value) : null))
 const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
 onMounted(() => {
@@ -147,7 +148,22 @@ onMounted(() => {
                         variant="subtle"
                         data-prueba="marca-desconectado-tarjeta-iris"
                     />
+                    <UBadge
+                        v-if="avisoReconexionTarjeta"
+                        :label="MARCA_RECONEXION_PENDIENTE_IRIS.etiqueta"
+                        :icon="MARCA_RECONEXION_PENDIENTE_IRIS.icono"
+                        :color="MARCA_RECONEXION_PENDIENTE_IRIS.color"
+                        variant="subtle"
+                        data-prueba="marca-reconexion-tarjeta-iris"
+                    />
                 </div>
+                <p
+                    v-if="avisoReconexionTarjeta"
+                    class="text-sm text-muted"
+                    data-prueba="reconexion-vence-tarjeta-iris"
+                >
+                    {{ textoReconexionIris(avisoReconexionTarjeta) }}
+                </p>
                 <p
                     v-if="avisoCanjeTarjeta?.estado === 'pendiente' && avisoCanjeTarjeta.venceEn"
                     class="text-sm text-muted"

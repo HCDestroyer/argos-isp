@@ -100,6 +100,31 @@ export function avisoCanjeIris(conector: ConectorIris): AvisoCanjeIris | null {
     return null
 }
 
+/**
+ * Contrato Iris 0.6.3: un enlace nuevo canjeado sobre un conector en uso queda como reconexión
+ * pendiente hasta que Iris lo usa; mientras tanto sigue la conexión actual. Solo con
+ * `reconexion_pendiente_desde` (opcional en el OpenAPI); sin `reconexion_vence_en` se omite la hora.
+ */
+export interface AvisoReconexionIris {
+    desde: string
+    venceEn: string | null
+}
+
+export const MARCA_RECONEXION_PENDIENTE_IRIS: PresentacionEstadoUi = { etiqueta: 'Reconexión pendiente', color: 'info', icono: 'i-lucide-refresh-cw' }
+
+export function avisoReconexionIris(conector: ConectorIris): AvisoReconexionIris | null {
+    if (!conector.reconexion_pendiente_desde) {
+        return null
+    }
+    return { desde: conector.reconexion_pendiente_desde, venceEn: conector.reconexion_vence_en ?? null }
+}
+
+/** «Iris la activa antes del <hora>; mientras tanto sigue la conexión actual.» */
+export function textoReconexionIris(aviso: AvisoReconexionIris): string {
+    const plazo = aviso.venceEn ? `Iris la activa antes del ${formatearFechaHora(aviso.venceEn)}` : 'Iris aún no la activa'
+    return `${plazo}; mientras tanto sigue la conexión actual.`
+}
+
 /** Motivo y fecha de la desconexión en una línea (tarjeta del índice); sin ninguno de los dos, `null`. */
 export function textoDesconexionIris(aviso: Extract<AvisoCanjeIris, { estado: 'desconectado' }>): string | null {
     const fecha = aviso.desconectadoEn ? `${aviso.motivo ? 'desconectado' : 'Desconectado'} el ${formatearFechaHora(aviso.desconectadoEn)}` : null

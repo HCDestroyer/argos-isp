@@ -24,6 +24,8 @@ export const conectorIrisInicial: Schema<'ConectorIris'> = {
     canje_vence_en: null,
     desconectado_en: null,
     motivo_desconexion: null,
+    reconexion_pendiente_desde: null,
+    reconexion_vence_en: null,
     version: 0,
 }
 
@@ -57,6 +59,8 @@ export const conectorIrisPorReconectar: Schema<'ConectorIris'> = {
     canje_vence_en: null,
     desconectado_en: null,
     motivo_desconexion: null,
+    reconexion_pendiente_desde: null,
+    reconexion_vence_en: null,
     version: 4,
 }
 
@@ -86,6 +90,8 @@ export function conectorIrisCanjePendiente(canjeadoEn: Date = new Date()): Schem
         canje_vence_en: new Date(canjeadoEn.getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS).toISOString(),
         desconectado_en: null,
         motivo_desconexion: null,
+        reconexion_pendiente_desde: null,
+        reconexion_vence_en: null,
         version: 1,
     }
 }
@@ -118,11 +124,24 @@ export function conectorIrisDesconectado(
 }
 
 /**
+ * Reconexión pendiente: un enlace nuevo canjeado sobre el conector en uso (canje confirmado). El
+ * conector sigue con su canje anterior hasta que Iris use el `atk_` nuevo; se descarta a las 24 h.
+ */
+export function conectorIrisReconexionPendiente(canjeadoEn: Date = new Date()): Schema<'ConectorIris'> {
+    return {
+        ...conectorIrisCanjeConfirmado(new Date(canjeadoEn.getTime() - 3 * PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS)),
+        reconexion_pendiente_desde: canjeadoEn.toISOString(),
+        reconexion_vence_en: new Date(canjeadoEn.getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_FIXTURE_MS).toISOString(),
+        version: 3,
+    }
+}
+
+/**
  * Lo que responde una API anterior a 0.6.3: sin `estado_canje`, `canje_vence_en`,
  * `desconectado_en` ni `motivo_desconexion` (opcionales en el OpenAPI).
  */
 export function conectorIrisAnterior063(): Schema<'ConectorIris'> {
-    const { estado_canje: _estado, canje_vence_en: _vence, desconectado_en: _desconectado, motivo_desconexion: _motivo, ...resto } = conectorIrisCanjePendiente()
+    const { estado_canje: _estado, canje_vence_en: _vence, desconectado_en: _desconectado, motivo_desconexion: _motivo, reconexion_pendiente_desde: _reconexion, reconexion_vence_en: _reconexionVence, ...resto } = conectorIrisCanjePendiente()
     return { ...resto, contrato: '0.6.2' }
 }
 

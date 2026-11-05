@@ -5,7 +5,8 @@ import { entrar } from './ayudas'
  * Contrato Iris 0.6.3 en el panel, en modo fixtures, a 1280 y 390 px. La clave
  * `argos_fixtures_iris_canje` elige el estado del canje: `pendiente` lleva la marca informativa con
  * su vencimiento; `revocado_por_iris` y `canje_sin_uso` el aviso de error con el motivo, la fecha y
- * «Generar enlace de conexión»; `confirmado` y `anterior` (API sin los campos) no muestran nada.
+ * «Generar enlace de conexión»; `reconexion` la marca de reconexión pendiente con su hora;
+ * `confirmado` y `anterior` (API sin los campos) no muestran nada.
  * Capturas (claro y oscuro) en `test-results/capturas-iris-063/` (no se suben).
  */
 
@@ -76,6 +77,25 @@ for (const [motivo, texto] of [
     })
 }
 
+test('Iris: reconexión pendiente con su hora y la conexión actual en uso', async ({ page }) => {
+    await conEscenario(page, 'reconexion')
+
+    await page.goto('/configuracion/integraciones')
+    await expect(page.locator('[data-prueba="estado-tarjeta-iris"]')).toHaveText('Activa')
+    await expect(page.locator('[data-prueba="marca-reconexion-tarjeta-iris"]')).toHaveText('Reconexión pendiente')
+    await expect(page.locator('[data-prueba="reconexion-vence-tarjeta-iris"]')).toContainText(/Iris la activa antes del .+; mientras tanto sigue la conexión actual\./)
+    await sinDesborde(page)
+    await capturar(page, 'reconexion-tarjeta')
+
+    await page.goto('/configuracion/integraciones/iris')
+    await expect(page.locator('[data-prueba="marca-reconexion-iris"]')).toHaveText('Reconexión pendiente')
+    await expect(page.locator('[data-prueba="reconexion-vence-iris"]')).toContainText('mientras tanto sigue la conexión actual')
+    await expect(page.locator('[data-prueba="estado-conector-iris"]')).toHaveText('Activa')
+    await expect(page.locator('[data-prueba="aviso-desconectado-iris"]')).toHaveCount(0)
+    await sinDesborde(page)
+    await capturar(page, 'reconexion')
+})
+
 for (const escenario of ['confirmado', 'anterior']) {
     test(`Iris: ${escenario} no muestra nada nuevo`, async ({ page }) => {
         await conEscenario(page, escenario)
@@ -88,5 +108,6 @@ for (const escenario of ['confirmado', 'anterior']) {
         await expect(page.locator('[data-prueba="estado-conector-iris"]')).toHaveText('Activa')
         await expect(page.locator('[data-prueba="marca-canje-pendiente-iris"]')).toHaveCount(0)
         await expect(page.locator('[data-prueba="aviso-desconectado-iris"]')).toHaveCount(0)
+        await expect(page.locator('[data-prueba="marca-reconexion-iris"]')).toHaveCount(0)
     })
 }

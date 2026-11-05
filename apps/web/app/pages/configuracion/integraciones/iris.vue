@@ -141,6 +141,8 @@ const accionesReconectar = computed(() => (puedeConfigurar.value
 
 /** `pendiente`: marca informativa; `desconectado`: aviso con el motivo y el enlace (`iris.configurar`). */
 const avisoCanje = computed(() => (conector.value ? avisoCanjeIris(conector.value) : null))
+/** Enlace nuevo canjeado sobre el conector en uso: marca informativa hasta que Iris lo active. */
+const avisoReconexion = computed(() => (conector.value ? avisoReconexionIris(conector.value) : null))
 const accionesDesconectado = computed(() => (puedeConfigurar.value
     ? [{ label: 'Generar enlace de conexión', icon: 'i-lucide-link-2', color: 'error' as const, variant: 'solid' as const, loading: generandoEnlace.value, onClick: generarEnlace }]
     : []))
@@ -472,6 +474,14 @@ onMounted(() => {
                                     variant="subtle"
                                     data-prueba="marca-desconectado-iris"
                                 />
+                                <UBadge
+                                    v-if="avisoReconexion"
+                                    :label="MARCA_RECONEXION_PENDIENTE_IRIS.etiqueta"
+                                    :icon="MARCA_RECONEXION_PENDIENTE_IRIS.icono"
+                                    :color="MARCA_RECONEXION_PENDIENTE_IRIS.color"
+                                    variant="subtle"
+                                    data-prueba="marca-reconexion-iris"
+                                />
                             </h2>
                             <p class="text-sm text-muted">
                                 Apagada no hay llamadas a Iris ni webhooks. Nada del cobro, el corte o el AAA espera a Iris.
@@ -485,6 +495,13 @@ onMounted(() => {
                             data-prueba="interruptor-iris"
                         />
                     </div>
+                    <p
+                        v-if="avisoReconexion"
+                        class="text-sm text-muted"
+                        data-prueba="reconexion-vence-iris"
+                    >
+                        {{ textoReconexionIris(avisoReconexion) }}
+                    </p>
                     <p
                         v-if="avisoCanje?.estado === 'pendiente' && avisoCanje.venceEn"
                         class="text-sm text-muted"

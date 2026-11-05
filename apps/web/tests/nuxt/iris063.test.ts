@@ -9,6 +9,7 @@ import {
     conectorIrisCanjePendiente,
     conectorIrisDesconectado,
     conectorIrisInicial,
+    conectorIrisReconexionPendiente,
 } from '~~/fixtures/iris/datos'
 import { CLAVE_IRIS_CANJE } from '~~/fixtures/iris/rutas'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
@@ -63,10 +64,23 @@ describe('iris 0.6.3 · utilidades', () => {
         expect(MARCA_DESCONECTADO_IRIS.icono).toMatch(/^i-lucide-/)
     })
 
+    it('reconexión: solo con reconexion_pendiente_desde; sin vencimiento se omite la hora', () => {
+        expect(avisoReconexionIris(conectorIrisReconexionPendiente(CANJE))).toEqual({ desde: CANJE.toISOString(), venceEn: '2026-11-06T16:00:00.000Z' })
+        expect(avisoReconexionIris(conectorIrisInicial)).toBeNull()
+        expect(avisoReconexionIris(conectorIrisAnterior063())).toBeNull()
+        expect(avisoReconexionIris({ ...conectorIrisCanjeConfirmado(CANJE), reconexion_pendiente_desde: undefined, reconexion_vence_en: '2026-11-06T16:00:00.000Z' })).toBeNull()
+        const sinHora = avisoReconexionIris({ ...conectorIrisReconexionPendiente(CANJE), reconexion_vence_en: undefined })
+        expect(sinHora).toEqual({ desde: CANJE.toISOString(), venceEn: null })
+        expect(textoReconexionIris(sinHora!)).toBe('Iris aún no la activa; mientras tanto sigue la conexión actual.')
+        expect(MARCA_RECONEXION_PENDIENTE_IRIS.color).toBe('info')
+    })
+
     it('las fixtures son fieles a la API: inicial con los cuatro campos en null, desconectado sin secretos', () => {
         expect(conectorIrisInicial).toMatchObject({ estado_canje: null, canje_vence_en: null, desconectado_en: null, motivo_desconexion: null })
         expect(conectorIrisDesconectado('canje_sin_uso')).toMatchObject({ activo: false, token: null, webhook_salida_secreto: null, webhook_entrada_secreto: null, canje_vence_en: null })
         expect('estado_canje' in conectorIrisAnterior063()).toBe(false)
+        expect('reconexion_pendiente_desde' in conectorIrisAnterior063()).toBe(false)
+        expect(conectorIrisInicial).toMatchObject({ reconexion_pendiente_desde: null, reconexion_vence_en: null })
     })
 })
 
@@ -135,7 +149,7 @@ describe('iris 0.6.3 · pantalla', () => {
         bd.iris.conector = conector()
         const vista = await mountSuspended(conApp(PaginaIris), { route: '/configuracion/integraciones/iris' })
         await esperar(() => expect(vista.find('[data-prueba="estado-conector-iris"]').exists()).toBe(true))
-        for (const prueba of ['marca-canje-pendiente-iris', 'canje-vence-iris', 'aviso-desconectado-iris', 'marca-desconectado-iris']) {
+        for (const prueba of ['marca-canje-pendiente-iris', 'canje-vence-iris', 'aviso-desconectado-iris', 'marca-desconectado-iris', 'marca-reconexion-iris', 'reconexion-vence-iris']) {
             expect(vista.find(`[data-prueba="${prueba}"]`).exists()).toBe(false)
         }
     })
@@ -162,11 +176,41 @@ describe('iris 0.6.3 · pantalla', () => {
         expect(anterior.find('[data-prueba="marca-desconectado-tarjeta-iris"]').exists()).toBe(false)
     })
 
-    it('encender a mano un conector desconectado lo saca de ese estado (fixture como ConfigurarIris)', async () => {
-        bd.iris.conector = { ...conectorIrisDesconectado('revocado_por_iris', DESCONEXION), token: '***' }
+    it.each(['revocado_por_iris', 'canje_sin_uso'] as const)('encender a mano tras %s lo deja configurado a mano (fixture como ConfigurarIris)', async (motivo) => {
+        bd.iris.conector = { ...conectorIrisDesconectado(motivo, DESCONEXION), token: '***' }
         const respuesta = await useIris().guardar({ activo: true, version: bd.iris.conector.version })
         expect(respuesta.ok).toBe(true)
-        expect(bd.iris.conector).toMatchObject({ activo: true, estado_canje: 'confirmado', desconectado_en: null, motivo_desconexion: null })
+        expect(bd.iris.conector).toMatchObject({
+            activo: true,
+            estado_canje: null,
+            canje_vence_en: null,
+            conectado_por_enlace_en: null,
+            token_argos_id: null,
+            desconectado_en: null,
+            motivo_desconexion: null,
+            reconexion_pendiente_desde: null,
+            reconexion_vence_en: null,
+        })
+        const vista = await mountSuspended(conApp(PaginaIris), { route: '/configuracion/integraciones/iris' })
+        await esperar(() => expect(vista.find('[data-prueba="estado-conector-iris"]').text()).toBe('Activa'))
+        for (const prueba of ['marca-canje-pendiente-iris', 'canje-vence-iris', 'aviso-desconectado-iris', 'marca-reconexion-iris']) {
+            expect(vista.find(`[data-prueba="${prueba}"]`).exists()).toBe(false)
+        }
+    })
+
+    it('reconexión pendiente: marca informativa con la hora de Guatemala y que sigue la conexión actual', async () => {
+        bd.iris.conector = conectorIrisReconexionPendiente(CANJE)
+        const vista = await mountSuspended(conApp(PaginaIris), { route: '/configuracion/integraciones/iris' })
+        await esperar(() => expect(vista.find('[data-prueba="marca-reconexion-iris"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="marca-reconexion-iris"]').text()).toBe('Reconexión pendiente')
+        expect(vista.get('[data-prueba="reconexion-vence-iris"]').text()).toBe(`Iris la activa antes del ${formatearFechaHora('2026-11-06T16:00:00.000Z')}; mientras tanto sigue la conexión actual.`)
+        expect(vista.get('[data-prueba="estado-conector-iris"]').text()).toBe('Activa')
+        expect(vista.find('[data-prueba="aviso-desconectado-iris"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="marca-canje-pendiente-iris"]').exists()).toBe(false)
+
+        const indice = await mountSuspended(conApp(PaginaIntegraciones), { route: '/configuracion/integraciones' })
+        await esperar(() => expect(indice.find('[data-prueba="marca-reconexion-tarjeta-iris"]').exists()).toBe(true))
+        expect(indice.get('[data-prueba="reconexion-vence-tarjeta-iris"]').text()).toContain('mientras tanto sigue la conexión actual')
     })
 
     it('la clave de Playwright elige el estado del canje en el GET', async () => {
