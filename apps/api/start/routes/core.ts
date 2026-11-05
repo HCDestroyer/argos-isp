@@ -885,8 +885,9 @@ const servicios: Ruta[] = [
         etiqueta: 'servicios',
         permiso: 'servicios.crear',
         descripcion:
-            '422 `pppoe_requiere_radius` si el servicio es pppoe (el tipo por defecto) y el router está en modo `api` ' +
-            '(sin RADIUS): ahí solo van ip_estatica y dhcp_fija.',
+            'El tipo de conexión es el del router (`Router.tipo_conexion`): `tipo_conexion` es opcional y, si llega ' +
+            'distinto, 422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 ' +
+            '`pppoe_local_requiere_api`.',
         cuerpo: v.crearServicioValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Servicio creado', esquema: Servicio },
@@ -953,8 +954,10 @@ const servicios: Ruta[] = [
         operacion: 'serviciosEditar',
         resumen: 'Editar servicio (plan, router, IPs, datos)',
         descripcion:
-            'Mover un servicio pppoe a un router en modo `api` (sin RADIUS) o pasar a pppoe uno que está en un router ' +
-            '`api`: 422 `pppoe_requiere_radius`.',
+            'Al cambiar `router_id` el servicio adopta el `tipo_conexion` del router destino (dhcp_fija sin mac: 422 ' +
+            'en mac; a pppoe se generan credenciales). `tipo_conexion` solo acepta el del router o el actual: otro, ' +
+            '422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 ' +
+            '`pppoe_local_requiere_api`.',
         etiqueta: 'servicios',
         permiso: 'servicios.editar',
         cuerpo: v.editarServicioValidator,

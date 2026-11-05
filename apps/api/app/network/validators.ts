@@ -108,6 +108,24 @@ const modoSeguridad = () =>
                 'servicios pppoe no retirados: 422 servicios_pppoe_en_router',
         })
 
+/**
+ * Tipo de conexión del router (decisión del PM, 5 nov; `contratos/tipo-conexion-router.md`): todos sus
+ * servicios lo usan. En la edición solo si ningún servicio cambia; con servicios que cambian, 422
+ * `tipo_conexion_con_servicios` (se cambia con `POST /routers/:id/cambiar-tipo-conexion`).
+ */
+export const TIPOS_CONEXION_ROUTER = ['pppoe', 'ip_estatica', 'dhcp_fija'] as const
+
+const tipoConexionRouter = () =>
+    vine
+        .enum(TIPOS_CONEXION_ROUTER)
+        .optional()
+        .meta({
+            description:
+                'Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los ' +
+                'servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 ' +
+                'tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)',
+        })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -130,6 +148,7 @@ const camposRouter = {
                 '(422 en nas_ip si falta); opcional (null) con modo_seguridad api',
         }),
     modo_seguridad: modoSeguridad(),
+    tipo_conexion: tipoConexionRouter(),
     empresa_sugerida_id: empresaSugerida(),
     zona_id: zonaRouter(),
     coordenadas: coordenadasRouter(),
@@ -189,6 +208,7 @@ export const editarRouterValidator = conMensajes(
                     'null la quita (solo en un router api; 422 en nas_ip si el router queda en radius sin ella)',
             }),
             modo_seguridad: modoSeguridad(),
+            tipo_conexion: tipoConexionRouter(),
             empresa_sugerida_id: empresaSugerida(),
             zona_id: zonaRouter(),
             coordenadas: coordenadasRouter(),
@@ -1030,4 +1050,37 @@ export const unificarControlVelocidadValidator = vine.compile(
         reconectar: reconectar(),
         motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
     }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Tipo de conexión por router (decisión del PM, 5 nov; `contratos/tipo-conexion-router.md`)
+|--------------------------------------------------------------------------
+*/
+
+export const vistaPreviaTipoConexionValidator = vine.compile(
+    vine.object({
+        tipo: vine.enum(TIPOS_CONEXION_ROUTER).optional().meta({
+            description:
+                'Tipo al que pasaría el router; sin él, el actual (la vista de «unificar»: los servicios que difieren)',
+        }),
+    }),
+)
+
+export const cambiarTipoConexionValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            tipo_conexion: vine.enum(TIPOS_CONEXION_ROUTER).meta({
+                description:
+                    'Tipo nuevo del router; todos sus servicios no retirados pasan a él. Igual al actual = unificar',
+            }),
+            motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        }),
+    ),
+    {
+        ...MENSAJE_VERSION,
+        'tipo_conexion.required': 'Indica el tipo de conexión: pppoe, ip_estatica o dhcp_fija',
+        'tipo_conexion.enum': 'El tipo de conexión debe ser pppoe, ip_estatica o dhcp_fija',
+    },
 )

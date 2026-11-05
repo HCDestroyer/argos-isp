@@ -65644,6 +65644,7 @@
                         "roles.editar",
                         "roles.ver",
                         "routers.cambiar_control_velocidad",
+                        "routers.cambiar_tipo_conexion",
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
@@ -66021,6 +66022,7 @@
                         "roles.editar",
                         "roles.ver",
                         "routers.cambiar_control_velocidad",
+                        "routers.cambiar_tipo_conexion",
                         "routers.conexion_clave",
                         "routers.crear",
                         "routers.editar",
@@ -66410,6 +66412,15 @@
                     ],
                     "description": "radius (por defecto): PPPoE por RADIUS y CoA; nas_ip obligatoria. api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; nas_ip y radius_secret opcionales. Pasar a api con servicios pppoe no retirados: 422 servicios_pppoe_en_router"
                   },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)"
+                  },
                   "empresa_sugerida_id": {
                     "type": [
                       "integer",
@@ -66633,7 +66644,7 @@
       "put": {
         "operationId": "routersEditar",
         "summary": "Editar router",
-        "description": "Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite `router.radius_cambiado`.",
+        "description": "Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite `router.radius_cambiado`. Cambiar `tipo_conexion` solo si ningún servicio no retirado cambiaría (emite `router.tipo_conexion_cambiado` con motivo edicion); si no, 422 `tipo_conexion_con_servicios` con un errors[] por servicio: usar POST /routers/:id/cambiar-tipo-conexion.",
         "tags": [
           "routers"
         ],
@@ -66724,6 +66735,15 @@
                       "api"
                     ],
                     "description": "radius (por defecto): PPPoE por RADIUS y CoA; nas_ip obligatoria. api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; nas_ip y radius_secret opcionales. Pasar a api con servicios pppoe no retirados: 422 servicios_pppoe_en_router"
+                  },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)"
                   },
                   "empresa_sugerida_id": {
                     "type": [
@@ -67453,6 +67473,146 @@
           }
         },
         "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/cambiar-tipo-conexion": {
+      "post": {
+        "operationId": "routersCambiarTipoConexion",
+        "summary": "Cambiar el tipo de conexión del router y de todos sus servicios (o unificarlos)",
+        "description": "Solo admin. Pasa cada servicio no retirado con servicios.editar anidada (auditoría y diff por fila; servicio.config_cambiada con tipo_conexion, más ips/prefijo_v6 si cambiaron) y emite router.tipo_conexion_cambiado. Con el tipo actual unifica los que difieren (motivo unificar). 422 `tipo_conexion_servicios_incompletos` si a alguno le falta algo que no se completa solo (errors[] con `field: servicios.<id>.<mac|ipv4|plan>`); 422 `pppoe_local_requiere_api` (PPPoE en un router api sin credenciales de la API); 409 si la `version` del router cambió.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "tipo_conexion": {
+                    "type": "string",
+                    "enum": [
+                      "pppoe",
+                      "ip_estatica",
+                      "dhcp_fija"
+                    ],
+                    "description": "Tipo nuevo del router; todos sus servicios no retirados pasan a él. Igual al actual = unificar"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "tipo_conexion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Router y servicios cambiados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCambiarTipoConexion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.cambiar_tipo_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.cambiar_tipo_conexion",
         "x-implementado": true
       }
     },
@@ -70929,6 +71089,103 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/vista-previa-tipo-conexion": {
+      "get": {
+        "operationId": "routersVistaPreviaTipoConexion",
+        "summary": "Qué servicios cambian y qué les falta si el router pasa a otro tipo de conexión (no escribe)",
+        "description": "contratos/tipo-conexion-router.md: un tipo por router. Lista los servicios no retirados del router con `cambia`, `faltan` (mac, ipv4, plan: bloquean), `se_completa` (credenciales, ipv4, ipv6_modo, amarre_ip_mac: no bloquean) y `difiere_del_router`. Sin `tipo`, el actual: los que difieren (unificar). `aplicable` dice si el POST pasaría. No habla con el router.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "Tipo al que pasaría el router; sin él, el actual (la vista de «unificar»: los servicios que difieren)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pppoe",
+                "ip_estatica",
+                "dhcp_fija"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaTipoConexion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/vista-previa-unificar-velocidad": {
       "get": {
         "operationId": "routersVistaPreviaUnificarVelocidad",
@@ -71656,7 +71913,7 @@
       "post": {
         "operationId": "serviciosCrear",
         "summary": "Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)",
-        "description": "422 `pppoe_requiere_radius` si el servicio es pppoe (el tipo por defecto) y el router está en modo `api` (sin RADIUS): ahí solo van ip_estatica y dhcp_fija.",
+        "description": "El tipo de conexión es el del router (`Router.tipo_conexion`): `tipo_conexion` es opcional y, si llega distinto, 422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 `pppoe_local_requiere_api`.",
         "tags": [
           "servicios"
         ],
@@ -71712,7 +71969,7 @@
                       "ip_estatica",
                       "dhcp_fija"
                     ],
-                    "description": "Por defecto pppoe"
+                    "description": "Opcional: el servicio toma el tipo de su router (Router.tipo_conexion). Si llega distinto: 422 tipo_conexion_del_router"
                   },
                   "amarre_ip_mac": {
                     "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
@@ -72131,7 +72388,7 @@
       "put": {
         "operationId": "serviciosEditar",
         "summary": "Editar servicio (plan, router, IPs, datos)",
-        "description": "Mover un servicio pppoe a un router en modo `api` (sin RADIUS) o pasar a pppoe uno que está en un router `api`: 422 `pppoe_requiere_radius`.",
+        "description": "Al cambiar `router_id` el servicio adopta el `tipo_conexion` del router destino (dhcp_fija sin mac: 422 en mac; a pppoe se generan credenciales). `tipo_conexion` solo acepta el del router o el actual: otro, 422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 `pppoe_local_requiere_api`.",
         "tags": [
           "servicios"
         ],
@@ -72188,7 +72445,7 @@
                       "ip_estatica",
                       "dhcp_fija"
                     ],
-                    "description": "pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)"
+                    "description": "Solo el tipo del router (pasar a él) o el actual. Al cambiar router_id el servicio adopta el del destino (dhcp_fija exige mac; a pppoe se generan credenciales). Otro: 422 tipo_conexion_del_router"
                   },
                   "amarre_ip_mac": {
                     "description": "ARP estático IP-MAC en el router (solo sin PPPoE; exige mac)",
@@ -72197,13 +72454,13 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Solo al cambiar a pppoe; se genera si no viene"
+                    "description": "Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe). Emite servicio.config_cambiada con credenciales"
                   },
                   "pass_ppp": {
                     "type": "string",
                     "minLength": 6,
                     "maxLength": 64,
-                    "description": "Solo pppoe; al cambiar a pppoe se genera si no viene"
+                    "description": "Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con credenciales (nunca el valor; en audit.cambios queda ***)"
                   },
                   "mac": {
                     "type": [
@@ -72282,8 +72539,12 @@
                     "description": "Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido"
                   },
                   "ipv4": {
-                    "type": "string",
-                    "format": "ipv4"
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar"
                   },
                   "ipv6_modo": {
                     "type": "string",
@@ -77654,6 +77915,7 @@
                             "roles.editar",
                             "roles.ver",
                             "routers.cambiar_control_velocidad",
+                            "routers.cambiar_tipo_conexion",
                             "routers.conexion_clave",
                             "routers.crear",
                             "routers.editar",
@@ -100841,6 +101103,7 @@
           "roles.editar",
           "roles.ver",
           "routers.cambiar_control_velocidad",
+          "routers.cambiar_tipo_conexion",
           "routers.conexion_clave",
           "routers.crear",
           "routers.editar",
@@ -101111,6 +101374,7 @@
           "Editar roles y sus permisos",
           "Ver roles y permisos",
           "Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin",
+          "Cambiar el tipo de conexión de un router y de todos sus servicios (o unificar los que difieren); solo admin",
           "Pegar a mano la clave pública WireGuard de un router",
           "Crear routers",
           "Editar routers y sus credenciales",
@@ -113164,6 +113428,44 @@
           }
         }
       },
+      "ResultadoCambiarTipoConexion": {
+        "type": "object",
+        "required": [
+          "router",
+          "de",
+          "a",
+          "servicios"
+        ],
+        "properties": {
+          "router": {
+            "$ref": "#/components/schemas/Router"
+          },
+          "de": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ]
+          },
+          "a": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ]
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Servicios que pasaron al tipo nuevo (cada uno con servicio.config_cambiada)"
+          }
+        }
+      },
       "ResultadoCorte": {
         "type": "object",
         "required": [
@@ -114826,6 +115128,7 @@
               "roles.editar",
               "roles.ver",
               "routers.cambiar_control_velocidad",
+              "routers.cambiar_tipo_conexion",
               "routers.conexion_clave",
               "routers.crear",
               "routers.editar",
@@ -115246,6 +115549,7 @@
           "tiene_radius_secret",
           "nas_ip",
           "modo_seguridad",
+          "tipo_conexion",
           "control_velocidad",
           "estrategia_velocidad",
           "routeros_version",
@@ -115302,6 +115606,15 @@
               "api"
             ],
             "description": "radius: PPPoE por RADIUS (y servicios ip_estatica/dhcp_fija por la API REST). api: router sin RADIUS, solo ip_estatica y dhcp_fija por la API REST; sin nas_ip ni radius_secret obligatorios y sin PPPoE"
+          },
+          "tipo_conexion": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "Tipo de conexión de los servicios del router (contratos/tipo-conexion-router.md): los nuevos lo toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)"
           },
           "control_velocidad": {
             "type": "string",
@@ -120377,6 +120690,190 @@
               "null"
             ],
             "description": "El router no respondió o no tiene credenciales"
+          }
+        }
+      },
+      "VistaPreviaTipoConexion": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "router_version",
+          "tipo_actual",
+          "tipo",
+          "aplicable",
+          "bloqueos",
+          "resumen",
+          "servicios"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_version": {
+            "type": "integer",
+            "description": "version del router al calcular (va en el POST)"
+          },
+          "tipo_actual": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "Tipo del router hoy"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "pppoe",
+              "ip_estatica",
+              "dhcp_fija"
+            ],
+            "description": "Tipo al que pasaría (sin ?tipo=, el actual: «unificar»)"
+          },
+          "aplicable": {
+            "type": "boolean",
+            "description": "true si POST /routers/:id/cambiar-tipo-conexion con este tipo se aplicaría (sin bloqueos ni faltantes)"
+          },
+          "bloqueos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "mensaje"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "enum": [
+                    "pppoe_local_requiere_api"
+                  ]
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Lo que impide el cambio en el router mismo (PPPoE en un router api sin credenciales de la API)"
+          },
+          "resumen": {
+            "type": "object",
+            "required": [
+              "servicios",
+              "cambian",
+              "con_faltantes",
+              "difieren_del_router"
+            ],
+            "properties": {
+              "servicios": {
+                "type": "integer",
+                "description": "Servicios no retirados del router"
+              },
+              "cambian": {
+                "type": "integer",
+                "description": "Los que pasan al tipo nuevo"
+              },
+              "con_faltantes": {
+                "type": "integer",
+                "description": "Los que cambian y les falta algo (bloquean)"
+              },
+              "difieren_del_router": {
+                "type": "integer",
+                "description": "Los que hoy no usan el tipo del router"
+              }
+            }
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "cliente_id",
+                "cliente_nombre",
+                "user_ppp",
+                "estado",
+                "tipo_conexion",
+                "difiere_del_router",
+                "cambia",
+                "faltan",
+                "se_completa",
+                "mensajes"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente_nombre": {
+                  "type": "string"
+                },
+                "user_ppp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "estado": {
+                  "type": "string"
+                },
+                "tipo_conexion": {
+                  "type": "string",
+                  "enum": [
+                    "pppoe",
+                    "ip_estatica",
+                    "dhcp_fija"
+                  ],
+                  "description": "Tipo del servicio hoy"
+                },
+                "difiere_del_router": {
+                  "type": "boolean",
+                  "description": "No usa el tipo actual del router (dato anterior a la regla); el panel ofrece «unificar»"
+                },
+                "cambia": {
+                  "type": "boolean",
+                  "description": "Pasa a `tipo`"
+                },
+                "faltan": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "mac",
+                      "ipv4",
+                      "plan"
+                    ]
+                  },
+                  "description": "Lo que le falta y bloquea el cambio: mac (dhcp_fija), ipv4 (sin IPv4 y el router sin redes), plan (solo IPv6)"
+                },
+                "se_completa": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "credenciales",
+                      "ipv4",
+                      "ipv6_modo",
+                      "amarre_ip_mac"
+                    ]
+                  },
+                  "description": "Lo que el cambio completa solo: credenciales PPPoE nuevas, IPv4 de las redes del router, modo IPv6 por RADIUS → ninguno, amarre IP-MAC que se quita al pasar a PPPoE"
+                },
+                "mensajes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Detalle en español de cada falta (mismo orden que faltan)"
+                }
+              }
+            }
           }
         }
       },

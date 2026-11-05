@@ -4,7 +4,7 @@ import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { redis } from '#shared/redis'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import { RouterOSFalso } from '#network/routeros/falso'
@@ -101,6 +101,7 @@ test.group('RouterOS · dispatcher WISP', (group) => {
 
     async function crear(client: any, cuerpo: Record<string, unknown>) {
         const requestId = unico('req')
+        await routerConTipo(routerId, cuerpo.tipo_conexion)
         const r = await estado(
             client
                 .post('/api/v1/servicios')
@@ -229,6 +230,7 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         ])
 
         const requestId = unico('req')
+        await routerConTipo(routerId, 'ip_estatica')
         await estado(
             client
                 .put(`/api/v1/servicios/${servicio.id}`)

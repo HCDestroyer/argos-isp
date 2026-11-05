@@ -1040,7 +1040,11 @@ class Importador {
                 ipv4: s.ip ?? undefined,
                 ipv6_modo: this.opciones.ipv6 === 'plan' ? undefined : 'ninguno',
             }
+            // el servicio ya existe en el origen: conserva su tipo aunque difiera del router
+            // (`contratos/tipo-conexion-router.md`; los routers importados quedan `pppoe` por defecto)
+            entrada.conservarTipo = true
             if (s.tipo_conexion === 'pppoe') {
+                entrada.tipo_conexion = 'pppoe'
                 entrada.user_ppp = s.user_ppp!
                 entrada.pass_ppp = s.pass_ppp ?? undefined
             } else {

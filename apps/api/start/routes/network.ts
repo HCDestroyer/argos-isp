@@ -40,7 +40,11 @@ import {
     MigracionPools,
     VistaPreviaBloqueIpv6,
     VistaPreviaPoolIpv6,
+    VistaPreviaTipoConexion,
+    ResultadoCambiarTipoConexion,
 } from '#network/esquemas'
+import CambiarTipoConexionRouter from '#network/actions/cambiar_tipo_conexion_router'
+import { vistaPreviaTipoConexion } from '#network/tipo_conexion_router'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
 import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
 import EditarRedIpv4 from '#network/actions/editar_red_ipv4'
@@ -211,7 +215,9 @@ const routers: Ruta[] = [
             'Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). ' +
             'Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por ' +
             'servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite ' +
-            '`router.radius_cambiado`.',
+            '`router.radius_cambiado`. Cambiar `tipo_conexion` solo si ningún servicio no retirado cambiaría (emite ' +
+            '`router.tipo_conexion_cambiado` con motivo edicion); si no, 422 `tipo_conexion_con_servicios` con un ' +
+            'errors[] por servicio: usar POST /routers/:id/cambiar-tipo-conexion.',
         etiqueta: 'routers',
         permiso: 'routers.editar',
         cuerpo: v.editarRouterValidator,
@@ -276,6 +282,56 @@ const routers: Ruta[] = [
         handler: (ctx, { cuerpo, params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
             return new CambiarControlVelocidad().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/vista-previa-tipo-conexion',
+        operacion: 'routersVistaPreviaTipoConexion',
+        resumen:
+            'Qué servicios cambian y qué les falta si el router pasa a otro tipo de conexión (no escribe)',
+        descripcion:
+            'contratos/tipo-conexion-router.md: un tipo por router. Lista los servicios no retirados del router con ' +
+            '`cambia`, `faltan` (mac, ipv4, plan: bloquean), `se_completa` (credenciales, ipv4, ipv6_modo, ' +
+            'amarre_ip_mac: no bloquean) y `difiere_del_router`. Sin `tipo`, el actual: los que difieren (unificar). ' +
+            '`aplicable` dice si el POST pasaría. No habla con el router.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        query: v.vistaPreviaTipoConexionValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaTipoConexion },
+        handler: (ctx, { query, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return vistaPreviaTipoConexion(Number(params.id), query.tipo)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/cambiar-tipo-conexion',
+        operacion: 'routersCambiarTipoConexion',
+        resumen: 'Cambiar el tipo de conexión del router y de todos sus servicios (o unificarlos)',
+        descripcion:
+            'Solo admin. Pasa cada servicio no retirado con servicios.editar anidada (auditoría y diff por fila; ' +
+            'servicio.config_cambiada con tipo_conexion, más ips/prefijo_v6 si cambiaron) y emite ' +
+            'router.tipo_conexion_cambiado. Con el tipo actual unifica los que difieren (motivo unificar). 422 ' +
+            '`tipo_conexion_servicios_incompletos` si a alguno le falta algo que no se completa solo (errors[] con ' +
+            '`field: servicios.<id>.<mac|ipv4|plan>`); 422 `pppoe_local_requiere_api` (PPPoE en un router api sin ' +
+            'credenciales de la API); 409 si la `version` del router cambió.',
+        etiqueta: 'routers',
+        permiso: 'routers.cambiar_tipo_conexion',
+        cuerpo: v.cambiarTipoConexionValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Router y servicios cambiados',
+            esquema: ResultadoCambiarTipoConexion,
+        },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return new CambiarTipoConexionRouter().execute(
                 { ...cuerpo, id: Number(params.id) },
                 ctx.contextoAccion(),
             )

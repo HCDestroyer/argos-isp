@@ -23,6 +23,7 @@ import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 import { telefonoParaGuardar } from '#core/telefonos'
 import { resolverServidorServicio } from '#network/red_acceso/servicio'
+import { exigirTipoDelRouter } from '#network/tipo_conexion_router'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -42,8 +43,17 @@ export interface EntradaCrearServicio {
      * (`plantillaPorDefecto`). Lo pide `POST /servicios`; las llamadas internas no.
      */
     plantillaPorDefecto?: boolean
-    /** `pppoe` por defecto; `ip_estatica` y `dhcp_fija` sin credenciales (`contratos/routeros.md`) */
+    /**
+     * El del router (`network.routers.tipo_conexion`; `contratos/tipo-conexion-router.md`). Opcional: si
+     * llega distinto, 422 `tipo_conexion_del_router`. `ip_estatica` y `dhcp_fija` van sin credenciales
+     * (`contratos/routeros.md`).
+     */
     tipo_conexion?: TipoConexion
+    /**
+     * Solo interno (importador, nunca por la API): el servicio ya existe en el sistema de origen con su
+     * tipo y se conserva aunque difiera del router (como los servicios anteriores a la regla).
+     */
+    conservarTipo?: boolean
     amarre_ip_mac?: boolean
     user_ppp?: string
     pass_ppp?: string
@@ -95,6 +105,8 @@ export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
 
 /**
  * Alta de un servicio: valida cliente, router activo, plan disponible en el router y plantilla.
+ * El tipo de conexión es el del router (`contratos/tipo-conexion-router.md`): `tipo_conexion` es
+ * opcional y, si llega distinto, 422 `tipo_conexion_del_router`.
  * - `pppoe` (por defecto): genera `user_ppp` y `pass_ppp` si no vienen (la contraseña se guarda
  *   cifrada v1).
  * - `ip_estatica` / `dhcp_fija`: sin credenciales; IPv4 obligatoria de las redes del router;
@@ -126,9 +138,10 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         const router = (await t.trx
             .from('network.routers')
             .where('id', input.router_id)
-            .select('activo')
+            .select('activo', 'tipo_conexion')
             .first()) as {
             activo: boolean
+            tipo_conexion: TipoConexion
         } | null
         if (!router) {
             throw new ValidacionFallida([
@@ -160,7 +173,11 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
 
         const excepciones = input.excepciones ? await validarExcepciones(input.excepciones) : {}
 
-        const tipo = input.tipo_conexion ?? 'pppoe'
+        // el tipo lo define el router (decisión del PM, 5 nov); distinto → 422 `tipo_conexion_del_router`
+        if (!input.conservarTipo) exigirTipoDelRouter(router.tipo_conexion, input.tipo_conexion)
+        const tipo = input.conservarTipo
+            ? (input.tipo_conexion ?? router.tipo_conexion)
+            : router.tipo_conexion
         const modo = input.ipv6_modo ?? modoIpv6PorDefecto(plan, tipo)
         validarTipoConexion(plan, {
             tipo,

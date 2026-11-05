@@ -89,8 +89,9 @@ export async function crearServicioFila(datos: {
  * Router con una red IPv4 /24 (gateway .1) y un bloque IPv6 /40 con pools de enlace (/48 → /64)
  * y de delegación (/44 → /56 y /44 → /48). Devuelve la base IPv4 (`100.64.x`) y la raíz IPv6.
  */
-export async function crearEscenarioRouter() {
-    const routerId = await crearRouterFila()
+/** `datosRouter`: columnas del router (p. ej. `tipo_conexion`, `contratos/tipo-conexion-router.md`). */
+export async function crearEscenarioRouter(datosRouter: Record<string, unknown> = {}) {
+    const routerId = await crearRouterFila(datosRouter)
     const cidr = redUnica()
     const base = cidr.replace('.0/24', '')
     await db
@@ -122,4 +123,16 @@ export function crearEmpresaFila(datos: Record<string, unknown> = {}): Promise<n
         nombre_comercial: nombre,
         ...datos,
     })
+}
+
+/**
+ * El tipo de conexión lo define el router (`contratos/tipo-conexion-router.md`): las pruebas que dan de
+ * alta o pasan un servicio a un tipo en un router compartido ponen antes el router en ese tipo (fila
+ * directa, como un dato anterior a la regla). Sin `tipo_conexion`, `pppoe` (el de siempre).
+ */
+export async function routerConTipo(routerId: number, tipo: unknown = 'pppoe') {
+    await db
+        .from('network.routers')
+        .where('id', routerId)
+        .update({ tipo_conexion: tipo ?? 'pppoe' })
 }

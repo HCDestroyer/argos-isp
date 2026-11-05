@@ -361,6 +361,7 @@ export const rutasRouters: RutasFixture = {
             tiene_radius_secret: typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret.length > 0,
             nas_ip: nas,
             modo_seguridad: modo,
+            tipo_conexion: cuerpo.tipo_conexion === 'ip_estatica' || cuerpo.tipo_conexion === 'dhcp_fija' ? cuerpo.tipo_conexion : 'pppoe',
             control_velocidad: control,
             // Como `CrearRouter` (A2): la estrategia del atajo; sin versión hasta que la API responda.
             estrategia_velocidad: estrategiaDeControl(control),

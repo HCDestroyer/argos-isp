@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import { RouterOSFalso } from '#network/routeros/falso'
@@ -92,6 +92,7 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
     }
 
     async function crear(client: any, planId: number, cuerpo: Record<string, unknown> = {}) {
+        await routerConTipo(routerId, cuerpo.tipo_conexion ?? 'ip_estatica')
         const requestId = unico('req')
         const r = await estado(
             client
