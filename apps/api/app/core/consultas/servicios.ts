@@ -1,3 +1,4 @@
+import { sqlLocalAddress, sqlLocalAddressDerivado } from '#network/red_acceso/local_address'
 import { isIP } from 'node:net'
 import { sqlExterno, type IdExterno } from '#core/ids_externos'
 import type { TipoPlan } from '#network/tipos_plan'
@@ -62,6 +63,12 @@ export interface ServicioVista {
     prefijo_delegado_v6: string | null
     ipv6_modo: ModoIpv6
     ipv6_duid: string | null
+    /** servidor PPPoE del router (`contratos/red-acceso.md` §3); null fuera de PPPoE o sin servidores */
+    servidor_pppoe_id: number | null
+    /** `local-address` del PPPoE: gateway de la red de su IPv4 o de su servidor (calculado, §2) */
+    local_address: string | null
+    /** true = la red no tiene gateway: el local-address es su primera IP utilizable */
+    local_address_derivado: boolean
     cliente_nombre: string
     plan_nombre: string
     /** tipo del plan del servicio (solo lectura, derivado de `network.planes.tipo`) */
@@ -133,6 +140,9 @@ function columnas(cliente: QueryClientContract) {
         ),
         's.ipv6_modo',
         's.ipv6_duid',
+        's.servidor_pppoe_id',
+        cliente.raw(`${sqlLocalAddress('s')} AS local_address`),
+        cliente.raw(`${sqlLocalAddressDerivado('s')} AS local_address_derivado`),
         // nombres para pantallas sin permiso de ver routers, planes o zonas
         cliente.raw(
             `(SELECT c_n.nombre FROM core.clientes c_n WHERE c_n.id = s.cliente_id) AS cliente_nombre`,

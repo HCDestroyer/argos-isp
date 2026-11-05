@@ -112,7 +112,7 @@ defineExpose({ cargar })
                         </li>
                     </ul>
                     <p class="text-xs">
-                        Con dos registros, cada uno borra como huérfanas las colas del otro y las sesiones RADIUS se atribuyen a uno solo. Para usar dos formas de control de velocidad en el mismo equipo, configúralas por plan en un solo router.
+                        Con dos registros, cada uno borra como huérfanas las colas del otro y las sesiones RADIUS se atribuyen a uno solo. Un router tiene un solo modo de control de velocidad para todos sus servicios: únelos y elige ese modo en la ficha del que queda.
                     </p>
                     <p
                         v-if="!puede('routers.unir')"

@@ -10,6 +10,7 @@ import {
     crearPlanFila,
     crearServicioFila,
     ipUnica,
+    redUnica,
 } from '#tests/core/fabricas'
 
 /**
@@ -346,6 +347,10 @@ test.group('Routers sin RADIUS · script de conexión', (group) => {
             .where({ accion: 'routers.generar_script', entidad_tipo: 'router', entidad_id: routerId })
         assert.lengthOf(acciones, 1)
 
+        // el local-address del script sale de la red del router (`contratos/red-acceso.md` §2)
+        await db
+            .table('network.redes_ipv4')
+            .insert({ router_id: routerId, cidr: redUnica(), tipo: 'estatico' })
         const conServicio = await generarScript(client, token, routerId, { incluir: 'servicio' })
         assertSinRadius(assert, conServicio.text())
         assert.match(conServicio.text(), /pppoe-server/)

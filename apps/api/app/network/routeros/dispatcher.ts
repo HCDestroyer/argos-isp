@@ -29,6 +29,8 @@ import type { Estrategia } from '#network/estrategia_velocidad'
 import {
     claveTexto,
     MENUS_VELOCIDAD,
+    objetoAlDia,
+    porQuitar,
     sobrantesVelocidad,
     type EstadoVelocidad,
     type LecturaVelocidad,
@@ -281,14 +283,12 @@ export async function asegurarVelocidad(
         const existentes = (lectura.get(objeto.ruta as never) ?? []).filter((o: ObjetoRouterOS) =>
             Object.entries(objeto.clave).every(([k, v]) => o[k] === v),
         )
-        if (
-            existentes.length === 1 &&
-            Object.keys(diferencias(objeto.propiedades, existentes[0]!)).length === 0
-        ) {
-            continue
-        }
+        if (existentes.length === 1 && objetoAlDia(objeto, existentes[0]!)) continue
         const r = await cliente.asegurarPor(objeto.ruta, objeto.clave, objeto.propiedades, ctx)
-        if (r.accion !== 'sin_cambios' || r.duplicados > 0) {
+        // Lo que no debe estar puesto (un `local-address` copiado de `default`): `unset`.
+        const quitar = porQuitar(objeto, r.objeto)
+        if (quitar.length > 0) await cliente.desasignar(objeto.ruta, r.objeto['.id'], quitar, ctx)
+        if (r.accion !== 'sin_cambios' || r.duplicados > 0 || quitar.length > 0) {
             cambios.push({
                 ruta: objeto.ruta,
                 comment: comentarioDe(objeto.clave),

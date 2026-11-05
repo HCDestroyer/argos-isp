@@ -41,6 +41,8 @@ export const esquemaServicio = z.object({
     amarre_ip_mac: z.boolean(),
     asignacion: z.enum(['automatica', 'fija']),
     red_id: z.number().int().optional(),
+    /** Servidor PPPoE (`contratos/red-acceso.md` §3): sin elegir, la API toma el único; con varios, 422 `servidor_pppoe_requerido`. */
+    servidor_pppoe_id: z.number().int().optional(),
     ipv4: z.string().trim(),
     ipv6_modo: z.enum(MODOS_IPV6),
     ipv6_duid: z.string().trim().max(130, 'Máximo 130 caracteres'),
@@ -113,6 +115,7 @@ export function entradaServicioVacia(clienteId?: number): EntradaServicio {
         amarre_ip_mac: false,
         asignacion: 'automatica',
         red_id: undefined,
+        servidor_pppoe_id: undefined,
         ipv4: '',
         ipv6_modo: 'radius_servicio',
         ipv6_duid: '',
@@ -164,6 +167,9 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
     if (datos.tipo_conexion === 'pppoe') {
         cuerpo.user_ppp = datos.user_ppp
         cuerpo.pass_ppp = datos.pass_ppp
+        if (datos.servidor_pppoe_id !== undefined) {
+            cuerpo.servidor_pppoe_id = datos.servidor_pppoe_id
+        }
     }
     else {
         cuerpo.amarre_ip_mac = datos.amarre_ip_mac

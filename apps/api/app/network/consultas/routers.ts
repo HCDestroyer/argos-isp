@@ -7,7 +7,7 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
 import { estrategiasDeFila, type EstrategiasRouter } from '#network/estrategia_velocidad'
 import { sqlContactoRouter } from '#network/contacto_router'
-import { sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
+import { sqlGatewayEfectivo, sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
 import { sinCampos } from '#network/consultas/ipv6'
 
 /**
@@ -75,6 +75,12 @@ export interface RedIpv4Vista {
     nombre: string | null
     cidr: string
     gateway: string | null
+    /** el gateway o, sin él, la primera IP utilizable: el local-address del PPPoE (`contratos/red-acceso.md` §2) */
+    gateway_efectivo: string
+    /** true = la red no tiene gateway y `gateway_efectivo` es su primera IP utilizable */
+    gateway_derivado: boolean
+    /** servicio que ya tenía asignado el gateway derivado (dato anterior a la regla); null si nadie */
+    gateway_ocupado_por: number | null
     tipo: 'estatico' | 'pool'
     rango_inicio: string | null
     rango_fin: string | null
@@ -189,6 +195,12 @@ const COLUMNAS_RED = [
     db.raw('host(r.rango_fin) AS rango_fin'),
     db.raw('host(r.dns_primario) AS dns_primario'),
     db.raw('host(r.dns_secundario) AS dns_secundario'),
+    db.raw(`host(${sqlGatewayEfectivo('r')}) AS gateway_efectivo`),
+    db.raw('r.gateway IS NULL AS gateway_derivado'),
+    db.raw(
+        `(SELECT g.servicio_id FROM network.ipv4_asignaciones g
+           WHERE g.red_id = r.id AND g.fin IS NULL AND g.ip = ${sqlGatewayEfectivo('r')} LIMIT 1) AS gateway_ocupado_por`,
+    ),
     db.raw(`${sqlOcupacionRedV4('r')} AS ocupacion`),
     'r.version',
     'r.created_at',
@@ -216,5 +228,5 @@ export async function verRedIpv4(id: number, cliente: QueryClientContract = db.c
 
 /** Campos de una red para `audit.cambios` (sin la ocupación, que es calculada). */
 export function redParaAuditoria(red: RedIpv4Vista) {
-    return sinCampos(red, ['ocupacion'])
+    return sinCampos(red, ['ocupacion', 'gateway_efectivo', 'gateway_derivado', 'gateway_ocupado_por'])
 }

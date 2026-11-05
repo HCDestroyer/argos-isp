@@ -115,6 +115,9 @@ export function paraAuditoriaServicio<T extends { excepciones?: Record<string, u
 ): Record<string, unknown> {
     const { excepciones, ...resto } = vista
     const plano: Record<string, unknown> = { ...resto }
+    // calculado de la red (`contratos/red-acceso.md` §2): no es un dato del servicio
+    delete plano.local_address
+    delete plano.local_address_derivado
     for (const [campo, valor] of Object.entries(excepciones ?? {})) {
         plano[`excepcion_${campo}`] = valor
     }

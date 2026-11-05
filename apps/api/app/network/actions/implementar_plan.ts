@@ -20,6 +20,10 @@ export interface EntradaImplementarPlan {
     pool_ipv4?: string | null
     pool_ipv6_enlace?: string | null
     pool_ipv6_delegacion?: string | null
+    /**
+     * Obsoleto (5 nov, `contratos/red-acceso.md` §2): se ignora; el `local-address` sale del gateway
+     * efectivo de la red IPv4. Se acepta para no romper clientes viejos.
+     */
     local_address?: string | null
     no_crear_reglas?: boolean
     rate_limit_override?: string | null
@@ -35,7 +39,7 @@ export interface EntradaImplementarPlan {
 
 /**
  * Crea o edita la implementación de un plan en un router (`network.planes_routers`): perfil PPP,
- * pools, local-address y rate-limit propio del router. Para un plan no global, es lo que lo hace
+ * pools y rate-limit propio del router (el local-address ya no: sale de la red, `contratos/red-acceso.md`). Para un plan no global, es lo que lo hace
  * disponible en ese router. Después del COMMIT reescribe `aaa:user:*` de los servicios del plan
  * en ese router (perfil, pools y rate-limit van en el registro de RADIUS).
  *
@@ -47,7 +51,10 @@ export default class ImplementarPlan extends DomainAction<EntradaImplementarPlan
     readonly nombre = 'planes.editar'
 
     protected async handle(input: EntradaImplementarPlan, t: Transaccion): Promise<PlanRouterVista> {
-        const { plan_id: planId, router_id: routerId, version, ...datos } = input
+        // `local_address` obsoleto: nunca se guarda (la fuente es la red)
+        const { plan_id: planId, router_id: routerId, version, ...resto } = input
+        const { local_address: obsoleto, ...datos } = resto
+        void obsoleto
         const plan = await verPlan(planId, t.trx)
         const router = await t.trx.from('network.routers').where('id', routerId).select('id').first()
         if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)

@@ -133,7 +133,7 @@ test.group('Servicios · alta con red_ipv4_id', () => {
             422,
         )
 
-        // /30 sin gateway: dos hosts (.1 y .2)
+        // /30 sin gateway: la .1 es el gateway derivado (local-address, `contratos/red-acceso.md` §2); queda la .2
         const chica = redUnica().replace('.0/24', '.0/30')
         const redChica = await crearRed(a.routerId, chica, 'pool')
         const pedir = async (status: number) =>
@@ -150,8 +150,8 @@ test.group('Servicios · alta con red_ipv4_id', () => {
                     }),
                 status,
             )
-        await pedir(201)
-        await pedir(201)
+        const unica = await pedir(201)
+        assert.isTrue(unica.body().ipv4.endsWith('.2'))
         const llena = await pedir(422)
         assert.equal(llena.body().errors[0].field, 'red_ipv4_id')
         assert.equal(llena.body().errors[0].rule, 'llena')

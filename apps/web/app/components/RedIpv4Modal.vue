@@ -119,7 +119,9 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
         return
     }
     // Los rechazos con lista (IPs en uso fuera) van en el aviso, no junto a un campo.
-    const errores = codigoProblema(resultado.problema) === 'validacion' || !codigoProblema(resultado.problema) ? erroresDeFormulario(resultado.problema) : []
+    // 422 `gateway_derivado_ocupado` (quitar el gateway con un servicio en la primera IP) va junto al campo.
+    const codigo = codigoProblema(resultado.problema)
+    const errores = codigo === 'validacion' || codigo === 'gateway_derivado_ocupado' || !codigo ? erroresDeFormulario(resultado.problema) : []
     if (errores.length) {
         formulario.value?.setErrors(errores)
     }
@@ -200,7 +202,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     label="Gateway"
                     name="gateway"
                     hint="Opcional"
-                    help="La puerta de enlace de los clientes: nunca se asigna a un servicio."
+                    help="La puerta de enlace de los clientes: nunca se asigna a un servicio. Vacío: se usa la primera IP utilizable de la red."
                 >
                     <UInput
                         v-model="estado.gateway"

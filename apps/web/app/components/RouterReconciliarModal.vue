@@ -6,7 +6,9 @@ import type { VistaPreviaReconciliar } from '~/types/controlVelocidad'
 /**
  * «Reconciliar ahora» con vista previa (`routers.reconciliar`, `contratos/control-velocidad.md` §9–§10):
  * primero `GET /routers/:id/vista-previa-reconciliar` (lee el router sin escribir) con lo que se
- * crea, cambia, mueve y borra por grupo (servicio, velocidad, corte); al confirmar,
+ * crea, cambia, mueve y borra por grupo (servicio, velocidad, corte), la deriva de la red de acceso
+ * administrada (`red_acceso[]`) y los conflictos entre formas de limitar (`conflictos[]`, solo
+ * informan); al confirmar,
  * `POST /routers/:id/reconciliar`, que encola el trabajo (202 `ReconciliacionEncolada`; con
  * `encolado: false` ya había uno en curso, no es un error). Si el router no responde o no tiene
  * credenciales, se ve el error de la API y «Reintentar». Quien lo abre comprueba el permiso.
@@ -45,6 +47,12 @@ const columnas: TableColumn<VistaPreviaReconciliar['menus'][number]>[] = [
     { accessorKey: 'mover', header: 'Mueve', meta: numero },
     { accessorKey: 'borrar', header: 'Borra', meta: numero },
 ]
+
+/** Deriva de la red de acceso administrada (VLAN, perfil y servidor PPPoE; `red-acceso.md` §6). */
+const redAcceso = computed(() => vista.value?.red_acceso ?? [])
+/** Formas de limitar que chocan en el router: solo informan, Argos nunca borra lo ajeno. */
+const conflictos = computed(() => vista.value?.conflictos ?? [])
+const hayCambios = computed(() => Boolean(vista.value?.cambios.length) || redAcceso.value.length > 0)
 
 const grupos = computed(() => (Object.keys(GRUPOS) as Cambio['grupo'][])
     .map(grupo => ({ grupo, cambios: vista.value?.cambios.filter(c => c.grupo === grupo) ?? [] }))
@@ -138,7 +146,7 @@ async function reconciliar() {
                         data-prueba="reconciliar-sin-lectura"
                     />
                     <UAlert
-                        v-else-if="!vista.cambios.length"
+                        v-else-if="!hayCambios"
                         color="success"
                         variant="subtle"
                         icon="i-lucide-circle-check"
@@ -148,6 +156,7 @@ async function reconciliar() {
                     />
                     <template v-else>
                         <UTable
+                            v-if="vista.menus.length"
                             :data="vista.menus"
                             :columns="columnas"
                             tabindex="0"
@@ -183,7 +192,65 @@ async function reconciliar() {
                                 </li>
                             </ul>
                         </section>
+                        <section
+                            v-if="redAcceso.length"
+                            class="flex flex-col gap-1.5"
+                            data-prueba="reconciliar-red-acceso"
+                        >
+                            <span class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                                <UIcon
+                                    name="i-lucide-cable"
+                                    class="size-4"
+                                />
+                                Red de acceso · {{ redAcceso.length }}
+                            </span>
+                            <ul class="flex flex-col divide-y divide-default surface-card">
+                                <li
+                                    v-for="(cambio, indice) in redAcceso"
+                                    :key="indice"
+                                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                >
+                                    <span class="min-w-0 break-all font-mono text-xs">{{ cambio.ruta }} · {{ cambio.clave }}</span>
+                                    <UBadge
+                                        :label="ACCIONES[cambio.accion]"
+                                        color="neutral"
+                                        variant="subtle"
+                                        size="sm"
+                                    />
+                                </li>
+                            </ul>
+                            <p class="text-xs text-muted">
+                                Solo lo administrado por Argos: lo adoptado y lo ajeno no se tocan.
+                            </p>
+                        </section>
                     </template>
+                    <UAlert
+                        v-for="conflicto in conflictos"
+                        :key="conflicto.codigo"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-swords"
+                        :title="conflicto.mensaje"
+                        :data-conflicto="conflicto.codigo"
+                    >
+                        <template #description>
+                            <p class="text-xs">
+                                Solo informa: Argos nunca borra lo que no es suyo. Revísalo en el router.
+                            </p>
+                            <ul
+                                v-if="conflicto.objetos.length"
+                                class="mt-1 flex flex-col gap-0.5 font-mono text-xs"
+                            >
+                                <li
+                                    v-for="objeto in conflicto.objetos"
+                                    :key="objeto"
+                                    class="break-all"
+                                >
+                                    {{ objeto }}
+                                </li>
+                            </ul>
+                        </template>
+                    </UAlert>
                     <UAlert
                         v-if="vista.avisos.length"
                         color="warning"
@@ -197,6 +264,7 @@ async function reconciliar() {
                                 <li
                                     v-for="(aviso, indice) in vista.avisos"
                                     :key="indice"
+                                    class="break-words [overflow-wrap:anywhere]"
                                 >
                                     {{ aviso }}
                                 </li>
@@ -228,7 +296,7 @@ async function reconciliar() {
                     label="Reconciliar ahora"
                     icon="i-lucide-refresh-cw"
                     :loading="aplicando"
-                    :disabled="!vista || !!vista.error || !vista.cambios.length"
+                    :disabled="!vista || !!vista.error || !hayCambios"
                     class="justify-center"
                     data-prueba="reconciliar-confirmar"
                     @click="reconciliar"

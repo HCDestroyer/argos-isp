@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Eliminar sin historial y las vistas «Retirados» / «Inactivos» (`contratos/eliminar.md`), en
@@ -18,6 +18,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
     await expect(tabla.getByRole('link', { name: 'RB-Centro', exact: true })).toHaveCount(0)
     await tabla.getByRole('link', { name: /RB-Bodega/ }).click()
     await expect(page).toHaveURL(/\/routers\/3$/)
+    await pestanaRouter(page, 'Avanzado')
 
     await page.locator('[data-prueba="eliminar-router"]').click()
     const modal = page.getByRole('dialog', { name: /Eliminar RB-Bodega/ })
@@ -30,6 +31,7 @@ test('router: «Inactivos» aparte, eliminar uno sin historial y desactivar uno 
 
     await tabla.getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
+    await pestanaRouter(page, 'Avanzado')
     await expect(page.locator('[data-prueba="no-eliminable"]')).toContainText('No se puede eliminar: tiene 22 servicios y 41 sesiones PPPoE. Puedes desactivarlo.')
     await expect(page.locator('[data-prueba="eliminar-router"]')).toHaveCount(0)
     await page.locator('[data-prueba="cambiar-activo-router"]').click()

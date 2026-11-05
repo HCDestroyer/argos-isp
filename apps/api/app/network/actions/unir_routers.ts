@@ -1,3 +1,4 @@
+import { moverRedAcceso } from '#network/red_acceso/unir'
 import { DomainAction, simularEnTransaccion, type Transaccion } from '#shared/domain_action'
 import { descifrar } from '#shared/cifrado'
 import type { ContextoAccion } from '#shared/contexto'
@@ -278,6 +279,9 @@ export async function unirRouters(
             await verBloque(Number(id), t.trx),
         )
     }
+
+    // 2b. red de acceso: VLAN y servidores PPPoE (antes que los servicios, que conservan su servidor)
+    await moverRedAcceso(t, Number(absorbido.id), Number(queda.id), avisos)
 
     // 3. servicios (no retirados)
     const servicios = (await t.trx

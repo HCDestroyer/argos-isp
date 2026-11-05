@@ -81,6 +81,7 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
     let falso: RouterOSFalso
     let token: string
     let routerId: number
+    let base: string
     let planId: number
     let clienteId: number
 
@@ -88,7 +89,7 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         falso = new RouterOSFalso()
         await falso.levantar()
         ;({ token } = await usuarioConRoles(['admin']))
-        ;({ routerId } = await crearEscenarioRouter())
+        ;({ routerId, base } = await crearEscenarioRouter())
         await db
             .from('network.routers')
             .where('id', routerId)
@@ -417,6 +418,67 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         assert.lengthOf(red, 1)
     })
 
+    test('local-address: gateway de la red en el secret y en los perfiles, nunca el de default', async ({
+        client,
+        assert,
+    }) => {
+        // El script de conexión dejó en `default` un local-address que nadie conoce.
+        falso.tabla('/ppp/profile')[0]!['local-address'] = '10.10.0.1'
+        const { servicio, user } = await crear(client)
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}`)!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}-limitado`)!['local-address'], `${base}.1`)
+
+        // Un secret de antes de esta regla (sin local-address) con su cliente conectado: se le pone el
+        // gateway sin quitar la sesión (rige al reconectar; el despliegue no reconecta a todo el router).
+        delete secret(servicio.id)[0]!['local-address']
+        conectar(user, servicio.ipv4, '51')
+        await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
+        assert.lengthOf(activas(), 1)
+
+        // Cambia el gateway de la red: secret y perfiles toman el nuevo, sin cortar la sesión.
+        await db
+            .from('network.redes_ipv4')
+            .where('router_id', routerId)
+            .update({ gateway: `${base}.254` })
+        let r = await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.isNull(r.error)
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.254`)
+        assert.equal(perfil(`plan-${planId}`)!['local-address'], `${base}.254`)
+        assert.equal(perfil(`plan-${planId}-limitado`)!['local-address'], `${base}.254`)
+        assert.lengthOf(activas(), 1)
+
+        // La red pierde su gateway: decisión del PM (5 nov, `contratos/red-acceso.md` §2), el gateway
+        // efectivo es la primera IP utilizable (.1, derivada), en el secret y en los perfiles; sin avisos.
+        await db.from('network.redes_ipv4').where('router_id', routerId).update({ gateway: null })
+        r = await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.isNull(r.error)
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}`)!['local-address'], `${base}.1`)
+        assert.equal(perfil(`plan-${planId}-limitado`)!['local-address'], `${base}.1`)
+        assert.lengthOf(activas(), 1)
+        assert.isFalse(r.avisos.some((a) => a.includes('local-address')))
+
+        // Idempotente: otra pasada no escribe nada.
+        const antes = falso.escrituras.length
+        const otra = await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.lengthOf(otra.correcciones, 0)
+        assert.equal(falso.escrituras.length, antes)
+    })
+
     test('reconciliador: repone faltantes, corrige, borra sobrantes propios y nunca toca secrets ajenos', async ({
         client,
         assert,
@@ -547,10 +609,10 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
     test('matriz: en un router sin RADIUS, PPPoE acepta perfil_ppp (cualquier padre) y arbol_pcq', ({
         assert,
     }) => {
-        const base = estrategiasDeControl('simple')
+        const simple = estrategiasDeControl('simple')
         const con = (pppoe: Partial<EstrategiasRouter['pppoe']>): EstrategiasRouter => ({
-            ...base,
-            pppoe: { ...base.pppoe, ...pppoe },
+            ...simple,
+            pppoe: { ...simple.pppoe, ...pppoe },
         })
         const validar = (e: EstrategiasRouter) =>
             validarEstrategias({
@@ -570,7 +632,7 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         // con RADIUS no cambia nada
         assert.deepEqual(
             validarEstrategias({
-                estrategias: base,
+                estrategias: simple,
                 planes: [],
                 routeros_version: null,
                 capacidad_bajada_kbps: null,
@@ -580,7 +642,7 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
             [],
         )
         // un router api con la estrategia por defecto se aplica como perfil_ppp
-        assert.equal(estrategiaLocal(base.pppoe).aplicacion, 'perfil_ppp')
+        assert.equal(estrategiaLocal(simple.pppoe).aplicacion, 'perfil_ppp')
         assert.equal(segundosUptime('1w2d3h4m5s'), 604800 + 2 * 86400 + 3 * 3600 + 245)
         assert.isNull(segundosUptime('ayer'))
     })

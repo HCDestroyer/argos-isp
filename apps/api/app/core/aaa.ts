@@ -1,3 +1,5 @@
+import { sqlHostGatewayEfectivo, sqlLocalAddress } from '#network/red_acceso/local_address'
+import { perfilesPorServidor, type ServidorGateway } from '#network/routeros/red_acceso'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
@@ -77,6 +79,16 @@ export interface RegistroAaa {
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
+    /** servidor PPPoE y `local-address` (gateway de la red; `contratos/red-acceso.md` §3) */
+    red_acceso: {
+        servidor_pppoe_id: number | null
+        local_address: string | null
+        /**
+         * El router tiene servidores PPPoE activos con gateways distintos: `aaa` manda
+         * `Mikrotik-Group = plan-<id>-s<srv>` (`perfilesPorServidor` de A2, `contratos/red-acceso.md` §3)
+         */
+        perfil_por_servidor: boolean
+    }
 }
 
 /**
@@ -102,6 +114,8 @@ export function claveAaa(userPpp: string): string {
 }
 
 interface FilaAaa {
+    servidor_pppoe_id: number | null
+    local_address: string | null
     servicio_id: number
     version: number
     user_ppp: string
@@ -188,6 +202,8 @@ function consultaBase(cliente: QueryClientContract) {
             'pr.rafaga_segundos as pr_rafaga_segundos',
             'pr.prioridad as pr_prioridad',
             'pr.pool_ipv4',
+            's.servidor_pppoe_id',
+            cliente.raw(`${sqlLocalAddress('s')} AS local_address`),
             'pr.pool_ipv6_enlace',
             'pr.pool_ipv6_delegacion',
             cliente.raw(
@@ -204,7 +220,7 @@ function consultaBase(cliente: QueryClientContract) {
 
 const nulo = (v: string | null | undefined) => (v === null || v === undefined || v === '' ? null : v)
 
-function aRegistro(f: FilaAaa): RegistroAaa {
+function aRegistro(f: FilaAaa, perfilPorServidor = false): RegistroAaa {
     let ipv4: Ipv4Aaa = null
     if (f.ipv4) ipv4 = { modo: 'estatico', ip: f.ipv4 }
     else if (nulo(f.pool_ipv4)) ipv4 = { modo: 'pool', pool: f.pool_ipv4! }
@@ -266,7 +282,42 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         },
         ipv4,
         ipv6,
+        red_acceso: {
+            servidor_pppoe_id: f.servidor_pppoe_id === null ? null : Number(f.servidor_pppoe_id),
+            local_address: f.local_address,
+            perfil_por_servidor: perfilPorServidor,
+        },
     }
+}
+
+/**
+ * `perfil_por_servidor` por router con `perfilesPorServidor` de A2 sobre los servidores activos y el
+ * gateway **efectivo** de su red (`contratos/red-acceso.md` §2), una consulta por lote.
+ */
+async function aRegistros(filas: FilaAaa[], cliente: QueryClientContract): Promise<RegistroAaa[]> {
+    const routers = [...new Set(filas.map((f) => Number(f.router_id)))]
+    const porRouter = new Map<number, ServidorGateway[]>()
+    if (routers.length > 0) {
+        const servidores = (await cliente
+            .from('network.servidores_pppoe as sp')
+            .leftJoin('network.redes_ipv4 as r', 'r.id', 'sp.red_ipv4_id')
+            .whereIn('sp.router_id', routers)
+            .where('sp.activo', true)
+            .select(
+                'sp.id',
+                'sp.router_id',
+                cliente.raw(
+                    `CASE WHEN r.id IS NULL THEN NULL ELSE ${sqlHostGatewayEfectivo('r')} END AS local_address`,
+                ),
+            )) as Array<{ id: number; router_id: number; local_address: string | null }>
+        for (const s of servidores) {
+            const lista = porRouter.get(Number(s.router_id)) ?? []
+            lista.push({ id: Number(s.id), local_address: s.local_address })
+            porRouter.set(Number(s.router_id), lista)
+        }
+    }
+    const perfil = new Map(routers.map((r) => [r, perfilesPorServidor(porRouter.get(r) ?? [])]))
+    return filas.map((f) => aRegistro(f, perfil.get(Number(f.router_id)) ?? false))
 }
 
 /** Registro de un `user_ppp` (null si no existe). Un retirado se devuelve con `estado: retirado`. */
@@ -275,7 +326,9 @@ export async function construirRegistroAaa(
     cliente: QueryClientContract = db.connection(),
 ): Promise<RegistroAaa | null> {
     const fila = (await consultaBase(cliente).where('s.user_ppp', userPpp).first()) as FilaAaa | null
-    return fila ? aRegistro(fila) : null
+    if (!fila) return null
+    const [registro] = await aRegistros([fila], cliente)
+    return registro ?? null
 }
 
 export async function registrosAaaPorServicio(
@@ -284,7 +337,7 @@ export async function registrosAaaPorServicio(
 ): Promise<RegistroAaa[]> {
     if (servicioIds.length === 0) return []
     const filas = (await consultaBase(cliente).whereIn('s.id', servicioIds)) as FilaAaa[]
-    return filas.map(aRegistro)
+    return aRegistros(filas, cliente)
 }
 
 /** Registros de varios `user_ppp` (los inexistentes se omiten), en el orden pedido. */
@@ -295,7 +348,8 @@ export async function registrosAaaPorUserPpp(
     const unicos = [...new Set(usuarios)]
     if (unicos.length === 0) return []
     const filas = (await consultaBase(cliente).whereIn('s.user_ppp', unicos)) as FilaAaa[]
-    const porUsuario = new Map(filas.map((f) => [f.user_ppp, aRegistro(f)]))
+    const registros = await aRegistros(filas, cliente)
+    const porUsuario = new Map(registros.map((r) => [r.user_ppp, r]))
     return unicos.flatMap((u) => porUsuario.get(u) ?? [])
 }
 
@@ -311,7 +365,7 @@ export async function paginaRegistrosAaa(
     if (opciones.cursor) consulta.where('s.id', '>', decodificarCursor(opciones.cursor))
     const filas = (await consulta.orderBy('s.id', 'asc').limit(opciones.limit + 1)) as FilaAaa[]
     const hayMas = filas.length > opciones.limit
-    const data = (hayMas ? filas.slice(0, opciones.limit) : filas).map(aRegistro)
+    const data = await aRegistros(hayMas ? filas.slice(0, opciones.limit) : filas, cliente)
     const ultimo = data.at(-1)
     return { data, nextCursor: hayMas && ultimo ? codificarCursor(ultimo.servicio_id) : null }
 }

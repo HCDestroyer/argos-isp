@@ -61,6 +61,19 @@ describe('perfil RADIUS por estado', () => {
         assert.equal(avisos.length, 1)
     })
 
+    it('servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv>; si no, plan-<id>', () => {
+        const s = servicio({ user_ppp: 'srv' })
+        s.velocidad = { grupo: `plan-${s.plan.id}`, rate_limit: true, rate_limit_limitado: true } as never
+        s.red_acceso = { servidor_pppoe_id: 4, local_address: '10.4.0.1', perfil_por_servidor: true }
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Group'], `plan-${s.plan.id}-s4`)
+        s.red_acceso = { servidor_pppoe_id: 4, local_address: '10.4.0.1' }
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Group'], `plan-${s.plan.id}`)
+        // el corte siempre con su grupo
+        s.estado = 'suspendido'
+        s.red_acceso = { servidor_pppoe_id: 4, local_address: '10.4.0.1', perfil_por_servidor: true }
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Group'], 'suspendido')
+    })
+
     it('suspendido: el grupo de corte gana sobre profile_ppp', () => {
         const s = servicio({ user_ppp: 's', estado: 'suspendido' })
         s.plan.profile_ppp = 'plan-20m'
@@ -100,7 +113,12 @@ describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
 
     it('perfil_ppp activo: solo Mikrotik-Group (el rate-limit vive en el perfil)', () => {
         const s = conRate(servicio({ user_ppp: 'p' }))
-        s.velocidad = { aplicacion: 'perfil_ppp', grupo: 'plan-1', rate_limit: false, rate_limit_limitado: true }
+        s.velocidad = {
+            aplicacion: 'perfil_ppp',
+            grupo: 'plan-1',
+            rate_limit: false,
+            rate_limit_limitado: true,
+        }
         const { reply } = construirReply(s, PERFIL)
         assert.equal(reply['Mikrotik-Group'], 'plan-1')
         assert.equal(reply['Mikrotik-Rate-Limit'], undefined)
@@ -108,7 +126,12 @@ describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
 
     it('perfil_ppp limitado: Mikrotik-Group y el rate-limit limitado (RADIUS gana sobre el perfil)', () => {
         const s = conRate(servicio({ user_ppp: 'p', estado: 'limitado' }))
-        s.velocidad = { aplicacion: 'perfil_ppp', grupo: 'plan-1', rate_limit: false, rate_limit_limitado: true }
+        s.velocidad = {
+            aplicacion: 'perfil_ppp',
+            grupo: 'plan-1',
+            rate_limit: false,
+            rate_limit_limitado: true,
+        }
         const { reply } = construirReply(s, PERFIL)
         assert.equal(reply['Mikrotik-Group'], 'plan-1')
         assert.equal(reply['Mikrotik-Rate-Limit'], '1M/2M 0/0 0/0 0/0 8 1M/2M')
@@ -124,7 +147,12 @@ describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
 
     it('radius_rate_limit con padre por router: grupo plan-<id> aunque el reuso sea 1', () => {
         const s = conRate(servicio({ user_ppp: 'r' }))
-        s.velocidad = { aplicacion: 'radius_rate_limit', grupo: 'plan-1', rate_limit: true, rate_limit_limitado: true }
+        s.velocidad = {
+            aplicacion: 'radius_rate_limit',
+            grupo: 'plan-1',
+            rate_limit: true,
+            rate_limit_limitado: true,
+        }
         const { reply } = construirReply(s, PERFIL)
         assert.equal(reply['Mikrotik-Group'], 'plan-1')
         assert.equal(reply['Mikrotik-Rate-Limit'], '5M/20M 0/0 0/0 0/0 8 5M/20M')
@@ -134,7 +162,10 @@ describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
         const base = JSON.parse(JSON.stringify(servicio({ user_ppp: 'x' }))) as Record<string, unknown>
         const v = { aplicacion: 'pcq_plan', grupo: null, rate_limit: false, rate_limit_limitado: false }
         assert.deepEqual((parsearRegistro({ ...base, velocidad: v }) as ServicioAaa).velocidad, v)
-        assert.throws(() => parsearRegistro({ ...base, velocidad: { ...v, aplicacion: 'magia' } }), ErrorContrato)
+        assert.throws(
+            () => parsearRegistro({ ...base, velocidad: { ...v, aplicacion: 'magia' } }),
+            ErrorContrato,
+        )
     })
 })
 
@@ -232,5 +263,23 @@ describe('FuenteApi: URL del endpoint interno', () => {
         } finally {
             await api.cerrar()
         }
+    })
+})
+
+describe('red_acceso en el registro', () => {
+    it('se lee si viene y es null si falta (registros viejos)', async () => {
+        const { parsearRegistro } = await import('../src/servicio.ts')
+        const base = servicio({ user_ppp: 'ra' }) as unknown as Record<string, unknown>
+        const sin = parsearRegistro({ ...base, red_acceso: undefined }) as { red_acceso: unknown }
+        assert.equal(sin.red_acceso ?? null, null)
+        const con = parsearRegistro({
+            ...base,
+            red_acceso: { servidor_pppoe_id: 3, local_address: '10.3.0.1', perfil_por_servidor: true },
+        }) as { red_acceso: unknown }
+        assert.deepEqual(con.red_acceso, {
+            servidor_pppoe_id: 3,
+            local_address: '10.3.0.1',
+            perfil_por_servidor: true,
+        })
     })
 })

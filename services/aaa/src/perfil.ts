@@ -44,7 +44,16 @@ function rateLimit(subidaKbps: number, bajadaKbps: number): string {
  */
 export function grupoDe(servicio: ServicioAaa): string | null {
     // Estrategia por capas (`contratos/control-velocidad.md` §7): el perfil lo calcula A1.
-    if (servicio.velocidad) return servicio.velocidad.grupo
+    if (servicio.velocidad) {
+        const grupo = servicio.velocidad.grupo
+        // Servidores PPPoE con gateways distintos (`contratos/red-acceso.md` §6.1): el perfil del plan
+        // para el servidor del servicio, con su local-address (MikroTik no tiene atributo RADIUS para él).
+        const ra = servicio.red_acceso
+        if (grupo === `plan-${servicio.plan.id}` && ra?.perfil_por_servidor && ra.servidor_pppoe_id) {
+            return `${grupo}-s${ra.servidor_pppoe_id}`
+        }
+        return grupo
+    }
     if (servicio.control_velocidad === 'simple' && servicio.plan.reuso > 1) return `plan-${servicio.plan.id}`
     return servicio.plan.profile_ppp
 }
@@ -96,7 +105,10 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
     // `arbol_pcq` y `pcq_plan`: sin cola por sesión (la velocidad la ponen el PCQ y la cola o el árbol
     // del plan, con las direcciones de la sesión; dispatcher de RouterOS). `perfil_ppp` activo: el
     // rate-limit vive en el perfil `plan-<id>`. El suspendido conserva su rate-limit mínimo.
-    if ((servicio.estado === 'activo' || servicio.estado === 'limitado') && !conRateLimit(servicio, servicio.estado)) {
+    if (
+        (servicio.estado === 'activo' || servicio.estado === 'limitado') &&
+        !conRateLimit(servicio, servicio.estado)
+    ) {
         delete reply['Mikrotik-Rate-Limit']
     }
 

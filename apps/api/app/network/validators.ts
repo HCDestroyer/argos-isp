@@ -626,7 +626,11 @@ export const implementacionPlanValidator = vine.compile(
         pool_ipv4: vine.string().trim().maxLength(100).nullable().optional(),
         pool_ipv6_enlace: vine.string().trim().maxLength(100).nullable().optional(),
         pool_ipv6_delegacion: vine.string().trim().maxLength(100).nullable().optional(),
-        local_address: ipv4().nullable().optional(),
+        local_address: ipv4().nullable().optional().meta({
+            deprecated: true,
+            description:
+                'Obsoleto: se ignora. El local-address sale del gateway de la red IPv4 (o su primera IP utilizable)',
+        }),
         no_crear_reglas: vine.boolean().optional(),
         rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
             description: 'Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo',
@@ -1000,6 +1004,30 @@ export const asignarPerfilQosValidator = vine.compile(
     vine.object({
         version: versionEsperada(),
         qos_perfil_id: idEntidad().nullable().meta({ description: 'null = el perfil predeterminado' }),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Modo de velocidad único por router (`contratos/control-velocidad.md` §11)
+|--------------------------------------------------------------------------
+*/
+
+export const vistaPreviaUnificarVelocidadValidator = vine.compile(
+    vine.object({
+        reconectar: vine.boolean().optional().meta({
+            description: 'Calcular cuántas sesiones se desconectarían con reconectar',
+        }),
+    }),
+)
+
+export const unificarControlVelocidadValidator = vine.compile(
+    vine.object({
+        planes: vine.array(idEntidad()).maxLength(1000).meta({
+            description: 'Los plan_id con excepción que mostró la vista previa (409 si cambiaron)',
+        }),
+        reconectar: reconectar(),
         motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
     }),
 )

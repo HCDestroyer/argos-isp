@@ -69,6 +69,11 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/ipv6/firewall/filter': { requeridas: ['chain'], unicas: [] },
     '/ipv6/firewall/nat': { requeridas: ['chain'], unicas: [] },
     '/interface/list': { requeridas: ['name'], unicas: [['name']] },
+    '/interface/vlan': {
+        requeridas: ['name', 'vlan-id', 'interface'],
+        unicas: [['name'], ['interface', 'vlan-id']],
+    },
+    '/interface/pppoe-server/server': { requeridas: ['interface', 'service-name'], unicas: [['interface']] },
 }
 
 function hostDeUrl(url: string): string {
@@ -407,6 +412,16 @@ export class RouterOSFalso {
             // Sin destino (o inexistente) va al final, como RouterOS.
             if (destino < 0) tabla.push(objeto!)
             else tabla.splice(destino, 0, objeto!)
+            return this.#json(res, 200, [])
+        }
+        if (metodo === 'POST' && camino === `${ruta}/unset`) {
+            const objeto = this.tabla(ruta).find((o) => o['.id'] === cuerpo?.numbers)
+            if (!objeto) return this.#error(res, 400, 'Bad Request', 'no such item')
+            const nombre = cuerpo?.['value-name'] ?? ''
+            if (nombre === '' || nombre === 'name' || nombre === '.id') {
+                return this.#error(res, 400, 'Bad Request', 'failure: can not unset')
+            }
+            delete objeto[nombre]
             return this.#json(res, 200, [])
         }
         const id = camino.length > ruta.length ? decodeURIComponent(camino.slice(ruta.length + 1)) : null

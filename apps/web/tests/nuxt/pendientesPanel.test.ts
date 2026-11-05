@@ -134,7 +134,7 @@ describe('plan por router y direccionamiento del router', () => {
         await esperar(() => expect(plan.find('[data-implementacion="1"]').exists()).toBe(true))
         expect(plan.find('[data-implementacion="1"]').text()).toContain('profile argos-hogar')
         plan.unmount()
-        const router = await mountSuspended(PaginaRouter, { route: '/routers/1' })
+        const router = await mountSuspended(PaginaRouter, { route: '/routers/1?pestana=pools' })
         await esperar(() => expect(router.find('[data-pool="2"]').exists()).toBe(true))
         expect(router.find('[data-prueba="redes-router"]').text()).toContain('100.64.10.0/24')
         expect(router.find('[data-bloque="1"]').text()).toContain('Delegación · /56')

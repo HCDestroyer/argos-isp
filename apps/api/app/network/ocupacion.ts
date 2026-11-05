@@ -7,7 +7,7 @@ import { capacidad, subprefijoCorto } from '#network/ipv6'
  *
  * - IPv4 (por red): `total` = hosts utilizables (sin red ni broadcast en redes de /30 o más
  *   grandes). `asignadas` = IPs vigentes de servicios. `libres` = las que el sistema puede entregar
- *   (dentro del rango, sin el gateway). `reservadas` = el resto: el gateway y las que quedan fuera
+ *   (dentro del rango, sin el gateway efectivo). `reservadas` = el resto: el gateway (o la primera IP utilizable si no hay) y las que quedan fuera
  *   del rango.
  * - IPv6 (por pool, en unidades de `tamano_entrega`): `total` = prefijos que caben. `asignadas` =
  *   prefijos de ese tamaño entregados desde el pool. `reservadas` = unidades ocupadas por otros
@@ -40,6 +40,17 @@ export function sqlLimitesRedV4(r: string): string {
                                 - CASE WHEN masklen(${r}.cidr) >= 31 THEN 1 ELSE 2 END AS ultimo) u)`
 }
 
+/**
+ * Gateway efectivo de la red `r` (inet de host): el `gateway` o, sin él, la primera IP utilizable
+ * (`network + 1`; en /31 y /32 la dirección de red). Decisión del PM (5 nov, `contratos/red-acceso.md`
+ * §2): es el `local-address` del PPPoE y nunca se asigna a un cliente.
+ */
+export function sqlGatewayEfectivo(r = 'r'): string {
+    return `COALESCE(set_masklen(${r}.gateway, 32),
+        CASE WHEN masklen(${r}.cidr) >= 31 THEN set_masklen(network(${r}.cidr)::inet, 32)
+             ELSE set_masklen(network(${r}.cidr)::inet, 32) + 1 END)`
+}
+
 /** Subconsulta escalar con la ocupación de la red IPv4 de alias `r`. */
 export function sqlOcupacionRedV4(r = 'r'): string {
     return `(SELECT json_build_object(
@@ -49,8 +60,10 @@ export function sqlOcupacionRedV4(r = 'r'): string {
                FROM (SELECT k.ultimo - k.primero + 1 AS total,
                             a.asignadas,
                             GREATEST(GREATEST(k.fin - k.ini + 1, 0) - a.en_rango
-                                - CASE WHEN ${r}.gateway IS NOT NULL
-                                        AND host(${r}.gateway)::inet - k.base BETWEEN k.ini AND k.fin
+                                - CASE WHEN ${sqlGatewayEfectivo(r)} - k.base BETWEEN k.ini AND k.fin
+                                        AND NOT EXISTS (SELECT 1 FROM network.ipv4_asignaciones g
+                                                         WHERE g.red_id = ${r}.id AND g.fin IS NULL
+                                                           AND g.ip = ${sqlGatewayEfectivo(r)})
                                        THEN 1 ELSE 0 END, 0) AS libres
                        FROM ${sqlLimitesRedV4(r)} k,
                             LATERAL (SELECT count(*) AS asignadas,
