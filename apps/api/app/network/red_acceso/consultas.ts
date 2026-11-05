@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { sinCampos } from '#network/consultas/ipv6'
+import { sqlHostGatewayEfectivo } from '#network/red_acceso/local_address'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
@@ -71,6 +72,8 @@ export interface ServidorPppoeVista {
     perfil_base: string
     perfil: string | null
     local_address: string | null
+    /** true = su red no tiene gateway: el local-address es la primera IP utilizable */
+    local_address_derivado: boolean
     max_mtu: number
     max_mru: number
     mrru: number | null
@@ -310,7 +313,10 @@ function consultaServidores(cliente: QueryClientContract) {
             's.ipv6_pool_delegacion_id',
             's.perfil_base',
             's.perfil_router',
-            cliente.raw('host(r.gateway) AS local_address'),
+            cliente.raw(
+                `CASE WHEN r.id IS NULL THEN NULL ELSE ${sqlHostGatewayEfectivo('r')} END AS local_address`,
+            ),
+            cliente.raw('(r.id IS NOT NULL AND r.gateway IS NULL) AS local_address_derivado'),
             's.max_mtu',
             's.max_mru',
             's.mrru',
@@ -397,7 +403,7 @@ export async function listarServidoresPppoe(
 }
 
 export function servidorParaAuditoria(s: ServidorPppoeVista) {
-    return sinCampos(s, ['vlan', 'perfil', 'comment', 'servicios', 'local_address'])
+    return sinCampos(s, ['vlan', 'perfil', 'comment', 'servicios', 'local_address', 'local_address_derivado'])
 }
 
 /*

@@ -348,7 +348,7 @@ export interface CatalogoEventos {
         empresa_id: number | null
         entidad: 'olt' | 'puerto_pon' | 'vlan' | 'servidor_pppoe'
         entidad_id: number
-        accion: 'creada' | 'editada' | 'eliminada' | 'adoptada'
+        accion: 'creada' | 'editada' | 'eliminada' | 'adoptada' | 'tomar_control'
         estado: 'administrado' | 'adoptado' | null
         campos: string[]
     }

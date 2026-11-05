@@ -10,12 +10,26 @@ import {
     redUnica,
 } from '#tests/core/fabricas'
 import { registrosAaaPorServicio } from '#core/aaa'
-import { registrarLectorInventario, type InventarioRedAcceso } from '#network/red_acceso/inventario'
+import {
+    registrarDiffTomarControl,
+    registrarLectorInventario,
+    type InventarioRedAcceso,
+} from '#network/red_acceso/inventario'
 
 /** Cuerpo de una respuesta con el status esperado. */
 async function cuerpo(peticion: PromiseLike<any>, status: number) {
     const respuesta = await estado(peticion, status)
     return respuesta.body()
+}
+
+let contadorNas = 0
+/**
+ * Router con `nas_ip` en 10.252.x.y: fuera de los rangos de `ipUnica` y de `nasIpUnica` (notify), que
+ * comparten 10.200–249 y pueden chocar si una suite crea muchos routers.
+ */
+function routerPrueba() {
+    contadorNas += 1
+    return crearRouterFila({ nas_ip: `10.252.${Math.floor(contadorNas / 256) % 256}.${contadorNas % 256}` })
 }
 
 /**
@@ -143,7 +157,7 @@ test.group('Red de acceso · OLT y puertos PON', (group) => {
             409,
         )
 
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         await estado(
             client
                 .post(`/api/v1/routers/${routerId}/vlans`)
@@ -195,7 +209,7 @@ test.group('Red de acceso · OLT y puertos PON', (group) => {
                 .json({ nombre: unico('OLT') }),
             403,
         )
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         await estado(
             client
                 .post(`/api/v1/routers/${routerId}/vlans`)
@@ -216,7 +230,7 @@ test.group('Red de acceso · VLAN', (group) => {
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const olt = await cuerpo(
             client
                 .post('/api/v1/olts')
@@ -300,7 +314,7 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const red = await crearRed(routerId)
         const sinGateway = await crearRed(routerId, false)
         const vlan = await cuerpo(
@@ -314,12 +328,20 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
         const sinRed = await client.post(url).bearerToken(tecnico).json({ nombre: 'a', vlan_id: vlan.id })
         sinRed.assertStatus(422)
         assert.equal(sinRed.body().errors[0].rule, 'red_requerida')
-        const malaRed = await client
-            .post(url)
-            .bearerToken(tecnico)
-            .json({ nombre: 'a', vlan_id: vlan.id, red_ipv4_id: sinGateway.id })
-        malaRed.assertStatus(422)
-        assert.equal(malaRed.body().errors[0].rule, 'red_sin_gateway')
+        // red sin gateway (decisión del PM): vale, el local-address es su primera IP utilizable
+        const vlanB = await cuerpo(
+            client
+                .post(`/api/v1/routers/${routerId}/vlans`)
+                .bearerToken(tecnico)
+                .json({ interfaz_padre: 'sfp1', vlan_id: 201 }),
+            201,
+        )
+        const derivado = await crearServidor(client, tecnico, routerId, {
+            vlan_id: vlanB.id,
+            red_ipv4_id: sinGateway.id,
+        })
+        assert.equal(derivado.local_address, `${sinGateway.base}.1`)
+        assert.isTrue(derivado.local_address_derivado)
         const sinInterfaz = await client
             .post(url)
             .bearerToken(tecnico)
@@ -357,21 +379,17 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
         const borrar = await client.delete(`/api/v1/vlans/${vlan.id}`).bearerToken(tecnico)
         borrar.assertStatus(409)
 
-        // Quitar el gateway de la red del servidor: 422; cambiarlo: evento con local_address
+        // Cambiar el gateway: evento con local_address; quitarlo vale (queda el derivado .1)
         const filaRed = await db.from('network.redes_ipv4').where('id', red.id).firstOrFail()
-        const quitar = await client
-            .put(`/api/v1/redes-ipv4/${red.id}`)
-            .bearerToken(tecnico)
-            .json({ version: filaRed.version, gateway: null })
-        quitar.assertStatus(422)
-        assert.equal(quitar.body().errors[0].rule, 'red_con_servidor_pppoe')
-        await estado(
+        const conOtro = await cuerpo(
             client
                 .put(`/api/v1/redes-ipv4/${red.id}`)
                 .bearerToken(tecnico)
                 .json({ version: filaRed.version, gateway: `${red.base}.254` }),
             200,
         )
+        assert.equal(conOtro.gateway_efectivo, `${red.base}.254`)
+        assert.isFalse(conOtro.gateway_derivado)
         const visto = await cuerpo(client.get(`/api/v1/servidores-pppoe/${srv.id}`).bearerToken(tecnico), 200)
         assert.equal(visto.local_address, `${red.base}.254`)
         const cambios = await eventos('red_acceso.cambiada', 'entidad_id', srv.id).where(
@@ -380,6 +398,29 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
             JSON.stringify({ entidad: 'servidor_pppoe', campos: ['local_address'] }),
         )
         assert.lengthOf(cambios, 1)
+        const sinNada = await cuerpo(
+            client
+                .put(`/api/v1/redes-ipv4/${red.id}`)
+                .bearerToken(tecnico)
+                .json({ version: conOtro.version, gateway: null }),
+            200,
+        )
+        assert.equal(sinNada.gateway_efectivo, `${red.base}.1`)
+        assert.isTrue(sinNada.gateway_derivado)
+        const visto2 = await cuerpo(
+            client.get(`/api/v1/servidores-pppoe/${srv.id}`).bearerToken(tecnico),
+            200,
+        )
+        assert.equal(visto2.local_address, `${red.base}.1`)
+        assert.isTrue(visto2.local_address_derivado)
+        assert.lengthOf(
+            await eventos('red_acceso.cambiada', 'entidad_id', srv.id).where(
+                'payload',
+                '@>',
+                JSON.stringify({ entidad: 'servidor_pppoe', campos: ['local_address'] }),
+            ),
+            2,
+        )
 
         // editar: versión vieja 409; campos y evento
         await estado(
@@ -401,9 +442,9 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
             client.get(`/api/v1/routers/${routerId}/red-acceso`).bearerToken(tecnico),
             200,
         )
-        assert.lengthOf(arbol.vlans, 1)
-        assert.lengthOf(arbol.servidores_pppoe, 1)
-        assert.equal(arbol.servidores_pppoe[0].max_mtu, 1492)
+        assert.lengthOf(arbol.vlans, 2)
+        assert.lengthOf(arbol.servidores_pppoe, 2)
+        assert.equal(arbol.servidores_pppoe.find((x: { id: number }) => x.id === srv.id).max_mtu, 1492)
 
         await estado(client.delete(`/api/v1/servidores-pppoe/${srv.id}`).bearerToken(tecnico), 204)
         await estado(client.delete(`/api/v1/vlans/${vlan.id}`).bearerToken(tecnico), 204)
@@ -418,6 +459,8 @@ test.group('Red de acceso · servidores PPPoE y local-address', (group) => {
 
 test.group('Red de acceso · servicio PPPoE con servidor', (group) => {
     let tecnico: string
+    let clienteGlobal = 0
+    let planGlobal = 0
     group.setup(async () => {
         ;({ token: tecnico } = await usuarioConRoles(['tecnico']))
     })
@@ -426,7 +469,7 @@ test.group('Red de acceso · servicio PPPoE con servidor', (group) => {
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const redA = await crearRed(routerId)
         const redB = await crearRed(routerId)
         const pools = await crearPools(routerId)
@@ -504,31 +547,70 @@ test.group('Red de acceso · servicio PPPoE con servidor', (group) => {
         assert.equal(borrar.body().type.split(':').pop(), 'servidor_con_servicios')
     })
 
-    test('IP a mano en una red sin gateway con servidor administrado: 422 red_sin_gateway', async ({
+    test('red sin gateway: la primera IP utilizable es el local-address y nunca se asigna', async ({
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
-        const red = await crearRed(routerId)
+        const routerId = await routerPrueba()
         const sinGateway = await crearRed(routerId, false)
-        await crearServidor(client, tecnico, routerId, { interfaz: 'ether1', red_ipv4_id: red.id })
-        const r = await client
-            .post('/api/v1/servicios')
+        await crearServidor(client, tecnico, routerId, { interfaz: 'ether1', red_ipv4_id: sinGateway.id })
+        const alta = (datos: Record<string, unknown> = {}) =>
+            client
+                .post('/api/v1/servicios')
+                .bearerToken(tecnico)
+                .json({
+                    cliente_id: clienteGlobal,
+                    router_id: routerId,
+                    plan_id: planGlobal,
+                    plantilla_facturacion_id: null,
+                    ipv6_modo: 'ninguno',
+                    ...datos,
+                })
+        clienteGlobal = await crearClienteFila()
+        planGlobal = await crearPlanFila()
+        const primero = await cuerpo(alta(), 201)
+        assert.equal(primero.ipv4, `${sinGateway.base}.2`)
+        assert.equal(primero.local_address, `${sinGateway.base}.1`)
+        assert.isTrue(primero.local_address_derivado)
+        const [aaa] = await registrosAaaPorServicio([primero.id])
+        assert.equal(aaa!.red_acceso.local_address, `${sinGateway.base}.1`)
+        const reservada = await alta({ ipv4: `${sinGateway.base}.1` })
+        reservada.assertStatus(422)
+        assert.equal(reservada.body().errors[0].rule, 'reservada')
+
+        // dato anterior: un servicio que ya tenía la .1 de una red sin gateway
+        const red2 = await crearRed(routerId, false)
+        const viejo = await crearServicioFila({
+            cliente_id: clienteGlobal,
+            router_id: routerId,
+            ipv6_modo: 'ninguno',
+        })
+        await db
+            .table('network.ipv4_asignaciones')
+            .insert({ servicio_id: viejo, red_id: red2.id, ip: `${red2.base}.1` })
+        await db
+            .from('network.redes_ipv4')
+            .where('id', red2.id)
+            .update({ gateway: `${red2.base}.254` })
+        const fila2 = await db.from('network.redes_ipv4').where('id', red2.id).firstOrFail()
+        const quitar = await client
+            .put(`/api/v1/redes-ipv4/${red2.id}`)
             .bearerToken(tecnico)
-            .json({
-                cliente_id: await crearClienteFila(),
-                router_id: routerId,
-                plan_id: await crearPlanFila(),
-                plantilla_facturacion_id: null,
-                ipv6_modo: 'ninguno',
-                ipv4: `${sinGateway.base}.10`,
-            })
-        r.assertStatus(422)
-        assert.equal(r.body().errors[0].rule, 'red_sin_gateway')
+            .json({ version: fila2.version, gateway: null })
+        quitar.assertStatus(422)
+        assert.equal(quitar.body().errors[0].rule, 'gateway_derivado_ocupado')
+        await db.from('network.redes_ipv4').where('id', red2.id).update({ gateway: null })
+        const vista = await cuerpo(
+            client.get(`/api/v1/routers/${routerId}/redes-ipv4`).bearerToken(tecnico),
+            200,
+        )
+        const conflicto = vista.find((r: { id: number }) => r.id === red2.id)
+        assert.equal(conflicto.gateway_ocupado_por, viejo)
+        assert.isTrue(conflicto.gateway_derivado)
     })
 
     test('router sin servidores: el servicio queda sin servidor, como antes', async ({ client, assert }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         await crearRed(routerId, false)
         const r = await cuerpo(
             client
@@ -544,7 +626,10 @@ test.group('Red de acceso · servicio PPPoE con servidor', (group) => {
             201,
         )
         assert.isNull(r.servidor_pppoe_id)
-        assert.isNull(r.local_address)
+        // red sin gateway: la IPv4 salta la .1 (es el local-address derivado)
+        assert.isTrue(r.ipv4.endsWith('.2'))
+        assert.isTrue(r.local_address.endsWith('.1'))
+        assert.isTrue(r.local_address_derivado)
     })
 })
 
@@ -553,7 +638,10 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
     group.setup(async () => {
         ;({ token: tecnico } = await usuarioConRoles(['tecnico']))
     })
-    group.each.teardown(() => registrarLectorInventario(null))
+    group.each.teardown(() => {
+        registrarLectorInventario(null)
+        registrarDiffTomarControl(null)
+    })
 
     const inventario = (gateway: string): InventarioRedAcceso => ({
         interfaces: [{ nombre: 'sfp1', tipo: 'ether', deshabilitada: false }],
@@ -607,11 +695,134 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         pools_ipv6: [],
     })
 
+    test('tomar control: 501 sin A2; vista previa, huella y versión; pasa a administrado', async ({
+        client,
+        assert,
+    }) => {
+        const routerId = await routerPrueba()
+        const red = await crearRed(routerId)
+        registrarLectorInventario(async () => inventario(`${red.base}.1`))
+        const adoptado = await cuerpo(
+            client
+                .post(`/api/v1/routers/${routerId}/red-acceso/adoptar`)
+                .bearerToken(tecnico)
+                .json({ servidores_pppoe: [{ ros_id: '*1' }] }),
+            200,
+        )
+        const srv = adoptado.servidores_pppoe[0]
+        const url = `/api/v1/servidores-pppoe/${srv.id}`
+        const sinA2 = await client.get(`${url}/vista-previa-tomar-control`).bearerToken(tecnico)
+        sinA2.assertStatus(501)
+
+        let huella = 'h1'
+        registrarDiffTomarControl(async (objeto) => ({
+            huella,
+            cambios: [
+                {
+                    ruta: '/interface/pppoe-server/server',
+                    ros_id: objeto.ros_id,
+                    nombre: 'fibra300',
+                    accion: 'actualizar' as const,
+                    propiedades: [
+                        { propiedad: 'comment', actual: null, deseado: `argosisp:pppoe:${objeto.id}` },
+                    ],
+                },
+            ],
+            sesiones: 3,
+            advertencias: [],
+        }))
+        const vista = await cuerpo(client.get(`${url}/vista-previa-tomar-control`).bearerToken(tecnico), 200)
+        assert.equal(vista.estado, 'adoptado')
+        assert.equal(vista.sesiones, 3)
+        assert.deepEqual(
+            vista.faltan.map((f: { rule: string }) => f.rule),
+            ['red_requerida'],
+        )
+        // sin red: 422 red_requerida
+        const sinRed = await client
+            .post(`${url}/tomar-control`)
+            .bearerToken(tecnico)
+            .json({ version: vista.version, huella: vista.huella })
+        sinRed.assertStatus(422)
+        assert.equal(sinRed.body().errors[0].rule, 'red_requerida')
+        const conRed = await cuerpo(
+            client.put(url).bearerToken(tecnico).json({ version: srv.version, red_ipv4_id: red.id }),
+            200,
+        )
+        const vista2 = await cuerpo(client.get(`${url}/vista-previa-tomar-control`).bearerToken(tecnico), 200)
+        assert.deepEqual(vista2.faltan, [])
+        // el router cambió: 409 router_cambio; versión vieja: 409
+        huella = 'h2'
+        const cambio = await client
+            .post(`${url}/tomar-control`)
+            .bearerToken(tecnico)
+            .json({ version: conRed.version, huella: 'h1' })
+        cambio.assertStatus(409)
+        assert.equal(cambio.body().type.split(':').pop(), 'router_cambio')
+        await estado(
+            client
+                .post(`${url}/tomar-control`)
+                .bearerToken(tecnico)
+                .json({ version: srv.version, huella: 'h2' }),
+            409,
+        )
+        // soporte no
+        const { token: soporte } = await usuarioConRoles(['soporte'])
+        await estado(
+            client
+                .post(`${url}/tomar-control`)
+                .bearerToken(soporte)
+                .json({ version: conRed.version, huella: 'h2' }),
+            403,
+        )
+        const hecho = await cuerpo(
+            client
+                .post(`${url}/tomar-control`)
+                .bearerToken(tecnico)
+                .json({ version: conRed.version, huella: 'h2' }),
+            200,
+        )
+        assert.equal(hecho.estado, 'administrado')
+        assert.equal(hecho.perfil, `argosisp-pppoe-${srv.id}`)
+        assert.equal(hecho.comment, `argosisp:pppoe:${srv.id}`)
+        const [evento] = await eventos('red_acceso.cambiada', 'entidad_id', srv.id).where(
+            'payload',
+            '@>',
+            JSON.stringify({ entidad: 'servidor_pppoe', accion: 'tomar_control' }),
+        )
+        assert.deepInclude(evento.payload, { estado: 'administrado', campos: ['estado'] })
+        assert.isNotNull(
+            await db
+                .from('audit.acciones')
+                .where({ accion: 'red_acceso.tomar_control', entidad_id: srv.id })
+                .first(),
+        )
+        const otraVez = await client
+            .post(`${url}/tomar-control`)
+            .bearerToken(tecnico)
+            .json({ version: hecho.version, huella: 'h2' })
+        otraVez.assertStatus(422)
+        assert.equal(otraVez.body().type.split(':').pop(), 'ya_administrado')
+
+        // la VLAN adoptada con él también se puede tomar
+        const vlanUrl = `/api/v1/vlans/${adoptado.vlans[0].id}`
+        const vv = await cuerpo(client.get(`${vlanUrl}/vista-previa-tomar-control`).bearerToken(tecnico), 200)
+        const vlan = await cuerpo(
+            client
+                .post(`${vlanUrl}/tomar-control`)
+                .bearerToken(tecnico)
+                .json({ version: vv.version, huella: vv.huella }),
+            200,
+        )
+        assert.equal(vlan.estado, 'administrado')
+        assert.equal(vlan.comment, `argosisp:vlan:${vlan.id}`)
+    })
+
     test('sin lector: 501; con lector marca nuevo, adopta sin tocar el router y protege lo adoptado', async ({
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const red = await crearRed(routerId)
         const url = `/api/v1/routers/${routerId}/red-acceso`
         const sinLector = await client.get(`${url}/descubrir`).bearerToken(tecnico)
@@ -695,8 +906,8 @@ test.group('Red de acceso · unir routers', (group) => {
         client,
         assert,
     }) => {
-        const queda = await crearRouterFila()
-        const absorbido = await crearRouterFila()
+        const queda = await routerPrueba()
+        const absorbido = await routerPrueba()
         const redQueda = await crearRed(queda)
         const redAbs = await crearRed(absorbido)
         const vlanRepetida = (url: number) =>

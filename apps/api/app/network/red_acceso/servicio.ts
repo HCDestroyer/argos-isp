@@ -1,6 +1,5 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { localAddressServicio } from '#network/red_acceso/local_address'
 
 /**
  * Servicio PPPoE → servidor PPPoE (`contratos/red-acceso.md` §3). Lo usan `servicios.crear` y
@@ -144,25 +143,4 @@ export async function leerServidorServicio(
         .select(COLUMNAS)
         .first()) as Fila | null
     return fila ? aServidor(fila) : null
-}
-
-/**
- * Con servidor administrado o con red, el `local-address` debe existir: la red de la IPv4 del
- * servicio tiene gateway (422 `red_sin_gateway`). Se llama después de asignar las direcciones.
- */
-export async function exigirLocalAddress(
-    trx: TransactionClientContract,
-    servicioId: number,
-    servidor: ServidorDelServicio | null,
-    campo: 'ipv4' | 'red_ipv4_id' = 'ipv4',
-) {
-    if (!servidor || (servidor.estado !== 'administrado' && servidor.red_ipv4_id === null)) return
-    const local = await localAddressServicio(servicioId, trx)
-    if (local.local_address) return
-    throw error(
-        'La red IPv4 del servicio no tiene gateway: el local-address del PPPoE sale del gateway de la red. ' +
-            'Defínelo en la red IPv4 o usa una IP de la red del servidor PPPoE',
-        'red_sin_gateway',
-        campo,
-    )
 }

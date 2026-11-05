@@ -47,30 +47,28 @@ export async function exigirRouter(trx: TransactionClientContract, routerId: num
     if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
 }
 
-/** Red IPv4 del router con gateway (la única fuente del `local-address`, §2). */
-export async function exigirRedConGateway(
+/**
+ * Red IPv4 del router (la única fuente del `local-address`, §2). Sin gateway vale igual: el
+ * `local-address` es su primera IP utilizable (decisión del PM, 5 nov).
+ */
+export async function exigirRedDelRouter(
     trx: TransactionClientContract,
     redId: number,
     routerId: number,
     field = 'red_ipv4_id',
-): Promise<{ id: number; gateway: string }> {
+): Promise<{ id: number }> {
     const red = (await trx
         .from('network.redes_ipv4')
         .where('id', redId)
-        .select('id', 'router_id', 'cidr', trx.raw('host(gateway) AS gateway'))
-        .first()) as { id: number; router_id: number; cidr: string; gateway: string | null } | null
+        .select('id', 'router_id')
+        .first()) as {
+        id: number
+        router_id: number
+    } | null
     if (!red || Number(red.router_id) !== routerId) {
         throw campo(field, red ? 'La red IPv4 no es de este router' : 'La red IPv4 no existe', 'red')
     }
-    if (!red.gateway) {
-        throw campo(
-            field,
-            `La red ${red.cidr} no tiene gateway: el local-address del PPPoE sale del gateway de la red. ` +
-                'Defínelo en la red IPv4 (PUT /redes-ipv4/:id) antes de usarla',
-            'red_sin_gateway',
-        )
-    }
-    return { id: Number(red.id), gateway: red.gateway }
+    return { id: Number(red.id) }
 }
 
 /** Pool IPv6 de un bloque del router y del tipo pedido. */
@@ -121,19 +119,4 @@ export function camposCambiados(antes: Record<string, unknown> | null, despues: 
 
 export async function emitirRedAcceso(t: Transaccion, payload: CatalogoEventos['red_acceso.cambiada']) {
     await t.emit('red_acceso.cambiada', payload)
-}
-
-/** 422 si quitar el gateway dejaría a un servidor PPPoE sin `local-address`. */
-export async function exigirRedSinServidores(trx: TransactionClientContract, redId: number) {
-    const servidores = (await trx
-        .from('network.servidores_pppoe')
-        .where('red_ipv4_id', redId)
-        .select('nombre')) as Array<{ nombre: string }>
-    if (servidores.length === 0) return
-    throw campo(
-        'gateway',
-        `La red la usan los servidores PPPoE ${servidores.map((s) => `«${s.nombre}»`).join(', ')}: ` +
-            'su local-address es el gateway, no se puede quitar',
-        'red_con_servidor_pppoe',
-    )
 }

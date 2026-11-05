@@ -247,26 +247,44 @@ export const OcupacionPool = definirEsquema('OcupacionPool', {
 
 export const RedIpv4 = definirEsquema(
     'RedIpv4',
-    objeto({
-        id,
-        router_id: id,
-        nombre: nulable(texto),
-        cidr: texto,
-        gateway: { ...nulable(texto), description: 'Puerta de enlace de los clientes; nunca se asigna' },
-        tipo: enumerado(['estatico', 'pool']),
-        rango_inicio: {
-            ...nulable(texto),
-            description: 'Primera IP que se entrega a servicios; null = toda la red',
+    objeto(
+        {
+            id,
+            router_id: id,
+            nombre: nulable(texto),
+            cidr: texto,
+            gateway: { ...nulable(texto), description: 'Puerta de enlace de los clientes; nunca se asigna' },
+            gateway_efectivo: {
+                ...texto,
+                description:
+                    'El gateway o, sin él, la primera IP utilizable (nunca se asigna): local-address del PPPoE (contratos/red-acceso.md §2)',
+            },
+            gateway_derivado: {
+                ...booleano,
+                description: 'true: la red no tiene gateway y se usa la primera IP utilizable',
+            },
+            gateway_ocupado_por: {
+                ...nulable(id),
+                description:
+                    'Servicio que ya tenía asignado el gateway derivado (dato anterior); muévelo a otra IP',
+            },
+            tipo: enumerado(['estatico', 'pool']),
+            rango_inicio: {
+                ...nulable(texto),
+                description: 'Primera IP que se entrega a servicios; null = toda la red',
+            },
+            rango_fin: {
+                ...nulable(texto),
+                description: 'Última IP que se entrega a servicios; null = toda la red',
+            },
+            dns_primario: nulable(texto),
+            dns_secundario: nulable(texto),
+            ocupacion: OcupacionPool,
+            ...auditable,
         },
-        rango_fin: {
-            ...nulable(texto),
-            description: 'Última IP que se entrega a servicios; null = toda la red',
-        },
-        dns_primario: nulable(texto),
-        dns_secundario: nulable(texto),
-        ocupacion: OcupacionPool,
-        ...auditable,
-    }),
+        // red de acceso (5 nov): la API siempre los envía; opcionales hasta que las fixtures del panel los traigan
+        ['gateway_efectivo', 'gateway_derivado', 'gateway_ocupado_por'],
+    ),
 )
 
 export const Ipv6Bloque = definirEsquema(

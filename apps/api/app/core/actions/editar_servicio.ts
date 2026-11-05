@@ -30,11 +30,7 @@ import { reconciliarIncluidos } from '#core/adicionales'
 import { advertenciasServicio } from '#network/tipos_plan'
 import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
 import { telefonoParaGuardar } from '#core/telefonos'
-import {
-    exigirLocalAddress,
-    leerServidorServicio,
-    resolverServidorServicio,
-} from '#network/red_acceso/servicio'
+import { leerServidorServicio, resolverServidorServicio } from '#network/red_acceso/servicio'
 
 export interface EntradaEditarServicio {
     id: number
@@ -290,9 +286,6 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                       ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
                       : undefined,
               })
-        if (!mismoEquipo && (cambiaServidor || ipv4 !== undefined || routerId !== antes.router_id)) {
-            await exigirLocalAddress(t.trx, id, servidor)
-        }
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 

@@ -84,6 +84,8 @@ export const PERMISOS = {
     'red_acceso.descubrir': 'Leer del router sus VLAN, servidores PPPoE, perfiles y pools (no escribe)',
     'red_acceso.adoptar':
         'Importar a Argos VLAN y servidores PPPoE que ya existen en el router (sin tocarlo)',
+    'red_acceso.tomar_control':
+        'Pasar a administrado una VLAN o servidor PPPoE adoptado (Argos lo empieza a escribir en el router)',
     'olts.crear': 'Registrar OLT',
     'olts.editar': 'Editar OLT y sus puertos PON',
     'olts.eliminar': 'Eliminar una OLT sin VLAN asignadas',
@@ -501,6 +503,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'red_acceso.ver',
             'red_acceso.descubrir',
             'red_acceso.adoptar',
+            'red_acceso.tomar_control',
             'olts.crear',
             'olts.editar',
             'olts.eliminar',

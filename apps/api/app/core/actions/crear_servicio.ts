@@ -22,7 +22,7 @@ import { reconciliarIncluidos } from '#core/adicionales'
 import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 import { telefonoParaGuardar } from '#core/telefonos'
-import { exigirLocalAddress, resolverServidorServicio } from '#network/red_acceso/servicio'
+import { resolverServidorServicio } from '#network/red_acceso/servicio'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -242,7 +242,6 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
                 : undefined,
         })
-        await exigirLocalAddress(t.trx, id, servidor, input.red_ipv4_id ? 'red_ipv4_id' : 'ipv4')
 
         await registrarTramo(t.trx, id, 'alta')
         await guardarExcepciones(t.trx, id, excepciones)
