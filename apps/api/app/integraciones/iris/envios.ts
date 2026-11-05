@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { EventoEntrante } from '#shared/eventos_bus'
@@ -41,6 +42,11 @@ import {
  *   conectado habla un contrato ≥ 0.5.0 (`conectorAdmite`, A1); a uno anterior (o sin contrato
  *   informado) no le llegan como desconocidos. Un pendiente ya registrado sale igual: el contrato
  *   solo sube.
+ * - **Pagos y atención** (contrato 0.6.0, §7.2 y §7.4): `comprobante.aprobado` / `.rechazado` y
+ *   `promesa.creada` / `.cumplida` / `.incumplida` / `.cancelada`, de cualquier canal dentro del
+ *   alcance, solo a conectores con contrato ≥ 0.6.0 (`EVENTOS_DESDE_060`). Lo que A3 no trae en el
+ *   evento se completa con la fila (`billing.comprobantes`, `billing.promesas`); nunca la imagen del
+ *   comprobante ni la referencia bancaria.
  */
 
 /** Eventos del bus que van a Iris (§2.3). */
@@ -59,6 +65,12 @@ export const EVENTOS_A_IRIS = [
     'inventario.traslado_enviado',
     'inventario.traslado_recibido',
     'inventario.traslado_cancelado',
+    'comprobante.aprobado',
+    'comprobante.rechazado',
+    'promesa.creada',
+    'promesa.cumplida',
+    'promesa.incumplida',
+    'promesa.cancelada',
 ] as const
 
 /** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
@@ -72,6 +84,32 @@ export const EVENTOS_DESDE_050 = [
 
 /** Versión mínima del contrato para `EVENTOS_DESDE_050`. */
 export const CONTRATO_EVENTOS_050 = '0.5.0'
+
+/** Eventos de pagos y atención del contrato Iris 0.6.0 (§2.3, §7.2, §7.4): solo con contrato ≥ 0.6.0. */
+export const EVENTOS_DESDE_060 = [
+    'comprobante.aprobado',
+    'comprobante.rechazado',
+    'promesa.creada',
+    'promesa.cumplida',
+    'promesa.incumplida',
+    'promesa.cancelada',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+/** Versión mínima del contrato para `EVENTOS_DESDE_060`. */
+export const CONTRATO_EVENTOS_060 = '0.6.0'
+
+const CANALES_COMPROBANTE = ['portal', 'panel', 'iris'] as const
+const CAUSAS_RECHAZO = [
+    'no_aparece',
+    'monto_distinto',
+    'ilegible',
+    'falta_dato',
+    'duplicado',
+    'otro',
+] as const
+const TIPOS_PROMESA = ['promesa', 'reconexion_temporal'] as const
+const CANALES_PROMESA = ['portal', 'ia', 'operador', 'supervisor'] as const
+const ESTADOS_SERVICIO = ['pendiente_instalacion', 'activo', 'limitado', 'suspendido', 'retirado'] as const
 
 /** Catálogos de `catalogo.cambiado` (contrato Iris 0.5.0, pedido A15). */
 const CATALOGOS = ['zona', 'plan', 'router'] as const
@@ -218,6 +256,10 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
     }
 
     if (TRASLADOS.has(evento)) return payloadTraslado(evento, p)
+    if (evento === 'comprobante.aprobado' || evento === 'comprobante.rechazado') {
+        return payloadComprobante(evento, p)
+    }
+    if (evento.startsWith('promesa.')) return payloadPromesa(evento, p)
 
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
@@ -394,6 +436,114 @@ function payloadTraslado(evento: string, p: Payload): WebhookIris | null {
     return { payload: comun, empresas }
 }
 
+/** Monto como string con 2 decimales (`decimal.js`, nunca `number`); null si no es un número. */
+function decimal(valor: unknown): string | null {
+    if (valor === null || valor === undefined || valor === '') return null
+    const t = String(valor)
+    return /^-?\d+(\.\d+)?$/.test(t) ? new Decimal(t).toFixed(2) : null
+}
+
+function instanteIso(valor: unknown): string | null {
+    if (valor instanceof Date) return valor.toISOString()
+    const t = texto(valor)
+    return t && !Number.isNaN(Date.parse(t)) ? new Date(t).toISOString() : null
+}
+
+/**
+ * `comprobante.aprobado` / `comprobante.rechazado` (0.6.0, §7.2): comprobante_id, empresa_id,
+ * cliente_id, servicio_id, canal, monto, pago_id, motivo, causa y servicio_estado. Lo que A3 no trae
+ * en el evento sale de `billing.comprobantes` (y el estado, de `core.servicios`). Para comprobantes
+ * de cualquier canal dentro del alcance.
+ */
+async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIris | null> {
+    const comprobanteId = entero(p.comprobante_id)
+    if (!comprobanteId) return null
+    const fila = (await db
+        .from('billing.comprobantes')
+        .where('id', comprobanteId)
+        .select('empresa_id', 'cliente_id', 'servicio_id', 'canal', 'monto', 'pago_id', 'motivo_rechazo')
+        .first()) as {
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        canal: string
+        monto: string
+        pago_id: number | null
+        motivo_rechazo: string | null
+    } | null
+    const empresaId = entero(p.empresa_id) ?? entero(fila?.empresa_id)
+    if (!empresaId) return null
+    const servicioId = entero(p.servicio_id) ?? entero(fila?.servicio_id)
+    const aprobado = evento === 'comprobante.aprobado'
+    let servicioEstado = unoDe(p.servicio_estado, ESTADOS_SERVICIO)
+    if (!servicioEstado && servicioId && aprobado) {
+        const servicio = (await db
+            .from('core.servicios')
+            .where('id', servicioId)
+            .select('estado')
+            .first()) as {
+            estado: string
+        } | null
+        servicioEstado = unoDe(servicio?.estado, ESTADOS_SERVICIO)
+    }
+    return {
+        payload: {
+            comprobante_id: comprobanteId,
+            empresa_id: empresaId,
+            cliente_id: entero(p.cliente_id) ?? entero(fila?.cliente_id),
+            servicio_id: servicioId,
+            canal: unoDe(p.canal, CANALES_COMPROBANTE) ?? unoDe(fila?.canal, CANALES_COMPROBANTE),
+            monto: decimal(p.monto) ?? decimal(fila?.monto),
+            pago_id: aprobado ? (entero(p.pago_id) ?? entero(fila?.pago_id)) : null,
+            motivo: aprobado ? null : (texto(p.motivo) ?? texto(fila?.motivo_rechazo)),
+            // Sin causa en el evento (A3 anterior a 0.6.0), el rechazo cuenta como `otro`
+            causa: aprobado ? null : (unoDe(p.causa, CAUSAS_RECHAZO) ?? 'otro'),
+            servicio_estado: servicioId ? servicioEstado : null,
+        },
+        empresas: [empresaId],
+    }
+}
+
+/**
+ * `promesa.*` (0.6.0, §7.4): promesa_id, empresa_id, cliente_id, servicio_id, tipo, canal,
+ * comprobante_id, vence, monto y, en `promesa.cancelada`, motivo. Lo que no trae el evento sale de
+ * `billing.promesas`. `tipo` y `comprobante_id` llegan de A3 (reconexión temporal); sin ellos, una
+ * promesa común (`promesa`, null).
+ */
+async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris | null> {
+    const promesaId = entero(p.promesa_id)
+    if (!promesaId) return null
+    const fila = (await db
+        .from('billing.promesas')
+        .where('id', promesaId)
+        .select('empresa_id', 'cliente_id', 'servicio_id', 'canal', 'monto', 'vence_en')
+        .first()) as {
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number
+        canal: string
+        monto: string
+        vence_en: Date
+    } | null
+    const empresaId = entero(p.empresa_id) ?? entero(fila?.empresa_id)
+    if (!empresaId) return null
+    return {
+        payload: {
+            promesa_id: promesaId,
+            empresa_id: empresaId,
+            cliente_id: entero(p.cliente_id) ?? entero(fila?.cliente_id),
+            servicio_id: entero(p.servicio_id) ?? entero(fila?.servicio_id),
+            tipo: unoDe(p.tipo, TIPOS_PROMESA) ?? 'promesa',
+            canal: unoDe(p.canal, CANALES_PROMESA) ?? unoDe(fila?.canal, CANALES_PROMESA),
+            comprobante_id: entero(p.comprobante_id),
+            vence: instanteIso(p.vence) ?? instanteIso(fila?.vence_en),
+            monto: decimal(p.monto) ?? decimal(fila?.monto),
+            ...(evento === 'promesa.cancelada' ? { motivo: texto(p.motivo) } : {}),
+        },
+        empresas: [empresaId],
+    }
+}
+
 /**
  * Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global,
  * salvo el de infraestructura compartida (`compartido`), que pasa siempre.
@@ -420,6 +570,16 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
         logger.debug(
             { outboxId: evento.id, evento: evento.evento },
             'iris: el conector habla un contrato anterior a 0.5.0; webhook no enviado',
+        )
+        return null
+    }
+    if (
+        (EVENTOS_DESDE_060 as readonly string[]).includes(evento.evento) &&
+        !(await conectorAdmite(CONTRATO_EVENTOS_060))
+    ) {
+        logger.debug(
+            { outboxId: evento.id, evento: evento.evento },
+            'iris: el conector habla un contrato anterior a 0.6.0; webhook no enviado',
         )
         return null
     }

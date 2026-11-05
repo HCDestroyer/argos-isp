@@ -40,6 +40,7 @@ import { listarEnviosHorus, listarRecibidosHorus } from '#integraciones/horus/li
 import { autenticarWebhook } from '#integraciones/horus/receptor'
 import {
     EnvioIris,
+    ResultadoWebhookIris,
     ResumenEnviosIris,
     listarEnviosIris,
     listarEnviosIrisValidator,
@@ -52,6 +53,8 @@ import GenerarEnlaceHorus, { hashCodigo } from '#integraciones/horus/actions/gen
 import CanjearEnlaceHorus from '#integraciones/horus/actions/canjear_enlace_horus'
 import ConectarConEnlaceHorus, { partirEnlace } from '#integraciones/horus/actions/conectar_con_enlace_horus'
 import AbrirEnHorus from '#integraciones/horus/actions/abrir_en_horus'
+import { autenticarWebhookIris } from '#integraciones/iris/receptor'
+import RecibirWebhookIris from '#integraciones/iris/actions/recibir_webhook_iris'
 
 const DESCRIPCION_CONECTOR =
     'Una configuración por instalación, apagada por defecto. Los secretos (`hf_pat_`, secretos de ' +
@@ -277,6 +280,32 @@ const integraciones: Ruta[] = [
         query: v.listarEnviosHorusValidator,
         respuesta: { status: 200, descripcion: 'Página de envíos', esquema: pagina(EnvioHorus) },
         handler: (ctx, { query }) => listarEnviosHorus(query, empresasDeLaLista(ctx.empresa)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/iris/webhook',
+        operacion: 'irisWebhook',
+        resumen: 'Receptor de webhooks de Iris (firmados con HMAC, lo llama Iris)',
+        descripcion:
+            'Contrato Iris 0.6.0 §1.3 y §6.6. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, ' +
+            'timestamp.cuerpo))>` con el secreto de entrada que Argos entregó en el canje (401 `firma_invalida`), ' +
+            '`X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `iris_apagado` con ' +
+            'el conector apagado. Cuerpo `{ id, evento, ocurrido_en, payload }`. Deduplica por `X-Webhook-Id`. ' +
+            '`aviso.entregado` / `aviso.fallido` actualizan el envío de notify (por `idempotency_key`); ' +
+            '`contacto.baja` deja de pedir avisos por WhatsApp a ese cliente. Eventos desconocidos se ignoran.',
+        etiqueta: 'integraciones',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 202, descripcion: 'Webhook recibido', esquema: ResultadoWebhookIris },
+        handler: async (ctx) => {
+            const entrada = await autenticarWebhookIris(ctx.request.raw() ?? '', {
+                id: ctx.request.header('x-webhook-id'),
+                timestamp: ctx.request.header('x-webhook-timestamp'),
+                firma: ctx.request.header('x-webhook-signature'),
+            })
+            const resultado = await new RecibirWebhookIris().execute(entrada, ctx.contextoAccion('webhook'))
+            return { recibido: true, ...resultado }
+        },
     }),
     definirRuta({
         metodo: 'get',

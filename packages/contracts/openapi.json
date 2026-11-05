@@ -28271,6 +28271,29 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/iris/webhook": {
+      "post": {
+        "operationId": "irisWebhook",
+        "summary": "Receptor de webhooks de Iris (firmados con HMAC, lo llama Iris)",
+        "description": "Contrato Iris 0.6.0 §1.3 y §6.6. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>` con el secreto de entrada que Argos entregó en el canje (401 `firma_invalida`), `X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `iris_apagado` con el conector apagado. Cuerpo `{ id, evento, ocurrido_en, payload }`. Deduplica por `X-Webhook-Id`. `aviso.entregado` / `aviso.fallido` actualizan el envío de notify (por `idempotency_key`); `contacto.baja` deja de pedir avisos por WhatsApp a ese cliente. Eventos desconocidos se ignoran.",
+        "tags": [
+          "integraciones"
+        ],
+        "responses": {
+          "202": {
+            "description": "Webhook recibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookIris"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
@@ -47100,6 +47123,17 @@
                     "required": [],
                     "additionalProperties": false
                   },
+                  "whatsapp": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Solo sale si además el conector Iris está activo y habla el contrato ≥ 0.6.0",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
                   "avisos": {
                     "type": "object",
                     "properties": {
@@ -47491,6 +47525,17 @@
                     "required": [],
                     "additionalProperties": false
                   },
+                  "whatsapp": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Solo sale si además el conector Iris está activo y habla el contrato ≥ 0.6.0",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
                   "avisos": {
                     "type": "object",
                     "properties": {
@@ -47801,6 +47846,120 @@
           }
         },
         "x-permiso": "notificaciones.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/consentimientos": {
+      "post": {
+        "operationId": "notificacionesConsentimientoRegistrar",
+        "summary": "Registrar «Acepta avisos por WhatsApp» de un cliente (permiso de contacto hacia Iris)",
+        "description": "Contrato Iris 0.6.0 §6.4 (A21). Lo llama el panel al crear o editar un cliente con la casilla (`origen = argos_panel`; el portal usa la misma acción con `argos_portal`). El registro vive solo en Iris: queda en la cola hacia `POST <iris>/mensajeria/consentimientos` (`entrega: pendiente`) y sale con el conector activo y contrato ≥ 0.6.0. Con `baja`, Argos deja de pedir avisos por WhatsApp al instante. Queda en la línea de tiempo del cliente.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "acepta",
+                      "baja"
+                    ],
+                    "description": "`acepta`: marcó «Acepta avisos por WhatsApp»; `baja`: la desmarcó"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "estado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Consentimiento en la cola hacia Iris",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentimientoWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.registrar_consentimiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.registrar_consentimiento",
         "x-implementado": true
       }
     },
@@ -48477,6 +48636,79 @@
           }
         },
         "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/whatsapp/clientes/{id}": {
+      "get": {
+        "operationId": "notificacionesWhatsappCliente",
+        "summary": "WhatsApp de un cliente: canal disponible, último estado de contacto y última marca enviada a Iris",
+        "description": "Para la ficha del cliente y la casilla «Acepta avisos por WhatsApp» (A4). `contacto.estado = baja` con `origen` `iris_*` es una baja que el cliente dio en el chat (`contacto.baja`, §6.4): Argos ya no le pide avisos por WhatsApp. No muestra el número: lo tiene Iris.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsappCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
         "x-implementado": true
       }
     },
@@ -64309,6 +64541,7 @@
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
+                        "notificaciones.registrar_consentimiento",
                         "notificaciones.ver",
                         "olts.crear",
                         "olts.editar",
@@ -64682,6 +64915,7 @@
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
+                        "notificaciones.registrar_consentimiento",
                         "notificaciones.ver",
                         "olts.crear",
                         "olts.editar",
@@ -76311,6 +76545,7 @@
                             "notificaciones.configurar",
                             "notificaciones.editar",
                             "notificaciones.probar",
+                            "notificaciones.registrar_consentimiento",
                             "notificaciones.ver",
                             "olts.crear",
                             "olts.editar",
@@ -87011,6 +87246,7 @@
           "sembrada_desde_entorno",
           "correo",
           "telegram",
+          "whatsapp",
           "avisos",
           "version",
           "created_at",
@@ -87191,6 +87427,18 @@
                   "null"
                 ],
                 "description": "Ruta del webhook de este bot: `/api/v1/telegram/webhook/<bot_id>`"
+              }
+            }
+          },
+          "whatsapp": {
+            "type": "object",
+            "required": [
+              "activo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Apagado por defecto; además necesita el conector Iris activo con contrato ≥ 0.6.0"
               }
             }
           },
@@ -87443,6 +87691,85 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ConsentimientoWhatsapp": {
+        "type": "object",
+        "required": [
+          "id",
+          "cliente_id",
+          "canal",
+          "estado",
+          "origen",
+          "ocurrido_en",
+          "idempotency_key",
+          "entrega",
+          "intentos",
+          "ultimo_error",
+          "enviado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "whatsapp"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "acepta",
+              "baja"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "argos_panel",
+              "argos_portal"
+            ]
+          },
+          "ocurrido_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "`argos:consentimiento:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)"
+          },
+          "entrega": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido"
+            ],
+            "description": "`pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -92606,6 +92933,8 @@
           "proveedor_id",
           "fallback_de",
           "enviado_en",
+          "entregado_en",
+          "leido_en",
           "created_at",
           "updated_at"
         ],
@@ -92703,6 +93032,22 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "entregado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "WhatsApp por Iris: cuándo Iris lo entregó (`aviso.entregado`)"
+          },
+          "leido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "WhatsApp por Iris: cuándo lo leyó el cliente"
           },
           "created_at": {
             "type": "string",
@@ -99197,6 +99542,7 @@
           "notificaciones.configurar",
           "notificaciones.editar",
           "notificaciones.probar",
+          "notificaciones.registrar_consentimiento",
           "notificaciones.ver",
           "olts.crear",
           "olts.editar",
@@ -99463,6 +99809,7 @@
           "Configurar los canales de notificación (correo SMTP, bot de Telegram, interruptores); solo admin",
           "Editar plantillas de notificaciones",
           "Enviar un mensaje de prueba por correo o Telegram con la configuración guardada",
+          "Marcar o quitar «Acepta avisos por WhatsApp» de un cliente (el permiso de contacto vive en Iris)",
           "Ver plantillas y envíos de notificaciones",
           "Registrar OLT",
           "Editar OLT y sus puertos PON",
@@ -112037,6 +112384,34 @@
           }
         }
       },
+      "ResultadoWebhookIris": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "estado",
+          "resultado"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "resultado": {
+            "type": "string",
+            "description": "`acuse_aplicado`, `sin_cambio`, `envio_no_encontrado`, `baja_registrada`, `baja_anterior`, `cliente_no_encontrado`, `evento_desconocido`, `payload_invalido` o `duplicado`"
+          }
+        }
+      },
       "ResultadoWebhookPasarela": {
         "type": "object",
         "required": [
@@ -112967,6 +113342,7 @@
               "notificaciones.configurar",
               "notificaciones.editar",
               "notificaciones.probar",
+              "notificaciones.registrar_consentimiento",
               "notificaciones.ver",
               "olts.crear",
               "olts.editar",
@@ -113129,6 +113505,7 @@
               "ipv6.ver",
               "lealtad.canjear",
               "lealtad.ver",
+              "notificaciones.registrar_consentimiento",
               "notificaciones.ver",
               "pagos.ver",
               "planes.ver",
@@ -119075,6 +119452,85 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "WhatsappCliente": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "canal",
+          "contacto",
+          "ultimo_consentimiento"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "object",
+            "required": [
+              "activo",
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "Interruptor de WhatsApp en la configuración que aplica"
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Encendido y con el conector Iris activo con contrato ≥ 0.6.0"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Por qué no está disponible"
+              }
+            }
+          },
+          "contacto": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "estado",
+              "ocurrido_en",
+              "origen"
+            ],
+            "properties": {
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "acepta",
+                  "baja"
+                ]
+              },
+              "ocurrido_en": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "origen": {
+                "type": "string",
+                "description": "`argos_panel`, `argos_portal` o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`"
+              }
+            },
+            "description": "Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris)"
+          },
+          "ultimo_consentimiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsentimientoWhatsapp"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

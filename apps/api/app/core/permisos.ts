@@ -188,6 +188,8 @@ export const PERMISOS = {
         'Configurar los canales de notificación (correo SMTP, bot de Telegram, interruptores); solo admin',
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
+    'notificaciones.registrar_consentimiento':
+        'Marcar o quitar «Acepta avisos por WhatsApp» de un cliente (el permiso de contacto vive en Iris)',
 
     'horus.ver':
         'Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)',
@@ -426,6 +428,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.ver',
             'clientes.crear',
             'clientes.editar',
+            'notificaciones.registrar_consentimiento',
             'clientes.estado_cuenta',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',

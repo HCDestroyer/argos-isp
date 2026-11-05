@@ -16,11 +16,15 @@ import { firmar, verificarFirma } from '#integraciones/horus/firma'
 import { ConsumidorIris } from '#integraciones/iris/consumidor'
 import {
     EVENTOS_A_IRIS,
+    EVENTOS_DESDE_060,
     entregarPendientesIris,
     fijarFetchEnviosIris,
     registrarEnvioIris,
 } from '#integraciones/iris/envios'
 import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
+
+/** Los eventos de §2.3 hasta 0.5.0 (los de 0.6.0 se prueban en `iris_webhooks_060.spec.ts`). */
+const EVENTOS_HASTA_050 = EVENTOS_A_IRIS.filter((e) => !(EVENTOS_DESDE_060 as readonly string[]).includes(e))
 
 /**
  * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los catorce eventos (con los eliminados
@@ -245,12 +249,12 @@ test.group('integraciones · iris · webhooks Argos → Iris', (group) => {
                 nas_ip: '10.0.0.1',
                 acct_session_id: 'x',
             })
-            assert.lengthOf(await db.from('integraciones.iris_envios'), EVENTOS_A_IRIS.length)
+            assert.lengthOf(await db.from('integraciones.iris_envios'), EVENTOS_HASTA_050.length)
 
             const r = await entregarPendientesIris()
-            assert.equal(r.enviados, EVENTOS_A_IRIS.length)
+            assert.equal(r.enviados, EVENTOS_HASTA_050.length)
             const recibidas = iris.de(RECEPTOR)
-            assert.lengthOf(recibidas, EVENTOS_A_IRIS.length)
+            assert.lengthOf(recibidas, EVENTOS_HASTA_050.length)
             const porEvento = new Map(recibidas.map((p) => [p.json.evento as string, p]))
 
             for (const [nombre, outboxId] of Object.entries(ids)) {

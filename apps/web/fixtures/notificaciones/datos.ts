@@ -48,6 +48,8 @@ export const configuracionGlobal: Configuracion = {
         webhook_secreto: null,
         webhook_ruta: null,
     },
+    // WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6): apagado por defecto
+    whatsapp: { activo: false },
     avisos: { ...AVISOS_TODOS },
     version: 0,
     created_at: null,
@@ -98,6 +100,8 @@ const enviado = (id: number, extra: Partial<Schema<'EnvioNotificacion'>>): Schem
     proveedor_id: `<${id}@argosisp.local>`,
     fallback_de: null,
     enviado_en: `2026-10-0${Math.min(id, 9)}T15:00:05.000Z`,
+    entregado_en: null,
+    leido_en: null,
     created_at: `2026-10-0${Math.min(id, 9)}T15:00:00.000Z`,
     updated_at: `2026-10-0${Math.min(id, 9)}T15:00:05.000Z`,
     ...extra,

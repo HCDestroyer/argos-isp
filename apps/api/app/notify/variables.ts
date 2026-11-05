@@ -34,6 +34,11 @@ export interface Destinatario {
     telegramChatId: string | null
     /** código de cliente (`core.clientes.codigo`); `{{cliente.codigo}}` */
     codigo?: string | null
+    /**
+     * Destino de WhatsApp por Iris (`iris:cliente:<id>`, sin número: Iris lo resuelve). Lo fija
+     * `ProgramarNotificacion` solo si el canal está encendido y el cliente no dio de baja (`whatsapp.ts`).
+     */
+    whatsapp?: string | null
 }
 
 function entero(valor: unknown): number | null {
@@ -303,9 +308,18 @@ export function mbps(kbps: unknown): string {
     return Number.isInteger(valor) ? String(valor) : String(Math.round(valor * 10) / 10)
 }
 
+/** El motivo de `evaluarEstadoServicio` cuando corta o limita por facturas vencidas. */
+const POR_FACTURAS_VENCIDAS = /\d+ facturas? vencidas? \(se (corta|limita) con/
+
 function variablesEstado(payload: Payload): Variables {
     const a = texto(payload.a)
+    const de = texto(payload.de)
+    const motivo = texto(payload.motivo) ?? ''
     return {
+        /** corte o límite por facturas vencidas (no una suspensión manual) */
+        por_falta_de_pago: (a === 'suspendido' || a === 'limitado') && POR_FACTURAS_VENCIDAS.test(motivo),
+        /** vuelve a `activo` después de un corte o un límite */
+        reactivado: a === 'activo' && (de === 'suspendido' || de === 'limitado'),
         de: texto(payload.de) ?? '',
         a: a ?? '',
         motivo: texto(payload.motivo) ?? '',

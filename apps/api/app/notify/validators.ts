@@ -169,6 +169,16 @@ const telegramConfig = () =>
         })
         .optional()
 
+const whatsappConfig = () =>
+    vine
+        .object({
+            activo: vine.boolean().optional().meta({
+                description:
+                    'WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Solo sale si además el conector Iris está activo y habla el contrato ≥ 0.6.0',
+            }),
+        })
+        .optional()
+
 const avisosConfig = () =>
     vine
         .object({
@@ -195,6 +205,7 @@ export const configurarNotificacionesGlobalValidator = vine.compile(
         version: versionConfig(),
         correo: correoConfig(),
         telegram: telegramConfig(),
+        whatsapp: whatsappConfig(),
         avisos: avisosConfig(),
     }),
 )
@@ -208,6 +219,7 @@ export const configurarNotificacionesEmpresaValidator = vine.compile(
             .meta({ description: 'true: usa la configuración global (por defecto en una empresa nueva)' }),
         correo: correoConfig(),
         telegram: telegramConfig(),
+        whatsapp: whatsappConfig(),
         avisos: avisosConfig(),
     }),
 )
@@ -240,5 +252,14 @@ export const vistaPreviaPlantillaValidator = vine.compile(
             .minLength(1)
             .maxLength(4000)
             .meta({ description: 'Cuerpo Mustache sin guardar' }),
+    }),
+)
+
+export const registrarConsentimientoValidator = vine.compile(
+    vine.object({
+        cliente_id: vine.number().withoutDecimals().positive(),
+        estado: vine.enum(['acepta', 'baja'] as const).meta({
+            description: '`acepta`: marcó «Acepta avisos por WhatsApp»; `baja`: la desmarcó',
+        }),
     }),
 )
