@@ -127,7 +127,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/lealtad/premios', espera: 'Un mes gratis de internet' },
         { ruta: '/lealtad/canjes', espera: 'Sin canjes' },
         { ruta: '/planes/1', espera: 'profile argos-hogar' },
-        { ruta: '/routers/1', espera: '100.64.10.0/24' },
+        { ruta: '/routers/1?pestana=pools', espera: '100.64.10.0/24' },
         { ruta: '/configuracion/cuentas-bancarias', espera: 'Cuentas bancarias' },
         { ruta: '/configuracion/empresa', espera: 'Contacto y pagos' },
         { ruta: '/configuracion/empresas', espera: 'Empresas' },
@@ -181,7 +181,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
 
     // Control: con admin las mismas pantallas sí muestran sus acciones (la prueba de arriba no pasa en vacío).
     // /routers no tiene acciones en la lista (Velocidad abre el panel, cuyas acciones van aparte).
-    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', '/usuarios/roles', '/usuarios/tokens', '/plantillas', '/cobros/pasarela', '/lealtad/premios', '/routers/1', '/configuracion/nodos-portal', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
+    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', '/usuarios/roles', '/usuarios/tokens', '/plantillas', '/cobros/pasarela', '/lealtad/premios', '/routers/1?pestana=pools', '/configuracion/nodos-portal', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
         it(`${ruta}: con admin sí hay botones de acción`, async () => {
             const wrapper = await montar(ruta)
             await esperar(() => expect(botones(wrapper.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))

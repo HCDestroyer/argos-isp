@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Router sin RADIUS (A1, `modo_seguridad = 'api'`), en escritorio y teléfono: el alta no pide la IP
@@ -40,6 +40,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(page.locator('[data-prueba="router-modo-seguridad"]')).toHaveText('Sin RADIUS')
     await expect(page.locator('[data-prueba="router-pppoe-sin-radius"]')).toContainText('PPPoE va con secrets locales')
     await expect(page.locator('[data-prueba="router-pppoe-sin-radius"]')).toContainText('cada minuto')
+    await pestanaRouter(page, 'Conexión')
     // Script de conexión en su variante sin RADIUS (túnel y API, `use-radius=no`).
     const conexion = page.locator('[data-prueba="conexion-router"]')
     await expect(conexion.locator('[data-prueba="abrir-script"]')).toBeEnabled()
@@ -54,6 +55,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(script).toBeHidden()
 
     // Una red IPv4 para las IP de los servicios.
+    await pestanaRouter(page, 'Pools e IPs')
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')
     await direccionamiento.locator('[data-prueba="agregar-red"]').click()
     const red = page.getByRole('dialog', { name: 'Agregar red IPv4' })

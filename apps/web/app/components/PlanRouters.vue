@@ -4,7 +4,8 @@ import type { FormSubmitEvent, SelectItem, TableColumn } from '@nuxt/ui'
 
 /**
  * Implementación del plan por router (A1, brief tarea 7): profile PPP, pools, `local-address`,
- * rate-limit propio y excepciones de velocidad del plan en cada router (`null` = hereda del plan).
+ * rate-limit propio. El modo de velocidad es único por router (decisión del PM): una excepción
+ * heredada se ve marcada y se unifica desde la ficha del router.
  * Leer pide `planes.ver` (el de la página); crear o editar, `planes.editar`. Los nombres de los
  * routers se leen con `routers.ver`; sin él se ve el id.
  */
@@ -46,13 +47,7 @@ const columnas: TableColumn<PlanRouter>[] = [
 
 /* Velocidad del plan en un router y sincronizar (`contratos/control-velocidad.md`). */
 const seleccionada = shallowRef<PlanRouter | null>(null)
-const estrategiaAbierta = ref(false)
 const sincronizarAbierto = ref(false)
-
-function abrirEstrategia(implementacion: PlanRouter) {
-    seleccionada.value = implementacion
-    estrategiaAbierta.value = true
-}
 
 function abrirSincronizar(implementacion: PlanRouter) {
     seleccionada.value = implementacion
@@ -160,13 +155,14 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
                 >
                     <span class="text-sm font-medium text-highlighted">{{ nombreRouter(row.original.router_id) }}</span>
                     <span class="text-xs text-muted">{{ resumenImplementacion(row.original) }}</span>
-                    <UBadge
+                    <UButton
                         v-if="tieneExcepcion(row.original.estrategia_velocidad)"
-                        label="Velocidad propia en este router"
-                        icon="i-lucide-sliders-horizontal"
-                        color="info"
-                        variant="subtle"
-                        size="sm"
+                        :to="`/routers/${row.original.router_id}`"
+                        label="Velocidad propia heredada: unificar en el router"
+                        icon="i-lucide-split"
+                        color="warning"
+                        variant="soft"
+                        size="xs"
                         class="self-start"
                         :data-prueba="`excepcion-plan-${row.original.router_id}`"
                     />
@@ -181,16 +177,6 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
             </template>
             <template #acciones-cell="{ row }">
                 <div class="flex justify-end gap-1">
-                    <UButton
-                        v-if="puede('routers.cambiar_control_velocidad') && puede('routers.ver')"
-                        icon="i-lucide-sliders-horizontal"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`Velocidad del plan en ${nombreRouter(row.original.router_id)}`"
-                        :data-prueba="`estrategia-plan-${row.original.router_id}`"
-                        @click="abrirEstrategia(row.original)"
-                    />
                     <UButton
                         v-if="puede('planes.sincronizar')"
                         icon="i-lucide-refresh-cw"
@@ -370,14 +356,6 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
             </template>
         </USlideover>
 
-        <EstrategiaPlanModal
-            v-if="seleccionada && puede('routers.cambiar_control_velocidad') && puede('routers.ver')"
-            v-model:open="estrategiaAbierta"
-            :plan="plan"
-            :router-id="seleccionada.router_id"
-            :implementacion="seleccionada"
-            @guardado="cargar"
-        />
         <SincronizarPlanModal
             v-if="seleccionada && puede('planes.sincronizar')"
             v-model:open="sincronizarAbierto"

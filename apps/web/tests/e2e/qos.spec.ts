@@ -66,7 +66,7 @@ test('router simple: QoS deshabilitado con el porqué de la matriz; la ficha dic
     await expect(extra.getByRole('switch')).toBeDisabled()
     await expect(extra).toContainText('No disponible: RADIUS por sesión no tiene hojas por clase: qos (prioridad por clases) solo con arbol_pcq.')
 
-    await page.goto('/routers/1')
+    await page.goto('/routers/1?pestana=avanzado')
     const seccion = page.locator('[data-prueba="router-qos"]')
     await expect(seccion.locator('[data-prueba="qos-perfil-router"]')).toHaveText('Predeterminado')
     await expect(seccion.locator('[data-prueba="qos-estado-router"]')).toContainText('Apagado')
