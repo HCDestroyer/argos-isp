@@ -6,6 +6,7 @@ import {
     crearClienteFila,
     crearPlanFila,
     crearRouterFila,
+    crearServicioFila,
     redUnica,
 } from '#tests/core/fabricas'
 import { registrosAaaPorServicio } from '#core/aaa'
@@ -681,5 +682,75 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         assert.deepInclude(v300.argos, { estado: 'adoptado', id: adoptado.vlans[0].id })
         assert.equal(despues.servidores_pppoe[0].argos.estado, 'adoptado')
         assert.deepEqual(despues.sin_router, [])
+    })
+})
+
+test.group('Red de acceso · unir routers', (group) => {
+    let tecnico: string
+    group.setup(async () => {
+        ;({ token: tecnico } = await usuarioConRoles(['tecnico']))
+    })
+
+    test('VLAN y servidores pasan al que queda; los repetidos se resuelven a los suyos', async ({
+        client,
+        assert,
+    }) => {
+        const queda = await crearRouterFila()
+        const absorbido = await crearRouterFila()
+        const redQueda = await crearRed(queda)
+        const redAbs = await crearRed(absorbido)
+        const vlanRepetida = (url: number) =>
+            cuerpo(
+                client
+                    .post(`/api/v1/routers/${url}/vlans`)
+                    .bearerToken(tecnico)
+                    .json({ interfaz_padre: 'sfp1', vlan_id: 500 }),
+                201,
+            )
+        const vQueda = await vlanRepetida(queda)
+        const vAbs = await vlanRepetida(absorbido)
+        const vSola = await cuerpo(
+            client
+                .post(`/api/v1/routers/${absorbido}/vlans`)
+                .bearerToken(tecnico)
+                .json({ interfaz_padre: 'sfp1', vlan_id: 501 }),
+            201,
+        )
+        const sQueda = await crearServidor(client, tecnico, queda, {
+            vlan_id: vQueda.id,
+            red_ipv4_id: redQueda.id,
+        })
+        const sAbs = await crearServidor(client, tecnico, absorbido, {
+            vlan_id: vAbs.id,
+            red_ipv4_id: redAbs.id,
+        })
+        const sSolo = await crearServidor(client, tecnico, absorbido, {
+            vlan_id: vSola.id,
+            red_ipv4_id: redAbs.id,
+        })
+        const servicioId = await crearServicioFila({
+            cliente_id: await crearClienteFila(),
+            router_id: absorbido,
+            ipv6_modo: 'ninguno',
+            servidor_pppoe_id: sAbs.id,
+        })
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const router = await db.from('network.routers').where('id', queda).firstOrFail()
+        await estado(
+            client
+                .post(`/api/v1/routers/${queda}/unir`)
+                .bearerToken(admin)
+                .json({ version: router.version, absorber_id: absorbido }),
+            200,
+        )
+        const servicio = await db.from('core.servicios').where('id', servicioId).firstOrFail()
+        assert.equal(Number(servicio.router_id), queda)
+        assert.equal(Number(servicio.servidor_pppoe_id), sQueda.id)
+        assert.isNull(await db.from('network.servidores_pppoe').where('id', sAbs.id).first())
+        assert.isNull(await db.from('network.vlans').where('id', vAbs.id).first())
+        const movido = await db.from('network.servidores_pppoe').where('id', sSolo.id).firstOrFail()
+        assert.equal(Number(movido.router_id), queda)
+        const vlanMovida = await db.from('network.vlans').where('id', vSola.id).firstOrFail()
+        assert.equal(Number(vlanMovida.router_id), queda)
     })
 })
