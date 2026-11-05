@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { ejecutarCronCore } from '#core/jobs'
+import { descifrar } from '#shared/cifrado'
 import { CONTRATO_IRIS, PLAZO_CONFIRMAR_CANJE_IRIS_MS } from '#integraciones/iris/configuracion'
 
 /**
@@ -17,7 +18,7 @@ const BASE_IRIS = '/api/v1/integraciones/iris'
 const IRIS = 'https://iris.isp.example'
 const ARGOS = 'https://api.argos.isp.example'
 
-function canje(codigo: string) {
+function canje(codigo: string, extra: Record<string, unknown> = {}) {
     return {
         codigo,
         sistema: 'iris',
@@ -29,6 +30,7 @@ function canje(codigo: string) {
         },
         contrato: '0.6.2',
         receptor_argos: true,
+        ...extra,
     }
 }
 
@@ -37,12 +39,12 @@ async function limpiarIris() {
     await db.from('integraciones.iris_conector').delete()
 }
 
-async function canjear(client: any, admin: string) {
+async function canjear(client: any, admin: string, extra: Record<string, unknown> = {}) {
     const r = await estado(client.post(`${BASE_IRIS}/enlace`).bearerToken(admin), 201)
     const codigo = (r.body().enlace as string).split('#')[1]!
-    const cuerpo = canje(codigo)
+    const cuerpo = canje(codigo, extra)
     const c = await estado(client.post(`${BASE_IRIS}/conexion/canjear`).json(cuerpo), 200)
-    return { cuerpo, atk: c.body().token as string }
+    return { cuerpo, atk: c.body().token as string, respuesta: c.body() }
 }
 
 async function vista(client: any, admin: string) {
@@ -58,6 +60,11 @@ async function estadoCanje(client: any, admin: string) {
 async function tokenDelConector(): Promise<number> {
     const fila = await filaConector()
     return Number(fila.token_argos_id)
+}
+
+async function pendienteDelConector(): Promise<number | null> {
+    const fila = await filaConector()
+    return fila.pendiente_token_argos_id
 }
 
 async function filaConector() {
@@ -214,7 +221,7 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
             'iris_canjes_sin_uso',
             despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS + 60_000),
         )
-        assert.deepEqual(corrida.resultado, { resultado: 'desconectado' })
+        assert.deepEqual(corrida.resultado, { resultado: 'desconectado', reconexion: null })
         assert.isTrue(await tokenRevocado(tokenId))
         const fila = await filaConector()
         assert.isFalse(fila.activo)
@@ -253,9 +260,17 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
         // lo que hace Iris al activar su conector: PUT del contrato (nunca llama a revocar)
         await estado(client.put(`${BASE_IRIS}/contrato`).bearerToken(atk).json({ contrato: '0.6.2' }), 200)
 
-        const corrida = await ejecutarCronCore('iris_canjes_sin_uso', despuesDe(60_000))
-        assert.deepEqual(corrida.resultado, { resultado: 'confirmado' })
+        // la primera llamada ya lo confirmó (guard): el cron no tiene nada que hacer
         assert.equal(await estadoCanje(client, admin), 'confirmado')
+        const confirmacion = await db
+            .from('audit.acciones')
+            .where('accion', 'iris.confirmar_canje')
+            .orderBy('id', 'desc')
+            .first()
+        assert.equal(confirmacion.resultado, 'ok')
+        assert.equal(confirmacion.actor_tipo, 'token')
+        const corrida = await ejecutarCronCore('iris_canjes_sin_uso', despuesDe(60_000))
+        assert.isNull(corrida.resultado)
 
         const tarde = await ejecutarCronCore(
             'iris_canjes_sin_uso',
@@ -273,12 +288,32 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
         const { token: admin } = await usuarioConRoles(['admin'])
         const { atk } = await canjear(client, admin)
         await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(atk), 200)
+        assert.equal(await estadoCanje(client, admin), 'confirmado')
         const corrida = await ejecutarCronCore(
             'iris_canjes_sin_uso',
             despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS + 60_000),
         )
-        assert.deepEqual(corrida.resultado, { resultado: 'confirmado' })
+        assert.isNull(corrida.resultado)
         assert.isFalse(await tokenRevocado(await tokenDelConector()))
+    })
+
+    test('respaldo: si el guard no alcanzó a confirmar, el cron confirma por ultimo_uso', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        await canjear(client, admin)
+        const tokenId = await tokenDelConector()
+        await db
+            .from('core.tokens_api')
+            .where('id', tokenId)
+            .update({ ultimo_uso: db.knexRawQuery('now()') })
+        const corrida = await ejecutarCronCore(
+            'iris_canjes_sin_uso',
+            despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS + 60_000),
+        )
+        assert.deepEqual(corrida.resultado, { resultado: 'confirmado', reconexion: null })
+        assert.isFalse(await tokenRevocado(tokenId))
     })
 
     test('un conector existente (confirmado por la migración) nunca vence', async ({ client, assert }) => {
@@ -320,6 +355,63 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
         assert.isTrue(await tokenRevocado(segundoId))
     })
 
+    test('encender a mano un conector desconectado: queda sin canje y el barrido no lo vuelve a tocar', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        await canjear(client, admin)
+        const corrida = await ejecutarCronCore(
+            'iris_canjes_sin_uso',
+            despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS + 60_000),
+        )
+        assert.equal(corrida.resultado?.resultado, 'desconectado')
+        const antes = await filaConector()
+
+        const tokenNuevo = `iris_pat_${'Mn5Op4Qr'.repeat(5)}`
+        const r = await estado(
+            client
+                .put(BASE_IRIS)
+                .bearerToken(admin)
+                .json({ version: Number(antes.version), token: tokenNuevo, activo: true }),
+            200,
+        )
+        const v = r.body()
+        assert.isTrue(v.activo)
+        assert.equal(v.token, '***')
+        assert.isNull(v.estado_canje)
+        assert.isNull(v.canje_vence_en)
+        assert.isNull(v.desconectado_en)
+        assert.isNull(v.motivo_desconexion)
+        assert.isNull(v.conectado_por_enlace_en)
+        assert.isNull(v.token_argos_id)
+        assert.deepEqual(await vista(client, admin), v)
+
+        const tarde = await ejecutarCronCore(
+            'iris_canjes_sin_uso',
+            despuesDe(3 * PLAZO_CONFIRMAR_CANJE_IRIS_MS),
+        )
+        assert.isNull(tarde.resultado)
+        const fila = await filaConector()
+        assert.isTrue(fila.activo)
+        assert.equal(descifrar(fila.token_cifrado), tokenNuevo)
+
+        // conector a mano: Iris usa un atk_ creado en el panel
+        const otro = await estado(
+            client.post(`${BASE_IRIS}/tokens`).bearerToken(admin).json({ nombre: 'Iris (a mano)' }),
+            201,
+        )
+        await estado(
+            client.put(`${BASE_IRIS}/contrato`).bearerToken(otro.body().token).json({ contrato: '0.6.3' }),
+            200,
+        )
+        // y un canje nuevo sobre él es una reconexión: el conector sigue hasta la primera llamada
+        await canjear(client, admin)
+        const conPendiente = await filaConector()
+        assert.isNotNull(conPendiente.pendiente_token_argos_id)
+        assert.equal(descifrar(conPendiente.token_cifrado), tokenNuevo)
+    })
+
     test('dos corridas a la vez: una sola desconecta', async ({ client, assert }) => {
         const { token: admin } = await usuarioConRoles(['admin'])
         await canjear(client, admin)
@@ -330,5 +422,211 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
         ])
         const desconectadas = corridas.filter((c) => c.resultado?.resultado === 'desconectado')
         assert.lengthOf(desconectadas, 1)
+    })
+})
+
+test.group('Iris 0.6.3 · reconexión: el atk_ anterior se revoca al confirmar el canje nuevo', (group) => {
+    group.each.setup(async () => {
+        process.env.API_PUBLIC_URL = ARGOS
+        await limpiarIris()
+        return async () => {
+            await limpiarIris()
+            delete process.env.API_PUBLIC_URL
+            await soloEmpresaPrincipal()
+        }
+    })
+
+    const NUEVO = {
+        token: `iris_pat_${'Nv7Bc6Xz'.repeat(5)}`,
+        webhook: {
+            url: `${IRIS}/api/v1/integraciones/argosisp/webhook/c-2`,
+            secreto: 'secreto-nuevo-del-receptor-de-iris-987654',
+        },
+        contrato: '0.6.3',
+        receptor_argos: true,
+    }
+
+    /** Conector en uso: canjeado, confirmado (Iris lo usó), encendido y con receptor_argos false. */
+    async function conectorEnUso(client: any, admin: string) {
+        const viejo = await canjear(client, admin, { receptor_argos: false })
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(viejo.atk), 200)
+        const fila = await filaConector()
+        await estado(
+            client
+                .put(BASE_IRIS)
+                .bearerToken(admin)
+                .json({ version: Number(fila.version), activo: true }),
+            200,
+        )
+        return { ...viejo, tokenId: Number(fila.token_argos_id), fila: await filaConector() }
+    }
+
+    /** Lo que se conserva del conector mientras la reconexión está pendiente. */
+    function enUso(fila: any) {
+        return {
+            activo: fila.activo,
+            url_base: fila.url_base,
+            token: descifrar(fila.token_cifrado),
+            webhook_salida_url: fila.webhook_salida_url,
+            webhook_salida_secreto: descifrar(fila.webhook_salida_secreto_cifrado),
+            webhook_entrada_secreto: descifrar(fila.webhook_entrada_secreto_cifrado),
+            token_argos_id: Number(fila.token_argos_id),
+            contrato: fila.contrato,
+            receptor_argos: fila.receptor_argos,
+            conectado_por_enlace_en: new Date(fila.conectado_por_enlace_en).toISOString(),
+            canje_confirmado_en: new Date(fila.canje_confirmado_en).toISOString(),
+        }
+    }
+
+    test('reconectar y confirmar: el anterior sigue hasta la primera llamada del nuevo', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const viejo = await conectorEnUso(client, admin)
+
+        const nuevo = await canjear(client, admin, NUEVO)
+        const pendiente = await filaConector()
+        assert.deepEqual(enUso(pendiente), enUso(viejo.fila))
+        assert.isNotNull(pendiente.pendiente_token_argos_id)
+        assert.isFalse(await tokenRevocado(viejo.tokenId))
+        const v = await vista(client, admin)
+        assert.equal(v.estado_canje, 'confirmado')
+        assert.isNotNull(v.reconexion_pendiente_desde)
+        assert.equal(
+            new Date(v.reconexion_vence_en).getTime(),
+            new Date(v.reconexion_pendiente_desde).getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_MS,
+        )
+        // el atk_ anterior sigue funcionando (varias llamadas) y no confirma nada
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(viejo.atk), 200)
+        await estado(
+            client.put(`${BASE_IRIS}/contrato`).bearerToken(viejo.atk).json({ contrato: '0.6.2' }),
+            200,
+        )
+        assert.isNotNull(await pendienteDelConector())
+        // la primera llamada del atk_ nuevo lo confirma: aquí el PUT del contrato, que Iris hace al activar
+        await estado(
+            client.put(`${BASE_IRIS}/contrato`).bearerToken(nuevo.atk).json({ contrato: '0.6.3' }),
+            200,
+        )
+        assert.isTrue(await tokenRevocado(viejo.tokenId))
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(viejo.atk), 401)
+
+        const fila = await filaConector()
+        assert.isTrue(fila.activo)
+        assert.equal(descifrar(fila.token_cifrado), NUEVO.token)
+        assert.equal(fila.webhook_salida_url, NUEVO.webhook.url)
+        assert.equal(descifrar(fila.webhook_salida_secreto_cifrado), NUEVO.webhook.secreto)
+        assert.equal(descifrar(fila.webhook_entrada_secreto_cifrado), nuevo.respuesta.webhook.secreto)
+        assert.equal(fila.contrato, '0.6.3')
+        assert.isTrue(fila.receptor_argos)
+        assert.isNotNull(fila.canje_confirmado_en)
+        assert.isNull(fila.pendiente_token_argos_id)
+        assert.isNull(fila.pendiente_secreto_cifrado)
+        assert.notEqual(Number(fila.token_argos_id), viejo.tokenId)
+        const vista2 = await vista(client, admin)
+        assert.isNull(vista2.reconexion_pendiente_desde)
+        assert.isFalse(vista2.requiere_reconectar)
+
+        const confirmacion = await db
+            .from('audit.acciones')
+            .where('accion', 'iris.confirmar_canje')
+            .orderBy('id', 'desc')
+            .first()
+        assert.equal(confirmacion.resultado, 'ok')
+        // los secretos pendientes quedan como *** en audit.cambios
+        const cambio = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'conector_iris', entidad_id: 1, campo: 'pendiente_secreto_cifrado' })
+            .orderBy('id', 'asc')
+            .first()
+        assert.equal(String(cambio.despues).replaceAll('"', ''), '***')
+    })
+
+    test('reconectar y revocar: el anterior queda vivo y sin cambios', async ({ client, assert }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const viejo = await conectorEnUso(client, admin)
+        const nuevo = await canjear(client, admin, NUEVO)
+        const pendienteId = Number(await pendienteDelConector())
+
+        await estado(client.post(`${BASE_IRIS}/conexion/revocar`).bearerToken(nuevo.atk), 204)
+        assert.isTrue(await tokenRevocado(pendienteId))
+        assert.isFalse(await tokenRevocado(viejo.tokenId))
+        const fila = await filaConector()
+        assert.deepEqual(enUso(fila), enUso(viejo.fila))
+        assert.isNull(fila.pendiente_token_argos_id)
+        assert.isNull(fila.desconectado_en)
+        await estado(client.post(`${BASE_IRIS}/conexion/revocar`).bearerToken(nuevo.atk), 401)
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(viejo.atk), 200)
+        await estado(client.post(`${BASE_IRIS}/conexion/canjear`).json(nuevo.cuerpo), 410)
+    })
+
+    test('reconectar y vencer: a las 24 h sin uso se descarta y el anterior sigue', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const viejo = await conectorEnUso(client, admin)
+        const nuevo = await canjear(client, admin, NUEVO)
+        const pendienteId = Number(await pendienteDelConector())
+
+        const temprano = await ejecutarCronCore(
+            'iris_canjes_sin_uso',
+            despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS - 60_000),
+        )
+        assert.isNull(temprano.resultado)
+        const corrida = await ejecutarCronCore(
+            'iris_canjes_sin_uso',
+            despuesDe(PLAZO_CONFIRMAR_CANJE_IRIS_MS + 60_000),
+        )
+        assert.deepEqual(corrida.resultado, { resultado: 'sin_cambios', reconexion: 'vencida' })
+        assert.isTrue(await tokenRevocado(pendienteId))
+        assert.isFalse(await tokenRevocado(viejo.tokenId))
+        const fila = await filaConector()
+        assert.deepEqual(enUso(fila), enUso(viejo.fila))
+        assert.isNull(fila.pendiente_token_argos_id)
+        await estado(
+            client.put(`${BASE_IRIS}/contrato`).bearerToken(nuevo.atk).json({ contrato: '0.6.3' }),
+            401,
+        )
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(viejo.atk), 200)
+    })
+
+    test('dos canjes pendientes seguidos: el segundo reemplaza al primero, que se revoca', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const viejo = await conectorEnUso(client, admin)
+        const primero = await canjear(client, admin, NUEVO)
+        const primerId = Number(await pendienteDelConector())
+        const segundo = await canjear(client, admin, { ...NUEVO, contrato: '0.6.3-rc.2' })
+        const fila = await filaConector()
+        const segundoId = Number(fila.pendiente_token_argos_id)
+        assert.notEqual(segundoId, primerId)
+        assert.isTrue(await tokenRevocado(primerId))
+        assert.isFalse(await tokenRevocado(viejo.tokenId))
+        assert.deepEqual(enUso(fila), enUso(viejo.fila))
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(primero.atk), 401)
+
+        await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(segundo.atk), 200)
+        const final = await filaConector()
+        assert.equal(Number(final.token_argos_id), segundoId)
+        assert.equal(final.contrato, '0.6.3-rc.2')
+        assert.isTrue(await tokenRevocado(viejo.tokenId))
+    })
+
+    test('sobre un conector que nadie usó, el canje nuevo lo reemplaza al momento', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        await canjear(client, admin)
+        const primerId = await tokenDelConector()
+        await canjear(client, admin, NUEVO)
+        const fila = await filaConector()
+        assert.isTrue(await tokenRevocado(primerId))
+        assert.isNull(fila.pendiente_token_argos_id)
+        assert.equal(descifrar(fila.token_cifrado), NUEVO.token)
     })
 })

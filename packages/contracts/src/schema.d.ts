@@ -3715,7 +3715,7 @@ export interface paths {
         put?: never;
         /**
          * Iris revoca su propio token atk_ (por ejemplo, al rechazar un canje)
-         * @description Contrato Iris 0.6.3. Solo con el token `atk_` del usuario técnico Iris, y revoca ese mismo token (403 con cualquier otra credencial). Si es el `atk_` del último canje, el conector queda desconectado: apagado, sin secretos, `estado_canje: desconectado` y `motivo_desconexion: revocado_por_iris` en `GET /integraciones/iris`, sin borrar el historial; volver a conectar es otro canje. Sin cuerpo; responde 204. Repetirlo con el mismo token responde 401 (el token ya no autentica): para Iris, 204 y 401 significan que el token ya no sirve. Permiso `sso.emitir`, que el token de Iris ya tiene (como `PUT /integraciones/iris/contrato`).
+         * @description Contrato Iris 0.6.3. Solo con el token `atk_` del usuario técnico Iris, y revoca ese mismo token (403 con cualquier otra credencial). Si es el `atk_` de una reconexión pendiente, la descarta y el conector sigue igual con el `atk_` anterior. Si es el `atk_` del último canje, el conector queda desconectado: apagado, sin secretos, `estado_canje: desconectado` y `motivo_desconexion: revocado_por_iris` en `GET /integraciones/iris`, sin borrar el historial; volver a conectar es otro canje. Sin cuerpo; responde 204. Repetirlo con el mismo token responde 401 (el token ya no autentica): para Iris, 204 y 401 significan que el token ya no sirve. Permiso `sso.emitir`, que el token de Iris ya tiene (como `PUT /integraciones/iris/contrato`).
          */
         post: operations["irisConexionRevocar"];
         delete?: never;
@@ -12737,6 +12737,16 @@ export interface components {
              * @enum {string|null}
              */
             motivo_desconexion?: "revocado_por_iris" | "canje_sin_uso" | null;
+            /**
+             * Format: date-time
+             * @description Contrato Iris 0.6.3: cuándo se canjeó un enlace nuevo sobre este conector en uso. Hasta su primera llamada autenticada, el conector sigue con el canje anterior (su `atk_`, URL y secretos); al confirmarse se aplica y se revoca el `atk_` anterior. null si no hay
+             */
+            reconexion_pendiente_desde?: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior sigue igual. null si no hay
+             */
+            reconexion_vence_en?: string | null;
             version: number;
         };
         ConexionRouter: {

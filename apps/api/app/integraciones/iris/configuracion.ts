@@ -143,6 +143,11 @@ export interface FilaConectorIris {
     /** el conector quedó sin credenciales (0.6.3); null si no */
     desconectado_en: Date | null
     motivo_desconexion: MotivoDesconexionIris | null
+    /** reconexión (0.6.3): `atk_` del canje pendiente de confirmar sobre un conector en uso */
+    pendiente_token_argos_id: number | null
+    pendiente_canjeado_en: Date | null
+    /** `JuegoPendienteIris` cifrado */
+    pendiente_secreto_cifrado: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -271,6 +276,32 @@ export type MotivoDesconexionIris = 'revocado_por_iris' | 'canje_sin_uso'
  */
 export const PLAZO_CONFIRMAR_CANJE_IRIS_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Reconexión (0.6.3): lo que un canje sobre un conector en uso deja pendiente y se aplica al
+ * confirmarlo (primera llamada autenticada de su `atk_`). Se guarda cifrado entero.
+ */
+export interface JuegoPendienteIris {
+    url_base: string
+    /** `iris_pat_` del canje nuevo */
+    token: string
+    webhook_salida_url: string
+    webhook_salida_secreto: string
+    /** secreto del receptor de Argos entregado en el canje nuevo */
+    webhook_entrada_secreto: string
+    contrato: string | null
+    receptor_argos: boolean | null
+}
+
+/**
+ * ¿El conector está en uso, de modo que un canje nuevo debe quedar pendiente en vez de
+ * reemplazarlo? Sí si tiene credenciales de Iris, no está desconectado y, si se preparó con un
+ * enlace, ese canje ya se confirmó. Un conector configurado a mano cuenta como en uso.
+ */
+export function conectorIrisEnUso(fila: FilaConectorIris | null): boolean {
+    if (!fila || fila.desconectado_en || !fila.token_cifrado) return false
+    return !fila.conectado_por_enlace_en || fila.canje_confirmado_en !== null
+}
+
 // ── Escritura ────────────────────────────────────────────────────────────────────────────────
 
 /** Bloquea la fila del conector (candado + FOR UPDATE) para configurar o canjear. */
@@ -354,6 +385,13 @@ export interface VistaConectorIris {
     canje_vence_en: string | null
     desconectado_en: string | null
     motivo_desconexion: MotivoDesconexionIris | null
+    /**
+     * reconexión (0.6.3): cuándo se canjeó un enlace nuevo que espera su primera llamada (el
+     * conector sigue con el canje anterior hasta entonces); null si no hay
+     */
+    reconexion_pendiente_desde: string | null
+    /** cuándo se descarta esa reconexión si nadie la usa (24 h); null si no hay */
+    reconexion_vence_en: string | null
     version: number
 }
 
@@ -420,6 +458,12 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
         ...estadoCanjeIris(fila),
         desconectado_en: iso(fila?.desconectado_en),
         motivo_desconexion: fila?.motivo_desconexion ?? null,
+        reconexion_pendiente_desde: iso(fila?.pendiente_canjeado_en),
+        reconexion_vence_en: fila?.pendiente_canjeado_en
+            ? new Date(
+                  new Date(fila.pendiente_canjeado_en).getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_MS,
+              ).toISOString()
+            : null,
         version: fila?.version ?? 0,
     }
 }
