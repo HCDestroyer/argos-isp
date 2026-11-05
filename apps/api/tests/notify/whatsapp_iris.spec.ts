@@ -12,6 +12,9 @@ import { ConsumidorNotify } from '#notify/consumidor'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { recargarConfiguracion } from '#notify/configuracion'
 import { entregarConsentimientosIris } from '#notify/consentimientos'
+import { CanalWhatsappIris } from '#notify/canales/whatsapp'
+import { ErrorCanal } from '#notify/canales/canal'
+import { esIdempotenciaEnCursoIris, esTransitorioIris } from '#notify/idempotencia_iris'
 import { cabecerasFirmadas } from '#integraciones/horus/firma'
 import { HorusSimulado as IrisSimulado } from '#tests/integraciones/horus_simulado'
 import {
@@ -31,6 +34,14 @@ import {
  * webhooks Iris → Argos (`aviso.entregado`, `aviso.fallido`, `contacto.baja`) firmados y
  * deduplicados, consentimientos con su cola y lo que nace en Iris (no se avisa).
  */
+
+/** Los dos nombres que usa Iris para el 409 de idempotencia en curso (iris#104). */
+const EN_CURSO_409 = [
+    { type: 'urn:iris:problema:idempotencia_en_curso', title: 'La petición sigue en curso' },
+    { type: 'https://iris.local/problemas/idempotencia_en_proceso', title: 'La petición sigue en proceso' },
+]
+/** Un 409 de negocio: permanente. */
+const OTRO_409 = { type: 'urn:iris:problema:servicio_no_pendiente', title: 'No está pendiente' }
 
 const TOKEN = `iris_pat_${'Qw3Er4Ty'.repeat(5)}`
 const SECRETO_ENTRADA = 'whsec_secreto-del-receptor-de-argos-para-iris'
@@ -598,6 +609,116 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         assert.containsSubset(await entregarConsentimientosIris(), { fallidos: 1 })
         const fila = await db.from('notify.consentimientos_iris').where('id', r.id).firstOrFail()
         assert.containsSubset(fila, { entrega: 'fallido', intentos: 1, ultimo_status: 422 })
+        assert.lengthOf(iris.de(CONSENTIMIENTOS), 1)
+    })
+
+    test('409 de Iris: idempotencia en curso o en proceso se reintenta; otro 409 es permanente', ({
+        assert,
+    }) => {
+        for (const cuerpo of EN_CURSO_409) {
+            assert.isTrue(esIdempotenciaEnCursoIris(409, JSON.stringify(cuerpo)))
+            assert.isTrue(esTransitorioIris(409, JSON.stringify(cuerpo)))
+        }
+        // por el `code` o en texto plano también
+        assert.isTrue(esTransitorioIris(409, JSON.stringify({ code: 'idempotencia_en_proceso' })))
+        assert.isTrue(esTransitorioIris(409, 'idempotencia_en_curso'))
+        assert.isFalse(esTransitorioIris(409, JSON.stringify(OTRO_409)))
+        assert.isFalse(esTransitorioIris(409, JSON.stringify({ type: 'idempotencia_en_procesoX' })))
+        assert.isFalse(esTransitorioIris(409, ''))
+        // el nombre solo cuenta con 409
+        assert.isFalse(esTransitorioIris(422, JSON.stringify(EN_CURSO_409[1])))
+        assert.isTrue(esTransitorioIris(503, ''))
+        assert.isTrue(esTransitorioIris(429, ''))
+    })
+
+    test('canal whatsapp: 409 idempotencia_en_curso y _en_proceso son transitorios con la misma clave; otro 409 permanente', async ({
+        assert,
+    }) => {
+        await fijarConector()
+        const canal = new CanalWhatsappIris()
+        const aviso = { envioId: 77, empresaId: 1, clienteId: 5, servicioId: null, variables: {} }
+        let respuesta: { status: number; cuerpo: Record<string, unknown> } = {
+            status: 409,
+            cuerpo: EN_CURSO_409[0]!,
+        }
+        iris.responder(AVISOS, () => respuesta)
+
+        const fallo = async () => {
+            try {
+                await canal.enviar('iris:cliente:5', null, 'factura_vencida', { aviso })
+            } catch (e) {
+                assert.instanceOf(e, ErrorCanal)
+                return e as ErrorCanal
+            }
+            assert.fail('debía lanzar ErrorCanal')
+            throw new Error('inalcanzable')
+        }
+
+        for (const cuerpo of EN_CURSO_409) {
+            respuesta = { status: 409, cuerpo }
+            const e = await fallo()
+            assert.isFalse(e.permanente, cuerpo.type)
+        }
+        respuesta = { status: 409, cuerpo: OTRO_409 }
+        const otro = await fallo()
+        assert.isTrue(otro.permanente)
+
+        // el reintento lleva la misma Idempotency-Key
+        const claves = iris.de(AVISOS).map((p) => p.cabeceras['idempotency-key'])
+        assert.lengthOf(claves, 3)
+        assert.lengthOf(new Set(claves), 1)
+        assert.equal(claves[0], 'argos:aviso:factura_vencida:77')
+
+        // en cuanto la primera termina, el mismo aviso
+        respuesta = { status: 202, cuerpo: { aviso_id: 'av-409', estado: 'en_cola' } }
+        const r = await canal.enviar('iris:cliente:5', null, 'factura_vencida', { aviso })
+        assert.deepEqual(r, { id: 'av-409', estado: 'en_cola', motivo: null })
+    })
+
+    for (const cuerpo of EN_CURSO_409) {
+        test(`consentimiento: 409 ${cuerpo.type.split(/[:/]/).pop()} se reintenta con la misma clave`, async ({
+            assert,
+        }) => {
+            let status = 409
+            iris.responder(CONSENTIMIENTOS, () =>
+                status === 409
+                    ? { status, cuerpo }
+                    : { status, cuerpo: { consentimiento_id: 'cons-409', estado_vigente: 'acepta' } },
+            )
+            await fijarConector()
+            const clienteId = await crearCliente()
+            const r = await new RegistrarConsentimientoWhatsapp().execute(
+                { cliente_id: clienteId, estado: 'acepta', origen: 'argos_portal', empresa_id: 1 },
+                contextoPrueba(),
+            )
+            assert.containsSubset(await entregarConsentimientosIris(), { reintentar: 1 })
+            const espera = await db.from('notify.consentimientos_iris').where('id', r.id).firstOrFail()
+            assert.containsSubset(espera, { entrega: 'pendiente', intentos: 1, ultimo_status: 409 })
+
+            status = 201
+            const despues = new Date(Date.now() + 61_000)
+            assert.containsSubset(await entregarConsentimientosIris({ ahora: despues }), { enviados: 1 })
+            const peticiones = iris.de(CONSENTIMIENTOS)
+            assert.lengthOf(peticiones, 2)
+            assert.equal(peticiones[0]!.cabeceras['idempotency-key'], r.idempotency_key)
+            assert.equal(peticiones[1]!.cabeceras['idempotency-key'], r.idempotency_key)
+            assert.equal(peticiones[0]!.cuerpo, peticiones[1]!.cuerpo)
+            const fila = await db.from('notify.consentimientos_iris').where('id', r.id).firstOrFail()
+            assert.containsSubset(fila, { entrega: 'enviado', intentos: 2, consentimiento_id: 'cons-409' })
+        })
+    }
+
+    test('consentimiento: un 409 que no es de idempotencia no se reintenta', async ({ assert }) => {
+        iris.responder(CONSENTIMIENTOS, () => ({ status: 409, cuerpo: OTRO_409 }))
+        await fijarConector()
+        const clienteId = await crearCliente()
+        const r = await new RegistrarConsentimientoWhatsapp().execute(
+            { cliente_id: clienteId, estado: 'baja', origen: 'argos_portal', empresa_id: 1 },
+            contextoPrueba(),
+        )
+        assert.containsSubset(await entregarConsentimientosIris(), { fallidos: 1 })
+        const fila = await db.from('notify.consentimientos_iris').where('id', r.id).firstOrFail()
+        assert.containsSubset(fila, { entrega: 'fallido', intentos: 1, ultimo_status: 409 })
         assert.lengthOf(iris.de(CONSENTIMIENTOS), 1)
     })
 
