@@ -27,8 +27,8 @@ export const OPCIONES_APLICACION: Record<Aplicacion, { etiqueta: string, explica
     },
     cola_simple: {
         etiqueta: 'Cola simple por API',
-        explicacion: 'ArgosIsp crea una cola simple por cliente en el router: para IP estática y DHCP.',
-        escenario: 'Antenas o clientes con IP fija, sin PPPoE.',
+        explicacion: 'ArgosIsp crea una cola simple por cliente en el router: PPPoE, IP estática o DHCP.',
+        escenario: 'Ver y ajustar cada cliente en Winbox (Queues → Simple Queues); en PPPoE la cola sigue la IP de la sesión.',
     },
     pcq_plan: {
         etiqueta: 'PCQ por plan',
@@ -72,10 +72,10 @@ export const DETALLE_APLICACION: Record<Aplicacion, { icono: string, crea: strin
     },
     cola_simple: {
         icono: 'i-lucide-list',
-        crea: 'Una cola simple estática por servicio (argosisp-servicio-<id>) escrita por la API.',
+        crea: 'Una cola simple estática por servicio (argosisp-servicio-<id>) escrita por la API; en PPPoE, con la IP y los prefijos de la sesión. RADIUS no manda rate-limit.',
         cpu: 'medio',
         cpuPorque: 'Una cola por cliente, recorridas en orden: más de unas 1000 empiezan a pesar.',
-        conviene: 'IP estática o DHCP con IP fija en routers pequeños o medianos.',
+        conviene: 'Routers pequeños o medianos, con PPPoE (con o sin RADIUS), IP estática o DHCP con IP fija.',
     },
     pcq_plan: {
         icono: 'i-lucide-split',
@@ -171,7 +171,7 @@ export function aplicacionDisponible(matriz: MatrizControlVelocidad, aplicacion:
         return { valida: true, motivo: null }
     }
     if (tipo === 'pppoe') {
-        return { valida: false, motivo: 'PPPoE ya crea su cola dinámica: usa RADIUS por sesión, el perfil PPP, PCQ por plan o el árbol.' }
+        return { valida: false, motivo: 'No aplica a PPPoE: usa RADIUS por sesión, el perfil PPP, cola simple, PCQ por plan o el árbol.' }
     }
     return { valida: false, motivo: `No aplica a ${ETIQUETAS_TIPO_CONEXION[tipo]}: sin sesión PPP no hay perfil ni rate-limit por RADIUS; usa cola simple, PCQ por plan o árbol.` }
 }

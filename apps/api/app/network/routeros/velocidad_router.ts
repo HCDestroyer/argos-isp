@@ -10,7 +10,6 @@ import {
     COMMENT_PADRE_ROUTER,
     conNivelPlan,
     conNivelRouter,
-    familia,
     kindTipoHoja,
     NOMBRE_PADRE_ROUTER,
     nombrePadrePlan,
@@ -820,11 +819,9 @@ function estadoArbol(
     const qosMangles: ObjetoVelocidad[] = []
     const perfilQos = router.qos && claseResto(router.qos.clases) ? router.qos : null
     const capacidad = { bajada: router.capacidad_bajada_kbps, subida: router.capacidad_subida_kbps }
-    // El techo existe si la estrategia del router lo pide (aunque no haya planes) o algún plan lo usa.
-    const conGlobal =
-        Object.values(router.estrategias).some(
-            (e) => familia(e.aplicacion) === 'arbol' && conNivelRouter(e),
-        ) || planes.some((p) => conNivelRouter(p.estrategia))
+    // El techo existe solo si algún plan del árbol con servicios en el router lo usa: una estrategia del
+    // árbol para un tipo de conexión sin servicios no escribe nada (bug del PM, 5 nov).
+    const conGlobal = planes.some((p) => conNivelRouter(p.estrategia))
     if (conGlobal) {
         for (const sentido of SENTIDOS) {
             globales.push({

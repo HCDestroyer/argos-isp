@@ -102,6 +102,12 @@ El modo por router pasó a ser una estrategia de cuatro capas (aplicación, padr
 - **Sincronizar plan** (`POST /planes/:id/sincronizar` y `plan.velocidad_cambiada`): `sincronizar.ts`.
 - **Vista previa**: `vistaPreviaEstrategia` (Postgres, sin leer el router) y `vistaPreviaReconciliar` (lee el router).
 
+### Solo lo del modo activo (bug del PM, 5 nov; `contratos/control-velocidad.md` §12)
+
+- Un router escribe solo los objetos de la estrategia con la que se limita cada servicio que tiene (o su sesión PPPoE hasta reconectar). El perfil `plan-<id>` solo con servicios PPPoE del plan; los nodos globales del árbol solo si un plan del árbol con servicios los usa. Lo que sobra (comments `argosisp:` de velocidad) lo borra el reconciliador, cada `DELETE` en `audit.red`; lo ajeno no se toca.
+- PPPoE con `cola_simple`: cola `argosisp-servicio-<id>` con las direcciones de la sesión (`targetsColaServicio`, nunca `<pppoe-usuario>`), sin `Mikrotik-Rate-Limit`; sin RADIUS, un solo perfil `plan-<id>` sin rate-limit. Limitar reescribe la cola sin reconectar; el suspendido va por el perfil de corte.
+- Pruebas: `tests/network/routeros_reglas_modo.spec.ts` (cada modo × tipo de conexión × RADIUS/`api`).
+
 ### Corte de nivel router (`corte_router.ts`)
 
 El reconciliador (y el último paso de un cambio de estrategia) deja el corte en cada router con API: lista de interfaces y perfil `suspendido`, address-lists, saltos `argosisp:top` al inicio de filter y nat (antes de FastTrack), cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y `argos-corte-nat`, y la excepción de FastTrack si alguna estrategia la pide. Mismos comentarios que `lab.rsc`: si el script ya corrió, no cambia nada. Orden: crear → `move` → borrar. Configuración `ROUTERS_SERVICIO_*` (la del script de conexión) o `PORTAL_URL_PUBLICA` / pasarela.

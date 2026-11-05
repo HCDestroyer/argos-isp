@@ -19,6 +19,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
  * | velocidad o plan en `arbol_pcq`          | nada       | (sin cola por sesión: el dispatcher mueve la lista del plan)    |
+ * | velocidad o plan en `pcq_plan`/`cola_simple` | nada   | (cola estática de la API: la reescribe el dispatcher)            |
  *
  * El rate-limit es siempre la cadena completa de A1 (`registro.ts`); si no se puede leer, el CoA
  * de velocidad se registra como fallido (`coa.fallido`) en vez de mandar uno distinto.
@@ -88,9 +89,18 @@ export interface ServicioActual {
     grupo?: string | null
 }
 
-/** Sin cola por sesión: la velocidad la pone el PCQ del plan (cola o árbol), no un CoA. */
+/**
+ * Sin cola por sesión: la velocidad la pone una cola estática de la API (`cola_simple`, por servicio)
+ * o el PCQ del plan (cola o árbol), no un CoA.
+ */
 function sinColaPorSesion(servicio: ServicioActual): boolean {
-    if (servicio.aplicacion) return servicio.aplicacion === 'arbol_pcq' || servicio.aplicacion === 'pcq_plan'
+    if (servicio.aplicacion) {
+        return (
+            servicio.aplicacion === 'arbol_pcq' ||
+            servicio.aplicacion === 'pcq_plan' ||
+            servicio.aplicacion === 'cola_simple'
+        )
+    }
     return servicio.control_velocidad === 'arbol_pcq'
 }
 

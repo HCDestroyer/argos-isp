@@ -374,8 +374,11 @@ export function velocidadAaa(
     switch (e.aplicacion) {
         case 'perfil_ppp':
             return { aplicacion: e.aplicacion, grupo: perfil, rate_limit: false, rate_limit_limitado: true }
+        case 'cola_simple':
         case 'pcq_plan':
         case 'arbol_pcq':
+            // La velocidad la pone una cola estática de la API (por servicio o por plan) o el árbol:
+            // sin `Mikrotik-Rate-Limit` (una cola dinámica más limitaría dos veces).
             return {
                 aplicacion: e.aplicacion,
                 grupo: profilePpp,
@@ -412,7 +415,9 @@ export interface AdvertenciaEstrategia {
 const TIPOS_POR_APLICACION: Record<Aplicacion, readonly TipoConexionVelocidad[]> = {
     radius_rate_limit: ['pppoe'],
     perfil_ppp: ['pppoe'],
-    cola_simple: ['ip_estatica', 'dhcp_fija'],
+    // PPPoE con colas simples (bug del PM, 5 nov): cola estática por servicio con las direcciones de la
+    // sesión (o las fijas del servicio) en el `target`; `aaa` no manda `Mikrotik-Rate-Limit`.
+    cola_simple: TIPOS_CONEXION,
     pcq_plan: TIPOS_CONEXION,
     arbol_pcq: TIPOS_CONEXION,
 }
@@ -450,10 +455,7 @@ function problemasDe(
         errores.push({
             field: `${campo}.aplicacion`,
             rule: 'aplicacion_tipo',
-            message:
-                aplicacion === 'cola_simple'
-                    ? `cola_simple no aplica a PPPoE: la sesión ya crea su cola dinámica; usa radius_rate_limit, perfil_ppp, pcq_plan o arbol_pcq`
-                    : `${aplicacion} no aplica a ${NOMBRE_TIPO[tipo]}: sin sesión PPP no hay ${aplicacion === 'perfil_ppp' ? 'perfil' : 'atributo RADIUS'}; usa cola_simple, pcq_plan o arbol_pcq`,
+            message: `${aplicacion} no aplica a ${NOMBRE_TIPO[tipo]}: sin sesión PPP no hay ${aplicacion === 'perfil_ppp' ? 'perfil' : 'atributo RADIUS'}; usa cola_simple, pcq_plan o arbol_pcq`,
         })
     }
     if (tipoCola !== undefined && tipoCola !== null && !enLista(TIPOS_COLA, tipoCola)) {
@@ -534,7 +536,7 @@ export interface EntradaValidacion {
     qos_clases?: number
     /**
      * `network.routers.modo_seguridad` (ausente = `radius`). Sin RADIUS (`api`) PPPoE va con secrets
-     * locales (`contratos/pppoe-local.md` §5): solo `perfil_ppp` (con cualquier padre) o `arbol_pcq`.
+     * locales (`contratos/pppoe-local.md` §5): solo `perfil_ppp` (con cualquier padre), `cola_simple` o `arbol_pcq`.
      */
     modo_seguridad?: 'radius' | 'api'
     /**
@@ -584,8 +586,8 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
             rule: 'pppoe_sin_radius',
             message:
                 e.aplicacion === 'radius_rate_limit'
-                    ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
-                    : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp o arbol_pcq',
+                    ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp), con colas simples (cola_simple) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
+                    : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp, cola_simple o arbol_pcq',
         })
     }
     if (entrada.revisar_router_sin_radius !== false) {
@@ -818,7 +820,7 @@ export function matrizControlVelocidad() {
             {
                 rule: 'aplicacion_tipo',
                 mensaje:
-                    'radius_rate_limit y perfil_ppp solo en PPPoE; cola_simple solo en IP estática y DHCP fija',
+                    'radius_rate_limit y perfil_ppp solo en PPPoE; cola_simple, pcq_plan y arbol_pcq en todos los tipos',
             },
             { rule: 'tipo_cola', mensaje: 'pcq_plan y arbol_pcq exigen pcq; las demás no aceptan pcq' },
             { rule: 'version', mensaje: 'fq_codel y cake solo con RouterOS 7' },
@@ -842,7 +844,7 @@ export function matrizControlVelocidad() {
             {
                 rule: 'pppoe_sin_radius',
                 mensaje:
-                    'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre) o arbol_pcq',
+                    'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre), cola_simple o arbol_pcq',
             },
         ],
         advertencias: [

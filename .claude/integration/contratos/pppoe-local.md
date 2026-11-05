@@ -71,6 +71,7 @@ En un router `api`, para `pppoe`:
 | Aplicación | Sin RADIUS | Objetos |
 | --- | --- | --- |
 | `perfil_ppp` (cualquier `padre`) | ✔ | `/ppp/profile plan-<id>` y `plan-<id>-limitado` con `rate-limit` (activo / limitado), `parent-queue` si hay padre y `queue-type` si hay tipo de cola propio |
+| `cola_simple` (desde 2026-11-05, `control-velocidad.md` §12) | ✔ | Un solo `/ppp/profile plan-<id>` sin `rate-limit` (el secret apunta a él en activo y limitado) y la cola `argosisp-servicio-<id>` con la IPv4 fija o la de la sesión del sondeo |
 | `arbol_pcq` (también con QoS) | ✔ | Los mismos perfiles con `address-list = argosisp-plan-<id>` / `argosisp-plan-<id>-limitado` (el router mete la IPv4 de la sesión en la lista al conectar; el mangle del árbol la marca) |
 | `radius_rate_limit` | ✘ 422 `pppoe_sin_radius` | Sin RADIUS no hay `Mikrotik-Rate-Limit` |
 | `pcq_plan` | ✘ 422 `pppoe_sin_radius` | La cola PCQ del plan necesita las direcciones de la sesión al conectar; sin accounting llegarían con el sondeo |

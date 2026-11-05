@@ -3,7 +3,12 @@ import db from '@adonisjs/lucid/services/db'
 import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import {
+    crearClienteFila,
+    crearEscenarioRouter,
+    crearPlanFila,
+    crearServicioFila,
+} from '#tests/core/fabricas'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
@@ -118,6 +123,16 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
         await entregar(await eventosDe(ctx.requestId))
     }
 
+    /** PPPoE suspendido del plan: hace existir el perfil `plan-<id>` sin contar para el padre. */
+    const pppoeSuspendido = (planId: number) =>
+        crearServicioFila({
+            cliente_id: clienteId,
+            router_id: routerId,
+            plan_id: planId,
+            estado: 'suspendido',
+            ipv6_modo: 'ninguno',
+        })
+
     const padre = (planId: number) => falso.conComment('/queue/simple', commentPlan(planId))
     const perfil = (planId: number) => falso.conComment('/ppp/profile', commentPlan(planId))
     const cola = (id: number) => falso.conComment('/queue/simple', commentServicio(id))[0]!
@@ -148,8 +163,16 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
             servicios.map((s) => `${s.ipv4}/32`),
         )
         for (const s of servicios) assert.equal(cola(s.id).parent, nombrePadre(planId))
-        // Perfil PPP para las sesiones PPPoE del plan, con lo del perfil default salvo las
+        // Solo WISP: el perfil PPP del modo PPPoE no se escribe (bug del PM, 5 nov).
+        assert.lengthOf(perfil(planId), 0)
+        // Con un PPPoE del plan sí: perfil para sus sesiones, con lo del perfil default salvo las
         // direcciones: local-address = gateway de la red del router, nunca el de `default` (10.10.0.1)
+        // (suspendido: no cuenta para el padre del plan)
+        await pppoeSuspendido(planId)
+        await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
         assert.lengthOf(perfil(planId), 1)
         assert.containsSubset(perfil(planId)[0], {
             name: `plan-${planId}`,
@@ -299,6 +322,8 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
         const planId = await plan14()
         const s1 = await crear(client, planId)
         await crear(client, planId)
+        // Un PPPoE del plan: el perfil plan-<id> existe por él (sin PPPoE no se escribe)
+        await pppoeSuspendido(planId)
         const reconciliar = () =>
             new ReconciliarRouterOS(OPCIONES).execute(
                 { router_id: routerId, motivo: 'manual' },

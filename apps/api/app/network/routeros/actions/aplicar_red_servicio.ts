@@ -117,15 +117,16 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
             // ArgosIsp escribió antes (cambio de router, de tipo, de modo; retiro, eliminación).
             const conSecret = router !== null && (modo === 'api' || historial.includes(routerId))
             // Objetos propios del servicio: WISP en su router, o limpieza donde escribió antes.
-            // (PPPoE en `arbol_pcq`: sus direcciones en la lista del plan).
+            // (PPPoE en `arbol_pcq`: sus direcciones en la lista del plan; en `cola_simple`: su cola).
+            const conObjetos = (a: string | undefined) => a === 'arbol_pcq' || a === 'cola_simple'
             const porServicio =
                 !deseado ||
                 servicio.tipo_conexion !== 'pppoe' ||
                 modo === 'api' ||
                 historial.includes(routerId) ||
                 router?.red.control_velocidad === 'arbol_pcq' ||
-                servicio.estrategia.aplicacion === 'arbol_pcq' ||
-                servicio.estrategia_sesion?.aplicacion === 'arbol_pcq'
+                conObjetos(servicio.estrategia.aplicacion) ||
+                conObjetos(servicio.estrategia_sesion?.aplicacion)
             let estado: EstadoDeseado = estadoVacio(input.servicio_id)
             if (deseado && router) estado = estadoDeseado(servicio, router.red, perfilSuspendido())
 

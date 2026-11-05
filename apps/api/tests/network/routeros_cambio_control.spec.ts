@@ -344,9 +344,9 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
             `/ip/firewall/address-list|${commentServicio(s1.id)}`,
             `/ipv6/firewall/address-list|${commentServicio(s1.id)}:delegado`,
         ])
+        // Solo WISP: el perfil PPP del plan nunca existió (es del modo PPPoE), no hay que borrarlo.
         assert.sameMembers(claves(vista.borrar), [
             `/queue/simple|${commentPlan(plan)}`,
-            `/ppp/profile|${commentPlan(plan)}`,
             `/queue/simple|${commentServicio(s1.id)}`,
             `/queue/simple|${commentServicio(s2.id)}`,
         ])

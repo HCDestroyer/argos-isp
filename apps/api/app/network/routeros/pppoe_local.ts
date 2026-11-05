@@ -83,6 +83,7 @@ export interface PoolsPlan {
  * | --- | --- | --- |
  * | colas simples (`perfil_ppp`) | `rate-limit` activo, `parent-queue`, `queue-type` | `rate-limit` limitado, mismo padre |
  * | árbol (`arbol_pcq`) | `address-list = argosisp-plan-<id>` | `address-list = argosisp-plan-<id>-limitado` |
+ * | `cola_simple` | sin `rate-limit`, `parent-queue` ni `queue-type` (la cola estática del servicio limita) | no se crea (la que quede de otro modo se borra al reconciliar, después de mover los secrets) |
  *
  * Los dos copian pools, DNS e IPv6 del perfil `default` (`base`) y ponen los pools del plan en el
  * router si los tiene. Un perfil que el control de velocidad conserva (regla de oro incumplida) se
@@ -121,11 +122,16 @@ export function perfilesLocales(
             ...(pools?.enlace ? { 'remote-ipv6-prefix-pool': pools.enlace } : {}),
             ...(pools?.delegado ? { 'dhcpv6-pd-pool': pools.delegado } : {}),
         }
-        for (const limitado of [false, true]) {
+        // Con colas simples la velocidad es de la cola estática del servicio: un solo perfil, sin
+        // rate-limit ni padre (cambiar de activo a limitado no cambia el perfil ni reconecta).
+        const estados = e.aplicacion === 'cola_simple' ? [false] : [false, true]
+        for (const limitado of estados) {
             const nombre = limitado ? nombrePerfilLimitado(id) : nombrePerfil(id)
             const comment = limitado ? commentPerfilLimitado(id) : commentPlan(id)
             let propiedades: Propiedades
-            if (familia(e.aplicacion) === 'arbol') {
+            if (e.aplicacion === 'cola_simple') {
+                propiedades = { ...comun, name: nombre }
+            } else if (familia(e.aplicacion) === 'arbol') {
                 // El router mete la IPv4 de la sesión en la lista del plan al conectar (dinámica);
                 // el mangle del árbol la marca. El IPv6 lo agrega el sondeo (estado_deseado.ts).
                 propiedades = { ...comun, name: nombre, 'address-list': listaPlan(id, limitado) }
@@ -181,10 +187,12 @@ export function secretDeseado(
     suspendido: PerfilSuspendidoRed,
     password: string,
 ): SecretDeseado {
+    // Con `cola_simple` el limitado no cambia de perfil: lo limita la cola estática del servicio.
+    const colas = servicio.estrategia.aplicacion === 'cola_simple'
     const perfil =
         servicio.estado === 'suspendido'
             ? (suspendido.perfil ?? 'suspendido')
-            : servicio.estado === 'limitado'
+            : servicio.estado === 'limitado' && !colas
               ? nombrePerfilLimitado(servicio.plan_id)
               : nombrePerfil(servicio.plan_id)
     const la = localAddressSecret(
