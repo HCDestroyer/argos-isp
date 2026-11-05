@@ -4518,6 +4518,88 @@ async function verificarLibroCon(
     }
 
     /*
+    | 26 · Comprobantes y reconexión temporal (contrato Iris 0.6.0 §7.2–§7.4; rama a3/iris-060). Un
+    | comprobante no mueve el libro: solo su aprobación, por `RegistrarPago`, deja un pago (uno por
+    | comprobante, con sus mismos datos y su empresa). La reconexión temporal es una promesa de tipo
+    | `reconexion_temporal` ligada a un comprobante del mismo cliente, empresa y servicio, que cubre
+    | facturas del servicio por su monto, y nunca sigue activa con el comprobante rechazado.
+    */
+    const [conReconexion] = await filas(
+        `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema = 'billing' AND table_name = 'promesas' AND column_name = 'tipo') AS existe`,
+    )
+    if (conReconexion?.existe) {
+        await revisar(
+            '26.comprobante_aprobado_sin_su_pago (el aprobado es un pago de RegistrarPago con su monto, método, referencia, cuenta, cliente y empresa)',
+            `SELECT k.id AS comprobante_id, k.empresa_id, k.monto::text, k.pago_id, p.monto::text AS monto_pago,
+                    p.empresa_id AS empresa_pago, p.cliente_id AS cliente_pago
+               FROM billing.comprobantes k LEFT JOIN billing.pagos p ON p.id = k.pago_id
+              WHERE k.estado = 'aprobado' AND ${E('k.empresa_id')} AND ${C('k.cliente_id')}
+                AND (p.id IS NULL OR p.monto <> k.monto OR p.empresa_id <> k.empresa_id OR p.cliente_id <> k.cliente_id
+                     OR p.metodo <> k.metodo OR p.referencia IS DISTINCT FROM k.referencia
+                     OR p.cuenta_bancaria_id IS DISTINCT FROM k.cuenta_bancaria_id)`,
+        )
+        await revisar(
+            '26.comprobante_sin_aprobar_con_pago (pendiente o rechazado: ni pago ni asiento)',
+            `SELECT k.id AS comprobante_id, k.estado, k.pago_id
+               FROM billing.comprobantes k
+              WHERE k.estado <> 'aprobado' AND k.pago_id IS NOT NULL AND ${E('k.empresa_id')} AND ${C('k.cliente_id')}`,
+        )
+        await revisar(
+            '26.pago_de_varios_comprobantes (un depósito, un pago)',
+            `SELECT k.pago_id, array_agg(k.id ORDER BY k.id) AS comprobantes
+               FROM billing.comprobantes k
+              WHERE k.pago_id IS NOT NULL AND ${E('k.empresa_id')}
+              GROUP BY k.pago_id HAVING count(*) > 1`,
+        )
+        await revisar(
+            '26.comprobante_de_otra_empresa_que_su_cuenta (la empresa del comprobante es la de la cuenta bancaria de destino)',
+            `SELECT k.id AS comprobante_id, k.empresa_id, cb.empresa_id AS empresa_cuenta
+               FROM billing.comprobantes k JOIN billing.cuentas_bancarias cb ON cb.id = k.cuenta_bancaria_id
+              WHERE k.empresa_id <> cb.empresa_id AND ${E('k.empresa_id')}`,
+        )
+        await revisar(
+            '26.reconexion_mal_ligada (mismo cliente, empresa y servicio que su comprobante; regla facturas; canal ia u operador)',
+            `SELECT p.id AS promesa_id, p.empresa_id, p.cliente_id, p.servicio_id, p.canal, p.regla_cumplimiento,
+                    k.id AS comprobante_id, k.empresa_id AS empresa_comprobante, k.cliente_id AS cliente_comprobante,
+                    k.servicio_id AS servicio_comprobante, s.empresa_id AS empresa_servicio
+               FROM billing.promesas p
+               JOIN billing.comprobantes k ON k.id = p.comprobante_id
+               JOIN core.servicios s ON s.id = p.servicio_id
+              WHERE p.tipo = 'reconexion_temporal' AND ${E('p.empresa_id')} AND ${C('p.cliente_id')}
+                AND (k.cliente_id <> p.cliente_id OR k.empresa_id <> p.empresa_id OR s.cliente_id <> p.cliente_id
+                     OR (k.servicio_id IS NOT NULL AND k.servicio_id <> p.servicio_id)
+                     OR p.regla_cumplimiento <> 'facturas' OR p.canal NOT IN ('ia', 'operador'))`,
+        )
+        await revisar(
+            '26.reconexion_activa_con_comprobante_rechazado (rechazar el comprobante cancela su reconexión en la misma transacción)',
+            `SELECT p.id AS promesa_id, p.servicio_id, k.id AS comprobante_id
+               FROM billing.promesas p JOIN billing.comprobantes k ON k.id = p.comprobante_id
+              WHERE p.tipo = 'reconexion_temporal' AND p.estado = 'activa' AND k.estado = 'rechazado'
+                AND ${E('p.empresa_id')} AND ${C('p.cliente_id')}`,
+        )
+        await revisar(
+            '26.promesa_cubre_factura_ajena (promesas_facturas: facturas del servicio y la empresa de la promesa, por un monto > 0)',
+            `SELECT p.id AS promesa_id, p.empresa_id, pf.factura_id, pf.empresa_id AS empresa_linea,
+                    f.empresa_id AS empresa_factura, f.servicio_id AS servicio_factura, p.servicio_id
+               FROM billing.promesas_facturas pf
+               JOIN billing.promesas p ON p.id = pf.promesa_id
+               JOIN billing.facturas f ON f.id = pf.factura_id
+              WHERE ${E('p.empresa_id')} AND ${C('p.cliente_id')}
+                AND (pf.empresa_id <> p.empresa_id OR f.empresa_id <> p.empresa_id
+                     OR f.servicio_id IS DISTINCT FROM p.servicio_id)`,
+        )
+        await revisar(
+            '26.reconexion_por_otro_monto_que_sus_facturas (monto = Σ promesas_facturas, lo vencido al crearla)',
+            `SELECT p.id AS promesa_id, p.monto::text, coalesce(sum(pf.monto), 0)::text AS cubierto, count(pf.factura_id)::int AS facturas
+               FROM billing.promesas p LEFT JOIN billing.promesas_facturas pf ON pf.promesa_id = p.id
+              WHERE p.tipo = 'reconexion_temporal' AND ${E('p.empresa_id')} AND ${C('p.cliente_id')}
+              GROUP BY p.id
+             HAVING count(pf.factura_id) = 0 OR p.monto <> coalesce(sum(pf.monto), 0)`,
+        )
+    }
+
+    /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
     */
     for (const empresa of empresas) {
