@@ -74,7 +74,7 @@ ArgosIsp no escribe reglas de filtro (su orden lo pone la plantilla `lab.rsc`); 
 | Dónde | Columna | Forma |
 | --- | --- | --- |
 | Router (por defecto) | `network.routers.estrategia_velocidad` jsonb NOT NULL | `{ "pppoe": <estrategia>, "ip_estatica": <estrategia>, "dhcp_fija": <estrategia> }`, las tres completas |
-| Plan en ese router | `network.planes_routers.estrategia_velocidad` jsonb NULL | `{ "pppoe"?: <parcial>, "ip_estatica"?: <parcial>, "dhcp_fija"?: <parcial> }`; null o capa ausente = hereda del router |
+| Plan en ese router | `network.planes_routers.estrategia_velocidad` jsonb NULL | **Obsoleto desde 2026-11-05 (§11):** ya no se escribe una excepción nueva; las que existen siguen aplicándose hasta `routers.unificar_control_velocidad` |
 
 - **Estrategia efectiva** de un servicio = la del router para su `tipo_conexion`, capa por capa sobrescrita por la del plan en ese router (y `extras` campo por campo). Función única: `estrategiaEfectiva()` en `apps/api/app/network/estrategia_velocidad.ts`; la usan la caché AAA, el dispatcher, la vista previa y la validación.
 - Vista `Router`: `estrategia_velocidad` (las tres) y `routeros_version`. Vista `PlanRouter`: `estrategia_velocidad` (null o parcial) y su `version`.
@@ -231,7 +231,7 @@ Endpoints (todos en `packages/contracts`):
 
 
 - **Selector por capas** en el router: una columna por tipo de conexión (PPPoE, IP estática, DHCP fija) con las cuatro capas; las opciones inválidas para ese tipo se ven deshabilitadas con el porqué (de la matriz). Atajo «igual para todos».
-- **Excepción por plan** en la implementación del plan en el router: mismas capas, cada una con «heredar».
+- ~~**Excepción por plan**~~: se quita (§11). En su lugar, el aviso «N planes con excepción» con la vista previa de unificar.
 - **Matriz** (`GET /red/control-velocidad/matriz`): qué combina con qué; errores 422 junto a la capa (`errors[].field`).
 - **Vista previa** antes de confirmar: crear / actualizar / borrar por menú, sesiones con CoA, sesiones que conservan lo anterior hasta reconectar, advertencias, y la casilla «reconectar ahora» (muestra cuántas sesiones se desconectan; apagada por defecto).
 - **Botón «Sincronizar plan»** en el plan (y por router en su implementación), con permiso `planes.sincronizar`: muestra el resumen por router (sesiones actualizadas, colas cambiadas, errores con «Reintentar»).
@@ -290,3 +290,32 @@ Los comandos usan la sintaxis de la terminal (`/ip firewall nat add …`, `enabl
 - **HTTPS (443) no se redirige**: no se puede redirigir TLS sin un certificado del sitio que el cliente quiso abrir. El router corta con un reset TCP (`argosisp: corte TCP reset`) y el navegador muestra «no se puede conectar». La página aparece al abrir un sitio `http://` o con la detección de portal cautivo del teléfono o la computadora (que usa HTTP).
 - **IPv6 no se redirige**: no hay NAT a `/corte` en IPv6; al suspendido solo se le deja DNS, el portal y el walled garden, y el resto se rechaza. Si su equipo prefiere IPv6, la página aparece cuando el navegador cae a IPv4.
 - **El portal** (A5) debe responder `/corte` por HTTP en `ROUTERS_SERVICIO_PORTAL_PUERTO` **con cualquier encabezado `Host`** (llega el del sitio que el cliente intentó abrir) y ver la **IP real del cliente** (sin NAT de origen entre el router y el portal, o con `X-Forwarded-For` de un proxy de confianza) para identificarlo por `network.sesiones`.
+
+## 11. Modo de velocidad único por router (decisión del PM, 2026-11-05)
+
+El modo de control de velocidad se decide **por router**: todos sus servicios siguen la misma lógica. Se quitan las excepciones por plan. Manda sobre §2, §4 y §9 donde choquen.
+
+- **No hay excepciones nuevas.** `POST /planes/:id/routers/:routerId/estrategia-velocidad` solo acepta `estrategia_velocidad: null` (quitar la de un plan); un objeto → 422 `estrategia_por_router` (field `estrategia_velocidad`). `POST /routers/:id/vista-previa-estrategia` acepta `planes[]` solo con `estrategia_velocidad: null`; un objeto → 422 `estrategia_por_router` (field `planes.<plan_id>`). Los dos campos quedan `deprecated` en el OpenAPI y se borran cuando A4 quite la pantalla.
+- **Las excepciones que existen siguen funcionando** igual (la estrategia efectiva de §2 no cambia, `estrategiaEfectiva` tampoco) hasta que alguien las unifique. Nada se migra solo.
+- **Vista previa** `GET /api/v1/routers/:id/vista-previa-unificar-velocidad?reconectar=` (permiso `routers.ver`, no escribe, no lee el router) → `VistaPreviaUnificarVelocidad`:
+
+```json
+{
+  "router_id": 1,
+  "router_version": 7,
+  "planes": [
+    { "plan_id": 3, "nombre": "Fibra 50", "implementacion_id": 9, "version": 2,
+      "excepcion": { "pppoe": { "aplicacion": "arbol_pcq" } },
+      "capas": ["aplicacion", "tipo_cola"],
+      "de": { "pppoe": {...}, "ip_estatica": {...}, "dhcp_fija": {...} },
+      "a":  { "pppoe": {...}, "ip_estatica": {...}, "dhcp_fija": {...} },
+      "servicios": 42, "sesiones_abiertas": 30 }
+  ],
+  "vista_previa": { "...": "VistaPreviaEstrategia de §4 con todas las excepciones en null" }
+}
+```
+
+  `de` = estrategia efectiva hoy de ese plan; `a` = la del router. `vista_previa.sesiones_coa` / `sesiones_conservan` / `sesiones_a_desconectar` dicen cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectan con `reconectar=true`. Sin excepciones: `planes: []`.
+- **Acción `routers.unificar_control_velocidad`** (permiso del mismo nombre, solo `admin`): `POST /api/v1/routers/:id/unificar-control-velocidad` `{ planes: number[], reconectar?, motivo? }`, acepta `Idempotency-Key`. `planes` = los `plan_id` que el usuario vio en la vista previa: si no coinciden con las excepciones actuales → 409 `excepciones_cambiaron` (volver a pedir la vista previa). Valida la matriz del router sin excepciones (422 como §3). En una transacción: pone `planes_routers.estrategia_velocidad = null` en cada uno (diff en `audit.cambios`, `plan_router`), emite **un `router.estrategia_cambiada` por plan** con `plan_id`, `de` = la parcial, `a: null`, `capas`, `reconectar` y `motivo: 'unificar'` (el motivo del usuario va en la auditoría), y reescribe `aaa:user:*` del router al confirmar. Respuesta `ResultadoUnificarVelocidad { router_id, planes: number[] }`. Sin excepciones y `planes: []`: 200 sin eventos.
+- **RouterOS (A2):** cada evento se aplica como quitar la excepción de un plan (§4: crear → mover → borrar; las sesiones conservan lo suyo hasta reconectar, salvo `reconectar`). Con varios planes del mismo router conviene juntarlos en una sola corrida (pedido en `a1.md`).
+- **Pantalla (A4):** quitar «Excepción por plan»; en «Control de velocidad» del router, si `vista-previa-unificar-velocidad` trae planes, un aviso con la lista, qué cambia y cuántas sesiones reconectan, y el botón «Unificar» (`routers.unificar_control_velocidad`).
