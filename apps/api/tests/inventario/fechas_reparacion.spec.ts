@@ -117,8 +117,11 @@ test.group('Inventario · fase C · fechas pasadas y reparación', (group) => {
         assert.deepEqual(await saldoInventario(cable.id, bodega.id), ['6.000', '12.00'])
         await afirmarCuadre(assert, e.B)
 
-        // un mes cerrado no recibe movimientos
-        const mesPasado = DateTime.fromISO(hoyGuatemala(), { zone: 'utc' }).minus({ months: 1 })
+        // un mes cerrado no recibe movimientos. Se cierra el mes anterior al del intento más antiguo
+        // (12 días atrás), no «el mes pasado»: en los primeros días del mes el saldo inicial (10 días
+        // atrás) cae en el mes pasado y deja 2.9.01 con saldo, y el check apertura_cero (correcto)
+        // impide cerrarlo. Así la prueba no depende del día del mes en que corre.
+        const mesPasado = DateTime.fromISO(diasAtras(12), { zone: 'utc' }).minus({ months: 1 })
         await new CerrarPeriodo().execute(
             { empresa_id: e.B, anio: mesPasado.year, mes: mesPasado.month },
             e.ctx,
