@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/HCDestroyer/argos-isp/compare/v1.6.0...v1.7.0) (2026-11-05)
+
+
+### Funcionalidades
+
+* **network:** núcleo de routers — red de acceso, gateway de la red, modo único de velocidad y ficha del router ([#214](https://github.com/HCDestroyer/argos-isp/issues/214)) ([821326b](https://github.com/HCDestroyer/argos-isp/commit/821326be992d7c5989c50f2b75a8d0904c651c90))
+
 ## [1.6.0](https://github.com/HCDestroyer/argos-isp/compare/v1.5.1...v1.6.0) (2026-10-31)
 
 
