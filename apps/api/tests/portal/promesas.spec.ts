@@ -64,13 +64,9 @@ async function cortado(reglas: ReglasPromesaParciales = {}, cliente: Record<stri
         user_ppp: unico('ppp'),
         ipv4: ip,
     })
-    const deuda = await db
-        .from('billing.facturas')
-        .where('servicio_id', datos.servicioId)
-        .whereIn('estado', ['emitida', 'parcial', 'vencida'])
-        .select(db.raw('sum(total - pagado)::numeric(14,2)::text as pendiente'))
-        .first()
-    // Lo que cubre una promesa: las facturas vencidas con saldo, la más antigua primero.
+    // Lo que cubre una promesa: las facturas vencidas con saldo, la más antigua primero. Es también
+    // la base de `deuda_maxima` y `abono_inicial_pct`; la factura del mes en curso no entra mientras
+    // no venza (los primeros días del mes está emitida y no vencida).
     const vencidas = await db
         .from('billing.facturas')
         .where('servicio_id', datos.servicioId)
@@ -81,7 +77,6 @@ async function cortado(reglas: ReglasPromesaParciales = {}, cliente: Record<stri
     return {
         ...datos,
         ip,
-        deuda: String(deuda.pendiente),
         vencido: aTexto(vencido),
         facturasVencidas: vencidas.map((f) => Number(f.id)),
     }
@@ -188,12 +183,12 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         assert.equal(cuerpo.fecha_maxima, siguiente.minus({ days: 1 }).toISODate())
         assert.deepEqual(cuerpo.abono_inicial, {
             porcentaje: 50,
-            requerido: aTexto(dec(s.deuda).div(2)),
+            requerido: aTexto(dec(s.vencido).div(2)),
             abonado: '0.00',
-            faltante: aTexto(dec(s.deuda).div(2)),
+            faltante: aTexto(dec(s.vencido).div(2)),
         })
         // sin abonar, la promesa no se aprobaría: el portal no deja enviar
-        assert.equal(cuerpo.pago_previo, aTexto(dec(s.deuda).div(2)))
+        assert.equal(cuerpo.pago_previo, aTexto(dec(s.vencido).div(2)))
     })
 
     test('condiciones de limitesPromesa (A3): deuda máxima y pago previo, iguales a lo que decide crear', async ({
@@ -207,8 +202,8 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         )
         const cuerpo = leidas.body()
         assert.isTrue(cuerpo.disponible)
-        const exceso = aTexto(dec(s.deuda).minus('100.00'))
-        assert.deepEqual(cuerpo.deuda_maxima, { maximo: '100.00', vencida: s.deuda, faltante: exceso })
+        const exceso = aTexto(dec(s.vencido).minus('100.00'))
+        assert.deepEqual(cuerpo.deuda_maxima, { maximo: '100.00', vencida: s.vencido, faltante: exceso })
         assert.equal(cuerpo.pago_previo, exceso)
 
         // lo que anunció el portal es lo que decide CrearPromesaPago
@@ -223,7 +218,7 @@ test.group('Portal: solicitar promesa de pago', (group) => {
         // el límite de la regla que falló (resultado_evaluacion.reglas.at(-1).limite) va en el mensaje
         assert.equal(
             promesa.body().motivo,
-            `Para pedir una promesa de pago tu saldo vencido debe ser de Q100.00 o menos (hoy es Q${s.deuda}). ` +
+            `Para pedir una promesa de pago tu saldo vencido debe ser de Q100.00 o menos (hoy es Q${s.vencido}). ` +
                 'Abona la diferencia o comunícate con nosotros para acordar una fecha de pago.',
         )
     })
