@@ -120,6 +120,10 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                         <span class="text-xs text-muted lg:hidden">{{ resumenCorte(row.original) }}</span>
                         <span class="text-xs text-muted sm:hidden">{{ resumenMora(row.original) }}</span>
                         <span class="text-xs text-muted md:hidden">{{ resumenPromesas(row.original.reglas_promesa) }}</span>
+                        <span
+                            class="text-xs text-muted md:hidden"
+                            data-prueba="resumen-reconexion"
+                        >{{ resumenReconexionTemporal(row.original.reglas_promesa) }}</span>
                     </div>
                 </template>
                 <template #corte-cell="{ row }">
@@ -131,6 +135,10 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                 <template #promesas-cell="{ row }">
                     <div class="flex flex-col gap-1">
                         <span class="text-sm">{{ resumenPromesas(row.original.reglas_promesa) }}</span>
+                        <span
+                            class="text-xs text-muted"
+                            data-prueba="resumen-reconexion"
+                        >{{ resumenReconexionTemporal(row.original.reglas_promesa) }}</span>
                         <div
                             v-if="row.original.reglas_promesa.habilitadas"
                             class="flex flex-wrap gap-1"

@@ -36,6 +36,7 @@ function reglasPorDefecto(): ReglasPromesa {
             operador: { ...sinLimites },
             supervisor: { ...sinLimites, plazo_max_dias: 15, max_por_periodo: 3 },
         },
+        reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24 },
     }
 }
 
@@ -49,9 +50,10 @@ function normalizarReglas(entrada: unknown): ReglasPromesa {
     if (!esObjeto(entrada)) {
         return reglas
     }
-    const { canales, ...generales } = entrada
+    const { canales, reconexion_temporal: reconexion, ...generales } = entrada
     const resultado = { ...reglas, ...generales } as ReglasPromesa
     resultado.canales = reglas.canales
+    resultado.reconexion_temporal = { ...reglas.reconexion_temporal, ...(esObjeto(reconexion) ? reconexion : {}) } as NonNullable<ReglasPromesa['reconexion_temporal']>
     for (const canal of CANALES) {
         const parcial = esObjeto(canales) && esObjeto(canales[canal]) ? canales[canal] : {}
         resultado.canales[canal] = { ...reglas.canales[canal], ...parcial } as ReglasPromesa['canales'][Canal]
@@ -87,6 +89,18 @@ function erroresReglas(reglas: ReglasPromesa): Errores {
         }
         if (limites.max_por_periodo !== null && !enRango(limites.max_por_periodo, 0, 12)) {
             errores.push({ field: `reglas_promesa.canales.${canal}.max_por_periodo`, message: 'El campo debe estar entre 0 y 12', rule: 'range' })
+        }
+    }
+    const reconexion = reglas.reconexion_temporal
+    if (reconexion) {
+        if (typeof reconexion.permitida !== 'boolean') {
+            errores.push({ field: 'reglas_promesa.reconexion_temporal.permitida', message: 'El campo debe ser verdadero o falso', rule: 'boolean' })
+        }
+        if (!enRango(reconexion.max_por_periodo, 0, 12)) {
+            errores.push({ field: 'reglas_promesa.reconexion_temporal.max_por_periodo', message: 'El campo debe estar entre 0 y 12', rule: 'range' })
+        }
+        if (!enRango(reconexion.horas_max, 1, 168)) {
+            errores.push({ field: 'reglas_promesa.reconexion_temporal.horas_max', message: 'El campo debe estar entre 1 y 168', rule: 'range' })
         }
     }
     if (reglas.max_por_periodo_buen_historial < reglas.max_por_periodo) {

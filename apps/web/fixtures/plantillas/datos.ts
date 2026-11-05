@@ -40,6 +40,8 @@ const reglasPromesa: Schema<'PlantillaFacturacion'>['reglas_promesa'] = {
         operador: { ...sinLimitesCanal },
         supervisor: { ...sinLimitesCanal, plazo_max_dias: 15, max_por_periodo: 3 },
     },
+    // Contrato Iris 0.6.0 §7.3: apagada por defecto, una por periodo, 24 h.
+    reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24 },
 }
 
 // `hora_corte` en HH:MM (`to_char(hora_corte, 'HH24:MI')`) y `por_defecto` siempre presente, como la API.

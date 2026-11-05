@@ -39,6 +39,7 @@ import { rutasConsejos } from './consejos/rutas'
 import { rutasDeclaraciones } from './declaraciones/rutas'
 import { rutasEjercicios } from './libro/ejercicios'
 import { rutasNotificaciones } from './notificaciones/rutas'
+import { rutasWhatsapp } from './notificaciones/whatsapp'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
@@ -530,6 +531,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasDeclaraciones,
     ...rutasEjercicios,
     ...rutasNotificaciones,
+    ...rutasWhatsapp,
     ...rutasZonas,
     ...rutasClientes,
     ...rutasServicios,

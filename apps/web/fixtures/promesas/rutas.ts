@@ -128,13 +128,18 @@ export const rutasPromesas: RutasFixture = {
         const servicio = numeroQuery(solicitud, 'servicio_id')
         const cliente = numeroQuery(solicitud, 'cliente_id')
         const estado = solicitud.query.get('estado')
+        const tipo = solicitud.query.get('tipo')
         if (estado && !(ESTADOS as readonly string[]).includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
+        }
+        if (tipo && tipo !== 'promesa' && tipo !== 'reconexion_temporal') {
+            return datosInvalidos([{ field: 'tipo', message: 'Tipo inválido', rule: 'enum' }])
         }
         const filas = deLaEmpresa(bd.promesas, solicitud)
             .filter(p => servicio === undefined || p.servicio_id === servicio)
             .filter(p => cliente === undefined || p.cliente_id === cliente)
             .filter(p => !estado || p.estado === estado)
+            .filter(p => !tipo || p.tipo === tipo)
             .sort((a, b) => b.id - a.id)
             .map(conSaldosDeHoy)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
@@ -192,6 +197,10 @@ export const rutasPromesas: RutasFixture = {
             facturas: cobertura.facturas.map(f => ({ ...f, saldo: f.monto, estado: 'vencida' })),
             estado,
             canal,
+            // Como la API: desde el panel siempre `promesa`, sin comprobante ni sistema de origen.
+            tipo: 'promesa',
+            comprobante_id: null,
+            sistema_origen: null,
             aprobada_por: null,
             resultado_evaluacion: evaluacion,
             version: 1,

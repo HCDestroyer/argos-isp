@@ -293,6 +293,9 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // de la orden y desde «Mi bodega», que comprueban el permiso de la acción; leen con el `inventario.ver` de la página.
     'TrasladoRecibirSlideover.vue': { permisos: ['inventario.recibir_traslado', 'inventario.ver'], desde: ['pages/inventario/traslados/[id].vue', 'pages/inventario/mi-bodega.vue'] },
     'TrasladoDocumentoModal.vue': { permisos: ['inventario.adjuntar_documento_traslado'], desde: ['pages/inventario/traslados/[id].vue'] },
+    // Contrato Iris 0.6.0: el WhatsApp de la ficha con `notificaciones.ver`; rechazar con causa con `comprobantes.rechazar`.
+    'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['pages/comprobantes/[id].vue'] },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 

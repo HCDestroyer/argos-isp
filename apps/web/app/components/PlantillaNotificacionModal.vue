@@ -10,6 +10,8 @@ import * as z from 'zod'
  * ejemplo) se insertan donde está el cursor. "Vista previa" pide a la API el texto con los datos de
  * ejemplo, sin guardar (`POST /notificaciones/plantillas/vista-previa`), y avisa de las variables
  * que el evento no trae.
+ * WhatsApp (contrato Iris 0.6.0 §6.3): el cuerpo es el **código** de la plantilla de Iris (Iris
+ * tiene el texto y la aprobación de Meta); no hay editor de texto libre, solo «Activa».
  */
 const props = defineProps<{
     plantilla: PlantillaNotificacion
@@ -48,6 +50,7 @@ watch(abierto, (valor) => {
 }, { immediate: true })
 
 const grupos = computed(() => props.evento?.variables ?? [])
+const esWhatsapp = computed(() => props.plantilla.canal === 'whatsapp')
 
 /** La vista previa deja de valer en cuanto cambia el texto. */
 watch(() => [estado.asunto, estado.cuerpo], () => {
@@ -135,137 +138,155 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     description="Apagada, este evento no se avisa por este canal."
                     data-prueba="aviso-activa"
                 />
-                <UFormField
-                    label="Asunto"
-                    name="asunto"
-                    :help="plantilla.canal === 'correo' ? 'Admite variables.' : 'En Telegram va como primera línea; vacío = sin ella.'"
-                >
-                    <UInput
-                        v-model="estado.asunto"
-                        class="w-full"
-                        data-prueba="aviso-asunto"
+                <template v-if="esWhatsapp">
+                    <UAlert
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-message-circle"
+                        title="El texto lo tiene Iris"
+                        description="Por WhatsApp sale la plantilla aprobada de Iris con este código; sus textos y traducciones se cambian en Iris. Aquí solo se enciende o se apaga el aviso."
+                        data-prueba="aviso-whatsapp"
                     />
-                </UFormField>
-                <UFormField
-                    label="Mensaje"
-                    name="cuerpo"
-                    help="Texto plano con variables {{…}}; para condicionar: {{#estado.es_suspendido}}…{{/estado.es_suspendido}}."
-                    required
-                >
-                    <UTextarea
-                        ref="textarea"
-                        v-model="estado.cuerpo"
-                        :rows="10"
-                        autoresize
-                        :maxrows="20"
-                        class="w-full font-mono"
-                        data-prueba="aviso-cuerpo"
+                    <DatoFicha
+                        etiqueta="Código de la plantilla de Iris"
+                        :valor="plantilla.cuerpo"
+                        mono
+                        data-prueba="aviso-codigo-iris"
                     />
-                </UFormField>
-
-                <section
-                    class="flex flex-col gap-3"
-                    data-prueba="aviso-vista-previa"
-                >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h3 class="text-sm font-medium text-highlighted">
-                            Vista previa
-                        </h3>
-                        <UButton
-                            label="Ver vista previa"
-                            icon="i-lucide-eye"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            :loading="cargandoPrevia"
-                            data-prueba="aviso-ver-previa"
-                            @click="verPrevia"
+                </template>
+                <template v-else>
+                    <UFormField
+                        label="Asunto"
+                        name="asunto"
+                        :help="plantilla.canal === 'correo' ? 'Admite variables.' : 'En Telegram va como primera línea; vacío = sin ella.'"
+                    >
+                        <UInput
+                            v-model="estado.asunto"
+                            class="w-full"
+                            data-prueba="aviso-asunto"
                         />
-                    </div>
-                    <ProblemaAlerta
-                        v-if="problemaPrevia && !problemaPrevia.errors?.length"
-                        :problema="problemaPrevia"
-                        :reintentar="verPrevia"
-                        :reintentando="cargandoPrevia"
-                    />
-                    <template v-else-if="previa">
-                        <p class="text-xs text-muted">
-                            Con los datos de ejemplo del evento; no se guarda nada. Así lo recibe el destinatario:
-                        </p>
+                    </UFormField>
+                    <UFormField
+                        label="Mensaje"
+                        name="cuerpo"
+                        help="Texto plano con variables {{…}}; para condicionar: {{#estado.es_suspendido}}…{{/estado.es_suspendido}}."
+                        required
+                    >
+                        <UTextarea
+                            ref="textarea"
+                            v-model="estado.cuerpo"
+                            :rows="10"
+                            autoresize
+                            :maxrows="20"
+                            class="w-full font-mono"
+                            data-prueba="aviso-cuerpo"
+                        />
+                    </UFormField>
+
+                    <section
+                        class="flex flex-col gap-3"
+                        data-prueba="aviso-vista-previa"
+                    >
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="text-sm font-medium text-highlighted">
+                                Vista previa
+                            </h3>
+                            <UButton
+                                label="Ver vista previa"
+                                icon="i-lucide-eye"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                :loading="cargandoPrevia"
+                                data-prueba="aviso-ver-previa"
+                                @click="verPrevia"
+                            />
+                        </div>
+                        <ProblemaAlerta
+                            v-if="problemaPrevia && !problemaPrevia.errors?.length"
+                            :problema="problemaPrevia"
+                            :reintentar="verPrevia"
+                            :reintentando="cargandoPrevia"
+                        />
+                        <template v-else-if="previa">
+                            <p class="text-xs text-muted">
+                                Con los datos de ejemplo del evento; no se guarda nada. Así lo recibe el destinatario:
+                            </p>
+                            <p
+                                v-if="plantilla.canal === 'correo' && previa.asunto"
+                                class="text-sm"
+                                data-prueba="previa-asunto"
+                            >
+                                <span class="text-muted">Asunto:</span> <span class="font-medium text-highlighted">{{ previa.asunto }}</span>
+                            </p>
+                            <div
+                                class="rounded-md border border-default bg-elevated/50 p-3 text-sm whitespace-pre-wrap text-default"
+                                data-prueba="previa-mensaje"
+                            >
+                                {{ previa.mensaje }}
+                            </div>
+                            <UAlert
+                                v-if="previa.variables_desconocidas.length"
+                                color="warning"
+                                variant="subtle"
+                                icon="i-lucide-triangle-alert"
+                                title="Variables que este evento no trae (salen vacías)"
+                                :description="previa.variables_desconocidas.join(', ')"
+                                data-prueba="previa-desconocidas"
+                            />
+                        </template>
                         <p
-                            v-if="plantilla.canal === 'correo' && previa.asunto"
-                            class="text-sm"
-                            data-prueba="previa-asunto"
+                            v-else
+                            class="text-xs text-muted"
                         >
-                            <span class="text-muted">Asunto:</span> <span class="font-medium text-highlighted">{{ previa.asunto }}</span>
+                            Muestra el texto con datos de ejemplo antes de guardar.
+                        </p>
+                    </section>
+
+                    <section
+                        v-if="grupos.length"
+                        class="flex flex-col gap-3"
+                        data-prueba="aviso-variables"
+                    >
+                        <h3 class="text-sm font-medium text-highlighted">
+                            Variables de este evento
+                        </h3>
+                        <p class="text-xs text-muted">
+                            Toca una para insertarla donde está el cursor. Los montos con <code>_q</code> ya vienen en quetzales y las fechas en hora de Guatemala.
                         </p>
                         <div
-                            class="rounded-md border border-default bg-elevated/50 p-3 text-sm whitespace-pre-wrap text-default"
-                            data-prueba="previa-mensaje"
+                            v-for="grupo in grupos"
+                            :key="grupo.grupo"
+                            class="flex flex-col gap-1.5"
                         >
-                            {{ previa.mensaje }}
+                            <span class="text-xs font-medium text-muted">{{ grupo.etiqueta }}</span>
+                            <div class="flex flex-wrap gap-1">
+                                <UTooltip
+                                    v-for="variable in grupo.variables"
+                                    :key="variable.nombre"
+                                    :text="`Ejemplo: ${variable.ejemplo || '(vacío)'}`"
+                                >
+                                    <UButton
+                                        :label="variable.nombre"
+                                        color="neutral"
+                                        variant="soft"
+                                        size="xs"
+                                        class="font-mono"
+                                        :aria-label="`Insertar ${variable.nombre}`"
+                                        @click="insertar(variable.nombre)"
+                                    />
+                                </UTooltip>
+                            </div>
                         </div>
-                        <UAlert
-                            v-if="previa.variables_desconocidas.length"
-                            color="warning"
-                            variant="subtle"
-                            icon="i-lucide-triangle-alert"
-                            title="Variables que este evento no trae (salen vacías)"
-                            :description="previa.variables_desconocidas.join(', ')"
-                            data-prueba="previa-desconocidas"
-                        />
-                    </template>
-                    <p
+                    </section>
+                    <UAlert
                         v-else
-                        class="text-xs text-muted"
-                    >
-                        Muestra el texto con datos de ejemplo antes de guardar.
-                    </p>
-                </section>
-
-                <section
-                    v-if="grupos.length"
-                    class="flex flex-col gap-3"
-                    data-prueba="aviso-variables"
-                >
-                    <h3 class="text-sm font-medium text-highlighted">
-                        Variables de este evento
-                    </h3>
-                    <p class="text-xs text-muted">
-                        Toca una para insertarla donde está el cursor. Los montos con <code>_q</code> ya vienen en quetzales y las fechas en hora de Guatemala.
-                    </p>
-                    <div
-                        v-for="grupo in grupos"
-                        :key="grupo.grupo"
-                        class="flex flex-col gap-1.5"
-                    >
-                        <span class="text-xs font-medium text-muted">{{ grupo.etiqueta }}</span>
-                        <div class="flex flex-wrap gap-1">
-                            <UTooltip
-                                v-for="variable in grupo.variables"
-                                :key="variable.nombre"
-                                :text="`Ejemplo: ${variable.ejemplo || '(vacío)'}`"
-                            >
-                                <UButton
-                                    :label="variable.nombre"
-                                    color="neutral"
-                                    variant="soft"
-                                    size="xs"
-                                    class="font-mono"
-                                    :aria-label="`Insertar ${variable.nombre}`"
-                                    @click="insertar(variable.nombre)"
-                                />
-                            </UTooltip>
-                        </div>
-                    </div>
-                </section>
-                <UAlert
-                    v-else
-                    color="neutral"
-                    variant="subtle"
-                    icon="i-lucide-info"
-                    :description="evento ? 'Este evento no trae variables.' : 'No se pudo leer el catálogo de eventos: las variables no están a la vista. La vista previa y el guardado siguen funcionando.'"
-                />
+                        color="neutral"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        :description="evento ? 'Este evento no trae variables.' : 'No se pudo leer el catálogo de eventos: las variables no están a la vista. La vista previa y el guardado siguen funcionando.'"
+                    />
+                </template>
 
                 <ProblemaAlerta
                     v-if="problema"

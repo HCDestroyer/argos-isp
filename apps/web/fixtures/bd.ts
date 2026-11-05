@@ -38,6 +38,7 @@ import type { HorusFixtures } from './horus/datos'
 import { irisInicial } from './iris/datos'
 import type { IrisFixtures } from './iris/datos'
 import { configuracionGlobal, enviosNotificacion, eventosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
+import { whatsappInicial, type WhatsappFixtures } from './notificaciones/datosWhatsapp'
 import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
@@ -196,6 +197,8 @@ interface BaseFixtures {
     enviosNotificacion: Schema<'EnvioNotificacion'>[]
     /** Envíos de prueba hechos (para el `envio_id`). */
     enviosPrueba: number
+    /** Permisos de contacto por WhatsApp que Argos conoce y los que mandó a Iris (contrato Iris 0.6.0 §6.4). */
+    whatsapp: WhatsappFixtures
     /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
     cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
@@ -374,6 +377,7 @@ function inicial(): BaseFixtures {
         recordatoriosPago,
         enviosNotificacion,
         enviosPrueba: 0,
+        whatsapp: whatsappInicial(),
         cobros: [],
         plantillaAvisoCobro,
         plantillaNotaCredito,
