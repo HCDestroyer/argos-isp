@@ -991,7 +991,7 @@ export const rutasInventarioFaseD: RutasFixture = {
                 continue
             }
             const fila = porUsuario.get(usuario.id) ?? { id_externo: String(usuario.id), correo: usuario.email, nombre: usuario.nombre, bodegas: [] }
-            fila.bodegas.push({ id: b.id, empresa_id: b.empresa_id, activa: b.activo })
+            fila.bodegas.push({ id: b.id, empresa_id: b.empresa_id, activa: b.activo, nombre: b.nombre })
             porUsuario.set(usuario.id, fila)
         }
         return { status: 200, cuerpo: paginar([...porUsuario.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)), solicitud) }
