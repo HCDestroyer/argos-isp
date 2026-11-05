@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * FEL (fase 3 de A3) en el panel, en modo fixtures: ArgosNet (empresa 1) tiene la FEL obligatoria
@@ -91,6 +91,9 @@ test('anular una factura certificada en dos pasos: anulación pendiente y luego 
 })
 
 test('integridad del libro: con la cadena rota, el cierre del mes lo explica y lleva a la integridad', async ({ page }) => {
+    // El mes que se ofrece cerrar sale de «hoy»: con el reloj real, en noviembre se ofrecía 2026-10
+    // (aún sin terminar en los fixtures) y el cierre fallaba por otra razón. Hoy = el de los fixtures.
+    await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await page.evaluate(() => localStorage.setItem('argos_fixtures_cadena_rota', JSON.stringify({ 1: 'hash_distinto' })))
     await ir(page, 'Libro', /\/libro/)
