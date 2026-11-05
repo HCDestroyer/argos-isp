@@ -195,6 +195,20 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   por Iris ≥ 0.5.0); con un conector sin contrato (Iris anterior) o con uno menor no salen, como un
   evento fuera de alcance. Los demás eventos no cambian. Un envío ya registrado sale aunque el
   contrato cambie después (el contrato solo sube).
+- **Pagos y atención** (contrato 0.6.0, §7.2 y §7.4; `EVENTOS_DESDE_060`, solo con
+  `conectorAdmite('0.6.0')`): `comprobante.aprobado` / `.rechazado` (`comprobante_id`, `empresa_id`,
+  `cliente_id`, `servicio_id`, `canal`, `monto`, `pago_id`, `motivo`, `causa`, `servicio_estado`) y
+  `promesa.creada` / `.cumplida` / `.incumplida` / `.cancelada` (`promesa_id`, `empresa_id`,
+  `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `vence`, `monto`; `motivo` solo en
+  `cancelada`), de cualquier canal dentro del alcance. Lo que el evento no trae se completa con
+  `billing.comprobantes` / `billing.promesas`; sin `causa` el rechazo sale `otro`, sin `tipo` es
+  `promesa`. Nunca la imagen ni la referencia bancaria.
+- **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
+  reservado; `receptor.ts`, `actions/recibir_webhook_iris.ts`, tabla `integraciones.iris_recibidos`).
+  Misma firma `v1=` que Horus con el secreto de entrada del canje, ±5 min, 503 `iris_apagado` con el
+  conector apagado, deduplicado por `X-Webhook-Id`. `aviso.entregado` / `aviso.fallido` cierran el
+  envío de notify por `idempotency_key`; `contacto.baja` deja de pedir WhatsApp a ese cliente
+  (`app/notify/README.md`, «WhatsApp por la mensajería de Iris»).
 - **Eventos atrasados:** un `servicio.*` o `asignacion.cambiada` que llega después del
   `servicio.eliminado` sale igual con el `empresa_id` de su payload (sin la fila, `cliente_id`
   queda null si el evento no lo trae); Iris lo trata como «no existe».

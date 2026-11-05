@@ -174,7 +174,8 @@ test.group('notify · servicio pendiente de instalación', (group) => {
             .orderBy('canal')
         assert.deepEqual(
             filas.map((f) => f.canal),
-            ['correo', 'telegram'],
+            // WhatsApp por Iris: el código `bienvenida` (contrato Iris 0.6.0 §6.3)
+            ['correo', 'telegram', 'whatsapp'],
         )
         const correo = filas[0]
         try {

@@ -159,3 +159,18 @@ export async function resumenEnviosIris(empresas: number[] | null) {
             : null,
     }
 }
+
+/** Respuesta del receptor `POST /integraciones/iris/webhook` (contrato Iris 0.6.0 §6.6). */
+export const ResultadoWebhookIris = definirEsquema(
+    'ResultadoWebhookIris',
+    objeto({
+        recibido: booleano,
+        duplicado: booleano,
+        estado: enumerado(['procesado', 'ignorado']),
+        resultado: {
+            ...texto,
+            description:
+                '`acuse_aplicado`, `sin_cambio`, `envio_no_encontrado`, `baja_registrada`, `baja_anterior`, `cliente_no_encontrado`, `evento_desconocido`, `payload_invalido` o `duplicado`',
+        },
+    }),
+)

@@ -45,6 +45,10 @@ export interface EntradaConfigurar {
         /** omitido: se conserva (o se genera si hay token y no hay secreto); `null`: se borra */
         webhook_secreto?: string | null
     }
+    /** WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6) */
+    whatsapp?: {
+        activo?: boolean
+    }
     /** tipo de aviso → encendido; los que no vienen no cambian */
     avisos?: Partial<Record<TipoAviso, boolean>>
 }
@@ -200,6 +204,8 @@ function columnasDe(input: EntradaConfigurar, antes: FilaConfiguracion | null): 
     }
     // Un bot sin secreto rechazaría todo en el webhook: se genera uno.
     if (token && !secreto) columnas.telegram_webhook_secreto_cifrado = cifrar(generarSecretoWebhook())
+
+    if (input.whatsapp?.activo !== undefined) columnas.whatsapp_activo = input.whatsapp.activo
 
     if (input.avisos && Object.keys(input.avisos).length > 0) {
         columnas.avisos = JSON.stringify({ ...(antes?.avisos ?? {}), ...input.avisos })

@@ -8,9 +8,11 @@ import { nuevaConexionRedis, prefijoColas, redis } from '#shared/redis'
 import type { Canal } from '#notify/canales/canal'
 import { CanalCorreo } from '#notify/canales/correo'
 import { CanalTelegram } from '#notify/canales/telegram'
+import { canalWhatsappIris } from '#notify/canales/whatsapp'
 
 /**
- * Configuración de los canales de notificación (correo y Telegram), editable desde el panel
+ * Configuración de los canales de notificación (correo, Telegram y el interruptor de WhatsApp por
+ * Iris), editable desde el panel
  * (`notify.configuracion_canales`, contrato `contratos/multiempresa.md`).
  *
  * - **Resolución.** Una fila global (`empresa_id` nulo) y una opcional por empresa. Para un aviso
@@ -101,6 +103,8 @@ export interface FilaConfiguracion {
     telegram_bot_nombre: string | null
     telegram_chat_equipo: string | null
     telegram_webhook_secreto_cifrado: string | null
+    /** WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6); apagado por defecto */
+    whatsapp_activo: boolean
     avisos: Partial<Record<string, boolean>>
     sembrada_desde_entorno: boolean
     version: number
@@ -138,6 +142,10 @@ export interface ConfigCanales {
         botNombre: string | null
         chatEquipo: string | null
         webhookSecreto: string | null
+    }
+    /** WhatsApp por la mensajería de Iris (`#notify/whatsapp`): solo el interruptor; el resto es del conector Iris */
+    whatsapp: {
+        activo: boolean
     }
     avisos: Record<TipoAviso, boolean>
     /** secretos guardados que no se pudieron descifrar (clave distinta): el canal queda sin configurar */
@@ -196,6 +204,7 @@ export function desdeFila(fila: FilaConfiguracion): ConfigCanales {
                 errores,
             ),
         },
+        whatsapp: { activo: fila.whatsapp_activo === true },
         avisos: avisosCompletos(fila.avisos),
         erroresCifrado: errores,
     }
@@ -257,6 +266,8 @@ export function desdeEntorno(entorno: NodeJS.ProcessEnv = process.env): ConfigCa
             chatEquipo: entorno.TELEGRAM_CHAT_EQUIPO || null,
             webhookSecreto: entorno.TELEGRAM_WEBHOOK_SECRET || null,
         },
+        // WhatsApp no tiene valor inicial en el entorno: se enciende desde el panel
+        whatsapp: { activo: false },
         avisos: avisosCompletos({}),
         erroresCifrado: [],
     }
@@ -481,6 +492,8 @@ export function construirCanal(
                 crear: () => new CanalTelegram({ token, apiRoot, fetch: transporteTelegram.fetch }),
             }
         }
+        // WhatsApp: el adaptador lee el conector Iris en cada envío (sin caché, como A1)
+        if (nombre === 'whatsapp') return { huella: 'whatsapp', crear: () => canalWhatsappIris() }
         return null
     }
     const plan = armar()
@@ -528,6 +541,9 @@ export function disponibilidad(
     if (nombre === 'telegram' && uso === 'alertas' && !config.telegram.alertasActivo) {
         return { canal: null, apagado: true, motivo: `Alertas por Telegram apagadas en ${donde}` }
     }
+    if (nombre === 'whatsapp' && (uso === 'alertas' || !config.whatsapp.activo)) {
+        return { canal: null, apagado: true, motivo: `WhatsApp apagado en ${donde}` }
+    }
     const canal = construirCanal(config, nombre)
     if (canal) return { canal, apagado: false, motivo: null }
     const motivo =
@@ -535,7 +551,7 @@ export function disponibilidad(
             ? `canal no configurado: falta el servidor SMTP en ${donde}`
             : nombre === 'telegram'
               ? `canal no configurado: falta el token del bot en ${donde}`
-              : 'canal no configurado: WhatsApp todavía no tiene adaptador'
+              : 'canal no configurado: WhatsApp no tiene adaptador'
     return { canal: null, apagado: false, motivo }
 }
 
