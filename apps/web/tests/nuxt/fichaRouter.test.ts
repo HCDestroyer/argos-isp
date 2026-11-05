@@ -3,6 +3,7 @@ import { defineComponent, h, type Component } from 'vue'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
+import { bd } from '~~/fixtures/bd'
 import PaginaRouter from '~/pages/routers/[id].vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
@@ -11,7 +12,7 @@ import { esperar } from '../ayudas/esperar'
  * Ficha del router (núcleo de routers, pedido del PM): cabecera con estado y modo de seguridad, la
  * franja de salud con lo que da la API, «Control de velocidad» como primera pestaña abierta con las
  * tarjetas del modo único del router, y el aviso de excepciones heredadas por plan con «Unificar»
- * (vista previa de la API; aplicar espera la acción de A1).
+ * (vista previa y `routers.unificar_control_velocidad`).
  */
 
 function enApp(componente: Component) {
@@ -56,21 +57,32 @@ describe('ficha del router', () => {
         expect(pagina.find('[data-prueba="excepciones-heredadas"]').exists()).toBe(false)
     })
 
-    it('excepción heredada por plan: aviso con «Unificar» y la vista previa de la API', async () => {
+    it('excepción heredada por plan: «Unificar» con la vista previa de la API y aplicar', async () => {
         const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/2' })
         await esperar(() => expect(pagina.find('[data-prueba="excepciones-heredadas"]').exists()).toBe(true))
         const aviso = pagina.find('[data-prueba="excepciones-heredadas"]')
         expect(aviso.text()).toContain('1 plan tiene su propia velocidad en este router')
         expect(aviso.text()).toContain('Fibra Mixco 100 Mbps')
 
-        const unificar = aviso.findAll('button').find(b => b.text() === 'Unificar')
-        await unificar?.trigger('click')
+        await aviso.findAll('button').find(b => b.text() === 'Unificar')?.trigger('click')
         await esperar(() => expect(enBody('unificar-planes')).not.toBeNull())
         expect(enBody('unificar-planes')?.querySelector('[data-plan="4"]')?.textContent).toContain('Fibra Mixco 100 Mbps')
+        expect(enBody('unificar-planes')?.querySelector('[data-plan="4"]')?.textContent).toContain('extras')
         expect(enBody('vista-previa-estrategia')).not.toBeNull()
-        // Aplicar es la acción de A1 `routers.unificar_control_velocidad`: aún no está en la API.
-        expect(enBody('unificar-confirmar')?.hasAttribute('disabled')).toBe(true)
-        expect(enBody('unificar-pendiente')?.textContent).toContain('Unificar control de velocidad')
+        const confirmar = enBody('unificar-confirmar')
+        expect(confirmar?.hasAttribute('disabled')).toBe(false)
+        confirmar?.click()
+        await esperar(() => expect(pagina.find('[data-prueba="excepciones-heredadas"]').exists()).toBe(false))
+        expect(bd.implementacionesPlan.every(i => i.estrategia_velocidad === null)).toBe(true)
+        expect(bd.acciones.some(a => a.accion === 'routers.unificar_control_velocidad')).toBe(true)
+    })
+
+    it('«Unificar» con las excepciones cambiadas: 409 y vuelve a leer la vista previa', async () => {
+        const previa = await useControlVelocidad().vistaPreviaUnificar(2)
+        expect(previa.ok && previa.data.planes.map(p => p.plan_id)).toEqual([4])
+        const viejo = await useControlVelocidad().unificar(2, { planes: [] }, nuevaClaveIdempotencia())
+        expect(!viejo.ok && viejo.problema.status).toBe(409)
+        expect(!viejo.ok && codigoProblema(viejo.problema)).toBe('excepciones_cambiaron')
     })
 
     it('la pestaña va en la URL: «Avanzado» muestra la baja y los datos del equipo', async () => {

@@ -198,6 +198,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Núcleo de routers: el control de velocidad, la salud y la red de acceso van en la ficha (`routers.ver`) y el panel lateral.
     'RouterControlVelocidad.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue', 'components/RouterVelocidad.vue'], exentos: { 'components/RouterVelocidad.vue': ['routers.ver'] } },
     'RouterSalud.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    // Red de acceso (`contratos/red-acceso.md`, A1): la pestaña con `red_acceso.ver`; cada modal con el permiso de su acción.
+    'RouterRedAcceso.vue': { permisos: ['red_acceso.ver', 'routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'OltsSlideover.vue': { permisos: ['red_acceso.ver', 'olts.crear', 'olts.editar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['olts.crear', 'olts.editar'] } },
+    'RedAccesoDescubrir.vue': { permisos: ['red_acceso.descubrir', 'red_acceso.adoptar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['red_acceso.adoptar'] } },
+    'VlanModal.vue': { permisos: ['vlans.crear', 'vlans.editar'], desde: ['components/RouterRedAcceso.vue'] },
+    'ServidorPppoeModal.vue': { permisos: ['servidores_pppoe.crear', 'servidores_pppoe.editar'], desde: ['components/RouterRedAcceso.vue'] },
     'RouterExcepcionesAviso.vue': { permisos: ['routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
     // Menú de acciones del router: lo montan la lista y la ficha (las dos con `routers.ver`).
     'RouterAcciones.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue', 'pages/routers/[id].vue'] },

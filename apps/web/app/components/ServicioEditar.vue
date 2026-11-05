@@ -34,6 +34,8 @@ const problema = ref<Problem | null>(null)
 const planes = shallowRef<PlanEfectivo[]>([])
 /** Router del servicio, para saber si usa RADIUS (sin `routers.ver` no se sabe: decide la API). */
 const routerServicio = shallowRef<RouterNas | null>(null)
+/** Servidores PPPoE del router (`red_acceso.ver`); vacío = router sin servidores. */
+const servidores = shallowRef<ServidorPppoe[]>([])
 
 watch(abierto, async (valor) => {
     if (!valor) {
@@ -41,12 +43,14 @@ watch(abierto, async (valor) => {
     }
     Object.assign(estado, entradaEdicionDesde(props.servicio))
     problema.value = null
-    const [resultadoPlanes, resultadoRouter] = await Promise.all([
+    const [resultadoPlanes, resultadoRouter, resultadoServidores] = await Promise.all([
         puede('planes.ver') ? useRouters().planes(props.servicio.router_id) : null,
         puede('routers.ver') ? useRouters().ver(props.servicio.router_id) : null,
+        puede('red_acceso.ver') ? useRedAcceso().servidores(props.servicio.router_id) : null,
     ])
     planes.value = resultadoPlanes?.ok ? resultadoPlanes.data : []
     routerServicio.value = resultadoRouter?.ok ? resultadoRouter.data : null
+    servidores.value = resultadoServidores?.ok ? resultadoServidores.data : []
 }, { immediate: true })
 
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
@@ -88,6 +92,20 @@ watch(() => estado.tipo_conexion, (tipo) => {
         estado.amarre_ip_mac = false
     }
 })
+
+/*
+ * Servidor PPPoE (`contratos/red-acceso.md` §3): el del servicio, o elegir otro activo del router.
+ * Con uno solo la API lo toma; con varios, 422 `servidor_pppoe_requerido` si no se elige.
+ */
+const itemsServidor = computed<SelectItem[]>(() => [
+    ...(props.servicio.servidor_pppoe_id ? [] : [{ label: 'Que lo elija Argos por la red', value: 0 }]),
+    ...servidores.value
+        .filter(s => s.activo || s.id === props.servicio.servidor_pppoe_id)
+        .map(s => ({ label: s.nombre, value: s.id, description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}` : 'sin gateway'].join(' · ') })),
+])
+const servidorElegido = computed(() => servidores.value.find(s => s.id === estado.servidor_pppoe_id) ?? null)
+/** Gateway de solo lectura: el guardado mientras no cambie el servidor; si cambia, el del servidor nuevo. */
+const gatewayServicio = computed(() => (estado.servidor_pppoe_id === (props.servicio.servidor_pppoe_id ?? 0) ? props.servicio.local_address : servidorElegido.value?.local_address) ?? null)
 
 /** Qué pasa con las credenciales al cambiar el tipo. */
 const avisoTipo = computed(() => {
@@ -193,6 +211,31 @@ async function recargar() {
                     v-if="faltanCredencialesApi && !credencialesRechazadas"
                     :router-id="servicio.router_id"
                 />
+
+                <UFormField
+                    v-if="conPppoe && servidores.length"
+                    name="servidor_pppoe_id"
+                    label="Servidor PPPoE"
+                    :help="servidores.length === 1 ? 'El único del router.' : 'Uno por VLAN: por dónde entra el cliente. Si su IP no es de la red del servidor nuevo, la API le da una de esa red.'"
+                    data-prueba="editar-servidor-pppoe"
+                >
+                    <USelect
+                        v-model="estado.servidor_pppoe_id"
+                        :items="itemsServidor"
+                        class="w-full"
+                        data-prueba="editar-selector-servidor"
+                    />
+                    <p
+                        class="mt-1.5 flex items-center gap-1.5 text-xs text-muted"
+                        data-prueba="editar-gateway"
+                    >
+                        <UIcon
+                            name="i-lucide-route"
+                            class="size-3.5 shrink-0"
+                        />
+                        Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio ?? 'sale de la red del servidor' }}</span>
+                    </p>
+                </UFormField>
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <UFormField

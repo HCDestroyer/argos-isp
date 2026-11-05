@@ -1,4 +1,4 @@
-import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosVistaPreviaEstrategia, MatrizControlVelocidad, SincronizacionPlan, VistaPreviaEstrategia, VistaPreviaReconciliar } from '~/types/controlVelocidad'
+import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosUnificarVelocidad, DatosVistaPreviaEstrategia, ResultadoUnificarVelocidad, VistaPreviaUnificarVelocidad, MatrizControlVelocidad, SincronizacionPlan, VistaPreviaEstrategia, VistaPreviaReconciliar } from '~/types/controlVelocidad'
 
 /**
  * Control de velocidad por capas, «Sincronizar plan» y la vista previa de «Reconciliar ahora»
@@ -45,5 +45,24 @@ export function useControlVelocidad() {
         return resolver(api.GET('/api/v1/routers/{id}/vista-previa-reconciliar', { params: { path: { id: routerId } } }))
     }
 
-    return { matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar, vistaPreviaReconciliar }
+    /**
+     * `GET /routers/:id/vista-previa-unificar-velocidad?reconectar=` (`routers.ver`, no escribe):
+     * planes con excepción heredada, qué cambia y cuántas sesiones reconectan (`control-velocidad.md` §11).
+     */
+    function vistaPreviaUnificar(routerId: number, reconectar = false): Promise<Resultado<VistaPreviaUnificarVelocidad>> {
+        return resolver(api.GET('/api/v1/routers/{id}/vista-previa-unificar-velocidad', { params: { path: { id: routerId }, query: reconectar ? { reconectar: true } : {} } }))
+    }
+
+    /**
+     * `POST /routers/:id/unificar-control-velocidad` (`routers.unificar_control_velocidad`, solo admin):
+     * `planes` = los de la vista previa; 409 `excepciones_cambiaron` si ya no coinciden.
+     */
+    function unificar(routerId: number, datos: DatosUnificarVelocidad, claveIdempotencia: string): Promise<Resultado<ResultadoUnificarVelocidad>> {
+        return resolver(api.POST('/api/v1/routers/{id}/unificar-control-velocidad', {
+            params: { path: { id: routerId }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { vistaPreviaUnificar, unificar, matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar, vistaPreviaReconciliar }
 }

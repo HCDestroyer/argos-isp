@@ -25,9 +25,13 @@ export type VistaPreviaEstrategia = Schema<'VistaPreviaEstrategia'>
 export type SincronizacionPlan = Schema<'SincronizacionPlan'>
 export type VistaPreviaReconciliar = Schema<'VistaPreviaReconciliar'>
 export type DiagnosticoCorte = Schema<'DiagnosticoCorte'>
+/** Modo único por router (§11): vista previa y resultado de «Unificar». */
+export type VistaPreviaUnificarVelocidad = Schema<'VistaPreviaUnificarVelocidad'>
+export type ResultadoUnificarVelocidad = Schema<'ResultadoUnificarVelocidad'>
 
 export type DatosVistaPreviaEstrategia = paths['/api/v1/routers/{id}/vista-previa-estrategia']['post']['requestBody']['content']['application/json']
 export type CambioEstrategiaRouter = paths['/api/v1/routers/{id}/cambiar-estrategia-velocidad']['post']['requestBody']['content']['application/json']
+export type DatosUnificarVelocidad = paths['/api/v1/routers/{id}/unificar-control-velocidad']['post']['requestBody']['content']['application/json']
 export type CambioEstrategiaPlan = paths['/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad']['post']['requestBody']['content']['application/json']
 
 export const APLICACIONES = ['radius_rate_limit', 'perfil_ppp', 'cola_simple', 'pcq_plan', 'arbol_pcq'] as const satisfies readonly Aplicacion[]

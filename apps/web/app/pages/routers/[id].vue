@@ -332,7 +332,17 @@ async function alProbar() {
                         />
                     </template>
                     <template #red-acceso>
-                        <RouterRedAcceso :router="nas" />
+                        <RouterRedAcceso
+                            v-if="puede('red_acceso.ver')"
+                            :router="nas"
+                        />
+                        <UEmpty
+                            v-else
+                            icon="i-lucide-lock"
+                            title="Sin permiso para ver la red de acceso"
+                            description="Pide a un administrador el permiso «red_acceso.ver»."
+                            variant="naked"
+                        />
                     </template>
                     <template #pools>
                         <RouterDireccionamiento

@@ -73,6 +73,12 @@ function alCambiarEstrategia(router: RouterNas) {
     void cargarPlanes()
 }
 
+/** Tras «Unificar»: el router (su `version`) y las excepciones de los planes, otra vez. */
+async function alUnificar() {
+    await recargarRouter()
+    await cargarPlanes()
+}
+
 /* Capacidad del enlace. */
 const esquemaCapacidad = z.object({
     capacidad_bajada_kbps: z.number().int('Solo kbps enteros').min(1, 'Al menos 1 kbps').max(100_000_000, 'Máximo 100 000 000 kbps').nullable(),
@@ -174,7 +180,7 @@ const conExcepcion = computed(() => planes.value.filter(p => tieneExcepcion(p.im
                 v-if="conExcepcion.length"
                 :router="actual"
                 :planes="conExcepcion"
-                @unificado="alCambiarEstrategia"
+                @unificado="alUnificar"
             />
 
             <ul
