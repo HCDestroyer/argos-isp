@@ -9,7 +9,8 @@ import {
     crearServicioFila,
     redUnica,
 } from '#tests/core/fabricas'
-import { registrosAaaPorServicio } from '#core/aaa'
+import { claveAaa, registrosAaaPorServicio } from '#core/aaa'
+import { redis } from '#shared/redis'
 import {
     registrarDiffTomarControl,
     registrarLectorInventario,
@@ -500,12 +501,21 @@ test.group('Red de acceso · servicio PPPoE con servidor', (group) => {
         assert.isTrue(uno.prefijo_enlace_v6.startsWith(`${pools.raiz}01:`))
         assert.isTrue(uno.prefijo_delegado_v6.startsWith(`${pools.raiz}2`))
         const [aaa] = await registrosAaaPorServicio([uno.id])
-        assert.deepEqual(aaa!.red_acceso, { servidor_pppoe_id: srvB.id, local_address: `${redB.base}.1` })
+        assert.deepEqual(aaa!.red_acceso, {
+            servidor_pppoe_id: srvB.id,
+            local_address: `${redB.base}.1`,
+            perfil_por_servidor: false,
+        })
 
         const srvA = await crearServidor(client, tecnico, routerId, {
             interfaz: 'ether1',
             red_ipv4_id: redA.id,
         })
+        // dos servidores con gateways distintos: perfiles por servidor (A2) y aaa:user:* reescrito
+        const [conDos] = await registrosAaaPorServicio([uno.id])
+        assert.isTrue(conDos!.red_acceso.perfil_por_servidor)
+        const enRedis = JSON.parse((await redis().get(claveAaa(uno.user_ppp)))!)
+        assert.isTrue(enRedis.red_acceso.perfil_por_servidor)
         const ambigua = await alta()
         ambigua.assertStatus(422)
         assert.equal(ambigua.body().type.split(':').pop(), 'servidor_pppoe_requerido')
@@ -818,16 +828,17 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         assert.equal(vlan.comment, `argosisp:vlan:${vlan.id}`)
     })
 
-    test('sin lector: 501; con lector marca nuevo, adopta sin tocar el router y protege lo adoptado', async ({
+    test('lector de A2: 502 sin API; con lector marca nuevo, adopta sin tocar el router y protege lo adoptado', async ({
         client,
         assert,
     }) => {
         const routerId = await routerPrueba()
         const red = await crearRed(routerId)
         const url = `/api/v1/routers/${routerId}/red-acceso`
-        const sinLector = await client.get(`${url}/descubrir`).bearerToken(tecnico)
-        sinLector.assertStatus(501)
-        assert.equal(sinLector.body().type.split(':').pop(), 'descubrir_no_disponible')
+        // Con el lector de A2 (`routeros/inventario_acceso.ts`): un router sin credenciales de la API → 502
+        const sinApi = await client.get(`${url}/descubrir`).bearerToken(tecnico)
+        sinApi.assertStatus(502)
+        assert.equal(sinApi.body().type.split(':').pop(), 'router_no_responde')
 
         registrarLectorInventario(async () => inventario(`${red.base}.1`))
         const visto = await cuerpo(client.get(`${url}/descubrir`).bearerToken(tecnico), 200)

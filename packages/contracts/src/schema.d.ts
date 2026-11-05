@@ -20201,6 +20201,22 @@ export interface components {
                 mover: number;
             }[];
             avisos: string[];
+            /** @description Deriva de la red de acceso administrada (VLAN, perfil del servidor y servidor PPPoE; contratos/red-acceso.md §6). Lo adoptado y lo ajeno no aparecen: nunca se tocan */
+            red_acceso?: {
+                ruta: string;
+                /** @description comment de Argos (`argosisp:vlan:<id>`, `argosisp:pppoe:<id>`…) */
+                clave: string;
+                /** @enum {string} */
+                accion: "crear" | "actualizar" | "borrar";
+            }[];
+            /** @description Formas de limitar que chocan en el router (RADIUS + colas por API, árbol + simples, perfil con rate-limit + colas). Solo informa: Argos nunca borra lo ajeno */
+            conflictos?: {
+                /** @enum {string} */
+                codigo: "radius_y_colas_api" | "arbol_y_simples" | "perfil_con_rate_limit_y_colas" | "perfil_de_fabrica_con_rate_limit";
+                mensaje: string;
+                /** @description Objetos del router implicados (`menú name`), hasta 20 */
+                objetos: string[];
+            }[];
             /** @description El router no respondió o no tiene credenciales */
             error: string | null;
         };

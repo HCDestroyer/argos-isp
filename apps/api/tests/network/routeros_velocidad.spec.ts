@@ -58,13 +58,14 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
     let falso: RouterOSFalso
     let token: string
     let routerId: number
+    let base: string
     let clienteId: number
 
     group.each.setup(async () => {
         falso = new RouterOSFalso()
         await falso.levantar()
         ;({ token } = await usuarioConRoles(['soporte']))
-        ;({ routerId } = await crearEscenarioRouter())
+        ;({ routerId, base } = await crearEscenarioRouter())
         await db
             .from('network.routers')
             .where('id', routerId)
@@ -147,15 +148,16 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
             servicios.map((s) => `${s.ipv4}/32`),
         )
         for (const s of servicios) assert.equal(cola(s.id).parent, nombrePadre(planId))
-        // Perfil PPP para las sesiones PPPoE del plan, con lo del perfil default
+        // Perfil PPP para las sesiones PPPoE del plan, con lo del perfil default salvo las
+        // direcciones: local-address = gateway de la red del router, nunca el de `default` (10.10.0.1)
         assert.lengthOf(perfil(planId), 1)
         assert.containsSubset(perfil(planId)[0], {
             name: `plan-${planId}`,
             'parent-queue': nombrePadre(planId),
-            'local-address': '10.10.0.1',
-            'remote-address': 'pool-clientes',
+            'local-address': `${base}.1`,
             'dhcpv6-pd-pool': 'pool-pd',
         })
+        assert.notProperty(perfil(planId)[0]!, 'remote-address')
 
         // Un suspendido no cuenta: 3 activos → 3750k/15M; su cola deja de colgar del padre.
         await cambiarEstado(servicios[3]!.id, 'suspendido')

@@ -16,6 +16,9 @@ import type { RegistroAaa } from '#core/aaa'
  *   `address-list=suspendidos`), igual que `Mikrotik-Group = suspendido`.
  * - `retirado`: no se exporta.
  * - IPv4 fija → `remote-address`; /64 de enlace fijo (`radius_servicio`) → `remote-ipv6-prefix`.
+ * - `local-address` del secret = `red_acceso.local_address` del registro de `aaa` (regla única de A1:
+ *   gateway de la red de su IPv4 o de su servidor PPPoE), nunca el del perfil `default`: el secret
+ *   manda sobre lo que el perfil copió. Sin gateway con IPv4 fija: aviso en el resumen.
  *   El /56 delegado fijo no tiene atributo en `/ppp secret`: con secrets, el cliente recibe uno
  *   del `dhcpv6-pd-pool` del perfil (otro prefijo mientras dure la emergencia).
  *
@@ -51,6 +54,8 @@ export interface ResumenRsc {
     por_estado: Record<string, number>
     perfiles: string[]
     omitidos: Array<{ servicio_id: number; user_ppp: string; motivo: string }>
+    /** Secrets sin `local-address` (red sin gateway), sin contraseñas */
+    avisos: string[]
 }
 
 /** Contraseña ya descifrada (o el motivo por el que no se pudo). */
@@ -77,6 +82,7 @@ export function generarRscEmergencia(
         por_estado: {},
         perfiles: [],
         omitidos: [],
+        avisos: [],
     }
     const perfiles = new Map<string, PerfilEmergencia>()
     const secrets: string[] = []
@@ -132,6 +138,13 @@ export function generarRscEmergencia(
             'service=pppoe',
             `profile=${cadenaRos(perfil)}`,
         ]
+        const local = r.red_acceso?.local_address ?? null
+        if (local) partes.push(`local-address=${local}`)
+        else if (r.ipv4?.modo === 'estatico') {
+            resumen.avisos.push(
+                `servicio ${r.servicio_id}: la red de ${r.ipv4.ip} no tiene gateway; el secret no lleva local-address`,
+            )
+        }
         if (r.ipv4?.modo === 'estatico') partes.push(`remote-address=${r.ipv4.ip}`)
         if (r.ipv6.modo === 'radius_servicio' && r.ipv6.prefijo_enlace) {
             partes.push(`remote-ipv6-prefix=${r.ipv6.prefijo_enlace}`)

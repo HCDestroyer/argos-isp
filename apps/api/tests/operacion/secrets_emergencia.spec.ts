@@ -97,7 +97,7 @@ test.group('operacion · secrets PPPoE de emergencia', () => {
         // Contraseña escapada para RouterOS (\ " $), IPv4 fija y perfil del plan
         assert.equal(
             secret(e.activo.user),
-            `add name="${e.activo.user}" password=${cadenaRos('cl@ve"con$signos\\')} service=pppoe profile="argosisp-emergencia-plan-${e.planId}" remote-address=${e.base}.10 comment="argosisp-emergencia"`,
+            `add name="${e.activo.user}" password=${cadenaRos('cl@ve"con$signos\\')} service=pppoe profile="argosisp-emergencia-plan-${e.planId}" local-address=${e.base}.1 remote-address=${e.base}.10 comment="argosisp-emergencia"`,
         )
         assert.include(secret(e.activo.user)!, 'password="cl@ve\\"con\\$signos\\\\"')
         assert.include(secret(e.conPool.user)!, 'password="clave-pool"')
@@ -135,6 +135,30 @@ test.group('operacion · secrets PPPoE de emergencia', () => {
         assert.equal(auditoria.entidad_tipo, 'router')
         assert.equal(Number(auditoria.entidad_id), e.routerId)
         assert.notInclude(JSON.stringify(auditoria), 'clave')
+    })
+
+    test('local-address: el del registro de aaa (gateway de la red); sin gateway, aviso', async ({
+        assert,
+    }) => {
+        const e = await escenario()
+        let { rsc, resumen } = await new ExportarSecretsEmergencia().execute(
+            { router_id: e.routerId },
+            contextoPrueba(),
+        )
+        const secret = (texto: string, user: string) =>
+            texto.split('\n').find((l) => l.startsWith(`add name="${user}"`))!
+        assert.include(secret(rsc, e.activo.user), `local-address=${e.base}.1 `)
+        assert.notInclude(secret(rsc, e.conPool.user), 'local-address')
+        assert.lengthOf(resumen.avisos, 0)
+
+        await db.from('network.redes_ipv4').where('router_id', e.routerId).update({ gateway: null })
+        ;({ rsc, resumen } = await new ExportarSecretsEmergencia().execute(
+            { router_id: e.routerId },
+            contextoPrueba(),
+        ))
+        assert.notInclude(secret(rsc, e.activo.user), 'local-address')
+        assert.isTrue(resumen.avisos.some((a) => a.includes(`servicio ${e.activo.id}`)))
+        assert.notInclude(JSON.stringify(resumen), 'clave')
     })
 
     test('sin suspendidos y router inexistente', async ({ assert }) => {
