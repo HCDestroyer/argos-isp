@@ -174,6 +174,48 @@ export const PortalTelegram = definirEsquema(
     }),
 )
 
+export const PortalWhatsapp = definirEsquema(
+    'PortalWhatsapp',
+    objeto({
+        visible: {
+            ...booleano,
+            description:
+                'WhatsApp encendido en notify (`whatsapp.activo`) para alguna empresa con servicios vigentes del ' +
+                'cliente. En `false` el portal no muestra la casilla y los demás campos van vacíos',
+        },
+        disponible: {
+            ...booleano,
+            description:
+                'Además, el conector Iris está activo con contrato ≥ 0.6.0. En `false` el portal muestra el error ' +
+                'con «Reintentar» y no pinta la casilla',
+        },
+        motivo: nulable({ ...texto, description: 'Texto para el cliente cuando no está disponible' }),
+        empresas: { ...lista(PortalMarcaEmpresa), description: 'Empresas con WhatsApp encendido' },
+        estado: {
+            ...nulable(enumerado(['acepta', 'baja'])),
+            description:
+                'Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris). `null`: el ' +
+                'cliente nunca eligió (no recibe avisos por WhatsApp)',
+        },
+        ocurrido_en: nulable(instante),
+        origen: {
+            ...nulable(texto),
+            description:
+                '`argos_portal`, `argos_panel`, o con una baja dada en Iris `iris_cliente`, `iris_agente`, `iris_vigente`',
+        },
+        baja_de_iris: {
+            ...booleano,
+            description: 'La baja vigente la dio el cliente (o un agente) en la conversación de Iris',
+        },
+        entrega: {
+            ...nulable(enumerado(['pendiente', 'enviado', 'fallido'])),
+            description:
+                'Entrega a Iris de la última marca hecha en Argos (`null` si el estado vigente vino de Iris). ' +
+                '`fallido`: Iris no la registró; el portal ofrece reintentar',
+        },
+    }),
+)
+
 export const PortalVinculoTelegram = definirEsquema(
     'PortalVinculoTelegram',
     objeto({

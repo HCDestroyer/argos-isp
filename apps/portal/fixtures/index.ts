@@ -174,6 +174,7 @@ export function fijarSesionFixture(abierta: boolean): void {
     telegram.pendienteHasta = null
     telegram.consultas = 0
     telegram.vinculadas.clear()
+    whatsapp.marcado = null
 }
 
 /** Pruebas: con o sin bot configurado. */
@@ -182,6 +183,73 @@ export function fijarTelegramFixture(disponible: boolean): void {
     telegram.pendienteHasta = null
     telegram.consultas = 0
     telegram.vinculadas.clear()
+}
+
+/**
+ * WhatsApp en fixtures (contrato Iris 0.6.0 §6.4): `?whatsapp=nuevo|acepta|baja_iris|apagado|sin_conector|fallido`
+ * en la URL (solo desarrollo) o `fijarWhatsappFixture` en pruebas. Por defecto, `nuevo` (encendido y sin
+ * elegir). `POST /portal/whatsapp` deja el estado pedido con la entrega `pendiente`, como la API.
+ */
+export type EscenarioWhatsapp = 'nuevo' | 'acepta' | 'baja_iris' | 'apagado' | 'sin_conector' | 'fallido'
+const ESCENARIOS_WHATSAPP: readonly EscenarioWhatsapp[] = ['nuevo', 'acepta', 'baja_iris', 'apagado', 'sin_conector', 'fallido']
+export const WHATSAPP_OCURRIDO_FIXTURE = '2026-11-02T15:30:00.000Z'
+const whatsapp: { escenario: EscenarioWhatsapp | null, marcado: Schema<'PortalWhatsapp'> | null } = { escenario: null, marcado: null }
+
+export function fijarWhatsappFixture(escenario: EscenarioWhatsapp | null): void {
+    whatsapp.escenario = escenario
+    whatsapp.marcado = null
+}
+
+function escenarioWhatsapp(): EscenarioWhatsapp {
+    if (whatsapp.escenario) {
+        return whatsapp.escenario
+    }
+    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('whatsapp')
+    return ESCENARIOS_WHATSAPP.find(e => e === pedido) ?? 'nuevo'
+}
+
+/** Mismos valores por defecto que `whatsappPortal` de la API (`visible: false` con todo vacío). */
+const WHATSAPP_OCULTO: Schema<'PortalWhatsapp'> = {
+    visible: false,
+    disponible: false,
+    motivo: null,
+    empresas: [],
+    estado: null,
+    ocurrido_en: null,
+    origen: null,
+    baja_de_iris: false,
+    entrega: null,
+}
+
+function whatsappFixture(): Schema<'PortalWhatsapp'> {
+    if (whatsapp.marcado) {
+        return whatsapp.marcado
+    }
+    const escenario = escenarioWhatsapp()
+    if (escenario === 'apagado') {
+        return WHATSAPP_OCULTO
+    }
+    const base: Schema<'PortalWhatsapp'> = { ...WHATSAPP_OCULTO, visible: true, disponible: true, empresas: empresasDelCliente() }
+    switch (escenario) {
+        case 'sin_conector':
+            return {
+                ...base,
+                disponible: false,
+                motivo: 'Los avisos por WhatsApp no están disponibles en este momento. Inténtalo de nuevo más tarde.',
+                estado: 'acepta',
+                ocurrido_en: WHATSAPP_OCURRIDO_FIXTURE,
+                origen: 'argos_portal',
+                entrega: 'enviado',
+            }
+        case 'acepta':
+            return { ...base, estado: 'acepta', ocurrido_en: WHATSAPP_OCURRIDO_FIXTURE, origen: 'argos_panel', entrega: 'enviado' }
+        case 'baja_iris':
+            return { ...base, estado: 'baja', ocurrido_en: WHATSAPP_OCURRIDO_FIXTURE, origen: 'iris_cliente', baja_de_iris: true }
+        case 'fallido':
+            return { ...base, estado: 'acepta', ocurrido_en: WHATSAPP_OCURRIDO_FIXTURE, origen: 'argos_portal', entrega: 'fallido' }
+        default:
+            return base
+    }
 }
 
 export const BOT_FIXTURE = 'ArgosIspBot'
@@ -767,6 +835,29 @@ const rutasBase: RutasFixture = {
         })
         comprobantes.recibidos.unshift(recibido)
         return { status: 201, cuerpo: recibido }
+    },
+    'GET /api/v1/portal/whatsapp': conSesion(() => ({ status: 200, cuerpo: whatsappFixture() })),
+    'POST /api/v1/portal/whatsapp': ({ cuerpo: pedido }) => {
+        if (!sesion.abierta) {
+            return SIN_SESION()
+        }
+        const actual = whatsappFixture()
+        if (!actual.visible) {
+            return problema(422, 'whatsapp_no_disponible', 'Regla de negocio', 'Los avisos por WhatsApp no están activos para tu servicio')
+        }
+        const valor = (pedido as { estado?: string } | undefined)?.estado
+        if (valor !== 'acepta' && valor !== 'baja') {
+            return problema(422, 'validacion', 'Validación fallida', 'El estado debe ser acepta o baja')
+        }
+        whatsapp.marcado = {
+            ...actual,
+            estado: valor,
+            ocurrido_en: new Date().toISOString(),
+            origen: 'argos_portal',
+            baja_de_iris: false,
+            entrega: 'pendiente',
+        }
+        return { status: 200, cuerpo: whatsapp.marcado }
     },
     'GET /api/v1/portal/telegram': conSesion(() => {
         if (telegram.pendienteHasta) {

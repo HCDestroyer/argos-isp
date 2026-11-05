@@ -209,6 +209,16 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`. "Vincular Telegra
 Tras recargar sigue esperando (solo `vence_en` en `sessionStorage`, nunca el código). Desvincular pide
 confirmación. Telegram como canal preferido solo se habilita con el chat vinculado.
 
+### Avisos por WhatsApp en "Mi cuenta" (contrato Iris 0.6.0 §6.4)
+
+`CuentaWhatsapp` (`app/components/cuenta/Whatsapp.vue`, `useWhatsapp`): casilla «Acepto recibir avisos
+por WhatsApp» (`UForm` + zod, espejo de `registrarWhatsappValidator`) solo si la API dice `visible`
+(WhatsApp encendido para la empresa). La casilla siempre muestra lo que respondió la API: al cambiarla
+manda `POST /portal/whatsapp` con `Idempotency-Key` y toma el estado de la respuesta. Una baja dada en el
+chat de Iris se explica. Conector Iris apagado, error al leer, error al guardar o entrega fallida a Iris:
+alerta con «Reintentar» y, si no se pudo leer, ninguna casilla ni estado. Fixtures:
+`?whatsapp=nuevo|acepta|baja_iris|apagado|sin_conector|fallido`. Pruebas en `tests/nuxt/whatsapp.test.ts`.
+
 ### Promesa rechazada
 
 "Cambiar fecha o monto" aparece solo si `corregible` (la regla fue el plazo o la próxima factura); por

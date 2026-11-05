@@ -187,6 +187,13 @@ export const vincularTelegramValidator = vine.compile(
     }),
 )
 
+export const registrarWhatsappValidator = vine.compile(
+    vine.object({
+        // Sin .meta(): en VineJS 4.4 deja pasar null en un campo obligatorio (a5.md, 2026-10-19).
+        estado: vine.enum(['acepta', 'baja'] as const),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Anuncios (contrato `anuncios.md`)

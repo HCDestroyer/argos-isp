@@ -47,7 +47,8 @@ Reglas:
   todas las lecturas filtran por el `clienteId` de la sesión (`acceso/sesion.ts`).
 - **Actor.** Canal `portal` siempre. Con la sesión, actor `cliente` (`ctx.contextoCliente`, id de
   `core.clientes`): `portal.cerrar_sesion`, `portal.editar_contacto`, `portal.desvincular_telegram`,
-  `notificaciones.telegram_codigo` y `promesas.crear` con `servicio_id`; `portal.verificar_codigo`
+  `notificaciones.telegram_codigo`, `portal.registrar_whatsapp` (y `notificaciones.registrar_consentimiento`
+  anidada) y `promesas.crear` con `servicio_id`; `portal.verificar_codigo`
   se audita como `cliente` al acertar (`t.identificarActor`, como `auth.login`). Por IP (sin sesión)
   y al pedir el código, actor `sistema`: la IP no autentica a nadie. `comprobantes.registrar` y
   `pasarela.crear_cobro` siguen como `sistema` aun con la sesión porque A3 guarda `actor.id` en
@@ -277,6 +278,17 @@ Contrato de A6 en `.claude/integration/contratos/telegram.md`: el código, su ta
 | `POST /api/v1/portal/telegram/vincular` (sesión, límite por IP) | `GenerarCodigoTelegram` de A6 (`notificaciones.telegram_codigo`, canal portal) | Cuerpo opcional `{ empresa_id }` (el bot de esa empresa; 404 si el cliente no tiene servicios en ella). 201 `{ codigo, enlace, bot, vence_en, empresa_id }` con `enlace = https://t.me/<bot>?start=<código>`; 503 `telegram_no_configurado`                             |
 | `POST /api/v1/portal/telegram/desvincular` (sesión)             | `actions/desvincular_telegram.ts` (`portal.desvincular_telegram`)              | `clientes.desvincular_telegram` de A1 y `notificaciones.telegram_anular_codigos` de A6 (anula los códigos pendientes: un enlace viejo no vuelve a vincular); si el canal preferido era Telegram pasa a correo (`clientes.editar`). Todo en una transacción. Idempotente |
 
+### Avisos por WhatsApp desde el portal (contrato Iris 0.6.0 §6.4)
+
+El registro de permisos de contacto vive solo en Iris (§9.2.8). El portal lee lo que sabe Argos con
+`verWhatsappCliente` de A6 y registra la marca del cliente con `RegistrarConsentimientoWhatsapp`
+(`origen: argos_portal`), que la deja en la cola hacia Iris.
+
+| Ruta                                                    | Acción                                                                  | Qué hace                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/portal/whatsapp` (sesión)                  | `whatsapp.ts` (`whatsappPortal`, lectura)                               | `PortalWhatsapp`: `visible` solo si `whatsapp.activo` está encendido para alguna empresa con servicios vigentes del cliente (si no, todo vacío); `disponible` si además el conector Iris permite enviar (si no, `motivo` para el cliente, sin detalles internos); `estado`, `ocurrido_en`, `origen`, `baja_de_iris` (baja dada en el chat) y `entrega` de la última marca de Argos |
+| `POST /api/v1/portal/whatsapp` (sesión, límite por IP)  | `actions/registrar_whatsapp.ts` (`portal.registrar_whatsapp`)           | `{ estado: 'acepta' \| 'baja' }`. Llama `notificaciones.registrar_consentimiento` de A6 en la misma transacción, una vez por empresa visible con el mismo `ocurrido_en` (en Iris el permiso lleva empresa, y la `Idempotency-Key` también). 422 `whatsapp_no_disponible` sin empresa visible. Acepta `Idempotency-Key`. Actor `cliente`, canal `portal` |
+
 ### Pago en línea desde el portal (semana 2)
 
 Contrato en `.claude/integration/contratos/pago-en-linea.md`. El cobro, el webhook firmado, el pago y la
@@ -441,11 +453,17 @@ puede ser un correo). Pruebas: `tests/portal/adicionales.spec.ts`.
 
 ## Eventos
 
-No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos
+No emite ni consume eventos propios (`portal.registrar_whatsapp` tampoco: el permiso de WhatsApp no
+cambia estado de negocio de Argos). Las acciones de A3 que llama emiten los suyos
 (`promesa.creada`, `comprobante.recibido`; el webhook de la pasarela emite `pago.registrado` y
 `servicio.estado_cambiado`).
 
 ## Pruebas
+
+`tests/portal/whatsapp.spec.ts` (Postgres y Redis reales): 401 sin sesión, oculto y 422 con WhatsApp
+apagado, conector apagado o contrato < 0.6.0 (no disponible, sin detalles internos), acepta y baja con la
+fila en `notify.consentimientos_iris` (`argos_portal`, empresa) y auditoría del cliente, baja de Iris,
+entrega fallida, `Idempotency-Key`, 422 por estado inválido y una marca por empresa en multiempresa.
 
 `tests/portal/acceso.spec.ts` (Postgres y Redis reales, enviador falso): código al correo registrado por
 NIT y por usuario PPPoE, sin enumeración, destino que no sale de la petición, Telegram preferido, por IP

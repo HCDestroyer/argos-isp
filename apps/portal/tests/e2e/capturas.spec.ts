@@ -117,3 +117,50 @@ for (const tema of ['light', 'dark'] as const) {
         })
     })
 }
+
+for (const tema of ['light', 'dark'] as const) {
+    test.describe(`capturas WhatsApp ${tema}`, () => {
+        test.skip(!DESTINO, 'Solo con PW_CAPTURAS')
+        test.use({ colorScheme: tema })
+
+        test('avisos por WhatsApp en Mi cuenta', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/entrar')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.waitForURL(/\/cuenta/, { timeout: 30_000 })
+
+            // La sesión de los fixtures vive en memoria: se navega con el router, sin recargar.
+            const ir = (ruta: string) => page.evaluate((r) => {
+                const app = (document.querySelector('#__nuxt') as unknown as { __vue_app__: { config: { globalProperties: { $router: { push: (r: string) => Promise<void> } } } } }).__vue_app__
+                return app.config.globalProperties.$router.push(r)
+            }, ruta)
+            for (const escenario of ['nuevo', 'acepta', 'baja_iris', 'sin_conector', 'fallido'] as const) {
+                await ir('/cuenta')
+                await ir(`/cuenta?seccion=cuenta&whatsapp=${escenario}`)
+                const seccion = page.getByTestId('whatsapp')
+                await seccion.waitFor({ timeout: 30_000 })
+                await page.waitForTimeout(400)
+                if (escenario === 'acepta') {
+                    await capturar(page, 'whatsapp-cuenta', info.project.name, nombreTema)
+                }
+                await seccion.screenshot({ path: join(DESTINO!, `whatsapp-${escenario}-${nombreTema}-${info.project.name}.png`) })
+            }
+        })
+    })
+}
