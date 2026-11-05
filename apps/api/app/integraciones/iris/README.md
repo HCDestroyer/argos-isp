@@ -37,7 +37,7 @@ validador (`canjearEnlaceIrisValidator`: el de Horus más `code_verifier`); el c
 
 | Ruta                                                               | Permiso                                                | Acción                                                 |
 | ------------------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------ |
-| `GET /integraciones/iris`                                          | `iris.ver`                                             | vista (secretos `***`)                                 |
+| `GET /integraciones/iris`                                          | `iris.ver`                                             | vista (secretos `***`, `requiere_reconectar`, 0.6.2)   |
 | `GET /integraciones/iris/estado`                                   | `iris.abrir` o el `atk_` de Iris                       | `{ activo, version_argos, contrato }` (botón «Ver en Iris»; Iris lee las versiones) |
 | `PUT /integraciones/iris/contrato`                                 | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_contrato`                               |
 | `PUT /integraciones/iris`                                          | `iris.configurar`                                      | `iris.configurar` (con `version`)                      |
@@ -89,7 +89,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.6.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.6.2"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
@@ -109,6 +109,29 @@ y el admin aprueba en Argos.
   no es semver, false. Los webhooks nuevos de 0.5.0 (`servicio.datos_cambiados`,
   `catalogo.cambiado`, `inventario.traslado_*`) solo deben salir con `conectorAdmite('0.5.0')`.
   `compararSemver` y `contratoAdmite` son las funciones puras.
+
+## Receptor de Argos y «hay que volver a conectar» (contrato 0.6.2)
+
+- **`receptor_argos`** (boolean, opcional) en el cuerpo del canje (§1.3 y §1.4) y de
+  `PUT /integraciones/iris/contrato`: si Iris tiene guardados la `url` y el `secreto` del receptor
+  de Argos que entrega el canje. Se guarda en `integraciones.iris_conector.receptor_argos`
+  (migración `1793889354405_alter_iris_conector_receptor_argos_table`, diff en `audit.cambios`).
+  - Canje: con B1, Iris siempre manda `true`. Sin el campo (un Iris anterior) queda **null**; un
+    canje nuevo siempre reemplaza el valor anterior. Entra en el hash de idempotencia solo si viene.
+  - `PUT`: Iris manda `false` en los conectores canjeados antes de B1. Sin el campo se **conserva**
+    el último informado (un Iris que solo informa su contrato no lo borra).
+  - Otro tipo (`"si"`, `1`): 422 en `receptor_argos`.
+- **`GET /integraciones/iris`** responde `requiere_reconectar` (boolean) y `motivo_reconectar`
+  (string o null, `MOTIVO_RECONECTAR_RECEPTOR`). `true` **solo** cuando el último `receptor_argos`
+  es `false`; null (nunca informado), `true` o sin conector → `false` y `null`. No se infiere nada del
+  contrato ni de la fecha del canje (`reconexionIris(fila)` en `configuracion.ts`). Se quita al volver a
+  conectar con B1 (el canje deja `true`) o con un `PUT { receptor_argos: true }`.
+- **Host del receptor.** El canje arma `webhook.url` como `<base>/api/v1/integraciones/iris/webhook`
+  con la **misma** `base` guardada en el enlace al generarlo (`baseArgos`: `API_PUBLIC_URL`, si no
+  `NOTIFY_API_URL`, si no protocolo + host de la petición). Esa base es la que Iris recibe: el enlace
+  de §1.3 es `<base>/conectar#…` y en §1.4 va como `api=<base>` en el fragmento. Por eso el host
+  coincide siempre con la base de Argos que conoce Iris; **no** coincide con `panel_url` (en
+  producción el panel y la API tienen dominios distintos). Prueba: `tests/core/iris_receptor_062.spec.ts`.
 
 ## Pagos y atención (contrato 0.6.0, §1.1, §7.1, §7.5, §7.6; parte de A1)
 

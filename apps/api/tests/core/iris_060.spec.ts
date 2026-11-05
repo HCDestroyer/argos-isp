@@ -176,10 +176,10 @@ test.group('Iris 0.6.0 · usuario técnico y contrato', () => {
         assert.lengthOf(repetidos, 1)
     })
 
-    test('Argos habla 0.6.0; los webhooks de §7 piden un conector con contrato ≥ 0.6.0', async ({
+    test('Argos habla 0.6.2; los webhooks de §7 piden un conector con contrato ≥ 0.6.0', async ({
         assert,
     }) => {
-        assert.equal(CONTRATO_IRIS, '0.6.0')
+        assert.equal(CONTRATO_IRIS, '0.6.2')
         assert.equal(CONTRATO_EVENTOS_060, '0.6.0')
         for (const evento of EVENTOS_IRIS_DESDE_060) assert.equal(contratoMinimoEventoIris(evento), '0.6.0')
         assert.isNull(contratoMinimoEventoIris('servicio.estado_cambiado'))

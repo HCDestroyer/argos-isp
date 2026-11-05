@@ -118,14 +118,20 @@ const iris: Ruta[] = [
             'Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ' +
             'ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de ' +
             '0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. ' +
-            'Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).',
+            'Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos). ' +
+            'Contrato 0.6.2: `receptor_argos` opcional (false = Iris no tiene el receptor de Argos: ' +
+            '`GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior.',
         etiqueta: 'integraciones',
         permiso: 'sso.emitir',
         cuerpo: vi.contratoIrisValidator,
         respuesta: { status: 200, descripcion: 'Contrato guardado', esquema: ContratoConectorIris },
         handler: (ctx, { cuerpo }) =>
             new InformarContratoIris().execute(
-                { contrato: cuerpo.contrato, atk_id: tokenDeLaPeticion(ctx) },
+                {
+                    contrato: cuerpo.contrato,
+                    receptor_argos: cuerpo.receptor_argos ?? null,
+                    atk_id: tokenDeLaPeticion(ctx),
+                },
                 ctx.contextoAccion(),
             ),
     }),
@@ -205,7 +211,8 @@ const iris: Ruta[] = [
             '`enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida ' +
             'antes de vencer recibe la misma respuesta. Responde además `panel_url` (`PANEL_URL_PUBLICA`). ' +
             'Un código de «Conectar con un botón» (§1.4) exige `code_verifier`: si falta o no coincide, 401 ' +
-            '`codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide.',
+            '`codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide. Contrato 0.6.2: ' +
+            '`receptor_argos` opcional (true = Iris guardó el receptor de esta respuesta); se guarda en el conector.',
         etiqueta: 'integraciones',
         seguridad: 'publico',
         permiso: null,
@@ -225,6 +232,7 @@ const iris: Ruta[] = [
                     webhook: cuerpo.webhook,
                     code_verifier: cuerpo.code_verifier ?? null,
                     contrato: cuerpo.contrato ?? null,
+                    receptor_argos: cuerpo.receptor_argos ?? null,
                 },
                 ctx.contextoAccion('webhook'),
             ),

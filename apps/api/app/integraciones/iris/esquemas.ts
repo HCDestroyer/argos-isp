@@ -46,6 +46,17 @@ export const ConectorIris = definirEsquema(
                 'Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca ' +
                 '(un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0)',
         },
+        requiere_reconectar: {
+            type: 'boolean',
+            description:
+                'true solo si el último `receptor_argos` que informó Iris (canje o `PUT /integraciones/iris/contrato`) ' +
+                'es false: un conector canjeado antes de B1 que no guardó el receptor de Argos. Null o true: false ' +
+                '(contrato Iris 0.6.2)',
+        },
+        motivo_reconectar: {
+            ...nulable(texto),
+            description: 'Por qué hay que volver a conectar Iris; null si `requiere_reconectar` es false',
+        },
         version: { type: 'integer', minimum: 0 },
     }),
 )

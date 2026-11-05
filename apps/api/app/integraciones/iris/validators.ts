@@ -53,8 +53,21 @@ const contratoIris = () =>
         .regex(FORMATO_SEMVER)
         .meta({ description: 'Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`)' })
 
+/** `receptor_argos` (contrato 0.6.2): si Iris guardó la URL y el secreto del receptor de Argos. */
+const receptorArgos = (descripcion: string) =>
+    vine.boolean({ strict: true }).optional().meta({ description: descripcion })
+
 /** `PUT /integraciones/iris/contrato` (con el token de Iris). */
-export const contratoIrisValidator = vine.compile(vine.object({ contrato: contratoIris() }))
+export const contratoIrisValidator = vine.compile(
+    vine.object({
+        contrato: contratoIris(),
+        receptor_argos: receptorArgos(
+            'Contrato Iris 0.6.2: true si Iris tiene guardados la URL y el secreto del receptor de webhooks de ' +
+                'Argos (los del canje); false si no (conector canjeado antes de B1: el panel pide volver a ' +
+                'conectar). Omitido: se conserva el último informado',
+        ),
+    }),
+)
 
 /** Caracteres seguros en URL (RFC 3986 «unreserved»): `state` y `code_verifier`. */
 const URL_SEGURO = /^[A-Za-z0-9._~-]+$/
@@ -88,6 +101,10 @@ export const canjearEnlaceIrisValidator = vine.compile(
                     'Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, ' +
                     'Argos no envía los webhooks nuevos de 0.5.0',
             }),
+        receptor_argos: receptorArgos(
+            'Contrato Iris 0.6.2: true si Iris guardó la URL y el secreto del receptor de Argos de esta respuesta ' +
+                '(con B1, siempre true). Se guarda en el conector; omitido queda null (desconocido)',
+        ),
     }),
 )
 

@@ -29,7 +29,7 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.6.0'
+export const CONTRATO_IRIS = '0.6.2'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -136,6 +136,8 @@ export interface FilaConectorIris {
     conectado_por_enlace_en: Date | null
     /** versión del contrato que habla el Iris conectado (semver); null = anterior a 0.5.0 */
     contrato: string | null
+    /** lo último que informó Iris del receptor de Argos (0.6.2): true guardado, false no, null nunca */
+    receptor_argos: boolean | null
     version: number
     created_at: Date
     updated_at: Date
@@ -319,7 +321,29 @@ export interface VistaConectorIris {
     token_argos_id: number | null
     /** versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca */
     contrato: string | null
+    /** true solo si el último `receptor_argos` que informó Iris es false (contrato 0.6.2) */
+    requiere_reconectar: boolean
+    /** por qué hay que volver a conectar; null si no hace falta */
+    motivo_reconectar: string | null
     version: number
+}
+
+/** Motivo de `requiere_reconectar` (contrato Iris 0.6.2). */
+export const MOTIVO_RECONECTAR_RECEPTOR =
+    'Iris informó que no tiene guardado el receptor de webhooks de Argos (conector canjeado antes de ' +
+    'B1): vuelve a conectar Iris con un enlace o con «Conectar con Argos» para que Iris reciba la URL ' +
+    'y el secreto del receptor'
+
+/**
+ * Contrato Iris 0.6.2: hay que volver a conectar solo cuando el último `receptor_argos` informado
+ * es false. null (nunca informado, un Iris anterior) o true: no.
+ */
+export function reconexionIris(fila: Pick<FilaConectorIris, 'receptor_argos'> | null): {
+    requiere_reconectar: boolean
+    motivo_reconectar: string | null
+} {
+    const requiere = fila?.receptor_argos === false
+    return { requiere_reconectar: requiere, motivo_reconectar: requiere ? MOTIVO_RECONECTAR_RECEPTOR : null }
 }
 
 function mascara(valor: string | null | undefined): '***' | null {
@@ -345,6 +369,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
                 ? null
                 : Number(fila.token_argos_id),
         contrato: fila?.contrato ?? null,
+        ...reconexionIris(fila),
         version: fila?.version ?? 0,
     }
 }
