@@ -11,12 +11,12 @@ async function cuerpo(peticion: PromiseLike<any>, status: number) {
 
 let contadorNas = 0
 /**
- * Router con `nas_ip` en 10.252.x.y: fuera de los rangos de `ipUnica` y de `nasIpUnica` (notify), que
+ * Router con `nas_ip` en 10.253.x.y (10.252 es de red_acceso.spec): fuera de los rangos de `ipUnica` y de `nasIpUnica` (notify), que
  * comparten 10.200–249 y pueden chocar si una suite crea muchos routers.
  */
 function routerPrueba() {
     contadorNas += 1
-    return crearRouterFila({ nas_ip: `10.252.${Math.floor(contadorNas / 256) % 256}.${contadorNas % 256}` })
+    return crearRouterFila({ nas_ip: `10.253.${Math.floor(contadorNas / 256) % 256}.${contadorNas % 256}` })
 }
 
 /**
