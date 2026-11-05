@@ -49,7 +49,29 @@ export const PERMISOS_IRIS_CONTRATO = [
     'servicios.crear',
     // autologin
     'sso.emitir',
+    // pagos y atención (contrato 0.6.0 §7, con los nombres de Argos de §9.1: `pagos.reportar` →
+    // `comprobantes.registrar`, `servicios.reconexion_temporal` → `comprobantes.reconexion_temporal`;
+    // `clientes.buscar_por_telefono` no existe: es el filtro `telefono` de `GET /clientes`, con
+    // `clientes.ver`)
+    'cuentas_bancarias.ver',
+    'comprobantes.registrar',
+    'comprobantes.ver',
+    'comprobantes.reconexion_temporal',
+    'promesas.ver',
+    'promesas.crear',
+    'clientes.verificar_identidad',
 ] as const
+
+/** Permisos que el contrato 0.6.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_060 = [
+    'cuentas_bancarias.ver',
+    'comprobantes.registrar',
+    'comprobantes.ver',
+    'comprobantes.reconexion_temporal',
+    'promesas.ver',
+    'promesas.crear',
+    'clientes.verificar_identidad',
+] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
 
 export const PERMISOS_IRIS = permisosExistentes(PERMISOS_IRIS_CONTRATO)
 
@@ -59,7 +81,7 @@ export const USUARIO_TECNICO_IRIS: DefinicionUsuarioTecnico = {
     email: EMAIL_USUARIO_IRIS,
     rol: ROL_IRIS,
     descripcionRol:
-        'Integración Iris: leer clientes, servicios y red; activar instalaciones, retiros, comodatos, consumos y cargos únicos',
+        'Integración Iris: leer clientes, servicios y red; activar instalaciones, retiros, comodatos, consumos y cargos únicos; comprobantes, promesas y verificación de identidad',
     permisos: PERMISOS_IRIS,
 }
 

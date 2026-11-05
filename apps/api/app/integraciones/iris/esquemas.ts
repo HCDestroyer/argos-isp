@@ -160,3 +160,15 @@ export const VistaPreviaAutorizacionIris = definirEsquema(
         ...alcanceEmpresas,
     }),
 )
+
+/** Respuesta de `POST /integraciones/iris/verificar-identidad` (contrato Iris 0.6.0 §7.5). */
+export const VerificacionIdentidad = definirEsquema(
+    'VerificacionIdentidad',
+    objeto({
+        coincide: {
+            type: 'boolean',
+            description:
+                'Si lo que dijo el cliente coincide con lo que tiene Argos. Nunca se devuelve el dato',
+        },
+    }),
+)

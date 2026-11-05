@@ -9,6 +9,8 @@
 import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
+import { FORMATO_TELEFONO, normalizarTelefono } from '#core/telefonos'
+import { esTokenIris } from '#integraciones/iris/atencion'
 import { empresasDeLaLista, exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
 import { lista, pagina } from '#shared/openapi/esquemas'
@@ -542,13 +544,37 @@ const clientes: Ruta[] = [
         ruta: '/clientes',
         operacion: 'clientesListar',
         resumen: 'Buscar clientes',
-        descripcion: 'Busca por nombre, NIT/CUI, teléfono, user_ppp o IP.',
+        descripcion:
+            'Busca por nombre, NIT/CUI, teléfono, user_ppp o IP. `telefono` es otro filtro, exacto (contrato ' +
+            'Iris 0.6.0 §7.6). Con el token del usuario técnico Iris, `q` no busca por NIT/CUI y `nit_cui` ' +
+            'sale como `***`; con `telefono`, exige `X-Iris-Actor` y `X-Iris-Conversacion`.',
         etiqueta: 'clientes',
         permiso: 'clientes.ver',
         query: v.listarClientesValidator,
+        cabecerasIris: (ctx) => typeof ctx.request.qs().telefono === 'string',
         respuesta: { status: 200, descripcion: 'Página de clientes', esquema: pagina(Cliente) },
-        handler: (ctx, { query }) =>
-            buscarClientes(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: (ctx, { query }) => {
+            const { telefono, ...filtros } = query
+            let normalizado: string | undefined
+            if (telefono !== undefined) {
+                normalizado = normalizarTelefono(telefono) ?? undefined
+                if (normalizado === undefined) {
+                    throw new ValidacionFallida([
+                        {
+                            field: 'telefono',
+                            message: `Teléfono inválido: ${FORMATO_TELEFONO}`,
+                            rule: 'telefono',
+                        },
+                    ])
+                }
+            }
+            return buscarClientes(
+                { ...filtros, telefono: normalizado },
+                ctx.alcance,
+                empresasDeLaLista(ctx.empresa, query.empresas),
+                { sinDocumento: esTokenIris(ctx) },
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',

@@ -1,6 +1,7 @@
 import vine from '@vinejs/vine'
 import { TIPOS_DESTINO_IRIS } from '#integraciones/iris/actions/abrir_en_iris'
 import { FORMATO_SEMVER } from '#integraciones/iris/configuracion'
+import { METODOS_VERIFICACION } from '#core/actions/verificar_identidad_cliente'
 
 /**
  * Validadores del conector Iris (`contratos/iris.md` §1). El canje del enlace es el de Horus más el
@@ -127,3 +128,25 @@ export const autorizarIrisValidator = vine.compile(
 
 /** `GET /integraciones/iris/autorizar/vista-previa?iris=`. */
 export const vistaPreviaAutorizarIrisValidator = vine.compile(vine.object({ iris: origenIris() }))
+
+/** `POST /integraciones/iris/verificar-identidad` (contrato Iris 0.6.0 §7.5). */
+export const verificarIdentidadValidator = vine.compile(
+    vine.object({
+        cliente_id: vine
+            .number()
+            .withoutDecimals()
+            .positive()
+            .meta({ description: 'El cliente que dice ser' }),
+        metodo: vine.enum(METODOS_VERIFICACION).meta({
+            description:
+                '`documento` (NIT o CUI completo), `nombre` o `codigo_cliente`. `nombre` y `codigo_cliente` son ' +
+                'pruebas débiles: solo valen junto con otra',
+        }),
+        valor: vine
+            .string()
+            .trim()
+            .minLength(1)
+            .maxLength(200)
+            .meta({ description: 'Lo que dijo el cliente. Argos nunca lo devuelve y lo audita como `***`' }),
+    }),
+)

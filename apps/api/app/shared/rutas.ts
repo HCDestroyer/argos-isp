@@ -4,6 +4,12 @@ import type { Infer, SchemaTypes } from '@vinejs/vine/types'
 import type { EsquemaJson } from '#shared/openapi/esquemas'
 import { NoImplementado, Problema } from '#shared/errores'
 import type { Permiso } from '#core/permisos'
+import {
+    esRespuestaJson,
+    esTokenIris,
+    exigirCabecerasIris,
+    ocultarDocumentoIris,
+} from '#integraciones/iris/atencion'
 
 /**
  * Registro de rutas de la API. Cada ruta se declara una sola vez con su validador VineJS, su
@@ -114,6 +120,13 @@ export interface DefinicionRuta<
     /** tiene límite de peticiones y puede responder 429 con `Retry-After` */
     limitada?: boolean
     /**
+     * Ruta de pagos y atención del contrato Iris 0.6.0 §7: con el token de Iris exige
+     * `X-Iris-Actor` y `X-Iris-Conversacion` (`400 cabecera_iris_requerida`) y las lleva al contexto
+     * y a la auditoría (`#integraciones/iris/atencion`). Una función decide por petición (p. ej. solo
+     * con el filtro `telefono`). Otros actores no las necesitan.
+     */
+    cabecerasIris?: boolean | ((ctx: HttpContext) => boolean)
+    /**
      * Gancho que corre después de autenticar, autorizar e idempotencia, pero **antes** de validar
      * cuerpo y query con VineJS. Para el límite de peticiones: un cuerpo inválido (422) también
      * consume el cupo. Si lanza, ni se valida ni corre el handler.
@@ -190,6 +203,9 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
             'Esta operación exige el header Idempotency-Key',
         )
     }
+    if (typeof ruta.cabecerasIris === 'function' ? ruta.cabecerasIris(ctx) : ruta.cabecerasIris) {
+        exigirCabecerasIris(ctx)
+    }
     if (ruta.antes) await ruta.antes(ctx)
     // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined
@@ -215,5 +231,9 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
     }
     ctx.response.status(status)
     if (status === 204) return ctx.response.send('')
+    // contrato Iris 0.6.0 §1.1: el usuario técnico Iris nunca recibe el documento del cliente
+    if (!ruta.respuesta.contenido && esRespuestaJson(resultado) && esTokenIris(ctx)) {
+        return ocultarDocumentoIris(resultado)
+    }
     return resultado
 }
