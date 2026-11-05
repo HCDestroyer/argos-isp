@@ -4352,7 +4352,7 @@ export interface paths {
         };
         /**
          * Técnicos con bodega (para vincularlos desde Iris: id_externo, correo y sus bodegas)
-         * @description Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa).
+         * @description Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa, nombre; 0.6.4).
          */
         get: operations["inventarioTecnicos"];
         put?: never;
@@ -19968,6 +19968,8 @@ export interface components {
                 id: number;
                 empresa_id: number;
                 activa: boolean;
+                /** @description Nombre de la bodega (contrato Iris 0.6.4, A22) */
+                nombre: string;
             }[];
         };
         TelegramWebhookRespuesta: {

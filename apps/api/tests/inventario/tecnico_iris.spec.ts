@@ -155,10 +155,31 @@ test.group('Inventario · el técnico y su bodega (fase D, Iris)', (group) => {
             id_externo: String(tecnico.usuario.id),
             correo: tecnico.usuario.email,
             nombre: tecnico.usuario.nombre,
-            bodegas: [{ id: tecnico.bodega.id, empresa_id: e.B, activa: true }],
+            bodegas: [
+                { id: tecnico.bodega.id, empresa_id: e.B, activa: true, nombre: tecnico.bodega.nombre },
+            ],
         })
         // el mismo técnico con bodega en otra empresa: sin empresa, la lista de bodegas
         const otra = await bodegaEn(e.C, e.ctx, { tipo: 'tecnico', usuario_id: tecnico.usuario.id })
+        // 0.6.4 (A22): cada bodega con su nombre, para elegirla en Iris sin teclear su id
+        const conNombres = await estado(
+            client.get('/api/v1/inventario/tecnicos?limit=100&empresas=todas').bearerToken(e.token),
+            200,
+        )
+        const filaConNombres = conNombres
+            .body()
+            .data.find((x: { id_externo: string }) => x.id_externo === String(tecnico.usuario.id))
+        assert.deepEqual(filaConNombres.bodegas, [
+            { id: tecnico.bodega.id, empresa_id: e.B, activa: true, nombre: tecnico.bodega.nombre },
+            { id: otra.id, empresa_id: e.C, activa: true, nombre: otra.nombre },
+        ])
+        assert.isAbove(otra.nombre.length, 0)
+        // toda bodega `tecnico` tiene usuario: la base rechaza una sin él
+        await assert.rejects(() =>
+            db
+                .table('inventario.bodegas')
+                .insert({ empresa_id: e.B, nombre: unico('Huérfana'), tipo: 'tecnico' }),
+        )
         const varias = await estado(
             client.get(`/api/v1/inventario/mi-bodega?id_externo=${tecnico.usuario.id}`).bearerToken(e.token),
             200,

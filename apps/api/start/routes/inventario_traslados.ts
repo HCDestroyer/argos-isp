@@ -139,7 +139,7 @@ const rutas: Ruta[] = [
         permiso: 'inventario.ver',
         query: v.tecnicosValidator,
         descripcion:
-            'Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa).',
+            'Contrato Iris 0.5.0 §3.3: usuarios con al menos una bodega tecnico en las empresas visibles, con sus bodegas (id, empresa_id, activa, nombre; 0.6.4).',
         respuesta: { status: 200, descripcion: 'Página de técnicos', esquema: pagina(Tecnico) },
         handler: (ctx, { query }) => listarTecnicos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),

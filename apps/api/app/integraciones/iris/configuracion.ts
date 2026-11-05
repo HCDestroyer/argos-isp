@@ -29,7 +29,7 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.6.3'
+export const CONTRATO_IRIS = '0.6.4'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/

@@ -92,7 +92,7 @@ test.group('Iris 0.6.3 · token huérfano de un canje', (group) => {
     })
 
     test('Argos habla el contrato 0.6.3', async ({ assert }) => {
-        assert.equal(CONTRATO_IRIS, '0.6.3')
+        assert.equal(CONTRATO_IRIS, '0.6.4')
     })
 
     test('el canje queda pendiente de confirmar, con su vencimiento a 24 h', async ({ client, assert }) => {
