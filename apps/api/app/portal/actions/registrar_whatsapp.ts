@@ -16,10 +16,9 @@ export interface EntradaWhatsappPortal {
  *
  * Delega en `RegistrarConsentimientoWhatsapp` de A6 (`origen: 'argos_portal'`, misma transacción)
  * una vez por cada empresa con servicios vigentes del cliente que tiene WhatsApp encendido en notify:
- * en Iris el permiso lleva empresa, en Argos el estado de contacto es uno por cliente. Como la
- * `Idempotency-Key` hacia Iris es `cliente + canal + ocurrido_en`, cada empresa usa un milisegundo
- * distinto. 422 `whatsapp_no_disponible` si ninguna empresa lo tiene encendido. Con el conector Iris
- * apagado la marca queda en la cola hacia Iris y sale al activarse (lo decide A6).
+ * en Iris el permiso lleva empresa, en Argos el estado de contacto es uno por cliente. Todas con el
+ * mismo `ocurrido_en`: la `Idempotency-Key` hacia Iris lleva la empresa (A6). 422
+ * `whatsapp_no_disponible` si ninguna empresa lo tiene encendido. Con el conector Iris apagado la marca queda en la cola hacia Iris y sale al activarse (lo decide A6).
  */
 export default class RegistrarWhatsappPortal extends DomainAction<
     EntradaWhatsappPortal,
@@ -36,9 +35,9 @@ export default class RegistrarWhatsappPortal extends DomainAction<
                 'whatsapp_no_disponible',
             )
         }
-        const base = Date.now()
+        const ocurrido = new Date()
         const salida: VistaConsentimiento[] = []
-        for (const [indice, { empresaId }] of visibles.entries()) {
+        for (const { empresaId } of visibles) {
             salida.push(
                 await new RegistrarConsentimientoWhatsapp().execute(
                     {
@@ -46,7 +45,7 @@ export default class RegistrarWhatsappPortal extends DomainAction<
                         estado: input.estado,
                         origen: 'argos_portal',
                         empresa_id: empresaId,
-                        ocurrido_en: new Date(base + indice),
+                        ocurrido_en: ocurrido,
                     },
                     { ...t.ctx, empresaId },
                     { trx: t.trx },
