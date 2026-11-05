@@ -546,14 +546,14 @@ Argos revisó la propuesta de Iris contra lo que ya tiene. Iris copia esta versi
 | Permiso `clientes.buscar_por_telefono` | (ninguno) `clientes.ver` | Es un filtro de una lista, no una acción |
 | `Idempotency-Key = argos:aviso:<tipo>:<id de Argos>` | `argos:aviso:<plantilla>:<envio_id>` | El id único de Argos es el del envío |
 
-### 9.3 Decisiones del PM (5 nov 2026)
+### 9.2 Decisiones del PM (5 nov 2026)
 
 1. Reconexión temporal: limitada y apagada por defecto, con los valores de §7.3.
 2. Comprobantes y promesas que nacen en Iris: solo Iris confirma al cliente en la conversación; Argos no manda otro aviso.
 3. Identidad: con el DPI/NIT completo, el nombre o el código de cliente (§7.5); `nit_cui` no se entrega al usuario técnico Iris.
 4. Argos adopta la mensajería de Iris como su canal WhatsApp (A21); correo y Telegram siguen en Argos.
 
-### 9.2 Semántica
+### 9.3 Semántica
 
 1. **Un comprobante no es un pago** (§7.1): no toca el libro ni el estado hasta que caja lo aprueba.
 2. **La reconexión temporal es una promesa** (§7.3): el estado lo sigue decidiendo solo `evaluarEstadoServicio`. Exige un comprobante pendiente que cubra todo lo vencido. Al rechazarse se re-evalúa al instante, pero un corte respeta la hora de corte de la plantilla. Vencida sin revisar no castiga el historial del cliente.
