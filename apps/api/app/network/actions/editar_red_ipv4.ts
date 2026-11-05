@@ -3,6 +3,8 @@ import { NoEncontrado } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { redParaAuditoria, verRedIpv4, type RedIpv4Vista } from '#network/consultas/routers'
 import { exigirIpsAsignadasDentro, exigirRedSinTraslape, validarRedIpv4 } from '#network/reglas_pools'
+import { emitirRedAcceso, exigirRedSinServidores } from '#network/red_acceso/reglas'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaEditarRedIpv4 {
     id: number
@@ -51,6 +53,8 @@ export default class EditarRedIpv4 extends DomainAction<EntradaEditarRedIpv4, Re
             rango_inicio: valor('rango_inicio') as string | null,
             rango_fin: valor('rango_fin') as string | null,
         }
+        // el gateway es el local-address de los servidores PPPoE de la red (`contratos/red-acceso.md` §2)
+        if (datos.gateway === null && antes.gateway !== null) await exigirRedSinServidores(t.trx, id)
         const cidr = await validarRedIpv4(t.trx, datos)
         if (cidr !== antes.cidr) await exigirRedSinTraslape(t.trx, cidr, id)
         await exigirIpsAsignadasDentro(t.trx, id, { ...datos, cidr })
@@ -59,6 +63,35 @@ export default class EditarRedIpv4 extends DomainAction<EntradaEditarRedIpv4, Re
         await actualizarConVersion(t.trx, 'network.redes_ipv4', id, version, columnas)
         const despues = await verRedIpv4(id, t.trx)
         await t.registrarCambios({ tipo: 'red_ipv4', id }, redParaAuditoria(antes), redParaAuditoria(despues))
+        if (despues.gateway !== antes.gateway) await avisarLocalAddress(t, id, antes.router_id)
         return despues
     }
+}
+
+/**
+ * Cambió el gateway: cambia el `local-address` de los servidores PPPoE de la red y de los servicios
+ * con IP en ella. Un `red_acceso.cambiada` por servidor (A2 rehace su perfil) y `aaa:user:*` del router.
+ */
+async function avisarLocalAddress(t: Transaccion, redId: number, routerId: number) {
+    const servidores = (await t.trx
+        .from('network.servidores_pppoe')
+        .where('red_ipv4_id', redId)
+        .orderBy('id')
+        .select('id', 'empresa_id', 'estado')) as Array<{
+        id: number
+        empresa_id: number | null
+        estado: 'administrado' | 'adoptado'
+    }>
+    for (const s of servidores) {
+        await emitirRedAcceso(t, {
+            router_id: routerId,
+            empresa_id: s.empresa_id === null ? null : Number(s.empresa_id),
+            entidad: 'servidor_pppoe',
+            entidad_id: Number(s.id),
+            accion: 'editada',
+            estado: s.estado,
+            campos: ['local_address'],
+        })
+    }
+    refrescarAaaAlConfirmar(t, { routerId })
 }

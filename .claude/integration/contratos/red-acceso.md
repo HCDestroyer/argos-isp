@@ -1,6 +1,6 @@
 # Contrato · Red de acceso: OLT, puertos PON, VLAN y servidores PPPoE
 
-Dueño: **A1** (`apps/api/app/network/red_acceso/`). Lo consumen **A2** (RouterOS: descubrir, aplicar y reconciliar) y **A4** (pestaña «Red de acceso» de la ficha del router). Versión 1 (2026-11-05). Pedido del PM «núcleo de routers» (5 nov): un servidor PPPoE por VLAN, una o dos VLAN por puerto PON, y el `local-address` del perfil PPP sale del gateway de la red, nunca del perfil `default`.
+Dueño: **A1** (`apps/api/app/network/red_acceso/`). Lo consumen **A2** (RouterOS: descubrir, aplicar y reconciliar) y **A4** (pestaña «Red de acceso» de la ficha del router). Versión 1 (2026-11-05). Implementación: `apps/api/app/network/red_acceso/`, acciones en `app/network/actions/`, rutas en `start/routes/red_acceso.ts`, pruebas en `tests/network/red_acceso.spec.ts`. Pedido del PM «núcleo de routers» (5 nov): un servidor PPPoE por VLAN, una o dos VLAN por puerto PON, y el `local-address` del perfil PPP sale del gateway de la red, nunca del perfil `default`.
 
 Modelo explícito (lo que ningún competidor modela):
 
@@ -66,6 +66,7 @@ La empresa es la de su OLT.
 | `ipv6_pool_enlace_id` | bigint NULL → `network.ipv6_pools` | | pool `enlace` de un bloque del router (422 `pool_ipv6`) |
 | `ipv6_pool_delegacion_id` | bigint NULL → `network.ipv6_pools` | | pool `delegacion` de un bloque del router (422 `pool_ipv6`) |
 | `perfil_base` | text NOT NULL | `default` | perfil de RouterOS del que se copian las propiedades **que no son direcciones** (DNS, `change-tcp-mss`, `use-*`…). Nunca su `local-address` ni su `remote-address` |
+| `perfil_router` | text NULL | null | solo adoptado: el `default-profile` que tenía en el router (sale como `perfil`) |
 | `max_mtu`, `max_mru` | integer NOT NULL | 1480, 1480 | 576–9000 (1480 = 1500 − 8 de PPPoE − 12 de margen para VLAN/QinQ) |
 | `mrru` | integer NULL | null (deshabilitado) | 1500–65535 |
 | `autenticacion` | text[] NOT NULL | `{pap,chap,mschap1,mschap2}` (el de RouterOS) | subconjunto no vacío de esos cuatro |
@@ -131,7 +132,7 @@ Cambiar el gateway de una red emite `red_acceso.cambiada` (`entidad: 'servidor_p
 | `POST /olts/:id/puertos-pon` | `olts.editar` | `identificador, descripcion?` | 201 `PuertoPon` |
 | `PUT /puertos-pon/:id` | `olts.editar` | `version, identificador?, descripcion?` | `PuertoPon` |
 | `DELETE /puertos-pon/:id` | `olts.editar` | | 204; 409 `puerto_con_vlans` |
-| `GET /routers/:id/red-acceso` | `red_acceso.ver` | | `RedAccesoRouter` (VLAN, servidores con `local_address` y `servicios`, OLT/puertos usados) |
+| `GET /routers/:id/red-acceso` | `red_acceso.ver` | | `RedAccesoRouter` (VLAN, servidores con `local_address` y `servicios`, OLT/puertos usados, `servicios_sin_servidor`) |
 | `GET /routers/:id/vlans` | `red_acceso.ver` | `?olt_id&puerto_pon_id` | `Vlan[]` |
 | `POST /routers/:id/vlans` | `vlans.crear` | `interfaz_padre, vlan_id, nombre?, puerto_pon_id?, mtu?, empresa_id?, descripcion?` | 201 `Vlan` (`administrado`) |
 | `PUT /vlans/:id` | `vlans.editar` | `version` + los de crear | `Vlan` |

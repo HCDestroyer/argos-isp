@@ -17,12 +17,18 @@ import {
     SincronizacionPlan,
     VistaPreviaEstrategia,
     VistaPreviaReconciliar,
+    VistaPreviaUnificarVelocidad,
+    ResultadoUnificarVelocidad,
 } from '#network/esquemas'
 import {
     CambiarEstrategiaPlanRouter,
     CambiarEstrategiaVelocidad,
+    excepcionPorPlanRetirada,
 } from '#network/actions/cambiar_estrategia_velocidad'
+import UnificarControlVelocidad from '#network/actions/unificar_control_velocidad'
+import { vistaPreviaUnificarVelocidad } from '#network/consultas/unificar_velocidad'
 import {
+    leerExcepcion,
     matrizControlVelocidad,
     type EstrategiasRouter,
     type ExcepcionEstrategia,
@@ -32,6 +38,48 @@ import { sincronizarPlan } from '#network/routeros/sincronizar'
 import { diagnosticoCorte, vistaPreviaReconciliar } from '#network/routeros/diagnostico'
 
 const velocidad: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/vista-previa-unificar-velocidad',
+        operacion: 'routersVistaPreviaUnificarVelocidad',
+        resumen: 'Planes del router con excepción de velocidad y qué cambia al unificarlos (no escribe)',
+        descripcion:
+            'Modo de velocidad único por router (contratos/control-velocidad.md §11): cada plan con excepción, su ' +
+            'estrategia efectiva hoy (`de`) y la del router (`a`), las capas que cambian, servicios y sesiones ' +
+            'abiertas, y la vista previa de A2 sin excepciones (`sesiones_coa`, `sesiones_conservan`, ' +
+            '`sesiones_a_desconectar` con `reconectar=true`). Sin leer el router.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        query: v.vistaPreviaUnificarVelocidadValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaUnificarVelocidad },
+        handler: (ctx, { query, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return vistaPreviaUnificarVelocidad(Number(params.id), query.reconectar ?? false)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/unificar-control-velocidad',
+        operacion: 'routersUnificarControlVelocidad',
+        resumen: 'Quitar las excepciones de velocidad por plan: todo el router con su modo',
+        descripcion:
+            '`planes` = los `plan_id` que mostró la vista previa (409 `excepciones_cambiaron` si ya no coinciden). ' +
+            'Valida la matriz del router sin excepciones (422), quita cada excepción con su diff y emite un ' +
+            '`router.estrategia_cambiada` por plan (`motivo: unificar`); RouterOS lo aplica sin cortar. Las sesiones ' +
+            'PPPoE conservan lo anterior hasta reconectar, salvo `reconectar: true`. Solo admin.',
+        etiqueta: 'routers',
+        permiso: 'routers.unificar_control_velocidad',
+        cuerpo: v.unificarControlVelocidadValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Planes unificados', esquema: ResultadoUnificarVelocidad },
+        handler: (ctx, { cuerpo, params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return new UnificarControlVelocidad().execute(
+                { ...cuerpo, router_id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/red/control-velocidad/matriz',
@@ -51,7 +99,8 @@ const velocidad: Ruta[] = [
         operacion: 'routersVistaPreviaEstrategia',
         resumen: 'Vista previa de un cambio de estrategia de velocidad (no escribe)',
         descripcion:
-            'Con la estrategia propuesta del router y, opcional, excepciones de planes: qué se crea, cambia y ' +
+            '`planes[]` es obsoleto y solo acepta `estrategia_velocidad: null` (422 `estrategia_por_router` con un objeto; ' +
+            'contratos/control-velocidad.md §11). Con la estrategia propuesta del router: qué se crea, cambia y ' +
             'borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas ' +
             'conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el ' +
             'router. 422 con `errors[]` si la combinación no es válida.',
@@ -61,6 +110,12 @@ const velocidad: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaEstrategia },
         handler: async (ctx, { cuerpo, params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            // modo único por router (§11): `planes` solo para ver cómo queda sin la excepción
+            const conExcepcion = (cuerpo.planes ?? []).find((p) => {
+                const e = leerExcepcion(p.estrategia_velocidad)
+                return e !== null && Object.keys(e).length > 0
+            })
+            if (conExcepcion) throw excepcionPorPlanRetirada(`planes.${conExcepcion.plan_id}`)
             const vista = await vistaPreviaEstrategia(Number(params.id), {
                 estrategias: cuerpo.estrategia_velocidad as EstrategiasRouter | undefined,
                 planes: Object.fromEntries(
@@ -113,11 +168,11 @@ const velocidad: Ruta[] = [
         metodo: 'post',
         ruta: '/planes/:id/routers/:routerId/estrategia-velocidad',
         operacion: 'planesEstrategiaVelocidad',
-        resumen: 'Estrategia de velocidad propia de un plan en un router (o quitarla con null)',
+        resumen: 'Obsoleto: quitar la excepción de velocidad de un plan en un router (solo null)',
         descripcion:
-            'Parcial por tipo de conexión: cada capa ausente o null hereda la del router. Valida la matriz con ' +
-            'todo el router (422), guarda en `planes_routers` (la crea si el plan no estaba implementado) y ' +
-            'emite `router.estrategia_cambiada` con `plan_id`. `version` de la implementación si ya existe.',
+            'El modo de velocidad se decide por router (contratos/control-velocidad.md §11): `estrategia_velocidad` ' +
+            'solo acepta `null` (quita la excepción y emite `router.estrategia_cambiada` con `plan_id`); un objeto ' +
+            'responde 422 `estrategia_por_router`. Para quitar todas: POST /routers/:id/unificar-control-velocidad.',
         etiqueta: 'planes',
         permiso: 'routers.cambiar_control_velocidad',
         cuerpo: v.estrategiaPlanRouterValidator,

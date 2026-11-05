@@ -1,3 +1,4 @@
+import { sqlLocalAddress } from '#network/red_acceso/local_address'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
@@ -77,6 +78,8 @@ export interface RegistroAaa {
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
+    /** servidor PPPoE y `local-address` (gateway de la red; `contratos/red-acceso.md` §3) */
+    red_acceso: { servidor_pppoe_id: number | null; local_address: string | null }
 }
 
 /**
@@ -102,6 +105,8 @@ export function claveAaa(userPpp: string): string {
 }
 
 interface FilaAaa {
+    servidor_pppoe_id: number | null
+    local_address: string | null
     servicio_id: number
     version: number
     user_ppp: string
@@ -188,6 +193,8 @@ function consultaBase(cliente: QueryClientContract) {
             'pr.rafaga_segundos as pr_rafaga_segundos',
             'pr.prioridad as pr_prioridad',
             'pr.pool_ipv4',
+            's.servidor_pppoe_id',
+            cliente.raw(`${sqlLocalAddress('s')} AS local_address`),
             'pr.pool_ipv6_enlace',
             'pr.pool_ipv6_delegacion',
             cliente.raw(
@@ -266,6 +273,10 @@ function aRegistro(f: FilaAaa): RegistroAaa {
         },
         ipv4,
         ipv6,
+        red_acceso: {
+            servidor_pppoe_id: f.servidor_pppoe_id === null ? null : Number(f.servidor_pppoe_id),
+            local_address: f.local_address,
+        },
     }
 }
 
