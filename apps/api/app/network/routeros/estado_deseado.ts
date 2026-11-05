@@ -1,3 +1,4 @@
+import type { RedGateway } from '#network/routeros/local_address'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { rateLimitServicio, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
 import {
@@ -108,6 +109,10 @@ export interface ServicioRed {
     prefijo_enlace?: string | null
     /** Pools del plan en el router (`planes_routers`): van en el perfil `plan-<id>` sin RADIUS */
     pools?: { ipv4: string | null; enlace: string | null; delegado: string | null }
+    /** Red de la IPv4 fija vigente: su `gateway` es el `local-address` (`local_address.ts`) */
+    red_ipv4?: RedGateway | null
+    /** Red del pool del plan en el router (`redes_ipv4.nombre = planes_routers.pool_ipv4`) */
+    red_pool?: RedGateway | null
 }
 
 /** Datos del router que entran en los objetos. */

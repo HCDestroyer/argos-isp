@@ -3,6 +3,7 @@ import { NoEncontrado } from '#shared/errores'
 import { descifrar } from '#shared/cifrado'
 import { paginaRegistrosAaa, type RegistroAaa } from '#core/aaa'
 import { generarRscEmergencia, type ResumenRsc } from '#operacion/secrets_emergencia'
+import { leerRedGateway, type RedGateway } from '#network/routeros/local_address'
 
 /**
  * `routers.exportar_secrets_emergencia` (solo consola: `node ace emergencia:secrets-ppp`): arma el
@@ -58,6 +59,41 @@ export default class ExportarSecretsEmergencia extends DomainAction<
             cursor = pagina.nextCursor
         } while (cursor)
 
+        // local-address = gateway de la red (network/routeros/local_address.ts), nunca el de `default`.
+        const redes = (await t.trx
+            .from('network.redes_ipv4')
+            .where('router_id', router.id)
+            .select(
+                'id',
+                'nombre',
+                t.trx.raw('cidr::text AS cidr'),
+                t.trx.raw('host(gateway) AS gateway'),
+            )) as Array<{
+            id: number
+            nombre: string | null
+            cidr: string
+            gateway: string | null
+        }>
+        const porId = new Map<number, RedGateway>()
+        const redesPool = new Map<string, RedGateway>()
+        for (const f of redes) {
+            const red = leerRedGateway({ red_id: f.id, cidr: f.cidr, gateway: f.gateway })
+            if (!red) continue
+            porId.set(red.red_id, red)
+            if (f.nombre && !redesPool.has(f.nombre.toLowerCase())) redesPool.set(f.nombre.toLowerCase(), red)
+        }
+        const asignaciones = (await t.trx
+            .from('network.ipv4_asignaciones as a')
+            .join('core.servicios as s', 's.id', 'a.servicio_id')
+            .where('s.router_id', router.id)
+            .whereNull('a.fin')
+            .select('a.servicio_id', 'a.red_id')) as Array<{ servicio_id: number; red_id: number }>
+        const redesServicio = new Map<number, RedGateway>()
+        for (const a of asignaciones) {
+            const red = porId.get(Number(a.red_id))
+            if (red) redesServicio.set(Number(a.servicio_id), red)
+        }
+
         return generarRscEmergencia(
             { id: router.id, nombre: router.nombre, nas_ip: router.nas_ip },
             registros,
@@ -73,6 +109,8 @@ export default class ExportarSecretsEmergencia extends DomainAction<
                 perfilSuspendido: input.perfil_suspendido?.trim() || 'suspendido',
                 incluirSuspendidos: input.incluir_suspendidos ?? true,
                 generado: new Date().toISOString(),
+                redesServicio,
+                redesPool,
             },
         )
     }

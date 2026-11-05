@@ -32,8 +32,15 @@ import {
     QOS_MAX_HOJAS,
     type PerfilQosRouter,
 } from '#network/qos'
-import { normalizarValor } from '#network/routeros/normalizar'
+import { diferencias, normalizarValor } from '#network/routeros/normalizar'
 import { perfilesLocales, type PoolsPlan } from '#network/routeros/pppoe_local'
+import {
+    gatewayUnico,
+    localAddressPerfil,
+    type LocalAddress,
+    type RedesPlan,
+    type RedGateway,
+} from '#network/routeros/local_address'
 
 /**
  * Estado deseado del control de velocidad de un router (`contratos/control-velocidad.md`): los
@@ -71,9 +78,11 @@ export const TARGET_SIN_HIJAS = '192.0.2.255/32'
 /** Perfil PPP del que se copian pools, DNS e IPv6 (el `default-profile` del PPPoE server). */
 export const PERFIL_PPP_BASE = 'default'
 
-/** Propiedades del perfil base que se copian a `plan-<id>` (nunca `rate-limit` ni `parent-queue`). */
+/**
+ * Propiedades del perfil base que se copian a `plan-<id>` (nunca `rate-limit` ni `parent-queue`). Nunca
+ * `local-address`: sale del gateway de la red IPv4 (`local_address.ts`, pedido del PM del 5 nov).
+ */
 export const PROPIEDADES_PERFIL_BASE = [
-    'local-address',
     'remote-address',
     'remote-ipv6-prefix-pool',
     'dhcpv6-pd-pool',
@@ -146,6 +155,8 @@ export interface RouterVelocidad {
      * `perfilesLocales`, en las dos familias.
      */
     modo_seguridad?: 'radius' | 'api'
+    /** Redes IPv4 del router con su gateway (`local-address` de los perfiles; ausente = ninguna) */
+    redes_ipv4?: RedGateway[]
 }
 
 /** Colas WISP (`cola_simple`) que cuelgan de un padre. */
@@ -188,6 +199,8 @@ export interface PlanRouter {
     tipos_hoja: TipoCola[]
     /** Pools del plan en el router (solo sin RADIUS: van en sus perfiles) */
     pools?: PoolsPlan | null
+    /** Redes de las que sale el `local-address` del perfil `plan-<id>` (`local_address.ts`) */
+    redes?: RedesPlan | null
 }
 
 /**
@@ -212,6 +225,48 @@ export interface ObjetoVelocidad {
     ruta: RutaRouterOS
     clave: Propiedades
     propiedades: Propiedades
+    /** Propiedades que no deben estar puestas: si el router las tiene, se quitan con `unset` */
+    quitar?: string[]
+}
+
+/** Propiedades de `quitar` que el objeto del router todavía tiene puestas. */
+export function porQuitar(
+    objeto: Pick<ObjetoVelocidad, 'quitar'>,
+    actual: ObjetoRouterOS | undefined,
+): string[] {
+    if (!actual) return []
+    return (objeto.quitar ?? []).filter((k) => {
+        const v = actual[k]
+        return v !== undefined && v !== '' && v !== '0.0.0.0'
+    })
+}
+
+/** ¿El objeto del router ya está como se desea (propiedades iguales y nada que quitar)? */
+export function objetoAlDia(objeto: ObjetoVelocidad, actual: ObjetoRouterOS): boolean {
+    return (
+        Object.keys(diferencias(objeto.propiedades, actual)).length === 0 &&
+        porQuitar(objeto, actual).length === 0
+    )
+}
+
+/**
+ * `local-address` de un perfil: la propiedad si hay gateway, o `quitar` (no se deja uno copiado de
+ * `default` ni uno viejo). El aviso, si lo hay, va a los avisos del estado.
+ */
+export function conLocalAddress(la: LocalAddress): { propiedades: Propiedades; quitar: string[] } {
+    return la.gateway
+        ? { propiedades: { 'local-address': la.gateway }, quitar: [] }
+        : { propiedades: {}, quitar: ['local-address'] }
+}
+
+/** Redes del plan para su perfil; sin datos del plan, las del router. */
+export function redesDelPlan(router: RouterVelocidad, plan: PlanRouter): RedesPlan {
+    return plan.redes ?? { pool: null, servicios: [], router: router.redes_ipv4 ?? [] }
+}
+
+/** `local-address` del perfil de corte (`suspendido`): el único gateway de las redes del router. */
+export function localAddressCorte(redes: RedGateway[] | undefined): LocalAddress {
+    return gatewayUnico(redes ?? [], 'perfil de corte')
 }
 
 export interface EstadoVelocidad {
@@ -402,11 +457,13 @@ export function estadoVelocidadRouter(
     // que apuntan (`parent-queue`, `queue-type`).
     const locales =
         router.modo_seguridad === 'api'
-            ? perfilesLocales(planes, perfilBase(lectura), new Set(simple.conservar))
-            : { presentes: [], conservar: [] }
+            ? perfilesLocales(planes, perfilBase(lectura), new Set(simple.conservar), (p) =>
+                  localAddressPerfil(p.plan_id, redesDelPlan(router, p), 'api'),
+              )
+            : { presentes: [], conservar: [], avisos: [] }
     return {
         presentes: [...tipos, ...resto, ...locales.presentes, ...arbol.presentes],
-        avisos: [...simple.avisos, ...arbol.avisos],
+        avisos: [...simple.avisos, ...arbol.avisos, ...locales.avisos],
         conservar: [...simple.conservar, ...arbol.conservar, ...locales.conservar],
         errores: [...simple.errores, ...arbol.errores],
     }
@@ -586,11 +643,16 @@ function estadoSimple(
             const vp = velocidadConExtras(plan.velocidad, ep.extras)
             const padre = padreCliente(ep, id, vp.reuso)
             const tipo = nombreTipoHoja(ep.tipo_cola)
+            const la = localAddressPerfil(id, redesDelPlan(router, plan), 'radius')
+            if (la.aviso) avisos.push(la.aviso)
+            const local = conLocalAddress(la)
             perfiles.push({
                 ruta: '/ppp/profile',
                 clave: { comment: commentPlan(id) },
+                quitar: local.quitar,
                 propiedades: {
                     ...base,
+                    ...local.propiedades,
                     name: nombrePerfil(id),
                     ...(padre !== 'none' ? { 'parent-queue': padre } : {}),
                     ...(tipo ? { 'queue-type': tipo } : {}),

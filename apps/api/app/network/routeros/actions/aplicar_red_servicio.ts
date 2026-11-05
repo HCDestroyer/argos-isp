@@ -176,6 +176,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                             return
                         }
                         deseadoSecret = secretDeseado(servicio!, perfilSuspendido(), clave.clave)
+                        if (deseadoSecret.aviso) fila.avisos = [...fila.avisos, deseadoSecret.aviso]
                         if (servicio!.estado === 'suspendido') {
                             fila.cambios.push(
                                 ...(await asegurarPerfilCorte(

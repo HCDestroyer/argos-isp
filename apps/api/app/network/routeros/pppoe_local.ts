@@ -10,6 +10,7 @@ import {
 } from '#network/estrategia_velocidad'
 import type { ClienteRouterOS, ContextoRed, ObjetoRouterOS, Propiedades } from '#network/routeros/cliente'
 import { diferencias } from '#network/routeros/normalizar'
+import { localAddressServicio, type LocalAddress } from '#network/routeros/local_address'
 import { RouterOSSolicitud } from '#network/routeros/errores'
 import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
 import { perfilSuspendido } from '#network/routeros/dispatcher'
@@ -23,6 +24,7 @@ import {
 import {
     claveTexto,
     commentPlan,
+    conLocalAddress,
     listaPlan,
     nombrePerfil,
     type ObjetoVelocidad,
@@ -90,9 +92,11 @@ export function perfilesLocales(
     planes: PlanRouter[],
     base: Propiedades,
     conservados: Set<string>,
-): { presentes: ObjetoVelocidad[]; conservar: string[] } {
+    localAddress: (plan: PlanRouter) => LocalAddress = () => ({ gateway: null, red_id: null, aviso: null }),
+): { presentes: ObjetoVelocidad[]; conservar: string[]; avisos: string[] } {
     const presentes: ObjetoVelocidad[] = []
     const conservar: string[] = []
+    const avisos: string[] = []
     const vistos = new Set<number>()
     for (const plan of [...planes].sort((a, b) => a.plan_id - b.plan_id)) {
         const e = plan.perfil
@@ -106,8 +110,13 @@ export function perfilesLocales(
             continue
         }
         const pools = plan.pools ?? null
+        // El secret lleva el `local-address` de la red de cada servicio; el perfil, el del pool o el único.
+        const la = localAddress(plan)
+        if (la.aviso) avisos.push(la.aviso)
+        const local = conLocalAddress(la)
         const comun: Propiedades = {
             ...base,
+            ...local.propiedades,
             ...(pools?.ipv4 ? { 'remote-address': pools.ipv4 } : {}),
             ...(pools?.enlace ? { 'remote-ipv6-prefix-pool': pools.enlace } : {}),
             ...(pools?.delegado ? { 'dhcpv6-pd-pool': pools.delegado } : {}),
@@ -132,10 +141,10 @@ export function perfilesLocales(
                     'rate-limit': rateLimitServicio(vp, limitado ? 'limitado' : 'activo'),
                 }
             }
-            presentes.push({ ruta: '/ppp/profile', clave: { comment }, propiedades })
+            presentes.push({ ruta: '/ppp/profile', clave: { comment }, propiedades, quitar: local.quitar })
         }
     }
-    return { presentes, conservar }
+    return { presentes, conservar, avisos }
 }
 
 /** `comment` del secret de un servicio (el mismo de todos sus objetos). */
@@ -150,6 +159,8 @@ const ESTADOS_CON_SECRET = new Set(['activo', 'limitado', 'suspendido'])
 export interface SecretDeseado {
     comment: string
     propiedades: Propiedades
+    /** Por qué no lleva `local-address` (red sin gateway), para los avisos; null si no hay nada que avisar */
+    aviso?: string | null
 }
 
 /**
@@ -159,6 +170,8 @@ export interface SecretDeseado {
  * - `name` = `user_ppp`, `password` = la clave PPP descifrada, `service = pppoe`.
  * - `profile`: `plan-<id>` (activo), `plan-<id>-limitado` (limitado) o el perfil de corte
  *   (`suspendido`: `address-list = suspendidos` y rate-limit mínimo, lo crea el reconciliador).
+ * - `local-address` = el gateway de la red de la IPv4 fija (o de la red del pool del plan), nunca el
+ *   del perfil `default` (`local_address.ts`). Sin gateway no se pone y queda el aviso.
  * - `remote-address` = la IPv4 fija si la hay (si no, la da el pool del perfil).
  * - `remote-ipv6-prefix` = el /64 de enlace del servicio (modo `radius_servicio`). El /56 delegado
  *   no tiene atributo en `/ppp/secret`: sale del `dhcpv6-pd-pool` del perfil.
@@ -174,13 +187,16 @@ export function secretDeseado(
             : servicio.estado === 'limitado'
               ? nombrePerfilLimitado(servicio.plan_id)
               : nombrePerfil(servicio.plan_id)
+    const la = localAddressServicio(servicio.servicio_id, servicio.red_ipv4, servicio.red_pool)
     return {
         comment: commentSecret(servicio.servicio_id),
+        aviso: la.aviso,
         propiedades: {
             name: servicio.user_ppp!,
             password,
             service: 'pppoe',
             profile: perfil,
+            ...(la.gateway ? { 'local-address': la.gateway } : {}),
             ...(servicio.ipv4 ? { 'remote-address': servicio.ipv4 } : {}),
             ...(servicio.prefijo_enlace ? { 'remote-ipv6-prefix': servicio.prefijo_enlace } : {}),
             disabled: 'no',
@@ -206,6 +222,12 @@ const AL_CONECTAR = ['name', 'profile', 'remote-address', 'remote-ipv6-prefix', 
 
 /** Propiedades que no se pueden «quitar» con un PATCH: si sobran, el secret se vuelve a crear. */
 const SIN_PATCH = ['remote-address', 'remote-ipv6-prefix']
+
+/**
+ * `local-address` (§2 bis): un cambio no quita la sesión (rige al reconectar; si no, el despliegue de
+ * esta regla reconectaría a todos los clientes de un router a la vez) y se quita con `unset`.
+ */
+const LOCAL = 'local-address'
 
 const vacio = (v: string | undefined) => v === undefined || v === '' || v === '0.0.0.0' || v === '::/0'
 
@@ -310,6 +332,13 @@ export async function asegurarSecret(
     const comparables: Propiedades = { ...deseado.propiedades }
     if (!('password' in actual)) delete comparables.password
     const dif = diferencias(comparables, actual)
+    if (!vacio(actual[LOCAL]) && vacio(deseado.propiedades[LOCAL])) {
+        await cliente.desasignar('/ppp/secret', actual['.id'], [LOCAL], ctx)
+        if (Object.keys(dif).length === 0) {
+            cambios.push({ ruta: '/ppp/secret', comment, accion: 'actualizado' })
+            return cambios
+        }
+    }
     if (Object.keys(dif).length === 0) return cambios
     // Sin `password` legible, se escribe junto con el cambio (así nunca queda una vieja).
     await cliente.asegurar('/ppp/secret', comment, { ...dif, password: deseado.propiedades.password! }, ctx)
@@ -389,15 +418,13 @@ export async function reconciliarSecrets(
             continue
         }
         deseados.add(s.servicio_id)
+        const deseado = secretDeseado(s, suspendido, clave.clave)
+        if (deseado.aviso) avisos.push(deseado.aviso)
         try {
             correcciones.push(
-                ...(await asegurarSecret(
-                    cliente,
-                    s.servicio_id,
-                    secretDeseado(s, suspendido, clave.clave),
-                    ctx(s.servicio_id),
-                    { actuales: porServicio.get(s.servicio_id) ?? [] },
-                )),
+                ...(await asegurarSecret(cliente, s.servicio_id, deseado, ctx(s.servicio_id), {
+                    actuales: porServicio.get(s.servicio_id) ?? [],
+                })),
             )
         } catch (error) {
             // Un 400 de un secret no detiene la reconciliación del resto (reintentar no lo arregla).

@@ -37,6 +37,7 @@ import {
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { estrategiaLocal } from '#network/routeros/pppoe_local'
 import { perfilQosRouter } from '#network/consultas/qos'
+import { leerRedGateway, type RedGateway } from '#network/routeros/local_address'
 
 /**
  * Lecturas del dispatcher de RouterOS. Todo sale de Postgres en el momento de aplicar (nunca del
@@ -117,6 +118,18 @@ function consultaServicios(cliente: QueryClientContract) {
                 `(SELECT host(a.ip) FROM network.ipv4_asignaciones a
                    WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
             ),
+            // local-address (pppoe-local.md §2 bis): la red de la IPv4 fija y la red del pool del plan.
+            cliente.raw(
+                `(SELECT jsonb_build_object('red_id', r4.id, 'cidr', r4.cidr::text, 'gateway', host(r4.gateway))
+                    FROM network.ipv4_asignaciones a JOIN network.redes_ipv4 r4 ON r4.id = a.red_id
+                   WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS red_ipv4`,
+            ),
+            cliente.raw(
+                `(SELECT jsonb_build_object('red_id', r4.id, 'cidr', r4.cidr::text, 'gateway', host(r4.gateway))
+                    FROM network.redes_ipv4 r4
+                   WHERE r4.router_id = s.router_id AND pr.pool_ipv4 IS NOT NULL
+                     AND lower(r4.nombre) = lower(pr.pool_ipv4) ORDER BY r4.id LIMIT 1) AS red_pool`,
+            ),
             cliente.raw(
                 // Solo el prefijo delegado (propio del servicio): el /64 de enlace de WISP es el del
                 // segmento, compartido con RA (`infra/mikrotik/README.md`), y no va en la cola.
@@ -178,6 +191,8 @@ function aServicio(fila: FilaServicio): ServicioRed {
         user_ppp: texto(fila.user_ppp),
         pass_ppp: texto(fila.pass_ppp),
         prefijo_enlace: texto(fila.prefijo_enlace),
+        red_ipv4: leerRedGateway(fila.red_ipv4),
+        red_pool: leerRedGateway(fila.red_pool),
         pools: {
             ipv4: texto(fila.pool_ipv4),
             enlace: texto(fila.pool_ipv6_enlace),
@@ -359,6 +374,22 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
         hijas.targets.push(...targetsServicio(s))
         hijas.limit_at_kbps.subida += limitAt.subida
         hijas.limit_at_kbps.bajada += limitAt.bajada
+    }
+    // local-address del perfil (`local_address.ts`): red del pool del plan y redes de sus PPPoE.
+    for (const g of grupos.values()) {
+        if (!g.perfil) continue
+        const delPlan = servicios.filter(
+            (s) =>
+                s.plan_id === g.plan_id &&
+                s.tipo_conexion === 'pppoe' &&
+                s.estado !== 'retirado' &&
+                s.estado !== 'pendiente_instalacion',
+        )
+        g.redes = {
+            pool: delPlan.find((s) => s.red_pool)?.red_pool ?? null,
+            servicios: delPlan.flatMap((s) => (s.red_ipv4 ? [s.red_ipv4] : [])),
+            router: router.redes_ipv4 ?? [],
+        }
     }
     return [...grupos.values()].sort((a, b) => a.plan_id - b.plan_id || a.familia.localeCompare(b.familia))
 }
@@ -557,9 +588,27 @@ export async function routerDispatcher(
             capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
             capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
             qos: await perfilQosRouter(r.qos_perfil_id === null ? null : Number(r.qos_perfil_id), cliente),
+            redes_ipv4: await redesGatewayDeRouter(Number(r.id), cliente),
         },
         con_credenciales: texto(r.api_usuario) !== null && texto(r.api_password) !== null,
     }
+}
+
+/** Redes IPv4 del router con su gateway (de ahí sale el `local-address`, `local_address.ts`). */
+export async function redesGatewayDeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<RedGateway[]> {
+    const filas = (await cliente
+        .from('network.redes_ipv4')
+        .where('router_id', routerId)
+        .orderBy('id')
+        .select('id', cliente.raw('cidr::text AS cidr'), cliente.raw('host(gateway) AS gateway'))) as Array<{
+        id: number
+        cidr: string
+        gateway: string | null
+    }>
+    return filas.flatMap((f) => leerRedGateway({ red_id: f.id, cidr: f.cidr, gateway: f.gateway }) ?? [])
 }
 
 /** Redes IPv4 de clientes del router (`argos-clientes`, exclusión de FastTrack). */

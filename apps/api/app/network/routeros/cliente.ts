@@ -369,6 +369,26 @@ export class ClienteRouterOS {
         })
     }
 
+    /**
+     * Quita propiedades de un objeto (`/<menú> unset numbers=<id> value-name=<prop>`, `POST
+     * /rest/<menú>/unset`): vuelven al valor de fábrica (sin `local-address`). Una llamada por
+     * propiedad, cada una en `audit.red`.
+     */
+    async desasignar(
+        ruta: RutaRouterOS,
+        id: string,
+        nombres: string[],
+        ctx: ContextoRed = {},
+    ): Promise<void> {
+        for (const nombre of nombres) {
+            await this.#conReintentos((intento) =>
+                this.#escribir('POST', ruta, null, { numbers: id, 'value-name': nombre }, ctx, intento, {
+                    comando: 'unset',
+                }),
+            )
+        }
+    }
+
     async borrarPorId(ruta: RutaRouterOS, id: string, ctx: ContextoRed = {}): Promise<void> {
         await this.#conReintentos((intento) => this.#borrarId(ruta, { '.id': id }, ctx, intento))
     }

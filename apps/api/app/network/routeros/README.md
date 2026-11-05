@@ -50,7 +50,7 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 | Objeto          | Clave                          | Propiedades                                                                                                                                                                                                                                           |
 | --------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/queue/simple` | `comment = argosisp:plan:<id>` | `name = argosisp-plan-<id>`, `max-limit` / `limit-at` de `limitesPadrePlan(plan, activos)` (`#network/velocidad`), `priority` del plan, sin ráfaga, `target` = los de sus hijas                                                                       |
-| `/ppp/profile`  | `comment = argosisp:plan:<id>` | `name = plan-<id>`, `parent-queue = argosisp-plan-<id>` y lo que tenga el perfil `default` en `local-address`, `remote-address`, `remote-ipv6-prefix-pool`, `dhcpv6-pd-pool`, `use-ipv6`, `dns-server`, `change-tcp-mss`… (`PROPIEDADES_PERFIL_BASE`) |
+| `/ppp/profile`  | `comment = argosisp:plan:<id>` | `name = plan-<id>`, `parent-queue = argosisp-plan-<id>`, `local-address` = gateway de la red (ver «local-address») y lo que tenga el perfil `default` en `remote-address`, `remote-ipv6-prefix-pool`, `dhcpv6-pd-pool`, `use-ipv6`, `dns-server`, `change-tcp-mss`… (`PROPIEDADES_PERFIL_BASE`) |
 
 - `activos` = servicios del plan en el router (PPPoE y WISP) que no están suspendidos ni retirados. Con 0 activos se calcula como 1.
 - Hijas: las colas WISP activas o limitadas del plan llevan `parent = argosisp-plan-<id>` (suspendidas, `none`); las de PPPoE cuelgan por el perfil (`aaa` manda `Mikrotik-Group = plan-<id>`; el suspendido, `suspendido`).
@@ -110,14 +110,29 @@ El reconciliador (y el último paso de un cambio de estrategia) deja el corte en
 
 **Diagnóstico de corte** (`diagnosticoCorte`, chequeo `corte` de «Probar conexión» y `GET /routers/:id/diagnostico-corte`): lista `suspendidos` (o que no hace falta), reglas activas y en orden, `/tool/fetch` al destino real del NAT, suspendidos con su IP fuera de la lista y FastTrack; cada paso con comandos de RouterOS. Límites: HTTPS e IPv6 no se redirigen (`contratos/control-velocidad.md` §10).
 
+## local-address (`local_address.ts`, pedido del PM del 5 nov)
+
+El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gateway` de `network.redes_ipv4`; nunca se copia del perfil `default` ni se teclea (`PROPIEDADES_PERFIL_BASE` ya no lo trae; `planes_routers.local_address` no se usa).
+
+| Objeto | `local-address` |
+| --- | --- |
+| `/ppp/secret` (router `api`) | gateway de la red de la IPv4 fija; sin IPv4 fija, el de la red del pool del plan (`redes_ipv4.nombre = planes_routers.pool_ipv4`, sin distinguir mayúsculas). Cada secret lleva el suyo: funciona con varias VLAN/servidores con gateways distintos |
+| `/ppp/profile plan-<id>[-limitado]` | gateway de la red del pool del plan; si no, el **único** gateway de las redes de los PPPoE del plan en el router; si no hay PPPoE con IPv4, el único del router |
+| `/ppp/profile suspendido` (corte) | el único gateway del router; si no se puede derivar, no se toca el que tenga (lo pone el script de conexión) |
+| Secrets de emergencia (`operacion/secrets_emergencia.ts`) | el del secret (como en `api`); el perfil, el de la red de su pool |
+
+- **Sin gateway derivable** (red sin gateway, gateways distintos, ninguna red): el objeto no lleva `local-address`; si lo tenía, se quita con `unset` (`POST /rest/ppp/<menú>/unset`, en `audit.red`). Un cambio solo de `local-address` no quita la sesión del secret: rige al reconectar (así el despliegue no reconecta a todo un router). Queda un aviso en `routeros.reconciliar` y en la vista previa de reconciliación (`avisos[]`): «la red X no tiene gateway… Define el gateway en Red → Pools» o «redes con gateways distintos…». Nunca se inventa uno.
+- **RADIUS:** MikroTik no tiene atributo RADIUS para el `local-address` (solo `Framed-IP-Address`, el remoto), así que `aaa` no manda nada nuevo: vive en el perfil que elige `Mikrotik-Group` o, si `aaa` no manda grupo (`radius_rate_limit` sin padre ni tipo de cola), en el `default-profile` del servidor PPPoE. Con un plan repartido en redes de gateways distintos el perfil `plan-<id>` queda sin `local-address` (aviso) hasta los perfiles por servidor de la red de acceso (`contratos/red-acceso.md`).
+- Sin RADIUS, gateways distintos no son un problema (cada secret lleva el suyo) y no se avisa.
+
 ## PPPoE sin RADIUS (`contratos/pppoe-local.md`)
 
 En un router `modo_seguridad = 'api'`:
 
 | Objeto                                            | Clave                                     | Propiedades                                                                                                                                                                                                                      |
 | ------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/ppp/secret`                                     | `comment = argosisp:servicio:<id>`        | `name` = `user_ppp`, `password` (descifrada; `***` en `audit.red`), `service = pppoe`, `profile` = `plan-<id>` / `plan-<id>-limitado` / `suspendido`, `remote-address` (IPv4 fija), `remote-ipv6-prefix` (/64 `radius_servicio`) |
-| `/ppp/profile` `plan-<id>` y `plan-<id>-limitado` | `comment = argosisp:plan:<id>[:limitado]` | Copia de `default` + pools del plan; `perfil_ppp`: `rate-limit` activo/limitado, `parent-queue`, `queue-type`; `arbol_pcq`: `address-list = argosisp-plan-<id>[-limitado]`                                                       |
+| `/ppp/secret`                                     | `comment = argosisp:servicio:<id>`        | `name` = `user_ppp`, `password` (descifrada; `***` en `audit.red`), `service = pppoe`, `profile` = `plan-<id>` / `plan-<id>-limitado` / `suspendido`, `local-address` (gateway de su red), `remote-address` (IPv4 fija), `remote-ipv6-prefix` (/64 `radius_servicio`) |
+| `/ppp/profile` `plan-<id>` y `plan-<id>-limitado` | `comment = argosisp:plan:<id>[:limitado]` | Copia de `default` (sin `local-address`) + pools del plan + `local-address` derivado; `perfil_ppp`: `rate-limit` activo/limitado, `parent-queue`, `queue-type`; `arbol_pcq`: `address-list = argosisp-plan-<id>[-limitado]`                                                       |
 
 - Cambio de perfil, direcciones o nombre, o secret borrado → `/ppp active remove` de las sesiones de ese `name` (`DELETE /rest/ppp/active/<id>`, en `audit.red`) y la fila de `network.sesiones` se cierra con `Admin-Reset`. Solo contraseña: no corta.
 - `radius_rate_limit` y `pcq_plan` se aplican como `perfil_ppp` (`estrategiaLocal`); la API los rechaza (`pppoe_sin_radius`).

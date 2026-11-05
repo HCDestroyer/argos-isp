@@ -222,6 +222,12 @@ export interface OpcionesCorte {
     fasttrack: boolean
     /** Redes IPv4 de clientes del router (`network.redes_ipv4`), para `argos-clientes` */
     redes_v4: string[]
+    /**
+     * `local-address` del perfil de corte: el único gateway de las redes del router
+     * (`localAddressCorte`). null/ausente = no se pone (nunca se copia el de `default`; uno que ya
+     * tenga el perfil se respeta: lo puede haber puesto `lab.rsc`).
+     */
+    local_address?: string | null
 }
 
 /** Dirección de documentación (RFC 5737) que deja creada la lista de suspendidos. */
@@ -433,6 +439,7 @@ export function estadoCorteRouter(
             name: config.perfil,
             propiedades: {
                 ...perfilBase(perfiles),
+                ...(opciones.local_address ? { 'local-address': opciones.local_address } : {}),
                 'rate-limit': config.susp_rate_limit,
                 'address-list': lista,
                 'interface-list': lista,

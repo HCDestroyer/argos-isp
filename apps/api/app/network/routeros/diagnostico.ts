@@ -26,7 +26,12 @@ import {
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { estadoVelocidadRouter, sobrantesVelocidad } from '#network/routeros/velocidad_router'
+import {
+    estadoVelocidadRouter,
+    localAddressCorte,
+    objetoAlDia,
+    sobrantesVelocidad,
+} from '#network/routeros/velocidad_router'
 import {
     estadoDeseado,
     estadoVacio,
@@ -103,6 +108,7 @@ export async function vistaPreviaReconciliar(
                 {
                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                     redes_v4: await redesV4DeRouter(routerId),
+                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
                 },
                 lecturaCorte.get('/ppp/profile') ?? [],
             )
@@ -122,7 +128,7 @@ export async function vistaPreviaReconciliar(
                 const clave = o.clave.comment ?? o.clave.name ?? ''
                 if (existentes.length === 0) {
                     salida.cambios.push({ ruta: o.ruta, clave, accion: 'crear', grupo: 'velocidad' })
-                } else if (existentes.length > 1 || !igual(o.propiedades, existentes[0])) {
+                } else if (existentes.length > 1 || !objetoAlDia(o, existentes[0]!)) {
                     salida.cambios.push({ ruta: o.ruta, clave, accion: 'actualizar', grupo: 'velocidad' })
                 }
             }
@@ -792,7 +798,11 @@ export async function diagnosticoCorte(
             const fasttrack = pideFasttrack(estrategiasEnUso(router.velocidad, todos))
             const corte = estadoCorteRouter(
                 config,
-                { fasttrack, redes_v4: await redesV4DeRouter(routerId) },
+                {
+                    fasttrack,
+                    redes_v4: await redesV4DeRouter(routerId),
+                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                },
                 lectura.get('/ppp/profile') ?? [],
             )
             const plan = planCorte(corte, lectura).filter((c) => c.accion !== 'borrar')

@@ -1,4 +1,5 @@
 import type { RegistroAaa } from '#core/aaa'
+import { localAddressServicio, type RedGateway } from '#network/routeros/local_address'
 
 /**
  * `.rsc` de **secrets PPPoE de emergencia** para un router, para cuando `aaa` (RADIUS) no
@@ -16,6 +17,9 @@ import type { RegistroAaa } from '#core/aaa'
  *   `address-list=suspendidos`), igual que `Mikrotik-Group = suspendido`.
  * - `retirado`: no se exporta.
  * - IPv4 fija → `remote-address`; /64 de enlace fijo (`radius_servicio`) → `remote-ipv6-prefix`.
+ * - `local-address` del secret = gateway de la red de la IPv4 fija (o de la red del pool del plan),
+ *   como en un router `api` (`network/routeros/local_address.ts`): nunca el del perfil `default`. El
+ *   perfil lleva el gateway de la red de su pool si lo hay. Sin gateway: aviso en el resumen.
  *   El /56 delegado fijo no tiene atributo en `/ppp secret`: con secrets, el cliente recibe uno
  *   del `dhcpv6-pd-pool` del perfil (otro prefijo mientras dure la emergencia).
  *
@@ -42,6 +46,10 @@ export interface OpcionesRsc {
     incluirSuspendidos: boolean
     /** fecha de generación para el encabezado (ISO) */
     generado: string
+    /** Red de la IPv4 fija de cada servicio (`servicio_id` → red): su gateway es el `local-address` */
+    redesServicio?: Map<number, RedGateway>
+    /** Red de cada pool IPv4 del router (`redes_ipv4.nombre` = nombre del pool) */
+    redesPool?: Map<string, RedGateway>
 }
 
 export interface ResumenRsc {
@@ -51,6 +59,8 @@ export interface ResumenRsc {
     por_estado: Record<string, number>
     perfiles: string[]
     omitidos: Array<{ servicio_id: number; user_ppp: string; motivo: string }>
+    /** Secrets sin `local-address` (red sin gateway), sin contraseñas */
+    avisos: string[]
 }
 
 /** Contraseña ya descifrada (o el motivo por el que no se pudo). */
@@ -77,6 +87,7 @@ export function generarRscEmergencia(
         por_estado: {},
         perfiles: [],
         omitidos: [],
+        avisos: [],
     }
     const perfiles = new Map<string, PerfilEmergencia>()
     const secrets: string[] = []
@@ -132,6 +143,10 @@ export function generarRscEmergencia(
             'service=pppoe',
             `profile=${cadenaRos(perfil)}`,
         ]
+        const redPool = r.ipv4?.modo === 'pool' ? opciones.redesPool?.get(r.ipv4.pool.toLowerCase()) : null
+        const la = localAddressServicio(r.servicio_id, opciones.redesServicio?.get(r.servicio_id), redPool)
+        if (la.gateway) partes.push(`local-address=${la.gateway}`)
+        else if (la.aviso) resumen.avisos.push(la.aviso)
         if (r.ipv4?.modo === 'estatico') partes.push(`remote-address=${r.ipv4.ip}`)
         if (r.ipv6.modo === 'radius_servicio' && r.ipv6.prefijo_enlace) {
             partes.push(`remote-ipv6-prefix=${r.ipv6.prefijo_enlace}`)
@@ -186,6 +201,8 @@ function lineaPerfil(nombre: string, p: PerfilEmergencia, opciones: OpcionesRsc)
         `copy-from=${cadenaRos(base)}`,
         `rate-limit=${cadenaRos(p.limitado ? r.plan.rate_limit_limitado : r.plan.rate_limit)}`,
     ]
+    const gateway = p.pool ? opciones.redesPool?.get(p.pool.toLowerCase())?.gateway : null
+    if (gateway) partes.push(`local-address=${gateway}`)
     if (p.pool) partes.push(`remote-address=${cadenaRos(p.pool)}`)
     if (p.poolEnlace) partes.push(`remote-ipv6-prefix-pool=${cadenaRos(p.poolEnlace)}`)
     if (p.poolDelegacion) partes.push(`dhcpv6-pd-pool=${cadenaRos(p.poolDelegacion)}`)

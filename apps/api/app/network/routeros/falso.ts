@@ -409,6 +409,16 @@ export class RouterOSFalso {
             else tabla.splice(destino, 0, objeto!)
             return this.#json(res, 200, [])
         }
+        if (metodo === 'POST' && camino === `${ruta}/unset`) {
+            const objeto = this.tabla(ruta).find((o) => o['.id'] === cuerpo?.numbers)
+            if (!objeto) return this.#error(res, 400, 'Bad Request', 'no such item')
+            const nombre = cuerpo?.['value-name'] ?? ''
+            if (nombre === '' || nombre === 'name' || nombre === '.id') {
+                return this.#error(res, 400, 'Bad Request', 'failure: can not unset')
+            }
+            delete objeto[nombre]
+            return this.#json(res, 200, [])
+        }
         const id = camino.length > ruta.length ? decodeURIComponent(camino.slice(ruta.length + 1)) : null
         const tabla = this.tabla(ruta)
         const indice = id === null ? -1 : tabla.findIndex((o) => o['.id'] === id)
