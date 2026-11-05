@@ -57672,6 +57672,156 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/whatsapp": {
+      "get": {
+        "operationId": "portalWhatsapp",
+        "summary": "«Acepta avisos por WhatsApp» del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Lee `verWhatsappCliente` de A6 por cada empresa con servicios vigentes del cliente. `visible` solo si `whatsapp.activo` está encendido en alguna; `disponible` si además el conector Iris permite enviar. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalRegistrarWhatsapp",
+        "summary": "El cliente acepta (`acepta`) o se da de baja (`baja`) de los avisos por WhatsApp",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.registrar_whatsapp` (canal portal) sobre `notificaciones.registrar_consentimiento` de A6 con `origen: argos_portal`, una vez por empresa con WhatsApp encendido; queda en la cola hacia Iris (sale al activarse el conector). Una `baja` deja de pedir avisos por WhatsApp al instante. 422 `whatsapp_no_disponible` si ninguna empresa del cliente lo tiene encendido. Acepta `Idempotency-Key`. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "acepta",
+                      "baja"
+                    ]
+                  }
+                },
+                "required": [
+                  "estado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente, ya con la marca",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/productos": {
       "get": {
         "operationId": "productosListar",
@@ -105745,6 +105895,85 @@
             ],
             "minimum": 1,
             "description": "Empresa cuyo bot se vincula (null = el bot global)"
+          }
+        }
+      },
+      "PortalWhatsapp": {
+        "type": "object",
+        "required": [
+          "visible",
+          "disponible",
+          "motivo",
+          "empresas",
+          "estado",
+          "ocurrido_en",
+          "origen",
+          "baja_de_iris",
+          "entrega"
+        ],
+        "properties": {
+          "visible": {
+            "type": "boolean",
+            "description": "WhatsApp encendido en notify (`whatsapp.activo`) para alguna empresa con servicios vigentes del cliente. En `false` el portal no muestra la casilla y los demás campos van vacíos"
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "Además, el conector Iris está activo con contrato ≥ 0.6.0. En `false` el portal muestra el error con «Reintentar» y no pinta la casilla"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto para el cliente cuando no está disponible"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalMarcaEmpresa"
+            },
+            "description": "Empresas con WhatsApp encendido"
+          },
+          "estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "acepta",
+              "baja"
+            ],
+            "description": "Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris). `null`: el cliente nunca eligió (no recibe avisos por WhatsApp)"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`argos_portal`, `argos_panel`, o con una baja dada en Iris `iris_cliente`, `iris_agente`, `iris_vigente`"
+          },
+          "baja_de_iris": {
+            "type": "boolean",
+            "description": "La baja vigente la dio el cliente (o un agente) en la conversación de Iris"
+          },
+          "entrega": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido"
+            ],
+            "description": "Entrega a Iris de la última marca hecha en Argos (`null` si el estado vigente vino de Iris). `fallido`: Iris no la registró; el portal ofrece reintentar"
           }
         }
       },

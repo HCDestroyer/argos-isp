@@ -8042,6 +8042,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * «Acepta avisos por WhatsApp» del cliente de la sesión
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Lee `verWhatsappCliente` de A6 por cada empresa con servicios vigentes del cliente. `visible` solo si `whatsapp.activo` está encendido en alguna; `disponible` si además el conector Iris permite enviar. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.
+         */
+        get: operations["portalWhatsapp"];
+        put?: never;
+        /**
+         * El cliente acepta (`acepta`) o se da de baja (`baja`) de los avisos por WhatsApp
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.registrar_whatsapp` (canal portal) sobre `notificaciones.registrar_consentimiento` de A6 con `origen: argos_portal`, una vez por empresa con WhatsApp encendido; queda en la cola hacia Iris (sale al activarse el conector). Una `baja` deja de pedir avisos por WhatsApp al instante. 422 `whatsapp_no_disponible` si ninguna empresa del cliente lo tiene encendido. Acepta `Idempotency-Key`. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.
+         */
+        post: operations["portalRegistrarWhatsapp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/productos": {
         parameters: {
             query?: never;
@@ -17269,6 +17293,32 @@ export interface components {
             vence_en: string;
             /** @description Empresa cuyo bot se vincula (null = el bot global) */
             empresa_id: number | null;
+        };
+        PortalWhatsapp: {
+            /** @description WhatsApp encendido en notify (`whatsapp.activo`) para alguna empresa con servicios vigentes del cliente. En `false` el portal no muestra la casilla y los demás campos van vacíos */
+            visible: boolean;
+            /** @description Además, el conector Iris está activo con contrato ≥ 0.6.0. En `false` el portal muestra el error con «Reintentar» y no pinta la casilla */
+            disponible: boolean;
+            /** @description Texto para el cliente cuando no está disponible */
+            motivo: string | null;
+            /** @description Empresas con WhatsApp encendido */
+            empresas: components["schemas"]["PortalMarcaEmpresa"][];
+            /**
+             * @description Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris). `null`: el cliente nunca eligió (no recibe avisos por WhatsApp)
+             * @enum {string|null}
+             */
+            estado: "acepta" | "baja" | null;
+            /** Format: date-time */
+            ocurrido_en: string | null;
+            /** @description `argos_portal`, `argos_panel`, o con una baja dada en Iris `iris_cliente`, `iris_agente`, `iris_vigente` */
+            origen: string | null;
+            /** @description La baja vigente la dio el cliente (o un agente) en la conversación de Iris */
+            baja_de_iris: boolean;
+            /**
+             * @description Entrega a Iris de la última marca hecha en Argos (`null` si el estado vigente vino de Iris). `fallido`: Iris no la registró; el portal ofrece reintentar
+             * @enum {string|null}
+             */
+            entrega: "pendiente" | "enviado" | "fallido" | null;
         };
         PremioLealtad: {
             id: number;
@@ -51735,6 +51785,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalSesion"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalWhatsapp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WhatsApp del cliente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalWhatsapp"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalRegistrarWhatsapp: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado: "acepta" | "baja";
+                };
+            };
+        };
+        responses: {
+            /** @description WhatsApp del cliente, ya con la marca */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalWhatsapp"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Datos inválidos */
