@@ -21,7 +21,7 @@ describe('semana 2 · cola de comprobantes', () => {
     it('lista por estado y cliente, por id descendente', async () => {
         const api = useComprobantes()
         const pendientes = await api.listar({ estado: 'pendiente' })
-        expect(pendientes.ok && pendientes.data.data.map(c => c.id)).toEqual([4, 3, 2])
+        expect(pendientes.ok && pendientes.data.data.map(c => c.id)).toEqual([5, 4, 3, 2])
 
         const rechazados = await api.listar({ estado: 'rechazado' })
         expect(rechazados.ok && rechazados.data.data.map(c => c.motivo_rechazo)).toEqual(['La boleta no aparece en el estado de cuenta de Banrural'])
@@ -71,10 +71,10 @@ describe('semana 2 · cola de comprobantes', () => {
     })
 
     it('rechazar exige motivo y deja la referencia libre', async () => {
-        const sinMotivo = await useComprobantes().rechazar(4, ' ', nuevaClaveIdempotencia())
+        const sinMotivo = await useComprobantes().rechazar(4, { motivo: ' ' }, nuevaClaveIdempotencia())
         expect(!sinMotivo.ok && sinMotivo.problema.errors?.[0]?.field).toBe('motivo')
 
-        const rechazado = await useComprobantes().rechazar(4, 'El monto no coincide con el banco', nuevaClaveIdempotencia())
+        const rechazado = await useComprobantes().rechazar(4, { motivo: 'El monto no coincide con el banco', causa: 'monto_distinto' }, nuevaClaveIdempotencia())
         expect(rechazado.ok && rechazado.data).toMatchObject({ estado: 'rechazado', motivo_rechazo: 'El monto no coincide con el banco', pago_id: null })
 
         const pagos = await usePagos().listar({ metodo: 'ach' })
@@ -90,9 +90,9 @@ describe('semana 2 · cola de comprobantes', () => {
     it('el contador del menú cuenta los pendientes y desaparece con error', async () => {
         const api = useComprobantes()
         await api.actualizarContador()
-        expect(textoContador(api.contador.value)).toBe('3')
-        await api.rechazar(4, 'Duplicado', nuevaClaveIdempotencia())
-        await esperar(() => expect(textoContador(api.contador.value)).toBe('2'))
+        expect(textoContador(api.contador.value)).toBe('4')
+        await api.rechazar(4, { motivo: 'Duplicado' }, nuevaClaveIdempotencia())
+        await esperar(() => expect(textoContador(api.contador.value)).toBe('3'))
         simularFalla('GET /api/v1/comprobantes', 500)
         await api.actualizarContador()
         expect(api.contador.value).toBeNull()

@@ -32,6 +32,9 @@ const SOLO_SESION = [
     'portalCanjes',
     'portalCanjear',
     'portalBonificaciones',
+    // contrato Iris 0.6.0 §6.4: avisos por WhatsApp
+    'portalWhatsapp',
+    'portalRegistrarWhatsapp',
 ]
 
 type Operacion = {

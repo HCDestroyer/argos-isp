@@ -4,6 +4,7 @@ import {
     bloquearOrigen,
     crearEnvio,
     elegirCanales,
+    type EleccionCanal,
     enviosExistentes,
     plantillasActivas,
     type EnvioCreado,
@@ -16,12 +17,22 @@ import {
     pagoCubiertoPorComprobante,
     tercerosDelPago,
 } from '#notify/avisos_pago'
-import { cargarDestinatario, construirVariables, resolverCliente } from '#notify/variables'
+import { cargarDestinatario, construirVariables, resolverCliente, type Variables } from '#notify/variables'
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
 import { avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
 import { servicioEliminado } from '#notify/eliminados'
+import { renderizar } from '#notify/plantillas'
+import {
+    bajaWhatsapp,
+    destinoWhatsapp,
+    esCodigoIris,
+    estadoConectorWhatsapp,
+    nacioEnIris,
+    variablesParaIris,
+    type EstadoWhatsapp,
+} from '#notify/whatsapp'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -40,6 +51,9 @@ export interface ResultadoProgramar {
     /** ids en `encolado` que hay que poner en la cola (nuevos o pendientes de una entrega anterior) */
     encolar: number[]
 }
+
+/** Canal elegido con las variables de su envío (WhatsApp suma `iris`). */
+type EleccionWhatsapp = EleccionCanal & { variables: Variables }
 
 /** Un aviso a un cliente: la plantilla (`evento`) y el payload con el que se arman las variables. */
 interface Aviso {
@@ -78,6 +92,11 @@ interface Aviso {
  *   no se avisa (ni error ni envío).
  * - Lealtad (`lealtad.ts`): `lealtad.referido_calificado` va al referidor; el
  *   `lealtad.puntos_acumulados` del crédito del referidor no se avisa (ya lo dice el del referido).
+ * - WhatsApp por Iris (`whatsapp.ts`, contrato Iris 0.6.0 §6): solo con el interruptor encendido y
+ *   sin baja del cliente; el cuerpo es el código de la plantilla de Iris y las variables de Iris
+ *   quedan fijas en el envío (`variables.iris`). Sin conector o con contrato < 0.6.0: `omitido`.
+ * - Lo que nace en Iris (comprobantes, su pago, promesas y la reactivación que traen) no se avisa
+ *   por ningún canal: ya lo contestó Iris en la conversación (`nacioEnIris`, decisión del PM).
  */
 export default class ProgramarNotificacion extends DomainAction<EntradaProgramar, ResultadoProgramar> {
     readonly nombre = 'notificaciones.programar'
@@ -87,6 +106,10 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         const payload = payloadDelAviso(input.evento, input.payload)
         // Servicio eliminado (`contratos/eliminar.md`): nada que avisar sobre él
         if (await servicioEliminado(t.trx, input.evento, payload)) {
+            return { clienteId: null, envios: [], encolar: [] }
+        }
+        // Nació en Iris: Iris ya avisó en la conversación (contrato Iris 0.6.0 §7, PM 9.2.2)
+        if (nacioEnIris(payload)) {
             return { clienteId: null, envios: [], encolar: [] }
         }
         // Servicio pendiente de instalación: sin mora ni recordatorios (`#notify/instalacion`)
@@ -164,15 +187,36 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
 
         const empresaId = await empresaDelEvento(t.trx, aviso.payload)
         const config = await configPara(empresaId)
+        // WhatsApp apagado: su plantilla no cuenta (sin ella, un aviso solo de WhatsApp no deja nada)
+        if (!config.whatsapp.activo) plantillas.delete('whatsapp')
+        if (plantillas.size === 0) return null
         // Telegram por empresa: el chat que el bot de esta configuración tiene vinculado (o ninguno)
         destinatario.telegramChatId = await chatTelegramPara(t.trx, aviso.clienteId, config)
+        // WhatsApp por Iris: solo con el canal encendido y sin baja del cliente (`whatsapp.ts`)
+        let conector: EstadoWhatsapp | null = null
+        if (plantillas.has('whatsapp')) {
+            if (!(await bajaWhatsapp(t.trx, aviso.clienteId))) {
+                destinatario.whatsapp = destinoWhatsapp(aviso.clienteId)
+                conector = await estadoConectorWhatsapp(t.trx)
+            }
+        }
         const variables = await construirVariables(t.trx, aviso.evento, aviso.payload, destinatario, ahora)
-        const elegidos = elegirCanales(destinatario, plantillas, config, aviso.evento)
+        const elegidos: EleccionWhatsapp[] = []
+        for (const eleccion of elegirCanales(destinatario, plantillas, config, aviso.evento)) {
+            if (eleccion.canal !== 'whatsapp') {
+                elegidos.push({ ...eleccion, variables })
+                continue
+            }
+            const preparada = await this.prepararWhatsapp(t, eleccion, variables, conector)
+            if (preparada) elegidos.push(preparada)
+        }
 
         if (elegidos.length === 0) {
             const canal = destinatario.canalPreferido
             const plantilla =
-                plantillas.get(canal) ?? plantillas.get('correo') ?? [...plantillas.values()][0]!
+                (canal !== 'whatsapp' ? plantillas.get(canal) : undefined) ??
+                plantillas.get('correo') ??
+                [...plantillas.values()][0]!
             const envio = await crearEnvio(t.trx, {
                 origen,
                 evento: aviso.evento,
@@ -205,7 +249,7 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                     clienteId: aviso.clienteId,
                     canal: eleccion.canal,
                     destino: eleccion.destino,
-                    variables,
+                    variables: eleccion.variables,
                     plantilla: eleccion.plantilla,
                     requestId: t.ctx.requestId,
                     omitido: eleccion.omitido,
@@ -214,5 +258,40 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
             )
         }
         return envios
+    }
+
+    /**
+     * El envío por WhatsApp de un aviso: el código de Iris que da la plantilla y sus variables
+     * cerradas, guardadas en `variables.iris`. null si el aviso no va por WhatsApp (la plantilla da
+     * vacío). `omitido` si el código no es de Iris, faltan datos o el conector no lo permite.
+     */
+    private async prepararWhatsapp(
+        t: Transaccion,
+        eleccion: EleccionCanal,
+        variables: Variables,
+        conector: EstadoWhatsapp | null,
+    ): Promise<EleccionWhatsapp | null> {
+        const codigo = renderizar(eleccion.plantilla.cuerpo, variables).trim()
+        if (codigo === '') return null
+        const plantilla = { ...eleccion.plantilla, asunto: null, cuerpo: codigo }
+        if (!esCodigoIris(codigo)) {
+            return {
+                ...eleccion,
+                plantilla,
+                variables,
+                omitido:
+                    eleccion.omitido ??
+                    `WhatsApp: «${codigo.slice(0, 60)}» no es un código de plantilla de Iris`,
+            }
+        }
+        const iris = await variablesParaIris(t.trx, codigo, variables)
+        let omitido = eleccion.omitido ?? (conector && !conector.disponible ? conector.motivo : null)
+        if (!omitido && !iris) omitido = `WhatsApp: faltan datos para la plantilla ${codigo} de Iris`
+        return {
+            ...eleccion,
+            plantilla,
+            variables: { ...variables, iris: { plantilla: codigo, variables: iris ?? {} } },
+            omitido,
+        }
     }
 }

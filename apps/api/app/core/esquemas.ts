@@ -23,6 +23,7 @@ import { TIPOS_ACTOR } from '#shared/contexto'
 import { ESTADOS_SERVICIO } from '#shared/eventos'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
+import { COINCIDENCIAS_TELEFONO } from '#core/telefonos'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 import { NOMBRES_PERMISOS, PERMISOS, ROLES_BASE, type Permiso as NombreDePermiso } from '#core/permisos'
 
@@ -308,7 +309,8 @@ export const Cliente = definirEsquema(
             nit_cui: {
                 ...nulable(texto),
                 description:
-                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
+                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf. ' +
+                    'Al usuario técnico Iris le sale `***` (contrato Iris 0.6.0 §1.1; null sigue null)',
             },
             nit_cui_invalido: {
                 ...booleano,
@@ -379,11 +381,18 @@ export const Cliente = definirEsquema(
                 description:
                     'Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos',
             },
+            coincide_en: {
+                ...lista(enumerado([...COINCIDENCIAS_TELEFONO])),
+                description:
+                    'Solo con el filtro `telefono` de `GET /clientes` (contrato Iris 0.6.0 §7.6): dónde ' +
+                    'coincidió el número. `contacto_servicio` = contacto en sitio de un servicio no ' +
+                    'retirado, que puede no ser el titular',
+            },
             ...auditable,
         },
         // `referencia` (Iris 0.5.0): la API siempre la envía; opcional en el esquema hasta que las
-        // fixtures del panel la traigan (pedido a A4 en `a1.md`)
-        ['referencia'],
+        // fixtures del panel la traigan (pedido a A4 en `a1.md`). `coincide_en` solo sale con `telefono`.
+        ['referencia', 'coincide_en'],
     ),
 )
 
@@ -763,33 +772,48 @@ export const CredencialAdicional = definirEsquema(
 
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
-    objeto({
-        id,
-        actor_tipo: enumerado(TIPOS_ACTOR),
-        actor_id: nulable(id),
-        actor_nombre: {
-            type: ['string', 'null'],
-            description: 'Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)',
+    objeto(
+        {
+            id,
+            actor_tipo: enumerado(TIPOS_ACTOR),
+            actor_id: nulable(id),
+            actor_nombre: {
+                type: ['string', 'null'],
+                description:
+                    'Nombre del usuario, o del cliente si actor_tipo = cliente (null para el sistema)',
+            },
+            canal: texto,
+            accion: texto,
+            entidad_tipo: nulable(texto),
+            entidad_id: nulable(id),
+            entrada: {},
+            resultado: enumerado(['ok', 'error']),
+            error: nulable(texto),
+            request_id: nulable(texto),
+            empresa_id: {
+                type: ['integer', 'null'],
+                description:
+                    'Empresa (NIT) de lo que se hizo, o la empresa activa de quien lo hizo; null si no es de ninguna (login, usuarios, clientes, sistema)',
+            },
+            empresa_nombre: {
+                type: ['string', 'null'],
+                description: 'Nombre comercial de esa empresa (null sin empresa)',
+            },
+            iris_actor: {
+                type: ['string', 'null'],
+                description:
+                    '`X-Iris-Actor` de una llamada del usuario técnico Iris a pagos y atención (`asistente_ia` o ' +
+                    '`usuario:<id en Iris>`, contrato Iris 0.6.0 §7.1); null en lo demás',
+            },
+            iris_conversacion: {
+                type: ['string', 'null'],
+                description:
+                    '`X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás',
+            },
+            created_at: instante,
         },
-        canal: texto,
-        accion: texto,
-        entidad_tipo: nulable(texto),
-        entidad_id: nulable(id),
-        entrada: {},
-        resultado: enumerado(['ok', 'error']),
-        error: nulable(texto),
-        request_id: nulable(texto),
-        empresa_id: {
-            type: ['integer', 'null'],
-            description:
-                'Empresa (NIT) de lo que se hizo, o la empresa activa de quien lo hizo; null si no es de ninguna (login, usuarios, clientes, sistema)',
-        },
-        empresa_nombre: {
-            type: ['string', 'null'],
-            description: 'Nombre comercial de esa empresa (null sin empresa)',
-        },
-        created_at: instante,
-    }),
+        ['iris_actor', 'iris_conversacion'],
+    ),
 )
 
 export const CambioAuditoria = definirEsquema(

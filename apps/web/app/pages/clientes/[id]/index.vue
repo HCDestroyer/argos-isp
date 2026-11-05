@@ -39,9 +39,11 @@ watch(altaServicioAbierta, (abierta) => {
 
 /** Edición del cliente en un panel lateral: al guardar, la ficha muestra la versión nueva. */
 const edicionAbierta = ref(false)
+const ediciones = ref(0)
 
 function alEditarCliente(actualizado: Cliente) {
     cliente.value = actualizado
+    ediciones.value++
     void cargarZona(actualizado.zona_id)
     toast.add({ title: 'Cambios guardados', description: actualizado.nombre, color: 'success', icon: 'i-lucide-circle-check' })
 }
@@ -413,6 +415,12 @@ onMounted(cargar)
                         :valor="`${formatearFechaHora(cliente.updated_at)} · versión ${cliente.version}`"
                     />
                 </dl>
+                <!-- Tras cada edición (que pudo cambiar la casilla de WhatsApp) se vuelve a leer. -->
+                <ClienteWhatsapp
+                    v-if="puede('notificaciones.ver')"
+                    :key="`${cliente.id}-${ediciones}`"
+                    :cliente-id="cliente.id"
+                />
                 <ProblemaAlerta
                     v-if="problemaCatalogo"
                     :problema="problemaCatalogo"

@@ -48,6 +48,26 @@ export interface ContextoAccion {
      * Las acciones lo revisan con `exigirAccesoEmpresa` (`#shared/empresa_activa`).
      */
     empresasPermitidas?: number[] | null
+    /**
+     * Cabeceras del usuario técnico Iris en las rutas de pagos y atención (contrato Iris 0.6.0
+     * §7.1): quién habla en Iris (`asistente_ia` | `usuario:<id en Iris>`) y en qué conversación. Se
+     * guardan en `audit.acciones` (`iris_actor`, `iris_conversacion`). Con `asistente_ia` el canal
+     * es `ia`; con `usuario:<id>`, `api`. Ausente fuera de esas rutas o con otro actor.
+     */
+    iris?: OrigenIris | null
+}
+
+/** Actor de Iris de `X-Iris-Actor` y conversación de `X-Iris-Conversacion` (contrato Iris 0.6.0 §7.1). */
+export interface OrigenIris {
+    /** `asistente_ia` o `usuario:<id en Iris>` */
+    actor: string
+    /** id de la conversación en Iris */
+    conversacion: string
+}
+
+/** ¿La acción la pidió el asistente de IA de Iris? (canal de la promesa `ia`; `operador` si no). */
+export function esAsistenteIris(ctx: Pick<ContextoAccion, 'iris'>): boolean {
+    return ctx.iris?.actor === 'asistente_ia'
 }
 
 /** Contexto para crons, workers y consola. */

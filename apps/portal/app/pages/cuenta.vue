@@ -498,6 +498,7 @@ watch(() => route.hash, async (hash) => {
                         :vinculado="cuenta.cliente.telegram_vinculado"
                         @cambio="refresh(); telegram.cargar()"
                     />
+                    <CuentaWhatsapp :key="`whatsapp-${recargas}`" />
                     <CuentaContacto
                         :contacto="cuenta.cliente"
                         @actualizado="contactoActualizado"

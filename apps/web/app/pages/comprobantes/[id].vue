@@ -53,23 +53,57 @@ function alAprobar(aprobado: Comprobante) {
     })
 }
 
-async function rechazar(motivo: string, clave: string) {
-    const resultado = await useComprobantes().rechazar(comprobanteId.value, motivo, clave)
-    if (!resultado.ok && esComprobanteRevisado(resultado.problema)) {
-        void cargar()
+/*
+ * Reconexión temporal (contrato Iris 0.6.0 §7.3): la promesa `reconexion_temporal` activa ligada a
+ * este comprobante. Rechazarlo la cancela y el servicio vuelve a cortarse a la hora de corte. Sin
+ * `promesas.ver` no se puede saber: el aviso lo dice en vez de callarlo.
+ */
+const reconexion = shallowRef<Promesa | null>(null)
+const problemaReconexion = ref<Problem | null>(null)
+const cargandoReconexion = ref(false)
+const reconexionDesconocida = computed(() => pendiente.value && (problemaReconexion.value !== null || !puede('promesas.ver')))
+
+async function cargarReconexion() {
+    reconexion.value = null
+    problemaReconexion.value = null
+    const actual = comprobante.value
+    if (!actual || actual.estado !== 'pendiente' || !puede('promesas.ver')) {
+        return
     }
-    return resultado
+    cargandoReconexion.value = true
+    // Por cliente: la reconexión puede ir a un servicio que el comprobante no trae (`servicio_id` del cuerpo).
+    const resultado = await usePromesas().listar({ cliente_id: actual.cliente_id, tipo: 'reconexion_temporal', estado: 'activa', limit: 50 })
+    cargandoReconexion.value = false
+    if (!resultado.ok) {
+        problemaReconexion.value = resultado.problema
+        return
+    }
+    reconexion.value = resultado.data.data.find(p => p.comprobante_id === actual.id) ?? null
 }
 
+watch(comprobante, () => void cargarReconexion())
+
 function alRechazar(rechazado: Comprobante) {
+    const conReconexion = reconexion.value !== null
     comprobante.value = rechazado
     toast.add({
         title: 'Comprobante rechazado',
-        description: 'Se avisa al cliente con el motivo; puede subirlo de nuevo.',
+        description: conReconexion
+            ? 'La reconexión temporal se canceló: el servicio vuelve a cortarse a la hora de corte.'
+            : llegoPorIris(rechazado)
+                ? 'Iris se lo explica al cliente en la conversación.'
+                : 'Se avisa al cliente con el motivo; puede subirlo de nuevo.',
         icon: 'i-lucide-circle-x',
         color: 'success',
     })
 }
+
+/**
+ * «Ver conversación en Iris»: el autologin de Iris (`POST /integraciones/iris/abrir`) todavía no
+ * acepta el destino `conversacion` (pedido B2 a Iris; A1 lo suma cuando Iris lo publique). Hasta
+ * entonces el botón se ve deshabilitado y dice por qué.
+ */
+const MOTIVO_SIN_CONVERSACION = 'Iris todavía no permite abrir una conversación desde Argos (pedido B2). Búscala en Iris con este código.'
 
 watch(comprobanteId, () => {
     pagoRegistrado.value = null
@@ -135,6 +169,14 @@ onMounted(cargar)
                             variant="subtle"
                             data-prueba="estado-comprobante"
                         />
+                        <UBadge
+                            v-if="llegoPorIris(comprobante)"
+                            label="Llegó por Iris"
+                            icon="i-lucide-messages-square"
+                            color="info"
+                            variant="subtle"
+                            data-prueba="llego-por-iris"
+                        />
                     </div>
                     <p class="text-sm text-muted">
                         {{ ETIQUETAS_METODO[comprobante.metodo] }} ·
@@ -150,6 +192,14 @@ onMounted(cargar)
                     v-if="pendiente"
                     class="flex flex-wrap gap-2"
                 >
+                    <UBadge
+                        v-if="cargandoReconexion"
+                        label="Revisando reconexión…"
+                        icon="i-lucide-loader"
+                        color="neutral"
+                        variant="subtle"
+                        class="self-center"
+                    />
                     <UButton
                         v-if="puede('comprobantes.rechazar')"
                         label="Rechazar"
@@ -185,8 +235,26 @@ onMounted(cargar)
                 variant="subtle"
                 icon="i-lucide-circle-x"
                 title="Comprobante rechazado"
-                :description="[comprobante.motivo_rechazo, textoRevision(comprobante)].filter(Boolean).join(' · ')"
+                :description="[etiquetaCausaRechazo(comprobante.causa_rechazo), comprobante.motivo_rechazo, textoRevision(comprobante)].filter(Boolean).join(' · ')"
                 data-prueba="comprobante-rechazado"
+            />
+
+            <UAlert
+                v-if="pendiente && reconexion"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-plug-zap"
+                title="Reconexión temporal activa"
+                :description="`Iris reconectó el servicio ${reconexion.servicio_id} mientras se revisa este comprobante, hasta el ${formatearFechaHora(reconexion.vence_en)}. Rechazarlo vuelve a cortar el servicio a la hora de corte.`"
+                :actions="[{ label: 'Ver promesas', to: `/promesas?servicio=${reconexion.servicio_id}`, color: 'warning', variant: 'outline' }]"
+                data-prueba="aviso-reconexion"
+            />
+            <ProblemaAlerta
+                v-else-if="pendiente && problemaReconexion"
+                :problema="problemaReconexion"
+                :reintentar="cargarReconexion"
+                :reintentando="cargandoReconexion"
+                data-prueba="error-reconexion"
             />
 
             <UAlert
@@ -296,6 +364,57 @@ onMounted(cargar)
                         />
                     </dl>
                 </UPageCard>
+
+                <UPageCard
+                    v-if="llegoPorIris(comprobante)"
+                    title="Lectura de Iris"
+                    description="Lo que Iris leyó de la foto. Compáralo con el banco: Argos nunca lo aplica solo."
+                    icon="i-lucide-messages-square"
+                    variant="subtle"
+                    class="lg:col-start-2"
+                    data-prueba="lectura-iris"
+                >
+                    <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+                        <DatoFicha
+                            etiqueta="Leído por"
+                            :valor="comprobante.leido_por ? LEIDO_POR[comprobante.leido_por] : null"
+                        />
+                        <DatoFicha
+                            etiqueta="Confianza"
+                            :valor="textoConfianza(comprobante.confianza)"
+                        />
+                        <DatoFicha
+                            etiqueta="Llegó por"
+                            :valor="comprobante.canal_contacto ? CANALES_CONTACTO[comprobante.canal_contacto].etiqueta : null"
+                        />
+                        <DatoFicha
+                            etiqueta="Atendió"
+                            :valor="textoActorIris(comprobante.iris_actor)"
+                        />
+                        <DatoFicha
+                            etiqueta="Conversación"
+                            :valor="comprobante.iris_conversacion ?? null"
+                            mono
+                            class="col-span-2"
+                        />
+                    </dl>
+                    <div class="flex flex-col gap-1">
+                        <UTooltip :text="MOTIVO_SIN_CONVERSACION">
+                            <UButton
+                                label="Ver conversación en Iris"
+                                icon="i-lucide-external-link"
+                                color="neutral"
+                                variant="outline"
+                                disabled
+                                class="self-start"
+                                data-prueba="ver-conversacion-iris"
+                            />
+                        </UTooltip>
+                        <p class="text-xs text-muted">
+                            {{ MOTIVO_SIN_CONVERSACION }}
+                        </p>
+                    </div>
+                </UPageCard>
             </div>
 
             <ComprobanteAprobarModal
@@ -305,16 +424,13 @@ onMounted(cargar)
                 @revisado="cargar"
             />
 
-            <AccionMotivoModal
+            <ComprobanteRechazarModal
                 v-model:open="rechazarAbierto"
-                titulo="Rechazar comprobante"
-                :descripcion="`#${comprobante.id} · ${comprobante.cliente_nombre} · ${formatearQuetzales(comprobante.monto)}`"
-                efecto="No se registra pago ni asiento. El cliente recibe el aviso con el motivo y puede subir el comprobante de nuevo con la misma referencia."
-                confirmar="Rechazar comprobante"
-                icono="i-lucide-circle-x"
-                placeholder="Ej.: la boleta no aparece en el estado de cuenta del banco"
-                :ejecutar="rechazar"
+                :comprobante="comprobante"
+                :reconexion="reconexion"
+                :reconexion-desconocida="reconexionDesconocida"
                 @hecho="alRechazar"
+                @revisado="cargar"
             />
         </div>
     </PanelPagina>

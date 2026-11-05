@@ -106,7 +106,7 @@ describe('filtros de clientes · contra los fixtures', () => {
     })
 
     it('con promesa activa', async () => {
-        expect(await ids({ ...FILTROS_CLIENTES_VACIOS, conPromesa: true })).toEqual([12])
+        expect(await ids({ ...FILTROS_CLIENTES_VACIOS, conPromesa: true })).toEqual([8, 12])
     })
 
     it('servicios: zona y deuda vencida', async () => {

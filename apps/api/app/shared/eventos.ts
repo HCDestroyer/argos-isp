@@ -75,6 +75,11 @@ interface PayloadPago {
      * anteriores.
      */
     clientes?: number[]
+    /**
+     * `iris`: el pago nace de aprobar un comprobante que llegó por Iris (contrato Iris 0.6.0 §7.2):
+     * Iris confirma al cliente en la conversación y notify no avisa al pagador. Ausente en los demás.
+     */
+    origen?: 'iris'
 }
 
 /** Nota de crédito interna (A3, semana 3): reduce el saldo de `factura_id` y la CxC del cliente. */
@@ -88,22 +93,73 @@ interface PayloadNotaCredito {
     motivo: string
 }
 
-interface PayloadPromesa {
+/**
+ * Promesa de pago (A3). Payload común del contrato Iris 0.6.0 §7.4: `cliente_id`, `tipo`, `canal`,
+ * `comprobante_id` (solo en una reconexión temporal) y `origen` (`iris` si la creó Iris: notify no
+ * avisa al cliente por su cuenta). Los eventos anteriores al 0.6.0 no traen esas claves.
+ */
+export interface PayloadPromesa {
     promesa_id: number
     empresa_id: number
+    cliente_id: number
     servicio_id: number
+    tipo: 'promesa' | 'reconexion_temporal'
+    canal: 'portal' | 'ia' | 'operador' | 'supervisor'
+    comprobante_id: number | null
     /** instante ISO 8601 */
     vence: string
     monto: Dinero
+    origen: 'iris' | null
 }
 
-/** Comprobante de depósito (A3, día 4). `pago_id` solo al aprobar; `motivo` solo al rechazar. */
-interface PayloadComprobante {
+/** Motivos de `promesa.cancelada` (contrato Iris 0.6.0 §7.3 y §7.4). */
+export const MOTIVOS_CANCELACION_PROMESA = [
+    'cancelada_por_supervisor',
+    'rechazada_por_supervisor',
+    'vencida_sin_aprobacion',
+    'comprobante_rechazado',
+    'vencida_sin_revisar',
+] as const
+export type MotivoCancelacionPromesa = (typeof MOTIVOS_CANCELACION_PROMESA)[number]
+
+/** `promesa.cancelada`: la promesa dejó de estar activa o pendiente sin cumplirse ni incumplirse. */
+export interface PayloadPromesaCancelada extends PayloadPromesa {
+    /** estado en que quedó: `cancelada` o `rechazada` (un supervisor rechazó una pendiente) */
+    estado: 'cancelada' | 'rechazada'
+    motivo: MotivoCancelacionPromesa
+    /** texto del supervisor (o null en los cierres automáticos) */
+    detalle: string | null
+}
+
+/** Causas de rechazo de un comprobante (contrato Iris 0.6.0 §7.2). */
+export const CAUSAS_RECHAZO_COMPROBANTE = [
+    'no_aparece',
+    'monto_distinto',
+    'ilegible',
+    'falta_dato',
+    'duplicado',
+    'otro',
+] as const
+export type CausaRechazoComprobante = (typeof CAUSAS_RECHAZO_COMPROBANTE)[number]
+
+/**
+ * Comprobante de depósito (A3, día 4). `pago_id` solo al aprobar; `motivo` y `causa` solo al
+ * rechazar. Desde el contrato Iris 0.6.0 §7.2 trae además `servicio_id`, `canal`, `monto`,
+ * `servicio_estado` (estado del servicio después de aplicar el pago o el rechazo; null sin
+ * servicio) y `origen` (`iris` con `canal = iris`: notify no avisa al cliente por su cuenta).
+ */
+export interface PayloadComprobante {
     comprobante_id: number
     empresa_id: number
     cliente_id: number
+    servicio_id: number | null
+    canal: 'portal' | 'panel' | 'iris'
+    monto: Dinero
     pago_id: number | null
     motivo: string | null
+    causa: CausaRechazoComprobante | null
+    servicio_estado: EstadoServicioConPendiente | null
+    origen: 'iris' | null
 }
 
 interface PayloadSesion {
@@ -217,6 +273,12 @@ export interface CatalogoEventos {
          */
         origen_tipo?: string
         origen_id?: string
+        /**
+         * `iris` (contrato Iris 0.6.0, pedido de A6): el cambio lo provocó algo que nació en Iris (una
+         * promesa o reconexión temporal de Iris, su cierre, o el pago de un comprobante de Iris).
+         * Notify no avisa al cliente: Iris le explica en la conversación. Ausente en los demás.
+         */
+        origen?: 'iris'
     }
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
@@ -606,6 +668,8 @@ export interface CatalogoEventos {
     'promesa.creada': PayloadPromesa
     'promesa.cumplida': PayloadPromesa
     'promesa.incumplida': PayloadPromesa
+    /** cancelada (supervisor, vencida sin aprobar, reconexión sin pago) o rechazada por un supervisor */
+    'promesa.cancelada': PayloadPromesaCancelada
     /** el cliente (portal) o un operador (panel) subió un comprobante; queda pendiente de revisión */
     'comprobante.recibido': PayloadComprobante
     /** se aprobó y ya es un pago (`pago_id`); el pago emite además `pago.registrado` */
@@ -1278,6 +1342,7 @@ export const EVENTOS = [
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
+    'promesa.cancelada',
     'comprobante.recibido',
     'comprobante.aprobado',
     'comprobante.rechazado',

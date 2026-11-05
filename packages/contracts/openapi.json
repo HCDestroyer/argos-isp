@@ -3095,6 +3095,28 @@
             "panel": []
           }
         ],
+        "parameters": [
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Bancos activos",
@@ -3105,6 +3127,16 @@
                   "items": {
                     "$ref": "#/components/schemas/Banco"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5498,6 +5530,16 @@
                 "interno",
                 "consola"
               ]
+            }
+          },
+          {
+            "name": "iris_conversacion",
+            "in": "query",
+            "required": false,
+            "description": "Acciones de esta conversación de Iris (`X-Iris-Conversacion`, contrato Iris 0.6.0)",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
             }
           },
           {
@@ -8378,7 +8420,7 @@
       "get": {
         "operationId": "clientesListar",
         "summary": "Buscar clientes",
-        "description": "Busca por nombre, NIT/CUI, teléfono, user_ppp o IP.",
+        "description": "Busca por nombre, NIT/CUI, teléfono, user_ppp o IP. `telefono` es otro filtro, exacto (contrato Iris 0.6.0 §7.6). Con el token del usuario técnico Iris, `q` no busca por NIT/CUI y `nit_cui` sale como `***`; con `telefono`, exige `X-Iris-Actor` y `X-Iris-Conversacion`.",
         "tags": [
           "clientes"
         ],
@@ -8515,6 +8557,36 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "telefono",
+            "in": "query",
+            "required": false,
+            "description": "Coincidencia exacta del número (contrato Iris 0.6.0 §7.6) sobre `telefono` y `movil` del cliente y `contacto_telefono` de sus servicios no retirados; se normaliza con la regla de los teléfonos (`422 validacion`, `rule: telefono`, si no es válido). Cada fila trae `coincide_en[]`. Con el token de Iris exige `X-Iris-Actor` y `X-Iris-Conversacion`",
+            "schema": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
           }
         ],
         "responses": {
@@ -8542,6 +8614,16 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -13893,7 +13975,7 @@
     "/api/v1/comprobantes": {
       "get": {
         "operationId": "comprobantesListar",
-        "summary": "Cola de comprobantes de depósito (portal y panel)",
+        "summary": "Cola de comprobantes de depósito (portal, panel e Iris)",
         "description": "Filtros por estado, cliente, método, cuenta bancaria de destino y fecha de depósito (desde/hasta, inclusive). resumen trae el total y el monto de lo filtrado (todas las páginas) y los pendientes con los demás filtros sin importar estado: el contador del menú sale de GET /comprobantes?limit=1.",
         "tags": [
           "pagos"
@@ -13987,6 +14069,20 @@
             }
           },
           {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "description": "iris: boletas que llegaron por Iris (contrato Iris 0.6.0 §7.2)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "portal",
+                "panel",
+                "iris"
+              ]
+            }
+          },
+          {
             "name": "desde",
             "in": "query",
             "required": false,
@@ -14053,6 +14149,239 @@
         },
         "x-permiso": "comprobantes.ver",
         "x-implementado": true
+      },
+      "post": {
+        "operationId": "comprobantesRegistrar",
+        "summary": "Registrar un comprobante de depósito (boleta) para la cola de caja",
+        "description": "Contrato Iris 0.6.0 §7.2 (pedido A16). Queda `pendiente` en la cola de caja (no mueve dinero ni el estado del servicio). Con el token de Iris: canal `iris`, X-Iris-Actor y X-Iris-Conversacion obligatorias (400 cabecera_iris_requerida), `canal_contacto` y `leido_por` obligatorios (422), y `leido_por`, `confianza`, `canal_contacto` y la conversación se muestran a caja. Con otro usuario: canal `panel` (los campos de Iris no se aceptan). La empresa es la de `cuenta_bancaria_id`: `empresa_id` distinto → 422 empresa_no_coincide; fuera del alcance → 403 empresa_no_permitida. 409 referencia_duplicada si la referencia (mismo método y cuenta) ya es un pago o está en otro comprobante pendiente; 422 por campo (`archivo` con rule required, tipo o tamano; `fecha_deposito` futura; `monto`); 422 cuenta_de_otra_empresa si la cuenta es de otra empresa que el servicio.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "El cliente verificado"
+                  },
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Del mismo cliente; si viene, el pago se aplica primero a sus facturas"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "transferencia",
+                      "ach",
+                      "remesa"
+                    ]
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Cuenta propia de destino (GET /cuentas-bancarias?activa=true); de ella sale la empresa"
+                  },
+                  "banco_origen_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con transferencia y ach (GET /bancos)"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha_deposito": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "canal_contacto": {
+                    "type": "string",
+                    "enum": [
+                      "whatsapp",
+                      "telegram",
+                      "correo",
+                      "llamada"
+                    ],
+                    "description": "Obligatorio con el token de Iris: por dónde llegó la boleta"
+                  },
+                  "leido_por": {
+                    "type": "string",
+                    "enum": [
+                      "ia",
+                      "persona",
+                      "cliente_dictado"
+                    ],
+                    "description": "Obligatorio con el token de Iris: quién leyó los datos de la foto"
+                  },
+                  "confianza": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(0(\\.\\d{1,3})?|1(\\.0{1,3})?)?$",
+                    "description": "0–1 (hasta 3 decimales) o vacío: qué tan seguro está Iris de lo que leyó"
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Si viene, debe ser la de la cuenta bancaria (422 empresa_no_coincide)"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Caja la ve"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Foto (JPG, PNG o WebP) o PDF de la boleta, hasta 5 MB; Argos decide el tipo por el contenido y guarda su copia"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "metodo",
+                  "cuenta_bancaria_id",
+                  "referencia",
+                  "monto",
+                  "fecha_deposito",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comprobante pendiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comprobante"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`); o Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.registrar",
+        "x-implementado": true
       }
     },
     "/api/v1/comprobantes/{id}": {
@@ -14079,6 +14408,26 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
           }
         ],
         "responses": {
@@ -14088,6 +14437,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Comprobante"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -14339,7 +14698,7 @@
       "post": {
         "operationId": "comprobantesRechazar",
         "summary": "Rechazar comprobante con motivo (se notifica al cliente)",
-        "description": "Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.",
+        "description": "Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.",
         "tags": [
           "pagos"
         ],
@@ -14384,6 +14743,18 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 500
+                  },
+                  "causa": {
+                    "type": "string",
+                    "enum": [
+                      "no_aparece",
+                      "monto_distinto",
+                      "ilegible",
+                      "falta_dato",
+                      "duplicado",
+                      "otro"
+                    ],
+                    "description": "Por defecto otro. falta_dato: el cliente lo vuelve a mandar completo (la referencia queda libre)"
                   }
                 },
                 "required": [
@@ -14457,6 +14828,170 @@
           }
         },
         "x-permiso": "comprobantes.rechazar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/comprobantes/{id}/reconexion-temporal": {
+      "post": {
+        "operationId": "comprobantesReconexionTemporal",
+        "summary": "Reconectar temporalmente mientras caja revisa el comprobante (promesa reconexion_temporal)",
+        "description": "Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Obligatorio solo si el comprobante no tiene servicio"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "fuera_de_horario"
+                    ]
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reconexión temporal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconexionTemporal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`); o Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso comprobantes.reconexion_temporal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "comprobantes.reconexion_temporal",
         "x-implementado": true
       }
     },
@@ -15064,6 +15599,26 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
           }
         ],
         "responses": {
@@ -15076,6 +15631,16 @@
                   "items": {
                     "$ref": "#/components/schemas/CuentaBancaria"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -28268,6 +28833,171 @@
           }
         },
         "x-permiso": "iris.revocar_token",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/verificar-identidad": {
+      "post": {
+        "operationId": "irisVerificarIdentidad",
+        "summary": "Verificar la identidad de un cliente sin recibir el dato (contrato Iris 0.6.0 §7.5)",
+        "description": "`metodo` = `documento` (NIT o CUI completo; sin guiones ni espacios y sin distinguir mayúsculas), `nombre` (sin mayúsculas, tildes, signos ni espacios repetidos) o `codigo_cliente`. Compara en tiempo constante y responde solo `{ coincide }`. Sin documento (`cf`): `422 metodo_no_disponible`, que no cuenta como intento. 5 intentos fallidos por cliente cada 30 minutos: después, `429 demasiados_intentos` con `Retry-After` (un acierto no reinicia el contador). Cada intento queda auditado con `valor` como `***`. Fuera del alcance de empresas: 403.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "El cliente que dice ser"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "documento",
+                      "nombre",
+                      "codigo_cliente"
+                    ],
+                    "description": "`documento` (NIT o CUI completo), `nombre` o `codigo_cliente`. `nombre` y `codigo_cliente` son pruebas débiles: solo valen junto con otra"
+                  },
+                  "valor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Lo que dijo el cliente. Argos nunca lo devuelve y lo audita como `***`"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "metodo",
+                  "valor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionIdentidad"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.verificar_identidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.verificar_identidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/webhook": {
+      "post": {
+        "operationId": "irisWebhook",
+        "summary": "Receptor de webhooks de Iris (firmados con HMAC, lo llama Iris)",
+        "description": "Contrato Iris 0.6.0 §1.3 y §6.6. Sin sesión: `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>` con el secreto de entrada que Argos entregó en el canje (401 `firma_invalida`), `X-Webhook-Timestamp` a menos de 5 min (401 `timestamp_fuera_de_ventana`), 503 `iris_apagado` con el conector apagado. Cuerpo `{ id, evento, ocurrido_en, payload }`. Deduplica por `X-Webhook-Id`. `aviso.entregado` / `aviso.fallido` actualizan el envío de notify (por `idempotency_key`); `contacto.baja` deja de pedir avisos por WhatsApp a ese cliente. Eventos desconocidos se ignoran.",
+        "tags": [
+          "integraciones"
+        ],
+        "responses": {
+          "202": {
+            "description": "Webhook recibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoWebhookIris"
+                }
+              }
+            }
+          }
+        },
         "x-implementado": true
       }
     },
@@ -47100,6 +47830,17 @@
                     "required": [],
                     "additionalProperties": false
                   },
+                  "whatsapp": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Solo sale si además el conector Iris está activo y habla el contrato ≥ 0.6.0",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
                   "avisos": {
                     "type": "object",
                     "properties": {
@@ -47491,6 +48232,17 @@
                     "required": [],
                     "additionalProperties": false
                   },
+                  "whatsapp": {
+                    "type": "object",
+                    "properties": {
+                      "activo": {
+                        "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Solo sale si además el conector Iris está activo y habla el contrato ≥ 0.6.0",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
                   "avisos": {
                     "type": "object",
                     "properties": {
@@ -47801,6 +48553,125 @@
           }
         },
         "x-permiso": "notificaciones.probar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/consentimientos": {
+      "post": {
+        "operationId": "notificacionesConsentimientoRegistrar",
+        "summary": "Registrar «Acepta avisos por WhatsApp» de un cliente (permiso de contacto hacia Iris)",
+        "description": "Contrato Iris 0.6.0 §6.4 (A21). Lo llama el panel al crear o editar un cliente con la casilla (`origen = argos_panel`; el portal usa la misma acción con `argos_portal`). El registro vive solo en Iris: queda en la cola hacia `POST <iris>/mensajeria/consentimientos` (`entrega: pendiente`) y sale con el conector activo y contrato ≥ 0.6.0. Con `baja`, Argos deja de pedir avisos por WhatsApp al instante. Queda en la línea de tiempo del cliente.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "acepta",
+                      "baja"
+                    ],
+                    "description": "`acepta`: marcó «Acepta avisos por WhatsApp»; `baja`: la desmarcó"
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "estado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Consentimiento en la cola hacia Iris",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentimientoWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.registrar_consentimiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.registrar_consentimiento",
         "x-implementado": true
       }
     },
@@ -48477,6 +49348,79 @@
           }
         },
         "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/whatsapp/clientes/{id}": {
+      "get": {
+        "operationId": "notificacionesWhatsappCliente",
+        "summary": "WhatsApp de un cliente: canal disponible, último estado de contacto y última marca enviada a Iris",
+        "description": "Para la ficha del cliente y la casilla «Acepta avisos por WhatsApp» (A4). `contacto.estado = baja` con `origen` `iris_*` es una baja que el cliente dio en el chat (`contacto.baja`, §6.4): Argos ya no le pide avisos por WhatsApp. No muestra el número: lo tiene Iris.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsappCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
         "x-implementado": true
       }
     },
@@ -53583,6 +54527,26 @@
                         },
                         "required": [],
                         "additionalProperties": false
+                      },
+                      "reconexion_temporal": {
+                        "type": "object",
+                        "properties": {
+                          "permitida": {
+                            "type": "boolean"
+                          },
+                          "max_por_periodo": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 12
+                          },
+                          "horas_max": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 168
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
                       }
                     },
                     "required": [],
@@ -54056,6 +55020,26 @@
                             },
                             "required": [],
                             "additionalProperties": false
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "reconexion_temporal": {
+                        "type": "object",
+                        "properties": {
+                          "permitida": {
+                            "type": "boolean"
+                          },
+                          "max_por_periodo": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 12
+                          },
+                          "horas_max": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 168
                           }
                         },
                         "required": [],
@@ -57243,6 +58227,156 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/whatsapp": {
+      "get": {
+        "operationId": "portalWhatsapp",
+        "summary": "«Acepta avisos por WhatsApp» del cliente de la sesión",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Lee `verWhatsappCliente` de A6 por cada empresa con servicios vigentes del cliente. `visible` solo si `whatsapp.activo` está encendido en alguna; `disponible` si además el conector Iris permite enviar. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalRegistrarWhatsapp",
+        "summary": "El cliente acepta (`acepta`) o se da de baja (`baja`) de los avisos por WhatsApp",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Acción `portal.registrar_whatsapp` (canal portal) sobre `notificaciones.registrar_consentimiento` de A6 con `origen: argos_portal`, una vez por empresa con WhatsApp encendido; queda en la cola hacia Iris (sale al activarse el conector). Una `baja` deja de pedir avisos por WhatsApp al instante. 422 `whatsapp_no_disponible` si ninguna empresa del cliente lo tiene encendido. Acepta `Idempotency-Key`. Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe (incluida una baja dada en el chat) y nunca el número.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "acepta",
+                      "baja"
+                    ]
+                  }
+                },
+                "required": [
+                  "estado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "WhatsApp del cliente, ya con la marca",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalWhatsapp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/productos": {
       "get": {
         "operationId": "productosListar",
@@ -58540,6 +59674,19 @@
                 "rechazada"
               ]
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "promesa",
+                "reconexion_temporal"
+              ]
+            }
           }
         ],
         "responses": {
@@ -58608,7 +59755,7 @@
       "post": {
         "operationId": "promesasCrear",
         "summary": "Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
+        "description": "Contrato Iris 0.6.0 §7.4: con el token de Iris exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida); el canal sale de X-Iris-Actor (asistente_ia → ia, usuario:<id> → operador) y `canal` del cuerpo se ignora; la promesa queda con sistema_origen = iris. `empresa_id`, si viene, debe ser la del servicio (422 empresa_no_coincide). Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
         "tags": [
           "promesas"
         ],
@@ -58630,6 +59777,26 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 255
+            }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
             }
           }
         ],
@@ -58664,7 +59831,13 @@
                       "ia",
                       "operador",
                       "supervisor"
-                    ]
+                    ],
+                    "description": "Con el token de Iris se ignora: el canal sale de X-Iris-Actor (ia u operador, contrato Iris 0.6.0 §7.4)"
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Si viene, debe ser la empresa del servicio (422 empresa_no_coincide)"
                   }
                 },
                 "required": [
@@ -58683,6 +59856,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Promesa"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -59110,7 +60293,7 @@
       "post": {
         "operationId": "promesasSimular",
         "summary": "Simular una promesa: evalúa todas las reglas sin crear nada",
-        "description": "Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
+        "description": "Con el token de Iris exige X-Iris-Actor y X-Iris-Conversacion y el canal sale de X-Iris-Actor (contrato Iris 0.6.0 §7.4). Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
         "tags": [
           "promesas"
         ],
@@ -59120,6 +60303,28 @@
           },
           {
             "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
           }
         ],
         "requestBody": {
@@ -59396,6 +60601,26 @@
                         },
                         "required": [],
                         "additionalProperties": false
+                      },
+                      "reconexion_temporal": {
+                        "type": "object",
+                        "properties": {
+                          "permitida": {
+                            "type": "boolean"
+                          },
+                          "max_por_periodo": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 12
+                          },
+                          "horas_max": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 168
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
                       }
                     },
                     "required": [],
@@ -59418,6 +60643,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SimulacionPromesa"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -64191,6 +65426,7 @@
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
+                        "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -64204,6 +65440,8 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconexion_temporal",
+                        "comprobantes.registrar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
@@ -64309,6 +65547,7 @@
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
+                        "notificaciones.registrar_consentimiento",
                         "notificaciones.ver",
                         "olts.crear",
                         "olts.editar",
@@ -64564,6 +65803,7 @@
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
+                        "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -64577,6 +65817,8 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconexion_temporal",
+                        "comprobantes.registrar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
@@ -64682,6 +65924,7 @@
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
+                        "notificaciones.registrar_consentimiento",
                         "notificaciones.ver",
                         "olts.crear",
                         "olts.editar",
@@ -76193,6 +77436,7 @@
                             "clientes.estado_cuenta",
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
+                            "clientes.verificar_identidad",
                             "clientes.vincular_telegram",
                             "cobros.configurar",
                             "cobros.liquidar",
@@ -76206,6 +77450,8 @@
                             "compras.ver",
                             "comprobantes.aprobar",
                             "comprobantes.rechazar",
+                            "comprobantes.reconexion_temporal",
+                            "comprobantes.registrar",
                             "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
@@ -76311,6 +77557,7 @@
                             "notificaciones.configurar",
                             "notificaciones.editar",
                             "notificaciones.probar",
+                            "notificaciones.registrar_consentimiento",
                             "notificaciones.ver",
                             "olts.crear",
                             "olts.editar",
@@ -78483,6 +79730,20 @@
               "null"
             ],
             "description": "Nombre comercial de esa empresa (null sin empresa)"
+          },
+          "iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`X-Iris-Actor` de una llamada del usuario técnico Iris a pagos y atención (`asistente_ia` o `usuario:<id en Iris>`, contrato Iris 0.6.0 §7.1); null en lo demás"
+          },
+          "iris_conversacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás"
           },
           "created_at": {
             "type": "string",
@@ -84838,7 +86099,7 @@
               "string",
               "null"
             ],
-            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf"
+            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf. Al usuario técnico Iris le sale `***` (contrato Iris 0.6.0 §1.1; null sigue null)"
           },
           "nit_cui_invalido": {
             "type": "boolean",
@@ -85005,6 +86266,18 @@
               }
             },
             "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
+          },
+          "coincide_en": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "telefono",
+                "movil",
+                "contacto_servicio"
+              ]
+            },
+            "description": "Solo con el filtro `telefono` de `GET /clientes` (contrato Iris 0.6.0 §7.6): dónde coincidió el número. `contacto_servicio` = contacto en sitio de un servicio no retirado, que puede no ser el titular"
           },
           "version": {
             "type": "integer",
@@ -85799,8 +87072,58 @@
             "type": "string",
             "enum": [
               "portal",
-              "panel"
-            ]
+              "panel",
+              "iris"
+            ],
+            "description": "iris: boleta que llegó por chat o llamada (contrato Iris 0.6.0 §7.2)"
+          },
+          "leido_por": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ia",
+              "persona",
+              "cliente_dictado",
+              null
+            ],
+            "description": "Solo Iris: quién leyó los datos de la foto. Caja lo ve; Argos nunca lo aplica solo"
+          },
+          "confianza": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo Iris: 0–1 (decimal como texto), qué tan seguro está Iris de los datos leídos"
+          },
+          "canal_contacto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "whatsapp",
+              "telegram",
+              "correo",
+              "llamada",
+              null
+            ],
+            "description": "Solo Iris: por dónde llegó la boleta"
+          },
+          "iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo Iris: X-Iris-Actor de la petición"
+          },
+          "iris_conversacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris»)"
           },
           "nota": {
             "type": [
@@ -85821,6 +87144,22 @@
               "string",
               "null"
             ]
+          },
+          "causa_rechazo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "no_aparece",
+              "monto_distinto",
+              "ilegible",
+              "falta_dato",
+              "duplicado",
+              "otro",
+              null
+            ],
+            "description": "Al rechazar; null en los demás y en los rechazados antes de 0.6.0"
           },
           "pago_id": {
             "type": [
@@ -87011,6 +88350,7 @@
           "sembrada_desde_entorno",
           "correo",
           "telegram",
+          "whatsapp",
           "avisos",
           "version",
           "created_at",
@@ -87191,6 +88531,18 @@
                   "null"
                 ],
                 "description": "Ruta del webhook de este bot: `/api/v1/telegram/webhook/<bot_id>`"
+              }
+            }
+          },
+          "whatsapp": {
+            "type": "object",
+            "required": [
+              "activo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Apagado por defecto; además necesita el conector Iris activo con contrato ≥ 0.6.0"
               }
             }
           },
@@ -87443,6 +88795,111 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ConsentimientoWhatsapp": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "canal",
+          "estado",
+          "origen",
+          "ocurrido_en",
+          "idempotency_key",
+          "entrega",
+          "intentos",
+          "ultimo_error",
+          "enviado_en",
+          "consentimiento_id",
+          "estado_vigente"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa del permiso de contacto (obligatoria en Iris)"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "whatsapp"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "acepta",
+              "baja"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "argos_panel",
+              "argos_portal"
+            ]
+          },
+          "ocurrido_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)"
+          },
+          "entrega": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido"
+            ],
+            "description": "`pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "consentimiento_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id del registro en Iris (al entregarse)"
+          },
+          "estado_vigente": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "acepta",
+              "baja"
+            ],
+            "description": "Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)"
           }
         }
       },
@@ -92606,6 +94063,8 @@
           "proveedor_id",
           "fallback_de",
           "enviado_en",
+          "entregado_en",
+          "leido_en",
           "created_at",
           "updated_at"
         ],
@@ -92703,6 +94162,22 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "entregado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "WhatsApp por Iris: cuándo Iris lo entregó (`aviso.entregado`)"
+          },
+          "leido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "WhatsApp por Iris: cuándo lo leyó el cliente"
           },
           "created_at": {
             "type": "string",
@@ -99079,6 +100554,7 @@
           "clientes.estado_cuenta",
           "clientes.quitar_responsable_pago",
           "clientes.ver",
+          "clientes.verificar_identidad",
           "clientes.vincular_telegram",
           "cobros.configurar",
           "cobros.liquidar",
@@ -99092,6 +100568,8 @@
           "compras.ver",
           "comprobantes.aprobar",
           "comprobantes.rechazar",
+          "comprobantes.reconexion_temporal",
+          "comprobantes.registrar",
           "comprobantes.ver",
           "cuentas_bancarias.editar",
           "cuentas_bancarias.ver",
@@ -99197,6 +100675,7 @@
           "notificaciones.configurar",
           "notificaciones.editar",
           "notificaciones.probar",
+          "notificaciones.registrar_consentimiento",
           "notificaciones.ver",
           "olts.crear",
           "olts.editar",
@@ -99345,6 +100824,7 @@
           "Ver el estado de cuenta de un cliente",
           "Quitar el responsable de pago de un cliente",
           "Ver y buscar clientes",
+          "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
           "Vincular el chat de Telegram de un cliente",
           "Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN",
           "Registrar la liquidación de un proveedor de cobro (banco neto y comisión)",
@@ -99358,6 +100838,8 @@
           "Ver compras (libro de compras)",
           "Aprobar comprobantes de depósito (registra el pago)",
           "Rechazar comprobantes de depósito con motivo",
+          "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
+          "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
           "Crear y editar cuentas bancarias propias",
           "Ver las cuentas bancarias propias (destino de depósitos y transferencias)",
@@ -99463,6 +100945,7 @@
           "Configurar los canales de notificación (correo SMTP, bot de Telegram, interruptores); solo admin",
           "Editar plantillas de notificaciones",
           "Enviar un mensaje de prueba por correo o Telegram con la configuración guardada",
+          "Marcar o quitar «Acepta avisos por WhatsApp» de un cliente (el permiso de contacto vive en Iris)",
           "Ver plantillas y envíos de notificaciones",
           "Registrar OLT",
           "Editar OLT y sus puertos PON",
@@ -105137,6 +106620,85 @@
           }
         }
       },
+      "PortalWhatsapp": {
+        "type": "object",
+        "required": [
+          "visible",
+          "disponible",
+          "motivo",
+          "empresas",
+          "estado",
+          "ocurrido_en",
+          "origen",
+          "baja_de_iris",
+          "entrega"
+        ],
+        "properties": {
+          "visible": {
+            "type": "boolean",
+            "description": "WhatsApp encendido en notify (`whatsapp.activo`) para alguna empresa con servicios vigentes del cliente. En `false` el portal no muestra la casilla y los demás campos van vacíos"
+          },
+          "disponible": {
+            "type": "boolean",
+            "description": "Además, el conector Iris está activo con contrato ≥ 0.6.0. En `false` el portal muestra el error con «Reintentar» y no pinta la casilla"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto para el cliente cuando no está disponible"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalMarcaEmpresa"
+            },
+            "description": "Empresas con WhatsApp encendido"
+          },
+          "estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "acepta",
+              "baja"
+            ],
+            "description": "Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris). `null`: el cliente nunca eligió (no recibe avisos por WhatsApp)"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`argos_portal`, `argos_panel`, o con una baja dada en Iris `iris_cliente`, `iris_agente`, `iris_vigente`"
+          },
+          "baja_de_iris": {
+            "type": "boolean",
+            "description": "La baja vigente la dio el cliente (o un agente) en la conversación de Iris"
+          },
+          "entrega": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido"
+            ],
+            "description": "Entrega a Iris de la última marca hecha en Argos (`null` si el estado vigente vino de Iris). `fallido`: Iris no la registró; el portal ofrece reintentar"
+          }
+        }
+      },
       "PremioLealtad": {
         "type": "object",
         "required": [
@@ -105715,6 +107277,33 @@
               "operador",
               "supervisor"
             ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "promesa",
+              "reconexion_temporal"
+            ],
+            "description": "reconexion_temporal: ligada a un comprobante pendiente (contrato Iris 0.6.0 §7.3). Siempre viene"
+          },
+          "comprobante_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Solo en una reconexión temporal: el comprobante que la respalda"
+          },
+          "sistema_origen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris",
+              null
+            ],
+            "description": "iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)"
           },
           "aprobada_por": {
             "type": [
@@ -106425,6 +108014,56 @@
           "encolado": {
             "type": "boolean",
             "description": "false: ya había una esperando o en curso (no se encoló otra)"
+          }
+        }
+      },
+      "ReconexionTemporal": {
+        "type": "object",
+        "required": [
+          "promesa_id",
+          "reconexion_id",
+          "hasta",
+          "servicio"
+        ],
+        "properties": {
+          "promesa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "La promesa de tipo reconexion_temporal (GET /promesas/:id)"
+          },
+          "reconexion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Alias de promesa_id para Iris"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Vencimiento de la promesa: ahora + horas_max de la plantilla"
+          },
+          "servicio": {
+            "type": "object",
+            "required": [
+              "id",
+              "estado"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "pendiente_instalacion",
+                  "activo",
+                  "limitado",
+                  "suspendido",
+                  "retirado"
+                ],
+                "description": "Estado tras re-evaluar (activo, salvo que la hora de corte no aplique)"
+              }
+            }
           }
         }
       },
@@ -107614,6 +109253,29 @@
                 }
               }
             }
+          },
+          "reconexion_temporal": {
+            "type": "object",
+            "required": [
+              "permitida",
+              "max_por_periodo",
+              "horas_max"
+            ],
+            "properties": {
+              "permitida": {
+                "type": "boolean",
+                "description": "Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)"
+              },
+              "max_por_periodo": {
+                "type": "integer",
+                "description": "Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)"
+              },
+              "horas_max": {
+                "type": "integer",
+                "description": "Duración desde que se crea (por defecto 24)"
+              }
+            },
+            "description": "Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta"
           }
         }
       },
@@ -112037,6 +113699,34 @@
           }
         }
       },
+      "ResultadoWebhookIris": {
+        "type": "object",
+        "required": [
+          "recibido",
+          "duplicado",
+          "estado",
+          "resultado"
+        ],
+        "properties": {
+          "recibido": {
+            "type": "boolean"
+          },
+          "duplicado": {
+            "type": "boolean"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "procesado",
+              "ignorado"
+            ]
+          },
+          "resultado": {
+            "type": "string",
+            "description": "`acuse_aplicado`, `sin_cambio`, `envio_no_encontrado`, `baja_registrada`, `baja_anterior`, `cliente_no_encontrado`, `evento_desconocido`, `payload_invalido` o `duplicado`"
+          }
+        }
+      },
       "ResultadoWebhookPasarela": {
         "type": "object",
         "required": [
@@ -112849,6 +114539,7 @@
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
               "clientes.ver",
+              "clientes.verificar_identidad",
               "clientes.vincular_telegram",
               "cobros.configurar",
               "cobros.liquidar",
@@ -112862,6 +114553,8 @@
               "compras.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.reconexion_temporal",
+              "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
@@ -112967,6 +114660,7 @@
               "notificaciones.configurar",
               "notificaciones.editar",
               "notificaciones.probar",
+              "notificaciones.registrar_consentimiento",
               "notificaciones.ver",
               "olts.crear",
               "olts.editar",
@@ -113090,6 +114784,7 @@
               "clientes.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.ver",
               "egresos.registrar",
@@ -113129,6 +114824,7 @@
               "ipv6.ver",
               "lealtad.canjear",
               "lealtad.ver",
+              "notificaciones.registrar_consentimiento",
               "notificaciones.ver",
               "pagos.ver",
               "planes.ver",
@@ -113268,6 +114964,7 @@
               "compras.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
@@ -117491,6 +119188,18 @@
           }
         }
       },
+      "VerificacionIdentidad": {
+        "type": "object",
+        "required": [
+          "coincide"
+        ],
+        "properties": {
+          "coincide": {
+            "type": "boolean",
+            "description": "Si lo que dijo el cliente coincide con lo que tiene Argos. Nunca se devuelve el dato"
+          }
+        }
+      },
       "VerificacionSorteo": {
         "type": "object",
         "required": [
@@ -119075,6 +120784,85 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "WhatsappCliente": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "canal",
+          "contacto",
+          "ultimo_consentimiento"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "canal": {
+            "type": "object",
+            "required": [
+              "activo",
+              "disponible",
+              "motivo"
+            ],
+            "properties": {
+              "activo": {
+                "type": "boolean",
+                "description": "Interruptor de WhatsApp en la configuración que aplica"
+              },
+              "disponible": {
+                "type": "boolean",
+                "description": "Encendido y con el conector Iris activo con contrato ≥ 0.6.0"
+              },
+              "motivo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Por qué no está disponible"
+              }
+            }
+          },
+          "contacto": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "estado",
+              "ocurrido_en",
+              "origen"
+            ],
+            "properties": {
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "acepta",
+                  "baja"
+                ]
+              },
+              "ocurrido_en": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "origen": {
+                "type": "string",
+                "description": "`argos_panel`, `argos_portal`, `iris_vigente` (Iris respondió otro estado vigente) o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`"
+              }
+            },
+            "description": "Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris)"
+          },
+          "ultimo_consentimiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsentimientoWhatsapp"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

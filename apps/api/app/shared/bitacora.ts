@@ -18,6 +18,8 @@ export interface FiltrosAcciones extends OpcionesPaginacion {
     cliente_id?: number
     canal?: string
     excluir_canal?: string
+    /** `X-Iris-Conversacion` (contrato Iris 0.6.0 §7.1) */
+    iris_conversacion?: string
 }
 
 /** Entidades que pertenecen a un cliente: tipo en `audit.acciones` → tabla con `cliente_id`. */
@@ -71,6 +73,8 @@ export async function listarAcciones(
             'a.request_id',
             'a.empresa_id',
             'e_a.nombre_comercial as empresa_nombre',
+            'a.iris_actor',
+            'a.iris_conversacion',
             'a.created_at',
         )
         .if(filtros.actor_id, (q) => q.where('a.actor_id', filtros.actor_id!))
@@ -82,6 +86,7 @@ export async function listarAcciones(
         .if(filtros.hasta, (q) => q.where('a.created_at', '<', filtros.hasta!))
         .if(filtros.canal, (q) => q.where('a.canal', filtros.canal!))
         .if(filtros.excluir_canal, (q) => q.whereNot('a.canal', filtros.excluir_canal!))
+        .if(filtros.iris_conversacion, (q) => q.where('a.iris_conversacion', filtros.iris_conversacion!))
 
     filtrarPorEmpresa(consulta, empresas, (q, ids) =>
         q.where((w) => w.whereIn('a.empresa_id', ids).orWhereNull('a.empresa_id')),

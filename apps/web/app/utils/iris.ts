@@ -50,3 +50,17 @@ export function textoAlcanceIris(alcance: ResumenEnviosIris['alcance']): string 
     }
     return alcance.empresas.length === 1 ? '1 empresa' : `${alcance.empresas.length} empresas`
 }
+
+/**
+ * `X-Iris-Actor` (contrato Iris 0.6.0 §7.1) en palabras: `asistente_ia` → «Asistente de IA de
+ * Iris»; `usuario:ana-77` → «Persona en Iris (ana-77)». Sin valor, `null`.
+ */
+export function textoActorIris(actor: string | null | undefined): string | null {
+    if (!actor) {
+        return null
+    }
+    if (actor === 'asistente_ia') {
+        return 'Asistente de IA de Iris'
+    }
+    return actor.startsWith('usuario:') ? `Persona en Iris (${actor.slice('usuario:'.length)})` : actor
+}

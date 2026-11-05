@@ -35,6 +35,8 @@ const entidadId = ref(idQuery(route.query.entidad) ? String(idQuery(route.query.
 const desde = ref(FECHA.test(textoQuery(route.query.desde)) ? textoQuery(route.query.desde) : '')
 const hasta = ref(FECHA.test(textoQuery(route.query.hasta)) ? textoQuery(route.query.hasta) : '')
 const peticion = ref(textoQuery(route.query.peticion))
+/** `X-Iris-Conversacion` de las acciones que llegaron de Iris (contrato Iris 0.6.0 §7.1). */
+const conversacion = ref(textoQuery(route.query.conversacion))
 
 const usuarios = shallowRef<UsuarioPanel[]>([])
 
@@ -98,6 +100,9 @@ function filtrosAcciones(): FiltrosAcciones {
     if (peticion.value) {
         resultado.request_id = peticion.value
     }
+    if (conversacion.value.trim()) {
+        resultado.iris_conversacion = conversacion.value.trim()
+    }
     return resultado
 }
 
@@ -130,7 +135,7 @@ const columnasCambios: TableColumn<CambioAuditoria>[] = [
 ]
 
 const hayFiltros = computed(() => actor.value !== TODOS || canal.value !== TODOS || accion.value !== ''
-    || entidadTipo.value !== TODOS || entidadId.value !== '' || desde.value !== '' || hasta.value !== '' || peticion.value !== '')
+    || entidadTipo.value !== TODOS || entidadId.value !== '' || desde.value !== '' || hasta.value !== '' || peticion.value !== '' || conversacion.value !== '')
 
 /** Actor de un cambio: `actor_nombre` de la API (A1, día 4); si falta, el de `GET /usuarios`. */
 function nombreActor(tipo: string | null, id: number | null, nombre?: string | null): string {
@@ -172,6 +177,9 @@ async function aplicarFiltros() {
     if (peticion.value) {
         query.peticion = peticion.value
     }
+    if (conversacion.value.trim()) {
+        query.conversacion = conversacion.value.trim()
+    }
     await router.replace({ query })
     await lista.value.recargar()
 }
@@ -185,6 +193,7 @@ function limpiarFiltros() {
     desde.value = ''
     hasta.value = ''
     peticion.value = ''
+    conversacion.value = ''
 }
 
 /** Con varias empresas, cada acción dice de cuál es (A1: `empresa_id`/`empresa_nombre`; null = del grupo). */
@@ -201,6 +210,12 @@ function filtrarPeticion(requestId: string) {
     peticion.value = requestId
 }
 
+function filtrarConversacion(id: string) {
+    detalleAbierto.value = false
+    limpiarFiltros()
+    conversacion.value = id
+}
+
 function verCambios(tipo: string, id: number) {
     detalleAbierto.value = false
     limpiarFiltros()
@@ -210,7 +225,7 @@ function verCambios(tipo: string, id: number) {
 }
 
 let temporizador: ReturnType<typeof setTimeout> | undefined
-watch(entidadId, () => {
+watch([entidadId, conversacion], () => {
     clearTimeout(temporizador)
     temporizador = setTimeout(aplicarFiltros, 300)
 })
@@ -294,6 +309,15 @@ onMounted(async () => {
                     aria-label="Filtrar por id de la entidad"
                     class="w-full"
                 />
+                <UInput
+                    v-if="pestana === 'acciones'"
+                    v-model="conversacion"
+                    icon="i-lucide-messages-square"
+                    placeholder="Conversación de Iris"
+                    aria-label="Filtrar por conversación de Iris"
+                    class="w-full font-mono"
+                    data-prueba="filtro-conversacion-iris"
+                />
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -324,6 +348,14 @@ onMounted(async () => {
                         Fechas y horas en hora de Guatemala.
                     </p>
                 </template>
+                <UBadge
+                    v-if="conversacion && pestana === 'acciones'"
+                    :label="`Conversación de Iris ${conversacion}`"
+                    icon="i-lucide-messages-square"
+                    color="info"
+                    variant="subtle"
+                    class="max-w-full self-start truncate font-mono sm:self-auto"
+                />
                 <UBadge
                     v-if="peticion"
                     :label="`Petición ${peticion}`"
@@ -371,6 +403,10 @@ onMounted(async () => {
                             <span class="text-xs text-muted sm:hidden">{{ formatearFechaHora(row.original.created_at) }}</span>
                             <span class="text-xs text-muted lg:hidden">{{ etiquetaActor(row.original) }} · {{ etiquetaCanal(row.original.canal) }}</span>
                             <span
+                                v-if="origenIris(row.original)"
+                                class="text-xs text-info lg:hidden"
+                            >{{ origenIris(row.original) }}</span>
+                            <span
                                 v-if="variasEmpresas && row.original.empresa_nombre"
                                 class="text-xs text-muted"
                                 :data-empresa-accion="row.original.empresa_id"
@@ -385,6 +421,18 @@ onMounted(async () => {
                         <div class="flex flex-col">
                             <span class="text-sm">{{ etiquetaActor(row.original) }}</span>
                             <span class="text-xs text-muted">{{ etiquetaCanal(row.original.canal) }}</span>
+                            <ULink
+                                v-if="row.original.iris_conversacion"
+                                class="max-w-56 truncate text-xs text-info hover:text-primary"
+                                :title="origenIris(row.original) ?? undefined"
+                                data-prueba="origen-iris"
+                                @click.stop="filtrarConversacion(row.original.iris_conversacion)"
+                            >{{ origenIris(row.original) }}</ULink>
+                            <span
+                                v-else-if="origenIris(row.original)"
+                                class="text-xs text-info"
+                                data-prueba="origen-iris"
+                            >{{ origenIris(row.original) }}</span>
                         </div>
                     </template>
                     <template #entidad_tipo-cell="{ row }">

@@ -74,6 +74,11 @@ function guardar(solicitud: SolicitudFixture, empresaId: number | null): Respues
         siguiente.telegram.webhook_ruta = null
     }
     Object.assign(siguiente.avisos, objeto(cuerpo.avisos))
+    const whatsapp = objeto(cuerpo.whatsapp)
+    if (whatsapp.activo !== undefined && typeof whatsapp.activo !== 'boolean') {
+        return datosInvalidos([{ field: 'whatsapp.activo', message: 'El campo debe ser verdadero o falso', rule: 'boolean' }])
+    }
+    Object.assign(siguiente.whatsapp, whatsapp)
     const momento = ahora()
     Object.assign(siguiente, {
         id: actual.id ?? (empresaId ?? 0) + 100,

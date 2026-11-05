@@ -55,6 +55,10 @@ export interface VistaConfiguracion {
         /** ruta del webhook de este bot (relativa al host público de la API) */
         webhook_ruta: string | null
     }
+    /** WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6): interruptor; el resto es del conector Iris */
+    whatsapp: {
+        activo: boolean
+    }
     avisos: Record<TipoAviso, boolean>
     /** 0 = sin guardar (el primer guardado manda `version: 0`) */
     version: number
@@ -98,6 +102,7 @@ export function vistaDeFila(fila: FilaConfiguracion): VistaConfiguracion {
             webhook_secreto: oculto(fila.telegram_webhook_secreto_cifrado),
             webhook_ruta: rutaWebhook(fila.telegram_bot_id),
         },
+        whatsapp: { activo: fila.whatsapp_activo === true },
         avisos: avisosCompletos(fila.avisos),
         version: fila.version,
         created_at: fila.created_at,
@@ -134,6 +139,7 @@ export function vistaDeEntorno(config: ConfigCanales = desdeEntorno()): VistaCon
             webhook_secreto: oculto(config.telegram.webhookSecreto),
             webhook_ruta: rutaWebhook(config.telegram.botId),
         },
+        whatsapp: { activo: config.whatsapp.activo },
         avisos: config.avisos,
         version: 0,
         created_at: null,
@@ -170,6 +176,7 @@ export function vistaEmpresaSinFila(empresaId: number): VistaConfiguracion {
             webhook_secreto: null,
             webhook_ruta: null,
         },
+        whatsapp: { activo: false },
         avisos: Object.fromEntries(TIPOS_AVISO.map((t) => [t, true])) as Record<TipoAviso, boolean>,
         version: 0,
         created_at: null,

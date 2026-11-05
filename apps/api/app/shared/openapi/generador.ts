@@ -216,6 +216,29 @@ function operacion(ruta: Ruta): EsquemaJson {
         })
     }
 
+    if (ruta.cabecerasIris) {
+        const condicion =
+            typeof ruta.cabecerasIris === 'function'
+                ? ' cuando la petición es de atención (ver la descripción)'
+                : ''
+        parametros.push(
+            {
+                name: 'X-Iris-Actor',
+                in: 'header',
+                required: false,
+                description: `Obligatoria con el token del usuario técnico Iris${condicion}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
+                schema: { type: 'string', pattern: '^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$' },
+            },
+            {
+                name: 'X-Iris-Conversacion',
+                in: 'header',
+                required: false,
+                description: `Obligatoria con el token del usuario técnico Iris${condicion}: id de la conversación en Iris; queda en la auditoría`,
+                schema: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' },
+            },
+        )
+    }
+
     const respuestas: Record<string, EsquemaJson> = {}
     const contenido = contenidoRespuesta(ruta)
     respuestas[String(ruta.respuesta.status)] = esStatusRedireccion(ruta.respuesta.status)
@@ -246,9 +269,15 @@ function operacion(ruta: Ruta): EsquemaJson {
         const motivos = [permiso, csrf].filter((m): m is string => m !== null)
         if (motivos.length > 0) respuestas['403'] = problema(motivos.join('; o '))
     }
-    if (ruta.idempotente === 'obligatoria') {
-        respuestas['400'] = problema('Falta el header Idempotency-Key (`idempotency_key_requerida`)')
-    }
+    const faltas400 = [
+        ruta.idempotente === 'obligatoria'
+            ? 'Falta el header Idempotency-Key (`idempotency_key_requerida`)'
+            : null,
+        ruta.cabecerasIris
+            ? 'Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)'
+            : null,
+    ].filter((m): m is string => m !== null)
+    if (faltas400.length > 0) respuestas['400'] = problema(faltas400.join('; o '))
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')
     if (ruta.versionada || ruta.idempotente) {
         respuestas['409'] = problema(

@@ -268,6 +268,13 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'iris.canjear_enlace': 'Iris se conectó con el enlace de Argos',
     'iris.autorizar': 'Conexión con Iris aprobada',
     'iris.informar_contrato': 'Iris informó su versión del contrato',
+    // Contrato Iris 0.6.0 (mensajería, pagos y atención).
+    'iris.recibir_webhook': 'Aviso recibido de Iris',
+    'clientes.verificar_identidad': 'Identidad del cliente verificada por Iris',
+    'comprobantes.reconexion_temporal': 'Reconexión temporal mientras se revisa el comprobante',
+    'promesas.cancelar_reconexion': 'Reconexión temporal cancelada (comprobante rechazado)',
+    'notificaciones.registrar_consentimiento': 'Permiso de avisos por WhatsApp registrado',
+    'notificaciones.conciliar_avisos_iris': 'Avisos de WhatsApp revisados con Iris',
     'horus.conectar_enlace': 'Conectado con un enlace de Horus',
     'horus.recibir_webhook': 'Aviso de Horus recibido',
     'nodos_portal.crear': 'Nodo portal creado',
@@ -294,6 +301,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'portal.cerrar_sesion': 'Sesión del portal cerrada',
     'portal.editar_contacto': 'Contacto editado desde el portal',
     'portal.desvincular_telegram': 'Telegram desvinculado desde el portal',
+    'portal.registrar_whatsapp': 'Avisos por WhatsApp elegidos desde el portal',
     'promesas.rechazar': 'Promesa de pago rechazada',
     'promesas.cancelar': 'Promesa de pago cancelada',
     'promesas.cumplir': 'Promesa de pago cumplida',
@@ -429,6 +437,10 @@ const ICONOS_ACCION: Record<string, string> = {
     reabrir_periodo: 'i-lucide-lock-open',
     cambiar_control_velocidad: 'i-lucide-gauge',
     cambiar_control: 'i-lucide-gauge',
+    reconexion_temporal: 'i-lucide-plug-zap',
+    cancelar_reconexion: 'i-lucide-plug-zap',
+    verificar_identidad: 'i-lucide-shield-check',
+    registrar_consentimiento: 'i-lucide-message-circle',
 }
 
 const ACTORES: Record<Accion['actor_tipo'], string> = {
@@ -455,6 +467,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },
     pago: { etiqueta: 'Pago', ruta: id => `/pagos/${id}` },
     promesa: { etiqueta: 'Promesa' },
+    comprobante: { etiqueta: 'Comprobante de depósito', ruta: id => `/comprobantes/${id}` },
     caja: { etiqueta: 'Caja', ruta: id => `/caja?caja=${id}` },
     asiento: { etiqueta: 'Asiento' },
     sesion: { etiqueta: 'Sesión PPPoE' },
@@ -642,4 +655,18 @@ export function etiquetaEntidad(accion: Accion): string | null {
         return null
     }
     return accion.entidad_id === null ? accion.entidad_tipo : `${accion.entidad_tipo} ${accion.entidad_id}`
+}
+
+/**
+ * Origen Iris de una acción (contrato Iris 0.6.0 §7.1): «Iris · asistente de IA · conversación
+ * wa:conv-7731», o `null` si la acción no vino de Iris (`iris_actor` e `iris_conversacion` null).
+ */
+export function origenIris(accion: Pick<Accion, 'iris_actor' | 'iris_conversacion'>): string | null {
+    if (!accion.iris_actor && !accion.iris_conversacion) {
+        return null
+    }
+    const actor = accion.iris_actor === 'asistente_ia'
+        ? 'asistente de IA'
+        : accion.iris_actor?.startsWith('usuario:') ? `persona ${accion.iris_actor.slice('usuario:'.length)}` : accion.iris_actor
+    return ['Iris', actor, accion.iris_conversacion ? `conversación ${accion.iris_conversacion}` : null].filter(Boolean).join(' · ')
 }

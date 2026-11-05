@@ -14,6 +14,8 @@ export const PERMISOS = {
     'clientes.desvincular_telegram': 'Quitar el chat de Telegram de un cliente',
     'clientes.asignar_responsable_pago': 'Asignar el cliente que paga por otro (responsable de pago)',
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
+    'clientes.verificar_identidad':
+        'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -153,6 +155,10 @@ export const PERMISOS = {
     'comprobantes.ver': 'Ver comprobantes de depósito y su archivo',
     'comprobantes.aprobar': 'Aprobar comprobantes de depósito (registra el pago)',
     'comprobantes.rechazar': 'Rechazar comprobantes de depósito con motivo',
+    'comprobantes.registrar':
+        'Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)',
+    'comprobantes.reconexion_temporal':
+        'Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)',
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
@@ -188,6 +194,8 @@ export const PERMISOS = {
         'Configurar los canales de notificación (correo SMTP, bot de Telegram, interruptores); solo admin',
     'notificaciones.probar':
         'Enviar un mensaje de prueba por correo o Telegram con la configuración guardada',
+    'notificaciones.registrar_consentimiento':
+        'Marcar o quitar «Acepta avisos por WhatsApp» de un cliente (el permiso de contacto vive en Iris)',
 
     'horus.ver':
         'Ver el conector con Horus Flow, sus tokens (sin el valor) y sus datos (consumo, salud y seguridad de los servicios)',
@@ -410,6 +418,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'fel.ver',
             'cajas.depositar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
@@ -426,6 +435,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.ver',
             'clientes.crear',
             'clientes.editar',
+            'notificaciones.registrar_consentimiento',
             'clientes.estado_cuenta',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',
@@ -579,6 +589,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',

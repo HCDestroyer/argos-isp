@@ -576,6 +576,57 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                     </div>
                 </section>
 
+                <section
+                    class="flex flex-col gap-4"
+                    data-prueba="plantilla-reconexion-temporal"
+                >
+                    <div class="flex flex-col gap-1">
+                        <h3 class="text-sm font-medium text-highlighted">
+                            Reconexión temporal
+                        </h3>
+                        <p class="text-xs text-muted">
+                            Cuando un cliente cortado manda su comprobante por Iris y caja no lo puede revisar pronto, Iris puede pedir que se reconecte mientras se revisa. Solo si el comprobante cubre todo lo vencido; si caja lo rechaza o vence sin revisar, el servicio se vuelve a cortar a la hora de corte. Es aparte del cupo de promesas.
+                        </p>
+                    </div>
+                    <USwitch
+                        v-model="estado.reglas_promesa.reconexion_temporal.permitida"
+                        label="Permitir reconexión temporal"
+                        description="Apagada por defecto."
+                        data-prueba="plantilla-reconexion-permitida"
+                    />
+                    <div
+                        v-if="estado.reglas_promesa.reconexion_temporal.permitida"
+                        class="grid gap-4 sm:grid-cols-2"
+                    >
+                        <UFormField
+                            label="Reconexiones por periodo"
+                            help="Por servicio y periodo de facturación, en cualquier estado."
+                            name="reglas_promesa.reconexion_temporal.max_por_periodo"
+                        >
+                            <UInputNumber
+                                v-model="estado.reglas_promesa.reconexion_temporal.max_por_periodo"
+                                :min="0"
+                                :max="12"
+                                class="w-full"
+                                data-prueba="plantilla-reconexion-max"
+                            />
+                        </UFormField>
+                        <UFormField
+                            label="Duración máxima (horas)"
+                            help="Desde que se crea; de 1 a 168."
+                            name="reglas_promesa.reconexion_temporal.horas_max"
+                        >
+                            <UInputNumber
+                                v-model="estado.reglas_promesa.reconexion_temporal.horas_max"
+                                :min="1"
+                                :max="168"
+                                class="w-full"
+                                data-prueba="plantilla-reconexion-horas"
+                            />
+                        </UFormField>
+                    </div>
+                </section>
+
                 <ProblemaAlerta
                     v-if="problema"
                     :problema="problema"

@@ -52,6 +52,11 @@ export const EnvioNotificacion = definirEsquema(
         proveedor_id: nulable(texto),
         fallback_de: nulable(id),
         enviado_en: nulable(instante),
+        entregado_en: {
+            ...nulable(instante),
+            description: 'WhatsApp por Iris: cuándo Iris lo entregó (`aviso.entregado`)',
+        },
+        leido_en: { ...nulable(instante), description: 'WhatsApp por Iris: cuándo lo leyó el cliente' },
         created_at: instante,
         updated_at: instante,
     }),
@@ -118,6 +123,13 @@ export const ConfiguracionNotificaciones = definirEsquema(
             webhook_ruta: {
                 ...nulable(texto),
                 description: 'Ruta del webhook de este bot: `/api/v1/telegram/webhook/<bot_id>`',
+            },
+        }),
+        whatsapp: objeto({
+            activo: {
+                type: 'boolean',
+                description:
+                    'WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6). Apagado por defecto; además necesita el conector Iris activo con contrato ≥ 0.6.0',
             },
         }),
         avisos: objeto({
@@ -205,5 +217,73 @@ export const VistaPreviaPlantilla = definirEsquema(
             items: texto,
             description: 'Variables que la plantilla usa y el evento no trae: se renderizan vacías',
         },
+    }),
+)
+
+const entrega = enumerado(['pendiente', 'enviado', 'fallido'])
+
+export const ConsentimientoWhatsapp = definirEsquema(
+    'ConsentimientoWhatsapp',
+    objeto({
+        id,
+        empresa_id: { ...id, description: 'Empresa del permiso de contacto (obligatoria en Iris)' },
+        cliente_id: id,
+        canal: enumerado(['whatsapp']),
+        estado: enumerado(['acepta', 'baja']),
+        origen: enumerado(['argos_panel', 'argos_portal']),
+        ocurrido_en: instante,
+        idempotency_key: {
+            type: 'string',
+            description:
+                '`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)',
+        },
+        entrega: {
+            ...entrega,
+            description:
+                '`pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`',
+        },
+        intentos: entero,
+        ultimo_error: nulable(texto),
+        enviado_en: nulable(instante),
+        consentimiento_id: { ...nulable(texto), description: 'Id del registro en Iris (al entregarse)' },
+        estado_vigente: {
+            ...nulable(enumerado(['acepta', 'baja'])),
+            description:
+                'Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)',
+        },
+    }),
+)
+
+export const WhatsappCliente = definirEsquema(
+    'WhatsappCliente',
+    objeto({
+        cliente_id: id,
+        canal: objeto({
+            activo: {
+                type: 'boolean',
+                description: 'Interruptor de WhatsApp en la configuración que aplica',
+            },
+            disponible: {
+                type: 'boolean',
+                description: 'Encendido y con el conector Iris activo con contrato ≥ 0.6.0',
+            },
+            motivo: { ...nulable(texto), description: 'Por qué no está disponible' },
+        }),
+        contacto: {
+            ...nulable(
+                objeto({
+                    estado: enumerado(['acepta', 'baja']),
+                    ocurrido_en: instante,
+                    origen: {
+                        type: 'string',
+                        description:
+                            '`argos_panel`, `argos_portal`, `iris_vigente` (Iris respondió otro estado vigente) o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`',
+                    },
+                }),
+            ),
+            description:
+                'Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris)',
+        },
+        ultimo_consentimiento: nulable(ConsentimientoWhatsapp),
     }),
 )

@@ -35,6 +35,7 @@ import {
     PortalSolicitudCodigo,
     PortalTelegram,
     PortalVinculoTelegram,
+    PortalWhatsapp,
     QuienSoy,
 } from '#portal/esquemas'
 import {
@@ -52,6 +53,7 @@ import {
     subirComprobanteValidator,
     verificarCodigoValidator,
     vincularTelegramValidator,
+    registrarWhatsappValidator,
 } from '#portal/validators'
 import { ipOrigenDelCliente } from '#portal/ip_origen'
 import { DemasiadasPeticiones, limitarPorIp } from '#portal/limite_peticiones'
@@ -73,6 +75,8 @@ import EditarContactoPortal from '#portal/actions/editar_contacto'
 import GenerarCodigoTelegram from '#notify/actions/generar_codigo_telegram'
 import DesvincularTelegramPortal from '#portal/actions/desvincular_telegram'
 import { estadoTelegram } from '#portal/acceso/telegram'
+import { whatsappPortal } from '#portal/whatsapp'
+import RegistrarWhatsappPortal from '#portal/actions/registrar_whatsapp'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
 import EditarEmpresa from '#portal/actions/editar_empresa'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
@@ -595,6 +599,62 @@ const telegram: Ruta[] = [
                 { clienteId: sesion.clienteId },
                 ctx.contextoCliente(sesion.clienteId),
             )
+        },
+    }),
+]
+
+const SOBRE_WHATSAPP =
+    'Contrato Iris 0.6.0 §6.4: el registro de permisos vive en Iris; Argos muestra lo último que sabe ' +
+    '(incluida una baja dada en el chat) y nunca el número.'
+
+const whatsapp: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/whatsapp',
+        operacion: 'portalWhatsapp',
+        resumen: '«Acepta avisos por WhatsApp» del cliente de la sesión',
+        descripcion:
+            `${SOBRE_LA_SESION} Lee \`verWhatsappCliente\` de A6 por cada empresa con servicios vigentes del ` +
+            'cliente. `visible` solo si `whatsapp.activo` está encendido en alguna; `disponible` si además el ' +
+            `conector Iris permite enviar. ${SOBRE_WHATSAPP}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'WhatsApp del cliente', esquema: PortalWhatsapp },
+        handler: async (ctx) => whatsappPortal(await clienteDeLaSesionLimitada(ctx, 'whatsapp')),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/whatsapp',
+        operacion: 'portalRegistrarWhatsapp',
+        resumen: 'El cliente acepta (`acepta`) o se da de baja (`baja`) de los avisos por WhatsApp',
+        descripcion:
+            `${SOBRE_LA_SESION} Acción \`portal.registrar_whatsapp\` (canal portal) sobre ` +
+            '`notificaciones.registrar_consentimiento` de A6 con `origen: argos_portal`, una vez por empresa con ' +
+            'WhatsApp encendido; queda en la cola hacia Iris (sale al activarse el conector). Una `baja` deja de ' +
+            'pedir avisos por WhatsApp al instante. 422 `whatsapp_no_disponible` si ninguna empresa del cliente ' +
+            `lo tiene encendido. Acepta \`Idempotency-Key\`. ${SOBRE_WHATSAPP}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        idempotente: true,
+        limitada: true,
+        antes: limitarAntesDeValidar('whatsapp-registrar'),
+        cuerpo: registrarWhatsappValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'WhatsApp del cliente, ya con la marca',
+            esquema: PortalWhatsapp,
+        },
+        handler: async (ctx, { cuerpo }) => {
+            await ipDelCliente(ctx, 'whatsapp-registrar')
+            const sesion = await exigirSesionPortal(ctx)
+            await new RegistrarWhatsappPortal().execute(
+                { clienteId: sesion.clienteId, estado: cuerpo.estado },
+                ctx.contextoCliente(sesion.clienteId),
+            )
+            return whatsappPortal(sesion.clienteId)
         },
     }),
 ]
@@ -1720,6 +1780,7 @@ const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
     ...telegram,
+    ...whatsapp,
     ...promesas,
     ...comprobantes,
     ...pagosEnLinea,

@@ -27,7 +27,15 @@ function estadoQuery(valor: unknown): EstadoPromesa | typeof TODOS {
     return texto in ESTADOS_PROMESA ? (texto as EstadoPromesa) : TODOS
 }
 
+type TipoPromesa = NonNullable<Promesa['tipo']>
+
+function tipoQuery(valor: unknown): TipoPromesa | typeof TODOS {
+    const texto = textoQuery(valor)
+    return texto in TIPOS_PROMESA ? (texto as TipoPromesa) : TODOS
+}
+
 const estado = ref<EstadoPromesa | typeof TODOS>(estadoQuery(route.query.estado))
+const tipo = ref<TipoPromesa | typeof TODOS>(tipoQuery(route.query.tipo))
 const clienteId = ref(idQuery(route.query.cliente))
 const servicioId = ref(idQuery(route.query.servicio))
 const clienteElegido = shallowRef<Cliente | null>(null)
@@ -40,10 +48,19 @@ const itemsEstado: SelectItem[] = [
     ...Object.entries(ESTADOS_PROMESA).map(([valor, datos]) => ({ label: datos.etiqueta, value: valor, icon: datos.icono })),
 ]
 
+/** Reconexiones temporales (contrato Iris 0.6.0 §7.3) o promesas normales. */
+const itemsTipo: SelectItem[] = [
+    { label: 'Todos los tipos', value: TODOS },
+    ...Object.entries(TIPOS_PROMESA).map(([valor, datos]) => ({ label: datos.etiqueta, value: valor, icon: datos.icono })),
+]
+
 function filtros(): FiltrosPromesas {
     const resultado: FiltrosPromesas = {}
     if (estado.value !== TODOS) {
         resultado.estado = estado.value
+    }
+    if (tipo.value !== TODOS) {
+        resultado.tipo = tipo.value
     }
     if (clienteId.value) {
         resultado.cliente_id = clienteId.value
@@ -66,12 +83,15 @@ const columnas = computed<TableColumn<Promesa>[]>(() => [
     ...(conAcciones.value ? [{ id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden text-right sm:table-cell' } } }] : []),
 ])
 
-const hayFiltros = computed(() => estado.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
+const hayFiltros = computed(() => estado.value !== TODOS || tipo.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
 
 async function aplicarFiltros() {
     const query: Record<string, string> = {}
     if (estado.value !== TODOS) {
         query.estado = estado.value
+    }
+    if (tipo.value !== TODOS) {
+        query.tipo = tipo.value
     }
     if (clienteId.value) {
         query.cliente = String(clienteId.value)
@@ -85,6 +105,7 @@ async function aplicarFiltros() {
 
 function limpiarFiltros() {
     estado.value = TODOS
+    tipo.value = TODOS
     clienteId.value = 0
     clienteElegido.value = null
     servicioId.value = 0
@@ -138,7 +159,7 @@ function alAprobar(promesa: Promesa) {
     void lista.recargar()
 }
 
-watch([estado, clienteId, servicioId], aplicarFiltros)
+watch([estado, tipo, clienteId, servicioId], aplicarFiltros)
 
 const simuladorAbierto = ref(false)
 
@@ -221,6 +242,14 @@ onMounted(async () => {
                     aria-label="Filtrar por estado"
                     class="w-full sm:w-60"
                 />
+                <USelect
+                    v-model="tipo"
+                    :items="itemsTipo"
+                    icon="i-lucide-plug-zap"
+                    aria-label="Filtrar por tipo"
+                    class="w-full sm:w-52"
+                    data-prueba="filtro-tipo-promesa"
+                />
                 <UBadge
                     v-if="servicioId"
                     :label="`Servicio ${servicioId}`"
@@ -265,8 +294,11 @@ onMounted(async () => {
                                     :to="enlace(`/servicios/${row.original.servicio_id}`)"
                                     class="hover:text-primary"
                                 >servicio {{ row.original.servicio_id }}</ULink>
-                                · {{ CANALES_PROMESA[row.original.canal] }}
                             </span>
+                            <PromesaOrigen
+                                :promesa="row.original"
+                                class="mt-0.5"
+                            />
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
                             <PromesaCumplimiento
                                 :promesa="row.original"

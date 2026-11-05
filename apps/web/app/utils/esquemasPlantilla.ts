@@ -76,6 +76,12 @@ export const esquemaPlantilla = z.object({
             operador: esquemaCanal,
             supervisor: esquemaCanal,
         }),
+        /** Contrato Iris 0.6.0 §7.3: rangos de `reglasPromesaSchema.reconexion_temporal` (A3). */
+        reconexion_temporal: z.object({
+            permitida: z.boolean(),
+            max_por_periodo: entero(0, 12, 'Reconexiones por periodo'),
+            horas_max: entero(1, 168, 'Horas máximas'),
+        }),
     }),
 }).superRefine((datos, ctx) => {
     if (datos.ciclo === 'dia_fijo' && datos.dia === null) {
@@ -104,6 +110,15 @@ export const esquemaPlantilla = z.object({
 export type EntradaPlantilla = z.input<typeof esquemaPlantilla>
 export type SalidaPlantilla = z.output<typeof esquemaPlantilla>
 type EntradaCanal = EntradaPlantilla['reglas_promesa']['canales'][CanalReglasPromesa]
+export type ReglasReconexionTemporal = EntradaPlantilla['reglas_promesa']['reconexion_temporal']
+
+/**
+ * `REGLAS_PROMESA_POR_DEFECTO.reconexion_temporal` de la API (valores del PM, 5 nov 2026): apagada
+ * hasta que la empresa la active, una por periodo de facturación y servicio, 24 h.
+ */
+export function reconexionTemporalPorDefecto(): ReglasReconexionTemporal {
+    return { permitida: false, max_por_periodo: 1, horas_max: 24 }
+}
 
 /**
  * Valores por defecto de una plantilla nueva: los de `CrearPlantilla` (`VALORES_POR_DEFECTO`) y
@@ -144,6 +159,7 @@ export function entradaPlantillaVacia(): EntradaPlantilla {
                 operador: sinLimites(),
                 supervisor: { ...sinLimites(), plazo_max_dias: 15, max_por_periodo: 3 },
             },
+            reconexion_temporal: reconexionTemporalPorDefecto(),
         },
     }
 }
@@ -174,6 +190,8 @@ export function entradaDesdePlantilla(plantilla: Plantilla): EntradaPlantilla {
             ...reglas,
             deuda_maxima: reglas.deuda_maxima ?? '',
             canales: { portal: canal('portal'), ia: canal('ia'), operador: canal('operador'), supervisor: canal('supervisor') },
+            // La API siempre la manda (normalizada); si faltara, los valores por defecto de la API.
+            reconexion_temporal: { ...(reglas.reconexion_temporal ?? reconexionTemporalPorDefecto()) },
         },
     }
 }
@@ -243,6 +261,15 @@ export function resumenMora(plantilla: Pick<Plantilla, 'mora_tipo' | 'mora_valor
     }
     const valor = plantilla.mora_tipo === 'fija' ? formatearQuetzales(plantilla.mora_valor) : `${plantilla.mora_valor} %`
     return plantilla.mora_recurrente ? `${valor} por periodo vencido` : `${valor} una vez`
+}
+
+/** `Reconexión temporal: hasta 1 por periodo · 24 h`, o `apagada`. */
+export function resumenReconexionTemporal(reglas: ReglasPromesa): string {
+    const reconexion = reglas.reconexion_temporal ?? reconexionTemporalPorDefecto()
+    if (!reconexion.permitida) {
+        return 'Reconexión temporal apagada'
+    }
+    return `Reconexión temporal: hasta ${reconexion.max_por_periodo} por periodo · ${reconexion.horas_max} h`
 }
 
 export function resumenPromesas(reglas: ReglasPromesa): string {

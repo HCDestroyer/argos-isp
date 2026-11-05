@@ -141,6 +141,8 @@ for (const tema of ['light', 'dark'] as const) {
                 if (cuenta) {
                     await expect(page.locator('[data-testid^="telegram-empresa-"]')).toHaveCount(2)
                 }
+                // Casilla «Acepto recibir avisos por WhatsApp» (contrato Iris 0.6.0 §6.4)
+                await expect(page.getByTestId('whatsapp')).toBeVisible()
                 await revisar(page, `cuenta (${nombre}): mi cuenta`)
             })
         }

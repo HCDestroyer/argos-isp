@@ -141,6 +141,8 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalTelegram: () => undefined,
     portalVincularTelegram: () => undefined,
     portalDesvincularTelegram: () => undefined,
+    portalWhatsapp: () => undefined,
+    portalRegistrarWhatsapp: () => ({ estado: 'acepta' }),
     portalFacturaPdf: () => undefined,
     portalFacturaXml: () => undefined,
     portalNotasCredito: () => undefined,

@@ -162,13 +162,13 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sesion.iniciada` / `sesion.terminada` | aaa (o network: sondeo de PPPoE sin RADIUS) | servicio_id, nas_ip (null en sesiones por sondeo), acct_session_id, ipv4, prefijos_v6, origen (`accounting` \| `sondeo`); `sesion.terminada` además motivo (causa de fin) |
 | `servicio.caidas_repetidas` | aaa (sesiones) | servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas (una vez por servicio y ventana; `contratos/eventos.md`) |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
-| `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
+| `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas); origen (`iris`, solo en el pago de un comprobante de Iris) |
 | `pago.disputa_abierta` | billing | pago_id, empresa_id, cobro_id, cliente_id (pagador), monto, proveedor, motivo (contracargo de la pasarela; una vez por pago) |
 | `pago.diferencia_cerrada` | billing | pago_id, empresa_id, cliente_id (pagador), facturas[], monto (saldo pequeño cerrado como gasto 5.3.05) |
 | `bonificacion.registrada` | billing | bonificacion_id, empresa_id, cliente_id, servicio_id, periodo, origen, bruto |
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
-| `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |
+| `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` / `promesa.cancelada` | billing | promesa_id, empresa_id, cliente_id, servicio_id, tipo (`promesa` \| `reconexion_temporal`), canal, comprobante_id, vence, monto, origen; cancelada además estado (`cancelada` \| `rechazada`), motivo, detalle |
 | `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
 | `notificaciones.config_cambiada` | notify | configuracion_id, empresa_id (null = global), campos[] |
@@ -176,7 +176,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sesion.velocidad_solicitada` | network (sincronizar plan) | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, estado, rate_limit, motivo (CoA de velocidad, nunca Disconnect) |
 | `coa.fallido` | coa | servicio_id (o null), nas_ip, tipo (coa/disconnect), error |
 | `aaa.caido` / `aaa.recuperado` | network (vigía) | nodo, desde, hasta (recuperado), ultimo_error |
-| `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, empresa_id, cliente_id, pago_id, motivo |
+| `comprobante.recibido` / `comprobante.aprobado` / `comprobante.rechazado` | billing | comprobante_id, empresa_id, cliente_id, pago_id, motivo, servicio_id, canal (`portal` \| `panel` \| `iris`), monto, causa (solo al rechazar), servicio_estado, origen (`iris` o null). Con `origen: iris` en `comprobante.*`, `pago.registrado`, `promesa.*` o `servicio.estado_cambiado`, el hecho nació en Iris y notify no avisa al cliente (`contratos/iris.md` §9.2) |
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.estrategia_cambiada` | núcleo (control de velocidad) | router_id, plan_id (null = la del router), de, a, capas[] (aplicacion, padre, tipo_cola, extras), reconectar, motivo (`unificar` al quitar las excepciones por plan: el modo es uno por router; `contratos/control-velocidad.md`) |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |

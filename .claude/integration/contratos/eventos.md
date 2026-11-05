@@ -34,6 +34,11 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 | `sesion.desconexion_solicitada` | `origen` (`'sondeo'`, opcional); `nas_ip` puede ser null | 2026-10-30 (A2, `contratos/pppoe-local.md` §4) | Con `origen: 'sondeo'` la ejecuta el consumidor `routeros` (`routeros.desconectar_sesion`: `/ppp active remove` y cierre `Admin-Reset`); `coa` la ignora (solo lee sesiones `origen = 'accounting'`) |
 | `servicio.config_cambiada` | `campos` incluye `servidor_pppoe` (nuevo valor) | 2026-11-05 (A1, `contratos/red-acceso.md` §3) | Cambió `servidor_pppoe_id` del servicio (otro servidor PPPoE del router). Suele venir con `ips` (la IPv4 pasa a la red del servidor). RouterOS: el servicio entra por otro servidor/perfil; `aaa-cache` ya tiene el registro nuevo. Un consumidor que no lo conozca lo ignora |
 | `router.estrategia_cambiada` | `motivo: 'unificar'` | 2026-11-05 (A1, `contratos/control-velocidad.md` §11) | `routers.unificar_control_velocidad` quitó la excepción del plan (`plan_id`, `a: null`). Un evento por plan; se aplica como quitar una excepción |
+| `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` | `servicio_id` (o null), `canal` (`portal` \| `panel` \| `iris`), `monto`, `causa` (o null), `servicio_estado` (o null), `origen` (`'iris'` o null) | 2026-11-05 (A3, contrato Iris 0.6.0 §7.2) | `servicio_estado`: estado del servicio del comprobante después del cambio (pago aplicado o rechazo con su re-evaluación); null sin servicio. `causa` solo al rechazar (`no_aparece`, `monto_distinto`, `ilegible`, `falta_dato`, `duplicado`, `otro`). `origen = iris` con `canal = iris`: **notify no avisa al cliente** (Iris confirma en la conversación, §9.2 #2) |
+| `promesa.creada`, `promesa.cumplida`, `promesa.incumplida` | `cliente_id`, `tipo` (`promesa` \| `reconexion_temporal`), `canal` (`portal` \| `ia` \| `operador` \| `supervisor`), `comprobante_id` (o null), `origen` (`'iris'` o null) | 2026-11-05 (A3, contrato Iris 0.6.0 §7.4) | Payload común de `promesa.*`. `reconexion_temporal`: la promesa ligada a un comprobante pendiente (§7.3). `origen = iris`: la creó el usuario técnico Iris; **notify no avisa al cliente** |
+| `pago.registrado` | `origen` (`'iris'`, opcional) | 2026-11-05 (A3, contrato Iris 0.6.0 §7.2) | Solo en el pago que nace de aprobar un comprobante de `canal = iris`: notify no avisa al pagador (Iris lo hace). Ausente en los demás |
+| `servicio.estado_cambiado` | `origen` (`'iris'`, opcional) | 2026-11-05 (A3, contrato Iris 0.6.0, pedido de A6) | El cambio lo provocó algo nacido en Iris: la reconexión temporal o la promesa de Iris (y su cierre: cumplida, cancelada, incumplida), o el pago de un comprobante de `canal = iris` al aprobarse. Lo marca `evaluarEstadoServicio` (`ctx.iris`, la promesa activa de Iris o `origen` del llamador) vía `CambiarEstadoServicio`. **notify no avisa al cliente**. Ausente en los demás |
+| `comprobante.*`, `pago.registrado`, `promesa.*`, `servicio.estado_cambiado` | `origen: 'iris'` (opcional) | 2026-11-05 (A6 consume, contrato Iris 0.6.0 §7 y §9.2.2) | Lo consume notify (A6): con `origen: 'iris'` el hecho nació en Iris y ya lo contestó Iris en la conversación; notify no avisa por ningún canal. Es la única marca que mira notify (`nacioEnIris`) |
 
 ## Eventos fuera de la tabla de `CLAUDE.md`
 
@@ -212,6 +217,22 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 ## Payloads de notas de crédito (A3)
 
 `nota_credito.emitida`: `{ nota_credito_id, empresa_id, factura_id, servicio_id, cliente_id, monto, motivo }` (semana 3). Una por nota; `monto` es lo acreditado (parcial o total del saldo de la factura). `nota_credito.anulada` (fase 3): `{ nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo }`, solo cuando la SAT rechazó en definitivo la NCRE de la nota y se anuló con `facturas.anular_nota_credito` (reverso espejo de su asiento; el monto vuelve al saldo de la factura; una vez por nota). Una nota interna (sin NCRE) no se anula: se corrige con otra nota o un cargo.
+
+## Payloads de promesas (A3, contrato Iris 0.6.0)
+
+Payload común de `promesa.creada`, `promesa.cumplida`, `promesa.incumplida` y `promesa.cancelada`: `{ promesa_id, empresa_id, cliente_id, servicio_id, tipo, canal, comprobante_id, vence, monto, origen }`, siempre con todas las claves.
+
+`promesa.cancelada` (nuevo, 2026-11-05) suma `estado` (`cancelada` \| `rechazada`), `motivo` y `detalle`:
+
+| `motivo` | Cuándo | `estado` | `detalle` |
+| --- | --- | --- | --- |
+| `cancelada_por_supervisor` | `POST /promesas/:id/cancelar` (activa o pendiente) | `cancelada` | texto del supervisor |
+| `rechazada_por_supervisor` | `POST /promesas/:id/rechazar` (pendiente) | `rechazada` | texto del supervisor |
+| `vencida_sin_aprobacion` | cron: una pendiente venció sin aprobarse | `cancelada` | null |
+| `comprobante_rechazado` | caja rechazó el comprobante de una reconexión temporal | `cancelada` | null |
+| `vencida_sin_revisar` | cron: la reconexión llegó a `hasta` con el comprobante pendiente | `cancelada` | null |
+
+Una cancelada o rechazada no cuenta en el historial de cumplimiento. Si la promesa estaba activa, el servicio ya se re-evaluó en la misma transacción (`servicio.estado_cambiado` aparte, con la hora de corte).
 
 ## Payloads de comprobantes (A3)
 

@@ -118,12 +118,19 @@ test.group('billing · comprobantes de depósito', () => {
         await access(join(directorioComprobantes(), fila.archivo))
 
         const [evento] = await eventosDe('comprobante.recibido', 'comprobante_id', comprobante.id)
+        // contrato Iris 0.6.0 §7.2: además servicio_id, canal, monto, causa, servicio_estado y origen
         assert.deepEqual(evento.payload, {
             empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
+            servicio_id: servicioId,
+            canal: 'portal',
+            monto: '300.00',
             pago_id: null,
             motivo: null,
+            causa: null,
+            servicio_estado: 'suspendido',
+            origen: null,
         })
         // la auditoría guarda nombre y tamaño del archivo, nunca su contenido
         const auditoria = await db
@@ -227,12 +234,17 @@ test.group('billing · comprobantes de depósito', () => {
         await afirmarLibroCuadrado(assert)
 
         const [evento] = await eventosDe('comprobante.aprobado', 'comprobante_id', comprobante.id)
-        assert.deepEqual(evento.payload, {
+        assert.containSubset(evento.payload, {
             empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
+            canal: 'portal',
+            monto: '300.00',
             pago_id: aprobado.pago.id,
             motivo: null,
+            causa: null,
+            servicio_estado: 'activo',
+            origen: null,
         })
         assert.lengthOf(await eventosDe('pago.registrado', 'pago_id', aprobado.pago.id), 1)
         const cambios = await eventosDe('servicio.estado_cambiado', 'servicio_id', servicioId)
@@ -356,12 +368,15 @@ test.group('billing · comprobantes de depósito', () => {
 
         // notify: el evento genera el aviso con el motivo (plantilla comprobante.rechazado)
         const [evento] = await eventosDe('comprobante.rechazado', 'comprobante_id', comprobante.id)
-        assert.deepEqual(evento.payload, {
+        assert.containSubset(evento.payload, {
             empresa_id: 1,
             comprobante_id: comprobante.id,
             cliente_id: clienteId,
+            canal: 'portal',
             pago_id: null,
             motivo,
+            causa: 'otro',
+            origen: null,
         })
         const programado = await new ProgramarNotificacion().execute(
             { origen: `outbox:${evento.id}`, evento: evento.evento, payload: evento.payload },

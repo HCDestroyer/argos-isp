@@ -26,6 +26,17 @@ export const CANALES_PROMESA: Record<PromesaPago['canal'], string> = {
     ia: 'Agente de IA',
 }
 
+/** `tipo` de la promesa (contrato Iris 0.6.0 §7.3): la normal o la reconexión ligada a un comprobante. */
+export const TIPOS_PROMESA: Record<NonNullable<PromesaPago['tipo']>, { etiqueta: string, color: Color, icono: string }> = {
+    promesa: { etiqueta: 'Promesa', color: 'neutral', icono: 'i-lucide-handshake' },
+    reconexion_temporal: { etiqueta: 'Reconexión temporal', color: 'warning', icono: 'i-lucide-plug-zap' },
+}
+
+/** Tipo de una promesa: sin `tipo` (fixtures viejos) es `promesa`, como en la API. */
+export function tipoPromesa(promesa: Pick<PromesaPago, 'tipo'>): NonNullable<PromesaPago['tipo']> {
+    return promesa.tipo ?? 'promesa'
+}
+
 /** Nombres legibles de las reglas de `contratos/promesas.md` (las desconocidas se muestran tal cual). */
 const REGLAS: Record<ReglaPromesa, string> = {
     habilitadas: 'Promesas habilitadas',

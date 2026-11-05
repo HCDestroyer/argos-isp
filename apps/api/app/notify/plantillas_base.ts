@@ -379,6 +379,37 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
     },
 ]
 
+/**
+ * WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6.3, A21): el cuerpo es el **código** de
+ * la plantilla de Iris (Iris tiene el texto y la aprobación de Meta), no un texto. Mustache que se
+ * renderiza a un código; vacío = ese aviso no va por WhatsApp. Sin `corte_programado` (Argos no
+ * tiene ventanas de mantenimiento). `comprobante.aprobado` es el aviso de pago del pagador cuando
+ * el pago sale de un comprobante del portal o del panel (`avisos_pago.ts`); los de Iris no se
+ * avisan (`whatsapp.ts`, `nacioEnIris`).
+ */
+const porVencerOVencida =
+    '{{#factura.vencida}}factura_vencida{{/factura.vencida}}{{^factura.vencida}}factura_por_vencer{{/factura.vencida}}'
+const PLANTILLAS_WHATSAPP: PlantillaBase[] = [
+    ...[1, 2, 3].map((orden) => ({
+        evento: `recordatorio.${orden}`,
+        canal: 'whatsapp' as const,
+        asunto: null,
+        cuerpo: porVencerOVencida,
+    })),
+    { evento: 'factura.vencida', canal: 'whatsapp', asunto: null, cuerpo: 'factura_vencida' },
+    { evento: 'pago.registrado', canal: 'whatsapp', asunto: null, cuerpo: 'pago_recibido' },
+    { evento: 'comprobante.aprobado', canal: 'whatsapp', asunto: null, cuerpo: 'pago_recibido' },
+    {
+        evento: 'servicio.estado_cambiado',
+        canal: 'whatsapp',
+        asunto: null,
+        cuerpo:
+            '{{#estado.por_falta_de_pago}}corte_por_falta_de_pago{{/estado.por_falta_de_pago}}' +
+            '{{#estado.reactivado}}servicio_reactivado{{/estado.reactivado}}',
+    },
+    { evento: 'servicio.instalacion_activada', canal: 'whatsapp', asunto: null, cuerpo: 'bienvenida' },
+]
+
 export const PLANTILLAS_BASE: PlantillaBase[] = [
     ...PLANTILLAS_ALERTA,
     ...recordatorio(1),
@@ -542,4 +573,5 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
             '{{^bonificacion.es_cargo}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}}{{#bonificacion.periodo}} de {{bonificacion.periodo}}{{/bonificacion.periodo}} no tiene costo ({{bonificacion.origen_texto}}){{/bonificacion.es_cargo}}' +
             '{{#bonificacion.bruto_q}}: te bonificamos {{bonificacion.bruto_q}}{{/bonificacion.bruto_q}}. Por eso no recibirás factura por este concepto.',
     ),
+    ...PLANTILLAS_WHATSAPP,
 ]

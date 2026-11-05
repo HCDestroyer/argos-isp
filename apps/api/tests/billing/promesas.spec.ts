@@ -85,12 +85,18 @@ test.group('billing · promesas: crear y evaluar', () => {
         assert.equal(await estadoServicio(servicioId), 'activo')
 
         const [creada] = await eventosDe('promesa.creada', 'promesa_id', promesa.id)
+        // payload común de promesa.* (contrato Iris 0.6.0 §7.4)
         assert.deepEqual(creada.payload, {
             empresa_id: 1,
             promesa_id: promesa.id,
+            cliente_id: promesa.cliente_id,
             servicio_id: servicioId,
+            tipo: 'promesa',
+            canal: 'operador',
+            comprobante_id: null,
             vence: gt('2026-10-12T18:00').toISOString(),
             monto: '300.00',
+            origen: null,
         })
         const [cambio] = await eventosDe('servicio.estado_cambiado', 'servicio_id', servicioId).then((e) =>
             e.slice(-1),

@@ -71,7 +71,7 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
             200,
         )
         assert.include(r.body(), { version_argos: '1.6.0', contrato: CONTRATO_IRIS })
-        assert.equal(CONTRATO_IRIS, '0.5.0')
+        assert.equal(CONTRATO_IRIS, '0.6.0')
         assert.isNull(await contratoGuardado())
         assert.isFalse(await conectorAdmite('0.5.0'))
 
@@ -87,7 +87,7 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
         const codigo = await enlace(client, admin)
         const cuerpo = canje(codigo, { contrato: '0.5.0' })
         const r = await estado(client.post(`${BASE_IRIS}/conexion/canjear`).json(cuerpo), 200)
-        assert.include(r.body(), { version_argos: '1.6.0', contrato: '0.5.0' })
+        assert.include(r.body(), { version_argos: '1.6.0', contrato: CONTRATO_IRIS })
         assert.equal(await contratoGuardado(), '0.5.0')
         assert.isTrue(await conectorAdmite('0.5.0'))
         assert.isTrue(await conectorAdmite('0.4.0'))
@@ -140,7 +140,11 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
             client.put(`${BASE_IRIS}/contrato`).bearerToken(atk).json({ contrato: '0.5.0' }),
             200,
         )
-        assert.deepEqual(puesto.body(), { contrato_iris: '0.5.0', version_argos: '1.6.0', contrato: '0.5.0' })
+        assert.deepEqual(puesto.body(), {
+            contrato_iris: '0.5.0',
+            version_argos: '1.6.0',
+            contrato: CONTRATO_IRIS,
+        })
         assert.equal(await contratoGuardado(), '0.5.0')
         assert.isTrue(await conectorAdmite('0.5.0'))
         const accion = await db
@@ -180,14 +184,14 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
     }) => {
         const { token: admin } = await usuarioConRoles(['admin'])
         const delPanel = await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(admin), 200)
-        assert.deepEqual(delPanel.body(), { activo: false, version_argos: '1.6.0', contrato: '0.5.0' })
+        assert.deepEqual(delPanel.body(), { activo: false, version_argos: '1.6.0', contrato: CONTRATO_IRIS })
 
         const r = await estado(
             client.post(`${BASE_IRIS}/conexion/canjear`).json(canje(await enlace(client, admin))),
             200,
         )
         const deIris = await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(r.body().token), 200)
-        assert.deepEqual(deIris.body(), { activo: false, version_argos: '1.6.0', contrato: '0.5.0' })
+        assert.deepEqual(deIris.body(), { activo: false, version_argos: '1.6.0', contrato: CONTRATO_IRIS })
 
         const { token: lectura } = await usuarioConRoles(['lectura'])
         await estado(client.get(`${BASE_IRIS}/estado`).bearerToken(lectura), 403)

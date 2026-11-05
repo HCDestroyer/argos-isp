@@ -51,12 +51,19 @@ export abstract class DomainAction<Entrada, Salida> {
         return true
     }
 
+    /**
+     * Campos de primer nivel de la entrada que se auditan como `***` aunque su nombre no parezca
+     * sensible (p. ej. `valor` de `clientes.verificar_identidad`: el documento que dictó el
+     * cliente). Vale para la fila de éxito y para la de error.
+     */
+    protected readonly camposEntradaOcultos: readonly string[] = []
+
     async execute(
         input: Entrada,
         ctx: ContextoAccion,
         opciones: { trx?: TransactionClientContract } = {},
     ): Promise<Salida> {
-        const entrada = enmascarar(input)
+        const entrada = ocultarCampos(enmascarar(input), this.camposEntradaOcultos)
         let t: Transaccion | undefined
 
         const anidada = Boolean(opciones.trx)
@@ -124,6 +131,17 @@ export abstract class DomainAction<Entrada, Salida> {
             )
         }
     }
+}
+
+function ocultarCampos(entrada: unknown, campos: readonly string[]): unknown {
+    if (campos.length === 0 || typeof entrada !== 'object' || entrada === null || Array.isArray(entrada)) {
+        return entrada
+    }
+    const salida = { ...(entrada as Record<string, unknown>) }
+    for (const campo of campos) {
+        if (campo in salida && salida[campo] !== null) salida[campo] = MASCARA
+    }
+    return salida
 }
 
 /**
@@ -363,6 +381,8 @@ async function registrarAccion(
             resultado: error ? 'error' : 'ok',
             error: error ? describirError(error) : null,
             request_id: ctx.requestId,
+            iris_actor: ctx.iris?.actor ?? null,
+            iris_conversacion: ctx.iris?.conversacion ?? null,
         })
 }
 
