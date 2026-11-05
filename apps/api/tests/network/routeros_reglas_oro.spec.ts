@@ -154,7 +154,8 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
         )
         // El padre quedó como estaba (no se escribió un árbol inválido) y sigue existiendo para sus hijas
         assert.deepEqual(padre(), antes)
-        assert.lengthOf(falso.conComment('/ppp/profile', commentPlan(plan)), 1)
+        // Solo WISP: no hay perfil PPP del plan (es del modo PPPoE, sin servicios PPPoE aquí)
+        assert.lengthOf(falso.conComment('/ppp/profile', commentPlan(plan)), 0)
         const red = await db
             .from('audit.red')
             .where('router_id', routerId)

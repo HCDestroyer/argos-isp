@@ -23,7 +23,7 @@ Una **estrategia** es un objeto con cuatro capas:
 | --- | --- | --- |
 | `radius_rate_limit` | `aaa` manda `Mikrotik-Rate-Limit` y RouterOS crea la cola dinámica de la sesión (`<pppoe-usuario>`) | solo `pppoe` |
 | `perfil_ppp` | El rate-limit vive en el perfil PPP del plan (`/ppp/profile plan-<id>`, `rate-limit=`). `aaa` manda solo `Mikrotik-Group = plan-<id>` en activo; en limitado manda además el `Mikrotik-Rate-Limit` limitado (RADIUS tiene prioridad sobre el perfil) | solo `pppoe` |
-| `cola_simple` | Cola simple estática por servicio (`argosisp-servicio-<id>`) escrita por la API | `ip_estatica`, `dhcp_fija` |
+| `cola_simple` | Cola simple estática por servicio (`argosisp-servicio-<id>`) escrita por la API. PPPoE: `target` = direcciones de la sesión y `aaa` no manda `Mikrotik-Rate-Limit` (§12) | todos |
 | `pcq_plan` | Una cola simple por plan y estado (`argosisp-plan-<id>-pcq`, `argosisp-plan-<id>-pcq-limitado`) con `queue=` dos tipos PCQ (`pcq-rate` = MIR del plan). El cliente se identifica por el `target` de esa cola: IPv4 y prefijos de cada servicio (WISP) o de cada sesión abierta (PPPoE) | todos |
 | `arbol_pcq` | Queue tree + mangle + address-list `argosisp-plan-<id>[-limitado]` (lo de hoy) | todos |
 
@@ -88,14 +88,14 @@ La valida `validarEstrategias()` y la publica `GET /api/v1/red/control-velocidad
 | # | Regla | Error (`rule`) | Mensaje (ejemplo) |
 | --- | --- | --- | --- |
 | 1 | `radius_rate_limit` y `perfil_ppp` solo en `pppoe` | `aplicacion_tipo` | «perfil_ppp no aplica a ip_estatica: sin sesión PPP no hay perfil; usa cola_simple, pcq_plan o arbol_pcq» |
-| 2 | `cola_simple` no en `pppoe` | `aplicacion_tipo` | «PPPoE ya crea su cola dinámica: usa radius_rate_limit o perfil_ppp» |
+| 2 | ~~`cola_simple` no en `pppoe`~~ (quitada el 2026-11-05, §12: PPPoE admite colas simples) | — | — |
 | 3 | `pcq_plan` y `arbol_pcq` exigen `tipo_cola = pcq`; las demás no aceptan `pcq` | `tipo_cola` | «arbol_pcq necesita PCQ: el tope de cada cliente es el pcq-rate» |
 | 4 | `fq_codel` y `cake` solo con RouterOS ≥ 7 | `version` | «cake necesita RouterOS 7; este router tiene 6.49.10» |
 | 5 | Todo lo que usa `por_router` o `jerarquico` en un router es de **una sola familia** | `familia_router` | «el techo del router se partiría en dos: colas simples (pppoe) y queue tree (ip_estatica)» |
 | 6 | Un mismo plan, dentro de una familia, usa el mismo `padre` y los mismos `extras` en los tipos que comparten objetos del plan (en el árbol, todos; en colas simples, los que cuelgan de un padre y los `pcq_plan`) | `plan_consistente` | «PPPoE e IP estática del plan 3 comparten argosisp-plan-3: usa el mismo padre y los mismos extras» |
 | 7 | Un mismo plan con `por_plan`/`jerarquico` no mezcla familias | `familia_plan` | «el reuso del plan 3 se partiría entre colas simples y queue tree» |
 | 8 | Los valores existen | `enum` | «aplicacion debe ser una de …» |
-| 12 | Router sin RADIUS (`modo_seguridad = 'api'`, `contratos/pppoe-local.md` §5): PPPoE solo con `perfil_ppp` (cualquier `padre`) o `arbol_pcq`; ni `radius_rate_limit` (no hay `Mikrotik-Rate-Limit`) ni `pcq_plan` (sin accounting no hay direcciones de la sesión al conectar). Se revisa al cambiar la estrategia del router y la excepción PPPoE de un plan. Datos anteriores con `radius_rate_limit` o `pcq_plan` se aplican como `perfil_ppp` (`estrategiaLocal`) | `pppoe_sin_radius` | «el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit» |
+| 12 | Router sin RADIUS (`modo_seguridad = 'api'`, `contratos/pppoe-local.md` §5): PPPoE solo con `perfil_ppp` (cualquier `padre`), `cola_simple` (§12) o `arbol_pcq`; ni `radius_rate_limit` (no hay `Mikrotik-Rate-Limit`) ni `pcq_plan` (sin accounting no hay direcciones de la sesión al conectar). Se revisa al cambiar la estrategia del router y la excepción PPPoE de un plan. Datos anteriores con `radius_rate_limit` o `pcq_plan` se aplican como `perfil_ppp` (`estrategiaLocal`) | `pppoe_sin_radius` | «el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit» |
 
 | Advertencia | Cuándo |
 | --- | --- |
@@ -204,7 +204,7 @@ El registro `aaa:user:*` suma:
 ```
 
 - `grupo`: `Mikrotik-Group` en activo y limitado (perfil `plan-<id>` si la estrategia lo necesita: padre, `tipo_cola` ≠ `default` o `perfil_ppp`; si no, `profile_ppp` del router o null).
-- `rate_limit` / `rate_limit_limitado`: si `aaa` manda `Mikrotik-Rate-Limit` en ese estado (`false` en `perfil_ppp` activo, `pcq_plan` y `arbol_pcq`).
+- `rate_limit` / `rate_limit_limitado`: si `aaa` manda `Mikrotik-Rate-Limit` en ese estado (`false` en `perfil_ppp` activo, `cola_simple`, `pcq_plan` y `arbol_pcq`). `coa` no manda CoA de velocidad con `cola_simple`, `pcq_plan` ni `arbol_pcq` (lo aplica el dispatcher de RouterOS).
 - `aaa` y `coa` usan `velocidad` si viene; si no (registro viejo), lo de hoy por `control_velocidad` y `reuso`. El suspendido no cambia.
 
 ## 8. Eventos (para `contratos/eventos.md` y el catálogo de `CLAUDE.md`)
@@ -319,3 +319,27 @@ El modo de control de velocidad se decide **por router**: todos sus servicios si
 - **Acción `routers.unificar_control_velocidad`** (permiso del mismo nombre, solo `admin`): `POST /api/v1/routers/:id/unificar-control-velocidad` `{ planes: number[], reconectar?, motivo? }`, acepta `Idempotency-Key`. `planes` = los `plan_id` que el usuario vio en la vista previa: si no coinciden con las excepciones actuales → 409 `excepciones_cambiaron` (volver a pedir la vista previa). Valida la matriz del router sin excepciones (422 como §3). En una transacción: pone `planes_routers.estrategia_velocidad = null` en cada uno (diff en `audit.cambios`, `plan_router`), emite **un `router.estrategia_cambiada` por plan** con `plan_id`, `de` = la parcial, `a: null`, `capas`, `reconectar` y `motivo: 'unificar'` (el motivo del usuario va en la auditoría), y reescribe `aaa:user:*` del router al confirmar. Respuesta `ResultadoUnificarVelocidad { router_id, planes: number[] }`. Sin excepciones y `planes: []`: 200 sin eventos.
 - **RouterOS (A2):** cada evento se aplica como quitar la excepción de un plan (§4: crear → mover → borrar; las sesiones conservan lo suyo hasta reconectar, salvo `reconectar`). Con varios planes del mismo router conviene juntarlos en una sola corrida (pedido en `a1.md`).
 - **Pantalla (A4):** quitar «Excepción por plan»; en «Control de velocidad» del router, si `vista-previa-unificar-velocidad` trae planes, un aviso con la lista, qué cambia y cuántas sesiones reconectan, y el botón «Unificar» (`routers.unificar_control_velocidad`).
+
+## 12. Solo las reglas del modo activo y PPPoE con colas simples (bug del PM, 2026-11-05, v1.9.0)
+
+«Argos está escribiendo todas las reglas sin importar el tipo de control» y «no deja permitir PPPoE con colas simples». Manda sobre §1, §3 y §10 donde choquen.
+
+**Solo se escribe lo del modo activo.** Un router escribe los objetos de velocidad de la estrategia con la que está limitado **cada servicio que tiene** (la de su tipo de conexión, o la de su sesión PPPoE hasta reconectar, §4). La estrategia de un tipo de conexión sin servicios en el router no escribe nada:
+
+- El perfil `plan-<id>` (y `plan-<id>-s<srv>`, `plan-<id>-limitado`) solo existe si el plan tiene servicios **PPPoE** en el router (antes lo creaba cualquier servicio WISP del plan, con `rate-limit` en `perfil_ppp`, `parent-queue` y su cola padre, junto al árbol o a la cola del servicio).
+- Los nodos globales del árbol (`argosisp-global-*`) solo si un plan del árbol con servicios los usa (antes bastaba con que la estrategia de un tipo sin servicios fuera `arbol_pcq` con `por_router`/`jerarquico`).
+- Lo que sobra (comment `argosisp:plan:…`, `argosisp:global:…`, `argosisp:router`, `argosisp:qos…` y los tipos `argosisp-…` por nombre) lo borra `routeros.reconciliar` (periódico, «Reconciliar ahora», cambio de estrategia, `router.conexion_registrada`) y `routeros.aplicar_servicio`: cada `DELETE` en `audit.red` y la corrida en `audit.acciones` (corrigió algo). Nunca lo ajeno ni lo adoptado (sin comment de ArgosIsp). Un padre o perfil con sesiones PPPoE colgando se conserva hasta que reconecten (§4).
+
+**PPPoE con `cola_simple`** (decisión de A2, RouterOS 7):
+
+| | RADIUS | Sin RADIUS (`api`) |
+| --- | --- | --- |
+| Cola | `/queue/simple argosisp-servicio-<id>` (comment `argosisp:servicio:<id>`), `max-limit`/ráfaga/`limit-at`/`priority` de `rateLimitServicio` en activo o limitado, `queue=<tipo>/<tipo>` y `parent` al padre del plan o del router como en WISP | igual |
+| `target` | Direcciones de la sesión abierta (`network.sesiones`: IPv4/32, /64 y /56 que reportó el accounting). Sin sesión, la IPv4 fija y el delegado del servicio; sin ninguno, no hay cola | Las de la sesión del sondeo o, sin ella, la IPv4 fija (`remote-address` del secret). Con pool y sin IP fija, la cola llega con el primer sondeo (1 min) |
+| `aaa` | Sin `Mikrotik-Rate-Limit` ni `Mikrotik-Group` del plan (`velocidad.rate_limit = rate_limit_limitado = false`, `grupo` = `profile_ppp` del router) | — |
+| Perfil | Ninguno del plan | Un solo perfil `plan-<id>` sin `rate-limit`, `parent-queue` ni `queue-type` (el secret apunta a él en activo y en limitado) |
+| Limitar / activar | La cola se reescribe por `servicio.estado_cambiado` (dispatcher); `coa` no manda nada; **sin reconectar** | igual (el secret no cambia de perfil) |
+| Suspender | Sin cola estática: el perfil de corte (CoA o `Mikrotik-Group = suspendido`) pone el rate-limit mínimo | Sin cola estática: el secret pasa al perfil `suspendido` |
+
+- **Nunca `target=<pppoe-usuario>`**: RouterOS guarda el `target` de una cola estática por el id interno de la interfaz, y la interfaz dinámica de la sesión cambia de id en cada reconexión (la cola queda inválida). Por eso el dispatcher mantiene el `target` con `sesion.iniciada` / `sesion.terminada`, igual que el de los padres y el de `pcq_plan`. **Verificar en el laboratorio.**
+- `cola_simple` queda en la familia de colas simples: las reglas 5 a 7 no cambian.

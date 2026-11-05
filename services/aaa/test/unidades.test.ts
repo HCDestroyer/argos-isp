@@ -145,6 +145,21 @@ describe('perfil RADIUS por estrategia (control-velocidad.md §7)', () => {
         assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Rate-Limit'], PERFIL.suspendido.rateLimit)
     })
 
+    it('cola_simple en PPPoE: sin Mikrotik-Rate-Limit en activo ni limitado (lo limita la cola estática)', () => {
+        const s = conRate(servicio({ user_ppp: 'cs' }))
+        s.velocidad = { aplicacion: 'cola_simple', grupo: null, rate_limit: false, rate_limit_limitado: false }
+        const activo = construirReply(s, PERFIL).reply
+        assert.equal(activo['Mikrotik-Rate-Limit'], undefined)
+        assert.equal(activo['Mikrotik-Group'], undefined)
+        s.estado = 'limitado'
+        assert.equal(construirReply(s, PERFIL).reply['Mikrotik-Rate-Limit'], undefined)
+        // El suspendido sigue con el perfil de corte y su rate-limit mínimo.
+        s.estado = 'suspendido'
+        const susp = construirReply(s, PERFIL).reply
+        assert.equal(susp['Mikrotik-Rate-Limit'], PERFIL.suspendido.rateLimit)
+        assert.equal(susp['Mikrotik-Address-List'], PERFIL.suspendido.addressList)
+    })
+
     it('radius_rate_limit con padre por router: grupo plan-<id> aunque el reuso sea 1', () => {
         const s = conRate(servicio({ user_ppp: 'r' }))
         s.velocidad = {

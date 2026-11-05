@@ -55,7 +55,8 @@ describe('control de velocidad por capas', () => {
     })
 
     it('la matriz deshabilita lo que no combina, con el porqué', () => {
-        expect(aplicacionDisponible(MATRIZ, 'cola_simple', 'pppoe')).toEqual({ valida: false, motivo: expect.stringContaining('PPPoE ya crea su cola dinámica') })
+        // PPPoE con colas simples (bug del PM, 5 nov)
+        expect(aplicacionDisponible(MATRIZ, 'cola_simple', 'pppoe')).toEqual({ valida: true, motivo: null })
         expect(aplicacionDisponible(MATRIZ, 'perfil_ppp', 'ip_estatica').motivo).toContain('sin sesión PPP no hay perfil')
         expect(aplicacionDisponible(MATRIZ, 'pcq_plan', 'dhcp_fija').valida).toBe(true)
         expect(tipoColaDisponible(MATRIZ, 'cake', 'radius_rate_limit', '6.49.10 (long-term)')).toEqual({ valida: false, motivo: 'Requiere RouterOS 7; este router tiene 6.49.10 (long-term).' })
@@ -78,7 +79,8 @@ describe('control de velocidad por capas', () => {
         const texto = vista.text()
         expect(texto).toContain('La velocidad viaja con la sesión PPPoE')
         expect(texto).toContain('Ejemplo:')
-        expect(texto).toContain('No disponible: PPPoE ya crea su cola dinámica')
+        // En PPPoE ya no hay aplicación deshabilitada: cola simple también vale (bug del PM, 5 nov)
+        expect(texto).not.toContain('No disponible: PPPoE ya crea su cola dinámica')
         expect(texto).toContain('No disponible: Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
         expect(texto).toContain('Reduce la latencia bajo carga')
         expect(vista.find('[data-prueba="igual-para-todos"]').exists()).toBe(true)

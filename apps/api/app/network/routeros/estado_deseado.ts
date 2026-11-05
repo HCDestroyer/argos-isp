@@ -18,7 +18,7 @@ import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
  *
  * | Objeto | Cuándo |
  * | --- | --- |
- * | Cola simple (`/queue/simple`) | Modo `simple`: siempre (rate-limit de `rateLimitServicio`, `parent` al padre del plan con reuso). `arbol_pcq`: solo suspendido |
+ * | Cola simple (`/queue/simple`) | `cola_simple`: siempre (rate-limit de `rateLimitServicio`, `parent` al padre del plan con reuso); PPPoE solo activo o limitado, con las direcciones de la sesión (`targetsColaServicio`). `arbol_pcq` y `pcq_plan` (WISP): solo suspendido |
  * | Address-list `suspendidos` | Solo en `suspendido` (mismo NAT a `/corte` que PPPoE) |
  * | Address-list `argosisp-plan-<id>[-limitado]` (IPv4 e IPv6) | `arbol_pcq`, activo o limitado: IPv4 y prefijo delegado (WISP) o las direcciones de la sesión abierta (PPPoE: IPv4, /64, /56) |
  * | Lease DHCP | Solo en `dhcp_fija` (también suspendido: necesita su IP para llegar a `/corte`) |
@@ -221,6 +221,28 @@ function entradasArbol(
     return salida
 }
 
+/**
+ * `target` de la cola estática de un servicio (`cola_simple`). WISP: su IPv4 y su prefijo delegado.
+ * PPPoE: las direcciones de su sesión abierta (IPv4, /64 y /56 que reportó el accounting o el sondeo);
+ * sin sesión, las fijas del servicio (IPv4 y delegado), si las tiene. Nunca la interfaz
+ * `<pppoe-usuario>`: RouterOS guarda el `target` por id interno y la interfaz dinámica cambia de id
+ * en cada reconexión (la cola quedaría inválida). La mantiene el dispatcher con
+ * `sesion.iniciada` / `sesion.terminada` (`contratos/control-velocidad.md` §12).
+ */
+export function targetsColaServicio(
+    s: Pick<ServicioRed, 'tipo_conexion' | 'ipv4' | 'prefijos_v6' | 'sesion'>,
+): string[] {
+    if (s.tipo_conexion === 'pppoe' && s.sesion) {
+        const deSesion = [
+            s.sesion.ipv4 ? `${s.sesion.ipv4}/32` : null,
+            s.sesion.enlace,
+            s.sesion.delegado,
+        ].filter((t): t is string => t !== null)
+        if (deSesion.length > 0) return deSesion
+    }
+    return s.ipv4 ? [`${s.ipv4}/32`, ...s.prefijos_v6] : []
+}
+
 export function estadoDeseado(
     servicio: ServicioRed,
     router: RouterRed,
@@ -236,6 +258,33 @@ export function estadoDeseado(
             ? servicio.estrategia_sesion
             : servicio.estrategia
     const arbol = e.aplicacion === 'arbol_pcq'
+    if (servicio.tipo_conexion === 'pppoe' && e.aplicacion === 'cola_simple') {
+        // PPPoE con colas simples: una cola estática por servicio con las direcciones de la sesión
+        // (o las fijas). `aaa` no manda `Mikrotik-Rate-Limit`; el suspendido queda con el perfil de
+        // corte (RADIUS o el perfil `suspendido` del secret), sin cola estática.
+        const targets = targetsColaServicio(servicio)
+        if (!cuenta || targets.length === 0) return vacio
+        const velocidad = velocidadConExtras(servicio.velocidad, e.extras)
+        const tipoHoja = nombreTipoHoja(e.tipo_cola)
+        return completar(
+            id,
+            [
+                {
+                    ruta: '/queue/simple',
+                    comment: commentServicio(id),
+                    propiedades: {
+                        name: `argosisp-servicio-${id}`,
+                        target: targets.join(','),
+                        ...propiedadesCola(rateLimitServicio(velocidad, servicio.estado)),
+                        ...(tipoHoja ? { queue: `${tipoHoja}/${tipoHoja}` } : {}),
+                        parent: padreCliente(e, servicio.plan_id, velocidad.reuso),
+                        disabled: 'no',
+                    },
+                },
+            ],
+            [],
+        )
+    }
     if (servicio.tipo_conexion === 'pppoe') {
         // PPPoE: la cola y el corte vienen de RADIUS. En el árbol, sus direcciones (de la sesión
         // abierta) van a la lista del plan; sin sesión, nada. En `pcq_plan` van al `target` de la

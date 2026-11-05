@@ -24,6 +24,7 @@ import {
 import type { RouterApi } from '#network/routeros/router'
 import {
     propiedadesCola,
+    targetsColaServicio,
     type RouterRed,
     type ServicioRed,
     type TipoConexion,
@@ -330,10 +331,12 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
         const actual = s.estrategia
         const vigente = estrategiaVigente(s)
         grupo(s, actual)
-        // El perfil `plan-<id>` lo pide la estrategia PPPoE del plan en el router (aunque el plan aún no
-        // tenga servicios PPPoE, como hasta ahora); si ya no lo necesita, el de las sesiones viejas.
+        // El perfil `plan-<id>` lo pide la estrategia PPPoE del plan en el router, solo si el plan tiene
+        // servicios PPPoE en él: un servicio WISP no hace existir objetos del modo PPPoE (bug del PM,
+        // 5 nov: se escribían el perfil, su padre y el árbol a la vez). Si ya no lo necesita, el de las
+        // sesiones viejas.
         let nuevo: PlanRouter | null = null
-        if (necesitaPerfil(s.estrategia_pppoe, s.plan_id, s.velocidad.reuso)) {
+        if (s.tipo_conexion === 'pppoe' && necesitaPerfil(s.estrategia_pppoe, s.plan_id, s.velocidad.reuso)) {
             nuevo = grupo(s, s.estrategia_pppoe)
             nuevo.perfil = s.estrategia_pppoe
         }
@@ -370,7 +373,9 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
             pcq[s.estado === 'limitado' ? 'limitado' : 'activo'].push(...targetsServicio(s))
             continue
         }
-        if (vigente.aplicacion !== 'cola_simple' || !s.ipv4) continue
+        if (vigente.aplicacion !== 'cola_simple') continue
+        const targets = targetsColaServicio(s)
+        if (targets.length === 0) continue
         const padre = padreCliente(vigente, s.plan_id, vel.reuso)
         if (padre === 'none') continue
         // `limit-at` de la cola WISP (el mismo que arma `estado_deseado.ts`), para la regla de oro.
@@ -380,7 +385,7 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
             hijas = { padre, targets: [], limit_at_kbps: { subida: 0, bajada: 0 } }
             g.hijas.push(hijas)
         }
-        hijas.targets.push(...targetsServicio(s))
+        hijas.targets.push(...targets)
         hijas.limit_at_kbps.subida += limitAt.subida
         hijas.limit_at_kbps.bajada += limitAt.bajada
     }
