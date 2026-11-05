@@ -35,7 +35,14 @@ const OPCIONALES: Record<string, string[]> = {
     // `warnings` solo viene al crear o editar; `referencia` y el contacto en sitio (31 oct, Iris 0.5.0):
     // la API siempre los envía; obligatorios cuando las fixtures del panel los traigan (fila en `a1.md`)
     // `servidor_pppoe_id` y `local_address` (5 nov, red de acceso): igual, hasta las fixtures (fila en `a1.md`)
-    Servicio: ['warnings', 'referencia', 'contacto_nombre', 'contacto_telefono', 'servidor_pppoe_id', 'local_address'],
+    Servicio: [
+        'warnings',
+        'referencia',
+        'contacto_nombre',
+        'contacto_telefono',
+        'servidor_pppoe_id',
+        'local_address',
+    ],
     Cliente: ['referencia'],
     Plan: ['warnings'],
     // `csrf` solo con la sesión del panel por cookie
