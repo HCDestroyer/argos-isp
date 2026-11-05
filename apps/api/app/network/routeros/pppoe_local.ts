@@ -287,7 +287,7 @@ export async function asegurarSecret(
     servicioId: number,
     deseado: SecretDeseado | null,
     ctx: ContextoRed,
-    opciones: { actuales?: ObjetoRouterOS[]; desconectar?: boolean } = {},
+    opciones: { actuales?: ObjetoRouterOS[]; desconectar?: boolean; credenciales?: boolean } = {},
 ): Promise<CambioSecret[]> {
     const comment = commentSecret(servicioId)
     const desconectar = opciones.desconectar ?? true
@@ -334,7 +334,8 @@ export async function asegurarSecret(
         return cambios
     }
     const comparables: Propiedades = { ...deseado.propiedades }
-    if (!('password' in actual)) delete comparables.password
+    // Con `credenciales` la contraseña se escribe aunque el router no la devuelva (sin `sensitive`).
+    if (!('password' in actual) && !opciones.credenciales) delete comparables.password
     const dif = diferencias(comparables, actual)
     if (!vacio(actual[LOCAL]) && vacio(deseado.propiedades[LOCAL])) {
         await cliente.desasignar('/ppp/secret', actual['.id'], [LOCAL], ctx)
@@ -347,8 +348,16 @@ export async function asegurarSecret(
     // Sin `password` legible, se escribe junto con el cambio (así nunca queda una vieja).
     await cliente.asegurar('/ppp/secret', comment, { ...dif, password: deseado.propiedades.password! }, ctx)
     cambios.push({ ruta: '/ppp/secret', comment, accion: 'actualizado' })
-    if (desconectar && Object.keys(dif).some((k) => AL_CONECTAR.includes(k))) {
-        cambios.push(...(await desconectarUsuarios(cliente, [actual.name ?? ''], ctx, comment)))
+    // Credenciales nuevas: se corta la sesión (la del usuario viejo y, si ya entró, la del nuevo) para
+    // que reconecte con ellas; si no, solo con lo que el router toma al conectar.
+    const cortar = opciones.credenciales
+        ? 'password' in dif || 'name' in dif
+        : Object.keys(dif).some((k) => AL_CONECTAR.includes(k))
+    if (desconectar && cortar) {
+        const nombres = opciones.credenciales
+            ? [actual.name ?? '', deseado.propiedades.name ?? '']
+            : [actual.name ?? '']
+        cambios.push(...(await desconectarUsuarios(cliente, nombres, ctx, comment)))
     }
     return cambios
 }

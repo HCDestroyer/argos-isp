@@ -104,7 +104,12 @@ export class Dispatcher {
             return { decision, sesiones: [] }
         }
 
-        const sesiones = await almacen.sesionesActivas(evento.servicio_id)
+        // Credenciales: solo las sesiones abiertas antes del cambio (las nuevas ya entraron con ellas).
+        const credenciales = evento.evento === 'servicio.config_cambiada' && evento.campos.includes('credenciales')
+        const sesiones = await almacen.sesionesActivas(
+            evento.servicio_id,
+            credenciales ? { antesDelEvento: eventoId } : undefined,
+        )
         if (sesiones.length === 0) {
             log.info(
                 {

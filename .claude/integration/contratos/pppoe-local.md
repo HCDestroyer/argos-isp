@@ -126,3 +126,12 @@ Migración: `network.sesiones.origen` (`accounting` | `sondeo`, NOT NULL, por de
 | `routeros.fallido` | También por el secret (`ppp/secret add` con nombre ajeno, router caído) y `ppp/active remove` |
 
 Consumidor `routeros`: además `servicio.eliminado`, `sesion.desconexion_solicitada` (solo `origen: 'sondeo'`) y `router.radius_cambiado` (solo con `modo_seguridad` en `campos`).
+
+## Credenciales cambiadas (A2, 2026-11-05)
+
+`servicio.config_cambiada` con `campos` ⊇ `credenciales` (A1: cambió `user_ppp` o `pass_ppp`, sin valores) en un router `api`:
+
+1. `routeros.aplicar_servicio` reescribe el `/ppp/secret` con comment `argosisp:servicio:<id>`: `PATCH` con `name` y `password` **aunque el router no devuelva la contraseña** (usuario de la API sin `sensitive`). Con usuario nuevo el mismo secret se renombra; uno ajeno (sin el comment) nunca se toca, y uno ajeno con el nombre nuevo hace fallar el `PATCH` (400 → `routeros.fallido`).
+2. Después quita la sesión activa del usuario viejo y la del nuevo (`/ppp active remove`), y las cierra en `network.sesiones` (`Admin-Reset`).
+3. Cada comando en `audit.red` con el `evento_id`. Una entrega repetida del evento no fuerza nada si `audit.red` ya tiene el `PUT`/`PATCH` del secret de ese evento: no corta la sesión con la que el cliente ya reconectó.
+
