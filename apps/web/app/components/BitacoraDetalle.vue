@@ -77,6 +77,19 @@ const ruta = computed(() => (props.accion ? rutaEntidad(props.accion.entidad_tip
                         mono
                         class="col-span-2"
                     />
+                    <DatoFicha
+                        v-if="accion.iris_actor"
+                        etiqueta="Quién en Iris"
+                        :valor="textoActorIris(accion.iris_actor)"
+                        data-prueba="detalle-iris-actor"
+                    />
+                    <DatoFicha
+                        v-if="accion.iris_conversacion"
+                        etiqueta="Conversación de Iris"
+                        :valor="accion.iris_conversacion"
+                        mono
+                        data-prueba="detalle-iris-conversacion"
+                    />
                 </dl>
 
                 <UAlert

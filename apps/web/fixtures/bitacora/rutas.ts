@@ -32,6 +32,7 @@ export const rutasBitacora: RutasFixture = {
         const excluirCanal = solicitud.query.get('excluir_canal')
         const cliente = numeroQuery(solicitud, 'cliente_id')
         const requestId = solicitud.query.get('request_id')
+        const conversacion = solicitud.query.get('iris_conversacion')
         const desde = solicitud.query.get('desde')
         const hasta = solicitud.query.get('hasta')
         // Como `bitacora.ts` de A1: con empresas, las de esas empresas y las que no son de ninguna.
@@ -46,6 +47,7 @@ export const rutasBitacora: RutasFixture = {
             .filter(a => actor === undefined || a.actor_id === actor)
             .filter(a => !accion || a.accion === accion)
             .filter(a => !requestId || a.request_id === requestId)
+            .filter(a => !conversacion || a.iris_conversacion === conversacion)
             .filter(a => !desde || new Date(a.created_at) >= new Date(desde))
             .filter(a => !hasta || new Date(a.created_at) <= new Date(hasta))
             .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)

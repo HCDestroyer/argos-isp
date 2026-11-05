@@ -72,7 +72,37 @@ export function configuracionSinFila(empresaId: number, global: Configuracion): 
 }
 
 /** Plantillas de `notify_plantillas_seeder` como las devuelve `GET /notificaciones/plantillas` (A6). */
-export const plantillasNotificacion: Schema<'PlantillaNotificacion'>[] = plantillasJson as Schema<'PlantillaNotificacion'>[]
+const porVencerOVencida = '{{#factura.vencida}}factura_vencida{{/factura.vencida}}{{^factura.vencida}}factura_por_vencer{{/factura.vencida}}'
+
+/**
+ * WhatsApp (contrato Iris 0.6.0 §6.3, `PLANTILLAS_WHATSAPP` de A6): el cuerpo es el **código** de la
+ * plantilla de Iris (Mustache que se renderiza a un código), no un texto.
+ */
+const plantillasWhatsapp: Omit<Schema<'PlantillaNotificacion'>, 'id' | 'version' | 'created_at' | 'updated_at' | 'activa'>[] = [
+    ...[1, 2, 3].map(orden => ({ evento: `recordatorio.${orden}`, canal: 'whatsapp' as const, asunto: null, cuerpo: porVencerOVencida })),
+    { evento: 'factura.vencida', canal: 'whatsapp', asunto: null, cuerpo: 'factura_vencida' },
+    { evento: 'pago.registrado', canal: 'whatsapp', asunto: null, cuerpo: 'pago_recibido' },
+    { evento: 'comprobante.aprobado', canal: 'whatsapp', asunto: null, cuerpo: 'pago_recibido' },
+    {
+        evento: 'servicio.estado_cambiado',
+        canal: 'whatsapp',
+        asunto: null,
+        cuerpo: '{{#estado.por_falta_de_pago}}corte_por_falta_de_pago{{/estado.por_falta_de_pago}}{{#estado.reactivado}}servicio_reactivado{{/estado.reactivado}}',
+    },
+    { evento: 'servicio.instalacion_activada', canal: 'whatsapp', asunto: null, cuerpo: 'bienvenida' },
+]
+
+export const plantillasNotificacion: Schema<'PlantillaNotificacion'>[] = [
+    ...(plantillasJson as Schema<'PlantillaNotificacion'>[]),
+    ...plantillasWhatsapp.map((plantilla, indice) => ({
+        ...plantilla,
+        id: plantillasJson.length + indice + 1,
+        activa: true,
+        version: 1,
+        created_at: '2026-11-05T15:00:00.000Z',
+        updated_at: '2026-11-05T15:00:00.000Z',
+    })),
+]
 
 /**
  * Catálogo de eventos con plantilla y sus variables con ejemplo, copiado de `GET

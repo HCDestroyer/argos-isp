@@ -7,6 +7,8 @@ export type EstadoComprobante = Comprobante['estado']
 export type FiltrosComprobantes = Omit<NonNullable<paths['/api/v1/comprobantes']['get']['parameters']['query']>, 'cursor'>
 /** Cuerpo exacto de `POST /comprobantes/:id/aprobar` según `packages/contracts` (A3). */
 export type DatosAprobarComprobante = paths['/api/v1/comprobantes/{id}/aprobar']['post']['requestBody']['content']['application/json']
+/** Cuerpo de `POST /comprobantes/:id/rechazar`: motivo y `causa` (contrato Iris 0.6.0 §7.2). */
+export type DatosRechazarComprobante = paths['/api/v1/comprobantes/{id}/rechazar']['post']['requestBody']['content']['application/json']
 
 export const LIMITE_COMPROBANTES = 25
 
@@ -61,11 +63,14 @@ export function useComprobantes() {
         return resultado
     }
 
-    /** `POST /comprobantes/:id/rechazar { motivo }` (`comprobantes.rechazar`). */
-    async function rechazar(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Comprobante>> {
+    /**
+     * `POST /comprobantes/:id/rechazar { motivo, causa? }` (`comprobantes.rechazar`). Si el
+     * comprobante sostenía una reconexión temporal, la API la cancela y re-evalúa el servicio.
+     */
+    async function rechazar(id: number, datos: DatosRechazarComprobante, claveIdempotencia: string): Promise<Resultado<Comprobante>> {
         const resultado = await resolver(api.POST('/api/v1/comprobantes/{id}/rechazar', {
             params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
-            body: { motivo },
+            body: datos,
         }))
         void actualizarContador()
         return resultado

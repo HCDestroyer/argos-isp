@@ -16,7 +16,7 @@ function empresaDe(tipo: string | null, id: number | null): Pick<Accion, 'empres
     return { empresa_id: empresaId, empresa_nombre: empresas.find(e => e.id === empresaId)?.nombre_comercial ?? null }
 }
 
-function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre' | 'empresa_id' | 'empresa_nombre'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre'>>): Accion {
+function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' | 'actor_nombre' | 'empresa_id' | 'empresa_nombre' | 'iris_actor' | 'iris_conversacion'> & Partial<Pick<Accion, 'resultado' | 'error' | 'actor_nombre' | 'iris_actor' | 'iris_conversacion'>>): Accion {
     const id = siguiente++
     return {
         id,
@@ -27,6 +27,9 @@ function accion(datos: Omit<Accion, 'id' | 'error' | 'resultado' | 'request_id' 
         ...empresaDe(datos.entidad_tipo, datos.entidad_id),
         // Como la API: nombre del usuario; `null` para el sistema.
         actor_nombre: datos.actor_id === 1 ? 'Ana Administradora' : null,
+        // Como la API (contrato Iris 0.6.0 §7.1): null fuera de Iris.
+        iris_actor: null,
+        iris_conversacion: null,
         ...datos,
     }
 }
@@ -138,4 +141,16 @@ const delServicio: Accion[] = servicios.flatMap((servicio) => {
     return lista
 })
 
-export const acciones: Accion[] = [...delCliente, ...delServicio]
+/**
+ * La boleta 5 que mandó el asistente de Iris por WhatsApp y la reconexión temporal que pidió
+ * (contrato Iris 0.6.0 §7.2 y §7.3): actor `token` del usuario técnico Iris, canal `ia` y las
+ * cabeceras de Iris guardadas en la fila.
+ */
+const IRIS = { actor_tipo: 'token', actor_id: 90, actor_nombre: 'Iris', canal: 'ia', iris_actor: 'asistente_ia', iris_conversacion: 'wa:conv-7731' } as const
+const deIris: Accion[] = [
+    accion({ ...IRIS, accion: 'clientes.verificar_identidad', entidad_tipo: 'cliente', entidad_id: 8, entrada: { cliente_id: 8, metodo: 'documento', valor: '***' }, created_at: '2026-10-15T23:15:00.000Z' }),
+    accion({ ...IRIS, accion: 'comprobantes.registrar', entidad_tipo: 'comprobante', entidad_id: 5, entrada: { cliente_id: 8, metodo: 'deposito', referencia: '40023355', monto: '175.00', canal_contacto: 'whatsapp', leido_por: 'ia', confianza: '0.92' }, created_at: '2026-10-15T23:20:00.000Z' }),
+    accion({ ...IRIS, accion: 'comprobantes.reconexion_temporal', entidad_tipo: 'promesa', entidad_id: 5, entrada: { comprobante_id: 5, motivo: 'fuera_de_horario' }, created_at: '2026-10-15T23:20:30.000Z' }),
+]
+
+export const acciones: Accion[] = [...delCliente, ...delServicio, ...deIris]

@@ -464,6 +464,38 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
 
                 <section
                     class="surface-card flex flex-col gap-4 p-4 sm:p-6"
+                    aria-labelledby="titulo-whatsapp"
+                    data-prueba="seccion-whatsapp"
+                >
+                    <h2
+                        id="titulo-whatsapp"
+                        class="flex items-center gap-2 text-base font-semibold text-highlighted"
+                    >
+                        <UIcon
+                            name="i-lucide-message-circle"
+                            class="size-5"
+                        />
+                        WhatsApp
+                    </h2>
+                    <USwitch
+                        v-model="form.whatsapp.activo"
+                        :disabled="bloqueado"
+                        label="Avisos a clientes por WhatsApp"
+                        description="Salen por la mensajería de Iris: Iris tiene los textos aprobados por Meta, los permisos de contacto, el límite diario y el horario de silencio."
+                        data-prueba="whatsapp-activo"
+                    />
+                    <p class="text-xs text-muted">
+                        Además necesita el conector con Iris activo y con contrato 0.6.0 o posterior; si no, cada aviso queda «omitido» con el motivo en la lista de envíos. Correo y Telegram siguen saliendo de Argos.
+                        <ULink
+                            v-if="puede('iris.ver')"
+                            to="/configuracion/integraciones/iris"
+                            class="text-primary"
+                        >Ver el conector con Iris</ULink>
+                    </p>
+                </section>
+
+                <section
+                    class="surface-card flex flex-col gap-4 p-4 sm:p-6"
                     aria-labelledby="titulo-avisos"
                 >
                     <div>

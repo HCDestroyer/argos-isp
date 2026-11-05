@@ -55,7 +55,7 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         plan_id: plan,
         plantilla_facturacion_id: cliente.tipo === 'empresa' ? 2 : 1,
         estado,
-        promesa_activa: cliente.id === 12,
+        promesa_activa: cliente.id === 12 || cliente.id === 8,
         // Como la API (A1, semana 2): siempre trae el tipo de conexión y el amarre.
         tipo_conexion: 'pppoe',
         amarre_ip_mac: false,

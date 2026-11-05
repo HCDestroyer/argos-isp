@@ -34,6 +34,10 @@ export interface FormularioNotificaciones {
         bot_nombre: string
         chat_equipo: string
     }
+    /** WhatsApp por la mensajería de Iris (contrato Iris 0.6.0 §6): solo el interruptor. */
+    whatsapp: {
+        activo: boolean
+    }
     avisos: Configuracion['avisos']
     secretos: {
         password: Secreto
@@ -110,6 +114,8 @@ export function formularioNotificaciones(config: Configuracion): FormularioNotif
             bot_nombre: config.telegram.bot_nombre ?? '',
             chat_equipo: config.telegram.chat_equipo ?? '',
         },
+        // La API siempre lo manda (apagado por defecto); si faltara, apagado.
+        whatsapp: { activo: config.whatsapp?.activo ?? false },
         avisos: { ...config.avisos },
         secretos: { password: conservar(), token: conservar(), webhook_secreto: conservar() },
     }
@@ -160,7 +166,7 @@ export function cuerpoNotificaciones(form: FormularioNotificaciones, version: nu
     if (webhook) {
         telegram.webhook_secreto = webhook.valor
     }
-    const cuerpo: CambiosConfiguracionNotificaciones = { version, correo, telegram, avisos: { ...form.avisos } }
+    const cuerpo: CambiosConfiguracionNotificaciones = { version, correo, telegram, whatsapp: { activo: form.whatsapp.activo }, avisos: { ...form.avisos } }
     if (empresa) {
         cuerpo.hereda = form.hereda
     }

@@ -12,7 +12,7 @@ test('aprobar un comprobante del portal reactiva el servicio', async ({ page }) 
 
     const contenedor = await menu(page)
     const enlace = contenedor.getByRole('link', { name: /^Comprobantes/ })
-    await expect(enlace).toContainText('3')
+    await expect(enlace).toContainText('4')
     await enlace.click()
     await expect(page).toHaveURL(/\/comprobantes$/)
 

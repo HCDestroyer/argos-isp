@@ -29,6 +29,8 @@ function nombreUsuarioDe(solicitud: SolicitudFixture): string | null {
 }
 
 const METODOS: readonly Comprobante['metodo'][] = ['deposito', 'transferencia', 'ach', 'remesa']
+const CANALES: readonly Comprobante['canal'][] = ['portal', 'panel', 'iris']
+const CAUSAS: readonly NonNullable<Comprobante['causa_rechazo']>[] = ['no_aparece', 'monto_distinto', 'ilegible', 'falta_dato', 'duplicado', 'otro']
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
 
 /** Como `resumenComprobantes` (A3): total y monto de lo filtrado; pendientes sin el filtro de estado. */
@@ -58,11 +60,27 @@ function validarAprobar(cuerpo: Record<string, unknown>): NonNullable<Problem['e
     return errores
 }
 
+/** `cierre` de `CancelarReconexionTemporal`: `cancelada` con «caja rechazó el comprobante». */
+function cancelarReconexion(promesa: Schema<'Promesa'>, momento: string): void {
+    const evaluacion = promesa.resultado_evaluacion
+    Object.assign(promesa, {
+        estado: 'cancelada',
+        resultado_evaluacion: { ...evaluacion, cierre: { estado: 'cancelada', en: momento, motivo: 'caja rechazó el comprobante' } },
+        version: promesa.version + 1,
+        updated_at: momento,
+    })
+    const servicio = bd.servicios.find(s => s.id === promesa.servicio_id)
+    if (servicio && !bd.promesas.some(p => p.servicio_id === servicio.id && p.estado === 'activa')) {
+        servicio.promesa_activa = false
+    }
+}
+
 export const rutasComprobantes: RutasFixture = {
     'GET /api/v1/comprobantes': conPermiso('comprobantes.ver', (solicitud) => {
         const estado = solicitud.query.get('estado')
         const cliente = numeroQuery(solicitud, 'cliente_id')
         const metodo = solicitud.query.get('metodo')
+        const canal = solicitud.query.get('canal')
         const cuenta = numeroQuery(solicitud, 'cuenta_bancaria_id')
         const desde = solicitud.query.get('desde')
         const hasta = solicitud.query.get('hasta')
@@ -72,6 +90,9 @@ export const rutasComprobantes: RutasFixture = {
         }
         if (metodo && !(METODOS as readonly string[]).includes(metodo)) {
             errores.push({ field: 'metodo', message: 'Método inválido', rule: 'enum' })
+        }
+        if (canal && !(CANALES as readonly string[]).includes(canal)) {
+            errores.push({ field: 'canal', message: 'Canal inválido', rule: 'enum' })
         }
         for (const [campo, valor] of [['desde', desde], ['hasta', hasta]] as const) {
             if (valor && !FECHA.test(valor)) {
@@ -85,6 +106,7 @@ export const rutasComprobantes: RutasFixture = {
         const sinEstado = deLaEmpresa(bd.comprobantes, solicitud)
             .filter(c => cliente === undefined || c.cliente_id === cliente)
             .filter(c => !metodo || c.metodo === metodo)
+            .filter(c => !canal || c.canal === canal)
             .filter(c => cuenta === undefined || c.cuenta_bancaria_id === cuenta)
             .filter(c => !desde || c.fecha_deposito >= desde)
             .filter(c => !hasta || c.fecha_deposito <= hasta)
@@ -166,11 +188,15 @@ export const rutasComprobantes: RutasFixture = {
         if (!comprobante) {
             return noEncontrado('el comprobante')
         }
-        const { motivo } = cuerpoObjeto(solicitud)
+        const { motivo, causa } = cuerpoObjeto(solicitud)
         const texto = typeof motivo === 'string' ? motivo.trim() : ''
         if (texto.length < 3 || texto.length > 500) {
             return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener entre 3 y 500 caracteres', rule: 'minLength' }])
         }
+        if (causa !== undefined && !(CAUSAS as readonly unknown[]).includes(causa)) {
+            return datosInvalidos([{ field: 'causa', message: 'Causa inválida', rule: 'enum' }])
+        }
+        const causaRechazo = (causa ?? 'otro') as NonNullable<Comprobante['causa_rechazo']>
         if (comprobante.estado !== 'pendiente') {
             return revisado(comprobante)
         }
@@ -178,13 +204,20 @@ export const rutasComprobantes: RutasFixture = {
         Object.assign(comprobante, {
             estado: 'rechazado',
             motivo_rechazo: texto,
+            causa_rechazo: causaRechazo,
             verificado_por: usuarioDe(solicitud),
             verificado_por_nombre: nombreUsuarioDe(solicitud),
             verificado_en: momento,
             version: comprobante.version + 1,
             updated_at: momento,
         })
-        registrarAccion(solicitud, 'comprobantes.rechazar', { tipo: 'comprobante', id: comprobante.id }, { motivo: texto })
+        registrarAccion(solicitud, 'comprobantes.rechazar', { tipo: 'comprobante', id: comprobante.id }, { motivo: texto, causa: causaRechazo })
+        // Como `CancelarReconexionTemporal` (A3, §7.3): la reconexión activa de este comprobante se
+        // cancela al instante; el servicio se re-evalúa (aquí, pierde la bandera de promesa).
+        for (const promesa of bd.promesas.filter(p => p.tipo === 'reconexion_temporal' && p.comprobante_id === comprobante.id && p.estado === 'activa')) {
+            cancelarReconexion(promesa, momento)
+            registrarAccion(solicitud, 'promesas.cancelar_reconexion', { tipo: 'promesa', id: promesa.id }, { comprobante_id: comprobante.id })
+        }
         return { status: 200, cuerpo: comprobante }
     })),
 }

@@ -169,6 +169,9 @@ export function registrarAccion(solicitud: SolicitudFixture, accion: string, ent
         error: null,
         request_id: `req-fixture-${id}`,
         ...empresaDeAccion(entidad, solicitud),
+        // Las cabeceras de Iris (contrato Iris 0.6.0 §7.1), o null como en la API.
+        iris_actor: solicitud.headers.get('X-Iris-Actor'),
+        iris_conversacion: solicitud.headers.get('X-Iris-Conversacion'),
         created_at: ahora(),
     })
 }

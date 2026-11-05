@@ -10,6 +10,10 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  * pudo leer, el error se ve con "Reintentar" y el guardado no toca los valores guardados.
  * Teléfono y móvil se validan con la regla de la API (`utils/telefonos.ts`) solo si cambiaron; un
  * 422 `rule: 'telefono'` de la API se muestra junto al campo.
+ * «Acepta avisos por WhatsApp» (contrato Iris 0.6.0 §6.4): si cambió, después de guardar el cliente
+ * se manda `POST /notificaciones/consentimientos`; el registro vive en Iris. Al editar, la casilla
+ * parte del último estado conocido (`GET /notificaciones/whatsapp/clientes/:id`); si no se pudo
+ * leer, queda deshabilitada con el error y «Reintentar» (nunca se supone un estado).
  */
 const props = withDefaults(defineProps<{
     cliente?: Cliente | null
@@ -26,6 +30,7 @@ const emit = defineEmits<{
 
 const { puede } = usePermisos()
 const clientesApi = useClientes()
+const toast = useToast()
 
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaCliente>(entradaDesdeCliente(props.cliente ?? undefined))
@@ -71,6 +76,59 @@ function fijarCampo(clave: string, valor: ValorCampoFormulario) {
     estado.campos_personalizados[clave] = valor
     formulario.value?.clear(`campos_personalizados.${clave}`)
 }
+/*
+ * Casilla de WhatsApp. `inicial` es lo que Argos sabe hoy (`null` = no se pudo saber): solo un
+ * cambio frente a eso viaja a Iris, con una `Idempotency-Key` por formulario abierto.
+ */
+const puedeConsentir = computed(() => puede('notificaciones.registrar_consentimiento'))
+const aceptaWhatsappCasilla = ref(false)
+const whatsappInicial = ref<boolean | null>(props.cliente ? null : false)
+const cargandoWhatsapp = ref(false)
+const problemaWhatsapp = ref<Problem | null>(null)
+const claveConsentimiento = nuevaClaveIdempotencia()
+const casillaWhatsappBloqueada = computed(() => whatsappInicial.value === null)
+
+async function cargarWhatsapp() {
+    if (!props.cliente || !puedeConsentir.value) {
+        return
+    }
+    if (!puede('notificaciones.ver')) {
+        problemaWhatsapp.value = { type: 'about:blank', title: 'Sin permiso para leer el estado de WhatsApp', status: 403, detail: 'Hace falta notificaciones.ver para saber si el cliente ya acepta avisos por WhatsApp.' }
+        return
+    }
+    cargandoWhatsapp.value = true
+    problemaWhatsapp.value = null
+    const resultado = await useConsentimientosWhatsapp().estadoCliente(props.cliente.id)
+    cargandoWhatsapp.value = false
+    if (!resultado.ok) {
+        problemaWhatsapp.value = resultado.problema
+        return
+    }
+    whatsappInicial.value = aceptaWhatsapp(resultado.data)
+    aceptaWhatsappCasilla.value = whatsappInicial.value
+}
+
+/** Manda el cambio de la casilla a Iris; si falla, el cliente ya quedó guardado y se avisa con «Reintentar». */
+async function registrarWhatsapp(clienteId: number): Promise<void> {
+    if (!puedeConsentir.value || whatsappInicial.value === null || aceptaWhatsappCasilla.value === whatsappInicial.value) {
+        return
+    }
+    const estadoNuevo = aceptaWhatsappCasilla.value ? 'acepta' : 'baja'
+    const resultado = await useConsentimientosWhatsapp().registrar({ cliente_id: clienteId, estado: estadoNuevo }, claveConsentimiento)
+    if (resultado.ok) {
+        whatsappInicial.value = aceptaWhatsappCasilla.value
+        return
+    }
+    toast.add({
+        title: 'No se registró el permiso de WhatsApp',
+        description: `El cliente se guardó, pero el permiso no: ${resultado.problema.detail ?? resultado.problema.title}`,
+        icon: 'i-lucide-circle-alert',
+        color: 'error',
+        duration: 0,
+        actions: [{ label: 'Reintentar', color: 'error', variant: 'outline', onClick: () => void registrarWhatsapp(clienteId) }],
+    })
+}
+
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 /** Una clave por formulario abierto: un doble clic o un reintento no crean dos clientes. */
@@ -137,6 +195,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
     enviando.value = false
 
     if (resultado.ok) {
+        await registrarWhatsapp(resultado.data.id)
         emit('guardado', resultado.data)
         return
     }
@@ -151,6 +210,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
 
 onMounted(async () => {
     void cargarCatalogo()
+    void cargarWhatsapp()
     if (!puede('zonas.ver')) {
         return
     }
@@ -234,6 +294,26 @@ onMounted(async () => {
                         class="w-full"
                     />
                 </UFormField>
+
+                <div
+                    v-if="puedeConsentir"
+                    class="flex flex-col gap-2 sm:col-span-2"
+                    data-prueba="campo-whatsapp"
+                >
+                    <UCheckbox
+                        v-model="aceptaWhatsappCasilla"
+                        label="Acepta avisos por WhatsApp"
+                        description="Cobros, cortes y reactivaciones por la mensajería de Iris. Si el cliente escribe BAJA en el chat, la baja manda."
+                        :disabled="casillaWhatsappBloqueada || enviando"
+                        data-prueba="acepta-whatsapp"
+                    />
+                    <ProblemaAlerta
+                        v-if="problemaWhatsapp"
+                        :problema="problemaWhatsapp"
+                        :reintentar="problemaWhatsapp.status === 403 ? undefined : cargarWhatsapp"
+                        :reintentando="cargandoWhatsapp"
+                    />
+                </div>
 
                 <UFormField
                     name="telefono"

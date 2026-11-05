@@ -35,6 +35,13 @@ function metodoQuery(valor: unknown): Comprobante['metodo'] | 'todos' {
     return (METODOS_COMPROBANTE as string[]).includes(texto) ? texto as Comprobante['metodo'] : 'todos'
 }
 
+const CANALES: Comprobante['canal'][] = ['portal', 'panel', 'iris']
+
+function canalQuery(valor: unknown): Comprobante['canal'] | 'todos' {
+    const texto = textoQuery(valor)
+    return (CANALES as string[]).includes(texto) ? texto as Comprobante['canal'] : 'todos'
+}
+
 function fechaQuery(valor: unknown): string {
     const texto = textoQuery(valor)
     return FECHA.test(texto) ? texto : ''
@@ -45,8 +52,15 @@ const clienteId = ref(idQuery(route.query.cliente))
 const clienteElegido = shallowRef<Cliente | null>(null)
 const metodo = ref<Comprobante['metodo'] | 'todos'>(metodoQuery(route.query.metodo))
 const cuentaId = ref<number | 'todas'>(idQuery(route.query.cuenta) || 'todas')
+const canal = ref<Comprobante['canal'] | 'todos'>(canalQuery(route.query.canal))
 const desde = ref(fechaQuery(route.query.desde))
 const hasta = ref(fechaQuery(route.query.hasta))
+
+/** `canal=iris`: las boletas que llegaron por chat o llamada de Iris (contrato Iris 0.6.0 §7.2). */
+const itemsCanal: SelectItem[] = [
+    { label: 'Todos los canales', value: 'todos' },
+    ...CANALES.map(valor => ({ label: CANALES_COMPROBANTE[valor], value: valor })),
+]
 
 const itemsMetodo: SelectItem[] = [
     { label: 'Todos los métodos', value: 'todos' },
@@ -84,6 +98,9 @@ function filtrosActuales(): FiltrosComprobantes {
     if (cuentaId.value !== 'todas') {
         filtros.cuenta_bancaria_id = cuentaId.value
     }
+    if (canal.value !== 'todos') {
+        filtros.canal = canal.value
+    }
     if (desde.value) {
         filtros.desde = desde.value
     }
@@ -120,7 +137,7 @@ const columnas = computed<TableColumn<Comprobante>[]>(() => [
 ])
 
 /** Filtros además del estado (las pestañas). */
-const hayFiltros = computed(() => clienteId.value !== 0 || metodo.value !== 'todos' || cuentaId.value !== 'todas' || desde.value !== '' || hasta.value !== '')
+const hayFiltros = computed(() => clienteId.value !== 0 || metodo.value !== 'todos' || cuentaId.value !== 'todas' || canal.value !== 'todos' || desde.value !== '' || hasta.value !== '')
 const fechasInvalidas = computed(() => desde.value !== '' && hasta.value !== '' && desde.value > hasta.value)
 
 async function aplicarFiltros() {
@@ -136,6 +153,9 @@ async function aplicarFiltros() {
     }
     if (cuentaId.value !== 'todas') {
         query.cuenta = String(cuentaId.value)
+    }
+    if (canal.value !== 'todos') {
+        query.canal = canal.value
     }
     if (desde.value) {
         query.desde = desde.value
@@ -159,11 +179,12 @@ function limpiarFiltros() {
     clienteElegido.value = null
     metodo.value = 'todos'
     cuentaId.value = 'todas'
+    canal.value = 'todos'
     desde.value = ''
     hasta.value = ''
 }
 
-watch([estado, clienteId, metodo, cuentaId, desde, hasta], aplicarFiltros)
+watch([estado, clienteId, metodo, cuentaId, canal, desde, hasta], aplicarFiltros)
 
 // Sin filtros, `resumen.pendientes` es el conteo más fresco: el menú se actualiza con él.
 watch(resumen, (valor) => {
@@ -240,6 +261,19 @@ onMounted(async () => {
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <UFormField
+                    label="Canal"
+                    size="sm"
+                >
+                    <USelect
+                        v-model="canal"
+                        :items="itemsCanal"
+                        icon="i-lucide-messages-square"
+                        aria-label="Filtrar por canal"
+                        class="w-full sm:w-52"
+                        data-prueba="filtro-canal"
+                    />
+                </UFormField>
                 <UFormField
                     label="Depositado desde"
                     size="sm"
@@ -319,6 +353,21 @@ onMounted(async () => {
                                 Comprobante #{{ row.original.id }}
                             </ULink>
                             <span class="text-xs text-muted">Depósito del {{ formatearFecha(row.original.fecha_deposito) }}</span>
+                            <div
+                                v-if="llegoPorIris(row.original)"
+                                class="mt-0.5 flex flex-col gap-0.5"
+                                data-prueba="fila-iris"
+                            >
+                                <UBadge
+                                    label="Llegó por Iris"
+                                    icon="i-lucide-messages-square"
+                                    color="info"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="self-start"
+                                />
+                                <span class="text-xs text-muted">{{ resumenLecturaIris(row.original) }}</span>
+                            </div>
                             <span class="truncate text-xs text-muted sm:hidden">{{ row.original.cliente_nombre }}</span>
                             <span class="text-xs text-muted lg:hidden">{{ ETIQUETAS_METODO[row.original.metodo] }} · <span class="font-mono">{{ row.original.referencia }}</span></span>
                         </div>
