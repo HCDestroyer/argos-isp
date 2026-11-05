@@ -1074,13 +1074,32 @@ export const VistaPreviaReconciliar = definirEsquema(
                 ruta: texto,
                 clave: texto,
                 accion: enumerado(['crear', 'actualizar', 'borrar', 'mover']),
-                grupo: enumerado(['servicio', 'velocidad', 'corte']),
+                grupo: enumerado(['servicio', 'velocidad', 'corte', 'red_acceso']),
             }),
         ),
         menus: lista(
             objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero, mover: entero }),
         ),
         avisos: lista(texto),
+        conflictos: {
+            ...lista(
+                objeto({
+                    codigo: enumerado([
+                        'radius_y_colas_api',
+                        'arbol_y_simples',
+                        'perfil_con_rate_limit_y_colas',
+                        'perfil_de_fabrica_con_rate_limit',
+                    ]),
+                    mensaje: texto,
+                    objetos: {
+                        ...lista(texto),
+                        description: 'Objetos del router implicados (`menú name`), hasta 20',
+                    },
+                }),
+            ),
+            description:
+                'Formas de limitar que chocan en el router (RADIUS + colas por API, árbol + simples, perfil con rate-limit + colas). Solo informa: Argos nunca borra lo ajeno',
+        },
         error: { ...nulable(texto), description: 'El router no respondió o no tiene credenciales' },
     }),
 )

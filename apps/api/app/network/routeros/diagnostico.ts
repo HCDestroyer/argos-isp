@@ -66,8 +66,8 @@ export interface CambioVistaPrevia {
     ruta: string
     clave: string
     accion: 'crear' | 'actualizar' | 'borrar' | 'mover'
-    /** `servicio`, `velocidad` o `corte` */
-    grupo: 'servicio' | 'velocidad' | 'corte'
+    /** `servicio`, `velocidad`, `corte` o `red_acceso` (VLAN y servidores PPPoE administrados) */
+    grupo: 'servicio' | 'velocidad' | 'corte' | 'red_acceso'
 }
 
 export interface VistaPreviaReconciliar {
@@ -75,6 +75,8 @@ export interface VistaPreviaReconciliar {
     cambios: CambioVistaPrevia[]
     menus: Array<{ ruta: string; crear: number; actualizar: number; borrar: number; mover: number }>
     avisos: string[]
+    /** Conflictos de control de velocidad en el router (`detectarConflictos`); solo informa */
+    conflictos: Conflicto[]
     /** El router no respondió o no tiene credenciales: no hay vista previa */
     error: string | null
 }
@@ -94,6 +96,7 @@ export async function vistaPreviaReconciliar(
         cambios: [],
         menus: [],
         avisos: [],
+        conflictos: [],
         error: null,
     }
     const todos = await serviciosVigentesDeRouter(routerId)
@@ -139,6 +142,35 @@ export async function vistaPreviaReconciliar(
                     accion: 'borrar',
                     grupo: 'velocidad',
                 })
+            }
+
+            // Conflictos de formas de limitar (antes de aplicar; contratos/red-acceso.md §6)
+            const enUso = estrategiasEnUso(router.velocidad, todos)
+            const ppp = router.velocidad.estrategias.pppoe
+            salida.conflictos = detectarConflictos({
+                pppoe_por_radius:
+                    router.red.modo_seguridad !== 'api' &&
+                    (ppp.aplicacion === 'radius_rate_limit' || ppp.aplicacion === 'perfil_ppp'),
+                usa_arbol: enUso.some((e) => familia(e.aplicacion) === 'arbol'),
+                usa_simples: enUso.some(
+                    (e) =>
+                        familia(e.aplicacion) === 'simple' &&
+                        (e.aplicacion === 'cola_simple' ||
+                            e.aplicacion === 'pcq_plan' ||
+                            e.padre !== 'ninguno'),
+                ),
+                colas_simples: lectura.get('/queue/simple') ?? [],
+                arbol: lectura.get('/queue/tree') ?? [],
+                perfiles: lectura.get('/ppp/profile') ?? [],
+            })
+
+            // Red de acceso administrada: deriva por objeto (crear / actualizar / borrar)
+            const acceso = await redAccesoDeRouter(routerId)
+            const lecturaAcceso = await leerAcceso(cliente)
+            const deriva = derivaAcceso(acceso.vlans, acceso.servidores, lecturaAcceso)
+            salida.avisos.push(...deriva.avisos)
+            for (const d of deriva.deriva) {
+                salida.cambios.push({ ruta: d.ruta, clave: d.comment, accion: d.accion, grupo: 'red_acceso' })
             }
 
             // Servicios

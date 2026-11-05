@@ -77,6 +77,7 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             evento === 'qos.config_cambiada' ||
             evento === 'router.conexion_registrada' ||
             evento === 'router.radius_cambiado' ||
+            evento === 'red_acceso.cambiada' ||
             evento === 'sesion.desconexion_solicitada'
         )
     }
@@ -196,6 +197,20 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
                     ctx,
                 )
             }
+            return
+        }
+        if (evento.evento === 'red_acceso.cambiada') {
+            // contratos/red-acceso.md §5: solo VLAN y servidores administrados (o eliminados, que ya no
+            // tienen fila: el reconciliador borra lo que lleve su comment). OLT, PON y adoptados: nada.
+            const routerId = Number(evento.payload.router_id)
+            const entidad = evento.payload.entidad
+            if (!Number.isInteger(routerId) || routerId <= 0) return
+            if (entidad !== 'vlan' && entidad !== 'servidor_pppoe') return
+            if (evento.payload.estado === 'adoptado') return
+            await new ReconciliarRouterOS(opciones).execute(
+                { router_id: routerId, motivo: 'red_acceso', evento_id: String(evento.id) },
+                ctx,
+            )
             return
         }
         if (evento.evento === 'router.conexion_registrada') {

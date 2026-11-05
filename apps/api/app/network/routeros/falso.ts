@@ -69,6 +69,11 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/ipv6/firewall/filter': { requeridas: ['chain'], unicas: [] },
     '/ipv6/firewall/nat': { requeridas: ['chain'], unicas: [] },
     '/interface/list': { requeridas: ['name'], unicas: [['name']] },
+    '/interface/vlan': {
+        requeridas: ['name', 'vlan-id', 'interface'],
+        unicas: [['name'], ['interface', 'vlan-id']],
+    },
+    '/interface/pppoe-server/server': { requeridas: ['interface', 'service-name'], unicas: [['interface']] },
 }
 
 function hostDeUrl(url: string): string {

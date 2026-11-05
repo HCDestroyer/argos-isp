@@ -20,6 +20,8 @@ import {
 } from '#network/routeros/consultas'
 import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, localAddressCorte } from '#network/routeros/velocidad_router'
+import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
+import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { reconciliarSecrets, sesionesQuitadas } from '#network/routeros/pppoe_local'
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
@@ -50,7 +52,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos' | 'red_acceso'
     evento_id?: string | null
 }
 
@@ -169,6 +171,20 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                             .where('id', input.router_id)
                             .update({ routeros_version: version })
                         router.velocidad.routeros_version = version
+                    }
+                }
+                // Red de acceso administrada (contratos/red-acceso.md §6.3): VLAN → perfil → servidor,
+                // antes que lo demás; nunca lo adoptado ni lo ajeno.
+                if (router.con_credenciales) {
+                    const acceso = await redAccesoDeRouter(input.router_id, t.trx)
+                    if (
+                        acceso.vlans.length > 0 ||
+                        acceso.servidores.length > 0 ||
+                        input.motivo === 'red_acceso'
+                    ) {
+                        const r = await aplicarRedAcceso(cliente, acceso.vlans, acceso.servidores, ctxPlan)
+                        salida.correcciones.push(...r.cambios)
+                        salida.avisos.push(...r.avisos)
                     }
                 }
                 // Corte y FastTrack (siempre, sea cual sea la estrategia): la lista de interfaces, el

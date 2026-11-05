@@ -43,6 +43,9 @@ export const RUTAS = [
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
     '/interface/list',
+    // Red de acceso (contratos/red-acceso.md §6): solo lo administrado, `comment = argosisp:vlan|pppoe:<id>`
+    '/interface/vlan',
+    '/interface/pppoe-server/server',
 ] as const
 export type RutaRouterOS = (typeof RUTAS)[number]
 
@@ -67,7 +70,16 @@ export type ComandoRouterOS = (typeof COMANDOS)[number]
  * el router delegó a una sesión PPPoE en modo `radius_pool`, las sesiones PPP activas y los clientes
  * RADIUS del router (`routers.probar_conexion`).
  */
-export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active', '/radius'] as const
+export const RUTAS_LECTURA = [
+    '/ipv6/dhcp-server/binding',
+    '/ppp/active',
+    '/radius',
+    // Inventario de la red de acceso (descubrir) y sesiones por servidor PPPoE (`service`)
+    '/interface',
+    '/interface/pppoe-server',
+    '/ip/pool',
+    '/ipv6/pool',
+] as const
 export type RutaLectura = (typeof RUTAS_LECTURA)[number]
 
 /** Un objeto tal como lo devuelve RouterOS: todas las propiedades son texto. */
