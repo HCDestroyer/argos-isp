@@ -35,6 +35,32 @@ export function presentacionConectorIris(conector: ConectorIris): PresentacionEs
         : { etiqueta: 'Apagada', color: 'neutral', icono: 'i-lucide-power-off' }
 }
 
+/**
+ * Contrato Iris 0.6.2: Iris informó `receptor_argos: false` (conector canjeado antes de B1, sin la
+ * URL ni el secreto del receptor de Argos). Solo `requiere_reconectar: true` pide el aviso; si la
+ * API no trae motivo se usa uno genérico, nunca se infiere nada de otros campos.
+ */
+export interface AvisoReconectarIris {
+    titulo: string
+    motivo: string
+}
+
+export const MOTIVO_RECONECTAR_IRIS_GENERICO = 'Iris informó que no tiene guardado el receptor de webhooks de ArgosIsp. Vuelve a conectarlo para que reciba la URL y el secreto del receptor.'
+
+/** Instrucción del flujo de reconexión: el enlace desde aquí o «Conectar con Argos» en Iris. */
+export const INSTRUCCION_RECONECTAR_IRIS = 'Genera un enlace de conexión y pégalo en Iris, o pulsa «Conectar con Argos» en Iris → Administración → Integraciones. La configuración del conector se conserva.'
+
+/** Marca discreta junto al estado del conector («Activa», «Apagada»…). */
+export const MARCA_RECONECTAR_IRIS: PresentacionEstadoUi = { etiqueta: 'Volver a conectar', color: 'warning', icono: 'i-lucide-triangle-alert' }
+
+export function avisoReconectarIris(conector: ConectorIris): AvisoReconectarIris | null {
+    if (!conector.requiere_reconectar) {
+        return null
+    }
+    const motivo = conector.motivo_reconectar?.trim()
+    return { titulo: 'Hay que volver a conectar Iris', motivo: motivo || MOTIVO_RECONECTAR_IRIS_GENERICO }
+}
+
 /** `ConfigurarIris` no enciende el conector sin URL de Iris y token `iris_pat_`. */
 export function irisListoParaActivar(conector: ConectorIris): boolean {
     return conector.url_base !== null && conector.token !== null

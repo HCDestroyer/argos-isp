@@ -7,9 +7,32 @@ import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
-import { ORIGENES_IRIS_FIXTURES } from './datos'
+import { conectorIrisPorReconectar, ORIGENES_IRIS_FIXTURES } from './datos'
 
 type Conector = Schema<'ConectorIris'>
+
+/**
+ * Clave de `localStorage` para Playwright: si existe, `GET /integraciones/iris` toma el conector que
+ * Iris informó sin el receptor de Argos (`requiere_reconectar: true`, contrato 0.6.2).
+ */
+export const CLAVE_IRIS_RECONECTAR = 'argos_fixtures_iris_reconectar'
+
+function reconexionPedida(): boolean {
+    try {
+        return (globalThis.localStorage?.getItem(CLAVE_IRIS_RECONECTAR) ?? null) !== null
+    }
+    catch {
+        return false
+    }
+}
+
+/** Lo que responde `GET /integraciones/iris`; con la clave, el conector por reconectar (una vez). */
+function leerConector(): Conector {
+    if (reconexionPedida() && !bd.iris.conector.requiere_reconectar && bd.iris.conector.version === 0) {
+        bd.iris.conector = structuredClone(conectorIrisPorReconectar)
+    }
+    return bd.iris.conector
+}
 
 /** Los permisos de §1.1 del contrato que existen en Argos (rol `integracion_iris`). */
 const PERMISOS_IRIS: NonNullable<Schema<'TokenApi'>['alcances']['permisos']> = [
@@ -194,7 +217,7 @@ export const rutasIris: RutasFixture = {
     }),
     'POST /api/v1/integraciones/iris/autorizar': conPermiso('iris.configurar', autorizar),
 
-    'GET /api/v1/integraciones/iris': conPermiso('iris.ver', () => ({ status: 200, cuerpo: bd.iris.conector })),
+    'GET /api/v1/integraciones/iris': conPermiso('iris.ver', () => ({ status: 200, cuerpo: leerConector() })),
     'GET /api/v1/integraciones/iris/estado': conPermiso('iris.abrir', () => {
         const { activo, url_base, token } = bd.iris.conector
         // fuera de una imagen publicada la API responde `version_argos: 'desarrollo'` (contrato Iris 0.5.0)

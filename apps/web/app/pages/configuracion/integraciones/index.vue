@@ -108,13 +108,24 @@ onMounted(() => {
                     v-else-if="!presentacionIris"
                     class="h-6 w-28"
                 />
-                <div v-else>
+                <div
+                    v-else
+                    class="flex flex-wrap items-center gap-2"
+                >
                     <UBadge
                         :label="presentacionIris.etiqueta"
                         :icon="presentacionIris.icono"
                         :color="presentacionIris.color"
                         variant="subtle"
                         data-prueba="estado-tarjeta-iris"
+                    />
+                    <UBadge
+                        v-if="conectorIris?.requiere_reconectar"
+                        :label="MARCA_RECONECTAR_IRIS.etiqueta"
+                        :icon="MARCA_RECONECTAR_IRIS.icono"
+                        :color="MARCA_RECONECTAR_IRIS.color"
+                        variant="subtle"
+                        data-prueba="marca-reconectar-tarjeta-iris"
                     />
                 </div>
                 <UButton
