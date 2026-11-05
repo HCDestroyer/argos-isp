@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js'
 import { DateTime } from 'luxon'
-import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { configIris, conectorAdmite } from '#integraciones/iris/configuracion'
 import { ZONA, monto } from '#notify/formato'
 import type { Variables } from '#notify/variables'
@@ -168,54 +168,11 @@ export async function variablesParaIris(
 
 /**
  * ¿El hecho nació en Iris y ya lo contestó Iris en la conversación? (§7.2–§7.4, decisión del PM
- * 9.2.2). Entonces notify no avisa por ningún canal.
- *
- * 1. `origen: 'iris'` en el payload (lo marca A3 en `comprobante.*`, `promesa.*`, `pago.registrado`
- *    de un comprobante de Iris y `servicio.estado_cambiado` de una reconexión o promesa de Iris);
- * 2. `comprobante.*` cuyo comprobante tiene `canal = iris` (payload o `billing.comprobantes`);
- * 3. `pago.registrado` que salió de aprobar un comprobante con `canal = iris`;
- * 4. `promesa.*` de una promesa con `origen = iris` (`billing.promesas.origen`);
- * 5. `servicio.estado_cambiado` con el motivo «promesa de pago N activa» de una promesa de Iris.
+ * 9.2.2). Entonces notify no avisa por ningún canal. La marca es `origen: 'iris'` en el payload, que
+ * A3 pone en `comprobante.*` (comprobante con `canal = iris`), en el `pago.registrado` que nace de
+ * aprobarlo, en `promesa.*` de promesas y reconexiones pedidas por Iris y en el
+ * `servicio.estado_cambiado` que provocan (`contratos/eventos.md`).
  */
-export async function nacioEnIris(
-    trx: TransactionClientContract,
-    evento: string,
-    payload: Record<string, unknown>,
-): Promise<boolean> {
-    if (payload.origen === 'iris') return true
-    if (evento.startsWith('comprobante.')) {
-        if (payload.canal === 'iris') return true
-        const id = entero(payload.comprobante_id)
-        if (!id) return false
-        const fila = (await trx.from('billing.comprobantes').where('id', id).select('canal').first()) as {
-            canal: string
-        } | null
-        return fila?.canal === 'iris'
-    }
-    if (evento === 'pago.registrado') {
-        const pagoId = entero(payload.pago_id)
-        if (!pagoId) return false
-        const fila = (await trx
-            .from('billing.comprobantes')
-            .where('pago_id', pagoId)
-            .select('canal')
-            .first()) as { canal: string } | null
-        return fila?.canal === 'iris'
-    }
-    if (evento.startsWith('promesa.')) {
-        return promesaDeIris(trx, entero(payload.promesa_id))
-    }
-    if (evento === 'servicio.estado_cambiado') {
-        const m = /^promesa de pago (\d+) activa/.exec(texto(payload.motivo) ?? '')
-        return m ? promesaDeIris(trx, Number(m[1])) : false
-    }
-    return false
-}
-
-async function promesaDeIris(trx: TransactionClientContract, promesaId: number | null): Promise<boolean> {
-    if (!promesaId) return false
-    const fila = (await trx.from('billing.promesas').where('id', promesaId).select('origen').first()) as {
-        origen: string | null
-    } | null
-    return fila?.origen === 'iris'
+export function nacioEnIris(payload: Record<string, unknown>): boolean {
+    return payload.origen === 'iris'
 }

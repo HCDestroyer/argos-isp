@@ -418,6 +418,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'fel.ver',
             'cajas.depositar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
@@ -588,6 +589,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',

@@ -3,7 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { bloquearCliente } from '#billing/cobros'
-import { verPromesa } from '#billing/promesas'
+import { payloadPromesa, verPromesa } from '#billing/promesas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { servicioTrasPromesa, type ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
 
@@ -103,13 +103,7 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
             { estado: 'activa', aprobada_por: usuarioDelActor(t.ctx.actor) },
         )
 
-        await t.emit('promesa.creada', {
-            promesa_id: promesa.id,
-            empresa_id: Number(promesa.empresa_id),
-            servicio_id: promesa.servicio_id,
-            vence: new Date(promesa.vence_en).toISOString(),
-            monto: promesa.monto,
-        })
+        await t.emit('promesa.creada', await payloadPromesa(t.trx, promesa.id))
         const r = await new EvaluarEstadoServicio().execute(
             { servicio_id: promesa.servicio_id, ahora },
             t.ctx,

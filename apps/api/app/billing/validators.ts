@@ -299,6 +299,12 @@ export const listarPromesasValidator = vine.compile(
                 'rechazada',
             ] as const)
             .optional(),
+        tipo: vine
+            .enum(['promesa', 'reconexion_temporal'] as const)
+            .optional()
+            .meta({
+                description: 'reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3)',
+            }),
     }),
 )
 
@@ -311,7 +317,16 @@ export const crearPromesaValidator = vine.compile(
             description:
                 'Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)',
         }),
-        canal: vine.enum(['portal', 'ia', 'operador', 'supervisor'] as const).optional(),
+        canal: vine
+            .enum(['portal', 'ia', 'operador', 'supervisor'] as const)
+            .optional()
+            .meta({
+                description:
+                    'Con el token de Iris se ignora: el canal sale de X-Iris-Actor (ia u operador, contrato Iris 0.6.0 §7.4)',
+            }),
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Si viene, debe ser la empresa del servicio (422 empresa_no_coincide)' }),
     }),
 )
 
@@ -374,6 +389,10 @@ export const listarComprobantesValidator = vine.compile(
         cliente_id: idEntidad().optional(),
         metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const).optional(),
         cuenta_bancaria_id: idEntidad().optional().meta({ description: 'Cuenta bancaria propia de destino' }),
+        canal: vine
+            .enum(['portal', 'panel', 'iris'] as const)
+            .optional()
+            .meta({ description: 'iris: boletas que llegaron por Iris (contrato Iris 0.6.0 §7.2)' }),
         desde: fechaIso().optional().meta({ description: 'Fecha de depósito desde (inclusive)' }),
         hasta: fechaIso().optional().meta({ description: 'Fecha de depósito hasta (inclusive)' }),
     }),
@@ -389,7 +408,76 @@ export const aprobarComprobanteValidator = vine.compile(
     }),
 )
 
-export const rechazarComprobanteValidator = vine.compile(vine.object({ motivo: motivo() }))
+export const rechazarComprobanteValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        causa: vine
+            .enum(['no_aparece', 'monto_distinto', 'ilegible', 'falta_dato', 'duplicado', 'otro'] as const)
+            .optional()
+            .meta({
+                description:
+                    'Por defecto otro. falta_dato: el cliente lo vuelve a mandar completo (la referencia queda libre)',
+            }),
+    }),
+)
+
+/**
+ * `POST /comprobantes` (multipart, contrato Iris 0.6.0 §7.2): los campos de texto; el archivo va
+ * en `archivo`. `canal_contacto` y `leido_por` son obligatorios con el token de Iris.
+ */
+export const registrarComprobanteValidator = vine.compile(
+    vine.object({
+        cliente_id: idEntidad().meta({ description: 'El cliente verificado' }),
+        servicio_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Del mismo cliente; si viene, el pago se aplica primero a sus facturas' }),
+        metodo: vine.enum(['deposito', 'transferencia', 'ach', 'remesa'] as const),
+        cuenta_bancaria_id: idEntidad().meta({
+            description:
+                'Cuenta propia de destino (GET /cuentas-bancarias?activa=true); de ella sale la empresa',
+        }),
+        banco_origen_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Con transferencia y ach (GET /bancos)' }),
+        referencia: vine.string().trim().minLength(1).maxLength(100),
+        monto: dinero(),
+        fecha_deposito: fechaIso(),
+        canal_contacto: vine
+            .enum(['whatsapp', 'telegram', 'correo', 'llamada'] as const)
+            .optional()
+            .meta({ description: 'Obligatorio con el token de Iris: por dónde llegó la boleta' }),
+        leido_por: vine
+            .enum(['ia', 'persona', 'cliente_dictado'] as const)
+            .optional()
+            .meta({ description: 'Obligatorio con el token de Iris: quién leyó los datos de la foto' }),
+        confianza: vine
+            .string()
+            .trim()
+            .regex(/^(0(\.\d{1,3})?|1(\.0{1,3})?)?$/)
+            .nullable()
+            .optional()
+            .meta({
+                description: '0–1 (hasta 3 decimales) o vacío: qué tan seguro está Iris de lo que leyó',
+            }),
+        empresa_id: idEntidad()
+            .optional()
+            .meta({ description: 'Si viene, debe ser la de la cuenta bancaria (422 empresa_no_coincide)' }),
+        nota: vine.string().trim().maxLength(500).nullable().optional().meta({ description: 'Caja la ve' }),
+    }),
+)
+
+/** `POST /comprobantes/:id/reconexion-temporal` (contrato Iris 0.6.0 §7.3). */
+export const reconexionTemporalValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Obligatorio solo si el comprobante no tiene servicio' }),
+        motivo: vine.enum(['fuera_de_horario'] as const),
+    }),
+)
 
 /*
 |--------------------------------------------------------------------------

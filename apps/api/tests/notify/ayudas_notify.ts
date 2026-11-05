@@ -39,10 +39,15 @@ export async function bloqueIdsEvento(): Promise<number> {
     return 9_000_000_000_000 + (await siguienteDeSecuencia('audit.outbox')) * 1000
 }
 
-/** `nas_ip` única en la base (UNIQUE en `network.routers`): 10.200.0.0 a 10.249.255.255. */
+/**
+ * `nas_ip` única en la base (UNIQUE en `network.routers`), en un rango **propio de notify**:
+ * 10.160.0.0 a 10.191.255.255. No se cruza con `ipUnica` de `#tests/core/fabricas` (10.200–10.249,
+ * por pid), que en la suite completa chocaba con este generador (`routers_nas_ip_key`), ni con los
+ * rangos fijos de otras suites (10.252, 10.253, 10.254).
+ */
 export async function nasIpUnica(): Promise<string> {
     const n = await siguienteDeSecuencia('network.routers')
-    return `10.${200 + (Math.floor(n / 65536) % 50)}.${Math.floor(n / 256) % 256}.${n % 256}`
+    return `10.${160 + (Math.floor(n / 65536) % 32)}.${Math.floor(n / 256) % 256}.${n % 256}`
 }
 
 /**

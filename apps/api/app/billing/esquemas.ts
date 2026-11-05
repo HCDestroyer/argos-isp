@@ -18,6 +18,11 @@ import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
 import { NOMBRES_REGLA, REGLAS_CUMPLIMIENTO } from '#billing/promesas'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 
+/** Enumerado que también admite null (null dentro de `enum`, como `regla` de EvaluacionPromesa). */
+function enumeradoNulable(valores: readonly string[]) {
+    return { type: ['string', 'null'], enum: [...valores, null] } as const
+}
+
 /**
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
  */
@@ -32,29 +37,51 @@ const limitesCanal = objeto({
 
 export const ReglasPromesa = definirEsquema(
     'ReglasPromesa',
-    objeto({
-        habilitadas: booleano,
-        max_por_periodo: { ...entero, description: 'Promesas por periodo de facturación' },
-        max_por_periodo_buen_historial: {
-            ...entero,
-            description: 'Máximo si el cumplimiento reciente es >= buen_historial_pct',
+    objeto(
+        {
+            habilitadas: booleano,
+            max_por_periodo: { ...entero, description: 'Promesas por periodo de facturación' },
+            max_por_periodo_buen_historial: {
+                ...entero,
+                description: 'Máximo si el cumplimiento reciente es >= buen_historial_pct',
+            },
+            buen_historial_pct: entero,
+            historial_ventana: { ...entero, description: 'Últimas N promesas para medir el cumplimiento' },
+            plazo_max_dias: entero,
+            no_exceder_siguiente_facturacion: booleano,
+            deuda_maxima: nulable(Dinero),
+            abono_inicial_pct: {
+                ...entero,
+                description: 'Porcentaje de la deuda a pagar antes de la promesa',
+            },
+            antiguedad_minima_dias: entero,
+            cumplimiento_minimo_pct: nulable(entero),
+            bloqueo_tras_incumplida_dias: entero,
+            canales: objeto({
+                portal: limitesCanal,
+                ia: limitesCanal,
+                operador: limitesCanal,
+                supervisor: limitesCanal,
+            }),
+            reconexion_temporal: {
+                ...objeto({
+                    permitida: {
+                        ...booleano,
+                        description: 'Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)',
+                    },
+                    max_por_periodo: {
+                        ...entero,
+                        description:
+                            'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
+                    },
+                    horas_max: { ...entero, description: 'Duración desde que se crea (por defecto 24)' },
+                }),
+                description:
+                    'Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta',
+            },
         },
-        buen_historial_pct: entero,
-        historial_ventana: { ...entero, description: 'Últimas N promesas para medir el cumplimiento' },
-        plazo_max_dias: entero,
-        no_exceder_siguiente_facturacion: booleano,
-        deuda_maxima: nulable(Dinero),
-        abono_inicial_pct: { ...entero, description: 'Porcentaje de la deuda a pagar antes de la promesa' },
-        antiguedad_minima_dias: entero,
-        cumplimiento_minimo_pct: nulable(entero),
-        bloqueo_tras_incumplida_dias: entero,
-        canales: objeto({
-            portal: limitesCanal,
-            ia: limitesCanal,
-            operador: limitesCanal,
-            supervisor: limitesCanal,
-        }),
-    }),
+        ['reconexion_temporal'],
+    ),
 )
 
 export const PlantillaFacturacion = definirEsquema(
@@ -916,6 +943,20 @@ export const Promesa = definirEsquema(
                 'rechazada',
             ]),
             canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+            tipo: {
+                ...enumerado(['promesa', 'reconexion_temporal']),
+                description:
+                    'reconexion_temporal: ligada a un comprobante pendiente (contrato Iris 0.6.0 §7.3). Siempre viene',
+            },
+            comprobante_id: {
+                ...nulable(id),
+                description: 'Solo en una reconexión temporal: el comprobante que la respalda',
+            },
+            sistema_origen: {
+                ...enumeradoNulable(['iris']),
+                description:
+                    'iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)',
+            },
             aprobada_por: nulable(id),
             resultado_evaluacion: {
                 ...nulable(EvaluacionPromesa),
@@ -930,7 +971,16 @@ export const Promesa = definirEsquema(
             ...auditable,
         },
         // regla_cumplimiento y facturas siempre vienen; opcionales en el esquema hasta que A4 migre sus fixtures (a3.md)
-        ['servicio', 'cliente_nombre', 'empresa_id', 'regla_cumplimiento', 'facturas'],
+        [
+            'servicio',
+            'cliente_nombre',
+            'empresa_id',
+            'regla_cumplimiento',
+            'facturas',
+            'tipo',
+            'comprobante_id',
+            'sistema_origen',
+        ],
     ),
 )
 
@@ -1047,10 +1097,43 @@ export const Comprobante = definirEsquema(
             archivo_tipo: enumerado(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
             archivo_tamano: { ...entero, description: 'Bytes (máximo 5 MB)' },
             archivo_nombre: { ...nulable(texto), description: 'Nombre original del archivo subido' },
-            canal: enumerado(['portal', 'panel']),
+            canal: {
+                ...enumerado(['portal', 'panel', 'iris']),
+                description: 'iris: boleta que llegó por chat o llamada (contrato Iris 0.6.0 §7.2)',
+            },
+            leido_por: {
+                ...enumeradoNulable(['ia', 'persona', 'cliente_dictado']),
+                description:
+                    'Solo Iris: quién leyó los datos de la foto. Caja lo ve; Argos nunca lo aplica solo',
+            },
+            confianza: {
+                ...nulable(texto),
+                description:
+                    'Solo Iris: 0–1 (decimal como texto), qué tan seguro está Iris de los datos leídos',
+            },
+            canal_contacto: {
+                ...enumeradoNulable(['whatsapp', 'telegram', 'correo', 'llamada']),
+                description: 'Solo Iris: por dónde llegó la boleta',
+            },
+            iris_actor: { ...nulable(texto), description: 'Solo Iris: X-Iris-Actor de la petición' },
+            iris_conversacion: {
+                ...nulable(texto),
+                description: 'Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris»)',
+            },
             nota: nulable(texto),
             estado: enumerado(['pendiente', 'aprobado', 'rechazado']),
             motivo_rechazo: nulable(texto),
+            causa_rechazo: {
+                ...enumeradoNulable([
+                    'no_aparece',
+                    'monto_distinto',
+                    'ilegible',
+                    'falta_dato',
+                    'duplicado',
+                    'otro',
+                ]),
+                description: 'Al rechazar; null en los demás y en los rechazados antes de 0.6.0',
+            },
             pago_id: { ...nulable(id), description: 'Pago creado al aprobarlo' },
             registrado_por: nulable(id),
             verificado_por: { ...nulable(id), description: 'Quién lo aprobó o rechazó' },
@@ -1059,7 +1142,17 @@ export const Comprobante = definirEsquema(
             pago: { ...Pago, description: 'Solo al aprobar: el pago registrado (aplicaciones y servicios)' },
             ...auditable,
         },
-        ['pago', 'verificado_por_nombre', 'empresa_id'],
+        [
+            'pago',
+            'verificado_por_nombre',
+            'empresa_id',
+            'leido_por',
+            'confianza',
+            'canal_contacto',
+            'iris_actor',
+            'iris_conversacion',
+            'causa_rechazo',
+        ],
     ),
 )
 
@@ -1317,5 +1410,21 @@ export const Cobro = definirEsquema(
             ),
             description: 'Un pago por empresa con su marca (las del alcance del usuario)',
         },
+    }),
+)
+
+export const ReconexionTemporal = definirEsquema(
+    'ReconexionTemporal',
+    objeto({
+        promesa_id: { ...id, description: 'La promesa de tipo reconexion_temporal (GET /promesas/:id)' },
+        reconexion_id: { ...id, description: 'Alias de promesa_id para Iris' },
+        hasta: { ...instante, description: 'Vencimiento de la promesa: ahora + horas_max de la plantilla' },
+        servicio: objeto({
+            id,
+            estado: {
+                ...enumerado(ESTADOS_SERVICIO),
+                description: 'Estado tras re-evaluar (activo, salvo que la hora de corte no aplique)',
+            },
+        }),
     }),
 )

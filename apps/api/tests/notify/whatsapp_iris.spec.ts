@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
+import type { PayloadComprobante, PayloadPromesa } from '#shared/eventos'
 import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { contextoSistema } from '#shared/contexto'
 import EnviarNotificacion from '#notify/actions/enviar_notificacion'
@@ -482,44 +483,72 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         })
     })
 
-    test('lo que nace en Iris no se avisa por ningún canal (comprobante, promesa)', async ({ assert }) => {
+    test('lo que nace en Iris (origen: iris de A3) no se avisa por ningún canal', async ({ assert }) => {
         await fijarConector()
         await fijarWhatsapp(true)
         const clienteId = await crearCliente({ email: 'iris@prueba.local' })
         const servicioId = await crearServicio(clienteId)
-        for (const [evento, payload] of [
-            [
-                'comprobante.rechazado',
-                {
-                    comprobante_id: 1_999_999_998,
-                    empresa_id: 1,
-                    cliente_id: clienteId,
-                    canal: 'iris',
-                    motivo: 'ilegible',
-                },
-            ],
-            [
-                'promesa.creada',
-                {
-                    promesa_id: 1_999_999_997,
-                    empresa_id: 1,
-                    servicio_id: servicioId,
-                    cliente_id: clienteId,
-                    vence: '2026-11-10T05:59:59Z',
-                    monto: '150.00',
-                    origen: 'iris',
-                },
-            ],
-        ] as const) {
-            assert.lengthOf(await programar(evento, payload), 0, evento)
-        }
-        // el mismo comprobante desde el portal sí se avisa
-        const portal = await programar('comprobante.rechazado', {
+        // payloads con la forma real de A3 (`PayloadComprobante`, `PayloadPromesa`)
+        const comprobante: PayloadComprobante = {
             comprobante_id: 1_999_999_998,
             empresa_id: 1,
             cliente_id: clienteId,
+            servicio_id: servicioId,
+            canal: 'iris',
+            monto: '150.00',
+            pago_id: null,
+            motivo: 'No se lee la boleta',
+            causa: 'ilegible',
+            servicio_estado: 'suspendido',
+            origen: 'iris',
+        }
+        const promesa: PayloadPromesa = {
+            promesa_id: 1_999_999_997,
+            empresa_id: 1,
+            cliente_id: clienteId,
+            servicio_id: servicioId,
+            tipo: 'reconexion_temporal',
+            canal: 'ia',
+            comprobante_id: 1_999_999_998,
+            vence: '2026-11-10T05:59:59Z',
+            monto: '150.00',
+            origen: 'iris',
+        }
+        const eventos: Array<[string, Record<string, unknown>]> = [
+            ['comprobante.rechazado', { ...comprobante }],
+            ['promesa.creada', { ...promesa }],
+            [
+                'pago.registrado',
+                {
+                    pago_id: PAGO_SIN_COMPROBANTE - 2,
+                    cliente_id: clienteId,
+                    monto: '150.00',
+                    metodo: 'deposito',
+                    facturas: [],
+                    origen: 'iris',
+                },
+            ],
+            [
+                'servicio.estado_cambiado',
+                {
+                    servicio_id: servicioId,
+                    empresa_id: 1,
+                    cliente_id: clienteId,
+                    de: 'suspendido',
+                    a: 'activo',
+                    motivo: 'promesa de pago 1999999997 activa (1 factura vencida)',
+                    origen: 'iris',
+                },
+            ],
+        ]
+        for (const [evento, payload] of eventos) {
+            assert.lengthOf(await programar(evento, payload), 0, evento)
+        }
+        // el mismo comprobante desde el portal (sin `origen`) sí se avisa
+        const portal = await programar('comprobante.rechazado', {
+            ...comprobante,
             canal: 'portal',
-            motivo: 'ilegible',
+            origen: null,
         })
         assert.isAbove(portal.length, 0)
     })

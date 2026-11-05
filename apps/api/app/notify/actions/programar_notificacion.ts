@@ -109,7 +109,7 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
             return { clienteId: null, envios: [], encolar: [] }
         }
         // Nació en Iris: Iris ya avisó en la conversación (contrato Iris 0.6.0 §7, PM 9.2.2)
-        if (await nacioEnIris(t.trx, input.evento, payload)) {
+        if (nacioEnIris(payload)) {
             return { clienteId: null, envios: [], encolar: [] }
         }
         // Servicio pendiente de instalación: sin mora ni recordatorios (`#notify/instalacion`)

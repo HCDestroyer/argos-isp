@@ -20,6 +20,11 @@ import { dinero } from '#shared/validadores'
  * - `bloqueo_tras_incumplida_dias`: días sin promesas después de una incumplida.
  * - `canales.<canal>`: límites por canal. `permitido: false` rechaza; `requiere_aprobacion: true`
  *   deja la promesa en `pendiente_aprobacion`; los valores no nulos **reemplazan** al general.
+ * - `reconexion_temporal` (contrato Iris 0.6.0 §7.3, valores del PM del 5 nov 2026): promesa de
+ *   tipo `reconexion_temporal` ligada a un comprobante pendiente. `permitida` (apagada por
+ *   defecto), `max_por_periodo` (por periodo de facturación y servicio, aparte del cupo de las
+ *   promesas normales; cuentan todas las creadas en el periodo, en cualquier estado) y
+ *   `horas_max` (duración desde que se crea). Las demás reglas de arriba no se le aplican.
  */
 
 export const CANALES_PROMESA = ['portal', 'ia', 'operador', 'supervisor'] as const
@@ -32,6 +37,12 @@ export interface LimitesCanal {
     max_por_periodo: number | null
     /** monto decimal como string, o null */
     deuda_maxima: string | null
+}
+
+export interface ReglasReconexionTemporal {
+    permitida: boolean
+    max_por_periodo: number
+    horas_max: number
 }
 
 export interface ReglasPromesa {
@@ -48,6 +59,7 @@ export interface ReglasPromesa {
     cumplimiento_minimo_pct: number | null
     bloqueo_tras_incumplida_dias: number
     canales: Record<CanalPromesa, LimitesCanal>
+    reconexion_temporal: ReglasReconexionTemporal
 }
 
 const SIN_LIMITES_CANAL: LimitesCanal = {
@@ -77,6 +89,7 @@ export const REGLAS_PROMESA_POR_DEFECTO: ReglasPromesa = {
         operador: { ...SIN_LIMITES_CANAL },
         supervisor: { ...SIN_LIMITES_CANAL, plazo_max_dias: 15, max_por_periodo: 3 },
     },
+    reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24 },
 }
 
 /*
@@ -121,10 +134,18 @@ export const reglasPromesaSchema = () =>
                 supervisor: limitesCanal(),
             })
             .optional(),
+        reconexion_temporal: vine
+            .object({
+                permitida: vine.boolean().optional(),
+                max_por_periodo: entero(0, 12).optional(),
+                horas_max: entero(1, 168).optional(),
+            })
+            .optional(),
     })
 
-export type ReglasPromesaParciales = Partial<Omit<ReglasPromesa, 'canales'>> & {
+export type ReglasPromesaParciales = Partial<Omit<ReglasPromesa, 'canales' | 'reconexion_temporal'>> & {
     canales?: Partial<Record<CanalPromesa, Partial<LimitesCanal> | undefined>>
+    reconexion_temporal?: Partial<ReglasReconexionTemporal>
 }
 
 /** Completa con los valores por defecto (o con `base`) y devuelve un objeto nuevo. */
@@ -133,12 +154,15 @@ export function normalizarReglasPromesa(
     base: ReglasPromesa = REGLAS_PROMESA_POR_DEFECTO,
 ): ReglasPromesa {
     const entrada = (parciales ?? {}) as ReglasPromesaParciales
-    const { canales: canalesEntrada, ...generales } = entrada
+    const { canales: canalesEntrada, reconexion_temporal: reconexionEntrada, ...generales } = entrada
     const canales = {} as Record<CanalPromesa, LimitesCanal>
     for (const canal of CANALES_PROMESA) {
         canales[canal] = { ...base.canales[canal], ...sinIndefinidos(canalesEntrada?.[canal] ?? {}) }
     }
-    return { ...base, ...sinIndefinidos(generales), canales }
+    // reglas guardadas antes del 0.6.0 no traen el bloque: toman los valores por defecto
+    const reconexionBase = base.reconexion_temporal ?? REGLAS_PROMESA_POR_DEFECTO.reconexion_temporal
+    const reconexion = { ...reconexionBase, ...sinIndefinidos(reconexionEntrada ?? {}) }
+    return { ...base, ...sinIndefinidos(generales), canales, reconexion_temporal: reconexion }
 }
 
 function sinIndefinidos<T extends object>(objeto: T): Partial<T> {

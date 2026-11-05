@@ -5,7 +5,8 @@ import { detalleOperador, exigirEstadoPromesa, motivoDeCierre } from '#billing/c
 /**
  * `promesas.rechazar` (`POST /promesas/:id/rechazar { motivo }`): un supervisor rechaza una
  * promesa `pendiente_aprobacion` → `rechazada`; `resultado_evaluacion.cierre` guarda motivo y
- * quién. No cambia el servicio (una pendiente no lo protegía). 409 `promesa_no_pendiente` en
+ * quién. No cambia el servicio (una pendiente no lo protegía). Evento `promesa.cancelada` con
+ * `estado = rechazada` y `motivo = rechazada_por_supervisor` (Iris esperaba la decisión). 409 `promesa_no_pendiente` en
  * otro estado. Ver `cierre_promesa.ts`.
  */
 export default class RechazarPromesa extends ResolverPromesa {
@@ -19,6 +20,10 @@ export default class RechazarPromesa extends ResolverPromesa {
     ) {
         const motivo = motivoDeCierre(input)
         exigirEstadoPromesa(promesa, ['pendiente_aprobacion'], 'rechazar')
-        return { estado: 'rechazada' as const, detalle: detalleOperador(t, motivo) }
+        return {
+            estado: 'rechazada' as const,
+            detalle: detalleOperador(t, motivo),
+            cancelacion: { motivo: 'rechazada_por_supervisor' as const, detalle: motivo },
+        }
     }
 }
