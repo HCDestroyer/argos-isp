@@ -129,6 +129,14 @@ const activo = computed<boolean>({
 const listoParaActivar = computed(() => conector.value !== null && irisListoParaActivar(conector.value))
 const presentacionConector = computed(() => (conector.value ? presentacionConectorIris(conector.value) : null))
 
+/* ---------- Hay que volver a conectar (contrato Iris 0.6.2) ---------- */
+
+/** Solo con `requiere_reconectar: true`; el enlace se genera desde aquí con `iris.configurar`. */
+const avisoReconectar = computed(() => (conector.value ? avisoReconectarIris(conector.value) : null))
+const accionesReconectar = computed(() => (puedeConfigurar.value
+    ? [{ label: 'Generar enlace de conexión', icon: 'i-lucide-link-2', color: 'warning' as const, variant: 'solid' as const, loading: generandoEnlace.value, onClick: generarEnlace }]
+    : []))
+
 /* ---------- Lo que se muestra una sola vez ---------- */
 
 const unaVez = shallowRef<{ titulo: string, descripcion: string, valores: { etiqueta: string, valor: string }[], venceEn: string | null } | null>(null)
@@ -341,6 +349,35 @@ onMounted(() => {
                     :problema="problemaGuardar"
                 />
 
+                <UAlert
+                    v-if="avisoReconectar"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-triangle-alert"
+                    :title="avisoReconectar.titulo"
+                    :actions="accionesReconectar"
+                    :ui="{
+                        actions: 'flex-wrap',
+                    }"
+                    role="alert"
+                    data-prueba="aviso-reconectar-iris"
+                >
+                    <template #description>
+                        <p data-prueba="motivo-reconectar-iris">
+                            {{ avisoReconectar.motivo }}
+                        </p>
+                        <p class="mt-1">
+                            {{ INSTRUCCION_RECONECTAR_IRIS }}
+                        </p>
+                        <p
+                            v-if="!puedeConfigurar"
+                            class="mt-1"
+                        >
+                            Generar el enlace requiere el permiso para configurar Iris.
+                        </p>
+                    </template>
+                </UAlert>
+
                 <!-- Estado -->
                 <section
                     class="surface-card flex flex-col gap-4 p-4 sm:p-6"
@@ -351,7 +388,7 @@ onMounted(() => {
                         <div class="flex flex-col gap-1">
                             <h2
                                 id="titulo-estado-iris"
-                                class="flex items-center gap-2 text-base font-semibold text-highlighted"
+                                class="flex flex-wrap items-center gap-2 text-base font-semibold text-highlighted"
                             >
                                 Integración con Iris
                                 <UBadge
@@ -361,6 +398,14 @@ onMounted(() => {
                                     :color="presentacionConector.color"
                                     variant="subtle"
                                     data-prueba="estado-conector-iris"
+                                />
+                                <UBadge
+                                    v-if="conector.requiere_reconectar"
+                                    :label="MARCA_RECONECTAR_IRIS.etiqueta"
+                                    :icon="MARCA_RECONECTAR_IRIS.icono"
+                                    :color="MARCA_RECONECTAR_IRIS.color"
+                                    variant="subtle"
+                                    data-prueba="marca-reconectar-iris"
                                 />
                             </h2>
                             <p class="text-sm text-muted">

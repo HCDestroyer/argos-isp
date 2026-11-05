@@ -23,6 +23,34 @@ export const conectorIrisInicial: Schema<'ConectorIris'> = {
     version: 0,
 }
 
+/** Motivo que responde la API (`MOTIVO_RECONECTAR_RECEPTOR` en `configuracion.ts` de A1). */
+export const MOTIVO_RECONECTAR_RECEPTOR_FIXTURE
+    = 'Iris informó que no tiene guardado el receptor de webhooks de Argos (conector canjeado antes de '
+        + 'B1): vuelve a conectar Iris con un enlace o con «Conectar con Argos» para que Iris reciba la URL '
+        + 'y el secreto del receptor'
+
+/**
+ * Contrato Iris 0.6.2: un conector canjeado antes de B1, encendido, al que Iris informó después
+ * `receptor_argos: false` con `PUT /integraciones/iris/contrato`. `GET /integraciones/iris` responde
+ * `requiere_reconectar: true` con su motivo.
+ */
+export const conectorIrisPorReconectar: Schema<'ConectorIris'> = {
+    activo: true,
+    url_base: 'https://iris.argosnet.gt',
+    token: '***',
+    webhook_salida_url: 'https://iris.argosnet.gt/api/v1/integraciones/argosisp/webhook/cnx_7f3a',
+    webhook_salida_secreto: '***',
+    webhook_entrada_url: null,
+    webhook_entrada_secreto: null,
+    conector_id: 'cnx_7f3a',
+    conectado_por_enlace_en: '2026-10-20T15:30:00.000Z',
+    token_argos_id: 1,
+    contrato: '0.6.2',
+    requiere_reconectar: true,
+    motivo_reconectar: MOTIVO_RECONECTAR_RECEPTOR_FIXTURE,
+    version: 4,
+}
+
 export interface IrisFixtures {
     conector: Schema<'ConectorIris'>
     tokens: Schema<'TokenApi'>[]
