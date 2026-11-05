@@ -31,6 +31,17 @@ export default defineAppConfig({
                 },
             ],
         },
+        badge: {
+            // Sutil primaria en claro: teal-700 sobre su tinte al 10 % (y el vidrio de detrás) quedaba
+            // bajo AA en «Incluido en tu plan» (axe color-contrast); teal-800 en claro, el de siempre en oscuro.
+            compoundVariants: [
+                {
+                    color: 'primary',
+                    variant: 'subtle',
+                    class: 'text-(--ui-color-primary-800) dark:text-primary',
+                },
+            ],
+        },
         input: {
             slots: {
                 base: 'min-h-11',
