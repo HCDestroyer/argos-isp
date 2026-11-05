@@ -19,46 +19,71 @@ const secreto = {
 
 export const ConectorIris = definirEsquema(
     'ConectorIris',
-    objeto({
-        activo: { type: 'boolean', description: 'Apagado por defecto; encender exige URL y token' },
-        url_base: { ...nulable(texto), description: 'Origen de la API de Iris' },
-        token: secreto,
-        webhook_salida_url: {
-            ...nulable(texto),
-            description: 'Receptor de Iris (webhooks Argos → Iris, §2.3)',
+    objeto(
+        {
+            activo: { type: 'boolean', description: 'Apagado por defecto; encender exige URL y token' },
+            url_base: { ...nulable(texto), description: 'Origen de la API de Iris' },
+            token: secreto,
+            webhook_salida_url: {
+                ...nulable(texto),
+                description: 'Receptor de Iris (webhooks Argos → Iris, §2.3)',
+            },
+            webhook_salida_secreto: secreto,
+            webhook_entrada_url: {
+                ...nulable(texto),
+                description:
+                    'Receptor de Argos para webhooks de Iris (reservado: responde 501 hasta que el contrato los defina)',
+            },
+            webhook_entrada_secreto: secreto,
+            conector_id: {
+                ...nulable(texto),
+                description: 'Id opaco del conector en Argos (respuesta del canje)',
+            },
+            conectado_por_enlace_en: nulable(instante),
+            token_argos_id: { ...nulable(id), description: 'Token atk_ entregado a Iris en el último canje' },
+            contrato: {
+                ...nulable(texto),
+                description:
+                    'Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca ' +
+                    '(un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0)',
+            },
+            requiere_reconectar: {
+                type: 'boolean',
+                description:
+                    'true solo si el último `receptor_argos` que informó Iris (canje o `PUT /integraciones/iris/contrato`) ' +
+                    'es false: un conector canjeado antes de B1 que no guardó el receptor de Argos. Null o true: false ' +
+                    '(contrato Iris 0.6.2)',
+            },
+            motivo_reconectar: {
+                ...nulable(texto),
+                description: 'Por qué hay que volver a conectar Iris; null si `requiere_reconectar` es false',
+            },
+            estado_canje: {
+                type: ['string', 'null'],
+                enum: ['pendiente', 'confirmado', 'desconectado', null],
+                description:
+                    'Contrato Iris 0.6.3. `pendiente`: Iris aún no usó el `atk_` del último canje (vence en ' +
+                    '`canje_vence_en`: el token se revoca y el conector se desconecta); `confirmado`: ya lo usó; ' +
+                    '`desconectado`: Iris revocó el token o el canje venció sin uso (ver `motivo_desconexion`); ' +
+                    'null: el conector no se preparó con un enlace',
+            },
+            canje_vence_en: {
+                ...nulable(instante),
+                description:
+                    'Cuándo vence un canje `pendiente` sin uso (24 h después del canje); null en otro estado',
+            },
+            desconectado_en: nulable(instante),
+            motivo_desconexion: {
+                type: ['string', 'null'],
+                enum: ['revocado_por_iris', 'canje_sin_uso', null],
+                description:
+                    '`revocado_por_iris`: Iris revocó su token (`POST /integraciones/iris/conexion/revocar`); ' +
+                    '`canje_sin_uso`: nadie usó el token del canje en 24 h. Volver a conectar es otro canje',
+            },
+            version: { type: 'integer', minimum: 0 },
         },
-        webhook_salida_secreto: secreto,
-        webhook_entrada_url: {
-            ...nulable(texto),
-            description:
-                'Receptor de Argos para webhooks de Iris (reservado: responde 501 hasta que el contrato los defina)',
-        },
-        webhook_entrada_secreto: secreto,
-        conector_id: {
-            ...nulable(texto),
-            description: 'Id opaco del conector en Argos (respuesta del canje)',
-        },
-        conectado_por_enlace_en: nulable(instante),
-        token_argos_id: { ...nulable(id), description: 'Token atk_ entregado a Iris en el último canje' },
-        contrato: {
-            ...nulable(texto),
-            description:
-                'Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca ' +
-                '(un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0)',
-        },
-        requiere_reconectar: {
-            type: 'boolean',
-            description:
-                'true solo si el último `receptor_argos` que informó Iris (canje o `PUT /integraciones/iris/contrato`) ' +
-                'es false: un conector canjeado antes de B1 que no guardó el receptor de Argos. Null o true: false ' +
-                '(contrato Iris 0.6.2)',
-        },
-        motivo_reconectar: {
-            ...nulable(texto),
-            description: 'Por qué hay que volver a conectar Iris; null si `requiere_reconectar` es false',
-        },
-        version: { type: 'integer', minimum: 0 },
-    }),
+        ['estado_canje', 'canje_vence_en', 'desconectado_en', 'motivo_desconexion'],
+    ),
 )
 
 /** `version_argos` y `contrato`: canje y estado (contrato Iris 0.5.0, «Versión y compatibilidad»). */

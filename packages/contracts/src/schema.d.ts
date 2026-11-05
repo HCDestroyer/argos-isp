@@ -3704,6 +3704,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/iris/conexion/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Iris revoca su propio token atk_ (por ejemplo, al rechazar un canje)
+         * @description Contrato Iris 0.6.3. Solo con el token `atk_` del usuario técnico Iris, y revoca ese mismo token (403 con cualquier otra credencial). Si es el `atk_` del último canje, el conector queda desconectado: apagado, sin secretos, `estado_canje: desconectado` y `motivo_desconexion: revocado_por_iris` en `GET /integraciones/iris`, sin borrar el historial; volver a conectar es otro canje. Sin cuerpo; responde 204. Repetirlo con el mismo token responde 401 (el token ya no autentica): para Iris, 204 y 401 significan que el token ya no sirve. Permiso `sso.emitir`, que el token de Iris ya tiene (como `PUT /integraciones/iris/contrato`).
+         */
+        post: operations["irisConexionRevocar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/iris/contrato": {
         parameters: {
             query?: never;
@@ -12700,6 +12720,23 @@ export interface components {
             requiere_reconectar: boolean;
             /** @description Por qué hay que volver a conectar Iris; null si `requiere_reconectar` es false */
             motivo_reconectar: string | null;
+            /**
+             * @description Contrato Iris 0.6.3. `pendiente`: Iris aún no usó el `atk_` del último canje (vence en `canje_vence_en`: el token se revoca y el conector se desconecta); `confirmado`: ya lo usó; `desconectado`: Iris revocó el token o el canje venció sin uso (ver `motivo_desconexion`); null: el conector no se preparó con un enlace
+             * @enum {string|null}
+             */
+            estado_canje?: "pendiente" | "confirmado" | "desconectado" | null;
+            /**
+             * Format: date-time
+             * @description Cuándo vence un canje `pendiente` sin uso (24 h después del canje); null en otro estado
+             */
+            canje_vence_en?: string | null;
+            /** Format: date-time */
+            desconectado_en?: string | null;
+            /**
+             * @description `revocado_por_iris`: Iris revocó su token (`POST /integraciones/iris/conexion/revocar`); `canje_sin_uso`: nadie usó el token del canje en 24 h. Volver a conectar es otro canje
+             * @enum {string|null}
+             */
+            motivo_desconexion?: "revocado_por_iris" | "canje_sin_uso" | null;
             version: number;
         };
         ConexionRouter: {
@@ -35705,6 +35742,42 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisConexionRevocar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revocado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

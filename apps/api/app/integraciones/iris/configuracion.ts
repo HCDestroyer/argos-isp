@@ -29,7 +29,7 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.6.2'
+export const CONTRATO_IRIS = '0.6.3'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -138,6 +138,11 @@ export interface FilaConectorIris {
     contrato: string | null
     /** lo último que informó Iris del receptor de Argos (0.6.2): true guardado, false no, null nunca */
     receptor_argos: boolean | null
+    /** primer uso autenticado del `atk_` del último canje (0.6.3); null = pendiente de confirmar */
+    canje_confirmado_en: Date | null
+    /** el conector quedó sin credenciales (0.6.3); null si no */
+    desconectado_en: Date | null
+    motivo_desconexion: MotivoDesconexionIris | null
     version: number
     created_at: Date
     updated_at: Date
@@ -252,6 +257,20 @@ export function origenIris(valor: string): { origen: string; error: null } | { o
     return { origen: url.origin, error: null }
 }
 
+/**
+ * Contrato Iris 0.6.3: por qué un conector canjeado quedó desconectado.
+ * - `revocado_por_iris`: Iris rechazó el canje y revocó su `atk_` (`POST /integraciones/iris/conexion/revocar`).
+ * - `canje_sin_uso`: nadie usó el `atk_` del canje en `PLAZO_CONFIRMAR_CANJE_IRIS_MS` (cron `iris_canjes_sin_uso`).
+ */
+export type MotivoDesconexionIris = 'revocado_por_iris' | 'canje_sin_uso'
+
+/**
+ * Plazo para el primer uso autenticado del `atk_` de un canje (0.6.3): 24 h. Un Iris que acepta el
+ * canje lo usa enseguida (al activar su conector, que debe hacerse antes de que venza su propio
+ * `iris_pat_`, y con el PUT del contrato y la primera carga de catálogos).
+ */
+export const PLAZO_CONFIRMAR_CANJE_IRIS_MS = 24 * 60 * 60 * 1000
+
 // ── Escritura ────────────────────────────────────────────────────────────────────────────────
 
 /** Bloquea la fila del conector (candado + FOR UPDATE) para configurar o canjear. */
@@ -325,7 +344,35 @@ export interface VistaConectorIris {
     requiere_reconectar: boolean
     /** por qué hay que volver a conectar; null si no hace falta */
     motivo_reconectar: string | null
+    /**
+     * 0.6.3: estado del último canje. `pendiente`: nadie usó aún su `atk_` (vence en `canje_vence_en`);
+     * `confirmado`: Iris ya lo usó; `desconectado`: Iris lo revocó o venció sin uso; null: el
+     * conector no se preparó con un enlace
+     */
+    estado_canje: 'pendiente' | 'confirmado' | 'desconectado' | null
+    /** cuándo vence un canje `pendiente` sin uso; null en otro estado */
+    canje_vence_en: string | null
+    desconectado_en: string | null
+    motivo_desconexion: MotivoDesconexionIris | null
     version: number
+}
+
+function iso(valor: Date | null | undefined): string | null {
+    return valor ? new Date(valor).toISOString() : null
+}
+
+/** Estado del último canje (0.6.3) y cuándo vence si sigue pendiente. */
+export function estadoCanjeIris(
+    fila: Pick<
+        FilaConectorIris,
+        'conectado_por_enlace_en' | 'canje_confirmado_en' | 'desconectado_en'
+    > | null,
+): { estado_canje: VistaConectorIris['estado_canje']; canje_vence_en: string | null } {
+    if (fila?.desconectado_en) return { estado_canje: 'desconectado', canje_vence_en: null }
+    if (!fila?.conectado_por_enlace_en) return { estado_canje: null, canje_vence_en: null }
+    if (fila.canje_confirmado_en) return { estado_canje: 'confirmado', canje_vence_en: null }
+    const vence = new Date(fila.conectado_por_enlace_en).getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_MS
+    return { estado_canje: 'pendiente', canje_vence_en: new Date(vence).toISOString() }
 }
 
 /** Motivo de `requiere_reconectar` (contrato Iris 0.6.2). */
@@ -370,6 +417,9 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
                 : Number(fila.token_argos_id),
         contrato: fila?.contrato ?? null,
         ...reconexionIris(fila),
+        ...estadoCanjeIris(fila),
+        desconectado_en: iso(fila?.desconectado_en),
+        motivo_desconexion: fila?.motivo_desconexion ?? null,
         version: fila?.version ?? 0,
     }
 }

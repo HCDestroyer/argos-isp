@@ -5,7 +5,8 @@ import { cifrar, descifrar } from '#shared/cifrado'
 import { generarSecretoWebhook } from '#integraciones/horus/firma'
 import { EnlaceVencido } from '#integraciones/horus/errores'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
-import RevocarTokenIris from '#core/actions/revocar_token_iris'
+import { hashTokenApi } from '#core/auth/token_api_guard'
+import { revocarTokenIrisSiVigente } from '#integraciones/iris/desconexion'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -116,6 +117,10 @@ export async function empresasDelAlcance(
  *   `version_argos` y `contrato` (la versión de Argos y la del contrato que habla). En una
  *   repetición salen con el valor actual, no el guardado.
  * - Contrato 0.6.2: guarda `receptor_argos` (si Iris guardó el receptor de Argos; ausente → null).
+ * - Contrato 0.6.3: el canje queda **pendiente de confirmar** (`canje_confirmado_en = null`) hasta
+ *   el primer uso autenticado del `atk_`; sin uso en 24 h, el cron `iris_canjes_sin_uso` lo revoca.
+ *   Si Iris rechaza el canje, revoca el token con `POST /integraciones/iris/conexion/revocar`. La
+ *   repetición de un canje cuyo token ya se revocó responde 410.
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
@@ -186,6 +191,8 @@ export default class CanjearEnlaceIris extends DomainAction<
                 SalidaCanjearEnlaceIris,
                 'panel_url' | 'version_argos' | 'contrato'
             > & { panel_url?: string }
+            // 0.6.3: si Iris ya revocó ese token (rechazó el canje) o venció sin uso, el canje no se repite
+            if (await tokenRevocado(t, guardada.token)) throw new EnlaceVencido()
             const completa = {
                 ...guardada,
                 panel_url: guardada.panel_url ?? urlPanel(),
@@ -202,7 +209,7 @@ export default class CanjearEnlaceIris extends DomainAction<
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
         const antes = await bloquearConectorIris(t)
-        if (antes?.token_argos_id) await revocarSiVigente(t, Number(antes.token_argos_id))
+        if (antes?.token_argos_id) await revocarTokenIrisSiVigente(t, Number(antes.token_argos_id))
         const emitido = await new GenerarTokenIris().execute(
             { nombre: `Iris (enlace de conexión ${new Date().toISOString().slice(0, 10)})` },
             t.ctx,
@@ -220,6 +227,10 @@ export default class CanjearEnlaceIris extends DomainAction<
             conectado_por_enlace_en: t.trx.knexRawQuery('now()'),
             contrato: input.contrato ?? null,
             receptor_argos: input.receptor_argos ?? null,
+            // 0.6.3: pendiente de confirmar hasta el primer uso del atk_ (cron `iris_canjes_sin_uso`)
+            canje_confirmado_en: null,
+            desconectado_en: null,
+            motivo_desconexion: null,
         })
         const salida: SalidaCanjearEnlaceIris = {
             token: emitido.token,
@@ -253,12 +264,13 @@ interface FilaEnlaceIris {
     rechazado_en: Date | null
 }
 
-async function revocarSiVigente(t: Transaccion, tokenId: number) {
-    const fila = (await t.trx.from('core.tokens_api').where('id', tokenId).select('revocado_en').first()) as {
-        revocado_en: Date | null
-    } | null
-    if (!fila || fila.revocado_en) return
-    await new RevocarTokenIris().execute({ id: tokenId }, t.ctx, { trx: t.trx })
+async function tokenRevocado(t: Transaccion, token: string): Promise<boolean> {
+    const fila = (await t.trx
+        .from('core.tokens_api')
+        .where('hash', hashTokenApi(token))
+        .select('revocado_en')
+        .first()) as { revocado_en: Date | null } | null
+    return !fila || fila.revocado_en !== null
 }
 
 /**

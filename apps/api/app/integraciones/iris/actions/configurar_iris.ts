@@ -83,6 +83,11 @@ export default class ConfigurarIris extends DomainAction<EntradaConfigurarIris, 
             cambios.webhook_salida_secreto_cifrado = secreto === null ? null : cifrar(secreto)
         }
         if (input.activo !== undefined) cambios.activo = input.activo
+        // 0.6.3: encender un conector desconectado (con un token nuevo puesto a mano) lo saca de ese estado
+        if (input.activo === true && antes?.desconectado_en) {
+            cambios.desconectado_en = null
+            cambios.motivo_desconexion = null
+        }
 
         const activo = input.activo ?? antes?.activo ?? false
         const urlFinal = 'url_base' in cambios ? cambios.url_base : (antes?.url_base ?? null)
