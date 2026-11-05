@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Pantallas pendientes de la prioridad 2 (modo fixtures, escritorio y teléfono): plantillas de
@@ -70,6 +70,7 @@ test('router nuevo con red IPv4, bloque y pool IPv6; plan implementado en él', 
     await alta.locator('[data-prueba="router-guardar"]').click()
     await expect(page).toHaveURL(/\/routers\/\d+$/)
     const routerId = page.url().split('/').pop()
+    await pestanaRouter(page, 'Pools e IPs')
 
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')
     await direccionamiento.locator('[data-prueba="agregar-red"]').click()

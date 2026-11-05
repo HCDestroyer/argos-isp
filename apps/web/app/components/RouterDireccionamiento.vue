@@ -181,7 +181,14 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                             <div class="flex min-w-0 flex-col">
                                 <span class="font-mono text-sm text-highlighted">{{ r.cidr }}</span>
                                 <span class="text-xs text-muted">
-                                    {{ [r.nombre, r.gateway ? `gw ${r.gateway}` : null, textoRango(r)].filter(Boolean).join(' · ') || 'Toda la red se entrega' }}
+                                    {{ [r.nombre, r.gateway ? `gw ${r.gateway}` : (r.gateway_efectivo ? `gw ${r.gateway_efectivo}, ${MARCA_GATEWAY_DERIVADO}` : null), textoRango(r)].filter(Boolean).join(' · ') || 'Toda la red se entrega' }}
+                                </span>
+                                <span
+                                    v-if="r.gateway_ocupado_por"
+                                    class="text-xs text-warning"
+                                    :data-prueba="`gateway-ocupado-${r.id}`"
+                                >
+                                    El servicio {{ r.gateway_ocupado_por }} ya tenía {{ r.gateway_efectivo }}: la conserva, pero conviene moverlo a otra IP.
                                 </span>
                             </div>
                             <div class="flex items-center gap-1">

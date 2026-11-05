@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Pools editables y migrables (`contratos/pools.md`), en escritorio y teléfono: la ficha del router
@@ -14,6 +14,7 @@ test('editar, sugerir y mover pools del router', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
+    await pestanaRouter(page, 'Pools e IPs')
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')
     await expect(direccionamiento.locator('[data-prueba="ocupacion-red-1"]')).toContainText('Con espacio')
     await expect(direccionamiento.locator('[data-prueba="entrega-pool-2"]')).toContainText('256 redes /64')

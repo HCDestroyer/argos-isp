@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
+import type { TabsItem } from '@nuxt/ui'
 
 /**
- * Ficha del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1), "Ver
- * en Horus", su estado en línea con el último contacto (`en_linea` null = desconocido) y su
- * direccionamiento (redes IPv4, bloques y pools IPv6). «Editar» y el menú de acciones del router
- * (`RouterAcciones`) van en la barra superior.
+ * Ficha del router (núcleo de routers, pedido del PM): cabecera con nombre, estado, modo de
+ * seguridad y acciones; franja de salud (`RouterSalud`); y pestañas en este orden: Control de
+ * velocidad (la primera y abierta por defecto), Red de acceso, Pools e IPs, Servicios, Conexión y
+ * Avanzado (QoS, datos del equipo y baja). Es el destino del autologin desde Horus (`/routers/:id`,
+ * `rutaDestino` de A1); la pestaña elegida va en `?pestana=`.
  * Si el router está registrado dos veces, el aviso de duplicados con «Unir»; si ya se unió a otro
  * (`unido_a_id`), el enlace al que quedó (`contratos/routers.md`).
  */
@@ -137,36 +139,50 @@ watch(cambiarActivoAbierto, (valor) => {
     }
 })
 
-const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
+/* Pestañas: «Control de velocidad» primero y abierta por defecto; la elegida va en `?pestana=`. */
+const PESTANAS = ['velocidad', 'red-acceso', 'pools', 'servicios', 'conexion', 'avanzado'] as const
+type Pestana = typeof PESTANAS[number]
 
-const control = computed(() => {
-    const actual = nas.value
-    if (!actual) {
-        return null
-    }
-    return CONTROLES_VELOCIDAD[actual.control_velocidad ?? (actual.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')]
+function esPestana(valor: unknown): valor is Pestana {
+    return typeof valor === 'string' && (PESTANAS as readonly string[]).includes(valor)
+}
+
+const pestana = computed<Pestana>({
+    get: () => esPestana(route.query.pestana) ? route.query.pestana : 'velocidad',
+    set: (valor) => {
+        void navigateTo({ query: { ...route.query, pestana: valor === 'velocidad' ? undefined : valor } }, { replace: true })
+    },
 })
+
+const pestanas = computed<TabsItem[]>(() => [
+    { label: 'Control de velocidad', value: 'velocidad', icon: 'i-lucide-gauge', slot: 'velocidad' as const },
+    { label: 'Red de acceso', value: 'red-acceso', icon: 'i-lucide-cable', slot: 'red-acceso' as const },
+    { label: 'Pools e IPs', value: 'pools', icon: 'i-lucide-network', slot: 'pools' as const },
+    { label: 'Servicios', value: 'servicios', icon: 'i-lucide-users', slot: 'servicios' as const },
+    { label: 'Conexión', value: 'conexion', icon: 'i-lucide-plug-zap', slot: 'conexion' as const },
+    { label: 'Avanzado', value: 'avanzado', icon: 'i-lucide-settings-2', slot: 'avanzado' as const },
+])
+
+const pruebaAbierta = ref(false)
+const salud = useTemplateRef('salud')
+
+function alActualizar(router: RouterNas) {
+    nas.value = router
+}
+
+async function alProbar() {
+    await refrescar()
+    salud.value?.cargar()
+}
 </script>
 
 <template>
     <PanelPagina
         id="router"
-        :titulo="nas?.nombre ?? 'Router'"
+        titulo="Router"
         icono="i-lucide-router"
     >
         <template #acciones>
-            <VerEnHorusBoton
-                v-if="nas"
-                tipo="router"
-                :id-externo="nas.id"
-            />
-            <RouterAcciones
-                v-if="nas"
-                :router="nas"
-                con-editar
-                @actualizado="nas = $event"
-                @probado="refrescar"
-            />
             <UButton
                 to="/routers"
                 icon="i-lucide-arrow-left"
@@ -177,180 +193,298 @@ const control = computed(() => {
             />
         </template>
 
-        <UAlert
-            v-if="!cargando && nas?.unido_a_id"
-            color="info"
-            variant="subtle"
-            icon="i-lucide-merge"
-            title="Este router se unió a otro"
-            description="Era el mismo MikroTik registrado dos veces: sus servicios, sesiones, redes y planes pasaron al router que quedó. Este registro queda desactivado con su historial."
-            :actions="[{ label: 'Ver el router que quedó', to: `/routers/${nas.unido_a_id}`, icon: 'i-lucide-arrow-right', color: 'info', variant: 'outline' }]"
-            class="mx-auto mb-4 w-full max-w-4xl"
-            data-prueba="router-unido"
-        />
-        <RoutersDuplicadosAviso
-            v-if="!cargando && nas?.activo"
-            :router-id="nas.id"
-            class="mx-auto mb-4 w-full max-w-4xl"
-            @unido="alUnir"
-        />
-        <USkeleton
-            v-if="cargando"
-            class="h-40 w-full"
-        />
-        <UEmpty
-            v-else-if="problema?.status === 404 || (!problema && !nas)"
-            icon="i-lucide-router"
-            title="Router no encontrado"
-            :description="`No existe un router con id ${route.params.id}.`"
-            :actions="[{ label: 'Volver a routers', to: '/routers', icon: 'i-lucide-arrow-left', color: 'neutral', variant: 'subtle' }]"
-        />
-        <ProblemaAlerta
-            v-else-if="problema"
-            :problema="problema"
-            :reintentar="cargar"
-            :reintentando="cargando"
-        />
-        <section
-            v-else-if="nas"
-            class="surface-card mx-auto w-full max-w-4xl p-4 sm:p-6"
-            aria-label="Datos del router"
-        >
-            <dl class="grid gap-4 sm:grid-cols-3">
-                <DatoFicha
-                    etiqueta="Host"
-                    :valor="nas.host"
-                    mono
-                />
-                <DatoFicha
-                    etiqueta="NAS"
-                    :valor="textoNas(nas)"
-                    :mono="Boolean(nas.nas_ip)"
-                    data-prueba="router-nas-ip"
-                />
-                <DatoFicha etiqueta="Modo de seguridad">
-                    <UBadge
-                        :label="MODOS_SEGURIDAD[nas.modo_seguridad].etiqueta"
-                        :icon="MODOS_SEGURIDAD[nas.modo_seguridad].icono"
-                        :color="MODOS_SEGURIDAD[nas.modo_seguridad].color"
-                        variant="subtle"
-                        size="sm"
-                        data-prueba="router-modo-seguridad"
-                    />
-                    <p
-                        v-if="esSinRadius(nas)"
-                        class="mt-1 text-xs text-muted"
-                        data-prueba="router-pppoe-sin-radius"
-                    >
-                        {{ PPPOE_EN_ROUTER_SIN_RADIUS }}
-                    </p>
-                    <p
-                        v-if="esSinRadius(nas) && !tieneCredencialesApi(nas)"
-                        class="mt-1 text-xs text-warning"
-                    >
-                        Sin usuario y contraseña de la API no se pueden crear servicios PPPoE aquí.
-                    </p>
-                </DatoFicha>
-                <DatoFicha etiqueta="Estado">
-                    <UBadge
-                        :label="nas.activo ? 'Activo' : 'Inactivo'"
-                        :icon="nas.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
-                        :color="nas.activo ? 'success' : 'neutral'"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </DatoFicha>
-                <DatoFicha etiqueta="En línea">
-                    <UBadge
-                        :label="contacto.etiqueta"
-                        :icon="contacto.icono"
-                        :color="contacto.color"
-                        variant="subtle"
-                        size="sm"
-                        :data-prueba="`en-linea-${nas.id}`"
-                    />
-                </DatoFicha>
-                <DatoFicha
-                    etiqueta="Último contacto"
-                    :valor="nas.ultimo_contacto ? `${formatearFechaHora(nas.ultimo_contacto)} (${textoUltimoContacto(nas)})` : 'Nunca respondió'"
-                    :data-prueba="`ultimo-contacto-${nas.id}`"
-                />
-                <DatoFicha
-                    v-if="control"
-                    etiqueta="Colas"
-                    :valor="control.etiqueta"
-                />
-            </dl>
-
-            <div
-                v-if="puede('routers.editar') || puedeEliminar"
-                class="mt-6 flex flex-col gap-2 border-t border-default pt-4"
-                data-prueba="router-baja"
-            >
-                <ProblemaAlerta
-                    v-if="problemaEliminable"
-                    :problema="problemaEliminable"
-                    :reintentar="cargarEliminable"
-                />
-                <div class="flex flex-wrap items-center gap-2">
-                    <UButton
-                        v-if="puedeEliminar && eliminable?.eliminable"
-                        label="Eliminar"
-                        icon="i-lucide-trash-2"
-                        color="error"
-                        variant="outline"
-                        data-prueba="eliminar-router"
-                        @click="abrirEliminar"
-                    />
-                    <UButton
-                        v-if="puede('routers.editar') && !eliminable?.eliminable"
-                        :label="nas.activo ? 'Desactivar' : 'Activar'"
-                        :icon="nas.activo ? 'i-lucide-circle-pause' : 'i-lucide-circle-play'"
-                        color="neutral"
-                        variant="outline"
-                        data-prueba="cambiar-activo-router"
-                        @click="cambiarActivoAbierto = true"
-                    />
-                </div>
-                <p
-                    v-if="puedeEliminar && eliminable?.eliminable"
-                    class="text-xs text-muted"
+        <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+            <UAlert
+                v-if="!cargando && nas?.unido_a_id"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-merge"
+                title="Este router se unió a otro"
+                description="Era el mismo MikroTik registrado dos veces: sus servicios, sesiones, redes y planes pasaron al router que quedó. Este registro queda desactivado con su historial."
+                :actions="[{ label: 'Ver el router que quedó', to: `/routers/${nas.unido_a_id}`, icon: 'i-lucide-arrow-right', color: 'info', variant: 'outline' }]"
+                data-prueba="router-unido"
+            />
+            <RoutersDuplicadosAviso
+                v-if="!cargando && nas?.activo"
+                :router-id="nas.id"
+                @unido="alUnir"
+            />
+            <USkeleton
+                v-if="cargando"
+                class="h-40 w-full"
+            />
+            <UEmpty
+                v-else-if="problema?.status === 404 || (!problema && !nas)"
+                icon="i-lucide-router"
+                title="Router no encontrado"
+                :description="`No existe un router con id ${route.params.id}.`"
+                :actions="[{ label: 'Volver a routers', to: '/routers', icon: 'i-lucide-arrow-left', color: 'neutral', variant: 'subtle' }]"
+            />
+            <ProblemaAlerta
+                v-else-if="problema"
+                :problema="problema"
+                :reintentar="cargar"
+                :reintentando="cargando"
+            />
+            <template v-else-if="nas">
+                <header
+                    class="surface-card flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6"
+                    aria-label="Router"
+                    data-prueba="router-cabecera"
                 >
-                    Nunca se usó: se puede borrar del todo.
-                </p>
-                <p
-                    v-else-if="puedeEliminar && eliminable"
-                    class="flex items-start gap-1.5 text-xs text-muted"
-                    data-prueba="no-eliminable"
-                >
-                    <UIcon
-                        name="i-lucide-history"
-                        class="mt-0.5 size-3.5 shrink-0"
-                    />
-                    <span>{{ textoNoEliminable('router', eliminable.motivos, !nas.activo) }}</span>
-                </p>
-            </div>
-        </section>
-        <RouterConexionSeccion
-            v-if="nas"
-            ref="seccionConexion"
-            :router="nas"
-            class="mx-auto mt-6 w-full max-w-4xl"
-        />
-        <RouterQos
-            v-if="nas && puede('qos.ver')"
-            :router="nas"
-            class="mx-auto mt-6 w-full max-w-4xl"
-            @actualizado="nas = $event"
-            @recargar="cargar"
-        />
-        <RouterDireccionamiento
-            v-if="nas"
-            :key="lecturas"
-            :router-id="nas.id"
-            class="mx-auto mt-6 w-full max-w-4xl"
-        />
+                    <div class="flex min-w-0 items-start gap-3">
+                        <span class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <UIcon
+                                name="i-lucide-router"
+                                class="size-6"
+                            />
+                        </span>
+                        <div class="flex min-w-0 flex-col gap-1.5">
+                            <h1 class="truncate text-lg font-semibold text-highlighted">
+                                {{ nas.nombre }}
+                            </h1>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <UBadge
+                                    :label="nas.activo ? 'Activo' : 'Inactivo'"
+                                    :icon="nas.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
+                                    :color="nas.activo ? 'success' : 'neutral'"
+                                    variant="subtle"
+                                    size="sm"
+                                    data-prueba="router-estado"
+                                />
+                                <UBadge
+                                    :label="MODOS_SEGURIDAD[nas.modo_seguridad].etiqueta"
+                                    :icon="MODOS_SEGURIDAD[nas.modo_seguridad].icono"
+                                    :color="MODOS_SEGURIDAD[nas.modo_seguridad].color"
+                                    variant="subtle"
+                                    size="sm"
+                                    data-prueba="router-modo-seguridad"
+                                />
+                                <UBadge
+                                    :label="nas.routeros_version ? `RouterOS ${nas.routeros_version}` : 'RouterOS ?'"
+                                    icon="i-lucide-cpu"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                            </div>
+                            <p class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                                <span>Host <span class="font-mono text-default">{{ nas.host }}</span></span>
+                                <span>NAS <span
+                                    :class="nas.nas_ip ? 'font-mono text-default' : 'text-default'"
+                                    data-prueba="router-nas-ip"
+                                >{{ textoNas(nas) }}</span></span>
+                            </p>
+                            <p
+                                v-if="esSinRadius(nas)"
+                                class="text-xs text-muted"
+                                data-prueba="router-pppoe-sin-radius"
+                            >
+                                {{ PPPOE_EN_ROUTER_SIN_RADIUS }}
+                            </p>
+                            <p
+                                v-if="esSinRadius(nas) && !tieneCredencialesApi(nas)"
+                                class="text-xs text-warning"
+                            >
+                                Sin usuario y contraseña de la API no se pueden crear servicios PPPoE aquí.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <UButton
+                            v-if="puede('routers.probar_conexion')"
+                            label="Probar conexión"
+                            icon="i-lucide-activity"
+                            color="neutral"
+                            variant="outline"
+                            data-prueba="probar-conexion-cabecera"
+                            @click="pruebaAbierta = true"
+                        />
+                        <VerEnHorusBoton
+                            tipo="router"
+                            :id-externo="nas.id"
+                        />
+                        <RouterAcciones
+                            :router="nas"
+                            con-editar
+                            @actualizado="alActualizar"
+                            @probado="alProbar"
+                        />
+                    </div>
+                </header>
 
+                <RouterSalud
+                    ref="salud"
+                    :router="nas"
+                />
+
+                <UTabs
+                    v-model="pestana"
+                    :items="pestanas"
+                    variant="link"
+                    :ui="{ list: 'overflow-x-auto', trigger: 'shrink-0', content: 'pt-4' }"
+                    data-prueba="pestanas-router"
+                >
+                    <template #velocidad>
+                        <RouterControlVelocidad
+                            :router="nas"
+                            @actualizado="alActualizar"
+                        />
+                    </template>
+                    <template #red-acceso>
+                        <RouterRedAcceso
+                            v-if="puede('red_acceso.ver')"
+                            :router="nas"
+                        />
+                        <UEmpty
+                            v-else
+                            icon="i-lucide-lock"
+                            title="Sin permiso para ver la red de acceso"
+                            description="Pide a un administrador el permiso «red_acceso.ver»."
+                            variant="naked"
+                        />
+                    </template>
+                    <template #pools>
+                        <RouterDireccionamiento
+                            :key="lecturas"
+                            :router-id="nas.id"
+                        />
+                    </template>
+                    <template #servicios>
+                        <RouterSeccion
+                            id-titulo="titulo-servicios-router"
+                            titulo="Servicios"
+                            icono="i-lucide-users"
+                            descripcion="Los servicios de este router, con su estado y su plan, están en la lista de servicios filtrada por router."
+                        >
+                            <template
+                                v-if="puede('servicios.ver')"
+                                #acciones
+                            >
+                                <UButton
+                                    :to="`/servicios?router=${nas.id}`"
+                                    label="Ver servicios del router"
+                                    icon="i-lucide-arrow-right"
+                                    color="neutral"
+                                    variant="outline"
+                                    data-prueba="ver-servicios-router"
+                                />
+                            </template>
+                        </RouterSeccion>
+                    </template>
+                    <template #conexion>
+                        <RouterConexionSeccion
+                            ref="seccionConexion"
+                            :router="nas"
+                        />
+                    </template>
+                    <template #avanzado>
+                        <div class="flex flex-col gap-6">
+                            <RouterQos
+                                v-if="puede('qos.ver')"
+                                :router="nas"
+                                @actualizado="alActualizar"
+                                @recargar="cargar"
+                            />
+                            <RouterSeccion
+                                id-titulo="titulo-datos-router"
+                                titulo="Datos del equipo"
+                                icono="i-lucide-hard-drive"
+                            >
+                                <dl class="grid gap-4 sm:grid-cols-3">
+                                    <DatoFicha
+                                        etiqueta="Host"
+                                        :valor="nas.host"
+                                        mono
+                                    />
+                                    <DatoFicha
+                                        etiqueta="API"
+                                        :valor="nas.api_url ?? `https://${nas.host}`"
+                                        mono
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Serial"
+                                        :valor="nas.serial ?? 'Sin leer'"
+                                        :mono="Boolean(nas.serial)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Servidor DHCP"
+                                        :valor="nas.dhcp_servidor ?? 'El de la configuración'"
+                                        :mono="Boolean(nas.dhcp_servidor)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Interfaz de clientes"
+                                        :valor="nas.interfaz_clientes ?? 'La de la configuración'"
+                                        :mono="Boolean(nas.interfaz_clientes)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Último contacto"
+                                        :valor="nas.ultimo_contacto ? `${formatearFechaHora(nas.ultimo_contacto)} (${textoUltimoContacto(nas)})` : 'Nunca respondió'"
+                                    />
+                                </dl>
+                            </RouterSeccion>
+                            <RouterSeccion
+                                v-if="puede('routers.editar') || puedeEliminar"
+                                id-titulo="titulo-baja-router"
+                                titulo="Baja del router"
+                                icono="i-lucide-power"
+                                data-prueba="router-baja"
+                            >
+                                <ProblemaAlerta
+                                    v-if="problemaEliminable"
+                                    :problema="problemaEliminable"
+                                    :reintentar="cargarEliminable"
+                                />
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <UButton
+                                        v-if="puedeEliminar && eliminable?.eliminable"
+                                        label="Eliminar"
+                                        icon="i-lucide-trash-2"
+                                        color="error"
+                                        variant="outline"
+                                        data-prueba="eliminar-router"
+                                        @click="abrirEliminar"
+                                    />
+                                    <UButton
+                                        v-if="puede('routers.editar') && !eliminable?.eliminable"
+                                        :label="nas.activo ? 'Desactivar' : 'Activar'"
+                                        :icon="nas.activo ? 'i-lucide-circle-pause' : 'i-lucide-circle-play'"
+                                        color="neutral"
+                                        variant="outline"
+                                        data-prueba="cambiar-activo-router"
+                                        @click="cambiarActivoAbierto = true"
+                                    />
+                                </div>
+                                <p
+                                    v-if="puedeEliminar && eliminable?.eliminable"
+                                    class="text-xs text-muted"
+                                >
+                                    Nunca se usó: se puede borrar del todo.
+                                </p>
+                                <p
+                                    v-else-if="puedeEliminar && eliminable"
+                                    class="flex items-start gap-1.5 text-xs text-muted"
+                                    data-prueba="no-eliminable"
+                                >
+                                    <UIcon
+                                        name="i-lucide-history"
+                                        class="mt-0.5 size-3.5 shrink-0"
+                                    />
+                                    <span>{{ textoNoEliminable('router', eliminable.motivos, !nas.activo) }}</span>
+                                </p>
+                            </RouterSeccion>
+                        </div>
+                    </template>
+                </UTabs>
+            </template>
+        </div>
+
+        <RouterPruebaConexionModal
+            v-if="nas && puede('routers.probar_conexion')"
+            v-model:open="pruebaAbierta"
+            :router="nas"
+            @probado="alProbar"
+        />
         <EliminarRegistroModal
             v-if="nas && puedeEliminar && eliminable?.eliminable"
             :id="nas.id"

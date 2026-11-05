@@ -60,6 +60,7 @@ import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
+import { rutasRedAcceso } from './redAcceso/rutas'
 import { rutasQos } from './qos/rutas'
 import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
@@ -539,6 +540,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasConexionRouters,
     ...rutasEliminacion,
     ...rutasRed,
+    ...rutasRedAcceso,
     ...rutasQos,
     ...rutasPlanes,
     ...rutasPlantillas,

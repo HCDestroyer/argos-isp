@@ -83,6 +83,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/libros/habilitaciones',
     '/api/v1/motivos-sin-costo',
     '/api/v1/notas-credito',
+    '/api/v1/olts',
     '/api/v1/pagos',
     '/api/v1/pagos-proveedores',
     '/api/v1/pasarela/cobros',
@@ -105,6 +106,8 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/reportes/lealtad',
     '/api/v1/reportes/promesas',
     '/api/v1/routers',
+    // Ruta con parámetro: la prueba la compara con el OpenAPI; el plugin no la consolida (es por router).
+    '/api/v1/routers/{id}/vlans',
     '/api/v1/servicios',
 ]
 

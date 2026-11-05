@@ -55,6 +55,8 @@ const cargandoRouters = ref(true)
 const planes = shallowRef<Plan[]>([])
 const redes = shallowRef<RedIpv4[]>([])
 const bloques = shallowRef<Ipv6Bloque[]>([])
+/** Servidores PPPoE activos del router (`red_acceso.ver`); vacío = router sin servidores (lo de antes). */
+const servidores = shallowRef<ServidorPppoe[]>([])
 const plantillas = shallowRef<PlantillaFacturacion[]>([])
 const cargandoRouter = ref(false)
 const problemaCatalogo = ref<Problem | null>(null)
@@ -82,7 +84,7 @@ const pasos = computed<Paso[]>(() => [
         title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
         description: 'IP, IPv6 y acceso',
         icon: 'i-lucide-network',
-        campos: ['asignacion', 'red_id', 'ipv4', 'ipv6_modo', 'ipv6_duid', 'prefijo_delegado_v6', ...(conPppoe.value ? ['user_ppp', 'pass_ppp'] as const : ['mac', 'amarre_ip_mac'] as const)],
+        campos: ['servidor_pppoe_id', 'asignacion', 'red_id', 'ipv4', 'ipv6_modo', 'ipv6_duid', 'prefijo_delegado_v6', ...(conPppoe.value ? ['user_ppp', 'pass_ppp'] as const : ['mac', 'amarre_ip_mac'] as const)],
     },
     {
         id: 'instalacion',
@@ -120,6 +122,31 @@ const plan = computed(() => planes.value.find(p => p.id === estado.plan_id) ?? n
 const red = computed(() => redes.value.find(r => r.id === estado.red_id) ?? null)
 const plantilla = computed(() => plantillas.value.find(p => p.id === estado.plantilla_facturacion_id) ?? null)
 const soloIpv4 = computed(() => plan.value?.dual_stack === 'v4')
+/*
+ * Servidor PPPoE (`contratos/red-acceso.md` §3): con uno, la API lo toma solo; con varios se
+ * elige (o la API lo deduce de la red; si no puede, 422 `servidor_pppoe_requerido`).
+ */
+const AUTOMATICO = 0
+const servidorElegido = computed(() => (servidores.value.length === 1 ? servidores.value[0] : servidores.value.find(s => s.id === estado.servidor_pppoe_id)) ?? null)
+const itemsServidor = computed<SelectItem[]>(() => [
+    { label: 'Que lo elija Argos por la red', value: AUTOMATICO, description: 'Si la red no lo define, la API pide elegirlo.' },
+    ...servidores.value.map(s => ({
+        label: s.nombre,
+        value: s.id,
+        description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}${s.local_address_derivado ? ' (derivado)' : ''}` : 'sin red'].join(' · '),
+    })),
+])
+const servidorSeleccion = computed({
+    get: () => estado.servidor_pppoe_id ?? AUTOMATICO,
+    set: (valor: number) => {
+        estado.servidor_pppoe_id = valor === AUTOMATICO ? undefined : valor
+    },
+})
+/** El gateway que llevará la sesión (local-address): el de la red de su IP fija o el de su servidor. */
+const gatewayServicio = computed(() => (estado.asignacion === 'fija' && red.value ? (red.value.gateway_efectivo ?? red.value.gateway) : null) ?? servidorElegido.value?.local_address ?? null)
+/** El gateway sale de la primera IP de la red (red sin gateway). */
+const gatewayDerivado = computed(() => (estado.asignacion === 'fija' && red.value ? !red.value.gateway : Boolean(servidorElegido.value?.local_address_derivado)))
+
 /** El router elegido no usa RADIUS: todo por su API REST (PPPoE como secrets locales). */
 const routerSinRadius = computed(() => esSinRadius(router.value))
 /** PPPoE en un router sin RADIUS y sin credenciales de la API: la API respondería 422. */
@@ -287,17 +314,20 @@ function alElegirCliente(elegido: Cliente) {
 async function alCambiarRouter(id: number) {
     estado.plan_id = 0
     estado.red_id = undefined
+    estado.servidor_pppoe_id = undefined
     planes.value = []
     redes.value = []
     bloques.value = []
+    servidores.value = []
     if (!id) {
         return
     }
     cargandoRouter.value = true
-    const [resultadoPlanes, resultadoRedes, resultadoBloques] = await Promise.all([
+    const [resultadoPlanes, resultadoRedes, resultadoBloques, resultadoServidores] = await Promise.all([
         routersApi.planes(id),
         puede('redes.ver') ? routersApi.redesIpv4(id) : null,
         puede('ipv6.ver') ? routersApi.ipv6Bloques(id) : null,
+        puede('red_acceso.ver') ? useRedAcceso().servidores(id) : null,
     ])
     cargandoRouter.value = false
     if (estado.router_id !== id) {
@@ -316,6 +346,7 @@ async function alCambiarRouter(id: number) {
     }
     redes.value = resultadoRedes?.ok ? resultadoRedes.data : []
     bloques.value = resultadoBloques?.ok ? resultadoBloques.data : []
+    servidores.value = resultadoServidores?.ok ? resultadoServidores.data.filter(s => s.activo) : []
 }
 
 watch(() => estado.router_id, alCambiarRouter)
@@ -649,6 +680,47 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                     v-show="pasoActual === 'red'"
                     class="flex flex-col gap-6"
                 >
+                    <section
+                        v-if="conPppoe && servidores.length"
+                        class="flex flex-col gap-3"
+                        data-prueba="alta-servidor-pppoe"
+                    >
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Servidor PPPoE
+                        </h3>
+                        <p
+                            v-if="servidores.length === 1"
+                            class="text-sm text-muted"
+                            data-prueba="servidor-unico"
+                        >
+                            <span class="font-medium text-highlighted">{{ servidores[0]?.nombre }}</span>: el único del router, queda elegido.
+                        </p>
+                        <UFormField
+                            v-else
+                            name="servidor_pppoe_id"
+                            label="Servidor"
+                            help="El router tiene varios: uno por VLAN. Elige por dónde entra el cliente."
+                        >
+                            <USelect
+                                v-model="servidorSeleccion"
+                                :items="itemsServidor"
+                                class="w-full"
+                                data-prueba="selector-servidor-pppoe"
+                            />
+                        </UFormField>
+                        <p
+                            class="flex items-center gap-1.5 text-xs text-muted"
+                            data-prueba="gateway-servicio"
+                        >
+                            <UIcon
+                                name="i-lucide-route"
+                                class="size-3.5 shrink-0"
+                            />
+                            <span v-if="gatewayServicio">Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio }}</span>{{ gatewayDerivado ? `, ${MARCA_GATEWAY_DERIVADO}` : '' }}; sale de la red y no se escribe.</span>
+                            <span v-else>Gateway (local-address): sale de la red del servidor al elegirlo.</span>
+                        </p>
+                    </section>
+
                     <section class="flex flex-col gap-4">
                         <h3 class="text-sm font-semibold text-highlighted">
                             IPv4
@@ -1216,6 +1288,11 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             v-else-if="grupo.id === 'red'"
                             class="grid gap-x-6 gap-y-3 sm:grid-cols-2"
                         >
+                            <DatoFicha
+                                v-if="conPppoe && servidores.length"
+                                etiqueta="Servidor PPPoE"
+                                :valor="servidorElegido ? `${servidorElegido.nombre}${gatewayServicio ? ` · gateway ${gatewayServicio}` : ''}` : 'Lo elige Argos por la red'"
+                            />
                             <DatoFicha
                                 etiqueta="IPv4"
                                 :valor="textoIpv4"

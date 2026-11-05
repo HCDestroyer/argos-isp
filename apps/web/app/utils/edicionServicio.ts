@@ -41,6 +41,8 @@ export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_t
         fecha_instalacion: patron(PATRON_FECHA, 'Fecha AAAA-MM-DD'),
         costo_override: patron(PATRON_DINERO, 'Monto con hasta 2 decimales, por ejemplo 150.00'),
         excluir_firewall: z.boolean(),
+        /** Servidor PPPoE del router (`contratos/red-acceso.md` §3); 0 = sin servidor o que lo derive la API. */
+        servidor_pppoe_id: z.number().int(),
     }).superRefine((datos, ctx) => {
         if (datos.tipo_conexion === 'pppoe' && datos.amarre_ip_mac) {
             ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
@@ -86,6 +88,7 @@ export function entradaEdicionDesde(servicio: Servicio): EntradaEdicionServicio 
         fecha_instalacion: servicio.fecha_instalacion ?? '',
         costo_override: servicio.costo_override ?? '',
         excluir_firewall: servicio.excluir_firewall,
+        servidor_pppoe_id: servicio.servidor_pppoe_id ?? 0,
     }
 }
 
@@ -109,6 +112,9 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     }
     if (datos.tipo_conexion === 'pppoe' && antes.amarre_ip_mac) {
         cambios.amarre_ip_mac = false
+    }
+    if (datos.tipo_conexion === 'pppoe' && datos.servidor_pppoe_id !== antes.servidor_pppoe_id && datos.servidor_pppoe_id !== 0) {
+        cambios.servidor_pppoe_id = datos.servidor_pppoe_id
     }
     if (datos.mac.toUpperCase() !== antes.mac.toUpperCase()) {
         cambios.mac = nulo(datos.mac)

@@ -113,8 +113,27 @@ export function entregaPool(datos: { prefijo: string, tipo: Pool['tipo'], tamano
     }
 }
 
+/**
+ * Gateway efectivo (`red-acceso.md` §2, decisión del PM): el gateway o, sin él, la primera IP
+ * utilizable (en /31 y /32 la dirección de red). Nunca se entrega a un cliente.
+ */
+export function gatewayEfectivo(red: Pick<RedIpv4, 'cidr' | 'gateway'>): string {
+    if (red.gateway) {
+        return red.gateway
+    }
+    const r = redV4(red.cidr)
+    const n = r.largo >= 31 ? r.inicio : r.inicio + 1
+    return [24, 16, 8, 0].map(bits => Math.floor(n / 2 ** bits) % 256).join('.')
+}
+
+/** Servicio vigente que ya tenía el gateway efectivo (dato anterior: lo conserva). */
+function gatewayOcupadoPor(red: Pick<RedIpv4, 'cidr' | 'gateway' | 'router_id'>): number | null {
+    const efectivo = gatewayEfectivo(red)
+    return vigentes().find(s => s.router_id === red.router_id && s.ipv4 === efectivo)?.id ?? null
+}
+
 export function vistaRed(red: RedIpv4): RedIpv4 {
-    return { ...red, ocupacion: ocupacionRed(red) }
+    return { ...red, ocupacion: ocupacionRed(red), gateway_efectivo: gatewayEfectivo(red), gateway_derivado: !red.gateway, gateway_ocupado_por: gatewayOcupadoPor(red) }
 }
 
 export function vistaPool(pool: Pool): Pool {
@@ -352,6 +371,14 @@ export const rutasPools: RutasFixture = {
         if (fuera.length) {
             const errores = fuera.slice(0, 100).map(s => ({ field: utilizable(nueva.cidr, numeroIpv4(s.ipv4!)) ? (s.ipv4 === nueva.gateway ? 'gateway' : 'rango_inicio') : 'cidr', message: `${s.ipv4} (${etiqueta(s)}) quedaría fuera de la red`, rule: 'ips_asignadas_fuera' }))
             return regla('ips_asignadas_fuera', `${fuera.length} ${fuera.length === 1 ? 'IP asignada quedaría fuera' : 'IPs asignadas quedarían fuera'}${sumarSalida(errores, fuera.length)}`, errores)
+        }
+        // Quitar el gateway deja como derivado la primera IP: si un servicio ya la tiene, 422.
+        if (!nueva.gateway && (red.gateway || nueva.cidr !== red.cidr)) {
+            const ocupado = gatewayOcupadoPor({ ...red, ...nueva })
+            if (ocupado) {
+                const mensaje = `Sin gateway, la red usaría ${gatewayEfectivo({ ...red, ...nueva })} (la primera IP), que ya tiene el servicio ${ocupado}: muévelo a otra IP o deja un gateway`
+                return problemaTipado(422, 'gateway_derivado_ocupado', 'Regla de negocio', mensaje, [{ field: 'gateway', rule: 'gateway_derivado_ocupado', message: mensaje }])
+            }
         }
         Object.assign(red, nueva, { version: red.version + 1, updated_at: ahora() })
         registrarAccion(solicitud, 'redes.editar', { tipo: 'red_ipv4', id: red.id }, cuerpo)

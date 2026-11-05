@@ -42,6 +42,57 @@ export const OPCIONES_APLICACION: Record<Aplicacion, { etiqueta: string, explica
     },
 }
 
+/**
+ * Ficha de cada modo para las tarjetas del control de velocidad del router: qué crea en el
+ * MikroTik, cuánto pesa en la CPU y cuándo conviene (pedido del PM, núcleo de routers). Textos del
+ * contrato (`contratos/control-velocidad.md` §1); el panel no calcula nada con ellos.
+ */
+export type CostoCpu = 'bajo' | 'medio' | 'alto'
+
+export const COSTOS_CPU: Record<CostoCpu, { etiqueta: string, color: 'success' | 'warning' | 'error' }> = {
+    bajo: { etiqueta: 'CPU baja', color: 'success' },
+    medio: { etiqueta: 'CPU media', color: 'warning' },
+    alto: { etiqueta: 'CPU alta', color: 'error' },
+}
+
+export const DETALLE_APLICACION: Record<Aplicacion, { icono: string, crea: string, cpu: CostoCpu, cpuPorque: string, conviene: string }> = {
+    radius_rate_limit: {
+        icono: 'i-lucide-radio-tower',
+        crea: 'Nada fijo: RADIUS manda Mikrotik-Rate-Limit y RouterOS crea la cola dinámica <pppoe-usuario> al conectar.',
+        cpu: 'medio',
+        cpuPorque: 'Una cola simple por sesión; con miles de sesiones la lista de colas pesa.',
+        conviene: 'PPPoE con RADIUS y hasta unos cientos de clientes por router. Los cambios de velocidad llegan en vivo por CoA.',
+    },
+    perfil_ppp: {
+        icono: 'i-lucide-id-card',
+        crea: 'Un perfil PPP por plan (plan-<id>) con su rate-limit; la sesión toma la cola dinámica del perfil.',
+        cpu: 'medio',
+        cpuPorque: 'Igual que RADIUS por sesión: una cola dinámica por cliente conectado.',
+        conviene: 'Routers sin RADIUS o cuando quieres ver la velocidad de cada plan en Winbox (PPP → Profiles).',
+    },
+    cola_simple: {
+        icono: 'i-lucide-list',
+        crea: 'Una cola simple estática por servicio (argosisp-servicio-<id>) escrita por la API.',
+        cpu: 'medio',
+        cpuPorque: 'Una cola por cliente, recorridas en orden: más de unas 1000 empiezan a pesar.',
+        conviene: 'IP estática o DHCP con IP fija en routers pequeños o medianos.',
+    },
+    pcq_plan: {
+        icono: 'i-lucide-split',
+        crea: 'Una cola simple por plan y estado (argosisp-plan-<id>-pcq) con PCQ que reparte entre sus clientes.',
+        cpu: 'bajo',
+        cpuPorque: 'Pocas colas (una por plan): el PCQ reparte sin una cola por cliente.',
+        conviene: 'Muchos clientes por router con planes parejos; menos colas y menos CPU.',
+    },
+    arbol_pcq: {
+        icono: 'i-lucide-network',
+        crea: 'Queue tree global → plan → PCQ, con mangle y address-list argosisp-plan-<id>.',
+        cpu: 'bajo',
+        cpuPorque: 'El árbol con PCQ escala a miles de clientes; el mangle marca cada paquete una vez.',
+        conviene: 'Routers grandes que necesitan techo del enlace, reuso y garantía por plan. Permite QoS por clases.',
+    },
+}
+
 export const OPCIONES_PADRE: Record<Padre, { etiqueta: string, explicacion: string }> = {
     ninguno: { etiqueta: 'Sin agrupar', explicacion: 'Cada cliente solo con su tope; nada limita la suma.' },
     por_plan: { etiqueta: 'Por plan', explicacion: 'Los clientes de un plan comparten su ancho según el reuso (solo con reuso mayor a 1).' },
