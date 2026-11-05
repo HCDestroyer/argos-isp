@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/HCDestroyer/argos-isp/compare/v1.7.0...v1.8.0) (2026-11-05)
+
+
+### Funcionalidades
+
+* **iris:** Iris 0.6.0 en Argos — comprobantes, reconexión temporal, promesas, identidad, teléfono y WhatsApp (A16–A21) ([#217](https://github.com/HCDestroyer/argos-isp/issues/217)) ([115d86e](https://github.com/HCDestroyer/argos-isp/commit/115d86ef3afa64934c98491212d99cf5f00d7760))
+
 ## [1.7.0](https://github.com/HCDestroyer/argos-isp/compare/v1.6.0...v1.7.0) (2026-11-05)
 
 
