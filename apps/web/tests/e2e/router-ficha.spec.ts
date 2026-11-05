@@ -92,6 +92,17 @@ test('red de acceso: árbol con local-address, deriva y conflictos, detectar e i
     await expect(red.locator('[data-prueba="local-address-2"]')).toHaveText('100.64.20.1')
     await capturar(page, 'router-red-acceso', info.project.name)
 
+    // Tomar control del servidor adoptado: diff por propiedad, sesiones y confirmar.
+    await red.locator('[data-prueba="tomar-control-servidor-2"]').click()
+    const control = page.getByRole('dialog', { name: /Tomar control · fibra-201/ })
+    await expect(control.locator('[data-prueba="tomar-control-cambios"]')).toContainText('default-profile')
+    await expect(control.locator('[data-prueba="tomar-control-sesiones"]')).toContainText('nadie se desconecta')
+    await capturar(page, 'router-tomar-control', info.project.name)
+    await control.locator('[data-prueba="tomar-control-confirmar"]').click()
+    await expect(control).toBeHidden()
+    await expect(page.getByText('fibra-201: ahora lo administra Argos', { exact: true })).toBeVisible()
+    await expect(red.locator('[data-servidor="2"]')).toContainText('De Argos')
+
     // Deriva y conflictos: la vista previa de «Reconciliar».
     await red.locator('[data-prueba="abrir-deriva"]').click()
     const deriva = page.getByRole('dialog', { name: /Reconciliar ahora · CCR-Mixco/ })
@@ -148,4 +159,24 @@ test('alta de servicio en un router con varios servidores PPPoE: se elige y se v
     await page.getByRole('option', { name: /fibra-202/ }).click()
     await expect(seccion.locator('[data-prueba="gateway-servicio"]')).toContainText('100.64.20.1')
     await capturar(page, 'servicio-selector-servidor', info.project.name)
+})
+
+test('red sin gateway: Pools muestra el derivado y tomar control sin el diff (501) dice «Todavía no disponible»', async ({ page }, info) => {
+    await entrar(page, 'admin@argos.test')
+    await page.evaluate(() => localStorage.setItem('argos_fixtures_fallas', JSON.stringify({ 'GET /api/v1/vlans/:id/vista-previa-tomar-control': 501 })))
+    await ir(page, 'Routers', /\/routers$/)
+    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
+    await pestanaRouter(page, 'Pools e IPs')
+    await expect(page.locator('[data-red="2"]')).toContainText('gw 100.64.11.1, derivado (primera IP de la red)')
+    await capturar(page, 'router-pools-gateway-derivado', info.project.name)
+
+    await ir(page, 'Routers', /\/routers$/)
+    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: /CCR-Mixco/ }).click()
+    await pestanaRouter(page, 'Red de acceso')
+    await page.locator('[data-prueba="tomar-control-vlan-2"]').click()
+    const control = page.getByRole('dialog', { name: /Tomar control · VLAN 201/ })
+    await expect(control.locator('[data-prueba="tomar-control-no-disponible"]')).toContainText('Todavía no disponible')
+    await expect(control.getByRole('button', { name: 'Reintentar' })).toBeVisible()
+    await capturar(page, 'router-tomar-control-501', info.project.name)
+    await page.evaluate(() => localStorage.removeItem('argos_fixtures_fallas'))
 })

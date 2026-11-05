@@ -640,7 +640,7 @@ onMounted(cargar)
                         <DatoFicha
                             v-if="conPppoe"
                             etiqueta="Gateway (local-address)"
-                            :valor="servicio.local_address ?? 'Sin gateway: sale de la red IPv4'"
+                            :valor="servicio.local_address ? `${servicio.local_address}${servicio.local_address_derivado ? `, ${MARCA_GATEWAY_DERIVADO}` : ''}` : 'Sin red IPv4'"
                             :mono="Boolean(servicio.local_address)"
                             data-prueba="servicio-local-address"
                         />

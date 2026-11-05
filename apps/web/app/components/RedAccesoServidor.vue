@@ -14,6 +14,7 @@ const props = defineProps<{
 defineEmits<{
     editar: []
     eliminar: []
+    tomarControl: []
 }>()
 
 const { puede } = usePermisos()
@@ -56,6 +57,16 @@ const estado = computed(() => (props.servidor.estado === 'administrado'
             </div>
             <div class="flex gap-1">
                 <UButton
+                    v-if="servidor.estado === 'adoptado' && puede('red_acceso.tomar_control')"
+                    label="Tomar control"
+                    icon="i-lucide-hand"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    :data-prueba="`tomar-control-servidor-${servidor.id}`"
+                    @click="$emit('tomarControl')"
+                />
+                <UButton
                     v-if="puede('servidores_pppoe.editar')"
                     icon="i-lucide-pencil"
                     color="neutral"
@@ -93,10 +104,19 @@ const estado = computed(() => (props.servidor.estado === 'administrado'
                     :class="servidor.local_address ? 'font-mono text-highlighted' : 'text-warning'"
                     :data-prueba="`local-address-${servidor.id}`"
                 >
-                    {{ servidor.local_address ?? 'Sin gateway en la red' }}
+                    {{ servidor.local_address ?? 'Sin red IPv4' }}
                 </dd>
-                <dd class="text-muted">
-                    Sale del gateway de la red
+                <dd
+                    class="text-muted"
+                    :data-prueba="`local-address-origen-${servidor.id}`"
+                >
+                    {{ servidor.local_address_derivado ? MARCA_GATEWAY_DERIVADO : 'Sale del gateway de la red' }}
+                </dd>
+                <dd
+                    v-if="red?.gateway_ocupado_por"
+                    class="text-warning"
+                >
+                    El servicio {{ red.gateway_ocupado_por }} ya tenía esa IP: la conserva.
                 </dd>
             </div>
             <div class="flex flex-col gap-0.5">

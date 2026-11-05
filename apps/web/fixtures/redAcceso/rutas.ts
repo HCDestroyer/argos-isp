@@ -3,6 +3,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { efectiva } from '../routers/estrategias'
+import { gatewayEfectivo } from '../routers/pools'
 import { SERVIDOR_POR_DEFECTO, type FilaOlt, type FilaPuertoPon, type FilaServidorPppoe, type FilaVlan } from './datos'
 
 /**
@@ -37,9 +38,10 @@ export function vistaVlan(vlan: FilaVlan): Schema<'Vlan'> {
     return { ...vlan, puerto_pon: puerto && olt ? { id: puerto.id, identificador: puerto.identificador, olt_id: olt.id, olt_nombre: olt.nombre } : null }
 }
 
-/** `localAddressServidor`: el gateway de su red IPv4 (nunca el del perfil `default`). */
-export function localAddressServidor(servidor: Pick<FilaServidorPppoe, 'red_ipv4_id'>): string | null {
-    return bd.redesIpv4.find(r => r.id === servidor.red_ipv4_id)?.gateway ?? null
+/** `localAddressServidor`: el gateway efectivo de su red IPv4 (nunca el del perfil `default`). */
+export function localAddressServidor(servidor: Pick<FilaServidorPppoe, 'red_ipv4_id'>): { local_address: string | null, derivado: boolean } {
+    const red = bd.redesIpv4.find(r => r.id === servidor.red_ipv4_id)
+    return { local_address: red ? gatewayEfectivo(red) : null, derivado: Boolean(red) && !red?.gateway }
 }
 
 export function vistaServidor(servidor: FilaServidorPppoe): Schema<'ServidorPppoe'> {
@@ -48,7 +50,8 @@ export function vistaServidor(servidor: FilaServidorPppoe): Schema<'ServidorPppo
         ...servidor,
         vlan: vlan ? { id: vlan.id, nombre: vlan.nombre, vlan_id: vlan.vlan_id } : null,
         perfil: servidor.estado === 'administrado' ? `argosisp-pppoe-${servidor.id}` : servidor.perfil_base,
-        local_address: localAddressServidor(servidor),
+        local_address: localAddressServidor(servidor).local_address,
+        local_address_derivado: localAddressServidor(servidor).derivado,
         servicios: bd.servicios.filter(s => s.servidor_pppoe_id === servidor.id && s.estado !== 'retirado').length,
     }
 }
@@ -123,15 +126,14 @@ export function resolverServidorServicio(entrada: { routerId: number, tipo: stri
     return { servidor: opciones[0] ?? null }
 }
 
-/** `localAddressServicio`: gateway de la red de su IPv4 o, sin ella, el de su servidor. */
-export function localAddressServicio(servicio: Pick<Servicio, 'router_id' | 'ipv4' | 'servidor_pppoe_id'>): string | null {
-    const red = redDeIp(servicio.router_id, servicio.ipv4)
-    const gateway = bd.redesIpv4.find(r => r.id === red)?.gateway ?? null
-    if (gateway) {
-        return gateway
+/** `localAddressServicio`: gateway efectivo de la red de su IPv4 o, sin ella, el de su servidor. */
+export function localAddressServicio(servicio: Pick<Servicio, 'router_id' | 'ipv4' | 'servidor_pppoe_id'>): { local_address: string | null, derivado: boolean } {
+    const red = bd.redesIpv4.find(r => r.id === redDeIp(servicio.router_id, servicio.ipv4))
+    if (red) {
+        return { local_address: gatewayEfectivo(red), derivado: !red.gateway }
     }
     const servidor = ra().servidoresPppoe.find(s => s.id === servicio.servidor_pppoe_id)
-    return servidor ? localAddressServidor(servidor) : null
+    return servidor ? localAddressServidor(servidor) : { local_address: null, derivado: false }
 }
 
 /* Validaciones */
@@ -216,11 +218,9 @@ function revisarServidor(routerId: number, datos: FilaServidorPppoe, propia: num
     }
     if (datos.red_ipv4_id !== null) {
         const red = bd.redesIpv4.find(r => r.id === datos.red_ipv4_id)
+        // Sin gateway ya no se bloquea: el local-address es la primera IP utilizable (decisión del PM).
         if (!red || red.router_id !== routerId) {
             return regla('red_router', 'La red IPv4 no es de este router', 'red_ipv4_id')
-        }
-        if (!red.gateway) {
-            return regla('red_sin_gateway', `La red ${red.cidr} no tiene gateway: defínelo en la red IPv4 (es el local-address del PPPoE)`, 'red_ipv4_id')
         }
     }
     for (const [campo, tipo] of [['ipv6_pool_enlace_id', 'enlace'], ['ipv6_pool_delegacion_id', 'delegacion']] as const) {
@@ -345,6 +345,81 @@ function inventarioDe(routerId: number): Schema<'DescubrimientoRedAcceso'> | Res
         sin_router: [],
     }
     return leido
+}
+
+/* Tomar control de lo adoptado (§4.1) */
+
+function huellaDe(entidad: 'vlan' | 'servidor_pppoe', fila: { id: number, version: number }): string {
+    return `sha256:${entidad}-${fila.id}-${fila.version}-${ra().cambiosEnRouter[`${entidad}:${fila.id}`] ?? 0}`
+}
+
+/** El diff de A2 (`vistaPreviaTomarControl`): lo que Argos escribiría si lo administrara. */
+function vistaTomarControl(entidad: 'vlan' | 'servidor_pppoe', id: number): Schema<'VistaPreviaTomarControl'> | RespuestaFixture {
+    if (entidad === 'vlan') {
+        const vlan = ra().vlans.find(v => v.id === id)
+        if (!vlan) {
+            return noEncontrado('la VLAN')
+        }
+        return {
+            entidad, id, router_id: vlan.router_id, version: vlan.version, estado: vlan.estado, huella: huellaDe(entidad, vlan),
+            cambios: [{ ruta: '/interface/vlan', ros_id: vlan.ros_id, nombre: vlan.nombre, accion: 'actualizar', propiedades: [{ propiedad: 'comment', actual: vlan.comment, deseado: `argosisp:vlan:${vlan.id}` }] }],
+            sesiones: 0,
+            advertencias: [],
+            faltan: [],
+        }
+    }
+    const servidor = ra().servidoresPppoe.find(s => s.id === id)
+    if (!servidor) {
+        return noEncontrado('el servidor PPPoE')
+    }
+    const local = localAddressServidor(servidor).local_address
+    const sesiones = bd.sesiones.filter(x => x.fin === null && bd.servicios.some(sv => sv.id === x.servicio_id && sv.servidor_pppoe_id === servidor.id)).length
+    return {
+        entidad, id, router_id: servidor.router_id, version: servidor.version, estado: servidor.estado, huella: huellaDe(entidad, servidor),
+        cambios: [
+            { ruta: '/ppp/profile', ros_id: null, nombre: `argosisp-pppoe-${servidor.id}`, accion: 'crear', propiedades: [
+                { propiedad: 'local-address', actual: null, deseado: local },
+                { propiedad: 'comment', actual: null, deseado: `argosisp:perfil-pppoe:${servidor.id}` },
+            ] },
+            { ruta: '/interface/pppoe-server/server', ros_id: servidor.ros_id, nombre: servidor.service_name, accion: 'actualizar', propiedades: [
+                { propiedad: 'default-profile', actual: servidor.perfil_base, deseado: `argosisp-pppoe-${servidor.id}` },
+                { propiedad: 'max-mtu', actual: String(servidor.max_mtu), deseado: '1480' },
+                { propiedad: 'comment', actual: servidor.comment, deseado: `argosisp:pppoe:${servidor.id}` },
+            ] },
+        ],
+        sesiones,
+        advertencias: sesiones ? [`${sesiones} ${sesiones === 1 ? 'sesión abierta sigue' : 'sesiones abiertas siguen'} con su perfil hasta reconectar: el cambio de perfil no las corta.`] : [],
+        faltan: servidor.red_ipv4_id === null ? [{ field: 'red_ipv4_id', rule: 'red_requerida', message: 'Asígnale una red IPv4: su gateway es el local-address del perfil de Argos' }] : [],
+    }
+}
+
+function tomarControl(solicitud: SolicitudFixture, entidad: 'vlan' | 'servidor_pppoe'): RespuestaFixture {
+    const id = idDe(solicitud) ?? 0
+    const fila = entidad === 'vlan' ? ra().vlans.find(v => v.id === id) : ra().servidoresPppoe.find(s => s.id === id)
+    if (!fila) {
+        return noEncontrado(entidad === 'vlan' ? 'la VLAN' : 'el servidor PPPoE')
+    }
+    const cuerpo = cuerpoObjeto(solicitud)
+    if (cuerpo.version !== fila.version) {
+        return problemaTipado(409, 'conflicto_version', 'Conflicto de versión', 'Otra persona modificó este registro. Vuelve a cargarlo.')
+    }
+    if (fila.estado !== 'adoptado') {
+        return regla('ya_administrado', 'Argos ya lo administra', 'id')
+    }
+    const vista = vistaTomarControl(entidad, id)
+    if ('status' in vista) {
+        return vista
+    }
+    if (vista.faltan.length) {
+        const falta = vista.faltan[0]!
+        return problemaTipado(422, falta.rule, 'Regla de negocio', falta.message, vista.faltan)
+    }
+    if (cuerpo.huella !== vista.huella) {
+        return problemaTipado(409, 'router_cambio', 'El router cambió', 'Lo que tiene el router cambió desde la vista previa: vuelve a revisarla')
+    }
+    Object.assign(fila, { estado: 'administrado', comment: entidad === 'vlan' ? `argosisp:vlan:${id}` : `argosisp:pppoe:${id}`, version: fila.version + 1, updated_at: ahora() })
+    registrarAccion(solicitud, 'red_acceso.tomar_control', { tipo: entidad, id }, { ...cuerpo, cambios: vista.cambios.length })
+    return { status: 200, cuerpo: entidad === 'vlan' ? vistaVlan(fila as FilaVlan) : vistaServidor(fila as FilaServidorPppoe) }
 }
 
 export const rutasRedAcceso: RutasFixture = {
@@ -620,7 +695,9 @@ export const rutasRedAcceso: RutasFixture = {
         }
         Object.assign(actual, servidor)
         for (const servicio of bd.servicios.filter(s => s.servidor_pppoe_id === actual.id)) {
-            servicio.local_address = localAddressServicio(servicio)
+            const local = localAddressServicio(servicio)
+            servicio.local_address = local.local_address
+            servicio.local_address_derivado = local.derivado
         }
         registrarAccion(solicitud, 'servidores_pppoe.editar', { tipo: 'servidor_pppoe', id: actual.id }, cuerpo)
         return { status: 200, cuerpo: vistaServidor(actual) }
@@ -755,6 +832,20 @@ export const rutasRedAcceso: RutasFixture = {
         registrarAccion(solicitud, 'red_acceso.adoptar', { tipo: 'router', id: routerId }, cuerpo)
         return { status: 200, cuerpo: resultado }
     })),
+
+    'GET /api/v1/vlans/:id/vista-previa-tomar-control': conPermiso('red_acceso.tomar_control', (solicitud) => {
+        const vista = vistaTomarControl('vlan', idDe(solicitud) ?? 0)
+        return 'status' in vista ? vista : { status: 200, cuerpo: vista }
+    }),
+
+    'GET /api/v1/servidores-pppoe/:id/vista-previa-tomar-control': conPermiso('red_acceso.tomar_control', (solicitud) => {
+        const vista = vistaTomarControl('servidor_pppoe', idDe(solicitud) ?? 0)
+        return 'status' in vista ? vista : { status: 200, cuerpo: vista }
+    }),
+
+    'POST /api/v1/vlans/:id/tomar-control': conPermiso('red_acceso.tomar_control', conIdempotencia(solicitud => tomarControl(solicitud, 'vlan'))),
+
+    'POST /api/v1/servidores-pppoe/:id/tomar-control': conPermiso('red_acceso.tomar_control', conIdempotencia(solicitud => tomarControl(solicitud, 'servidor_pppoe'))),
 
     'GET /api/v1/routers/:id/vista-previa-unificar-velocidad': conPermiso('routers.ver', (solicitud) => {
         const router = bd.routers.find(r => r.id === idDe(solicitud))

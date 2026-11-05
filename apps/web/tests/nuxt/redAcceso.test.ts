@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { defineComponent, h, type Component } from 'vue'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import PaginaRouter from '~/pages/routers/[id].vue'
@@ -9,6 +9,7 @@ import PaginaServicio from '~/pages/servicios/[id].vue'
 import RouterRedAcceso from '~/components/RouterRedAcceso.vue'
 import RedAccesoDescubrir from '~/components/RedAccesoDescubrir.vue'
 import RouterReconciliarModal from '~/components/RouterReconciliarModal.vue'
+import TomarControlModal from '~/components/TomarControlModal.vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 
@@ -52,15 +53,56 @@ describe('red de acceso', () => {
 
         const vlan = await useRedAcceso().crearVlan(1, { interfaz_padre: 'sfp-sfpplus1', vlan_id: 120, puerto_pon_id: 3 })
         expect(vlan.ok && vlan.data).toMatchObject({ nombre: 'vlan120', estado: 'administrado', comment: `argosisp:vlan:${vlan.ok ? vlan.data.id : 0}` })
-        // La red 2 (pool) no tiene gateway: el local-address no se inventa.
-        const sinGateway = await useRedAcceso().crearServidor(1, { nombre: 'fibra-120', vlan_id: vlan.ok ? vlan.data.id : 0, red_ipv4_id: 2 })
-        expect(!sinGateway.ok && codigoProblema(sinGateway.problema)).toBe('red_sin_gateway')
-        const servidor = await useRedAcceso().crearServidor(1, { nombre: 'fibra-120', vlan_id: vlan.ok ? vlan.data.id : 0, red_ipv4_id: 1 })
-        expect(servidor.ok && servidor.data).toMatchObject({ interfaz: 'vlan120', local_address: '100.64.10.1', max_mtu: 1480, autenticacion: ['pap', 'chap', 'mschap1', 'mschap2'] })
+        // La red 2 (pool) no tiene gateway: ya no se bloquea, el local-address es su primera IP (derivado).
+        const servidor = await useRedAcceso().crearServidor(1, { nombre: 'fibra-120', vlan_id: vlan.ok ? vlan.data.id : 0, red_ipv4_id: 2 })
+        expect(servidor.ok && servidor.data).toMatchObject({ interfaz: 'vlan120', local_address: '100.64.11.1', local_address_derivado: true, max_mtu: 1480, autenticacion: ['pap', 'chap', 'mschap1', 'mschap2'] })
+        const redes = await useRouters().redesIpv4(1)
+        expect(redes.ok && redes.data.map(r => [r.id, r.gateway_efectivo, r.gateway_derivado, r.gateway_ocupado_por])).toEqual([[1, '100.64.10.1', false, null], [2, '100.64.11.1', true, null]])
 
         // Lo adoptado no cambia en lo de RouterOS.
         const adoptada = await useRedAcceso().editarVlan(2, { version: 1, vlan_id: 210 })
         expect(!adoptada.ok && codigoProblema(adoptada.problema)).toBe('adoptado_solo_lectura')
+    })
+
+    it('quitar el gateway con un servicio en la primera IP: 422 `gateway_derivado_ocupado` en el campo', async () => {
+        const red = bd.redesIpv4.find(r => r.id === 1)!
+        const servicio = bd.servicios.find(s => s.router_id === 1 && s.estado !== 'retirado')!
+        servicio.ipv4 = '100.64.10.1'
+        const quitar = await useRedesIpv4().editar(1, { version: red.version, gateway: null })
+        expect(!quitar.ok && codigoProblema(quitar.problema)).toBe('gateway_derivado_ocupado')
+        expect(!quitar.ok && quitar.problema.errors?.[0]?.field).toBe('gateway')
+    })
+
+    it('tomar control: vista previa con el diff, 409 si el router cambió y luego queda administrado', async () => {
+        const previa = await useRedAcceso().vistaPreviaTomarControl('servidor_pppoe', 2)
+        expect(previa.ok && previa.data.cambios.map(c => [c.ruta, c.accion])).toEqual([['/ppp/profile', 'crear'], ['/interface/pppoe-server/server', 'actualizar']])
+        expect(previa.ok && previa.data.faltan).toEqual([])
+        const huella = previa.ok ? previa.data.huella : ''
+        bd.redAcceso.cambiosEnRouter['servidor_pppoe:2'] = 1
+        const cambio = await useRedAcceso().tomarControlServidor(2, { version: 1, huella }, nuevaClaveIdempotencia())
+        expect(!cambio.ok && codigoProblema(cambio.problema)).toBe('router_cambio')
+        const otra = await useRedAcceso().vistaPreviaTomarControl('servidor_pppoe', 2)
+        const tomado = await useRedAcceso().tomarControlServidor(2, { version: 1, huella: otra.ok ? otra.data.huella : '' }, nuevaClaveIdempotencia())
+        expect(tomado.ok && [tomado.data.estado, tomado.data.perfil, tomado.data.comment]).toEqual(['administrado', 'argosisp-pppoe-2', 'argosisp:pppoe:2'])
+        const yaEs = await useRedAcceso().tomarControlServidor(2, { version: 2, huella: 'x' }, nuevaClaveIdempotencia())
+        expect(!yaEs.ok && codigoProblema(yaEs.problema)).toBe('ya_administrado')
+    })
+
+    it('tomar control sin el diff de A2 (501): «Todavía no disponible» con «Reintentar»', async () => {
+        simularFalla('GET /api/v1/vlans/:id/vista-previa-tomar-control', 501)
+        await mountSuspended(enApp(TomarControlModal, { entidad: 'vlan', id: 2, nombre: 'VLAN 201', open: true }))
+        await esperar(() => expect(enBody('tomar-control-no-disponible')).not.toBeNull())
+        expect(enBody('tomar-control-no-disponible')?.textContent).toContain('Reintentar')
+        expect(enBody('tomar-control-confirmar')).toBeNull()
+    })
+
+    it('la pestaña marca el local-address derivado (red sin gateway)', async () => {
+        const servidor = bd.redAcceso.servidoresPppoe.find(s => s.id === 1)!
+        servidor.red_ipv4_id = 2
+        const router = bd.routers.find(r => r.id === 1)!
+        const vista = await mountSuspended(enApp(RouterRedAcceso, { router }))
+        await esperar(() => expect(vista.find('[data-prueba="local-address-1"]').text()).toBe('100.64.11.1'))
+        expect(vista.find('[data-prueba="local-address-origen-1"]').text()).toBe('derivado (primera IP de la red)')
     })
 
     it('servicio PPPoE: se autoelige con un servidor y pide elegir con varios (422 servidor_pppoe_requerido)', async () => {

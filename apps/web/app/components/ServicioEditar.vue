@@ -101,11 +101,13 @@ const itemsServidor = computed<SelectItem[]>(() => [
     ...(props.servicio.servidor_pppoe_id ? [] : [{ label: 'Que lo elija Argos por la red', value: 0 }]),
     ...servidores.value
         .filter(s => s.activo || s.id === props.servicio.servidor_pppoe_id)
-        .map(s => ({ label: s.nombre, value: s.id, description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}` : 'sin gateway'].join(' · ') })),
+        .map(s => ({ label: s.nombre, value: s.id, description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}${s.local_address_derivado ? ' (derivado)' : ''}` : 'sin red'].join(' · ') })),
 ])
 const servidorElegido = computed(() => servidores.value.find(s => s.id === estado.servidor_pppoe_id) ?? null)
 /** Gateway de solo lectura: el guardado mientras no cambie el servidor; si cambia, el del servidor nuevo. */
-const gatewayServicio = computed(() => (estado.servidor_pppoe_id === (props.servicio.servidor_pppoe_id ?? 0) ? props.servicio.local_address : servidorElegido.value?.local_address) ?? null)
+const sinCambioServidor = computed(() => estado.servidor_pppoe_id === (props.servicio.servidor_pppoe_id ?? 0))
+const gatewayServicio = computed(() => (sinCambioServidor.value ? props.servicio.local_address : servidorElegido.value?.local_address) ?? null)
+const gatewayDerivado = computed(() => Boolean(sinCambioServidor.value ? props.servicio.local_address_derivado : servidorElegido.value?.local_address_derivado))
 
 /** Qué pasa con las credenciales al cambiar el tipo. */
 const avisoTipo = computed(() => {
@@ -233,7 +235,7 @@ async function recargar() {
                             name="i-lucide-route"
                             class="size-3.5 shrink-0"
                         />
-                        Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio ?? 'sale de la red del servidor' }}</span>
+                        Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio ?? 'sale de la red del servidor' }}</span><span v-if="gatewayServicio && gatewayDerivado">, {{ MARCA_GATEWAY_DERIVADO }}</span>
                     </p>
                 </UFormField>
 

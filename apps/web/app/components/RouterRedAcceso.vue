@@ -107,6 +107,28 @@ function abrirServidor(servidor: ServidorPppoe | null, vlan: Vlan | null = null)
     servidorAbierto.value = true
 }
 
+/* Tomar control de lo adoptado (§4.1) */
+const tomarControlAbierto = ref(false)
+const objetivoControl = shallowRef<{ entidad: VistaPreviaTomarControl['entidad'], id: number, nombre: string } | null>(null)
+
+function abrirTomarControl(entidad: VistaPreviaTomarControl['entidad'], id: number, nombre: string) {
+    objetivoControl.value = { entidad, id, nombre }
+    tomarControlAbierto.value = true
+}
+
+/** «Asignar red» desde lo que falta: abre la edición del servidor. */
+function completarControl() {
+    const objetivo = objetivoControl.value
+    const servidor = objetivo?.entidad === 'servidor_pppoe' ? red.value?.servidores_pppoe.find(s => s.id === objetivo.id) : undefined
+    const vlan = objetivo?.entidad === 'vlan' ? red.value?.vlans.find(v => v.id === objetivo.id) : undefined
+    if (servidor && puede('servidores_pppoe.editar')) {
+        abrirServidor(servidor)
+    }
+    else if (vlan && puede('vlans.editar')) {
+        abrirVlan(vlan)
+    }
+}
+
 /* Eliminar */
 const porEliminar = shallowRef<{ tipo: 'vlan', fila: Vlan } | { tipo: 'servidor', fila: ServidorPppoe } | null>(null)
 const eliminarAbierto = ref(false)
@@ -296,6 +318,16 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
                             </div>
                             <div class="flex gap-1">
                                 <UButton
+                                    v-if="vlan.estado === 'adoptado' && puede('red_acceso.tomar_control')"
+                                    label="Tomar control"
+                                    icon="i-lucide-hand"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    :data-prueba="`tomar-control-vlan-${vlan.id}`"
+                                    @click="abrirTomarControl('vlan', vlan.id, `VLAN ${vlan.vlan_id}`)"
+                                />
+                                <UButton
                                     v-if="puede('vlans.editar')"
                                     icon="i-lucide-pencil"
                                     color="neutral"
@@ -324,6 +356,7 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
                             :pool-delegacion="poolDe(servidorDe(vlan)!.ipv6_pool_delegacion_id)"
                             @editar="abrirServidor(servidorDe(vlan)!)"
                             @eliminar="pedirEliminar({ tipo: 'servidor', fila: servidorDe(vlan)! })"
+                            @tomar-control="abrirTomarControl('servidor_pppoe', servidorDe(vlan)!.id, servidorDe(vlan)!.nombre)"
                         />
                         <div
                             v-else
@@ -361,6 +394,7 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
                             :pool-delegacion="poolDe(servidor.ipv6_pool_delegacion_id)"
                             @editar="abrirServidor(servidor)"
                             @eliminar="pedirEliminar({ tipo: 'servidor', fila: servidor })"
+                            @tomar-control="abrirTomarControl('servidor_pppoe', servidor.id, servidor.nombre)"
                         />
                     </li>
                 </ul>
@@ -402,6 +436,15 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
             v-if="puede('red_acceso.ver')"
             v-model:open="oltsAbierto"
             @cambiado="cargar"
+        />
+        <TomarControlModal
+            v-if="objetivoControl && puede('red_acceso.tomar_control')"
+            :id="objetivoControl.id"
+            v-model:open="tomarControlAbierto"
+            :entidad="objetivoControl.entidad"
+            :nombre="objetivoControl.nombre"
+            @tomado="cargar"
+            @completar="completarControl"
         />
         <ConfirmacionModal
             v-if="puede('vlans.eliminar') || puede('servidores_pppoe.eliminar')"

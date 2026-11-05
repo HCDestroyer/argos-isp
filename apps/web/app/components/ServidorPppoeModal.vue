@@ -7,8 +7,8 @@ import * as z from 'zod'
  * Crear (`POST /routers/:id/servidores-pppoe`, `servidores_pppoe.crear`) o editar
  * (`PUT /servidores-pppoe/:id`, `servidores_pppoe.editar`, con `version`) un servidor PPPoE
  * (`contratos/red-acceso.md` §1–§2): uno por VLAN o interfaz, con su red IPv4. El `local-address`
- * del perfil **sale del gateway de la red** (solo lectura): una red sin gateway se ve deshabilitada
- * con el porqué. Un servidor adoptado solo cambia lo de Argos (nombre, red, pools, activo).
+ * del perfil **sale del gateway efectivo de la red** (solo lectura): el gateway o, sin él, la primera
+ * IP utilizable, marcado como derivado. Un servidor adoptado solo cambia lo de Argos (nombre, red, pools, activo).
  */
 const props = withDefaults(defineProps<{
     routerId: number
@@ -116,8 +116,7 @@ const itemsRed = computed<SelectItem[]>(() => [
     ...redes.value.map(red => ({
         label: red.nombre ? `${red.cidr} · ${red.nombre}` : red.cidr,
         value: red.id,
-        description: red.gateway ? `Gateway ${red.gateway}` : 'Sin gateway: defínelo en Pools e IPs',
-        disabled: !red.gateway,
+        description: red.gateway ? `Gateway ${red.gateway}` : `Gateway ${red.gateway_efectivo ?? '—'}, ${MARCA_GATEWAY_DERIVADO}`,
     })),
 ])
 
@@ -131,8 +130,10 @@ function itemsPool(tipo: 'enlace' | 'delegacion'): SelectItem[] {
 
 const itemsAutenticacion: CheckboxGroupItem[] = AUTENTICACIONES_PPPOE.map(a => ({ label: a.toUpperCase().replace('MSCHAP', 'MS-CHAP v'), value: a }))
 
-/** El `local-address` que llevará el perfil: el gateway de la red elegida (nunca se teclea). */
-const localAddress = computed(() => redes.value.find(r => r.id === estado.red_ipv4_id)?.gateway ?? null)
+/** El `local-address` que llevará el perfil: el gateway efectivo de la red elegida (nunca se teclea). */
+const redElegida = computed(() => redes.value.find(r => r.id === estado.red_ipv4_id) ?? null)
+const localAddress = computed(() => redElegida.value?.gateway_efectivo ?? redElegida.value?.gateway ?? null)
+const localDerivado = computed(() => Boolean(redElegida.value) && !redElegida.value?.gateway)
 const interfazDerivada = computed(() => props.vlans.find(v => v.id === estado.vlan_id)?.nombre ?? null)
 
 const nulo = (valor: number) => (valor === NINGUNO ? null : valor)
@@ -289,13 +290,17 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         class="mt-0.5 size-4 shrink-0 text-primary"
                     />
                     <span v-if="localAddress">
-                        local-address <span class="font-mono font-medium text-highlighted">{{ localAddress }}</span>: sale del gateway de la red, nunca del perfil default.
+                        local-address <span class="font-mono font-medium text-highlighted">{{ localAddress }}</span><template v-if="localDerivado">, {{ MARCA_GATEWAY_DERIVADO }}</template>: sale de la red, nunca del perfil default.
+                        <span
+                            v-if="redElegida?.gateway_ocupado_por"
+                            class="mt-1 block text-warning"
+                        >El servicio {{ redElegida.gateway_ocupado_por }} ya tenía esa IP: la conserva, pero conviene moverlo a otra.</span>
                     </span>
                     <span
                         v-else
                         class="text-muted"
                     >
-                        Elige una red con gateway: su gateway es el local-address del perfil PPP.
+                        Elige la red: su gateway (o, sin él, su primera IP) es el local-address del perfil PPP.
                     </span>
                 </div>
 

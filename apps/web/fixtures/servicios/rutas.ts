@@ -73,7 +73,7 @@ export function nombresDe(clienteId: number, planId: number, routerId: number): 
 /** El servicio como lo devuelve la API: con los nombres al día (un cliente renombrado, por ejemplo). */
 function vista(servicio: Servicio): Servicio {
     // Red de acceso (A1): la API siempre envía el servidor PPPoE y el local-address (null si no hay).
-    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id), servidor_pppoe_id: servicio.servidor_pppoe_id ?? null, local_address: servicio.local_address ?? null }
+    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id), servidor_pppoe_id: servicio.servidor_pppoe_id ?? null, local_address: servicio.local_address ?? null, local_address_derivado: servicio.local_address_derivado ?? false }
 }
 
 function texto(valor: unknown): string | null {
@@ -684,7 +684,9 @@ export const rutasServicios: RutasFixture = {
             return servidor
         }
         resultado.servidor_pppoe_id = servidor.servidor?.id ?? null
-        resultado.local_address = resultado.tipo_conexion === 'pppoe' ? localAddressServicio(resultado) : null
+        const local = resultado.tipo_conexion === 'pppoe' ? localAddressServicio(resultado) : { local_address: null, derivado: false }
+        resultado.local_address = local.local_address
+        resultado.local_address_derivado = local.derivado
         bd.servicios.push(resultado)
         const { pass_ppp: clave, ...entrada } = cuerpoObjeto(solicitud)
         if (resultado.tipo_conexion === 'pppoe') {
@@ -751,7 +753,8 @@ export const rutasServicios: RutasFixture = {
         const actualizado: Servicio = {
             ...actual,
             servidor_pppoe_id: servidorId,
-            local_address: tipo === 'pppoe' ? localAddressServicio({ ...actual, servidor_pppoe_id: servidorId }) : null,
+            local_address: tipo === 'pppoe' ? localAddressServicio({ ...actual, servidor_pppoe_id: servidorId }).local_address : null,
+            local_address_derivado: tipo === 'pppoe' && localAddressServicio({ ...actual, servidor_pppoe_id: servidorId }).derivado,
             plan_id: planId,
             tipo_conexion: tipo,
             amarre_ip_mac: amarre,

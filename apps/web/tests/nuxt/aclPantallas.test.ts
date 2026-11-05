@@ -203,6 +203,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'OltsSlideover.vue': { permisos: ['red_acceso.ver', 'olts.crear', 'olts.editar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['olts.crear', 'olts.editar'] } },
     'RedAccesoDescubrir.vue': { permisos: ['red_acceso.descubrir', 'red_acceso.adoptar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['red_acceso.adoptar'] } },
     'VlanModal.vue': { permisos: ['vlans.crear', 'vlans.editar'], desde: ['components/RouterRedAcceso.vue'] },
+    'TomarControlModal.vue': { permisos: ['red_acceso.tomar_control'], desde: ['components/RouterRedAcceso.vue'] },
     'ServidorPppoeModal.vue': { permisos: ['servidores_pppoe.crear', 'servidores_pppoe.editar'], desde: ['components/RouterRedAcceso.vue'] },
     'RouterExcepcionesAviso.vue': { permisos: ['routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
     // Menú de acciones del router: lo montan la lista y la ficha (las dos con `routers.ver`).

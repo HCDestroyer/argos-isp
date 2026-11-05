@@ -30,6 +30,9 @@ export function ipEnCidr(ip: string, cidr: string): boolean {
 }
 
 /** Kbps a texto corto: `10000` → `10 Mbps`, `512` → `512 kbps`. */
+/** Marca del gateway que sale de la primera IP utilizable (red sin gateway; `red-acceso.md` §2). */
+export const MARCA_GATEWAY_DERIVADO = 'derivado (primera IP de la red)'
+
 export function formatearVelocidad(kbps: number): string {
     if (kbps >= 1000 && kbps % 1000 === 0) {
         return `${kbps / 1000} Mbps`

@@ -133,7 +133,7 @@ const itemsServidor = computed<SelectItem[]>(() => [
     ...servidores.value.map(s => ({
         label: s.nombre,
         value: s.id,
-        description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}` : 'sin gateway'].join(' · '),
+        description: [s.vlan ? `VLAN ${s.vlan.vlan_id}` : s.interfaz, s.local_address ? `gateway ${s.local_address}${s.local_address_derivado ? ' (derivado)' : ''}` : 'sin red'].join(' · '),
     })),
 ])
 const servidorSeleccion = computed({
@@ -143,7 +143,9 @@ const servidorSeleccion = computed({
     },
 })
 /** El gateway que llevará la sesión (local-address): el de la red de su IP fija o el de su servidor. */
-const gatewayServicio = computed(() => (estado.asignacion === 'fija' && red.value ? red.value.gateway : null) ?? servidorElegido.value?.local_address ?? null)
+const gatewayServicio = computed(() => (estado.asignacion === 'fija' && red.value ? (red.value.gateway_efectivo ?? red.value.gateway) : null) ?? servidorElegido.value?.local_address ?? null)
+/** El gateway sale de la primera IP de la red (red sin gateway). */
+const gatewayDerivado = computed(() => (estado.asignacion === 'fija' && red.value ? !red.value.gateway : Boolean(servidorElegido.value?.local_address_derivado)))
 
 /** El router elegido no usa RADIUS: todo por su API REST (PPPoE como secrets locales). */
 const routerSinRadius = computed(() => esSinRadius(router.value))
@@ -714,7 +716,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 name="i-lucide-route"
                                 class="size-3.5 shrink-0"
                             />
-                            <span v-if="gatewayServicio">Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio }}</span>, sale de la red; no se escribe.</span>
+                            <span v-if="gatewayServicio">Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio }}</span>{{ gatewayDerivado ? `, ${MARCA_GATEWAY_DERIVADO}` : '' }}; sale de la red y no se escribe.</span>
                             <span v-else>Gateway (local-address): sale de la red del servidor al elegirlo.</span>
                         </p>
                     </section>

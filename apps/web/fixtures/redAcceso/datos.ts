@@ -17,7 +17,7 @@ import type { Schema } from '@argosisp/contracts'
 export type FilaOlt = Omit<Schema<'Olt'>, 'puertos'>
 export type FilaPuertoPon = Omit<Schema<'PuertoPon'>, 'vlans'>
 export type FilaVlan = Omit<Schema<'Vlan'>, 'puerto_pon'>
-export type FilaServidorPppoe = Omit<Schema<'ServidorPppoe'>, 'vlan' | 'perfil' | 'local_address' | 'servicios'>
+export type FilaServidorPppoe = Omit<Schema<'ServidorPppoe'>, 'vlan' | 'perfil' | 'local_address' | 'local_address_derivado' | 'servicios'>
 
 export interface RedAccesoFixtures {
     olts: FilaOlt[]
@@ -26,6 +26,8 @@ export interface RedAccesoFixtures {
     servidoresPppoe: FilaServidorPppoe[]
     /** Lo que «lee» el router en `descubrir`; sin entrada, lo mismo que Argos tiene registrado. */
     descubrimientos: Record<number, Schema<'DescubrimientoRedAcceso'>>
+    /** Cambios hechos a mano en el router desde la vista previa de «Tomar control» (`<entidad>:<id>`): cambian la huella. */
+    cambiosEnRouter: Record<string, number>
 }
 
 const creado = '2026-10-20T15:00:00.000Z'
@@ -63,6 +65,7 @@ export function redAccesoInicial(): RedAccesoFixtures {
             { id: 2, router_id: 2, empresa_id: null, nombre: 'fibra-201', vlan_id: 2, interfaz: 'vlan201', service_name: 'fibra-201', red_ipv4_id: 3, ipv6_pool_enlace_id: null, ipv6_pool_delegacion_id: null, ...SERVIDOR_POR_DEFECTO, perfil_base: 'pppoe-mixco', max_mtu: 1492, max_mru: 1492, estado: 'adoptado', ros_id: '*3D', comment: null, activo: true, descripcion: null, ...meta },
             { id: 3, router_id: 2, empresa_id: null, nombre: 'fibra-202', vlan_id: 3, interfaz: 'vlan202', service_name: 'fibra-202', red_ipv4_id: 3, ipv6_pool_enlace_id: null, ipv6_pool_delegacion_id: null, ...SERVIDOR_POR_DEFECTO, perfil_base: 'pppoe-mixco', max_mtu: 1492, max_mru: 1492, estado: 'adoptado', ros_id: '*3E', comment: null, activo: true, descripcion: null, ...meta },
         ],
+        cambiosEnRouter: {},
         descubrimientos: {
             1: {
                 router_id: 1,
@@ -94,9 +97,19 @@ export function redAccesoInicial(): RedAccesoFixtures {
     }
 }
 
+/** Primera IP utilizable de un CIDR (en /31 y /32 la dirección de red): el gateway derivado. */
+export function primeraIpUtilizable(cidr: string): string {
+    const [base = '0.0.0.0', largo = '32'] = cidr.split('/')
+    const tamano = 2 ** (32 - Number(largo))
+    const inicio = Math.floor(base.split('.').reduce((n, o) => n * 256 + Number(o), 0) / tamano) * tamano
+    const n = Number(largo) >= 31 ? inicio : inicio + 1
+    return [24, 16, 8, 0].map(bits => Math.floor(n / 2 ** bits) % 256).join('.')
+}
+
 /**
  * Como la API tras sembrar: cada PPPoE de un router con servidores queda en uno de ellos y su
- * `local_address` es el gateway de la red de su IPv4 (o el de su servidor). Los demás, null.
+ * `local_address` es el gateway efectivo de la red de su IPv4 (o el de su servidor): el gateway o,
+ * sin él, la primera IP utilizable (`local_address_derivado`). Los demás, null.
  */
 export function sembrarServidoresServicios(servicios: Schema<'Servicio'>[], red: RedAccesoFixtures, redes: Schema<'RedIpv4'>[]): void {
     for (const servicio of servicios) {
@@ -105,6 +118,8 @@ export function sembrarServidoresServicios(servicios: Schema<'Servicio'>[], red:
         const servidor = pppoe && candidatos.length ? candidatos[servicio.id % candidatos.length] : undefined
         servicio.servidor_pppoe_id = servidor?.id ?? null
         const deSuRed = redes.find(r => r.router_id === servicio.router_id && servicio.ipv4 && r.cidr.split('.').slice(0, 3).join('.') === servicio.ipv4.split('.').slice(0, 3).join('.'))
-        servicio.local_address = pppoe ? (deSuRed?.gateway ?? redes.find(r => r.id === servidor?.red_ipv4_id)?.gateway ?? null) : null
+            ?? redes.find(r => r.id === servidor?.red_ipv4_id)
+        servicio.local_address = pppoe && deSuRed ? (deSuRed.gateway ?? primeraIpUtilizable(deSuRed.cidr)) : null
+        servicio.local_address_derivado = pppoe && Boolean(deSuRed) && !deSuRed?.gateway
     }
 }

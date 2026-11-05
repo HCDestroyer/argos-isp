@@ -15,6 +15,8 @@ export type CambiosVlan = paths['/api/v1/vlans/{id}']['put']['requestBody']['con
 export type DatosServidorPppoe = paths['/api/v1/routers/{id}/servidores-pppoe']['post']['requestBody']['content']['application/json']
 export type CambiosServidorPppoe = paths['/api/v1/servidores-pppoe/{id}']['put']['requestBody']['content']['application/json']
 export type DatosAdopcion = paths['/api/v1/routers/{id}/red-acceso/adoptar']['post']['requestBody']['content']['application/json']
+export type VistaPreviaTomarControl = Schema<'VistaPreviaTomarControl'>
+export type DatosTomarControl = paths['/api/v1/vlans/{id}/tomar-control']['post']['requestBody']['content']['application/json']
 export type AutenticacionPppoe = ServidorPppoe['autenticacion'][number]
 
 export const AUTENTICACIONES_PPPOE = ['pap', 'chap', 'mschap1', 'mschap2'] as const satisfies readonly AutenticacionPppoe[]
@@ -80,5 +82,24 @@ export function useRedAcceso() {
         }))
     }
 
-    return { ver, crearVlan, editarVlan, eliminarVlan, crearServidor, editarServidor, eliminarServidor, servidores, verServidor, descubrir, adoptar }
+    /**
+     * `GET /vlans/:id/vista-previa-tomar-control` o `/servidores-pppoe/:id/…` (`red_acceso.tomar_control`):
+     * el diff de A2 (lee el router, no escribe), las sesiones, advertencias y `faltan[]`. 501 sin el diff.
+     */
+    function vistaPreviaTomarControl(entidad: VistaPreviaTomarControl['entidad'], id: number): Promise<Resultado<VistaPreviaTomarControl>> {
+        return entidad === 'vlan'
+            ? resolver(api.GET('/api/v1/vlans/{id}/vista-previa-tomar-control', { params: { path: { id } } }))
+            : resolver(api.GET('/api/v1/servidores-pppoe/{id}/vista-previa-tomar-control', { params: { path: { id } } }))
+    }
+
+    /** `POST …/tomar-control` con `version` y `huella` (409 `conflicto_version` / `router_cambio`; 422 `ya_administrado`, `red_requerida`). */
+    function tomarControlVlan(id: number, datos: DatosTomarControl, claveIdempotencia: string): Promise<Resultado<Vlan>> {
+        return resolver(api.POST('/api/v1/vlans/{id}/tomar-control', { params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } }, body: datos }))
+    }
+
+    function tomarControlServidor(id: number, datos: DatosTomarControl, claveIdempotencia: string): Promise<Resultado<ServidorPppoe>> {
+        return resolver(api.POST('/api/v1/servidores-pppoe/{id}/tomar-control', { params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } }, body: datos }))
+    }
+
+    return { vistaPreviaTomarControl, tomarControlVlan, tomarControlServidor, ver, crearVlan, editarVlan, eliminarVlan, crearServidor, editarServidor, eliminarServidor, servidores, verServidor, descubrir, adoptar }
 }

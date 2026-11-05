@@ -317,6 +317,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servidores_pppoe.editar': 'Servidor PPPoE editado',
     'servidores_pppoe.eliminar': 'Servidor PPPoE eliminado',
     'red_acceso.adoptar': 'Red de acceso importada del router',
+    'red_acceso.tomar_control': 'Argos tomó el control de lo adoptado en el router',
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'routers.unir': 'Routers duplicados unidos (el mismo MikroTik)',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',

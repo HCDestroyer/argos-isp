@@ -70,7 +70,7 @@ const ESTADOS: Record<EstadoArgos, { etiqueta: string, color: 'info' | 'neutral'
 
 const itemsRed = computed<SelectItem[]>(() => [
     { label: 'Sin red (el router asigna)', value: SIN_RED },
-    ...(props.direccionamiento?.redes_ipv4 ?? []).map(r => ({ label: r.cidr, value: r.id, description: r.gateway ? `Gateway ${r.gateway}` : 'Sin gateway', disabled: !r.gateway })),
+    ...(props.direccionamiento?.redes_ipv4 ?? []).map(r => ({ label: r.cidr, value: r.id, description: r.gateway ? `Gateway ${r.gateway}` : `Gateway ${r.gateway_efectivo ?? '—'}, ${MARCA_GATEWAY_DERIVADO}` })),
 ])
 
 function alternar(cual: 'vlans' | 'servidores', rosId: string, valor: boolean | 'indeterminate') {
