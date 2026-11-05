@@ -5501,6 +5501,16 @@
             }
           },
           {
+            "name": "iris_conversacion",
+            "in": "query",
+            "required": false,
+            "description": "Acciones de esta conversación de Iris (`X-Iris-Conversacion`, contrato Iris 0.6.0)",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
             "name": "empresas",
             "in": "query",
             "required": false,
@@ -8378,7 +8388,7 @@
       "get": {
         "operationId": "clientesListar",
         "summary": "Buscar clientes",
-        "description": "Busca por nombre, NIT/CUI, teléfono, user_ppp o IP.",
+        "description": "Busca por nombre, NIT/CUI, teléfono, user_ppp o IP. `telefono` es otro filtro, exacto (contrato Iris 0.6.0 §7.6). Con el token del usuario técnico Iris, `q` no busca por NIT/CUI y `nit_cui` sale como `***`; con `telefono`, exige `X-Iris-Actor` y `X-Iris-Conversacion`.",
         "tags": [
           "clientes"
         ],
@@ -8515,6 +8525,36 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "telefono",
+            "in": "query",
+            "required": false,
+            "description": "Coincidencia exacta del número (contrato Iris 0.6.0 §7.6) sobre `telefono` y `movil` del cliente y `contacto_telefono` de sus servicios no retirados; se normaliza con la regla de los teléfonos (`422 validacion`, `rule: telefono`, si no es válido). Cada fila trae `coincide_en[]`. Con el token de Iris exige `X-Iris-Actor` y `X-Iris-Conversacion`",
+            "schema": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris cuando la petición es de atención (ver la descripción): id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
           }
         ],
         "responses": {
@@ -8542,6 +8582,16 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -28268,6 +28318,148 @@
           }
         },
         "x-permiso": "iris.revocar_token",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/verificar-identidad": {
+      "post": {
+        "operationId": "irisVerificarIdentidad",
+        "summary": "Verificar la identidad de un cliente sin recibir el dato (contrato Iris 0.6.0 §7.5)",
+        "description": "`metodo` = `documento` (NIT o CUI completo; sin guiones ni espacios y sin distinguir mayúsculas), `nombre` (sin mayúsculas, tildes, signos ni espacios repetidos) o `codigo_cliente`. Compara en tiempo constante y responde solo `{ coincide }`. Sin documento (`cf`): `422 metodo_no_disponible`, que no cuenta como intento. 5 intentos fallidos por cliente cada 30 minutos: después, `429 demasiados_intentos` con `Retry-After` (un acierto no reinicia el contador). Cada intento queda auditado con `valor` como `***`. Fuera del alcance de empresas: 403.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Iris-Actor",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "schema": {
+              "type": "string",
+              "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
+            }
+          },
+          {
+            "name": "X-Iris-Conversacion",
+            "in": "header",
+            "required": false,
+            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "El cliente que dice ser"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "documento",
+                      "nombre",
+                      "codigo_cliente"
+                    ],
+                    "description": "`documento` (NIT o CUI completo), `nombre` o `codigo_cliente`. `nombre` y `codigo_cliente` son pruebas débiles: solo valen junto con otra"
+                  },
+                  "valor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Lo que dijo el cliente. Argos nunca lo devuelve y lo audita como `***`"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "metodo",
+                  "valor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionIdentidad"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.verificar_identidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.verificar_identidad",
         "x-implementado": true
       }
     },
@@ -64423,6 +64615,7 @@
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
+                        "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -64436,6 +64629,8 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconexion_temporal",
+                        "comprobantes.registrar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
@@ -64797,6 +64992,7 @@
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
+                        "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
                         "cobros.configurar",
                         "cobros.liquidar",
@@ -64810,6 +65006,8 @@
                         "compras.ver",
                         "comprobantes.aprobar",
                         "comprobantes.rechazar",
+                        "comprobantes.reconexion_temporal",
+                        "comprobantes.registrar",
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
@@ -76427,6 +76625,7 @@
                             "clientes.estado_cuenta",
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
+                            "clientes.verificar_identidad",
                             "clientes.vincular_telegram",
                             "cobros.configurar",
                             "cobros.liquidar",
@@ -76440,6 +76639,8 @@
                             "compras.ver",
                             "comprobantes.aprobar",
                             "comprobantes.rechazar",
+                            "comprobantes.reconexion_temporal",
+                            "comprobantes.registrar",
                             "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
@@ -78718,6 +78919,20 @@
               "null"
             ],
             "description": "Nombre comercial de esa empresa (null sin empresa)"
+          },
+          "iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`X-Iris-Actor` de una llamada del usuario técnico Iris a pagos y atención (`asistente_ia` o `usuario:<id en Iris>`, contrato Iris 0.6.0 §7.1); null en lo demás"
+          },
+          "iris_conversacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás"
           },
           "created_at": {
             "type": "string",
@@ -85073,7 +85288,7 @@
               "string",
               "null"
             ],
-            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf"
+            "description": "Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf. Al usuario técnico Iris le sale `***` (contrato Iris 0.6.0 §1.1; null sigue null)"
           },
           "nit_cui_invalido": {
             "type": "boolean",
@@ -85240,6 +85455,18 @@
               }
             },
             "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
+          },
+          "coincide_en": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "telefono",
+                "movil",
+                "contacto_servicio"
+              ]
+            },
+            "description": "Solo con el filtro `telefono` de `GET /clientes` (contrato Iris 0.6.0 §7.6): dónde coincidió el número. `contacto_servicio` = contacto en sitio de un servicio no retirado, que puede no ser el titular"
           },
           "version": {
             "type": "integer",
@@ -99424,6 +99651,7 @@
           "clientes.estado_cuenta",
           "clientes.quitar_responsable_pago",
           "clientes.ver",
+          "clientes.verificar_identidad",
           "clientes.vincular_telegram",
           "cobros.configurar",
           "cobros.liquidar",
@@ -99437,6 +99665,8 @@
           "compras.ver",
           "comprobantes.aprobar",
           "comprobantes.rechazar",
+          "comprobantes.reconexion_temporal",
+          "comprobantes.registrar",
           "comprobantes.ver",
           "cuentas_bancarias.editar",
           "cuentas_bancarias.ver",
@@ -99691,6 +99921,7 @@
           "Ver el estado de cuenta de un cliente",
           "Quitar el responsable de pago de un cliente",
           "Ver y buscar clientes",
+          "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
           "Vincular el chat de Telegram de un cliente",
           "Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN",
           "Registrar la liquidación de un proveedor de cobro (banco neto y comisión)",
@@ -99704,6 +99935,8 @@
           "Ver compras (libro de compras)",
           "Aprobar comprobantes de depósito (registra el pago)",
           "Rechazar comprobantes de depósito con motivo",
+          "Pedir la reconexión temporal de un servicio cortado mientras caja revisa su comprobante (contrato Iris 0.6.0 §7.3)",
+          "Registrar un comprobante de depósito para revisión de caja (contrato Iris 0.6.0 §7.2)",
           "Ver comprobantes de depósito y su archivo",
           "Crear y editar cuentas bancarias propias",
           "Ver las cuentas bancarias propias (destino de depósitos y transferencias)",
@@ -113224,6 +113457,7 @@
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
               "clientes.ver",
+              "clientes.verificar_identidad",
               "clientes.vincular_telegram",
               "cobros.configurar",
               "cobros.liquidar",
@@ -113237,6 +113471,8 @@
               "compras.ver",
               "comprobantes.aprobar",
               "comprobantes.rechazar",
+              "comprobantes.reconexion_temporal",
+              "comprobantes.registrar",
               "comprobantes.ver",
               "cuentas_bancarias.editar",
               "cuentas_bancarias.ver",
@@ -117865,6 +118101,18 @@
               "type": "string"
             },
             "description": "Claves en anomalía sin supervisar"
+          }
+        }
+      },
+      "VerificacionIdentidad": {
+        "type": "object",
+        "required": [
+          "coincide"
+        ],
+        "properties": {
+          "coincide": {
+            "type": "boolean",
+            "description": "Si lo que dijo el cliente coincide con lo que tiene Argos. Nunca se devuelve el dato"
           }
         }
       },

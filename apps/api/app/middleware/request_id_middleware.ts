@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-import { contextoCliente, esCanal, type Canal, type ContextoAccion } from '#shared/contexto'
+import { contextoCliente, esCanal, type Canal, type ContextoAccion, type OrigenIris } from '#shared/contexto'
 
 const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
 
@@ -29,17 +29,24 @@ export default class RequestIdMiddleware {
         ctx.contextoAccion = (canalForzado?: Canal): ContextoAccion => {
             const usuario = 'auth' in ctx ? ctx.auth.user : undefined
             const guard = usuario !== undefined ? ctx.auth.authenticatedViaGuard : undefined
+            // Iris 0.6.0 §7.1: con `X-Iris-Actor` ya validado, el canal sale del actor de Iris
+            const canalIris: Canal | null = ctx.iris
+                ? ctx.iris.actor === 'asistente_ia'
+                    ? 'ia'
+                    : 'api'
+                : null
             return {
                 actor: usuario
                     ? { tipo: guard === 'tokens' ? 'token' : 'usuario', id: usuario.id }
                     : { tipo: 'sistema', id: null },
                 // la cookie del panel implica canal `panel` si no llega `X-Canal`
-                canal: canalForzado ?? canal ?? (guard === 'panel' ? 'panel' : 'api'),
+                canal: canalForzado ?? canalIris ?? canal ?? (guard === 'panel' ? 'panel' : 'api'),
                 requestId,
                 // multiempresa: empresa activa y alcance (middleware `empresa`, rutas con sesión)
                 ...(ctx.empresa
                     ? { empresaId: ctx.empresa.activa, empresasPermitidas: ctx.empresa.permitidas }
                     : {}),
+                ...(ctx.iris ? { iris: ctx.iris } : {}),
             }
         }
         ctx.contextoCliente = (clienteId: number, canalForzado: Canal = 'portal'): ContextoAccion =>
@@ -77,6 +84,11 @@ export function registrarAcceso(ctx: HttpContext) {
 declare module '@adonisjs/core/http' {
     interface HttpContext {
         requestId: string
+        /**
+         * Cabeceras `X-Iris-Actor` y `X-Iris-Conversacion` ya validadas (solo con el token de Iris en
+         * las rutas de §7; `exigirCabecerasIris`). `contextoAccion()` las lleva a `ctx.iris`.
+         */
+        iris?: OrigenIris
         /** Contexto para `DomainAction.execute`. `canalForzado` lo usan rutas de un canal fijo (portal, interno). */
         contextoAccion(canalForzado?: Canal): ContextoAccion
         /** actor `cliente` (portal autenticado; la sesión ya se verificó), canal `portal` por defecto */

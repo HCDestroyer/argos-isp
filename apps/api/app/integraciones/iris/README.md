@@ -89,7 +89,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.5.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.6.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
@@ -109,6 +109,36 @@ y el admin aprueba en Argos.
   no es semver, false. Los webhooks nuevos de 0.5.0 (`servicio.datos_cambiados`,
   `catalogo.cambiado`, `inventario.traslado_*`) solo deben salir con `conectorAdmite('0.5.0')`.
   `compararSemver` y `contratoAdmite` son las funciones puras.
+
+## Pagos y atención (contrato 0.6.0, §1.1, §7.1, §7.5, §7.6; parte de A1)
+
+- **Permisos del usuario técnico** (§1.1 con los nombres de §9.1): `PERMISOS_IRIS_CONTRATO` suma
+  `cuentas_bancarias.ver`, `comprobantes.registrar`, `comprobantes.ver`,
+  `comprobantes.reconexion_temporal`, `promesas.ver`, `promesas.crear` y
+  `clientes.verificar_identidad` (`PERMISOS_IRIS_060`). `pagos.reportar`,
+  `servicios.reconexion_temporal` y `clientes.buscar_por_telefono` no existen en Argos. La migración
+  `1793862211681_alter_permisos_iris_060` los suma al rol `integracion_iris` y a los tokens vigentes
+  que recortan permisos (idempotente, con diff en `audit.cambios`), como la de 0.5.0.
+- **Webhooks de 0.6.0** (`comprobante.aprobado` / `.rechazado`, `promesa.creada` / `.cumplida` /
+  `.incumplida` / `.cancelada`): `EVENTOS_IRIS_DESDE_060` y `CONTRATO_EVENTOS_060` en
+  `configuracion.ts`; solo a conectores con `conectorAdmite('0.6.0')` (lo aplica A6 en `envios.ts`;
+  `contratoMinimoEventoIris(evento)` dice la versión mínima).
+- **Cabeceras de atención** (`atencion.ts`): con el `atk_` de Iris, las rutas que declaran
+  `cabecerasIris` en `definirRuta` exigen `X-Iris-Actor` (`asistente_ia` | `usuario:<id>`, id de hasta
+  64 `A-Z a-z 0-9 _ -`) y `X-Iris-Conversacion` (hasta 128 `A-Z a-z 0-9 . _ : -`); si faltan o están mal
+  formadas, `400 cabecera_iris_requerida`. Quedan en `ctx.iris` → `ContextoAccion.iris` y en
+  `audit.acciones.iris_actor` / `iris_conversacion` (buscables con
+  `GET /bitacora/acciones?iris_conversacion=`). Canal: `ia` con `asistente_ia`, `api` con
+  `usuario:<id>` (no existe un canal `integracion`). Otros actores no las necesitan y se ignoran.
+- **Documento oculto**: `despachar` (`#shared/rutas`) pasa toda respuesta JSON del `atk_` de Iris por
+  `ocultarDocumentoIris`: `nit_cui` sale `"***"` (null sigue null). `GET /clientes?q=` con ese token no
+  compara contra el documento. Los webhooks a Iris no llevan valores de documento (solo el nombre
+  `nit_cui` en `campos[]` de `cliente.actualizado`).
+- **`POST /integraciones/iris/verificar-identidad`** (`clientes.verificar_identidad`, acción
+  `#core/actions/verificar_identidad_cliente`): `{ cliente_id, metodo, valor }` → `{ coincide }`.
+  Ver `app/core/README.md`.
+- **`GET /clientes?telefono=`** (A20): filtro exacto con `coincide_en[]`; con el `atk_` de Iris exige
+  las cabeceras. Ver `app/core/README.md`.
 
 ## Eventos
 

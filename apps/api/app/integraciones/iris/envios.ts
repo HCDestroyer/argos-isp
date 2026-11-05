@@ -4,7 +4,14 @@ import logger from '@adonisjs/core/services/logger'
 import type { EventoEntrante } from '#shared/eventos_bus'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
-import { conectorAdmite, destinoWebhooksIris } from '#integraciones/iris/configuracion'
+import {
+    CONTRATO_EVENTOS_060,
+    EVENTOS_IRIS_DESDE_060,
+    conectorAdmite,
+    contratoMinimoEventoIris,
+    destinoWebhooksIris,
+} from '#integraciones/iris/configuracion'
+import { ocultarDocumentoIris } from '#integraciones/iris/atencion'
 import {
     entregarPendientesDe,
     insertarEnvio,
@@ -85,18 +92,15 @@ export const EVENTOS_DESDE_050 = [
 /** Versión mínima del contrato para `EVENTOS_DESDE_050`. */
 export const CONTRATO_EVENTOS_050 = '0.5.0'
 
-/** Eventos de pagos y atención del contrato Iris 0.6.0 (§2.3, §7.2, §7.4): solo con contrato ≥ 0.6.0. */
-export const EVENTOS_DESDE_060 = [
-    'comprobante.aprobado',
-    'comprobante.rechazado',
-    'promesa.creada',
-    'promesa.cumplida',
-    'promesa.incumplida',
-    'promesa.cancelada',
-] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+/**
+ * Eventos de pagos y atención del contrato Iris 0.6.0 (§2.3, §7.2, §7.4): solo con contrato ≥ 0.6.0.
+ * La lista y la versión son de A1 (`#integraciones/iris/configuracion`).
+ */
+export const EVENTOS_DESDE_060 = EVENTOS_IRIS_DESDE_060 satisfies ReadonlyArray<
+    (typeof EVENTOS_A_IRIS)[number]
+>
 
-/** Versión mínima del contrato para `EVENTOS_DESDE_060`. */
-export const CONTRATO_EVENTOS_060 = '0.6.0'
+export { CONTRATO_EVENTOS_060 }
 
 const CANALES_COMPROBANTE = ['portal', 'panel', 'iris'] as const
 const CAUSAS_RECHAZO = [
@@ -573,10 +577,8 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
         )
         return null
     }
-    if (
-        (EVENTOS_DESDE_060 as readonly string[]).includes(evento.evento) &&
-        !(await conectorAdmite(CONTRATO_EVENTOS_060))
-    ) {
+    const minimo = contratoMinimoEventoIris(evento.evento)
+    if (minimo && !(await conectorAdmite(minimo))) {
         logger.debug(
             { outboxId: evento.id, evento: evento.evento },
             'iris: el conector habla un contrato anterior a 0.6.0; webhook no enviado',
@@ -591,7 +593,8 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
     const webhook = await payloadParaIris(evento.evento, evento.payload ?? {})
     if (!webhook || !enAlcance(alcance, webhook.empresas, webhook.compartido)) return null
 
-    const payload = { ...webhook.payload }
+    // Seguro extra (A1, 0.6.0): `nit_cui` nunca sale hacia el usuario técnico Iris
+    const payload = ocultarDocumentoIris({ ...webhook.payload })
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {
         // Iris solo ve las empresas de su alcance
         const visibles = webhook.empresas.filter((e) => alcance.empresas.includes(e))

@@ -68,3 +68,6 @@ export function telefonoParaGuardar(
         { field: campo, message: `Teléfono inválido: ${FORMATO_TELEFONO}`, rule: 'telefono' },
     ])
 }
+
+/** Dónde coincidió el teléfono (`GET /clientes?telefono=`, contrato Iris 0.6.0 §7.6). */
+export const COINCIDENCIAS_TELEFONO = ['telefono', 'movil', 'contacto_servicio'] as const

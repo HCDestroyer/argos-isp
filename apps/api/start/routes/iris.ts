@@ -16,6 +16,9 @@ import { hashCodigo } from '#integraciones/horus/actions/generar_enlace_horus'
 import { ResolucionIpsHorus, TicketSsoEmitido, TokenApi } from '#core/esquemas'
 import * as v from '#core/validators'
 import ResolverIps from '#core/actions/resolver_ips'
+import VerificarIdentidadCliente from '#core/actions/verificar_identidad_cliente'
+import { DemasiadosIntentosIdentidad } from '#core/limite_identidad'
+import { exigirCliente } from '#core/acceso_empresa'
 import EmitirTicketSso from '#core/actions/emitir_ticket_sso'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import RevocarTokenIris from '#core/actions/revocar_token_iris'
@@ -40,6 +43,7 @@ import {
     EnlaceConexionIris,
     EstadoConectorIris,
     TicketIris,
+    VerificacionIdentidad,
     VistaPreviaAutorizacionIris,
 } from '#integraciones/iris/esquemas'
 
@@ -265,6 +269,36 @@ const iris: Ruta[] = [
                 { ...cuerpo, conector: 'iris', atk_id: tokenId },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/iris/verificar-identidad',
+        operacion: 'irisVerificarIdentidad',
+        resumen: 'Verificar la identidad de un cliente sin recibir el dato (contrato Iris 0.6.0 §7.5)',
+        descripcion:
+            '`metodo` = `documento` (NIT o CUI completo; sin guiones ni espacios y sin distinguir mayúsculas), ' +
+            '`nombre` (sin mayúsculas, tildes, signos ni espacios repetidos) o `codigo_cliente`. Compara en ' +
+            'tiempo constante y responde solo `{ coincide }`. Sin documento (`cf`): `422 metodo_no_disponible`, ' +
+            'que no cuenta como intento. 5 intentos fallidos por cliente cada 30 minutos: después, ' +
+            '`429 demasiados_intentos` con `Retry-After` (un acierto no reinicia el contador). Cada intento ' +
+            'queda auditado con `valor` como `***`. Fuera del alcance de empresas: 403.',
+        etiqueta: 'integraciones',
+        permiso: 'clientes.verificar_identidad',
+        cuerpo: vi.verificarIdentidadValidator,
+        cabecerasIris: true,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Resultado', esquema: VerificacionIdentidad },
+        handler: async (ctx, { cuerpo }) => {
+            await exigirCliente(ctx, cuerpo.cliente_id)
+            try {
+                return await new VerificarIdentidadCliente().execute(cuerpo, ctx.contextoAccion())
+            } catch (error) {
+                if (error instanceof DemasiadosIntentosIdentidad) {
+                    ctx.response.header('Retry-After', String(error.reintentarEnS))
+                }
+                throw error
+            }
         },
     }),
     definirRuta({
