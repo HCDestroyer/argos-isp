@@ -391,12 +391,12 @@ En Argos todo esto ya existe para el portal del cliente y el panel; Iris usa las
 
 | Lo que pide Iris | Pieza de Argos | Estado en Argos |
 | --- | --- | --- |
-| Boleta de pago | **Comprobante de depósito** (`comprobantes.registrar`): `pendiente` → `aprobado` (crea el pago) o `rechazado` | Existe (portal y cola del panel); falta la ruta para Iris |
+| Boleta de pago | **Comprobante de depósito** (`comprobantes.registrar`): `pendiente` → `aprobado` (crea el pago) o `rechazado` | Existe, con canal `iris` (PR #217) |
 | Promesa de pago | **Promesa** (`promesas.crear`, `POST /promesas`), con reglas por plantilla y por canal (`ia`, `operador`) | Existe |
 | Política de promesas | **Simulador** (`POST /promesas/simular`) | Existe |
-| Reconexión temporal | **Promesa de tipo `reconexion_temporal`** ligada a un comprobante pendiente | Nueva |
-| Verificar identidad | `clientes.verificar_identidad` | Nueva |
-| Buscar por teléfono | Filtro `telefono` de `GET /clientes` | Nuevo filtro |
+| Reconexión temporal | **Promesa de tipo `reconexion_temporal`** ligada a un comprobante pendiente | Existe (PR #217) |
+| Verificar identidad | `clientes.verificar_identidad` | Existe (PR #217) |
+| Buscar por teléfono | Filtro `telefono` de `GET /clientes` | Existe (PR #217) |
 
 ### 7.1 Principios
 
@@ -580,5 +580,5 @@ Argos revisó la propuesta de Iris contra lo que ya tiene. Iris copia esta versi
 6. **Cabeceras:** `X-Iris-Actor` y `X-Iris-Conversacion` son obligatorias en §7 (`400 cabecera_iris_requerida`). La auditoría de Argos usa canal `ia` o `api`; §0 se corrige (no existe un canal `integracion`).
 7. **Archivo:** el comprobante sube como `multipart/form-data` con el archivo, igual que en el portal, en lugar de una URL firmada de 7 días. Argos no descarga nada de Iris (sin riesgo de SSRF) y la copia del archivo queda en Argos desde el primer momento.
 8. **Avisos (A21):** Argos adopta la mensajería de Iris solo como su canal WhatsApp; correo y Telegram siguen en Argos. Lo que Iris contestó en la conversación (comprobantes, reconexión y promesas creadas por Iris) Argos no lo repite. `corte_programado` no lo usa Argos. Argos suma las plantillas `factura_vencida` y `servicio_reactivado`, e Iris suma `boleta_recibida`. El registro de permisos de contacto vive solo en Iris.
-9. **Webhooks Iris → Argos:** van al receptor `/api/v1/integraciones/iris/webhook` que Argos ya entrega en el canje (hoy reservado).
+9. **Webhooks Iris → Argos:** van al receptor `/api/v1/integraciones/iris/webhook` que Argos ya entrega en el canje (activo desde PR #217).
 10. **Nuevo pedido B2** a Iris: destino de autologin `conversacion`, para el botón «Ver conversación en Iris» de la cola de caja.
