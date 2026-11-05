@@ -6,6 +6,7 @@ import {
     type OpcionesEnvio,
     type ResultadoEnvio,
 } from '#notify/canales/canal'
+import { esTransitorioIris } from '#notify/idempotencia_iris'
 
 /**
  * Canal `whatsapp` de notify por la mensajería de Iris (contrato Iris 0.6.0 §6, pedido A21). Argos
@@ -18,8 +19,10 @@ import {
  * - `Idempotency-Key = argos:aviso:<plantilla>:<envio_id>`: un reintento manda los mismos bytes (las
  *   variables se fijan al programar el envío) e Iris devuelve el mismo aviso.
  * - `202 { aviso_id, estado: en_cola | bloqueado, motivo? }` → `ResultadoEnvio` con `estado`.
- * - Se reintentan: red, timeout, `429`, `5xx` y `409 idempotencia_en_curso`. Otro `4xx` es permanente
- *   (`422 variable_desconocida`, `401` token revocado…): el envío queda `fallido` con el detalle.
+ * - Se reintentan: red, timeout, `429`, `5xx` y el `409` de idempotencia en curso, con cualquiera de
+ *   sus dos nombres (`idempotencia_en_curso` o `idempotencia_en_proceso`, `#notify/idempotencia_iris`).
+ *   Otro `4xx`, también otro `409`, es permanente (`422 variable_desconocida`, `401` token
+ *   revocado…): el envío queda `fallido` con el detalle.
  * - Lee el conector en cada envío (sin caché, regla 5). Si está apagado o sin URL o token, lanza un
  *   error permanente; `EnviarNotificacion` ya lo marca `omitido` antes (`estadoWhatsappIris`).
  */
@@ -87,11 +90,6 @@ function detalle(cuerpo: string): string {
     return cuerpo.slice(0, 500)
 }
 
-/** ¿Es `409 idempotencia_en_curso` (se reintenta) y no otro 409? */
-function enCurso(cuerpo: string): boolean {
-    return /idempotencia_en_curso/.test(cuerpo)
-}
-
 export class CanalWhatsappIris implements Canal {
     readonly nombre = 'whatsapp' as const
 
@@ -133,10 +131,7 @@ export class CanalWhatsappIris implements Canal {
             throw new ErrorCanal('whatsapp', `Iris no respondió: ${mensaje}`, false, { cause: error })
         }
         if (!respuesta.ok) {
-            const transitorio =
-                respuesta.status >= 500 ||
-                respuesta.status === 429 ||
-                (respuesta.status === 409 && enCurso(crudo))
+            const transitorio = esTransitorioIris(respuesta.status, crudo)
             throw new ErrorCanal('whatsapp', `Iris ${respuesta.status} ${detalle(crudo)}`, !transitorio)
         }
         let json: Record<string, unknown>

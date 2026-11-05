@@ -5,6 +5,7 @@ import { configIris } from '#integraciones/iris/configuracion'
 import { REINTENTOS_S } from '#integraciones/webhooks_salientes'
 import { estadoConectorWhatsapp, type EstadoWhatsapp } from '#notify/whatsapp'
 import { configPara } from '#notify/configuracion'
+import { esTransitorioIris } from '#notify/idempotencia_iris'
 
 /**
  * Permisos de contacto por WhatsApp hacia Iris (contrato Iris 0.6.0 §6.4). La acción
@@ -19,9 +20,10 @@ import { configPara } from '#notify/configuracion'
  *   (`notify.contacto_iris`) para no pedir avisos a quien quedó de baja.
  * - Con el conector apagado, sin URL o token, o con contrato < 0.6.0: sigue `pendiente` sin gastar
  *   intentos (sale al activarse, §6.4).
- * - `2xx` → `enviado`. Red, timeout, `429`, `5xx` y `409 idempotencia_en_curso` se reintentan a 1 min,
- *   5 min, 30 min, 2 h y 12 h (como los webhooks); después, `fallido`. `422` y otro `4xx` → `fallido`
- *   sin reintento.
+ * - `2xx` → `enviado`. Red, timeout, `429`, `5xx` y el `409` de idempotencia en curso (con cualquiera
+ *   de sus dos nombres, `idempotencia_en_curso` o `idempotencia_en_proceso`) se reintentan a 1 min,
+ *   5 min, 30 min, 2 h y 12 h (como los webhooks); después, `fallido`. `422` y otro `4xx`, también
+ *   otro `409`, → `fallido` sin reintento.
  */
 
 export function claveConsentimiento(
@@ -211,8 +213,7 @@ export async function entregarConsentimientosIris(
             const crudo = await respuesta.text()
             if (!respuesta.ok) {
                 error = `Iris ${status} ${crudo.slice(0, 500)}`
-                reintentable =
-                    status >= 500 || status === 429 || (status === 409 && /idempotencia_en_curso/.test(crudo))
+                reintentable = esTransitorioIris(status, crudo)
             } else {
                 respuestaIris = leerRespuesta(crudo)
             }
