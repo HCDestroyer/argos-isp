@@ -117,8 +117,8 @@ describe('FEL · lecturas nuevas', () => {
     })
 
     it('el cierre lista las NCRE sin certificar desde errors[] con enlace a cada nota', async () => {
-        // El cierre mira «el periodo más viejo abierto» contra hoy: con el reloj real la prueba cambiaba
-        // sola al pasar los meses (empezó a fallar en noviembre). Se fija en el hoy de los fixtures.
+        // El cierre calcula los meses cerrables contra hoy: con el reloj real la prueba cambiaba sola al
+        // pasar los meses (empezó a fallar en noviembre). Se fija en el hoy de los fixtures.
         fijarHoyFixtures()
         onTestFinished(soltarReloj)
         const ncre = dteDe('rechazado', 'nota_credito')
