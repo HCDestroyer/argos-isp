@@ -234,7 +234,8 @@ export const ConsentimientoWhatsapp = definirEsquema(
         ocurrido_en: instante,
         idempotency_key: {
             type: 'string',
-            description: '`argos:consentimiento:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)',
+            description:
+                '`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)',
         },
         entrega: {
             ...entrega,

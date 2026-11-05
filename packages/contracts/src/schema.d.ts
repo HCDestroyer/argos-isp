@@ -12902,7 +12902,7 @@ export interface components {
             origen: "argos_panel" | "argos_portal";
             /** Format: date-time */
             ocurrido_en: string;
-            /** @description `argos:consentimiento:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4) */
+            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4) */
             idempotency_key: string;
             /**
              * @description `pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`

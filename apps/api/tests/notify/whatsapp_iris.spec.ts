@@ -2,7 +2,8 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
 import type { PayloadComprobante, PayloadPromesa } from '#shared/eventos'
-import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { crearEmpresaFila } from '#tests/core/fabricas'
 import { contextoSistema } from '#shared/contexto'
 import EnviarNotificacion from '#notify/actions/enviar_notificacion'
 import ConciliarAvisosIris from '#notify/actions/conciliar_avisos_iris'
@@ -430,7 +431,7 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         })
         assert.equal(
             creado.idempotency_key,
-            `argos:consentimiento:${clienteId}:whatsapp:${creado.ocurrido_en}`,
+            `argos:consentimiento:1:${clienteId}:whatsapp:${creado.ocurrido_en}`,
         )
 
         // conector apagado: sigue pendiente sin gastar intentos
@@ -640,5 +641,54 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
                 .json(JSON.parse(cuerpo)),
             400,
         )
+    })
+
+    test('consentimiento: el mismo cliente y el mismo instante en dos empresas son dos permisos (clave con empresa)', async ({
+        assert,
+    }) => {
+        iris.responder(CONSENTIMIENTOS, (p) => ({
+            status: 201,
+            cuerpo: { consentimiento_id: `cons-${p.json.empresa_id}`, estado_vigente: 'acepta' },
+        }))
+        await fijarConector()
+        const otra = await crearEmpresaFila()
+        try {
+            const clienteId = await crearCliente()
+            const ocurrido = '2026-11-05T16:00:00.000Z'
+            const entrada = {
+                cliente_id: clienteId,
+                estado: 'acepta' as const,
+                origen: 'argos_portal' as const,
+                ocurrido_en: ocurrido,
+            }
+            const a = await new RegistrarConsentimientoWhatsapp().execute(
+                { ...entrada, empresa_id: 1 },
+                contextoPrueba(),
+            )
+            const b = await new RegistrarConsentimientoWhatsapp().execute(
+                { ...entrada, empresa_id: otra },
+                contextoPrueba(),
+            )
+            assert.notEqual(a.id, b.id)
+            assert.equal(a.idempotency_key, `argos:consentimiento:1:${clienteId}:whatsapp:${ocurrido}`)
+            assert.equal(b.idempotency_key, `argos:consentimiento:${otra}:${clienteId}:whatsapp:${ocurrido}`)
+            // repetir la misma marca en la misma empresa no crea otra fila
+            const repetida = await new RegistrarConsentimientoWhatsapp().execute(
+                { ...entrada, empresa_id: otra },
+                contextoPrueba(),
+            )
+            assert.equal(repetida.id, b.id)
+
+            assert.containsSubset(await entregarConsentimientosIris(), { enviados: 2 })
+            const claves = iris.de(CONSENTIMIENTOS).map((p) => p.cabeceras['idempotency-key'])
+            assert.sameMembers(claves as string[], [a.idempotency_key, b.idempotency_key])
+            assert.sameMembers(
+                iris.de(CONSENTIMIENTOS).map((p) => p.json.empresa_id),
+                [1, otra],
+            )
+        } finally {
+            await db.from('notify.consentimientos_iris').delete()
+            await soloEmpresaPrincipal()
+        }
     })
 })
