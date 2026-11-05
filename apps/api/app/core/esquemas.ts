@@ -513,7 +513,11 @@ export const Servicio = definirEsquema(
             local_address: {
                 ...nulable(texto),
                 description:
-                    'local-address del PPPoE: gateway de la red de su IPv4 o de su servidor (calculado; nunca el del perfil default)',
+                    'local-address del PPPoE: gateway de la red de su IPv4 o de su servidor; sin gateway, la primera IP utilizable (calculado; nunca el del perfil default)',
+            },
+            local_address_derivado: {
+                ...booleano,
+                description: 'true: la red no tiene gateway y el local-address es su primera IP utilizable',
             },
             // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
             cliente_nombre: texto,
@@ -570,6 +574,7 @@ export const Servicio = definirEsquema(
             'contacto_telefono',
             'servidor_pppoe_id',
             'local_address',
+            'local_address_derivado',
         ],
     ),
 )
@@ -1006,7 +1011,15 @@ export const AaaServicio = definirEsquema(
                 ],
             },
             red_acceso: {
-                ...objeto({ servidor_pppoe_id: nulable(id), local_address: nulable(texto) }),
+                ...objeto({
+                    servidor_pppoe_id: nulable(id),
+                    local_address: nulable(texto),
+                    perfil_por_servidor: {
+                        ...booleano,
+                        description:
+                            'El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2)',
+                    },
+                }),
                 description:
                     'Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). ' +
                     'Ausente en registros anteriores',

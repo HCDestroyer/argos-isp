@@ -74,31 +74,83 @@ export interface InventarioRedAcceso {
 
 export type LectorInventario = (routerId: number, requestId: string) => Promise<InventarioRedAcceso>
 
+/*
+|--------------------------------------------------------------------------
+| Tomar control de lo adoptado (`contratos/red-acceso.md` §4.1)
+|--------------------------------------------------------------------------
+*/
+
+export interface PropiedadCambiada {
+    propiedad: string
+    /** valor que tiene hoy el router (null = no la tiene) */
+    actual: string | null
+    /** valor que escribirá Argos */
+    deseado: string | null
+}
+
+export interface CambioTomarControl {
+    /** menú de RouterOS: `/interface/vlan`, `/interface/pppoe-server/server`, `/ppp/profile` */
+    ruta: string
+    /** `.id` del objeto en el router (null si se crea, p. ej. el perfil `argosisp-pppoe-<id>`) */
+    ros_id: string | null
+    nombre: string
+    accion: 'crear' | 'actualizar'
+    propiedades: PropiedadCambiada[]
+}
+
+/** Lo que calcula A2 leyendo el router: qué cambiaría si Argos administra el objeto. */
+export interface DiffTomarControl {
+    /** sha256 de lo leído del router; si cambia entre la vista previa y la acción → 409 `router_cambio` */
+    huella: string
+    cambios: CambioTomarControl[]
+    /** sesiones PPPoE abiertas en ese servidor (0 en una VLAN); un cambio de perfil no las corta */
+    sesiones: number
+    advertencias: string[]
+}
+
+export interface ObjetoTomarControl {
+    router_id: number
+    entidad: 'vlan' | 'servidor_pppoe'
+    id: number
+    ros_id: string | null
+}
+
+export type DiffTomarControlFn = (objeto: ObjetoTomarControl, requestId: string) => Promise<DiffTomarControl>
+
 let lector: LectorInventario | null = null
+let diffTomarControl: DiffTomarControlFn | null = null
 
 /** Para pruebas (o un arranque que quiera otro lector): reemplaza el de A2. `null` lo quita. */
 export function registrarLectorInventario(nuevo: LectorInventario | null): void {
     lector = nuevo
 }
 
-class DescubrirNoDisponible extends Problema {
+/** Para pruebas: reemplaza `vistaPreviaTomarControl` de A2. `null` lo quita. */
+export function registrarDiffTomarControl(nuevo: DiffTomarControlFn | null): void {
+    diffTomarControl = nuevo
+}
+
+class LecturaNoDisponible extends Problema {
     constructor() {
         super(
             501,
             'descubrir_no_disponible',
-            'Descubrir no disponible',
+            'Lectura del router no disponible',
             'Este servidor todavía no sabe leer la red de acceso del router (falta el lector de RouterOS)',
         )
     }
 }
 
-/** El lector registrado o el de A2 por import dinámico; 501 si no existe todavía. */
-async function lectorActual(): Promise<LectorInventario> {
-    if (lector) return lector
+interface ModuloA2 {
+    leerInventarioAcceso?: LectorInventario
+    vistaPreviaTomarControl?: DiffTomarControlFn
+}
+
+/** El módulo de A2 (`#network/routeros/inventario_acceso`) por import dinámico; {} si aún no existe. */
+async function moduloA2(): Promise<ModuloA2> {
     try {
         const ruta = '#network/routeros/inventario_acceso'
-        const modulo = (await import(ruta)) as { leerInventarioAcceso?: LectorInventario }
-        if (typeof modulo.leerInventarioAcceso === 'function') return modulo.leerInventarioAcceso
+        return (await import(ruta)) as ModuloA2
     } catch (error) {
         // el módulo de A2 aún no existe (con el cargador de TS el error no trae `code`)
         const codigo = (error as { code?: string }).code
@@ -106,12 +158,27 @@ async function lectorActual(): Promise<LectorInventario> {
             codigo === 'ERR_MODULE_NOT_FOUND' ||
             /Cannot find module .*inventario_acceso/.test(String((error as Error).message ?? error))
         if (!falta) throw error
+        return {}
     }
-    throw new DescubrirNoDisponible()
 }
 
+/** Inventario del router (A2); 501 `descubrir_no_disponible` mientras no exista el lector. */
 export async function leerInventario(routerId: number, requestId: string): Promise<InventarioRedAcceso> {
-    return (await lectorActual())(routerId, requestId)
+    const a2 = lector ? null : await moduloA2()
+    const fn = lector ?? a2?.leerInventarioAcceso
+    if (typeof fn !== 'function') throw new LecturaNoDisponible()
+    return fn(routerId, requestId)
+}
+
+/** Diff de tomar control (A2); 501 `descubrir_no_disponible` mientras no exista. */
+export async function calcularDiffTomarControl(
+    objeto: ObjetoTomarControl,
+    requestId: string,
+): Promise<DiffTomarControl> {
+    const a2 = diffTomarControl ? null : await moduloA2()
+    const fn = diffTomarControl ?? a2?.vistaPreviaTomarControl
+    if (typeof fn !== 'function') throw new LecturaNoDisponible()
+    return fn(objeto, requestId)
 }
 
 /*

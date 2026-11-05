@@ -440,21 +440,21 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
         assert.lengthOf(activas(), 1)
 
-        // La red pierde su gateway: no se inventa uno; el secret se recrea sin local-address, el de los
-        // perfiles se quita con `unset` (en audit.red) y la reconciliación lo avisa.
+        // La red pierde su gateway: decisión del PM (5 nov, `contratos/red-acceso.md` §2) el local-address
+        // es la primera IP utilizable (aquí la misma .1, derivada). El secret toma `sqlLocalAddress` (A1).
+        // Los perfiles todavía leen el gateway crudo (pedido a A2 en `a1.md`): se quita con `unset` y avisa.
         await db.from('network.redes_ipv4').where('router_id', routerId).update({ gateway: null })
         const r = await new ReconciliarRouterOS(OPCIONES).execute(
             { router_id: routerId, motivo: 'manual' },
             contextoPrueba(),
         )
         assert.isNull(r.error)
-        assert.notProperty(secret(servicio.id)[0]!, 'local-address')
-        assert.lengthOf(activas(), 1) // quitar el local-address tampoco corta
+        assert.equal(secret(servicio.id)[0]!['local-address'], `${base}.1`)
+        assert.lengthOf(activas(), 1)
         assert.notProperty(perfil(`plan-${planId}`)!, 'local-address')
         assert.notProperty(perfil(`plan-${planId}-limitado`)!, 'local-address')
-        assert.isTrue(
-            r.avisos.some((a) => a.includes(`servicio ${servicio.id}`) && a.includes('no tiene gateway')),
-        )
+        // el servicio ya no avisa: su local-address es el derivado
+        assert.isFalse(r.avisos.some((a) => a.includes(`servicio ${servicio.id}`)))
         const unset = await db
             .from('audit.red')
             .where('router_id', routerId)

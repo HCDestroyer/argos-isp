@@ -42,6 +42,7 @@ const OPCIONALES: Record<string, string[]> = {
         'contacto_telefono',
         'servidor_pppoe_id',
         'local_address',
+        'local_address_derivado',
     ],
     Cliente: ['referencia'],
     Plan: ['warnings'],

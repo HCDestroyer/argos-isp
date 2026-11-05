@@ -176,3 +176,12 @@ export const adoptarRedAccesoValidator = vine.compile(
             .optional(),
     }),
 )
+
+export const tomarControlValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        huella: vine.string().trim().minLength(1).maxLength(128).meta({
+            description: 'huella de la vista previa (409 router_cambio si el router cambió)',
+        }),
+    }),
+)

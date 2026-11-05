@@ -52274,7 +52274,9 @@
                       "string",
                       "null"
                     ],
-                    "format": "ipv4"
+                    "format": "ipv4",
+                    "deprecated": true,
+                    "description": "Obsoleto: se ignora. El local-address sale del gateway de la red IPv4 (o su primera IP utilizable)"
                   },
                   "no_crear_reglas": {
                     "type": "boolean"
@@ -64339,6 +64341,7 @@
                         "red.ver",
                         "red_acceso.adoptar",
                         "red_acceso.descubrir",
+                        "red_acceso.tomar_control",
                         "red_acceso.ver",
                         "redes.crear",
                         "redes.editar",
@@ -64711,6 +64714,7 @@
                         "red.ver",
                         "red_acceso.adoptar",
                         "red_acceso.descubrir",
+                        "red_acceso.tomar_control",
                         "red_acceso.ver",
                         "redes.crear",
                         "redes.editar",
@@ -68277,7 +68281,7 @@
       "post": {
         "operationId": "servidoresPppoeCrear",
         "summary": "Crear un servidor PPPoE administrado por Argos (uno por VLAN o interfaz)",
-        "description": "`red_ipv4_id` obligatoria y con gateway: el gateway es el local-address del perfil (422 `red_requerida`, `red_sin_gateway`). 409 `interfaz_con_servidor`, `vlan_con_servidor`, `servidor_duplicado`. A2 lo escribe en RouterOS con su perfil `argosisp-pppoe-<id>`.",
+        "description": "`red_ipv4_id` obligatoria (422 `red_requerida`): su gateway es el local-address del perfil; sin gateway, la primera IP utilizable de la red (`local_address_derivado`). 409 `interfaz_con_servidor`, `vlan_con_servidor`, `servidor_duplicado`. A2 lo escribe en RouterOS con su perfil `argosisp-pppoe-<id>`.",
         "tags": [
           "red_acceso"
         ],
@@ -75337,6 +75341,211 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servidores-pppoe/{id}/tomar-control": {
+      "post": {
+        "operationId": "servidoresPppoeTomarControl",
+        "summary": "Pasar a administrado un objeto adoptado (Argos lo empieza a escribir en el router)",
+        "description": "`version` y `huella` de la vista previa: 409 `conflicto_version` o `router_cambio` si algo cambió. 422 `ya_administrado`, o `red_requerida` en un servidor sin red. Emite `red_acceso.cambiada` con `accion: tomar_control`.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "huella": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "huella de la vista previa (409 router_cambio si el router cambió)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "huella"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ahora administrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServidorPppoe"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.tomar_control; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.tomar_control",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servidores-pppoe/{id}/vista-previa-tomar-control": {
+      "get": {
+        "operationId": "servidoresPppoeVistaPreviaTomarControl",
+        "summary": "Qué cambiaría en el router si Argos administra este objeto adoptado (lee el router, no escribe)",
+        "description": "El diff lo calcula RouterOS (A2) leyendo el router: `cambios[]` por menú y propiedad (actual → deseado), `sesiones` y `advertencias`. `huella` y `version` se envían al tomar control. 501 `descubrir_no_disponible` mientras no exista el lector.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaTomarControl"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.tomar_control",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.tomar_control",
+        "x-implementado": true
+      }
+    },
     "/api/v1/sesiones": {
       "get": {
         "operationId": "sesionesListar",
@@ -76134,6 +76343,7 @@
                             "red.ver",
                             "red_acceso.adoptar",
                             "red_acceso.descubrir",
+                            "red_acceso.tomar_control",
                             "red_acceso.ver",
                             "redes.crear",
                             "redes.editar",
@@ -77387,6 +77597,211 @@
         "x-implementado": true
       }
     },
+    "/api/v1/vlans/{id}/tomar-control": {
+      "post": {
+        "operationId": "vlansTomarControl",
+        "summary": "Pasar a administrado un objeto adoptado (Argos lo empieza a escribir en el router)",
+        "description": "`version` y `huella` de la vista previa: 409 `conflicto_version` o `router_cambio` si algo cambió. 422 `ya_administrado`, o `red_requerida` en un servidor sin red. Emite `red_acceso.cambiada` con `accion: tomar_control`.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "huella": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "huella de la vista previa (409 router_cambio si el router cambió)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "huella"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ahora administrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.tomar_control; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.tomar_control",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/vlans/{id}/vista-previa-tomar-control": {
+      "get": {
+        "operationId": "vlansVistaPreviaTomarControl",
+        "summary": "Qué cambiaría en el router si Argos administra este objeto adoptado (lee el router, no escribe)",
+        "description": "El diff lo calcula RouterOS (A2) leyendo el router: `cambios[]` por menú y propiedad (actual → deseado), `sesiones` y `advertencias`. `huella` y `version` se envían al tomar control. 501 `descubrir_no_disponible` mientras no exista el lector.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaTomarControl"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.tomar_control",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.tomar_control",
+        "x-implementado": true
+      }
+    },
     "/api/v1/zonas": {
       "get": {
         "operationId": "zonasListar",
@@ -77942,7 +78357,8 @@
             "type": "object",
             "required": [
               "servidor_pppoe_id",
-              "local_address"
+              "local_address",
+              "perfil_por_servidor"
             ],
             "properties": {
               "servidor_pppoe_id": {
@@ -77957,6 +78373,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "perfil_por_servidor": {
+                "type": "boolean",
+                "description": "El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2)"
               }
             },
             "description": "Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). Ausente en registros anteriores"
@@ -98809,6 +99229,7 @@
           "red.ver",
           "red_acceso.adoptar",
           "red_acceso.descubrir",
+          "red_acceso.tomar_control",
           "red_acceso.ver",
           "redes.crear",
           "redes.editar",
@@ -99074,6 +99495,7 @@
           "Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)",
           "Importar a Argos VLAN y servidores PPPoE que ya existen en el router (sin tocarlo)",
           "Leer del router sus VLAN, servidores PPPoE, perfiles y pools (no escribe)",
+          "Pasar a administrado una VLAN o servidor PPPoE adoptado (Argos lo empieza a escribir en el router)",
           "Ver la red de acceso: OLT, puertos PON, VLAN y servidores PPPoE",
           "Crear redes IPv4",
           "Editar redes IPv4: nombre, red, gateway, rango y DNS",
@@ -101800,7 +102222,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)"
           },
           "no_crear_reglas": {
             "type": "boolean"
@@ -101882,7 +102306,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)"
           },
           "no_crear_reglas": {
             "type": "boolean"
@@ -106164,6 +106590,22 @@
               "null"
             ],
             "description": "Puerta de enlace de los clientes; nunca se asigna"
+          },
+          "gateway_efectivo": {
+            "type": "string",
+            "description": "El gateway o, sin él, la primera IP utilizable (nunca se asigna): local-address del PPPoE (contratos/red-acceso.md §2)"
+          },
+          "gateway_derivado": {
+            "type": "boolean",
+            "description": "true: la red no tiene gateway y se usa la primera IP utilizable"
+          },
+          "gateway_ocupado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Servicio que ya tenía asignado el gateway derivado (dato anterior); muévelo a otra IP"
           },
           "tipo": {
             "type": "string",
@@ -112557,6 +112999,7 @@
               "red.ver",
               "red_acceso.adoptar",
               "red_acceso.descubrir",
+              "red_acceso.tomar_control",
               "red_acceso.ver",
               "redes.crear",
               "redes.editar",
@@ -112751,6 +113194,7 @@
               "red.ver",
               "red_acceso.adoptar",
               "red_acceso.descubrir",
+              "red_acceso.tomar_control",
               "red_acceso.ver",
               "redes.crear",
               "redes.editar",
@@ -113644,7 +114088,11 @@
               "string",
               "null"
             ],
-            "description": "local-address del PPPoE: gateway de la red de su IPv4 o de su servidor (calculado; nunca el del perfil default)"
+            "description": "local-address del PPPoE: gateway de la red de su IPv4 o de su servidor; sin gateway, la primera IP utilizable (calculado; nunca el del perfil default)"
+          },
+          "local_address_derivado": {
+            "type": "boolean",
+            "description": "true: la red no tiene gateway y el local-address es su primera IP utilizable"
           },
           "cliente_nombre": {
             "type": "string"
@@ -113892,6 +114340,7 @@
           "perfil_base",
           "perfil",
           "local_address",
+          "local_address_derivado",
           "max_mtu",
           "max_mru",
           "mrru",
@@ -114002,7 +114451,11 @@
               "string",
               "null"
             ],
-            "description": "Gateway de su red IPv4 (calculado; nunca se teclea ni se copia del perfil default)"
+            "description": "Gateway de su red IPv4 o, sin gateway, su primera IP utilizable (calculado; nunca se teclea ni se copia del perfil default)"
+          },
+          "local_address_derivado": {
+            "type": "boolean",
+            "description": "true: la red no tiene gateway y el local-address es su primera IP utilizable"
           },
           "max_mtu": {
             "type": "integer"
@@ -118093,6 +118546,150 @@
               "null"
             ],
             "description": "El router no respondió o no tiene credenciales"
+          }
+        }
+      },
+      "VistaPreviaTomarControl": {
+        "type": "object",
+        "required": [
+          "entidad",
+          "id",
+          "router_id",
+          "version",
+          "estado",
+          "huella",
+          "cambios",
+          "sesiones",
+          "advertencias",
+          "faltan"
+        ],
+        "properties": {
+          "entidad": {
+            "type": "string",
+            "enum": [
+              "vlan",
+              "servidor_pppoe"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "description": "version de la fila en Argos (envíala al tomar control)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "administrado",
+              "adoptado"
+            ],
+            "description": "administrado: Argos lo escribe en el router (comment argosisp:…); adoptado: existía, Argos no lo toca"
+          },
+          "huella": {
+            "type": "string",
+            "description": "Huella de lo leído del router: envíala al tomar control (409 si cambió)"
+          },
+          "cambios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "ros_id",
+                "nombre",
+                "accion",
+                "propiedades"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string",
+                  "description": "Menú de RouterOS"
+                },
+                "ros_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "crear",
+                    "actualizar"
+                  ]
+                },
+                "propiedades": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "propiedad",
+                      "actual",
+                      "deseado"
+                    ],
+                    "properties": {
+                      "propiedad": {
+                        "type": "string"
+                      },
+                      "actual": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "deseado": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "sesiones": {
+            "type": "integer",
+            "description": "Sesiones PPPoE abiertas en el servidor (un cambio de perfil no las corta)"
+          },
+          "advertencias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "faltan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "rule",
+                "message"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "rule": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Requisitos de Argos que faltan (p. ej. red_requerida); con alguno, tomar control da 422"
           }
         }
       },

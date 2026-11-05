@@ -3,7 +3,7 @@ import { NoEncontrado } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { redParaAuditoria, verRedIpv4, type RedIpv4Vista } from '#network/consultas/routers'
 import { exigirIpsAsignadasDentro, exigirRedSinTraslape, validarRedIpv4 } from '#network/reglas_pools'
-import { emitirRedAcceso, exigirRedSinServidores } from '#network/red_acceso/reglas'
+import { campo as errorCampo, emitirRedAcceso } from '#network/red_acceso/reglas'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaEditarRedIpv4 {
@@ -53,9 +53,12 @@ export default class EditarRedIpv4 extends DomainAction<EntradaEditarRedIpv4, Re
             rango_inicio: valor('rango_inicio') as string | null,
             rango_fin: valor('rango_fin') as string | null,
         }
-        // el gateway es el local-address de los servidores PPPoE de la red (`contratos/red-acceso.md` §2)
-        if (datos.gateway === null && antes.gateway !== null) await exigirRedSinServidores(t.trx, id)
         const cidr = await validarRedIpv4(t.trx, datos)
+        // sin gateway, la primera IP utilizable es el local-address (`contratos/red-acceso.md` §2): no puede
+        // ser la IP de un servicio (solo se revisa si el gateway efectivo cambia, para no frenar datos viejos)
+        if (datos.gateway === null && (antes.gateway !== null || cidr !== antes.cidr)) {
+            await exigirGatewayDerivadoLibre(t, id, cidr)
+        }
         if (cidr !== antes.cidr) await exigirRedSinTraslape(t.trx, cidr, id)
         await exigirIpsAsignadasDentro(t.trx, id, { ...datos, cidr })
 
@@ -63,7 +66,9 @@ export default class EditarRedIpv4 extends DomainAction<EntradaEditarRedIpv4, Re
         await actualizarConVersion(t.trx, 'network.redes_ipv4', id, version, columnas)
         const despues = await verRedIpv4(id, t.trx)
         await t.registrarCambios({ tipo: 'red_ipv4', id }, redParaAuditoria(antes), redParaAuditoria(despues))
-        if (despues.gateway !== antes.gateway) await avisarLocalAddress(t, id, antes.router_id)
+        if (despues.gateway_efectivo !== antes.gateway_efectivo) {
+            await avisarLocalAddress(t, id, antes.router_id)
+        }
         return despues
     }
 }
@@ -94,4 +99,24 @@ async function avisarLocalAddress(t: Transaccion, redId: number, routerId: numbe
         })
     }
     refrescarAaaAlConfirmar(t, { routerId })
+}
+
+async function exigirGatewayDerivadoLibre(t: Transaccion, redId: number, cidr: string) {
+    const { rows } = (await t.trx.rawQuery(
+        `SELECT a.servicio_id, host(a.ip) AS ip
+           FROM network.ipv4_asignaciones a
+          WHERE a.red_id = ? AND a.fin IS NULL
+            AND a.ip = CASE WHEN masklen(?::cidr) >= 31 THEN set_masklen(network(?::cidr)::inet, 32)
+                            ELSE set_masklen(network(?::cidr)::inet, 32) + 1 END
+          LIMIT 1`,
+        [redId, cidr, cidr, cidr],
+    )) as { rows: Array<{ servicio_id: number; ip: string }> }
+    const ocupada = rows[0]
+    if (!ocupada) return
+    throw errorCampo(
+        'gateway',
+        `Sin gateway, el local-address de la red es ${ocupada.ip}, que tiene el servicio ${ocupada.servicio_id}: ` +
+            'indica un gateway o mueve ese servicio a otra IP',
+        'gateway_derivado_ocupado',
+    )
 }

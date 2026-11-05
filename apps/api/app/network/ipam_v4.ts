@@ -1,6 +1,6 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { sqlLimitesRedV4 } from '#network/ocupacion'
+import { sqlGatewayEfectivo, sqlLimitesRedV4 } from '#network/ocupacion'
 
 /**
  * IPAM IPv4: asignación de IPs de las redes de un router a servicios, con historial en
@@ -10,7 +10,7 @@ import { sqlLimitesRedV4 } from '#network/ocupacion'
  * Se usa dentro de las acciones de servicios (misma transacción). La asignación automática toma
  * la primera IP libre del router, primero en redes `estatico` y luego en `pool`, dentro del rango
  * de la red (`rango_inicio`–`rango_fin`; sin rango, toda la red) y sin la dirección de red,
- * broadcast ni gateway. Una IP pedida a mano también debe caer dentro del rango. Un advisory lock
+ * broadcast ni gateway (sin gateway, la primera IP utilizable: es el local-address). Una IP pedida a mano también debe caer dentro del rango. Un advisory lock
  * por router serializa asignaciones concurrentes.
  */
 
@@ -82,18 +82,20 @@ export async function asignarIpv4(
             `SELECT r.id, masklen(r.cidr) < 31 AND host(network(r.cidr)) = host(?::inet) AS es_red,
                     masklen(r.cidr) < 31 AND host(broadcast(r.cidr)) = host(?::inet) AS es_broadcast,
                     r.gateway IS NOT NULL AND host(r.gateway) = host(?::inet) AS es_gateway,
+                    r.gateway IS NULL AND host(${sqlGatewayEfectivo('r')}) = host(?::inet) AS es_gateway_derivado,
                     r.rango_inicio IS NOT NULL
                         AND NOT (?::inet BETWEEN r.rango_inicio AND r.rango_fin) AS fuera_de_rango,
                     host(r.rango_inicio) AS rango_inicio, host(r.rango_fin) AS rango_fin
                FROM network.redes_ipv4 r
               WHERE r.router_id = ? AND r.cidr >>= ?::inet`,
-            [entrada.ip, entrada.ip, entrada.ip, entrada.ip, entrada.routerId, entrada.ip],
+            [entrada.ip, entrada.ip, entrada.ip, entrada.ip, entrada.ip, entrada.routerId, entrada.ip],
         )) as {
             rows: Array<{
                 id: number
                 es_red: boolean
                 es_broadcast: boolean
                 es_gateway: boolean
+                es_gateway_derivado: boolean
                 fuera_de_rango: boolean
                 rango_inicio: string | null
                 rango_fin: string | null
@@ -118,7 +120,11 @@ export async function asignarIpv4(
                 'La IP no pertenece a la red IPv4 elegida',
             )
         }
-        const reservada = red.es_red || red.es_broadcast || red.es_gateway
+        // la primera IP utilizable de una red sin gateway es el local-address (`contratos/red-acceso.md`
+        // §2): no se entrega, salvo al servicio que ya la tenía de antes
+        const yaLaTiene = actual !== null && actual.ip === entrada.ip
+        const reservada =
+            red.es_red || red.es_broadcast || red.es_gateway || (red.es_gateway_derivado && !yaLaTiene)
         if (reservada) {
             throw new ValidacionFallida(
                 [
@@ -174,7 +180,7 @@ export async function asignarIpv4(
            CROSS JOIN LATERAL generate_series(k.ini, k.fin) AS g(n)
           WHERE r.router_id = ?
             AND (?::bigint = 0 OR r.id = ?::bigint)
-            AND (r.gateway IS NULL OR k.base + g.n <> set_masklen(r.gateway, 32))
+            AND k.base + g.n <> ${sqlGatewayEfectivo('r')}
             AND NOT EXISTS (
                 SELECT 1 FROM network.ipv4_asignaciones a
                  WHERE a.fin IS NULL AND a.ip = k.base + g.n

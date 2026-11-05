@@ -18,6 +18,7 @@ import {
     ResultadoAdopcion,
     ServidorPppoe,
     Vlan,
+    VistaPreviaTomarControl,
 } from '#network/red_acceso/esquemas'
 import {
     listarOlts,
@@ -44,6 +45,10 @@ import CrearServidorPppoe from '#network/actions/crear_servidor_pppoe'
 import EditarServidorPppoe from '#network/actions/editar_servidor_pppoe'
 import EliminarServidorPppoe from '#network/actions/eliminar_servidor_pppoe'
 import AdoptarRedAcceso from '#network/actions/adoptar_red_acceso'
+import TomarControlRedAcceso, {
+    vistaPreviaTomarControl,
+    type EntidadTomarControl,
+} from '#network/actions/tomar_control_red_acceso'
 
 const ETIQUETA = 'red_acceso'
 
@@ -269,8 +274,8 @@ const redAcceso: Ruta[] = [
         operacion: 'servidoresPppoeCrear',
         resumen: 'Crear un servidor PPPoE administrado por Argos (uno por VLAN o interfaz)',
         descripcion:
-            '`red_ipv4_id` obligatoria y con gateway: el gateway es el local-address del perfil ' +
-            '(422 `red_requerida`, `red_sin_gateway`). 409 `interfaz_con_servidor`, `vlan_con_servidor`, ' +
+            '`red_ipv4_id` obligatoria (422 `red_requerida`): su gateway es el local-address del perfil; sin ' +
+            'gateway, la primera IP utilizable de la red (`local_address_derivado`). 409 `interfaz_con_servidor`, `vlan_con_servidor`, ' +
             '`servidor_duplicado`. A2 lo escribe en RouterOS con su perfil `argosisp-pppoe-<id>`.',
         etiqueta: ETIQUETA,
         permiso: 'servidores_pppoe.crear',
@@ -369,6 +374,102 @@ const redAcceso: Ruta[] = [
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
             return new AdoptarRedAcceso().execute(
                 { ...cuerpo, router_id: Number(params.id) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/vlans/:id/vista-previa-tomar-control',
+        operacion: 'vlansVistaPreviaTomarControl',
+        resumen:
+            'Qué cambiaría en el router si Argos administra este objeto adoptado (lee el router, no escribe)',
+        descripcion:
+            'El diff lo calcula RouterOS (A2) leyendo el router: `cambios[]` por menú y propiedad (actual → deseado), ' +
+            '`sesiones` y `advertencias`. `huella` y `version` se envían al tomar control. 501 ' +
+            '`descubrir_no_disponible` mientras no exista el lector.',
+        etiqueta: ETIQUETA,
+        permiso: 'red_acceso.tomar_control',
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaTomarControl },
+        handler: async (ctx, { params }) => {
+            const fila = await verVlan(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [fila.router_id] })
+            exigirVisible(ctx.contextoAccion(), fila.empresa_id)
+            return vistaPreviaTomarControl(
+                'vlan' as EntidadTomarControl,
+                fila.id,
+                ctx.contextoAccion().requestId,
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/vlans/:id/tomar-control',
+        operacion: 'vlansTomarControl',
+        resumen: 'Pasar a administrado un objeto adoptado (Argos lo empieza a escribir en el router)',
+        descripcion:
+            '`version` y `huella` de la vista previa: 409 `conflicto_version` o `router_cambio` si algo cambió. ' +
+            '422 `ya_administrado`, o `red_requerida` en un servidor sin red. Emite `red_acceso.cambiada` con ' +
+            '`accion: tomar_control`.',
+        etiqueta: ETIQUETA,
+        permiso: 'red_acceso.tomar_control',
+        cuerpo: v.tomarControlValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Ahora administrado', esquema: Vlan },
+        handler: async (ctx, { cuerpo, params }) => {
+            const fila = await verVlan(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [fila.router_id] })
+            return new TomarControlRedAcceso().execute(
+                { ...cuerpo, entidad: 'vlan', id: fila.id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servidores-pppoe/:id/vista-previa-tomar-control',
+        operacion: 'servidoresPppoeVistaPreviaTomarControl',
+        resumen:
+            'Qué cambiaría en el router si Argos administra este objeto adoptado (lee el router, no escribe)',
+        descripcion:
+            'El diff lo calcula RouterOS (A2) leyendo el router: `cambios[]` por menú y propiedad (actual → deseado), ' +
+            '`sesiones` y `advertencias`. `huella` y `version` se envían al tomar control. 501 ' +
+            '`descubrir_no_disponible` mientras no exista el lector.',
+        etiqueta: ETIQUETA,
+        permiso: 'red_acceso.tomar_control',
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaTomarControl },
+        handler: async (ctx, { params }) => {
+            const fila = await verServidorPppoe(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [fila.router_id] })
+            exigirVisible(ctx.contextoAccion(), fila.empresa_id)
+            return vistaPreviaTomarControl(
+                'servidor_pppoe' as EntidadTomarControl,
+                fila.id,
+                ctx.contextoAccion().requestId,
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servidores-pppoe/:id/tomar-control',
+        operacion: 'servidoresPppoeTomarControl',
+        resumen: 'Pasar a administrado un objeto adoptado (Argos lo empieza a escribir en el router)',
+        descripcion:
+            '`version` y `huella` de la vista previa: 409 `conflicto_version` o `router_cambio` si algo cambió. ' +
+            '422 `ya_administrado`, o `red_requerida` en un servidor sin red. Emite `red_acceso.cambiada` con ' +
+            '`accion: tomar_control`.',
+        etiqueta: ETIQUETA,
+        permiso: 'red_acceso.tomar_control',
+        cuerpo: v.tomarControlValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Ahora administrado', esquema: ServidorPppoe },
+        handler: async (ctx, { cuerpo, params }) => {
+            const fila = await verServidorPppoe(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [fila.router_id] })
+            return new TomarControlRedAcceso().execute(
+                { ...cuerpo, entidad: 'servidor_pppoe', id: fila.id },
                 ctx.contextoAccion(),
             )
         },

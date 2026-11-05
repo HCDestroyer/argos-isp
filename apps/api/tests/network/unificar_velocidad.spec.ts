@@ -9,6 +9,16 @@ async function cuerpo(peticion: PromiseLike<any>, status: number) {
     return respuesta.body()
 }
 
+let contadorNas = 0
+/**
+ * Router con `nas_ip` en 10.253.x.y (10.252 es de red_acceso.spec): fuera de los rangos de `ipUnica` y de `nasIpUnica` (notify), que
+ * comparten 10.200–249 y pueden chocar si una suite crea muchos routers.
+ */
+function routerPrueba() {
+    contadorNas += 1
+    return crearRouterFila({ nas_ip: `10.253.${Math.floor(contadorNas / 256) % 256}.${contadorNas % 256}` })
+}
+
 /**
  * Modo de velocidad único por router (`contratos/control-velocidad.md` §11): no hay excepciones
  * nuevas por plan; las que existen se ven en la vista previa y se quitan con
@@ -41,7 +51,7 @@ test.group('Control de velocidad · modo único por router', (group) => {
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const planId = await crearPlanFila()
         const r = await client
             .post(`/api/v1/planes/${planId}/routers/${routerId}/estrategia-velocidad`)
@@ -69,7 +79,7 @@ test.group('Control de velocidad · modo único por router', (group) => {
         client,
         assert,
     }) => {
-        const routerId = await crearRouterFila()
+        const routerId = await routerPrueba()
         const a = await conExcepcion(routerId)
         const b = await conExcepcion(routerId)
         const sinExcepcion = await crearPlanFila()

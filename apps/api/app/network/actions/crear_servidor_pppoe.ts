@@ -11,7 +11,7 @@ import {
     emitirRedAcceso,
     exigirEmpresa,
     exigirPoolIpv6,
-    exigirRedConGateway,
+    exigirRedDelRouter,
     exigirRouter,
     exigirUnico,
 } from '#network/red_acceso/reglas'
@@ -49,8 +49,8 @@ export interface EntradaCrearServidorPppoe extends DatosServidorPppoe {
 /**
  * Valida un servidor PPPoE completo (`contratos/red-acceso.md` §1 y §2) y devuelve su `interfaz`:
  * con VLAN, el nombre de la VLAN (del mismo router); sin VLAN, la interfaz indicada. Un servidor por
- * interfaz y por VLAN (409), nombre único en el router (409), red del router con gateway (422) y
- * obligatoria en lo administrado, pools IPv6 del router y del tipo correcto.
+ * interfaz y por VLAN (409), nombre único en el router (409), red del router (422; sin gateway, su primera IP
+ * utilizable es el local-address) y obligatoria en lo administrado, pools IPv6 del router y del tipo correcto.
  */
 export async function validarServidorPppoe(
     trx: TransactionClientContract,
@@ -109,7 +109,7 @@ export async function validarServidorPppoe(
         exceptoId,
     )
     if (datos.red_ipv4_id) {
-        await exigirRedConGateway(trx, datos.red_ipv4_id, routerId)
+        await exigirRedDelRouter(trx, datos.red_ipv4_id, routerId)
     } else if (estado === 'administrado') {
         throw campo(
             'red_ipv4_id',

@@ -93,7 +93,12 @@ export const ServidorPppoe = definirEsquema(
         },
         local_address: {
             ...nulable(texto),
-            description: 'Gateway de su red IPv4 (calculado; nunca se teclea ni se copia del perfil default)',
+            description:
+                'Gateway de su red IPv4 o, sin gateway, su primera IP utilizable (calculado; nunca se teclea ni se copia del perfil default)',
+        },
+        local_address_derivado: {
+            ...booleano,
+            description: 'true: la red no tiene gateway y el local-address es su primera IP utilizable',
         },
         max_mtu: entero,
         max_mru: entero,
@@ -193,4 +198,40 @@ export const DescubrimientoRedAcceso = definirEsquema(
 export const ResultadoAdopcion = definirEsquema(
     'ResultadoAdopcion',
     objeto({ vlans: lista(Vlan), servidores_pppoe: lista(ServidorPppoe) }),
+)
+
+export const VistaPreviaTomarControl = definirEsquema(
+    'VistaPreviaTomarControl',
+    objeto({
+        entidad: enumerado(['vlan', 'servidor_pppoe']),
+        id,
+        router_id: id,
+        version: { ...entero, description: 'version de la fila en Argos (envíala al tomar control)' },
+        estado,
+        huella: {
+            ...texto,
+            description: 'Huella de lo leído del router: envíala al tomar control (409 si cambió)',
+        },
+        cambios: lista(
+            objeto({
+                ruta: { ...texto, description: 'Menú de RouterOS' },
+                ros_id: nulable(texto),
+                nombre: texto,
+                accion: enumerado(['crear', 'actualizar']),
+                propiedades: lista(
+                    objeto({ propiedad: texto, actual: nulable(texto), deseado: nulable(texto) }),
+                ),
+            }),
+        ),
+        sesiones: {
+            ...entero,
+            description: 'Sesiones PPPoE abiertas en el servidor (un cambio de perfil no las corta)',
+        },
+        advertencias: lista(texto),
+        faltan: {
+            ...lista(objeto({ field: texto, rule: texto, message: texto })),
+            description:
+                'Requisitos de Argos que faltan (p. ej. red_requerida); con alguno, tomar control da 422',
+        },
+    }),
 )

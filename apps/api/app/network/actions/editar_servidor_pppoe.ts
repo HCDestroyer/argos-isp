@@ -1,6 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { actualizarConVersion } from '#shared/version'
-import { refrescarAaaAlConfirmar } from '#core/aaa'
 import {
     servidorParaAuditoria,
     verServidorPppoe,
@@ -101,7 +100,6 @@ export default class EditarServidorPppoe extends DomainAction<
                 campos,
             })
         }
-        if (campos.includes('local_address')) refrescarAaaAlConfirmar(t, { routerId: despues.router_id })
         return despues
     }
 }
