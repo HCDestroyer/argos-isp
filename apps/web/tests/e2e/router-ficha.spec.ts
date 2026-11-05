@@ -82,7 +82,7 @@ test('excepción heredada por plan: «Unificar» muestra qué planes cambian y a
     await expect(aviso).toBeHidden()
 })
 
-test('red de acceso: árbol con local-address, detectar (501 en el CCR) e importar en el RB-Centro', async ({ page }, info) => {
+test('red de acceso: árbol con local-address, deriva y conflictos, detectar e importar; router sin API = 502', async ({ page }, info) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: /CCR-Mixco/ }).click()
@@ -92,11 +92,19 @@ test('red de acceso: árbol con local-address, detectar (501 en el CCR) e import
     await expect(red.locator('[data-prueba="local-address-2"]')).toHaveText('100.64.20.1')
     await capturar(page, 'router-red-acceso', info.project.name)
 
+    // Deriva y conflictos: la vista previa de «Reconciliar».
+    await red.locator('[data-prueba="abrir-deriva"]').click()
+    const deriva = page.getByRole('dialog', { name: /Reconciliar ahora · CCR-Mixco/ })
+    await expect(deriva.locator('[data-conflicto="arbol_y_simples"]')).toContainText('Argos nunca borra')
+    await capturar(page, 'router-reconciliar-conflictos', info.project.name)
+    await deriva.getByRole('button', { name: 'Cancelar' }).click()
+
+    // Lo que el router tiene ya está adoptado: nada para importar.
     await red.locator('[data-prueba="abrir-descubrir"]').click()
     const descubrir = page.getByRole('dialog', { name: /Detectar en el router · CCR-Mixco/ })
-    await expect(descubrir.locator('[data-prueba="descubrir-no-disponible"]')).toContainText('Todavía no disponible')
-    await expect(descubrir.getByRole('button', { name: 'Reintentar' })).toBeVisible()
-    await capturar(page, 'router-descubrir-no-disponible', info.project.name)
+    await expect(descubrir.locator('[data-descubierta]')).toHaveCount(2)
+    await expect(descubrir.locator('[data-descubierta]').first()).toContainText('Adoptado')
+    await expect(descubrir.locator('[data-prueba="descubrir-importar"]')).toBeDisabled()
     await descubrir.getByRole('button', { name: 'Cerrar' }).first().click()
 
     await ir(page, 'Routers', /\/routers$/)
@@ -112,6 +120,17 @@ test('red de acceso: árbol con local-address, detectar (501 en el CCR) e import
     await expect(leido).toBeHidden()
     await expect(red.locator('[data-servidor]')).toHaveCount(2)
     await expect(red).toContainText('edificio-150')
+
+    // RB-Bodega no tiene credenciales de la API: 502 `router_no_responde` con «Reintentar».
+    await ir(page, 'Routers', /\/routers$/)
+    await page.locator('[data-prueba="vista-routers"]').getByRole('tab', { name: 'Inactivos' }).click()
+    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: /RB-Bodega/ }).click()
+    await pestanaRouter(page, 'Red de acceso')
+    await red.locator('[data-prueba="abrir-descubrir"]').click()
+    const caido = page.getByRole('dialog', { name: /Detectar en el router · RB-Bodega/ })
+    await expect(caido.locator('[data-prueba="descubrir-error-lectura"]')).toContainText('El router no responde')
+    await expect(caido.getByRole('button', { name: 'Reintentar' })).toBeVisible()
+    await capturar(page, 'router-descubrir-502', info.project.name)
 })
 
 test('alta de servicio en un router con varios servidores PPPoE: se elige y se ve el gateway', async ({ page }, info) => {

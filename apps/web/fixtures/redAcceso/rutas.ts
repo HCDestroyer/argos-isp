@@ -315,6 +315,38 @@ function excepcionesDelRouter(routerId: number) {
     return bd.implementacionesPlan.filter(i => i.router_id === routerId && i.estrategia_velocidad !== null)
 }
 
+/* Inventario del router (A2) */
+
+function inventarioDe(routerId: number): Schema<'DescubrimientoRedAcceso'> | RespuestaFixture {
+    const router = bd.routers.find(r => r.id === routerId)
+    if (!router?.api_usuario || !router.tiene_api_password) {
+        return problemaTipado(502, 'router_no_responde', 'El router no responde', 'El router no tiene usuario y clave de la API REST: complétalos en «Conexión»')
+    }
+    if (bd.routersSinRespuesta.includes(routerId)) {
+        return problemaTipado(502, 'router_no_responde', 'El router no responde', 'El router no respondió a la API REST (timeout de 10 s): revisa el túnel o la dirección de la API')
+    }
+    const sembrado = ra().descubrimientos[routerId]
+    if (sembrado) {
+        return sembrado
+    }
+    // Sin semilla: el router tiene exactamente lo que Argos registró (administrado o adoptado).
+    const vlans = ra().vlans.filter(v => v.router_id === routerId)
+    const servidores = ra().servidoresPppoe.filter(s => s.router_id === routerId)
+    const leido: Schema<'DescubrimientoRedAcceso'> = {
+        router_id: routerId,
+        leido_en: ahora(),
+        interfaces: [...new Set(vlans.map(v => v.interfaz_padre))].map(nombre => ({ nombre, tipo: 'ether', deshabilitada: false }))
+            .concat(vlans.map(v => ({ nombre: v.nombre, tipo: 'vlan', deshabilitada: false }))),
+        vlans: vlans.map(v => ({ ros_id: v.ros_id ?? `*V${v.id}`, nombre: v.nombre, interfaz_padre: v.interfaz_padre, vlan_id: v.vlan_id, mtu: v.mtu, deshabilitada: false, comment: v.comment, argos: { estado: v.estado, id: v.id, diferencias: [] } })),
+        servidores_pppoe: servidores.map(s => ({ ros_id: s.ros_id ?? `*S${s.id}`, service_name: s.service_name, interfaz: s.interfaz, perfil: s.estado === 'administrado' ? `argosisp-pppoe-${s.id}` : s.perfil_base, max_mtu: s.max_mtu, max_mru: s.max_mru, mrru: s.mrru, autenticacion: [...s.autenticacion], keepalive_timeout: s.keepalive_timeout, una_sesion_por_host: s.una_sesion_por_host, max_sesiones: s.max_sesiones, deshabilitado: !s.activo, comment: s.comment, red_ipv4_sugerida_id: s.red_ipv4_id, argos: { estado: s.estado, id: s.id, diferencias: [] } })),
+        perfiles: [{ ros_id: '*0', nombre: 'default', local_address: null, remote_address: null, comment: null }],
+        pools_ipv4: [],
+        pools_ipv6: [],
+        sin_router: [],
+    }
+    return leido
+}
+
 export const rutasRedAcceso: RutasFixture = {
     'GET /api/v1/olts': conPermiso('red_acceso.ver', solicitud => ({ status: 200, cuerpo: paginar(ra().olts.map(vistaOlt), solicitud) })),
 
@@ -608,15 +640,18 @@ export const rutasRedAcceso: RutasFixture = {
         return { status: 204, cuerpo: undefined }
     }),
 
+    /**
+     * Como `leerInventarioAcceso` de A2: sin credenciales de la API o con el router caído, 502
+     * `router_no_responde`; si no, lo que «lee» del router (en el RB-Centro hay una VLAN y un servidor
+     * nuevos y una diferencia de MTU; en los demás, lo mismo que Argos tiene registrado).
+     */
     'GET /api/v1/routers/:id/red-acceso/descubrir': conPermiso('red_acceso.descubrir', (solicitud) => {
         const routerId = routerDe(solicitud)
         if (!routerId) {
             return noEncontrado('el router')
         }
-        const leido = ra().descubrimientos[routerId]
-        return leido
-            ? { status: 200, cuerpo: leido }
-            : problemaTipado(501, 'descubrir_no_disponible', 'Descubrir no disponible', 'Este servidor todavía no sabe leer la red de acceso del router (falta el lector de RouterOS)')
+        const leido = inventarioDe(routerId)
+        return 'status' in leido ? leido : { status: 200, cuerpo: leido }
     }),
 
     /** Relee el inventario: toma los valores de RouterOS por `ros_id` y crea las filas `adoptado`. */
@@ -625,9 +660,9 @@ export const rutasRedAcceso: RutasFixture = {
         if (!routerId) {
             return noEncontrado('el router')
         }
-        const leido = ra().descubrimientos[routerId]
-        if (!leido) {
-            return problemaTipado(501, 'descubrir_no_disponible', 'Descubrir no disponible', 'Este servidor todavía no sabe leer la red de acceso del router (falta el lector de RouterOS)')
+        const leido = inventarioDe(routerId)
+        if ('status' in leido) {
+            return leido
         }
         const cuerpo = cuerpoObjeto(solicitud)
         const pedidasVlans = (Array.isArray(cuerpo.vlans) ? cuerpo.vlans : []) as Record<string, unknown>[]

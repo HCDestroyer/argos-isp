@@ -8,13 +8,14 @@ import PaginaRouter from '~/pages/routers/[id].vue'
 import PaginaServicio from '~/pages/servicios/[id].vue'
 import RouterRedAcceso from '~/components/RouterRedAcceso.vue'
 import RedAccesoDescubrir from '~/components/RedAccesoDescubrir.vue'
+import RouterReconciliarModal from '~/components/RouterReconciliarModal.vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 
 /**
  * Red de acceso (`contratos/red-acceso.md`, A1): fixtures con las reglas de la API (2 VLAN por
  * puerto, red con gateway, servidor por VLAN, 422 `servidor_pppoe_requerido`), la pestaña con el
- * árbol y el local-address de solo lectura, «Detectar en el router» (501 = «Todavía no disponible»)
+ * árbol y el local-address de solo lectura, «Detectar en el router» (502 = error con «Reintentar»)
  * e «Importar», y el servidor y el gateway en la ficha del servicio.
  */
 
@@ -87,13 +88,35 @@ describe('red de acceso', () => {
         expect(vista.text()).toContain('Adoptado')
     })
 
-    it('«Detectar en el router»: 501 se ve como «Todavía no disponible» con «Reintentar», sin datos', async () => {
-        const router = bd.routers.find(r => r.id === 2)!
+    it('«Detectar en el router»: router sin API o caído = 502 `router_no_responde` con «Reintentar», sin datos', async () => {
+        const router = bd.routers.find(r => r.id === 3)!
         await mountSuspended(enApp(RedAccesoDescubrir, { router, direccionamiento: null, open: true }))
-        await esperar(() => expect(enBody('descubrir-no-disponible')).not.toBeNull())
-        expect(enBody('descubrir-no-disponible')?.textContent).toContain('Todavía no disponible')
-        expect(enBody('descubrir-no-disponible')?.textContent).toContain('Reintentar')
+        await esperar(() => expect(enBody('descubrir-error-lectura')).not.toBeNull())
+        expect(enBody('descubrir-error-lectura')?.textContent).toContain('El router no responde')
+        expect(enBody('descubrir-error-lectura')?.textContent).toContain('Reintentar')
         expect(document.body.querySelector('[data-descubierta]')).toBeNull()
+
+        bd.routersSinRespuesta.push(2)
+        const caido = await useRedAcceso().descubrir(2)
+        expect(!caido.ok && [caido.problema.status, codigoProblema(caido.problema)]).toEqual([502, 'router_no_responde'])
+    })
+
+    it('«Detectar» en un router con lo mismo que Argos: todo adoptado, nada nuevo', async () => {
+        const leido = await useRedAcceso().descubrir(2)
+        expect(leido.ok && leido.data.vlans.map(v => [v.nombre, v.argos.estado])).toEqual([['vlan201', 'adoptado'], ['vlan202', 'adoptado']])
+        expect(leido.ok && leido.data.servidores_pppoe.every(s => s.argos.estado === 'adoptado')).toBe(true)
+    })
+
+    it('«Reconciliar»: deriva de la red de acceso administrada y conflictos que solo informan', async () => {
+        const centro = await useControlVelocidad().vistaPreviaReconciliar(1)
+        expect(centro.ok && centro.data.red_acceso).toEqual([{ ruta: '/interface/pppoe-server/server', clave: 'argosisp:pppoe:1', accion: 'actualizar' }])
+        const mixco = await useControlVelocidad().vistaPreviaReconciliar(2)
+        expect(mixco.ok && mixco.data.conflictos?.map(c => c.codigo)).toEqual(['arbol_y_simples'])
+
+        await mountSuspended(enApp(RouterReconciliarModal, { router: { id: 2, nombre: 'CCR-Mixco' }, open: true }))
+        await esperar(() => expect(document.body.querySelector('[data-conflicto="arbol_y_simples"]')).not.toBeNull())
+        expect(document.body.querySelector('[data-conflicto="arbol_y_simples"]')?.textContent).toContain('/queue/simple cliente-viejo-14')
+        expect(document.body.querySelector('[data-conflicto="arbol_y_simples"]')?.textContent).toContain('Argos nunca borra')
     })
 
     it('«Detectar» e «Importar»: lo nuevo se adopta con la red sugerida y la VLAN de su servidor', async () => {

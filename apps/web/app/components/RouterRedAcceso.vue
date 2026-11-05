@@ -93,6 +93,8 @@ const servidorEditado = shallowRef<ServidorPppoe | null>(null)
 const vlanParaServidor = ref<number | null>(null)
 const descubrirAbierto = ref(false)
 const oltsAbierto = ref(false)
+/** Deriva de lo administrado y conflictos: la vista previa de «Reconciliar» (lee el router). */
+const derivaAbierta = ref(false)
 
 function abrirVlan(vlan: Vlan | null) {
     vlanEditada.value = vlan
@@ -161,6 +163,15 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
                     variant="outline"
                     data-prueba="abrir-descubrir"
                     @click="descubrirAbierto = true"
+                />
+                <UButton
+                    v-if="puede('routers.reconciliar')"
+                    label="Revisar deriva"
+                    icon="i-lucide-git-compare"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-deriva"
+                    @click="derivaAbierta = true"
                 />
                 <UButton
                     label="OLT y puertos PON"
@@ -381,6 +392,11 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
             :router="router"
             :direccionamiento="direccionamiento"
             @importado="cargar"
+        />
+        <RouterReconciliarModal
+            v-if="puede('routers.reconciliar')"
+            v-model:open="derivaAbierta"
+            :router="router"
         />
         <OltsSlideover
             v-if="puede('red_acceso.ver')"

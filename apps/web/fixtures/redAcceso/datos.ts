@@ -10,8 +10,8 @@ import type { Schema } from '@argosisp/contracts'
  *   red 100.64.10.0/24 con gateway 100.64.10.1): un solo servidor, el alta lo autoelige.
  * - CCR-Mixco (router 2): VLAN 201 y 202 en el puerto 0/1/2 (adoptadas) con un servidor cada una
  *   sobre la red 100.64.20.0/23: dos candidatos, el alta pide elegir (422 `servidor_pppoe_requerido`).
- * - «Detectar en el router» lee el RB-Centro (el lector de A2 simulado); en los demás responde 501
- *   `descubrir_no_disponible`, como la API mientras A2 no lo conecte.
+ * - «Detectar en el router» (lector de A2): en el RB-Centro trae una VLAN y un servidor nuevos y
+ *   una diferencia de MTU; en los demás, lo que Argos ya tiene. Sin API o caído: 502.
  */
 
 export type FilaOlt = Omit<Schema<'Olt'>, 'puertos'>
@@ -24,7 +24,7 @@ export interface RedAccesoFixtures {
     puertosPon: FilaPuertoPon[]
     vlans: FilaVlan[]
     servidoresPppoe: FilaServidorPppoe[]
-    /** Lo que «lee» el router en `descubrir`; sin entrada = 501 `descubrir_no_disponible`. */
+    /** Lo que «lee» el router en `descubrir`; sin entrada, lo mismo que Argos tiene registrado. */
     descubrimientos: Record<number, Schema<'DescubrimientoRedAcceso'>>
 }
 

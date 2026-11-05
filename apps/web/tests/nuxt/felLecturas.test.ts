@@ -1,6 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import type { Component } from 'vue'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
@@ -15,6 +15,7 @@ import PaginaFactura from '~/pages/facturas/[id].vue'
 import PaginaNota from '~/pages/notas-credito/[id].vue'
 import PaginaNotas from '~/pages/notas-credito/index.vue'
 import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 /**
  * Lecturas FEL de la segunda tanda de A3 y A5 (`3e1c218`, `7078281`): catálogo de certificadores,
@@ -116,6 +117,10 @@ describe('FEL · lecturas nuevas', () => {
     })
 
     it('el cierre lista las NCRE sin certificar desde errors[] con enlace a cada nota', async () => {
+        // El cierre mira «el periodo más viejo abierto» contra hoy: con el reloj real la prueba cambiaba
+        // sola al pasar los meses (empezó a fallar en noviembre). Se fija en el hoy de los fixtures.
+        fijarHoyFixtures()
+        onTestFinished(soltarReloj)
         const ncre = dteDe('rechazado', 'nota_credito')
         const nota = bd.notasCredito.find(n => n.id === ncre.documento_id)
         if (nota) {

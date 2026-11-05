@@ -262,7 +262,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
     'SincronizarPlanModal.vue': { permisos: ['planes.sincronizar'], desde: ['components/PlanRouters.vue', 'pages/planes/[id].vue'] },
     // «Reconciliar ahora» con vista previa: desde el menú del router, «Velocidad» y el chequeo del corte de «Probar conexión».
-    'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterPruebaConexionModal.vue'] },
+    'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterRedAcceso.vue', 'components/RouterPruebaConexionModal.vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },

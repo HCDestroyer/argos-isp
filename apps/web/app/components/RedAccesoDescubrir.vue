@@ -8,8 +8,9 @@ import type { SelectItem } from '@nuxt/ui'
  * administrados, con las diferencias contra Argos. Se eligen los nuevos y «Importar»
  * (`POST …/adoptar`, `red_acceso.adoptar`) los registra como adoptados: Argos nunca los toca en el
  * router. La red sugerida (la del gateway = local-address de su perfil) ya viene elegida.
- * Mientras la API no sepa leer el router responde 501 `descubrir_no_disponible`: «Todavía no
- * disponible» con «Reintentar», sin datos.
+ * Con el router caído o sin credenciales de la API responde 502 `router_no_responde`: el error con
+ * «Reintentar», sin datos. Un servidor sin el lector de A2 responde 501 `descubrir_no_disponible`:
+ * «Todavía no disponible».
  */
 const props = defineProps<{
     router: RouterNas
@@ -139,6 +140,7 @@ async function importar() {
                     :problema="problema"
                     :reintentar="leer"
                     :reintentando="cargando"
+                    data-prueba="descubrir-error-lectura"
                 />
                 <template v-else-if="leido">
                     <p class="text-xs text-muted">
