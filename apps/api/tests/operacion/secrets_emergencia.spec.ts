@@ -137,41 +137,26 @@ test.group('operacion · secrets PPPoE de emergencia', () => {
         assert.notInclude(JSON.stringify(auditoria), 'clave')
     })
 
-    test('local-address: gateway de la red de la IP fija o del pool; sin gateway, aviso', async ({
+    test('local-address: el del registro de aaa (gateway de la red); sin gateway, aviso', async ({
         assert,
     }) => {
         const e = await escenario()
-        const cidrPool = redUnica()
-        const basePool = cidrPool.replace('.0/24', '')
-        await db.table('network.redes_ipv4').insert({
-            router_id: e.routerId,
-            cidr: cidrPool,
-            gateway: `${basePool}.1`,
-            tipo: 'pool',
-            nombre: 'Pool-Clientes',
-        })
         let { rsc, resumen } = await new ExportarSecretsEmergencia().execute(
             { router_id: e.routerId },
             contextoPrueba(),
         )
-        let lineas = rsc.split('\n')
-        const secret = (user: string) => lineas.find((l) => l.startsWith(`add name="${user}"`))!
-        assert.include(secret(e.activo.user), `local-address=${e.base}.1 `)
-        assert.include(secret(e.conPool.user), `local-address=${basePool}.1 `)
-        const perfil = lineas.find((l) => l.startsWith(`add name="argosisp-emergencia-plan-${e.planId}" `))!
-        assert.include(perfil, `local-address=${basePool}.1`)
+        const secret = (texto: string, user: string) =>
+            texto.split('\n').find((l) => l.startsWith(`add name="${user}"`))!
+        assert.include(secret(rsc, e.activo.user), `local-address=${e.base}.1 `)
+        assert.notInclude(secret(rsc, e.conPool.user), 'local-address')
         assert.lengthOf(resumen.avisos, 0)
 
-        // Sin gateway en la red de la IP fija: el secret no lleva local-address y el resumen lo avisa.
-        await db.from('network.redes_ipv4').where('router_id', e.routerId).where('tipo', 'estatico').update({
-            gateway: null,
-        })
+        await db.from('network.redes_ipv4').where('router_id', e.routerId).update({ gateway: null })
         ;({ rsc, resumen } = await new ExportarSecretsEmergencia().execute(
             { router_id: e.routerId },
             contextoPrueba(),
         ))
-        lineas = rsc.split('\n')
-        assert.notInclude(secret(e.activo.user), 'local-address')
+        assert.notInclude(secret(rsc, e.activo.user), 'local-address')
         assert.isTrue(resumen.avisos.some((a) => a.includes(`servicio ${e.activo.id}`)))
         assert.notInclude(JSON.stringify(resumen), 'clave')
     })

@@ -111,8 +111,12 @@ export interface ServicioRed {
     pools?: { ipv4: string | null; enlace: string | null; delegado: string | null }
     /** Red de la IPv4 fija vigente: su `gateway` es el `local-address` (`local_address.ts`) */
     red_ipv4?: RedGateway | null
-    /** Red del pool del plan en el router (`redes_ipv4.nombre = planes_routers.pool_ipv4`) */
-    red_pool?: RedGateway | null
+    /** Red de su servidor PPPoE (`servidores_pppoe.red_ipv4_id`, `contratos/red-acceso.md`) */
+    red_servidor?: RedGateway | null
+    /** `local-address` según la regla de A1 (`sqlLocalAddress`): gateway de la red de su IPv4 o de su servidor */
+    local_address?: string | null
+    /** Servidor PPPoE del servicio (`core.servicios.servidor_pppoe_id`) */
+    servidor_pppoe_id?: number | null
 }
 
 /** Datos del router que entran en los objetos. */

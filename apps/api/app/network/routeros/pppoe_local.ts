@@ -10,7 +10,7 @@ import {
 } from '#network/estrategia_velocidad'
 import type { ClienteRouterOS, ContextoRed, ObjetoRouterOS, Propiedades } from '#network/routeros/cliente'
 import { diferencias } from '#network/routeros/normalizar'
-import { localAddressServicio, type LocalAddress } from '#network/routeros/local_address'
+import { localAddressSecret, type LocalAddress } from '#network/routeros/local_address'
 import { RouterOSSolicitud } from '#network/routeros/errores'
 import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
 import { perfilSuspendido } from '#network/routeros/dispatcher'
@@ -170,8 +170,8 @@ export interface SecretDeseado {
  * - `name` = `user_ppp`, `password` = la clave PPP descifrada, `service = pppoe`.
  * - `profile`: `plan-<id>` (activo), `plan-<id>-limitado` (limitado) o el perfil de corte
  *   (`suspendido`: `address-list = suspendidos` y rate-limit mínimo, lo crea el reconciliador).
- * - `local-address` = el gateway de la red de la IPv4 fija (o de la red del pool del plan), nunca el
- *   del perfil `default` (`local_address.ts`). Sin gateway no se pone y queda el aviso.
+ * - `local-address` = el de la regla de A1 (gateway de la red de su IPv4 o de su servidor PPPoE),
+ *   nunca el del perfil `default` (`local_address.ts`). Sin gateway no se pone y queda el aviso.
  * - `remote-address` = la IPv4 fija si la hay (si no, la da el pool del perfil).
  * - `remote-ipv6-prefix` = el /64 de enlace del servicio (modo `radius_servicio`). El /56 delegado
  *   no tiene atributo en `/ppp/secret`: sale del `dhcpv6-pd-pool` del perfil.
@@ -187,7 +187,11 @@ export function secretDeseado(
             : servicio.estado === 'limitado'
               ? nombrePerfilLimitado(servicio.plan_id)
               : nombrePerfil(servicio.plan_id)
-    const la = localAddressServicio(servicio.servicio_id, servicio.red_ipv4, servicio.red_pool)
+    const la = localAddressSecret(
+        servicio.servicio_id,
+        servicio.local_address,
+        servicio.red_ipv4 ?? (servicio.ipv4 ? null : servicio.red_servidor),
+    )
     return {
         comment: commentSecret(servicio.servicio_id),
         aviso: la.aviso,

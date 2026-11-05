@@ -2,9 +2,9 @@ import { routerDispatcher } from '#network/routeros/consultas'
 import { bitacoraRed, fabricaPorDefecto, type OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { ErrorRouterOS, RouterOSInalcanzable } from '#network/routeros/errores'
 import type { ClienteRouterOS, ObjetoRouterOS, RutaLectura, RutaRouterOS } from '#network/routeros/cliente'
-import { inventarioDe, type InventarioRedAcceso, type LecturaRedAcceso } from '#network/routeros/red_acceso'
-
-export type { InventarioRedAcceso } from '#network/routeros/red_acceso'
+import { inventarioDe, type LecturaRedAcceso } from '#network/routeros/red_acceso'
+import type { InventarioRedAcceso } from '#network/red_acceso/inventario'
+import { Problema } from '#shared/errores'
 
 /**
  * Descubrir la red de acceso de un router (`contratos/red-acceso.md` §4 y §6.2): lee una vez
@@ -16,14 +16,13 @@ export type { InventarioRedAcceso } from '#network/routeros/red_acceso'
  * filas (`ros_id`, comment, interfaz) y arma `DescubrimientoRedAcceso`.
  */
 
-/** El router no respondió o rechazó la lectura (A1 → 502 `router_no_responde`). */
-export class RouterNoResponde extends Error {
-    readonly status = 502
+/** El router no respondió, no existe o no tiene credenciales: 502 `router_no_responde` (RFC 9457). */
+export class RouterNoResponde extends Problema {
     constructor(
         readonly routerId: number,
-        mensaje: string,
+        detalle: string,
     ) {
-        super(mensaje)
+        super(502, 'router_no_responde', 'El router no responde', detalle)
     }
 }
 
@@ -92,7 +91,7 @@ export async function leerInventarioAcceso(
         for (const [i, ruta] of MENUS_INVENTARIO.entries()) {
             l[claves[i]!] = await leer(cliente, ruta, routerId, requestId)
         }
-        return inventarioDe(routerId, l as LecturaRedAcceso, new Date())
+        return inventarioDe(l as LecturaRedAcceso)
     } catch (error) {
         if (error instanceof RouterOSInalcanzable || error instanceof ErrorRouterOS) {
             throw new RouterNoResponde(routerId, `el router ${routerId} no respondió: ${error.message}`)

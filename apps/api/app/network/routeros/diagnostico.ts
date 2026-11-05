@@ -32,6 +32,10 @@ import {
     objetoAlDia,
     sobrantesVelocidad,
 } from '#network/routeros/velocidad_router'
+import { detectarConflictos, type Conflicto } from '#network/routeros/red_acceso'
+import { derivaAcceso, leerAcceso } from '#network/routeros/aplicar_red_acceso'
+import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
+import { familia } from '#network/estrategia_velocidad'
 import {
     estadoDeseado,
     estadoVacio,
@@ -66,8 +70,8 @@ export interface CambioVistaPrevia {
     ruta: string
     clave: string
     accion: 'crear' | 'actualizar' | 'borrar' | 'mover'
-    /** `servicio`, `velocidad`, `corte` o `red_acceso` (VLAN y servidores PPPoE administrados) */
-    grupo: 'servicio' | 'velocidad' | 'corte' | 'red_acceso'
+    /** `servicio`, `velocidad` o `corte` */
+    grupo: 'servicio' | 'velocidad' | 'corte'
 }
 
 export interface VistaPreviaReconciliar {
@@ -75,6 +79,8 @@ export interface VistaPreviaReconciliar {
     cambios: CambioVistaPrevia[]
     menus: Array<{ ruta: string; crear: number; actualizar: number; borrar: number; mover: number }>
     avisos: string[]
+    /** Deriva de la red de acceso administrada (`derivaAcceso`): VLAN, perfil del servidor y servidor */
+    red_acceso: Array<{ ruta: string; clave: string; accion: 'crear' | 'actualizar' | 'borrar' }>
     /** Conflictos de control de velocidad en el router (`detectarConflictos`); solo informa */
     conflictos: Conflicto[]
     /** El router no respondió o no tiene credenciales: no hay vista previa */
@@ -96,6 +102,7 @@ export async function vistaPreviaReconciliar(
         cambios: [],
         menus: [],
         avisos: [],
+        red_acceso: [],
         conflictos: [],
         error: null,
     }
@@ -170,7 +177,7 @@ export async function vistaPreviaReconciliar(
             const deriva = derivaAcceso(acceso.vlans, acceso.servidores, lecturaAcceso)
             salida.avisos.push(...deriva.avisos)
             for (const d of deriva.deriva) {
-                salida.cambios.push({ ruta: d.ruta, clave: d.comment, accion: d.accion, grupo: 'red_acceso' })
+                salida.red_acceso.push({ ruta: d.ruta, clave: d.comment, accion: d.accion })
             }
 
             // Servicios

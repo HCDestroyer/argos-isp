@@ -607,16 +607,17 @@ test.group('Red de acceso · descubrir y adoptar', (group) => {
         pools_ipv6: [],
     })
 
-    test('sin lector: 501; con lector marca nuevo, adopta sin tocar el router y protege lo adoptado', async ({
+    test('lector de A2: 502 sin API; con lector marca nuevo, adopta sin tocar el router y protege lo adoptado', async ({
         client,
         assert,
     }) => {
         const routerId = await crearRouterFila()
         const red = await crearRed(routerId)
         const url = `/api/v1/routers/${routerId}/red-acceso`
-        const sinLector = await client.get(`${url}/descubrir`).bearerToken(tecnico)
-        sinLector.assertStatus(501)
-        assert.equal(sinLector.body().type.split(':').pop(), 'descubrir_no_disponible')
+        // Con el lector de A2 (`routeros/inventario_acceso.ts`): un router sin credenciales de la API → 502
+        const sinApi = await client.get(`${url}/descubrir`).bearerToken(tecnico)
+        sinApi.assertStatus(502)
+        assert.equal(sinApi.body().type.split(':').pop(), 'router_no_responde')
 
         registrarLectorInventario(async () => inventario(`${red.base}.1`))
         const visto = await cuerpo(client.get(`${url}/descubrir`).bearerToken(tecnico), 200)

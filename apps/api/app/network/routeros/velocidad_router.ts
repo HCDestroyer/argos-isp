@@ -35,6 +35,12 @@ import {
 import { diferencias, normalizarValor } from '#network/routeros/normalizar'
 import { perfilesLocales, type PoolsPlan } from '#network/routeros/pppoe_local'
 import {
+    commentPerfilPlanServidor,
+    nombrePerfilPlanServidor,
+    perfilesPorServidor,
+    type ServidorGateway,
+} from '#network/routeros/red_acceso'
+import {
     gatewayUnico,
     localAddressPerfil,
     type LocalAddress,
@@ -80,10 +86,11 @@ export const PERFIL_PPP_BASE = 'default'
 
 /**
  * Propiedades del perfil base que se copian a `plan-<id>` (nunca `rate-limit` ni `parent-queue`). Nunca
- * `local-address`: sale del gateway de la red IPv4 (`local_address.ts`, pedido del PM del 5 nov).
+ * direcciones (`contratos/red-acceso.md` §6.1): el `local-address` sale del gateway de la red IPv4
+ * (`local_address.ts`) y la dirección del cliente, de su asignación (`Framed-IP-Address` o el
+ * `remote-address` del secret) o del pool del plan en el router (`planes_routers.pool_ipv4`).
  */
 export const PROPIEDADES_PERFIL_BASE = [
-    'remote-address',
     'remote-ipv6-prefix-pool',
     'dhcpv6-pd-pool',
     'use-ipv6',
@@ -157,6 +164,8 @@ export interface RouterVelocidad {
     modo_seguridad?: 'radius' | 'api'
     /** Redes IPv4 del router con su gateway (`local-address` de los perfiles; ausente = ninguna) */
     redes_ipv4?: RedGateway[]
+    /** Servidores PPPoE activos del router con el gateway de su red (perfiles por servidor con RADIUS) */
+    servidores_pppoe?: ServidorGateway[]
 }
 
 /** Colas WISP (`cola_simple`) que cuelgan de un padre. */
@@ -201,6 +210,8 @@ export interface PlanRouter {
     pools?: PoolsPlan | null
     /** Redes de las que sale el `local-address` del perfil `plan-<id>` (`local_address.ts`) */
     redes?: RedesPlan | null
+    /** Servidores PPPoE por los que el plan tiene servicios en el router */
+    servidores?: number[]
 }
 
 /**
@@ -261,7 +272,7 @@ export function conLocalAddress(la: LocalAddress): { propiedades: Propiedades; q
 
 /** Redes del plan para su perfil; sin datos del plan, las del router. */
 export function redesDelPlan(router: RouterVelocidad, plan: PlanRouter): RedesPlan {
-    return plan.redes ?? { pool: null, servicios: [], router: router.redes_ipv4 ?? [] }
+    return plan.redes ?? { servicios: [], router: router.redes_ipv4 ?? [] }
 }
 
 /** `local-address` del perfil de corte (`suspendido`): el único gateway de las redes del router. */
@@ -643,24 +654,43 @@ function estadoSimple(
             const vp = velocidadConExtras(plan.velocidad, ep.extras)
             const padre = padreCliente(ep, id, vp.reuso)
             const tipo = nombreTipoHoja(ep.tipo_cola)
+            // Servidores PPPoE con gateways distintos (red_acceso.ts, «Perfiles por servidor»): una
+            // variante `plan-<id>-s<srv>` por servidor del plan, con su local-address; mismo padre.
+            const servidores = router.servidores_pppoe ?? []
+            const porServidor = perfilesPorServidor(servidores)
+            const variantes = porServidor
+                ? (plan.servidores ?? []).flatMap((srv) => {
+                      const g = servidores.find((x) => x.id === srv)?.local_address
+                      return g ? [{ srv, gateway: g }] : []
+                  })
+                : []
             const la = localAddressPerfil(id, redesDelPlan(router, plan), 'radius')
-            if (la.aviso) avisos.push(la.aviso)
+            if (la.aviso && variantes.length === 0) avisos.push(la.aviso)
             const local = conLocalAddress(la)
+            const velocidadPerfil: Propiedades = {
+                ...(padre !== 'none' ? { 'parent-queue': padre } : {}),
+                ...(tipo ? { 'queue-type': tipo } : {}),
+                ...(ep.aplicacion === 'perfil_ppp' ? { 'rate-limit': rateLimitServicio(vp, 'activo') } : {}),
+            }
             perfiles.push({
                 ruta: '/ppp/profile',
                 clave: { comment: commentPlan(id) },
                 quitar: local.quitar,
-                propiedades: {
-                    ...base,
-                    ...local.propiedades,
-                    name: nombrePerfil(id),
-                    ...(padre !== 'none' ? { 'parent-queue': padre } : {}),
-                    ...(tipo ? { 'queue-type': tipo } : {}),
-                    ...(ep.aplicacion === 'perfil_ppp'
-                        ? { 'rate-limit': rateLimitServicio(vp, 'activo') }
-                        : {}),
-                },
+                propiedades: { ...base, ...local.propiedades, name: nombrePerfil(id), ...velocidadPerfil },
             })
+            for (const v of variantes) {
+                perfiles.push({
+                    ruta: '/ppp/profile',
+                    clave: { comment: commentPerfilPlanServidor(id, v.srv) },
+                    quitar: [],
+                    propiedades: {
+                        ...base,
+                        'local-address': v.gateway,
+                        name: nombrePerfilPlanServidor(id, v.srv),
+                        ...velocidadPerfil,
+                    },
+                })
+            }
         }
     }
 

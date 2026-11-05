@@ -1,4 +1,10 @@
 import type { ObjetoRouterOS, Propiedades } from '#network/routeros/cliente'
+import type { InventarioRedAcceso } from '#network/red_acceso/inventario'
+import {
+    commentServidor,
+    commentVlan,
+    perfilServidor as nombrePerfilServidor,
+} from '#network/red_acceso/consultas'
 
 /**
  * Red de acceso en RouterOS (`contratos/red-acceso.md` §6, A2): funciones puras para el inventario
@@ -17,11 +23,10 @@ export const PREFIJO_PPPOE = 'argosisp:pppoe:'
 export const PREFIJO_PERFIL_PPPOE = 'argosisp:perfil-pppoe:'
 export const PERFILES_DE_FABRICA = new Set(['default', 'default-encrypted'])
 
-export const commentVlan = (id: number) => `${PREFIJO_VLAN}${id}`
-export const commentServidor = (id: number) => `${PREFIJO_PPPOE}${id}`
+// Nombres y comments de A1 (`#network/red_acceso/consultas`): una sola definición.
+export { commentVlan, commentServidor } from '#network/red_acceso/consultas'
+export { perfilServidor as nombrePerfilServidor } from '#network/red_acceso/consultas'
 export const commentPerfilServidor = (id: number) => `${PREFIJO_PERFIL_PPPOE}${id}`
-/** `name` del perfil base de un servidor administrado (su `default-profile`). */
-export const nombrePerfilServidor = (id: number) => `argosisp-pppoe-${id}`
 
 /** `argosisp:<tipo>:<id>` → id, o null. */
 export function idDeComment(comment: string | undefined, prefijo: string): number | null {
@@ -33,109 +38,14 @@ export function idDeComment(comment: string | undefined, prefijo: string): numbe
 /** ¿El objeto es de ArgosIsp (cualquier comment `argosisp:`)? */
 export const esDeArgos = (o: ObjetoRouterOS) => (o.comment ?? '').startsWith('argosisp:')
 
-// ---------------------------------------------------------------------------------------------
-// Inventario (descubrir)
-// ---------------------------------------------------------------------------------------------
-
-/** De quién es un objeto del router según su comment. */
-export interface MarcaArgos {
-    /** Lleva un comment `argosisp:` */
-    de_argos: boolean
-    /** Entidad e id de Argos si el comment los trae (`argosisp:vlan:7` → `vlan`, 7) */
-    entidad: 'vlan' | 'servidor_pppoe' | 'perfil_pppoe' | 'plan' | 'otro' | null
-    id: number | null
-}
-
-export function marcaArgos(o: ObjetoRouterOS): MarcaArgos {
-    const c = o.comment ?? ''
-    if (!c.startsWith('argosisp:')) return { de_argos: false, entidad: null, id: null }
-    const vlan = idDeComment(c, PREFIJO_VLAN)
-    if (vlan) return { de_argos: true, entidad: 'vlan', id: vlan }
-    const pppoe = idDeComment(c, PREFIJO_PPPOE)
-    if (pppoe) return { de_argos: true, entidad: 'servidor_pppoe', id: pppoe }
-    const perfil = idDeComment(c, PREFIJO_PERFIL_PPPOE)
-    if (perfil) return { de_argos: true, entidad: 'perfil_pppoe', id: perfil }
-    const plan = /^argosisp:plan:(\d+)/.exec(c)?.[1]
-    if (plan) return { de_argos: true, entidad: 'plan', id: Number(plan) }
-    return { de_argos: true, entidad: 'otro', id: null }
-}
-
 const si = (v: string | undefined) => v === 'true' || v === 'yes'
 const entero = (v: string | undefined): number | null => {
     const n = Number(v)
     return v !== undefined && v !== '' && Number.isFinite(n) ? n : null
 }
+const texto = (v: string | undefined) => (v === undefined || v === '' ? null : v)
 
-export interface InterfazLeida {
-    ros_id: string
-    nombre: string
-    tipo: string
-    deshabilitada: boolean
-    comentario: string | null
-}
-
-export interface VlanLeida {
-    ros_id: string
-    nombre: string
-    vlan_id: number | null
-    interfaz_padre: string
-    mtu: number | null
-    deshabilitada: boolean
-    comentario: string | null
-    argos: MarcaArgos
-}
-
-export interface ServidorLeido {
-    ros_id: string
-    service_name: string
-    interfaz: string
-    perfil: string
-    max_mtu: number | null
-    max_mru: number | null
-    mrru: number | null
-    autenticacion: string[]
-    keepalive_timeout: number | null
-    una_sesion_por_host: boolean
-    max_sesiones: number | null
-    deshabilitado: boolean
-    comentario: string | null
-    argos: MarcaArgos
-}
-
-export interface PerfilLeido {
-    ros_id: string
-    nombre: string
-    local_address: string | null
-    remote_address: string | null
-    rate_limit: string | null
-    de_fabrica: boolean
-    comentario: string | null
-    argos: MarcaArgos
-}
-
-export interface PoolLeido {
-    ros_id: string
-    nombre: string
-    /** IPv4: `ranges` (`10.0.0.2-10.0.0.254,…`); IPv6: `prefix` */
-    rangos: string
-    /** IPv6: `prefix-length` */
-    tamano_entrega: number | null
-    comentario: string | null
-}
-
-/** Inventario de solo lectura de la red de acceso de un router (`DescubrimientoRedAcceso` de A1). */
-export interface InventarioRedAcceso {
-    router_id: number
-    leido_en: string
-    interfaces: InterfazLeida[]
-    vlans: VlanLeida[]
-    servidores_pppoe: ServidorLeido[]
-    perfiles: PerfilLeido[]
-    pools_ipv4: PoolLeido[]
-    pools_ipv6: PoolLeido[]
-}
-
-/** Lo que se lee de cada menú (un GET por menú). */
+/** Lo que se lee de cada menú para el inventario (un GET por menú). */
 export interface LecturaRedAcceso {
     interfaces: ObjetoRouterOS[]
     vlans: ObjetoRouterOS[]
@@ -145,30 +55,26 @@ export interface LecturaRedAcceso {
     pools_ipv6: ObjetoRouterOS[]
 }
 
-const texto = (v: string | undefined) => (v === undefined || v === '' ? null : v)
-
-/** Arma el inventario a partir de lo leído (sin objetos dinámicos). */
-export function inventarioDe(routerId: number, l: LecturaRedAcceso, leidoEn: Date): InventarioRedAcceso {
+/**
+ * Inventario de solo lectura en los tipos de A1 (`#network/red_acceso/inventario`), sin objetos
+ * dinámicos (sesiones `<pppoe-…>`, VLAN dinámicas). A1 empareja y marca nuevo/adoptado/administrado.
+ */
+export function inventarioDe(l: LecturaRedAcceso): InventarioRedAcceso {
     const estaticos = (lista: ObjetoRouterOS[]) => lista.filter((o) => o.dynamic !== 'true')
     return {
-        router_id: routerId,
-        leido_en: leidoEn.toISOString(),
         interfaces: estaticos(l.interfaces).map((o) => ({
-            ros_id: o['.id'],
             nombre: o.name ?? '',
             tipo: o.type ?? '',
             deshabilitada: si(o.disabled),
-            comentario: texto(o.comment),
         })),
         vlans: estaticos(l.vlans).map((o) => ({
             ros_id: o['.id'],
             nombre: o.name ?? '',
-            vlan_id: entero(o['vlan-id']),
             interfaz_padre: o.interface ?? '',
+            vlan_id: entero(o['vlan-id']) ?? 0,
             mtu: entero(o.mtu),
             deshabilitada: si(o.disabled),
-            comentario: texto(o.comment),
-            argos: marcaArgos(o),
+            comment: texto(o.comment),
         })),
         servidores_pppoe: estaticos(l.servidores).map((o) => ({
             ros_id: o['.id'],
@@ -183,32 +89,25 @@ export function inventarioDe(routerId: number, l: LecturaRedAcceso, leidoEn: Dat
             una_sesion_por_host: si(o['one-session-per-host']),
             max_sesiones: o['max-sessions'] === 'unlimited' ? null : entero(o['max-sessions']),
             deshabilitado: si(o.disabled),
-            comentario: texto(o.comment),
-            argos: marcaArgos(o),
+            comment: texto(o.comment),
         })),
         perfiles: estaticos(l.perfiles).map((o) => ({
             ros_id: o['.id'],
             nombre: o.name ?? '',
             local_address: texto(o['local-address']),
             remote_address: texto(o['remote-address']),
-            rate_limit: texto(o['rate-limit']),
-            de_fabrica: PERFILES_DE_FABRICA.has(o.name ?? ''),
-            comentario: texto(o.comment),
-            argos: marcaArgos(o),
+            comment: texto(o.comment),
         })),
         pools_ipv4: l.pools_ipv4.map((o) => ({
             ros_id: o['.id'],
             nombre: o.name ?? '',
             rangos: o.ranges ?? '',
-            tamano_entrega: null,
-            comentario: texto(o.comment),
         })),
         pools_ipv6: l.pools_ipv6.map((o) => ({
             ros_id: o['.id'],
             nombre: o.name ?? '',
-            rangos: o.prefix ?? '',
-            tamano_entrega: entero(o['prefix-length']),
-            comentario: texto(o.comment),
+            prefijo: o.prefix ?? '',
+            tamano_prefijo: entero(o['prefix-length']) ?? 64,
         })),
     }
 }

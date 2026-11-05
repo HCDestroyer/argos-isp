@@ -176,7 +176,17 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                             return
                         }
                         deseadoSecret = secretDeseado(servicio!, perfilSuspendido(), clave.clave)
-                        if (deseadoSecret.aviso) fila.avisos = [...fila.avisos, deseadoSecret.aviso]
+                        if (deseadoSecret.aviso) {
+                            // Sin gateway no se escribe local-address (nunca el de `default`); alerta
+                            // por evento (contratos/red-acceso.md §2). La pasada periódica solo avisa.
+                            fila.avisos = [...fila.avisos, deseadoSecret.aviso]
+                            await t.emit('routeros.fallido', {
+                                servicio_id: servicio!.servicio_id,
+                                router_id: routerId,
+                                operacion: 'local_address',
+                                error: deseadoSecret.aviso,
+                            })
+                        }
                         if (servicio!.estado === 'suspendido') {
                             fila.cambios.push(
                                 ...(await asegurarPerfilCorte(

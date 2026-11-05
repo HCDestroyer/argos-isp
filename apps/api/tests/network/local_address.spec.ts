@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import {
     gatewayUnico,
     localAddressPerfil,
-    localAddressServicio,
+    localAddressSecret,
     type RedGateway,
 } from '#network/routeros/local_address'
 import {
@@ -101,19 +101,18 @@ test.group('local-address · derivado del gateway de la red', () => {
         assert.notInclude([...PROPIEDADES_PERFIL_BASE] as string[], 'local-address')
     })
 
-    test('secret: la red de la IPv4 fija manda; sin ella, la del pool; sin gateway, aviso', ({ assert }) => {
-        assert.deepEqual(localAddressServicio(1, red(1, '10.1.0.1'), red(2, '10.2.0.1')), {
+    test('secret: el local-address de la regla de A1; sin gateway en su red, aviso', ({ assert }) => {
+        assert.deepEqual(localAddressSecret(1, '10.1.0.1', red(1, '10.1.0.1')), {
             gateway: '10.1.0.1',
             red_id: 1,
             aviso: null,
         })
-        assert.equal(localAddressServicio(1, null, red(2, '10.2.0.1')).gateway, '10.2.0.1')
-        const sinGw = localAddressServicio(9, red(3, null, '10.3.0.0/24'), null)
+        const sinGw = localAddressSecret(9, null, red(3, null, '10.3.0.0/24'))
         assert.isNull(sinGw.gateway)
         assert.include(sinGw.aviso!, 'servicio 9')
         assert.include(sinGw.aviso!, '10.3.0.0/24 no tiene gateway')
-        // ni red ni pool: nada que avisar (lo da el servidor PPPoE)
-        assert.deepEqual(localAddressServicio(1, null, null), { gateway: null, red_id: null, aviso: null })
+        // sin red (pool del router, sin servidor): nada que avisar (lo da el servidor PPPoE)
+        assert.deepEqual(localAddressSecret(1, null, null), { gateway: null, red_id: null, aviso: null })
     })
 
     test('gateway único: uno sí; varios o una red sin gateway, no', ({ assert }) => {
@@ -125,31 +124,17 @@ test.group('local-address · derivado del gateway de la red', () => {
         assert.isNull(gatewayUnico([], 'x').aviso)
     })
 
-    test('perfil: pool del plan → servicios → router; en api sin aviso por varios gateways', ({ assert }) => {
+    test('perfil: redes de sus servicios → router; en api sin aviso por varios gateways', ({ assert }) => {
         const router = [red(5, '10.5.0.1')]
         assert.equal(
-            localAddressPerfil(
-                7,
-                { pool: red(4, '10.4.0.1'), servicios: [red(1, '10.1.0.1')], router },
-                'radius',
-            ).gateway,
-            '10.4.0.1',
-        )
-        assert.equal(
-            localAddressPerfil(7, { pool: null, servicios: [red(1, '10.1.0.1')], router }, 'radius').gateway,
+            localAddressPerfil(7, { servicios: [red(1, '10.1.0.1')], router }, 'radius').gateway,
             '10.1.0.1',
         )
-        assert.equal(
-            localAddressPerfil(7, { pool: null, servicios: [], router }, 'radius').gateway,
-            '10.5.0.1',
-        )
-        const dos = { pool: null, servicios: [red(1, '10.1.0.1'), red(2, '10.2.0.1')], router }
+        assert.equal(localAddressPerfil(7, { servicios: [], router }, 'radius').gateway, '10.5.0.1')
+        const dos = { servicios: [red(1, '10.1.0.1'), red(2, '10.2.0.1')], router }
         assert.include(localAddressPerfil(7, dos, 'radius').aviso!, 'perfil plan-7')
         // sin RADIUS cada secret lleva el suyo: varias redes no son un problema
         assert.deepEqual(localAddressPerfil(7, dos, 'api'), { gateway: null, red_id: null, aviso: null })
-        const poolSinGw = localAddressPerfil(7, { pool: red(4, null), servicios: [], router }, 'radius')
-        assert.isNull(poolSinGw.gateway)
-        assert.include(poolSinGw.aviso!, 'pool del plan no tiene gateway')
     })
 
     test('estado RADIUS: el perfil plan-<id> lleva el gateway, no el local-address de default', ({
@@ -158,7 +143,7 @@ test.group('local-address · derivado del gateway de la red', () => {
         const router = routerCon([red(1, '10.1.0.1')])
         const estado = estadoVelocidadRouter(
             router,
-            [planPerfil({ pool: null, servicios: [red(1, '10.1.0.1')], router: router.redes_ipv4! })],
+            [planPerfil({ servicios: [red(1, '10.1.0.1')], router: router.redes_ipv4! })],
             lecturaConDefault(),
         )
         const perfil = estado.presentes.find((o) => o.ruta === '/ppp/profile')!
@@ -173,7 +158,7 @@ test.group('local-address · derivado del gateway de la red', () => {
         const redes = [red(1, '10.1.0.1'), red(2, '10.2.0.1')]
         const estado = estadoVelocidadRouter(
             routerCon(redes),
-            [planPerfil({ pool: null, servicios: redes, router: redes })],
+            [planPerfil({ servicios: redes, router: redes })],
             lecturaConDefault(),
         )
         const perfil = estado.presentes.find((o) => o.ruta === '/ppp/profile')!
@@ -187,11 +172,48 @@ test.group('local-address · derivado del gateway de la red', () => {
         assert.isTrue(objetoAlDia(perfil, { '.id': '*9', ...perfil.propiedades } as ObjetoRouterOS))
     })
 
+    test('RADIUS con servidores de gateways distintos: plan-<id>-s<srv> por servidor, mismo padre', ({
+        assert,
+    }) => {
+        const redes = [red(1, '10.1.0.1'), red(2, '10.2.0.1')]
+        const router = {
+            ...routerCon(redes),
+            servidores_pppoe: [
+                { id: 1, local_address: '10.1.0.1' },
+                { id: 2, local_address: '10.2.0.1' },
+                { id: 3, local_address: '10.3.0.1' },
+            ],
+        }
+        const plan = { ...planPerfil({ servicios: redes, router: redes }), servidores: [1, 2] }
+        const estado = estadoVelocidadRouter(router, [plan], lecturaConDefault())
+        const perfiles = estado.presentes.filter((o) => o.ruta === '/ppp/profile')
+        assert.deepEqual(
+            perfiles.map((p) => p.propiedades.name),
+            ['plan-7', 'plan-7-s1', 'plan-7-s2'],
+        )
+        assert.equal(perfiles[1]!.propiedades['local-address'], '10.1.0.1')
+        assert.equal(perfiles[1]!.clave.comment, 'argosisp:plan:7:s1')
+        assert.equal(perfiles[2]!.propiedades['local-address'], '10.2.0.1')
+        assert.equal(perfiles[1]!.propiedades['rate-limit'], perfiles[0]!.propiedades['rate-limit'])
+        // sin variante para el servidor 3 (el plan no tiene servicios ahí) y sin aviso: lo cubren las variantes
+        assert.isFalse(estado.avisos.some((a) => a.includes('gateways distintos')))
+        // un solo gateway entre servidores: nada por servidor
+        const uno = estadoVelocidadRouter(
+            { ...router, servidores_pppoe: [{ id: 1, local_address: '10.1.0.1' }] },
+            [plan],
+            lecturaConDefault(),
+        )
+        assert.lengthOf(
+            uno.presentes.filter((o) => o.ruta === '/ppp/profile'),
+            1,
+        )
+    })
+
     test('estado sin RADIUS: plan-<id> y -limitado con el gateway; sin redes, nada', ({ assert }) => {
         const redes = [red(1, '10.1.0.1')]
         const estado = estadoVelocidadRouter(
             routerCon(redes, 'api'),
-            [planPerfil({ pool: null, servicios: redes, router: redes })],
+            [planPerfil({ servicios: redes, router: redes })],
             lecturaConDefault(),
         )
         const perfiles = estado.presentes.filter((o) => o.ruta === '/ppp/profile')
@@ -200,7 +222,7 @@ test.group('local-address · derivado del gateway de la red', () => {
 
         const vacio = estadoVelocidadRouter(
             routerCon([], 'api'),
-            [planPerfil({ pool: null, servicios: [], router: [] })],
+            [planPerfil({ servicios: [], router: [] })],
             lecturaConDefault(),
         )
         for (const p of vacio.presentes.filter((o) => o.ruta === '/ppp/profile')) {

@@ -4,16 +4,9 @@ import type { ServidorArgos, VlanArgos } from '#network/routeros/red_acceso'
 
 /**
  * Lo que Argos dice de la red de acceso de un router (`network.vlans`, `network.servidores_pppoe`,
- * modelo de A1 en `contratos/red-acceso.md` §1). Mientras la migración de A1 no esté, las tablas no
- * existen y el router no tiene red de acceso registrada (listas vacías: lo de antes).
+ * modelo de A1 en `contratos/red-acceso.md` §1), en bloque para el reconciliador. El `local_address`
+ * de un servidor es el de `localAddressServidor` (gateway de su red).
  */
-
-async function existe(tabla: string, cliente: QueryClientContract): Promise<boolean> {
-    const fila = (await cliente.rawQuery('SELECT to_regclass(?) AS t', [tabla])) as {
-        rows: Array<{ t: string | null }>
-    }
-    return Boolean(fila.rows[0]?.t)
-}
 
 export interface RedAccesoArgos {
     vlans: VlanArgos[]
@@ -24,9 +17,6 @@ export async function redAccesoDeRouter(
     routerId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<RedAccesoArgos> {
-    if (!(await existe('network.servidores_pppoe', cliente)) || !(await existe('network.vlans', cliente))) {
-        return { vlans: [], servidores: [] }
-    }
     const vlans = (await cliente
         .from('network.vlans')
         .where('router_id', routerId)
