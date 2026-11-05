@@ -11,6 +11,11 @@ import {
 export interface EntradaInformarContratoIris {
     /** versión del contrato que habla Iris (semver; el validador ya la comprobó) */
     contrato: string
+    /**
+     * contrato 0.6.2: si Iris tiene guardado el receptor de Argos (false = conector canjeado antes de
+     * B1: el panel pide volver a conectar). Ausente: se conserva el último informado
+     */
+    receptor_argos?: boolean | null
     /** id (`core.tokens_api.id`) del token que hizo la petición; no se llama `token_*` para que la auditoría no lo enmascare */
     atk_id: number | null
 }
@@ -29,6 +34,8 @@ export type SalidaInformarContratoIris = { contrato_iris: string } & Omit<Estado
  *   `atk_` de ese canje, como el autologin. Funciona con el conector apagado: no envía nada.
  * - Permiso de la ruta: `sso.emitir`, el mínimo que el token de Iris ya tiene (§1.1); un permiso
  *   nuevo obligaría a reconectar cada Iris para que su token lo incluya.
+ * - Contrato 0.6.2: `receptor_argos` opcional (true/false) se guarda en el conector; omitido, se
+ *   conserva el anterior. Con false, `GET /integraciones/iris` responde `requiere_reconectar: true`.
  * - Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).
  */
 export default class InformarContratoIris extends DomainAction<
@@ -59,10 +66,14 @@ export default class InformarContratoIris extends DomainAction<
         if (antes?.conectado_por_enlace_en && Number(antes.token_argos_id) !== Number(input.atk_id)) {
             throw new Prohibido('El conector se preparó con un enlace: solo vale el token de ese canje')
         }
+        const cambios: Record<string, unknown> = {}
+        if (antes?.contrato !== input.contrato) cambios.contrato = input.contrato
+        const receptor = input.receptor_argos
+        if (receptor !== undefined && receptor !== null && antes?.receptor_argos !== receptor) {
+            cambios.receptor_argos = receptor
+        }
         const despues =
-            antes?.contrato === input.contrato
-                ? antes
-                : await guardarConectorIris(t, antes, { contrato: input.contrato })
+            antes && Object.keys(cambios).length === 0 ? antes : await guardarConectorIris(t, antes, cambios)
         t.fijarEntidad('conector_iris', 1)
         return { contrato_iris: despues.contrato ?? input.contrato, ...(await versionesIris()) }
     }

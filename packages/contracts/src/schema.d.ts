@@ -3695,7 +3695,7 @@ export interface paths {
         put?: never;
         /**
          * Canje del enlace de conexión de Argos (lo llama Iris, servidor a servidor)
-         * @description Sin sesión: lo autentica el código. `sistema: "iris"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta. Responde además `panel_url` (`PANEL_URL_PUBLICA`). Un código de «Conectar con un botón» (§1.4) exige `code_verifier`: si falta o no coincide, 401 `codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide.
+         * @description Sin sesión: lo autentica el código. `sistema: "iris"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta. Responde además `panel_url` (`PANEL_URL_PUBLICA`). Un código de «Conectar con un botón» (§1.4) exige `code_verifier`: si falta o no coincide, 401 `codigo_invalido` y el código queda gastado; el enlace de §1.3 no lo pide. Contrato 0.6.2: `receptor_argos` opcional (true = Iris guardó el receptor de esta respuesta); se guarda en el conector.
          */
         post: operations["irisEnlaceCanjear"];
         delete?: never;
@@ -3714,7 +3714,7 @@ export interface paths {
         get?: never;
         /**
          * Iris informa la versión del contrato que habla (servidor a servidor)
-         * @description Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de 0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).
+         * @description Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de 0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos). Contrato 0.6.2: `receptor_argos` opcional (false = Iris no tiene el receptor de Argos: `GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior.
          */
         put: operations["irisInformarContrato"];
         post?: never;
@@ -12696,6 +12696,10 @@ export interface components {
             token_argos_id: number | null;
             /** @description Versión del contrato que informó Iris (canje o `PUT /integraciones/iris/contrato`); null si nunca (un Iris anterior a 0.5.0: no recibe los webhooks nuevos de 0.5.0) */
             contrato: string | null;
+            /** @description true solo si el último `receptor_argos` que informó Iris (canje o `PUT /integraciones/iris/contrato`) es false: un conector canjeado antes de B1 que no guardó el receptor de Argos. Null o true: false (contrato Iris 0.6.2) */
+            requiere_reconectar: boolean;
+            /** @description Por qué hay que volver a conectar Iris; null si `requiere_reconectar` es false */
+            motivo_reconectar: string | null;
             version: number;
         };
         ConexionRouter: {
@@ -35684,6 +35688,8 @@ export interface operations {
                     code_verifier?: string;
                     /** @description Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, Argos no envía los webhooks nuevos de 0.5.0 */
                     contrato?: string;
+                    /** @description Contrato Iris 0.6.2: true si Iris guardó la URL y el secreto del receptor de Argos de esta respuesta (con B1, siempre true). Se guarda en el conector; omitido queda null (desconocido) */
+                    receptor_argos?: boolean;
                 };
             };
         };
@@ -35720,6 +35726,8 @@ export interface operations {
                 "application/json": {
                     /** @description Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`) */
                     contrato: string;
+                    /** @description Contrato Iris 0.6.2: true si Iris tiene guardados la URL y el secreto del receptor de webhooks de Argos (los del canje); false si no (conector canjeado antes de B1: el panel pide volver a conectar). Omitido: se conserva el último informado */
+                    receptor_argos?: boolean;
                 };
             };
         };

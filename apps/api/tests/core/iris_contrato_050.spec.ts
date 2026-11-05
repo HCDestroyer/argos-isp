@@ -71,7 +71,7 @@ test.group('Iris 0.5.0 · versión de Argos y contrato del conector', (group) =>
             200,
         )
         assert.include(r.body(), { version_argos: '1.6.0', contrato: CONTRATO_IRIS })
-        assert.equal(CONTRATO_IRIS, '0.6.1')
+        assert.equal(CONTRATO_IRIS, '0.6.2')
         assert.isNull(await contratoGuardado())
         assert.isFalse(await conectorAdmite('0.5.0'))
 

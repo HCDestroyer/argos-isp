@@ -36,6 +36,11 @@ export interface EntradaCanjearEnlaceIris {
     code_verifier?: string | null
     /** versión del contrato que habla Iris (semver, 0.5.0); se guarda en el conector. Ausente: null */
     contrato?: string | null
+    /**
+     * contrato 0.6.2: si Iris guardó la URL y el secreto del receptor de Argos de esta respuesta (con
+     * B1, siempre true). Se guarda en el conector; ausente: null (desconocido, un Iris anterior)
+     */
+    receptor_argos?: boolean | null
 }
 
 export interface SalidaCanjearEnlaceIris {
@@ -110,6 +115,7 @@ export async function empresasDelAlcance(
  *   (o null si no lo manda: un Iris anterior, que no recibe los webhooks nuevos) y responde
  *   `version_argos` y `contrato` (la versión de Argos y la del contrato que habla). En una
  *   repetición salen con el valor actual, no el guardado.
+ * - Contrato 0.6.2: guarda `receptor_argos` (si Iris guardó el receptor de Argos; ausente → null).
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
@@ -213,6 +219,7 @@ export default class CanjearEnlaceIris extends DomainAction<
             token_argos_id: Number(emitido.datos.id),
             conectado_por_enlace_en: t.trx.knexRawQuery('now()'),
             contrato: input.contrato ?? null,
+            receptor_argos: input.receptor_argos ?? null,
         })
         const salida: SalidaCanjearEnlaceIris = {
             token: emitido.token,
@@ -256,11 +263,15 @@ async function revocarSiVigente(t: Transaccion, tokenId: number) {
 
 /**
  * SHA-256 de la petición de canje (sin el código, que ya identifica el enlace): idempotencia. El
- * `contrato` (0.5.0) entra solo si viene: el hash de una petición sin él no cambia.
+ * `contrato` (0.5.0) y `receptor_argos` (0.6.2) entran solo si vienen: el hash de una petición sin
+ * ellos no cambia.
  */
 export function hashPeticionIris(input: EntradaCanjearEnlaceIris): string {
     const campos = [input.sistema, input.base_url, input.token, input.webhook.url, input.webhook.secreto]
     if (input.contrato) campos.push(input.contrato)
+    if (input.receptor_argos !== undefined && input.receptor_argos !== null) {
+        campos.push(`receptor_argos:${input.receptor_argos}`)
+    }
     return createHash('sha256').update(JSON.stringify(campos), 'utf8').digest('hex')
 }
 
