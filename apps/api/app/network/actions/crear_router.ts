@@ -53,6 +53,11 @@ export interface DatosRouter {
     /** null o ausente solo en un router sin RADIUS (`modo_seguridad = 'api'`) */
     nas_ip?: string | null
     modo_seguridad?: 'radius' | 'api'
+    /**
+     * Tipo de conexión de los servicios del router (`pppoe` por defecto; `contratos/tipo-conexion-router.md`).
+     * En la edición solo si ningún servicio cambia; si no, `routers.cambiar_tipo_conexion`.
+     */
+    tipo_conexion?: 'pppoe' | 'ip_estatica' | 'dhcp_fija'
     capacidad_bajada_kbps?: number | null
     capacidad_subida_kbps?: number | null
     api_url?: string | null

@@ -8,6 +8,7 @@ import {
     crearEscenarioRouter,
     crearPlanFila,
     crearServicioFila,
+    routerConTipo,
 } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
 import { clienteDeRouter } from '#network/routeros/router'
@@ -187,6 +188,7 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         })
 
     async function wisp(client: any, planId: number) {
+        await routerConTipo(routerId, 'ip_estatica')
         const r = await estado(
             client.post('/api/v1/servicios').bearerToken(token).json({
                 plantilla_facturacion_id: null,

@@ -72,6 +72,8 @@ export const PERMISOS = {
         'Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin',
     'routers.unificar_control_velocidad':
         'Quitar las excepciones de velocidad por plan de un router: todos sus planes con el modo del router; solo admin',
+    'routers.cambiar_tipo_conexion':
+        'Cambiar el tipo de conexión de un router y de todos sus servicios (o unificar los que difieren); solo admin',
     'routers.unir':
         'Unir dos registros del mismo MikroTik: servicios, redes, pools, planes y sesiones pasan al que queda; solo admin',
     'routers.generar_script':

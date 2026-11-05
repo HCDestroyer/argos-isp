@@ -318,6 +318,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.desconectar_sesion': 'Sesión PPPoE desconectada en el router',
     'routers.cambiar_control_velocidad': 'Modo de colas del router cambiado',
     'routers.unificar_control_velocidad': 'Control de velocidad unificado en el router (sin excepciones por plan)',
+    'routers.cambiar_tipo_conexion': 'Tipo de conexión del router cambiado (servicio por servicio)',
     'olts.crear': 'OLT registrada',
     'olts.editar': 'OLT o puerto PON editado',
     'olts.eliminar': 'OLT eliminada',

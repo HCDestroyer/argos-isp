@@ -91,6 +91,10 @@ Pedido del PM (5 nov): un servidor PPPoE por VLAN, una o dos VLAN por puerto PON
 
 Decisión del PM (5 nov): no hay excepciones de estrategia por plan nuevas (`POST /planes/:id/routers/:routerId/estrategia-velocidad` y `planes[]` de la vista previa solo aceptan `null`; un objeto → 422 `estrategia_por_router`). Las que existen siguen aplicándose hasta `routers.unificar_control_velocidad` (`POST /routers/:id/unificar-control-velocidad`, solo admin), con la vista previa `GET /routers/:id/vista-previa-unificar-velocidad` (`consultas/unificar_velocidad.ts`): qué planes, qué capas cambian y cuántas sesiones reconectan. Emite un `router.estrategia_cambiada` por plan con `motivo: 'unificar'`.
 
+## Tipo de conexión por router (`tipo_conexion_router.ts`, `contratos/tipo-conexion-router.md`)
+
+Decisión del PM (5 nov): `network.routers.tipo_conexion` (`pppoe` por defecto) define el tipo de todos sus servicios. El alta toma el del router (otro: 422 `tipo_conexion_del_router`); mover un servicio de router adopta el del destino. `PUT /routers/:id` lo cambia solo sin servicios que cambien (422 `tipo_conexion_con_servicios`). Con servicios: `GET /routers/:id/vista-previa-tipo-conexion?tipo=` (qué cambia, qué falta, `difiere_del_router`) y `routers.cambiar_tipo_conexion` (`POST /routers/:id/cambiar-tipo-conexion`), que pasa cada servicio por `servicios.editar` (diff y `servicio.config_cambiada` con `tipo_conexion`) y emite `router.tipo_conexion_cambiado` (`cambio`, `unificar` o `edicion`). Los servicios anteriores que difieren se quedan como están hasta unificarlos.
+
 ## IPAM IPv4 (`ipam_v4.ts`)
 
 - `asignarIpv4(trx, { servicioId, routerId, ip?, redId? })`: la IP pedida (debe estar en una red del router, no ser red/broadcast/gateway y estar libre: 422/409) o la primera libre, prefiriendo redes `estatico` sobre `pool`. Con `redId`, solo de esa red: 422 en `red_ipv4_id` si no es del router o está llena (`rule: llena`), y 422 en `ipv4` si la IP pedida no es de esa red. Advisory lock por router.

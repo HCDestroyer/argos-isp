@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
 import { estado, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
 
 /**
@@ -32,6 +32,7 @@ test.group('Servicios · sincronizar con el router', (group) => {
     })
 
     async function crear(client: any, cuerpo: Record<string, unknown> = {}) {
+        await routerConTipo(routerId, cuerpo.tipo_conexion ?? 'ip_estatica')
         const r = await estado(
             client
                 .post('/api/v1/servicios')

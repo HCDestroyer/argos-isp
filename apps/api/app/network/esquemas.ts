@@ -117,6 +117,13 @@ export const Router = definirEsquema(
                     'radius: PPPoE por RADIUS (y servicios ip_estatica/dhcp_fija por la API REST). api: router sin RADIUS, ' +
                     'solo ip_estatica y dhcp_fija por la API REST; sin nas_ip ni radius_secret obligatorios y sin PPPoE',
             },
+            tipo_conexion: {
+                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                description:
+                    'Tipo de conexión de los servicios del router (contratos/tipo-conexion-router.md): los nuevos lo ' +
+                    'toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con ' +
+                    'POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)',
+            },
             control_velocidad: {
                 ...enumerado(['simple', 'arbol_pcq']),
                 description:
@@ -1519,5 +1526,83 @@ export const ResultadoUnificarVelocidad = definirEsquema(
     objeto({
         router_id: id,
         planes: { ...lista(id), description: 'Planes cuya excepción se quitó (un evento por plan)' },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Tipo de conexión por router (A1, `contratos/tipo-conexion-router.md`)
+|--------------------------------------------------------------------------
+*/
+
+const tipoConexion = enumerado(['pppoe', 'ip_estatica', 'dhcp_fija'])
+
+export const VistaPreviaTipoConexion = definirEsquema(
+    'VistaPreviaTipoConexion',
+    objeto({
+        router_id: id,
+        router_version: { ...entero, description: 'version del router al calcular (va en el POST)' },
+        tipo_actual: { ...tipoConexion, description: 'Tipo del router hoy' },
+        tipo: { ...tipoConexion, description: 'Tipo al que pasaría (sin ?tipo=, el actual: «unificar»)' },
+        aplicable: {
+            ...booleano,
+            description:
+                'true si POST /routers/:id/cambiar-tipo-conexion con este tipo se aplicaría (sin bloqueos ni faltantes)',
+        },
+        bloqueos: {
+            ...lista(objeto({ codigo: enumerado(['pppoe_local_requiere_api']), mensaje: texto })),
+            description:
+                'Lo que impide el cambio en el router mismo (PPPoE en un router api sin credenciales de la API)',
+        },
+        resumen: objeto({
+            servicios: { ...entero, description: 'Servicios no retirados del router' },
+            cambian: { ...entero, description: 'Los que pasan al tipo nuevo' },
+            con_faltantes: { ...entero, description: 'Los que cambian y les falta algo (bloquean)' },
+            difieren_del_router: { ...entero, description: 'Los que hoy no usan el tipo del router' },
+        }),
+        servicios: lista(
+            objeto({
+                servicio_id: id,
+                cliente_id: id,
+                cliente_nombre: texto,
+                user_ppp: nulable(texto),
+                estado: texto,
+                tipo_conexion: { ...tipoConexion, description: 'Tipo del servicio hoy' },
+                difiere_del_router: {
+                    ...booleano,
+                    description:
+                        'No usa el tipo actual del router (dato anterior a la regla); el panel ofrece «unificar»',
+                },
+                cambia: { ...booleano, description: 'Pasa a `tipo`' },
+                faltan: {
+                    ...lista(enumerado(['mac', 'ipv4', 'plan'])),
+                    description:
+                        'Lo que le falta y bloquea el cambio: mac (dhcp_fija), ipv4 (sin IPv4 y el router sin redes), plan (solo IPv6)',
+                },
+                se_completa: {
+                    ...lista(enumerado(['credenciales', 'ipv4', 'ipv6_modo', 'amarre_ip_mac'])),
+                    description:
+                        'Lo que el cambio completa solo: credenciales PPPoE nuevas, IPv4 de las redes del router, modo IPv6 ' +
+                        'por RADIUS → ninguno, amarre IP-MAC que se quita al pasar a PPPoE',
+                },
+                mensajes: {
+                    ...lista(texto),
+                    description: 'Detalle en español de cada falta (mismo orden que faltan)',
+                },
+            }),
+        ),
+    }),
+)
+
+export const ResultadoCambiarTipoConexion = definirEsquema(
+    'ResultadoCambiarTipoConexion',
+    objeto({
+        router: Router,
+        de: tipoConexion,
+        a: tipoConexion,
+        servicios: {
+            ...lista(id),
+            description: 'Servicios que pasaron al tipo nuevo (cada uno con servicio.config_cambiada)',
+        },
     }),
 )

@@ -171,6 +171,11 @@ export async function reconciliarAsignaciones(
         /** sin PPPoE la IPv4 es obligatoria y sale de las redes del router (nunca de un pool) */
         tipoConexion?: TipoConexion
         ipv4?: string | null
+        /**
+         * Solo PPPoE: sin IPv4 fija, la entrega el pool (Framed-Pool o el perfil PPP del router); libera
+         * la vigente y no asigna de las redes del router (`ipv4: null` en `PUT /servicios/:id`)
+         */
+        sinIpv4?: boolean
         /** red de la que tomar la IPv4 (debe ser del router) */
         redIpv4Id?: number | null
         prefijoEstatico?: string | null
@@ -197,6 +202,8 @@ export async function reconciliarAsignaciones(
             ip: entrada.ipv4,
             redId: entrada.redIpv4Id,
         })
+    } else if (entrada.sinIpv4 && !entrada.ipv4 && !entrada.redIpv4Id) {
+        await liberarIpv4(trx, servicioId)
     } else if (entrada.ipv4 || entrada.redIpv4Id) {
         await asignarIpv4(trx, { servicioId, routerId, ip: entrada.ipv4, redId: entrada.redIpv4Id })
     } else {

@@ -5,7 +5,7 @@ import { cifrar } from '#shared/cifrado'
 import { actualizarConVersion, verificarVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
-import { verServicio, type ModoIpv6, type TipoConexion } from '#core/consultas/servicios'
+import { verServicio, type ModoIpv6, type ServicioVista, type TipoConexion } from '#core/consultas/servicios'
 import { exigirReferencia, exigirUserPppLibre } from '#core/actions/crear_servicio'
 import {
     asignacionesVigentes,
@@ -31,6 +31,7 @@ import { advertenciasServicio } from '#network/tipos_plan'
 import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
 import { telefonoParaGuardar } from '#core/telefonos'
 import { leerServidorServicio, resolverServidorServicio } from '#network/red_acceso/servicio'
+import { exigirTipoDelRouter, tipoConexionRouter } from '#network/tipo_conexion_router'
 
 export interface EntradaEditarServicio {
     id: number
@@ -40,7 +41,11 @@ export interface EntradaEditarServicio {
     plantilla_facturacion_id?: number | null
     tipo_conexion?: TipoConexion
     amarre_ip_mac?: boolean
-    /** solo al pasar a `pppoe` (si no viene se genera) */
+    /**
+     * Usuario PPPoE: al pasar a `pppoe` (si no viene se genera) o para cambiarlo en un `pppoe` (409
+     * `user_ppp_duplicado` si ya existe). Cambiar `user_ppp` o `pass_ppp` emite `servicio.config_cambiada`
+     * con `credenciales` (sin valores).
+     */
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
@@ -54,7 +59,12 @@ export interface EntradaEditarServicio {
     fecha_instalacion?: string | null
     costo_override?: string | null
     excluir_firewall?: boolean
-    ipv4?: string
+    /**
+     * IPv4 fija nueva. `null` (solo `pppoe`) la quita: se libera en IPAM y el servicio toma su IP del
+     * pool (Framed-Pool del plan o el del perfil PPP); las ediciones siguientes no la vuelven a fijar.
+     * En `ip_estatica`/`dhcp_fija` la IPv4 es obligatoria: `null` → 422 en `ipv4`.
+     */
+    ipv4?: string | null
     /**
      * Servidor PPPoE (`contratos/red-acceso.md` §3). Ausente: se conserva, salvo al cambiar de router o
      * pasar a PPPoE, donde se deriva de la red (varios candidatos → 422 `servidor_pppoe_requerido`).
@@ -86,13 +96,39 @@ export const CAMPOS_DATOS_SERVICIO = [
 ] as const satisfies readonly CampoDatos[]
 
 /**
+ * Tipo de conexión que queda (`contratos/tipo-conexion-router.md`; el tipo lo define el router):
+ * - al cambiar de router, el del router destino (otro `tipo_conexion` → 422 `tipo_conexion_del_router`);
+ * - en el mismo router, el que tiene (un servicio anterior a la regla que difiere se queda así) o el del
+ *   router si se pide pasar a él; cualquier otro → 422 `tipo_conexion_del_router`;
+ * - `routers.unir` (`mismoEquipo`) conserva el suyo: es el mismo MikroTik.
+ */
+async function tipoEfectivo(
+    t: Transaccion,
+    antes: ServicioVista,
+    routerId: number,
+    pedido: TipoConexion | undefined,
+    mismoEquipo: boolean | undefined,
+): Promise<TipoConexion> {
+    if (mismoEquipo) return pedido ?? antes.tipo_conexion
+    const delRouter = (await tipoConexionRouter(t.trx, routerId)) ?? antes.tipo_conexion
+    if (routerId !== antes.router_id) {
+        exigirTipoDelRouter(delRouter, pedido)
+        return delRouter
+    }
+    if (pedido === undefined || pedido === antes.tipo_conexion) return antes.tipo_conexion
+    exigirTipoDelRouter(delRouter, pedido)
+    return pedido
+}
+
+/**
  * Edita un servicio (control optimista por `version`: la segunda sesión con la misma versión
  * recibe 409). Cambiar router, plan, IP o modo IPv6 reconcilia las asignaciones y emite
  * `servicio.config_cambiada` (con los campos afectados) y, si cambiaron IPs o prefijos,
  * `asignacion.cambiada`. El estado no se edita aquí: tiene sus acciones propias.
  *
  * Cambiar `tipo_conexion` (`contratos/routeros.md`) es una edición más con diff y emite
- * `servicio.config_cambiada` con `tipo_conexion`:
+ * `servicio.config_cambiada` con `tipo_conexion`. Solo hacia el tipo del router (`tipoEfectivo`); al
+ * moverlo de router adopta el del destino (dhcp_fija exige MAC; a pppoe se generan credenciales):
  * - a `pppoe`: genera `user_ppp`/`pass_ppp` si no vienen;
  * - desde `pppoe`: borra las credenciales y escribe la lápida en `aaa:user:<user_ppp viejo>`;
  *   los modos IPv6 por RADIUS pasan a `ninguno` si no se pidió otro modo.
@@ -188,7 +224,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
 
         const excepciones = excepcionesEntrada ? await validarExcepciones(excepcionesEntrada) : {}
 
-        const tipo = datos.tipo_conexion ?? antes.tipo_conexion
+        const tipo = await tipoEfectivo(t, antes, routerId, datos.tipo_conexion, mismoEquipo)
         const cambiaTipo = tipo !== antes.tipo_conexion
         let modo = datos.ipv6_modo ?? antes.ipv6_modo
         // Pasar a un plan solo IPv4 apaga IPv6 si no se pidió otro modo.
@@ -197,14 +233,20 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (datos.ipv6_modo === undefined && tipo !== 'pppoe' && modoIpv6PorRadius(modo)) modo = 'ninguno'
         // Volver a PPPoE sin amarre: el amarre IP-MAC es solo sin PPPoE.
         const amarre = datos.amarre_ip_mac ?? (tipo === 'pppoe' ? false : antes.amarre_ip_mac)
-        if (userPppEntrada !== undefined && !(cambiaTipo && tipo === 'pppoe')) {
+        if (userPppEntrada !== undefined && tipo !== 'pppoe') {
             throw new ValidacionFallida([
                 {
                     field: 'user_ppp',
-                    message: 'El user_ppp solo se indica al cambiar el servicio a pppoe',
+                    message: 'Solo los servicios pppoe tienen user_ppp',
                     rule: 'tipo_conexion',
                 },
             ])
+        }
+        if (ipv4 === null && tipo !== 'pppoe') {
+            const mensaje =
+                'Sin PPPoE la IPv4 es obligatoria: la cola, la address-list y el lease se identifican por ella. ' +
+                'Cámbiala por otra en vez de quitarla'
+            throw new ValidacionFallida([{ field: 'ipv4', message: mensaje, rule: 'required' }], mensaje)
         }
         validarTipoConexion(plan, {
             tipo,
@@ -230,7 +272,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                       tipo,
                       empresaId: antes.empresa_id,
                       servidorId: servidorEntrada ?? null,
-                      ipv4,
+                      ipv4: ipv4 ?? undefined,
                   })
                 : await leerServidorServicio(t.trx, antes.servidor_pppoe_id)
         const cambiaServidor = (servidor?.id ?? null) !== antes.servidor_pppoe_id
@@ -250,6 +292,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (contactoTelefono !== undefined) columnas.contacto_telefono = contactoTelefono
         columnas.ipv6_modo = modo
         columnas.amarre_ip_mac = amarre
+        columnas.tipo_conexion = tipo
         if (passPpp !== undefined) columnas.pass_ppp = cifrar(passPpp)
         if (cambiaTipo && tipo === 'pppoe') {
             const cliente = (await t.trx
@@ -262,6 +305,10 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             await exigirUserPppLibre(t, nuevoUser)
             columnas.user_ppp = nuevoUser
             columnas.pass_ppp = cifrar(passPpp ?? generarPassPpp())
+        } else if (tipo === 'pppoe' && userPppEntrada !== undefined && userPppEntrada !== antes.user_ppp) {
+            // cambiar el usuario de un PPPoE (pedido del PM, 5 nov): único; la clave vieja recibe la lápida
+            await exigirUserPppLibre(t, userPppEntrada)
+            columnas.user_ppp = userPppEntrada
         } else if (cambiaTipo && antes.tipo_conexion === 'pppoe') {
             columnas.user_ppp = null
             columnas.pass_ppp = null
@@ -269,6 +316,16 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         await actualizarConVersion(t.trx, 'core.servicios', id, version, columnas)
 
         const asignacionesAntes = await asignacionesVigentes(t.trx, id)
+        // PPPoE por pool: quitar la IPv4 (`ipv4: null`) o un PPPoE que ya no tenía IPv4 fija en el mismo
+        // router no vuelve a recibir una de las redes del router
+        const sinIpv4 =
+            tipo === 'pppoe' &&
+            (ipv4 === null ||
+                (ipv4 === undefined &&
+                    !cambiaTipo &&
+                    routerId === antes.router_id &&
+                    asignacionesAntes.ipv4 === null &&
+                    plan.dual_stack !== 'v6'))
         // `routers.unir`: las direcciones ya son del router que queda (mismo equipo); no se tocan
         const asignaciones = mismoEquipo
             ? asignacionesAntes
@@ -278,9 +335,10 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                   plan,
                   modo,
                   tipoConexion: tipo,
-                  ipv4,
+                  ipv4: ipv4 ?? undefined,
+                  sinIpv4,
                   // otro servidor con su red: la IPv4 pasa a esa red (si no se pidió una IP)
-                  redIpv4Id: cambiaServidor && !ipv4 ? servidor?.red_ipv4_id : undefined,
+                  redIpv4Id: cambiaServidor && !ipv4 && !sinIpv4 ? servidor?.red_ipv4_id : undefined,
                   prefijoEstatico,
                   poolsV6: servidor
                       ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
@@ -290,14 +348,17 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 
         const despues = await verServicio(id, t.trx)
+        const claveNueva = columnas.pass_ppp !== undefined
         await t.registrarCambios(
             { tipo: 'servicio', id },
             paraAuditoriaServicio(antes),
-            // la contraseña nunca se audita; solo que cambió
-            columnas.pass_ppp !== undefined
+            // la contraseña nunca se audita, ni como `***` (README «pass_ppp»): solo `clave_ppp_cambiada`
+            claveNueva
                 ? { ...paraAuditoriaServicio(despues), clave_ppp_cambiada: true }
                 : paraAuditoriaServicio(despues),
         )
+        const cambianCredenciales =
+            tipo === 'pppoe' && !cambiaTipo && (despues.user_ppp !== antes.user_ppp || passPpp !== undefined)
 
         const campos: CampoConfig[] = []
         if (despues.plan_id !== antes.plan_id) campos.push('plan')
@@ -305,6 +366,8 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         if (despues.tipo_conexion !== antes.tipo_conexion) campos.push('tipo_conexion')
         if (despues.mac !== antes.mac) campos.push('mac')
         if (despues.amarre_ip_mac !== antes.amarre_ip_mac) campos.push('amarre_ip_mac')
+        // usuario o contraseña PPPoE nuevos (sin valores): A2 desconecta la sesión RADIUS o reescribe el secret
+        if (cambianCredenciales) campos.push('credenciales')
         if (despues.servidor_pppoe_id !== antes.servidor_pppoe_id) campos.push('servidor_pppoe')
         if (asignaciones.ipv4 !== asignacionesAntes.ipv4) campos.push('ips')
         if (

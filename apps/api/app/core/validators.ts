@@ -383,7 +383,13 @@ export const crearServicioValidator = vine.compile(
         }),
         router_id: idEntidad(),
         plan_id: idEntidad(),
-        tipo_conexion: tipoConexion().optional().meta({ description: 'Por defecto pppoe' }),
+        tipo_conexion: tipoConexion()
+            .optional()
+            .meta({
+                description:
+                    'Opcional: el servicio toma el tipo de su router (Router.tipo_conexion). Si llega distinto: 422 ' +
+                    'tipo_conexion_del_router',
+            }),
         amarre_ip_mac: amarreIpMac().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional().meta({
             description:
@@ -444,20 +450,34 @@ export const editarServicioValidator = vine.compile(
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional(),
-        tipo_conexion: tipoConexion().optional(),
+        tipo_conexion: tipoConexion()
+            .optional()
+            .meta({
+                description:
+                    'Solo el tipo del router (pasar a él) o el actual. Al cambiar router_id el servicio adopta el del ' +
+                    'destino (dhcp_fija exige mac; a pppoe se generan credenciales). Otro: 422 tipo_conexion_del_router',
+            }),
         amarre_ip_mac: amarreIpMac().optional(),
         user_ppp: vine
             .string()
             .trim()
             .regex(/^[A-Za-z0-9._@-]{3,64}$/)
             .optional()
-            .meta({ description: 'Solo al cambiar a pppoe; se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado ' +
+                    'si ya existe). Emite servicio.config_cambiada con credenciales',
+            }),
         pass_ppp: vine
             .string()
             .minLength(6)
             .maxLength(64)
             .optional()
-            .meta({ description: 'Solo pppoe; al cambiar a pppoe se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con ' +
+                    'credenciales (nunca el valor; en audit.cambios queda ***)',
+            }),
         mac: vine
             .string()
             .trim()
@@ -478,7 +498,14 @@ export const editarServicioValidator = vine.compile(
             description:
                 'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
         }),
-        ipv4: ipv4().optional(),
+        ipv4: ipv4()
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; ' +
+                    'en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar',
+            }),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional(),
