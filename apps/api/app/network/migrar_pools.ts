@@ -110,6 +110,33 @@ export async function migrarPools(t: Transaccion, entrada: EntradaMigrarPools): 
             })
         }
     }
+    // Un servidor PPPoE usa la red (su local-address) o los pools: es infraestructura del router de origen
+    // (`contratos/red-acceso.md`); primero se cambia o elimina el servidor.
+    const servidores = (await t.trx
+        .from('network.servidores_pppoe as sp')
+        .where((q) => {
+            q.whereIn('sp.red_ipv4_id', redesIds.length ? redesIds : [0])
+            if (bloquesIds.length) {
+                q.orWhereExists((p) =>
+                    p
+                        .from('network.ipv6_pools as p')
+                        .whereIn('p.bloque_id', bloquesIds)
+                        .where((w) =>
+                            w
+                                .whereRaw('p.id = sp.ipv6_pool_enlace_id')
+                                .orWhereRaw('p.id = sp.ipv6_pool_delegacion_id'),
+                        ),
+                )
+            }
+        })
+        .select('sp.nombre')) as Array<{ nombre: string }>
+    for (const s of servidores) {
+        errores.push({
+            field: principal.tipo === 'red_ipv4' ? 'redes_ipv4' : 'bloques_ipv6',
+            message: `La usa el servidor PPPoE «${s.nombre}» del router: cámbialo o elimínalo antes de migrar`,
+            rule: 'red_con_servidor_pppoe',
+        })
+    }
     for (const id of bloquesIds) {
         const fila = bloques.find((b) => b.id === id)
         if (!fila) {

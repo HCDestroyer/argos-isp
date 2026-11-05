@@ -4,6 +4,7 @@
 |--------------------------------------------------------------------------
 */
 import { definirRuta, type Ruta } from '#shared/rutas'
+import redAcceso from '#start/routes/red_acceso'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#network/validators'
 import { alcanceDePermiso, exigirAlcance, filtrarPorAlcance } from '#core/acl'
@@ -1104,4 +1105,5 @@ const conexion: Ruta[] = [
 
 // A2: control de velocidad por capas, sincronizar plan y corte (`start/routes/velocidad.ts`).
 // A2: QoS por clases (`start/routes/qos.ts`, `contratos/qos.md`).
-export default [...routers, ...conexion, ...planes, ...sesiones, ...red, ...velocidad, ...qos]
+// A1: red de acceso (`start/routes/red_acceso.ts`, `contratos/red-acceso.md`).
+export default [...routers, ...conexion, ...planes, ...sesiones, ...red, ...velocidad, ...qos, ...redAcceso]

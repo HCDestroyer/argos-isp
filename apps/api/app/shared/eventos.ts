@@ -234,7 +234,16 @@ export interface CatalogoEventos {
         servicio_id: number
         empresa_id: number
         campos: Array<
-            'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac' | 'empresa'
+            | 'plan'
+            | 'ips'
+            | 'prefijo_v6'
+            | 'router'
+            | 'tipo_conexion'
+            | 'mac'
+            | 'amarre_ip_mac'
+            | 'empresa'
+            /** cambió `servidor_pppoe_id` (`contratos/red-acceso.md` §3) */
+            | 'servidor_pppoe'
         >
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
@@ -328,6 +337,20 @@ export interface CatalogoEventos {
         router_id: number | null
         campos: string[]
         routers: number[]
+    }
+    /**
+     * Cambió la red de acceso (`contratos/red-acceso.md` §5): OLT, puerto PON, VLAN o servidor PPPoE.
+     * `routeros` aplica las VLAN y servidores `administrado`; ignora `adoptado`, OLT y puertos.
+     * `campos` solo nombres (más `local_address` cuando cambió el gateway de la red del servidor).
+     */
+    'red_acceso.cambiada': {
+        router_id: number | null
+        empresa_id: number | null
+        entidad: 'olt' | 'puerto_pon' | 'vlan' | 'servidor_pppoe'
+        entidad_id: number
+        accion: 'creada' | 'editada' | 'eliminada' | 'adoptada'
+        estado: 'administrado' | 'adoptado' | null
+        campos: string[]
     }
     'router.estrategia_cambiada': {
         router_id: number
@@ -1224,6 +1247,7 @@ export const EVENTOS = [
     'servicio.eliminado',
     'router.eliminado',
     'router.estrategia_cambiada',
+    'red_acceso.cambiada',
     'qos.config_cambiada',
     'router.conexion_generada',
     'router.conexion_registrada',

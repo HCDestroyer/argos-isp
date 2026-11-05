@@ -108,6 +108,9 @@
       "name": "red"
     },
     {
+      "name": "red_acceso"
+    },
+    {
       "name": "reportes"
     },
     {
@@ -48477,6 +48480,636 @@
         "x-implementado": true
       }
     },
+    "/api/v1/olts": {
+      "get": {
+        "operationId": "oltsListar",
+        "summary": "Listar OLT (las de la empresa activa y las compartidas)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de OLT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Olt"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "oltsCrear",
+        "summary": "Registrar una OLT (dato para ordenar; Argos no habla con la OLT)",
+        "description": "409 `olt_duplicada` si el nombre ya existe.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "marca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "modelo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OLT creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Olt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/olts/{id}": {
+      "get": {
+        "operationId": "oltsVer",
+        "summary": "Ver una OLT con sus puertos PON",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OLT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Olt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "oltsEditar",
+        "summary": "Editar una OLT",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "marca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "modelo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OLT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Olt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.editar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "oltsEliminar",
+        "summary": "Eliminar una OLT y sus puertos (409 `olt_con_vlans` si algún puerto tiene VLAN)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OLT eliminada"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.eliminar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/olts/{id}/puertos-pon": {
+      "post": {
+        "operationId": "puertosPonCrear",
+        "summary": "Agregar un puerto PON a una OLT",
+        "description": "409 `puerto_duplicado` si la OLT ya tiene ese identificador.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "identificador": {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,3}(\\/[0-9]{1,3}){1,3}$",
+                    "description": "marco/slot/puerto como lo escribe la OLT, p. ej. 0/1/3"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "identificador"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Puerto creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuertoPon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/pagos": {
       "get": {
         "operationId": "pagosListar",
@@ -51793,8 +52426,8 @@
     "/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad": {
       "post": {
         "operationId": "planesEstrategiaVelocidad",
-        "summary": "Estrategia de velocidad propia de un plan en un router (o quitarla con null)",
-        "description": "Parcial por tipo de conexión: cada capa ausente o null hereda la del router. Valida la matriz con todo el router (422), guarda en `planes_routers` (la crea si el plan no estaba implementado) y emite `router.estrategia_cambiada` con `plan_id`. `version` de la implementación si ya existe.",
+        "summary": "Obsoleto: quitar la excepción de velocidad de un plan en un router (solo null)",
+        "description": "El modo de velocidad se decide por router (contratos/control-velocidad.md §11): `estrategia_velocidad` solo acepta `null` (quita la excepción y emite `router.estrategia_cambiada` con `plan_id`); un objeto responde 422 `estrategia_por_router`. Para quitar todas: POST /routers/:id/unificar-control-velocidad.",
         "tags": [
           "planes"
         ],
@@ -59606,6 +60239,194 @@
         "x-implementado": true
       }
     },
+    "/api/v1/puertos-pon/{id}": {
+      "put": {
+        "operationId": "puertosPonEditar",
+        "summary": "Editar un puerto PON",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "identificador": {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,3}(\\/[0-9]{1,3}){1,3}$",
+                    "description": "marco/slot/puerto como lo escribe la OLT, p. ej. 0/1/3"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Puerto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuertoPon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.editar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "puertosPonEliminar",
+        "summary": "Eliminar un puerto PON sin VLAN (409 `puerto_con_vlans`)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Puerto eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso olts.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "olts.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/qos/clases/{id}": {
       "put": {
         "operationId": "qosEditarClase",
@@ -63487,6 +64308,9 @@
                         "notificaciones.editar",
                         "notificaciones.probar",
                         "notificaciones.ver",
+                        "olts.crear",
+                        "olts.editar",
+                        "olts.eliminar",
                         "pagos.anular",
                         "pagos.cerrar_diferencia",
                         "pagos.registrar",
@@ -63513,6 +64337,9 @@
                         "qos.gestionar",
                         "qos.ver",
                         "red.ver",
+                        "red_acceso.adoptar",
+                        "red_acceso.descubrir",
+                        "red_acceso.ver",
                         "redes.crear",
                         "redes.editar",
                         "redes.migrar",
@@ -63531,6 +64358,7 @@
                         "routers.probar_conexion",
                         "routers.reconciliar",
                         "routers.rotar_conexion",
+                        "routers.unificar_control_velocidad",
                         "routers.unir",
                         "routers.ver",
                         "servicios.activar_instalacion",
@@ -63554,6 +64382,9 @@
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
+                        "servidores_pppoe.crear",
+                        "servidores_pppoe.editar",
+                        "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "sorteos.ejecutar",
@@ -63575,6 +64406,9 @@
                         "usuarios.editar",
                         "usuarios.ver",
                         "vinculaciones.revocar",
+                        "vlans.crear",
+                        "vlans.editar",
+                        "vlans.eliminar",
                         "zonas.crear",
                         "zonas.editar",
                         "zonas.ver"
@@ -63846,6 +64680,9 @@
                         "notificaciones.editar",
                         "notificaciones.probar",
                         "notificaciones.ver",
+                        "olts.crear",
+                        "olts.editar",
+                        "olts.eliminar",
                         "pagos.anular",
                         "pagos.cerrar_diferencia",
                         "pagos.registrar",
@@ -63872,6 +64709,9 @@
                         "qos.gestionar",
                         "qos.ver",
                         "red.ver",
+                        "red_acceso.adoptar",
+                        "red_acceso.descubrir",
+                        "red_acceso.ver",
                         "redes.crear",
                         "redes.editar",
                         "redes.migrar",
@@ -63890,6 +64730,7 @@
                         "routers.probar_conexion",
                         "routers.reconciliar",
                         "routers.rotar_conexion",
+                        "routers.unificar_control_velocidad",
                         "routers.unir",
                         "routers.ver",
                         "servicios.activar_instalacion",
@@ -63913,6 +64754,9 @@
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
+                        "servidores_pppoe.crear",
+                        "servidores_pppoe.editar",
+                        "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
                         "sorteos.ejecutar",
@@ -63934,6 +64778,9 @@
                         "usuarios.editar",
                         "usuarios.ver",
                         "vinculaciones.revocar",
+                        "vlans.crear",
+                        "vlans.editar",
+                        "vlans.eliminar",
                         "zonas.crear",
                         "zonas.editar",
                         "zonas.ver"
@@ -66560,6 +67407,370 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/red-acceso": {
+      "get": {
+        "operationId": "routersRedAcceso",
+        "summary": "Red de acceso del router: VLAN, servidores PPPoE (con local-address) y OLT/puertos usados",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Red de acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedAccesoRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/red-acceso/adoptar": {
+      "post": {
+        "operationId": "routersRedAccesoAdoptar",
+        "summary": "Importar VLAN y servidores PPPoE que ya existen en el router (no toca el router)",
+        "description": "Relee el inventario y crea las filas `adoptado` con los valores de RouterOS. 409 `inventario_cambio` si un `ros_id` ya no está, `ya_registrado` si ya estaba en Argos. La VLAN de un servidor se adopta con él.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "vlans": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "ros_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32,
+                          "description": ".id de RouterOS"
+                        },
+                        "puerto_pon_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "empresa_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Empresa dueña; null = compartida entre empresas"
+                        },
+                        "descripcion": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "ros_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500
+                  },
+                  "servidores_pppoe": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "ros_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32,
+                          "description": ".id de RouterOS"
+                        },
+                        "nombre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "red_ipv4_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "ipv6_pool_enlace_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "ipv6_pool_delegacion_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "empresa_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Empresa dueña; null = compartida entre empresas"
+                        },
+                        "descripcion": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "ros_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lo adoptado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoAdopcion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.adoptar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.adoptar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/red-acceso/descubrir": {
+      "get": {
+        "operationId": "routersRedAccesoDescubrir",
+        "summary": "Leer del router sus VLAN, servidores PPPoE, perfiles y pools (no escribe)",
+        "description": "Cada VLAN y servidor sale marcado `nuevo`, `adoptado` o `administrado` con sus diferencias; el servidor trae la red sugerida (gateway = local-address de su perfil). `sin_router`: lo registrado que el router ya no tiene. 501 `descubrir_no_disponible` si el lector de RouterOS aún no existe.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescubrimientoRedAcceso"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.descubrir",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.descubrir",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/redes-ipv4": {
       "get": {
         "operationId": "redesIpv4Listar",
@@ -66989,6 +68200,431 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/servidores-pppoe": {
+      "get": {
+        "operationId": "servidoresPppoeListar",
+        "summary": "Servidores PPPoE del router",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servidores PPPoE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServidorPppoe"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "servidoresPppoeCrear",
+        "summary": "Crear un servidor PPPoE administrado por Argos (uno por VLAN o interfaz)",
+        "description": "`red_ipv4_id` obligatoria y con gateway: el gateway es el local-address del perfil (422 `red_requerida`, `red_sin_gateway`). 409 `interfaz_con_servidor`, `vlan_con_servidor`, `servidor_duplicado`. A2 lo escribe en RouterOS con su perfil `argosisp-pppoe-<id>`.",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "vlan_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "VLAN del router; un servidor por VLAN"
+                  },
+                  "interfaz": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$",
+                    "description": "Sin VLAN: interfaz física o bridge. Con VLAN se deriva de ella"
+                  },
+                  "service_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "service-name; por defecto el nombre"
+                  },
+                  "red_ipv4_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Red del router con gateway: su gateway es el local-address"
+                  },
+                  "ipv6_pool_enlace_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "ipv6_pool_delegacion_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "perfil_base": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "Perfil del que se copian las propiedades que no son direcciones (default)"
+                  },
+                  "max_mtu": {
+                    "type": "integer",
+                    "minimum": 576,
+                    "maximum": 9000
+                  },
+                  "max_mru": {
+                    "type": "integer",
+                    "minimum": 576,
+                    "maximum": 9000
+                  },
+                  "mrru": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1500,
+                    "maximum": 65535
+                  },
+                  "autenticacion": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pap",
+                        "chap",
+                        "mschap1",
+                        "mschap2"
+                      ]
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "keepalive_timeout": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "una_sesion_por_host": {
+                    "type": "boolean"
+                  },
+                  "max_sesiones": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Servidor creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServidorPppoe"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servidores_pppoe.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servidores_pppoe.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/unificar-control-velocidad": {
+      "post": {
+        "operationId": "routersUnificarControlVelocidad",
+        "summary": "Quitar las excepciones de velocidad por plan: todo el router con su modo",
+        "description": "`planes` = los `plan_id` que mostró la vista previa (409 `excepciones_cambiaron` si ya no coinciden). Valida la matriz del router sin excepciones (422), quita cada excepción con su diff y emite un `router.estrategia_cambiada` por plan (`motivo: unificar`); RouterOS lo aplica sin cortar. Las sesiones PPPoE conservan lo anterior hasta reconectar, salvo `reconectar: true`. Solo admin.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planes": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 1000,
+                    "description": "Los plan_id con excepción que mostró la vista previa (409 si cambiaron)"
+                  },
+                  "reconectar": {
+                    "description": "Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar",
+                    "type": "boolean"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "planes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Planes unificados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoUnificarVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.unificar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.unificar_control_velocidad",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/unir": {
       "post": {
         "operationId": "routersUnir",
@@ -67221,7 +68857,7 @@
       "post": {
         "operationId": "routersVistaPreviaEstrategia",
         "summary": "Vista previa de un cambio de estrategia de velocidad (no escribe)",
-        "description": "Con la estrategia propuesta del router y, opcional, excepciones de planes: qué se crea, cambia y borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el router. 422 con `errors[]` si la combinación no es válida.",
+        "description": "`planes[]` es obsoleto y solo acepta `estrategia_velocidad: null` (422 `estrategia_por_router` con un objeto; contratos/control-velocidad.md §11). Con la estrategia propuesta del router: qué se crea, cambia y borra en el router (colas, árbol, PCQ, perfiles, reglas), cuántas sesiones reciben CoA, cuántas conservan lo anterior hasta reconectar y cuántas se desconectarían con `reconectar`. Sin leer el router. 422 con `errors[]` si la combinación no es válida.",
         "tags": [
           "routers"
         ],
@@ -67993,6 +69629,356 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/vista-previa-unificar-velocidad": {
+      "get": {
+        "operationId": "routersVistaPreviaUnificarVelocidad",
+        "summary": "Planes del router con excepción de velocidad y qué cambia al unificarlos (no escribe)",
+        "description": "Modo de velocidad único por router (contratos/control-velocidad.md §11): cada plan con excepción, su estrategia efectiva hoy (`de`) y la del router (`a`), las capas que cambian, servicios y sesiones abiertas, y la vista previa de A2 sin excepciones (`sesiones_coa`, `sesiones_conservan`, `sesiones_a_desconectar` con `reconectar=true`). Sin leer el router.",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "reconectar",
+            "in": "query",
+            "required": false,
+            "description": "Calcular cuántas sesiones se desconectarían con reconectar",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaUnificarVelocidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/{id}/vlans": {
+      "get": {
+        "operationId": "vlansListar",
+        "summary": "VLAN del router (filtros por OLT y puerto PON)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "olt_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "puerto_pon_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VLAN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Vlan"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "vlansCrear",
+        "summary": "Crear una VLAN administrada por Argos en el router",
+        "description": "A2 la escribe en RouterOS (`comment = argosisp:vlan:<id>`). 409 `vlan_duplicada` o `nombre_interfaz_duplicado`; 422 `puerto_pon_lleno` (máximo 2 VLAN por puerto PON).",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "interfaz_padre": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$"
+                  },
+                  "vlan_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4094
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$",
+                    "description": "name de la interfaz en RouterOS; por defecto vlan<vlan_id>"
+                  },
+                  "puerto_pon_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Máximo 2 VLAN por puerto PON"
+                  },
+                  "mtu": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 576,
+                    "maximum": 9216
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "interfaz_padre",
+                  "vlan_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "VLAN creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso vlans.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "vlans.crear",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/conexion/registrar": {
       "post": {
         "operationId": "routersConexionRegistrar",
@@ -68524,6 +70510,14 @@
                     "format": "ipv4",
                     "description": "IP fija; si no viene se asigna de las redes del router"
                   },
+                  "servidor_pppoe_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido"
+                  },
                   "red_ipv4_id": {
                     "type": "integer",
                     "minimum": 1,
@@ -68978,6 +70972,14 @@
                   },
                   "excluir_firewall": {
                     "type": "boolean"
+                  },
+                  "servidor_pppoe_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido"
                   },
                   "ipv4": {
                     "type": "string",
@@ -72971,6 +74973,370 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servidores-pppoe/{id}": {
+      "get": {
+        "operationId": "servidoresPppoeVer",
+        "summary": "Ver un servidor PPPoE",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servidor PPPoE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServidorPppoe"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "servidoresPppoeEditar",
+        "summary": "Editar un servidor PPPoE (en uno adoptado solo los campos de Argos)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "vlan_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "VLAN del router; un servidor por VLAN"
+                  },
+                  "interfaz": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$",
+                    "description": "Sin VLAN: interfaz física o bridge. Con VLAN se deriva de ella"
+                  },
+                  "service_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "service-name; por defecto el nombre"
+                  },
+                  "red_ipv4_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Red del router con gateway: su gateway es el local-address"
+                  },
+                  "ipv6_pool_enlace_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "ipv6_pool_delegacion_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "perfil_base": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "Perfil del que se copian las propiedades que no son direcciones (default)"
+                  },
+                  "max_mtu": {
+                    "type": "integer",
+                    "minimum": 576,
+                    "maximum": 9000
+                  },
+                  "max_mru": {
+                    "type": "integer",
+                    "minimum": 576,
+                    "maximum": 9000
+                  },
+                  "mrru": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1500,
+                    "maximum": 65535
+                  },
+                  "autenticacion": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pap",
+                        "chap",
+                        "mschap1",
+                        "mschap2"
+                      ]
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "keepalive_timeout": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3600
+                  },
+                  "una_sesion_por_host": {
+                    "type": "boolean"
+                  },
+                  "max_sesiones": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servidor PPPoE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServidorPppoe"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servidores_pppoe.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servidores_pppoe.editar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "servidoresPppoeEliminar",
+        "summary": "Eliminar un servidor PPPoE sin servicios (409 `servidor_con_servicios`)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Servidor eliminado"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servidores_pppoe.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servidores_pppoe.eliminar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/sesiones": {
       "get": {
         "operationId": "sesionesListar",
@@ -73737,6 +76103,9 @@
                             "notificaciones.editar",
                             "notificaciones.probar",
                             "notificaciones.ver",
+                            "olts.crear",
+                            "olts.editar",
+                            "olts.eliminar",
                             "pagos.anular",
                             "pagos.cerrar_diferencia",
                             "pagos.registrar",
@@ -73763,6 +76132,9 @@
                             "qos.gestionar",
                             "qos.ver",
                             "red.ver",
+                            "red_acceso.adoptar",
+                            "red_acceso.descubrir",
+                            "red_acceso.ver",
                             "redes.crear",
                             "redes.editar",
                             "redes.migrar",
@@ -73781,6 +76153,7 @@
                             "routers.probar_conexion",
                             "routers.reconciliar",
                             "routers.rotar_conexion",
+                            "routers.unificar_control_velocidad",
                             "routers.unir",
                             "routers.ver",
                             "servicios.activar_instalacion",
@@ -73804,6 +76177,9 @@
                             "servicios.ver",
                             "servicios.ver_credencial_adicional",
                             "servicios.ver_credenciales",
+                            "servidores_pppoe.crear",
+                            "servidores_pppoe.editar",
+                            "servidores_pppoe.eliminar",
                             "sesiones.desconectar",
                             "sesiones.ver",
                             "sorteos.ejecutar",
@@ -73825,6 +76201,9 @@
                             "usuarios.editar",
                             "usuarios.ver",
                             "vinculaciones.revocar",
+                            "vlans.crear",
+                            "vlans.editar",
+                            "vlans.eliminar",
                             "zonas.crear",
                             "zonas.editar",
                             "zonas.ver"
@@ -74717,6 +77096,297 @@
         "x-implementado": true
       }
     },
+    "/api/v1/vlans/{id}": {
+      "get": {
+        "operationId": "vlansVer",
+        "summary": "Ver una VLAN",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VLAN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso red_acceso.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "red_acceso.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "vlansEditar",
+        "summary": "Editar una VLAN (en una adoptada solo puerto PON, empresa y descripción)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "interfaz_padre": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$"
+                  },
+                  "vlan_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4094
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,64}$",
+                    "description": "name de la interfaz en RouterOS; por defecto vlan<vlan_id>"
+                  },
+                  "puerto_pon_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Máximo 2 VLAN por puerto PON"
+                  },
+                  "mtu": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 576,
+                    "maximum": 9216
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa dueña; null = compartida entre empresas"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "VLAN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso vlans.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "vlans.editar",
+        "x-implementado": true
+      },
+      "delete": {
+        "operationId": "vlansEliminar",
+        "summary": "Eliminar una VLAN sin servidor PPPoE (409 `vlan_con_servidor`)",
+        "tags": [
+          "red_acceso"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "VLAN eliminada"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso vlans.eliminar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "vlans.eliminar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/zonas": {
       "get": {
         "operationId": "zonasListar",
@@ -75267,6 +77937,29 @@
                 }
               }
             ]
+          },
+          "red_acceso": {
+            "type": "object",
+            "required": [
+              "servidor_pppoe_id",
+              "local_address"
+            ],
+            "properties": {
+              "servidor_pppoe_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "local_address": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "description": "Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). Ausente en registros anteriores"
           }
         }
       },
@@ -86796,6 +89489,391 @@
           }
         }
       },
+      "DescubrimientoRedAcceso": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "leido_en",
+          "interfaces",
+          "vlans",
+          "servidores_pppoe",
+          "perfiles",
+          "pools_ipv4",
+          "pools_ipv6",
+          "sin_router"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "leido_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "interfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "nombre",
+                "tipo",
+                "deshabilitada"
+              ],
+              "properties": {
+                "nombre": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string"
+                },
+                "deshabilitada": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "vlans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ros_id",
+                "nombre",
+                "interfaz_padre",
+                "vlan_id",
+                "mtu",
+                "deshabilitada",
+                "comment",
+                "argos"
+              ],
+              "properties": {
+                "ros_id": {
+                  "type": "string"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "interfaz_padre": {
+                  "type": "string"
+                },
+                "vlan_id": {
+                  "type": "integer"
+                },
+                "mtu": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "deshabilitada": {
+                  "type": "boolean"
+                },
+                "comment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "argos": {
+                  "type": "object",
+                  "required": [
+                    "estado",
+                    "id",
+                    "diferencias"
+                  ],
+                  "properties": {
+                    "estado": {
+                      "type": "string",
+                      "enum": [
+                        "nuevo",
+                        "adoptado",
+                        "administrado"
+                      ]
+                    },
+                    "id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "diferencias": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "campo",
+                          "argos",
+                          "router"
+                        ],
+                        "properties": {
+                          "campo": {
+                            "type": "string"
+                          },
+                          "argos": {},
+                          "router": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "servidores_pppoe": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ros_id",
+                "service_name",
+                "interfaz",
+                "perfil",
+                "max_mtu",
+                "max_mru",
+                "mrru",
+                "autenticacion",
+                "keepalive_timeout",
+                "una_sesion_por_host",
+                "max_sesiones",
+                "deshabilitado",
+                "comment",
+                "red_ipv4_sugerida_id",
+                "argos"
+              ],
+              "properties": {
+                "ros_id": {
+                  "type": "string"
+                },
+                "service_name": {
+                  "type": "string"
+                },
+                "interfaz": {
+                  "type": "string"
+                },
+                "perfil": {
+                  "type": "string"
+                },
+                "max_mtu": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "max_mru": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "mrru": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "autenticacion": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "keepalive_timeout": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "una_sesion_por_host": {
+                  "type": "boolean"
+                },
+                "max_sesiones": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "deshabilitado": {
+                  "type": "boolean"
+                },
+                "comment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "red_ipv4_sugerida_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Red del router cuyo gateway es el local-address de su perfil"
+                },
+                "argos": {
+                  "type": "object",
+                  "required": [
+                    "estado",
+                    "id",
+                    "diferencias"
+                  ],
+                  "properties": {
+                    "estado": {
+                      "type": "string",
+                      "enum": [
+                        "nuevo",
+                        "adoptado",
+                        "administrado"
+                      ]
+                    },
+                    "id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "diferencias": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "campo",
+                          "argos",
+                          "router"
+                        ],
+                        "properties": {
+                          "campo": {
+                            "type": "string"
+                          },
+                          "argos": {},
+                          "router": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "perfiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ros_id",
+                "nombre",
+                "local_address",
+                "remote_address",
+                "comment"
+              ],
+              "properties": {
+                "ros_id": {
+                  "type": "string"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "local_address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "remote_address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "comment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "pools_ipv4": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ros_id",
+                "nombre",
+                "rangos"
+              ],
+              "properties": {
+                "ros_id": {
+                  "type": "string"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "rangos": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "pools_ipv6": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ros_id",
+                "nombre",
+                "prefijo",
+                "tamano_prefijo"
+              ],
+              "properties": {
+                "ros_id": {
+                  "type": "string"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "prefijo": {
+                  "type": "string"
+                },
+                "tamano_prefijo": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "sin_router": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "entidad",
+                "id",
+                "nombre"
+              ],
+              "properties": {
+                "entidad": {
+                  "type": "string",
+                  "enum": [
+                    "vlan",
+                    "servidor_pppoe"
+                  ]
+                },
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Registrados en Argos que el router ya no tiene (deriva)"
+          }
+        }
+      },
       "DeudaEvaluada": {
         "type": "object",
         "required": [
@@ -95700,6 +98778,9 @@
           "notificaciones.editar",
           "notificaciones.probar",
           "notificaciones.ver",
+          "olts.crear",
+          "olts.editar",
+          "olts.eliminar",
           "pagos.anular",
           "pagos.cerrar_diferencia",
           "pagos.registrar",
@@ -95726,6 +98807,9 @@
           "qos.gestionar",
           "qos.ver",
           "red.ver",
+          "red_acceso.adoptar",
+          "red_acceso.descubrir",
+          "red_acceso.ver",
           "redes.crear",
           "redes.editar",
           "redes.migrar",
@@ -95744,6 +98828,7 @@
           "routers.probar_conexion",
           "routers.reconciliar",
           "routers.rotar_conexion",
+          "routers.unificar_control_velocidad",
           "routers.unir",
           "routers.ver",
           "servicios.activar_instalacion",
@@ -95767,6 +98852,9 @@
           "servicios.ver",
           "servicios.ver_credencial_adicional",
           "servicios.ver_credenciales",
+          "servidores_pppoe.crear",
+          "servidores_pppoe.editar",
+          "servidores_pppoe.eliminar",
           "sesiones.desconectar",
           "sesiones.ver",
           "sorteos.ejecutar",
@@ -95788,6 +98876,9 @@
           "usuarios.editar",
           "usuarios.ver",
           "vinculaciones.revocar",
+          "vlans.crear",
+          "vlans.editar",
+          "vlans.eliminar",
           "zonas.crear",
           "zonas.editar",
           "zonas.ver"
@@ -95952,6 +99043,9 @@
           "Editar plantillas de notificaciones",
           "Enviar un mensaje de prueba por correo o Telegram con la configuración guardada",
           "Ver plantillas y envíos de notificaciones",
+          "Registrar OLT",
+          "Editar OLT y sus puertos PON",
+          "Eliminar una OLT sin VLAN asignadas",
           "Anular pagos",
           "Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)",
           "Registrar pagos",
@@ -95978,6 +99072,9 @@
           "Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router",
           "Ver los perfiles y clases de QoS (prioridad por protocolo en el árbol)",
           "Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)",
+          "Importar a Argos VLAN y servidores PPPoE que ya existen en el router (sin tocarlo)",
+          "Leer del router sus VLAN, servidores PPPoE, perfiles y pools (no escribe)",
+          "Ver la red de acceso: OLT, puertos PON, VLAN y servidores PPPoE",
           "Crear redes IPv4",
           "Editar redes IPv4: nombre, red, gateway, rango y DNS",
           "Pasar redes IPv4 a otro router (con sus servicios, si además tiene servicios.editar)",
@@ -95996,6 +99093,7 @@
           "Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)",
           "Reconciliar ahora la configuración de RouterOS de un router",
           "Rotar la conexión WireGuard de un router (invalida el peer y genera un script nuevo)",
+          "Quitar las excepciones de velocidad por plan de un router: todos sus planes con el modo del router; solo admin",
           "Unir dos registros del mismo MikroTik: servicios, redes, pools, planes y sesiones pasan al que queda; solo admin",
           "Ver routers",
           "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
@@ -96019,6 +99117,9 @@
           "Ver servicios",
           "Ver la credencial de un adicional de un servicio (queda auditado)",
           "Ver la contraseña PPPoE de un servicio (queda auditado)",
+          "Crear servidores PPPoE administrados por Argos en un router",
+          "Editar servidores PPPoE de un router",
+          "Eliminar servidores PPPoE sin servicios",
           "Desconectar sesiones PPPoE",
           "Ver sesiones PPPoE",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
@@ -96040,6 +99141,9 @@
           "Editar usuarios y sus roles",
           "Ver usuarios",
           "Revocar las vinculaciones de autologin de todos los usuarios o de uno",
+          "Crear VLAN administradas por Argos en un router",
+          "Editar VLAN de un router",
+          "Eliminar VLAN sin servidor PPPoE",
           "Crear zonas",
           "Editar zonas",
           "Ver zonas"
@@ -96422,6 +99526,79 @@
           }
         },
         "description": "Ocupación del pool (contratos/pools.md §2); total = asignadas + libres + reservadas"
+      },
+      "Olt": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "marca",
+          "modelo",
+          "empresa_id",
+          "descripcion",
+          "activo",
+          "puertos",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "marca": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "modelo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa dueña; null = compartida"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "puertos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuertoPon"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "OrdenTraslado": {
         "type": "object",
@@ -102527,6 +105704,56 @@
           }
         }
       },
+      "PuertoPon": {
+        "type": "object",
+        "required": [
+          "id",
+          "olt_id",
+          "identificador",
+          "descripcion",
+          "vlans",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "olt_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "identificador": {
+            "type": "string",
+            "description": "marco/slot/puerto, p. ej. 0/1/3"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vlans": {
+            "type": "integer",
+            "description": "VLAN asignadas (máximo 2)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PuntosCanjeables": {
         "type": "object",
         "required": [
@@ -102821,6 +106048,77 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "RedAccesoRouter": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "vlans",
+          "servidores_pppoe",
+          "olts",
+          "servicios_sin_servidor"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "vlans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vlan"
+            }
+          },
+          "servidores_pppoe": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServidorPppoe"
+            }
+          },
+          "olts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre",
+                "puertos"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "puertos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "identificador"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "identificador": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "servicios_sin_servidor": {
+            "type": "integer",
+            "description": "Servicios PPPoE del router sin servidor asignado"
           }
         }
       },
@@ -107496,6 +110794,27 @@
           }
         }
       },
+      "ResultadoAdopcion": {
+        "type": "object",
+        "required": [
+          "vlans",
+          "servidores_pppoe"
+        ],
+        "properties": {
+          "vlans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vlan"
+            }
+          },
+          "servidores_pppoe": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServidorPppoe"
+            }
+          }
+        }
+      },
       "ResultadoAplicarReglas": {
         "type": "object",
         "required": [
@@ -108138,6 +111457,27 @@
                 ]
               }
             }
+          }
+        }
+      },
+      "ResultadoUnificarVelocidad": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "planes"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "planes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Planes cuya excepción se quitó (un evento por plan)"
           }
         }
       },
@@ -109186,6 +112526,9 @@
               "notificaciones.editar",
               "notificaciones.probar",
               "notificaciones.ver",
+              "olts.crear",
+              "olts.editar",
+              "olts.eliminar",
               "pagos.anular",
               "pagos.cerrar_diferencia",
               "pagos.registrar",
@@ -109212,6 +112555,9 @@
               "qos.gestionar",
               "qos.ver",
               "red.ver",
+              "red_acceso.adoptar",
+              "red_acceso.descubrir",
+              "red_acceso.ver",
               "redes.crear",
               "redes.editar",
               "redes.migrar",
@@ -109230,6 +112576,7 @@
               "routers.probar_conexion",
               "routers.reconciliar",
               "routers.rotar_conexion",
+              "routers.unificar_control_velocidad",
               "routers.unir",
               "routers.ver",
               "servicios.activar_instalacion",
@@ -109253,6 +112600,9 @@
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
+              "servidores_pppoe.crear",
+              "servidores_pppoe.editar",
+              "servidores_pppoe.eliminar",
               "sesiones.desconectar",
               "sesiones.ver",
               "sorteos.ejecutar",
@@ -109274,6 +112624,9 @@
               "usuarios.editar",
               "usuarios.ver",
               "vinculaciones.revocar",
+              "vlans.crear",
+              "vlans.editar",
+              "vlans.eliminar",
               "zonas.crear",
               "zonas.editar",
               "zonas.ver"
@@ -109340,6 +112693,7 @@
               "promesas.crear",
               "promesas.ver",
               "red.ver",
+              "red_acceso.ver",
               "redes.ver",
               "routers.probar_conexion",
               "routers.ver",
@@ -109387,11 +112741,17 @@
               "ipv6.editar",
               "ipv6.migrar",
               "ipv6.ver",
+              "olts.crear",
+              "olts.editar",
+              "olts.eliminar",
               "planes.sincronizar",
               "planes.ver",
               "qos.gestionar",
               "qos.ver",
               "red.ver",
+              "red_acceso.adoptar",
+              "red_acceso.descubrir",
+              "red_acceso.ver",
               "redes.crear",
               "redes.editar",
               "redes.migrar",
@@ -109415,8 +112775,14 @@
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
+              "servidores_pppoe.crear",
+              "servidores_pppoe.editar",
+              "servidores_pppoe.eliminar",
               "sesiones.desconectar",
               "sesiones.ver",
+              "vlans.crear",
+              "vlans.editar",
+              "vlans.eliminar",
               "zonas.ver"
             ]
           },
@@ -109591,6 +112957,7 @@
               "proveedores.ver",
               "qos.ver",
               "red.ver",
+              "red_acceso.ver",
               "redes.ver",
               "reportes.ver",
               "roles.ver",
@@ -110264,6 +113631,21 @@
               "null"
             ]
           },
+          "servidor_pppoe_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Servidor PPPoE del router (contratos/red-acceso.md §3); null fuera de PPPoE o en routers sin servidores"
+          },
+          "local_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "local-address del PPPoE: gateway de la red de su IPv4 o de su servidor (calculado; nunca el del perfil default)"
+          },
           "cliente_nombre": {
             "type": "string"
           },
@@ -110489,6 +113871,220 @@
               "string",
               "null"
             ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ServidorPppoe": {
+        "type": "object",
+        "required": [
+          "id",
+          "router_id",
+          "empresa_id",
+          "nombre",
+          "vlan_id",
+          "vlan",
+          "interfaz",
+          "service_name",
+          "red_ipv4_id",
+          "ipv6_pool_enlace_id",
+          "ipv6_pool_delegacion_id",
+          "perfil_base",
+          "perfil",
+          "local_address",
+          "max_mtu",
+          "max_mru",
+          "mrru",
+          "autenticacion",
+          "keepalive_timeout",
+          "una_sesion_por_host",
+          "max_sesiones",
+          "estado",
+          "ros_id",
+          "comment",
+          "activo",
+          "servicios",
+          "descripcion",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa dueña; null = compartida"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "vlan_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "vlan": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "nombre",
+              "vlan_id"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "nombre": {
+                "type": "string"
+              },
+              "vlan_id": {
+                "type": "integer"
+              }
+            }
+          },
+          "interfaz": {
+            "type": "string"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "red_ipv4_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "ipv6_pool_enlace_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "ipv6_pool_delegacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "perfil_base": {
+            "type": "string",
+            "description": "Perfil del que se copian las propiedades que no son direcciones"
+          },
+          "perfil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Perfil PPP del servidor: argosisp-pppoe-<id> si es administrado; el leído si es adoptado"
+          },
+          "local_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Gateway de su red IPv4 (calculado; nunca se teclea ni se copia del perfil default)"
+          },
+          "max_mtu": {
+            "type": "integer"
+          },
+          "max_mru": {
+            "type": "integer"
+          },
+          "mrru": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "autenticacion": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pap",
+                "chap",
+                "mschap1",
+                "mschap2"
+              ]
+            }
+          },
+          "keepalive_timeout": {
+            "type": "integer"
+          },
+          "una_sesion_por_host": {
+            "type": "boolean"
+          },
+          "max_sesiones": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "administrado",
+              "adoptado"
+            ],
+            "description": "administrado: Argos lo escribe en el router (comment argosisp:…); adoptado: existía, Argos no lo toca"
+          },
+          "ros_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "argosisp:pppoe:<id> si es administrado"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "servicios": {
+            "type": "integer",
+            "description": "Servicios no retirados en este servidor"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
             "format": "date-time"
           }
         }
@@ -114438,6 +118034,95 @@
           }
         }
       },
+      "VistaPreviaUnificarVelocidad": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "router_version",
+          "planes",
+          "vista_previa"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_version": {
+            "type": "integer",
+            "description": "version del router al calcular la vista previa"
+          },
+          "planes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "plan_id",
+                "nombre",
+                "implementacion_id",
+                "version",
+                "excepcion",
+                "capas",
+                "de",
+                "a",
+                "servicios",
+                "sesiones_abiertas"
+              ],
+              "properties": {
+                "plan_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "implementacion_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Fila de planes_routers"
+                },
+                "version": {
+                  "type": "integer",
+                  "description": "version de la implementación"
+                },
+                "excepcion": {
+                  "$ref": "#/components/schemas/ExcepcionEstrategia"
+                },
+                "capas": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "aplicacion",
+                      "padre",
+                      "tipo_cola",
+                      "extras"
+                    ]
+                  }
+                },
+                "de": {
+                  "$ref": "#/components/schemas/EstrategiasRouter",
+                  "description": "Estrategia efectiva hoy del plan en el router"
+                },
+                "a": {
+                  "$ref": "#/components/schemas/EstrategiasRouter",
+                  "description": "La del router (lo que queda al unificar)"
+                },
+                "servicios": {
+                  "type": "integer",
+                  "description": "Servicios no retirados del plan en el router"
+                },
+                "sesiones_abiertas": {
+                  "type": "integer"
+                }
+              }
+            },
+            "description": "Planes con excepción; vacío = el router ya usa un solo modo"
+          },
+          "vista_previa": {
+            "$ref": "#/components/schemas/VistaPreviaEstrategia"
+          }
+        }
+      },
       "VistaPreviaVelocidad": {
         "type": "object",
         "required": [
@@ -114534,6 +118219,139 @@
                 "description": "Con 0 se calcula como 1"
               }
             }
+          }
+        }
+      },
+      "Vlan": {
+        "type": "object",
+        "required": [
+          "id",
+          "router_id",
+          "empresa_id",
+          "interfaz_padre",
+          "vlan_id",
+          "nombre",
+          "puerto_pon_id",
+          "puerto_pon",
+          "mtu",
+          "estado",
+          "ros_id",
+          "comment",
+          "descripcion",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa dueña; null = compartida"
+          },
+          "interfaz_padre": {
+            "type": "string"
+          },
+          "vlan_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4094
+          },
+          "nombre": {
+            "type": "string",
+            "description": "name de la interfaz VLAN en RouterOS"
+          },
+          "puerto_pon_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "puerto_pon": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "identificador",
+              "olt_id",
+              "olt_nombre"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "identificador": {
+                "type": "string"
+              },
+              "olt_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "olt_nombre": {
+                "type": "string"
+              }
+            }
+          },
+          "mtu": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "administrado",
+              "adoptado"
+            ],
+            "description": "administrado: Argos lo escribe en el router (comment argosisp:…); adoptado: existía, Argos no lo toca"
+          },
+          "ros_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": ".id en RouterOS"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "argosisp:vlan:<id> si es administrada"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

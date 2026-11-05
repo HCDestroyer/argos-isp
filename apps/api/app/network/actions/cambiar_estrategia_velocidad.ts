@@ -21,6 +21,7 @@ import {
 
 /**
  * Cambiar la estrategia de control de velocidad por capas (`contratos/control-velocidad.md` §4).
+ * Desde 2026-11-05 (§11, modo único por router) la del plan solo acepta `null` (quitar la excepción).
  * Dos acciones con el permiso del control de velocidad de hoy (`routers.cambiar_control_velocidad`):
  * la del router (una estrategia completa por tipo de conexión) y la excepción de un plan en ese router.
  *
@@ -126,6 +127,17 @@ export async function validarRouter(
     })
 }
 
+/**
+ * 422 `estrategia_por_router`: el modo de velocidad se decide por router; ya no hay excepciones por
+ * plan nuevas (las que existen se quitan con `routers.unificar_control_velocidad`).
+ */
+export function excepcionPorPlanRetirada(field: string): ValidacionFallida {
+    const message =
+        'El control de velocidad se decide por router: ya no hay excepciones por plan. Cambia el modo del ' +
+        'router o quita la excepción (null / unificar)'
+    return new ValidacionFallida([{ field, rule: 'estrategia_por_router', message }], message)
+}
+
 export class CambiarEstrategiaVelocidad extends DomainAction<EntradaEstrategiaRouter, RouterVista> {
     readonly nombre = 'routers.cambiar_control_velocidad'
 
@@ -175,6 +187,10 @@ export class CambiarEstrategiaPlanRouter extends DomainAction<EntradaEstrategiaP
         if (!plan) throw new NoEncontrado(`El plan ${input.plan_id} no existe`)
         const router = await verRouter(input.router_id, t.trx)
         const excepcion = leerExcepcion(input.estrategia_velocidad)
+        // Modo único por router (decisión del PM, `contratos/control-velocidad.md` §11): solo se quita
+        if (excepcion && Object.keys(excepcion).length > 0) {
+            throw excepcionPorPlanRetirada('estrategia_velocidad')
+        }
 
         // La matriz con la excepción nueva en lugar de la que tenía el plan.
         const enRouter = await planesParaValidar(input.router_id, t.trx)
