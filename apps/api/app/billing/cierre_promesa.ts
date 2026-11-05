@@ -69,6 +69,7 @@ export interface FilaPromesa {
     regla_cumplimiento: ReglaCumplimiento
     tipo: TipoPromesa
     comprobante_id: number | null
+    sistema_origen: 'iris' | null
     created_at: Date
 }
 
@@ -112,6 +113,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
                 'regla_cumplimiento',
                 'tipo',
                 'comprobante_id',
+                'sistema_origen',
                 'created_at',
             )
             .firstOrFail()) as FilaPromesa
@@ -167,9 +169,17 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
         }
         // una promesa activa que se cancela deja de proteger al servicio: también se re-evalúa
         if (cerrada || promesa.estado === 'activa') {
-            await new EvaluarEstadoServicio().execute({ servicio_id: promesa.servicio_id, ahora }, t.ctx, {
-                trx: t.trx,
-            })
+            await new EvaluarEstadoServicio().execute(
+                {
+                    servicio_id: promesa.servicio_id,
+                    ahora,
+                    ...(promesa.sistema_origen === 'iris' ? { origen: 'iris' as const } : {}),
+                },
+                t.ctx,
+                {
+                    trx: t.trx,
+                },
+            )
         }
         return { ...sinCambio, estado: decision.estado, cambiado: true }
     }

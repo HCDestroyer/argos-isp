@@ -40,6 +40,12 @@ export interface EntradaEvaluarEstado {
     /** instante de referencia (pruebas y cron); por defecto ahora */
     ahora?: Date
     ignorarHoraCorte?: boolean
+    /**
+     * `iris`: el cambio lo provoca algo nacido en Iris (pago de un comprobante de Iris, cierre de una
+     * promesa de Iris). Por defecto, `iris` si la petición es de Iris (`ctx.iris`) o si la promesa
+     * activa que decide el estado es de Iris. Solo marca `servicio.estado_cambiado` (`origen`).
+     */
+    origen?: 'iris'
 }
 
 export interface ResultadoEvaluarEstado {
@@ -110,8 +116,8 @@ export default class EvaluarEstadoServicio extends DomainAction<
             .from('billing.promesas')
             .where('servicio_id', servicio.id)
             .where('estado', 'activa')
-            .select('id', 'vence_en')
-            .first()) as { id: number; vence_en: Date } | null
+            .select('id', 'vence_en', 'sistema_origen')
+            .first()) as { id: number; vence_en: Date; sistema_origen: string | null } | null
 
         const { deseado, motivo } = decidir({
             vencidas: totalVencidas,
@@ -135,7 +141,14 @@ export default class EvaluarEstadoServicio extends DomainAction<
         }
 
         const cambio = await new CambiarEstadoServicio().execute(
-            { servicioId: servicio.id, nuevo: deseado, motivo },
+            {
+                servicioId: servicio.id,
+                nuevo: deseado,
+                motivo,
+                ...(input.origen === 'iris' || t.ctx.iris || promesa?.sistema_origen === 'iris'
+                    ? { origen: 'iris' as const }
+                    : {}),
+            },
             t.ctx,
             { trx: t.trx },
         )

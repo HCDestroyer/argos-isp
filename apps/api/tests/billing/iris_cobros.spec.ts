@@ -359,6 +359,58 @@ test.group('Iris 0.6.0 · comprobantes (§7.2)', () => {
     })
 })
 
+test.group('Iris 0.6.0 · reactivación por un comprobante de Iris', () => {
+    test('caja aprueba la boleta de Iris: servicio.estado_cambiado y pago.registrado con origen iris; el panel sin marca', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const cuenta = await cuentaBancariaPrueba()
+        const deIris = await servicioCortado()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(deIris.clienteId, deIris.servicioId, cuenta.id)),
+            201,
+        )
+        const r = await estado(
+            client.post(`/api/v1/comprobantes/${boleta.body().id}/aprobar`).bearerToken(admin).json({}),
+            200,
+        )
+        const cambios = await eventosDe('servicio.estado_cambiado', 'servicio_id', deIris.servicioId)
+        assert.containSubset(cambios.at(-1)!.payload, { a: 'activo', origen: 'iris' })
+        const [pago] = await eventosDe('pago.registrado', 'pago_id', r.body().pago_id)
+        assert.equal(pago.payload.origen, 'iris')
+
+        // el mismo flujo desde el panel no lleva la marca
+        const delPanel = await servicioCortado()
+        const panel = await client
+            .post('/api/v1/comprobantes')
+            .bearerToken(admin)
+            .header('Idempotency-Key', unico('panel'))
+            .field('cliente_id', String(delPanel.clienteId))
+            .field('servicio_id', String(delPanel.servicioId))
+            .field('metodo', 'deposito')
+            .field('cuenta_bancaria_id', String(cuenta.id))
+            .field('referencia', await unicoBd('boleta-panel'))
+            .field('monto', '300.00')
+            .field('fecha_deposito', '2026-10-08')
+            .file('archivo', PNG, { filename: 'b.png' })
+        panel.assertStatus(201)
+        await estado(
+            client.post(`/api/v1/comprobantes/${panel.body().id}/aprobar`).bearerToken(admin).json({}),
+            200,
+        )
+        const delPanelCambios = await eventosDe(
+            'servicio.estado_cambiado',
+            'servicio_id',
+            delPanel.servicioId,
+        )
+        assert.equal(delPanelCambios.at(-1)!.payload.a, 'activo')
+        assert.notProperty(delPanelCambios.at(-1)!.payload, 'origen')
+        await afirmarLibroCuadrado(assert)
+    })
+})
+
 test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
     test('201: promesa reconexion_temporal ligada al comprobante; el servicio se reactiva por evaluarEstadoServicio', async ({
         client,
@@ -417,6 +469,7 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
             .limit(1)
         assert.equal(cambio.payload.a, 'activo')
         assert.match(cambio.payload.motivo, /promesa de pago \d+ activa/)
+        assert.equal(cambio.payload.origen, 'iris')
         await afirmarLibroCuadrado(assert)
     })
 
@@ -611,6 +664,8 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
             motivo: 'comprobante_rechazado',
             detalle: null,
         })
+        const cortes = await eventosDe('servicio.estado_cambiado', 'servicio_id', datos.servicioId)
+        assert.containSubset(cortes.at(-1)!.payload, { a: 'suspendido', origen: 'iris' })
         assert.equal(await estadoServicio(datos.servicioId), 'suspendido')
         const [rechazado] = await eventosDe('comprobante.rechazado', 'comprobante_id', datos.comprobanteId)
         assert.include(rechazado.payload, { causa: 'monto_distinto', servicio_estado: 'suspendido' })

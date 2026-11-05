@@ -267,9 +267,13 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
 
         const servicios: ServicioCobrado[] = []
         for (const servicioId of serviciosDe([...previas, ...aplicadas])) {
-            const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, {
-                trx: t.trx,
-            })
+            const r = await new EvaluarEstadoServicio().execute(
+                { servicio_id: servicioId, ...(input.origen === 'iris' ? { origen: 'iris' as const } : {}) },
+                t.ctx,
+                {
+                    trx: t.trx,
+                },
+            )
             servicios.push({
                 servicio_id: r.servicio_id,
                 estado: r.estado,

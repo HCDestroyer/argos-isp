@@ -273,6 +273,12 @@ export interface CatalogoEventos {
          */
         origen_tipo?: string
         origen_id?: string
+        /**
+         * `iris` (contrato Iris 0.6.0, pedido de A6): el cambio lo provocó algo que nació en Iris (una
+         * promesa o reconexión temporal de Iris, su cierre, o el pago de un comprobante de Iris).
+         * Notify no avisa al cliente: Iris le explica en la conversación. Ausente en los demás.
+         */
+        origen?: 'iris'
     }
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
