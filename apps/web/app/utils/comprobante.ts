@@ -15,6 +15,7 @@ export const ESTADOS_COMPROBANTE: Record<Estado, { etiqueta: string, plural: str
 export const CANALES_COMPROBANTE: Record<Comprobante['canal'], string> = {
     portal: 'Portal del cliente',
     panel: 'Panel',
+    iris: 'Iris (chat o llamada)',
 }
 
 /** Quién lo aprobó o rechazó: su nombre (`verificado_por_nombre`), o `usuario #N` si no vino. */

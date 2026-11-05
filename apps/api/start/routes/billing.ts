@@ -39,7 +39,12 @@ import SustituirFactura from '#billing/actions/sustituir_factura'
 import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import { dteVigente } from '#fiscal/fel/dte'
 import db from '@adonisjs/lucid/services/db'
-import { dimensionesDePromesa, listarPromesas, verPromesa } from '#billing/promesas'
+import {
+    dimensionesDePromesa,
+    dimensionesDeServicio as dimensionesDeServicioPromesa,
+    listarPromesas,
+    verPromesa,
+} from '#billing/promesas'
 import { ultimasCorridas } from '#billing/corridas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
@@ -70,7 +75,17 @@ import {
     resumenComprobantes,
     verComprobante,
 } from '#billing/comprobantes'
-import { leerArchivoComprobante, extensionComprobante } from '#billing/comprobantes_archivos'
+import {
+    TAMANO_MAXIMO_COMPROBANTE,
+    leerArchivoComprobante,
+    extensionComprobante,
+} from '#billing/comprobantes_archivos'
+import RegistrarComprobante, {
+    type ArchivoComprobante as ArchivoSubido,
+} from '#billing/actions/registrar_comprobante'
+import RegistrarReconexionTemporal from '#billing/actions/registrar_reconexion_temporal'
+import { exigirCabecerasIris, peticionIris } from '#billing/iris'
+import { readFile } from 'node:fs/promises'
 import type { Reporte } from '#billing/reportes/definicion'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
@@ -117,6 +132,7 @@ import {
     ArchivoComprobante,
     Comprobante,
     PaginaComprobantes,
+    ReconexionTemporal,
     EstadoCuenta,
     Banco,
     CuentaBancaria,
@@ -633,16 +649,25 @@ const promesas: Ruta[] = [
         permiso: 'promesas.crear',
         cuerpo: v.crearPromesaValidator,
         idempotente: true,
+        antes: exigirCabecerasIris({ idempotencia: true }),
         descripcion:
+            'Contrato Iris 0.6.0 §7.4: con el token de Iris exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida); el canal sale de X-Iris-Actor (asistente_ia → ia, usuario:<id> → operador) y `canal` del cuerpo se ignora; la promesa queda con sistema_origen = iris. `empresa_id`, si viene, debe ser la del servicio (422 empresa_no_coincide). ' +
             'Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
-            const canal = await canalPromesa(ctx, cuerpo.canal)
+            const iris = peticionIris(ctx)
+            const canal = iris ? iris.canalPromesa : await canalPromesa(ctx, cuerpo.canal)
             return new CrearPromesaPago().execute(
                 // `monto` es obsoleto: se ignora (la promesa cubre todo lo vencido)
-                { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, canal },
-                ctx.contextoAccion(),
+                {
+                    servicio_id: cuerpo.servicio_id,
+                    vence_en: cuerpo.vence_en,
+                    canal,
+                    empresa_id: cuerpo.empresa_id ?? null,
+                    ...(iris ? { iris: { actor: iris.actor, conversacion: iris.conversacion } } : {}),
+                },
+                ctx.contextoAccion(iris?.canalAuditoria),
             )
         },
     }),
@@ -654,15 +679,19 @@ const promesas: Ruta[] = [
         etiqueta: 'promesas',
         permiso: 'promesas.ver',
         cuerpo: v.simularPromesaValidator,
+        antes: exigirCabecerasIris(),
         descripcion:
+            'Con el token de Iris exige X-Iris-Actor y X-Iris-Conversacion y el canal sale de X-Iris-Actor (contrato Iris 0.6.0 §7.4). ' +
             'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
         respuesta: { status: 200, descripcion: 'Simulación', esquema: SimulacionPromesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
             const canalPeticion = ctx.contextoAccion().canal
+            const iris = peticionIris(ctx)
             return simularPromesa({
                 servicio_id: cuerpo.servicio_id,
                 canal:
+                    iris?.canalPromesa ??
                     cuerpo.canal ??
                     (canalPeticion === 'portal' || canalPeticion === 'ia' ? canalPeticion : 'operador'),
                 vence_en: cuerpo.vence_en,
@@ -735,10 +764,128 @@ const promesas: Ruta[] = [
 
 const comprobantes: Ruta[] = [
     definirRuta({
+        metodo: 'post',
+        ruta: '/comprobantes',
+        operacion: 'comprobantesRegistrar',
+        resumen: 'Registrar un comprobante de depósito (boleta) para la cola de caja',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.registrar',
+        cuerpo: v.registrarComprobanteValidator,
+        multipart: {
+            archivos: {
+                archivo:
+                    'Foto (JPG, PNG o WebP) o PDF de la boleta, hasta 5 MB; Argos decide el tipo por el contenido y guarda su copia',
+            },
+        },
+        idempotente: 'obligatoria',
+        antes: exigirCabecerasIris(),
+        descripcion:
+            'Contrato Iris 0.6.0 §7.2 (pedido A16). Queda `pendiente` en la cola de caja (no mueve dinero ni el estado del servicio). Con el token de Iris: canal `iris`, X-Iris-Actor y X-Iris-Conversacion obligatorias (400 cabecera_iris_requerida), `canal_contacto` y `leido_por` obligatorios (422), y `leido_por`, `confianza`, `canal_contacto` y la conversación se muestran a caja. Con otro usuario: canal `panel` (los campos de Iris no se aceptan). La empresa es la de `cuenta_bancaria_id`: `empresa_id` distinto → 422 empresa_no_coincide; fuera del alcance → 403 empresa_no_permitida. 409 referencia_duplicada si la referencia (mismo método y cuenta) ya es un pago o está en otro comprobante pendiente; 422 por campo (`archivo` con rule required, tipo o tamano; `fecha_deposito` futura; `monto`); 422 cuenta_de_otra_empresa si la cuenta es de otra empresa que el servicio.',
+        respuesta: { status: 201, descripcion: 'Comprobante pendiente', esquema: Comprobante },
+        handler: async (ctx, { cuerpo }) => {
+            const iris = peticionIris(ctx)
+            const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => null)
+            if (dimensiones) exigirAlcance(ctx.alcance, dimensiones)
+            if (cuerpo.servicio_id) {
+                const deServicio = await dimensionesDeServicioPromesa(cuerpo.servicio_id).catch(() => null)
+                if (deServicio) exigirAcceso(ctx, deServicio)
+            }
+            if (!iris && (cuerpo.leido_por || cuerpo.canal_contacto || cuerpo.confianza)) {
+                throw new ValidacionFallida([
+                    {
+                        field: cuerpo.leido_por
+                            ? 'leido_por'
+                            : cuerpo.canal_contacto
+                              ? 'canal_contacto'
+                              : 'confianza',
+                        message: 'Solo para comprobantes que llegan por Iris',
+                        rule: 'no_aplica',
+                    },
+                ])
+            }
+            if (iris && (!cuerpo.leido_por || !cuerpo.canal_contacto)) {
+                throw new ValidacionFallida(
+                    [
+                        !cuerpo.leido_por && {
+                            field: 'leido_por',
+                            message: 'Falta quién leyó la boleta (ia, persona o cliente_dictado)',
+                            rule: 'required',
+                        },
+                        !cuerpo.canal_contacto && {
+                            field: 'canal_contacto',
+                            message: 'Falta por dónde llegó (whatsapp, telegram, correo o llamada)',
+                            rule: 'required',
+                        },
+                    ].filter((e) => e !== false),
+                )
+            }
+            const archivo = await archivoComprobante(ctx)
+            return new RegistrarComprobante().execute(
+                {
+                    cliente_id: cuerpo.cliente_id,
+                    servicio_id: cuerpo.servicio_id ?? null,
+                    metodo: cuerpo.metodo,
+                    cuenta_bancaria_id: cuerpo.cuenta_bancaria_id,
+                    banco_origen_id: cuerpo.banco_origen_id ?? null,
+                    referencia: cuerpo.referencia,
+                    monto: cuerpo.monto,
+                    fecha_deposito: cuerpo.fecha_deposito,
+                    nota: cuerpo.nota ?? null,
+                    empresa_id: cuerpo.empresa_id ?? null,
+                    canal: iris ? 'iris' : 'panel',
+                    archivo,
+                    iris: iris
+                        ? {
+                              leido_por: cuerpo.leido_por!,
+                              canal_contacto: cuerpo.canal_contacto!,
+                              confianza: cuerpo.confianza ?? null,
+                              actor: iris.actor,
+                              conversacion: iris.conversacion,
+                          }
+                        : null,
+                },
+                ctx.contextoAccion(iris?.canalAuditoria),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/comprobantes/:id/reconexion-temporal',
+        operacion: 'comprobantesReconexionTemporal',
+        resumen: 'Reconectar temporalmente mientras caja revisa el comprobante (promesa reconexion_temporal)',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.reconexion_temporal',
+        cuerpo: v.reconexionTemporalValidator,
+        idempotente: 'obligatoria',
+        antes: exigirCabecerasIris(),
+        descripcion:
+            'Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).',
+        respuesta: { status: 201, descripcion: 'Reconexión temporal', esquema: ReconexionTemporal },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
+            if (cuerpo.servicio_id) {
+                const deServicio = await dimensionesDeServicioPromesa(cuerpo.servicio_id).catch(() => null)
+                if (deServicio) exigirAcceso(ctx, deServicio)
+            }
+            const iris = peticionIris(ctx)
+            return new RegistrarReconexionTemporal().execute(
+                {
+                    comprobante_id: id,
+                    servicio_id: cuerpo.servicio_id ?? null,
+                    motivo: cuerpo.motivo,
+                    canal: iris?.canalPromesa ?? 'operador',
+                    iris: iris ? { actor: iris.actor, conversacion: iris.conversacion } : null,
+                },
+                ctx.contextoAccion(iris?.canalAuditoria),
+            )
+        },
+    }),
+    definirRuta({
         metodo: 'get',
         ruta: '/comprobantes',
         operacion: 'comprobantesListar',
-        resumen: 'Cola de comprobantes de depósito (portal y panel)',
+        resumen: 'Cola de comprobantes de depósito (portal, panel e Iris)',
         etiqueta: 'pagos',
         permiso: 'comprobantes.ver',
         query: v.listarComprobantesValidator,
@@ -827,18 +974,44 @@ const comprobantes: Ruta[] = [
         cuerpo: v.rechazarComprobanteValidator,
         idempotente: true,
         descripcion:
-            'Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.',
+            'Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.',
         respuesta: { status: 200, descripcion: 'Comprobante rechazado', esquema: Comprobante },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDeComprobante(id))
             return new RechazarComprobante().execute(
-                { comprobante_id: id, motivo: cuerpo.motivo },
+                { comprobante_id: id, motivo: cuerpo.motivo, causa: cuerpo.causa ?? null },
                 ctx.contextoAccion(),
             )
         },
     }),
 ]
+
+/** Archivo `archivo` de un multipart (uno solo, hasta 5 MB); vacío si no vino (la acción responde 422). */
+async function archivoComprobante(ctx: HttpContext): Promise<ArchivoSubido> {
+    const archivos = ctx.request.files('archivo')
+    if (archivos.length > 1) {
+        throw new ValidacionFallida([
+            {
+                field: 'archivo',
+                rule: 'unico',
+                message: 'Adjunta un solo archivo: la foto o el PDF de la boleta',
+            },
+        ])
+    }
+    const archivo = archivos[0]
+    if (!archivo?.tmpPath) return { contenido: new Uint8Array(), nombre: null }
+    if (archivo.size > TAMANO_MAXIMO_COMPROBANTE) {
+        throw new ValidacionFallida([
+            {
+                field: 'archivo',
+                rule: 'tamano',
+                message: `El archivo pesa ${(archivo.size / 1024 / 1024).toFixed(1)} MB; el máximo es 5 MB`,
+            },
+        ])
+    }
+    return { contenido: await readFile(archivo.tmpPath), nombre: archivo.clientName }
+}
 
 /**
  * Canal de la promesa: el pedido, o `portal`/`ia` según el canal de la petición (`X-Canal`), o

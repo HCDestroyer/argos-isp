@@ -10,8 +10,13 @@ import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { bloquearCliente } from '#billing/cobros'
 import { exigirReferenciaLibre, validarDatosBancarios } from '#billing/datos_bancarios'
 import {
+    CANALES_CONTACTO,
+    LECTORES_COMPROBANTE,
     METODOS_COMPROBANTE,
+    payloadComprobante,
     verComprobante,
+    type CanalContacto,
+    type LectorComprobante,
     type CanalComprobante,
     type ComprobanteVista,
     type MetodoComprobante,
@@ -37,7 +42,13 @@ import {
  *   Se guarda en `COMPROBANTES_DIR` (`comprobantes_archivos.ts`), nunca en la base.
  * - Referencia repetida → 409 `referencia_duplicada`: si ya es un pago (mismo método y cuenta) o
  *   si hay otro comprobante pendiente con ella. Uno rechazado la deja libre.
- * - Evento `comprobante.recibido` (`comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null`).
+ * - Evento `comprobante.recibido` (payload común de `payloadComprobante`: `pago_id`, `motivo` y
+ *   `causa` en null).
+ * - Canal `iris` (contrato Iris 0.6.0 §7.2, `POST /comprobantes` con el token de Iris): exige el
+ *   bloque `iris` (`leido_por`, `canal_contacto`, `confianza` opcional y las cabeceras `actor` y
+ *   `conversacion`), que se guarda y se muestra a caja; Argos nunca lo aplica solo. `empresa_id`,
+ *   si viene, debe ser la de la cuenta bancaria (422 `empresa_no_coincide`); fuera del alcance del
+ *   actor, 403 `empresa_no_permitida`.
  *
  * Uso desde el portal (A5):
  * ```ts
@@ -69,6 +80,21 @@ export interface EntradaRegistrarComprobante {
     archivo: ArchivoComprobante
     canal: CanalComprobante
     nota?: string | null
+    /** si viene, debe coincidir con la empresa de la cuenta bancaria (422 `empresa_no_coincide`) */
+    empresa_id?: number | null
+    /** obligatorio con `canal = iris` (y solo con él) */
+    iris?: DatosIrisComprobante | null
+}
+
+export interface DatosIrisComprobante {
+    leido_por: LectorComprobante
+    /** 0–1 como string decimal (hasta 3 decimales), o null */
+    confianza?: string | null
+    canal_contacto: CanalContacto
+    /** X-Iris-Actor */
+    actor: string
+    /** X-Iris-Conversacion */
+    conversacion: string
 }
 
 /** En la auditoría el archivo se registra solo con su nombre y tamaño, nunca su contenido. */
@@ -150,6 +176,8 @@ export default class RegistrarComprobante extends DomainAction<
             })
         }
 
+        const iris = this.validarIris(input, errores)
+
         const cliente = await t.trx.from('core.clientes').where('id', input.cliente_id).select('id').first()
         if (!cliente) {
             errores.push({
@@ -213,6 +241,21 @@ export default class RegistrarComprobante extends DomainAction<
         }
         // el comprobante es de la empresa de la cuenta bancaria de destino
         const empresaId = bancario.empresaCuenta!
+        if (input.empresa_id !== null && input.empresa_id !== undefined && input.empresa_id !== empresaId) {
+            throw new Problema(
+                422,
+                'empresa_no_coincide',
+                'Empresa no coincide',
+                `La cuenta bancaria ${bancario.cuentaBancariaId} es de la empresa ${empresaId}, no de la ${input.empresa_id}`,
+                [
+                    {
+                        field: 'empresa_id',
+                        message: 'No es la empresa de la cuenta bancaria de destino',
+                        rule: 'empresa_no_coincide',
+                    },
+                ],
+            )
+        }
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
 
@@ -241,6 +284,11 @@ export default class RegistrarComprobante extends DomainAction<
                     archivo_tamano: contenido.length,
                     archivo_nombre: input.archivo.nombre?.trim().slice(0, 255) || null,
                     canal: input.canal,
+                    leido_por: iris?.leido_por ?? null,
+                    confianza: iris?.confianza ?? null,
+                    canal_contacto: iris?.canal_contacto ?? null,
+                    iris_actor: iris?.actor ?? null,
+                    iris_conversacion: iris?.conversacion ?? null,
                     nota: input.nota?.trim() || null,
                     estado: 'pendiente',
                     registrado_por: usuarioDelActor(t.ctx.actor),
@@ -262,18 +310,68 @@ export default class RegistrarComprobante extends DomainAction<
 
         await guardarArchivoComprobante(ruta, contenido)
         try {
-            await t.emit('comprobante.recibido', {
-                comprobante_id: id,
-                empresa_id: empresaId,
-                cliente_id: input.cliente_id,
-                pago_id: null,
-                motivo: null,
-            })
+            await t.emit('comprobante.recibido', await payloadComprobante(t.trx, id))
             return await verComprobante(id, t.trx)
         } catch (error) {
             await borrarArchivoComprobante(ruta).catch(() => {})
             throw error
         }
+    }
+
+    /** Bloque `iris`: obligatorio con `canal = iris`, prohibido en los demás canales. */
+    private validarIris(input: EntradaRegistrarComprobante, errores: ErrorCampo[]) {
+        const iris = input.iris ?? null
+        if (input.canal !== 'iris') {
+            if (iris) {
+                errores.push({
+                    field: 'leido_por',
+                    message: 'Solo para comprobantes de Iris',
+                    rule: 'no_aplica',
+                })
+            }
+            return null
+        }
+        if (!iris) {
+            errores.push({ field: 'leido_por', message: 'Falta quién leyó la boleta', rule: 'required' })
+            errores.push({ field: 'canal_contacto', message: 'Falta por dónde llegó', rule: 'required' })
+            return null
+        }
+        if (!(LECTORES_COMPROBANTE as readonly string[]).includes(iris.leido_por)) {
+            errores.push({
+                field: 'leido_por',
+                message: `Se acepta ${LECTORES_COMPROBANTE.join(', ')}`,
+                rule: 'enum',
+            })
+        }
+        if (!(CANALES_CONTACTO as readonly string[]).includes(iris.canal_contacto)) {
+            errores.push({
+                field: 'canal_contacto',
+                message: `Se acepta ${CANALES_CONTACTO.join(', ')}`,
+                rule: 'enum',
+            })
+        }
+        let confianza: string | null = null
+        const texto = iris.confianza?.toString().trim() ?? ''
+        if (texto !== '') {
+            const valor = /^(0(\.\d{1,3})?|1(\.0{1,3})?|\.\d{1,3})$/.test(texto) ? dec(texto) : null
+            if (!valor || valor.lt(0) || valor.gt(1)) {
+                errores.push({
+                    field: 'confianza',
+                    message: 'La confianza va de 0 a 1 (hasta 3 decimales) o vacía',
+                    rule: 'confianza',
+                })
+            } else {
+                confianza = valor.toFixed(3)
+            }
+        }
+        if (!iris.actor || !iris.conversacion) {
+            errores.push({
+                field: 'X-Iris-Conversacion',
+                message: 'Faltan las cabeceras de Iris',
+                rule: 'cabecera_iris',
+            })
+        }
+        return { ...iris, confianza }
     }
 
     private async exigirSinPendiente(

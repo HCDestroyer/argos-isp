@@ -113,6 +113,12 @@ export interface EntradaRegistrarPago {
      * negativo (la pasarela lo descuenta de la liquidación). No llega desde la API.
      */
     reemplazo_de_reembolso?: boolean
+    /**
+     * interno (`AprobarComprobante`): el pago nace de un comprobante que llegó por Iris (contrato
+     * Iris 0.6.0 §7.2). Solo viaja en `pago.registrado` (`origen: 'iris'`) para que notify no
+     * avise al pagador; no cambia el pago, su asiento ni la aplicación. No llega desde la API.
+     */
+    origen?: 'iris'
 }
 
 export type ServicioCobrado = Pick<
@@ -670,6 +676,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             metodo: input.metodo,
             facturas: aplicaciones.map((a) => a.factura_id),
             clientes: clientesDelPago(input.cliente_id, aplicaciones),
+            ...(input.origen === 'iris' ? { origen: 'iris' as const } : {}),
         })
         return { pagoId, aplicaciones }
     }

@@ -238,7 +238,29 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Referencia única: 409 `referencia_duplicada` si ya es un pago (mismo método y cuenta) o si otro comprobante pendiente la tiene (índice parcial `comprobantes_referencia_pendiente`). Uno rechazado la libera.
 - Aprobar llama a `RegistrarPago` anidada (pago, asiento a la subcuenta de la cuenta bancaria, `pago.registrado` y reactivación en la misma transacción) con `facturas[]` opcional; sin `facturas`, aplica primero a las pendientes del servicio del comprobante. La respuesta trae `pago` con `servicios[]`.
 - Cola (`GET /comprobantes`): filtros `estado`, `cliente_id`, `metodo`, `cuenta_bancaria_id`, `desde`/`hasta` (fecha de depósito, inclusive) y `resumen { total, monto, pendientes, monto_pendiente }` con los mismos filtros y alcance (`pendientes` ignora `estado`: el contador del menú sale de `?limit=1`). Cada comprobante trae `verificado_por_nombre`.
-- Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
+- Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo` y, desde Iris 0.6.0, `servicio_id`, `canal`, `monto`, `causa`, `servicio_estado`, `origen`). notify ya tiene plantillas de aprobado y rechazado.
+- Cola: filtro `canal` (`portal`, `panel`, `iris`). Registro desde el panel e Iris: `POST /comprobantes` (sección Iris 0.6.0 abajo).
+
+## Iris 0.6.0: comprobantes, reconexión temporal y promesas (`contratos/iris.md` §7)
+
+Iris (chat o llamada, asistente de IA o persona) nunca registra un pago, una promesa ni una reconexión: lo pide a Argos y Argos decide. Las rutas son las de siempre; con el usuario técnico Iris (`iris.ts`, por su correo) exigen `X-Iris-Actor` (`asistente_ia` | `usuario:<id>`) y `X-Iris-Conversacion` (400 `cabecera_iris_requerida`) y la `Idempotency-Key` en las escrituras (400 `idempotency_key_requerida`). La auditoría va con canal `ia` (asistente) o `api` (persona) y las dos cabeceras en `entrada.iris`.
+
+| Acción | Ruta | Qué hace |
+| --- | --- | --- |
+| `comprobantes.registrar` | `POST /comprobantes` (multipart, `archivo`) | Comprobante `pendiente` en la cola de caja. Iris: canal `iris` con `leido_por`, `confianza`, `canal_contacto`, `iris_actor`, `iris_conversacion` (obligatorios los dos primeros de contacto y lectura). Otro usuario: canal `panel`. Empresa = la de la cuenta (422 `empresa_no_coincide` si `empresa_id` difiere; 403 `empresa_no_permitida`). 409 `referencia_duplicada` |
+| `comprobantes.reconexion_temporal` | `POST /comprobantes/:id/reconexion-temporal { servicio_id?, motivo: fuera_de_horario }` | Promesa `tipo = reconexion_temporal` ligada al comprobante (`actions/registrar_reconexion_temporal.ts`). `evaluarEstadoServicio` reactiva (nunca un cambio directo). 201 `{ promesa_id, reconexion_id, hasta, servicio }` |
+| `comprobantes.rechazar` | `POST /comprobantes/:id/rechazar { motivo, causa? }` | `causa_rechazo` (`no_aparece`, `monto_distinto`, `ilegible`, `falta_dato`, `duplicado`, `otro`; por defecto `otro`). Cancela la reconexión ligada |
+| `promesas.crear` / simulador | `POST /promesas`, `POST /promesas/simular` | Canal desde `X-Iris-Actor` (`ia` / `operador`); `sistema_origen = iris`; `empresa_id` opcional (422 `empresa_no_coincide`) |
+| `promesas.cancelar_reconexion` | (interna, `RechazarComprobante`) | `actions/cancelar_reconexion_temporal.ts` |
+
+**Reconexión temporal** (política `reglas_promesa.reconexion_temporal`: `permitida` false, `max_por_periodo` 1, `horas_max` 24; exceptuable por servicio con la excepción `reglas_promesa`). 422 `reconexion_no_permitida` con `errors[0].rule`, en este orden: `servicio_de_otro_cliente`, `comprobante_no_pendiente`, `no_habilitada`, `suspension_manual`, `promesa_abierta`, `servicio_no_cortado`, `cupo_agotado`, `comprobante_no_cubre`. El cupo cuenta las reconexiones creadas en el periodo de facturación en cualquier estado, y es **aparte** del de promesas (`max_por_periodo` de las normales cuenta solo `tipo = promesa`). La promesa cubre todo lo vencido (regla `facturas`) y vence a `horas_max`. Finales:
+
+- caja aprueba y el pago salda lo vencido → `CumplirPromesa` anidada en `AprobarComprobante` → `promesa.cumplida`;
+- caja rechaza → `promesa.cancelada` (`comprobante_rechazado`) y re-evaluación al instante (el corte respeta la hora de corte);
+- llega `hasta` con el comprobante pendiente → `IncumplirPromesa` la **cancela** (`vencida_sin_revisar`): no cuenta como incumplida en el historial;
+- caja aprueba sin saldar lo vencido → sigue activa hasta `hasta` y entonces `promesa.incumplida`.
+
+**Eventos.** `comprobante.*` lleva `servicio_id`, `canal`, `monto`, `causa`, `servicio_estado` (después del pago o del rechazo) y `origen` (`iris` con canal `iris`). `promesa.*` lleva `cliente_id`, `tipo`, `canal`, `comprobante_id` y `origen`. Nuevo `promesa.cancelada` (también al cancelar o rechazar un supervisor y al vencer una pendiente sin aprobar) con `estado`, `motivo` (código) y `detalle`. `pago.registrado` de un comprobante de Iris lleva `origen: 'iris'`. Con `origen = iris` notify no avisa al cliente (lo hace Iris en la conversación, decisión del PM §9.2 #2). No hay asientos nuevos: el pago sigue siendo `RegistrarPago`.
 
 ## Retirar una plantilla (`plantillas.retirar`)
 

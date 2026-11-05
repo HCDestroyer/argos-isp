@@ -1,13 +1,14 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { aTexto } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { bloquearCliente } from '#billing/cobros'
 import {
     datosEvaluacion,
     evaluarReglas,
+    payloadPromesa,
     verPromesa,
     type EstadoPromesa,
     type PromesaVista,
@@ -17,6 +18,7 @@ import type { CanalPromesa } from '#billing/reglas_promesa'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { ServicioPendienteInstalacion } from '#core/instalacion'
 import type { EstadoServicio } from '#shared/eventos'
+import type { CabecerasIris } from '#billing/iris'
 
 /**
  * `promesas.crear` = `crearPromesaPago` (`POST /promesas`; el portal de A5 la llama directo con
@@ -55,6 +57,14 @@ export interface EntradaCrearPromesa {
     canal: CanalPromesa
     /** instante de referencia (pruebas y simulador); por defecto ahora */
     ahora?: Date
+    /**
+     * Cabeceras de Iris (contrato Iris 0.6.0 §7.4): la promesa queda con `origen = iris` (Argos no
+     * avisa al cliente por su cuenta) y las cabeceras en la auditoría. El canal (`ia` u `operador`)
+     * ya viene decidido por `X-Iris-Actor`.
+     */
+    iris?: CabecerasIris | null
+    /** si viene, debe ser la empresa del servicio (422 `empresa_no_coincide`, contrato Iris §7.1) */
+    empresa_id?: number | null
 }
 
 /** Un `pendiente_instalacion` nunca llega aquí (422 antes de crear la promesa): estados operativos. */
@@ -101,6 +111,25 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
 
         t.fijarEntidad('servicio', input.servicio_id)
         const servicio = await leerServicio(t.trx, input.servicio_id)
+        if (
+            input.empresa_id !== null &&
+            input.empresa_id !== undefined &&
+            input.empresa_id !== servicio.empresa_id
+        ) {
+            throw new Problema(
+                422,
+                'empresa_no_coincide',
+                'Empresa no coincide',
+                `El servicio ${servicio.id} es de la empresa ${servicio.empresa_id}, no de la ${input.empresa_id}`,
+                [
+                    {
+                        field: 'empresa_id',
+                        message: 'No es la empresa del servicio',
+                        rule: 'empresa_no_coincide',
+                    },
+                ],
+            )
+        }
         // la promesa es de la empresa del servicio (403 si está fuera del alcance del actor)
         exigirAccesoEmpresa(t.ctx, servicio.empresa_id)
         t.fijarEmpresa(servicio.empresa_id)
@@ -153,6 +182,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
                 estado,
                 regla_cumplimiento: 'facturas',
                 canal: input.canal,
+                sistema_origen: input.iris ? 'iris' : null,
                 aprobada_por:
                     estado === 'activa' && input.canal === 'supervisor' ? usuarioDelActor(t.ctx.actor) : null,
                 reglas_snapshot: JSON.stringify(config.reglas_promesa),
@@ -179,13 +209,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
 
         if (estado !== 'activa') return verPromesa(promesaId, t.trx)
 
-        await t.emit('promesa.creada', {
-            promesa_id: promesaId,
-            empresa_id: servicio.empresa_id,
-            servicio_id: servicio.id,
-            vence: input.vence_en.toISOString(),
-            monto: aTexto(monto),
-        })
+        await t.emit('promesa.creada', await payloadPromesa(t.trx, promesaId))
         const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicio.id, ahora }, t.ctx, {
             trx: t.trx,
         })

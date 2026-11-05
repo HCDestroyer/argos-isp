@@ -12,6 +12,7 @@ import type { ConfiguracionFacturacion } from '#billing/excepciones'
 import { diasEntre, periodosHasta } from '#billing/periodos'
 import { ESTADOS_PENDIENTES } from '#billing/facturas'
 import type { CanalPromesa, ReglasPromesa } from '#billing/reglas_promesa'
+import type { PayloadPromesa } from '#shared/eventos'
 
 /**
  * Promesas de pago: datos para evaluar las reglas, la evaluación (pura), el cumplimiento y la
@@ -57,7 +58,18 @@ export interface Cobertura {
     facturas: FacturaCubierta[]
 }
 
-/** Estados que ocupan el cupo del periodo (las rechazadas y canceladas no cuentan). */
+/**
+ * Tipo de promesa (contrato Iris 0.6.0 §7.3): `promesa` (la de siempre) o `reconexion_temporal`,
+ * ligada a un comprobante pendiente, con su propio cupo y su propia política
+ * (`reglas_promesa.reconexion_temporal`).
+ */
+export const TIPOS_PROMESA = ['promesa', 'reconexion_temporal'] as const
+export type TipoPromesa = (typeof TIPOS_PROMESA)[number]
+
+/**
+ * Estados que ocupan el cupo del periodo (las rechazadas y canceladas no cuentan). Solo las de
+ * tipo `promesa`: las reconexiones temporales llevan su cupo aparte.
+ */
 const ESTADOS_EN_CUPO: readonly EstadoPromesa[] = ['activa', 'cumplida', 'incumplida', 'pendiente_aprobacion']
 
 /*
@@ -618,6 +630,7 @@ export async function datosEvaluacion(
         const fila = (await cliente
             .from('billing.promesas')
             .where('servicio_id', servicio.id)
+            .where('tipo', 'promesa')
             .whereIn('estado', ESTADOS_EN_CUPO as EstadoPromesa[])
             .where('created_at', '>=', desde)
             .count('* as n')
@@ -773,6 +786,11 @@ export interface PromesaVista {
     facturas: FacturaPromesa[]
     estado: EstadoPromesa
     canal: CanalPromesa
+    /** `reconexion_temporal`: ligada a `comprobante_id` (contrato Iris 0.6.0 §7.3) */
+    tipo: TipoPromesa
+    comprobante_id: number | null
+    /** `iris` si la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta) */
+    sistema_origen: 'iris' | null
     aprobada_por: number | null
     resultado_evaluacion: unknown
     version: number
@@ -812,6 +830,9 @@ const COLUMNAS = [
     ), '[]'::json) as facturas`),
     'p.estado',
     'p.canal',
+    'p.tipo',
+    'p.comprobante_id',
+    'p.sistema_origen',
     'p.aprobada_por',
     'p.resultado_evaluacion',
     'p.version',
@@ -832,10 +853,58 @@ export async function verPromesa(
     return fila
 }
 
+/** Payload común de `promesa.*` (contrato Iris 0.6.0 §7.4), leído de la fila guardada. */
+export async function payloadPromesa(
+    cliente: QueryClientContract,
+    promesaId: number,
+): Promise<PayloadPromesa> {
+    const fila = (await cliente
+        .from('billing.promesas')
+        .where('id', promesaId)
+        .select(
+            'id',
+            'empresa_id',
+            'cliente_id',
+            'servicio_id',
+            'tipo',
+            'canal',
+            'comprobante_id',
+            'vence_en',
+            cliente.raw('monto::text as monto'),
+            'sistema_origen',
+        )
+        .first()) as {
+        id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number
+        tipo: TipoPromesa
+        canal: CanalPromesa
+        comprobante_id: number | null
+        vence_en: Date
+        monto: string
+        sistema_origen: 'iris' | null
+    } | null
+    if (!fila) throw new NoEncontrado(`La promesa ${promesaId} no existe`)
+    return {
+        promesa_id: Number(fila.id),
+        empresa_id: Number(fila.empresa_id),
+        cliente_id: Number(fila.cliente_id),
+        servicio_id: Number(fila.servicio_id),
+        tipo: fila.tipo,
+        canal: fila.canal,
+        comprobante_id: fila.comprobante_id === null ? null : Number(fila.comprobante_id),
+        vence: new Date(fila.vence_en).toISOString(),
+        monto: aTexto(fila.monto),
+        origen: fila.sistema_origen ?? null,
+    }
+}
+
 export interface FiltrosPromesas extends OpcionesPaginacion {
     servicio_id?: number
     cliente_id?: number
     estado?: EstadoPromesa
+    tipo?: TipoPromesa
 }
 
 /** Alcance de una promesa: zona del cliente y router del servicio. */
@@ -857,6 +926,7 @@ export async function listarPromesas(
         .if(filtros.servicio_id, (q) => q.where('p.servicio_id', filtros.servicio_id!))
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
         .if(filtros.estado, (q) => q.where('p.estado', filtros.estado!))
+        .if(filtros.tipo, (q) => q.where('p.tipo', filtros.tipo!))
     filtrarPorAlcance(consulta, alcance, dimensionesPromesa)
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('p.empresa_id', ids))
     return paginar<PromesaVista>(consulta, filtros, { columna: 'p.id' })

@@ -5,10 +5,13 @@ import { aTexto } from '#ledger/dinero'
 import { bloquearCliente } from '#billing/cobros'
 import {
     avanceDePromesa,
+    payloadPromesa,
     type AvancePromesa,
     type EstadoPromesa,
     type ReglaCumplimiento,
+    type TipoPromesa,
 } from '#billing/promesas'
+import type { MotivoCancelacionPromesa } from '#shared/eventos'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 /**
@@ -29,7 +32,14 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  *   `rechazada` con `motivo` (sin evento: el catálogo no tiene `promesa.rechazada`).
  * - `promesas.cancelar` (`CancelarPromesa`): un supervisor cancela una `activa` o
  *   `pendiente_aprobacion` → `cancelada` con `motivo`; si estaba activa se re-evalúa el servicio
- *   (puede volver a limitarse o cortarse, respetando la hora de corte). Sin evento.
+ *   (puede volver a limitarse o cortarse, respetando la hora de corte).
+ * - `promesas.cancelar_reconexion` (`CancelarReconexionTemporal`): caja rechazó el comprobante de
+ *   una reconexión temporal activa → `cancelada` (`comprobante_rechazado`) y re-evaluación.
+ *
+ * `promesa.cancelada` (contrato Iris 0.6.0 §7.4) sale en toda cancelación y en el rechazo de un
+ * supervisor, con `motivo` (código: `cancelada_por_supervisor`, `rechazada_por_supervisor`,
+ * `vencida_sin_aprobacion`, `comprobante_rechazado`, `vencida_sin_revisar`) y `detalle` (texto
+ * del supervisor o null). Una cancelada no cuenta en el historial de cumplimiento.
  *
  * Idempotentes: sobre una promesa ya cerrada no hacen nada.
  */
@@ -57,7 +67,16 @@ export interface FilaPromesa {
     vence_en: Date
     monto: string
     regla_cumplimiento: ReglaCumplimiento
+    tipo: TipoPromesa
+    comprobante_id: number | null
     created_at: Date
+}
+
+export interface DecisionPromesa {
+    estado: EstadoPromesa
+    detalle: Record<string, unknown>
+    /** cancelada o rechazada: el código de `promesa.cancelada` y el texto del supervisor */
+    cancelacion?: { motivo: MotivoCancelacionPromesa; detalle: string | null }
 }
 
 export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromesa, ResultadoResolverPromesa> {
@@ -66,7 +85,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
         promesa: FilaPromesa,
         ahora: Date,
         input: EntradaResolverPromesa,
-    ): Promise<{ estado: EstadoPromesa; detalle: Record<string, unknown> } | null>
+    ): Promise<DecisionPromesa | null>
 
     protected async handle(input: EntradaResolverPromesa, t: Transaccion): Promise<ResultadoResolverPromesa> {
         const ahora = input.ahora ?? new Date()
@@ -91,6 +110,8 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
                 'vence_en',
                 'monto',
                 'regla_cumplimiento',
+                'tipo',
+                'comprobante_id',
                 'created_at',
             )
             .firstOrFail()) as FilaPromesa
@@ -131,12 +152,17 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
 
         const cerrada = decision.estado === 'cumplida' || decision.estado === 'incumplida'
         if (cerrada) {
-            await t.emit(decision.estado === 'cumplida' ? 'promesa.cumplida' : 'promesa.incumplida', {
-                promesa_id: promesa.id,
-                empresa_id: promesa.empresa_id,
-                servicio_id: promesa.servicio_id,
-                vence: new Date(promesa.vence_en).toISOString(),
-                monto: promesa.monto,
+            await t.emit(
+                decision.estado === 'cumplida' ? 'promesa.cumplida' : 'promesa.incumplida',
+                await payloadPromesa(t.trx, promesa.id),
+            )
+        }
+        if (decision.cancelacion && (decision.estado === 'cancelada' || decision.estado === 'rechazada')) {
+            await t.emit('promesa.cancelada', {
+                ...(await payloadPromesa(t.trx, promesa.id)),
+                estado: decision.estado,
+                motivo: decision.cancelacion.motivo,
+                detalle: decision.cancelacion.detalle,
             })
         }
         // una promesa activa que se cancela deja de proteger al servicio: también se re-evalúa

@@ -153,6 +153,10 @@ export const PERMISOS = {
     'comprobantes.ver': 'Ver comprobantes de depósito y su archivo',
     'comprobantes.aprobar': 'Aprobar comprobantes de depósito (registra el pago)',
     'comprobantes.rechazar': 'Rechazar comprobantes de depósito con motivo',
+    'comprobantes.registrar':
+        'Registrar comprobantes de depósito para la cola de caja (panel e Iris, POST /comprobantes)',
+    'comprobantes.reconexion_temporal':
+        'Reconectar temporalmente un servicio cortado mientras caja revisa su comprobante pendiente (contrato Iris §7.3)',
     'libro.ver': 'Ver libro diario, mayor y plan de cuentas',
     'libro.registrar_asiento': 'Registrar asientos manuales de ajuste',
     'libro.revertir_asiento': 'Revertir asientos con un asiento de reverso',
@@ -410,6 +414,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'fel.ver',
             'cajas.depositar',
             // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
@@ -579,6 +584,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.ver',
             'comprobantes.aprobar',
             'comprobantes.rechazar',
+            'comprobantes.registrar',
             'libro.ver',
             'libro.registrar_asiento',
             'libro.revertir_asiento',

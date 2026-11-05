@@ -3,8 +3,15 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { bloquearCliente } from '#billing/cobros'
-import { verComprobante, type ComprobanteVista, type EstadoComprobante } from '#billing/comprobantes'
+import {
+    payloadComprobante,
+    verComprobante,
+    type CanalComprobante,
+    type ComprobanteVista,
+    type EstadoComprobante,
+} from '#billing/comprobantes'
 import RegistrarPago, { type ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
+import CumplirPromesa from '#billing/actions/cumplir_promesa'
 
 /**
  * `comprobantes.aprobar` (`POST /comprobantes/:id/aprobar`): un cajero o contador verificó el
@@ -18,6 +25,11 @@ import RegistrarPago, { type ResultadoRegistrarPago } from '#billing/actions/reg
  * - 409 `comprobante_revisado` si ya se aprobó o rechazó; 409 `referencia_duplicada` si mientras
  *   tanto alguien registró un pago con la misma referencia (rechazarlo entonces).
  * - El pago lo registra quien aprueba (`registrado_por`).
+ * - Reconexión temporal ligada (contrato Iris 0.6.0 §7.3): se revisa en la misma transacción
+ *   (`CumplirPromesa` anidada). Si el pago saldó lo vencido → `promesa.cumplida`; si no, sigue
+ *   activa hasta su `hasta` y entonces se incumple como cualquier promesa.
+ * - Con `canal = iris`, el pago lleva `origen: 'iris'` en `pago.registrado` y el evento del
+ *   comprobante `origen: 'iris'`: Iris confirma al cliente y notify no avisa por su cuenta.
  */
 
 export interface EntradaAprobarComprobante {
@@ -42,6 +54,7 @@ interface FilaComprobante {
     monto: string
     nota: string | null
     estado: EstadoComprobante
+    canal: CanalComprobante
 }
 
 export async function bloquearComprobante(t: Transaccion, id: number): Promise<FilaComprobante> {
@@ -65,6 +78,7 @@ export async function bloquearComprobante(t: Transaccion, id: number): Promise<F
             'monto',
             'nota',
             'estado',
+            'canal',
         )
         .firstOrFail()) as FilaComprobante
     fila.empresa_id = Number(fila.empresa_id)
@@ -112,6 +126,7 @@ export default class AprobarComprobante extends DomainAction<
                 nota: nota.slice(0, 500),
                 facturas,
                 empresa_id: comprobante.empresa_id,
+                ...(comprobante.canal === 'iris' ? { origen: 'iris' as const } : {}),
             },
             t.ctx,
             { trx: t.trx },
@@ -135,13 +150,18 @@ export default class AprobarComprobante extends DomainAction<
             { estado: comprobante.estado, pago_id: null, verificado_por: null },
             { estado: 'aprobado', pago_id: pago.id, verificado_por: usuarioDelActor(t.ctx.actor) },
         )
-        await t.emit('comprobante.aprobado', {
-            comprobante_id: comprobante.id,
-            empresa_id: comprobante.empresa_id,
-            cliente_id: comprobante.cliente_id,
-            pago_id: pago.id,
-            motivo: null,
-        })
+        const reconexion = (await t.trx
+            .from('billing.promesas')
+            .where('comprobante_id', comprobante.id)
+            .where('estado', 'activa')
+            .select('id')
+            .first()) as { id: number } | null
+        if (reconexion) {
+            await new CumplirPromesa().execute({ promesa_id: reconexion.id }, t.ctx, { trx: t.trx })
+            t.fijarEntidad('comprobante', comprobante.id)
+            t.fijarEmpresa(comprobante.empresa_id)
+        }
+        await t.emit('comprobante.aprobado', await payloadComprobante(t.trx, comprobante.id))
         return { ...(await verComprobante(comprobante.id, t.trx)), pago }
     }
 
