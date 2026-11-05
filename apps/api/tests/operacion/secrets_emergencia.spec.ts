@@ -156,8 +156,8 @@ test.group('operacion · secrets PPPoE de emergencia', () => {
             { router_id: e.routerId },
             contextoPrueba(),
         ))
-        assert.notInclude(secret(rsc, e.activo.user), 'local-address')
-        assert.isTrue(resumen.avisos.some((a) => a.includes(`servicio ${e.activo.id}`)))
+        // sin gateway: la primera IP utilizable (decisión del PM, `contratos/red-acceso.md` §2), sin aviso
+        assert.include(secret(rsc, e.activo.user), `local-address=${e.base}.1 `)
         assert.notInclude(JSON.stringify(resumen), 'clave')
     })
 
