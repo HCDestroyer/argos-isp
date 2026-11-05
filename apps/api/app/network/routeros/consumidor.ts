@@ -8,7 +8,7 @@ import { encolarPrefijo } from '#network/routeros/prefijos'
 import { encolarCambioControl } from '#network/routeros/jobs'
 import type { EntradaCambioControl } from '#network/routeros/cambio_control'
 import type { ControlVelocidad } from '#network/velocidad'
-import { routerDispatcher, firmaDeEvento } from '#network/routeros/consultas'
+import { routerDispatcher, firmaDeEvento, firmaEstrategia } from '#network/routeros/consultas'
 import { controlDerivado, leerEstrategias } from '#network/estrategia_velocidad'
 import { sincronizarPlan } from '#network/routeros/sincronizar'
 
@@ -33,7 +33,8 @@ const EVENTOS_SERVICIO = new Set([
  *   toca el router.
  * - `plan.velocidad_cambiada` → `sincronizarPlan` (`contratos/control-velocidad.md` §5): CoA de
  *   velocidad a las sesiones vivas del plan, `aaa:user:*` y reconciliar sus routers (o el de la excepción).
- * - `router.estrategia_cambiada` → job `cambiar_control` (por lotes, sin cortar; con `reconectar`,
+ * - `router.estrategia_cambiada` → job `cambiar_control` (por lotes, sin cortar; con `motivo = 'unificar'`
+ *   los eventos de todos los planes de un pedido van en una sola corrida del router; con `reconectar`,
  *   Disconnect por lotes como el cambio de modo de antes).
  * - `qos.config_cambiada` → reconciliar cada router de `routers[]` (clasificación, cadenas y hojas de
  *   QoS por clases, `contratos/qos.md`).
@@ -147,6 +148,24 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             const planId = evento.payload.plan_id === null ? null : Number(evento.payload.plan_id)
             const router = await routerDispatcher(routerId)
             if (!router) return
+            // Modo único por router (control-velocidad.md §11): `routers.unificar_control_velocidad` emite
+            // un evento por plan en la misma transacción. Se ejecutan juntos en **una** corrida del router
+            // (preparar → lotes de 50 con pausa → terminar, sin cortar): el mismo `evento_id` por pedido
+            // deduplica el job y la ejecución, y la firma es la del router (sin excepciones).
+            if (evento.payload.motivo === 'unificar' && planId !== null) {
+                const pedido = (evento.requestId || String(evento.id)).replace(/[^A-Za-z0-9_-]/g, '_')
+                await this.#cambioControl({
+                    router_id: routerId,
+                    de: router.velocidad.control,
+                    a: router.velocidad.control,
+                    evento_id: `unificar-${pedido}`,
+                    request_id: ctx.requestId,
+                    firma: await firmaEstrategia(routerId, null),
+                    plan_id: null,
+                    reconectar: evento.payload.reconectar === true,
+                })
+                return
+            }
             const de =
                 planId === null
                     ? controlDerivado(leerEstrategias(evento.payload.de))
