@@ -32,6 +32,7 @@ import CanjearEnlaceIris from '#integraciones/iris/actions/canjear_enlace_iris'
 import AbrirEnIris from '#integraciones/iris/actions/abrir_en_iris'
 import AutorizarIris from '#integraciones/iris/actions/autorizar_iris'
 import InformarContratoIris from '#integraciones/iris/actions/informar_contrato_iris'
+import RevocarConexionIris from '#integraciones/iris/actions/revocar_conexion_iris'
 import { vistaPreviaAutorizacionIris } from '#integraciones/iris/autorizacion'
 import { estadoConectorIris, verConectorIris } from '#integraciones/iris/configuracion'
 import * as vi from '#integraciones/iris/validators'
@@ -236,6 +237,27 @@ const iris: Ruta[] = [
                 },
                 ctx.contextoAccion('webhook'),
             ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/iris/conexion/revocar',
+        operacion: 'irisConexionRevocar',
+        resumen: 'Iris revoca su propio token atk_ (por ejemplo, al rechazar un canje)',
+        descripcion:
+            'Contrato Iris 0.6.3. Solo con el token `atk_` del usuario técnico Iris, y revoca ese mismo token ' +
+            '(403 con cualquier otra credencial). Si es el `atk_` de una reconexión pendiente, la descarta y ' +
+            'el conector sigue igual con el `atk_` anterior. Si es el `atk_` del último canje, el conector queda ' +
+            'desconectado: apagado, sin secretos, `estado_canje: desconectado` y `motivo_desconexion: ' +
+            'revocado_por_iris` en `GET /integraciones/iris`, sin borrar el historial; volver a conectar es ' +
+            'otro canje. Sin cuerpo; responde 204. Repetirlo con el mismo token responde 401 (el token ya no ' +
+            'autentica): para Iris, 204 y 401 significan que el token ya no sirve. Permiso `sso.emitir`, que el ' +
+            'token de Iris ya tiene (como `PUT /integraciones/iris/contrato`).',
+        etiqueta: 'integraciones',
+        permiso: 'sso.emitir',
+        respuesta: { status: 204, descripcion: 'Token revocado' },
+        handler: async (ctx) => {
+            await new RevocarConexionIris().execute({ atk_id: tokenDeLaPeticion(ctx) }, ctx.contextoAccion())
+        },
     }),
     definirRuta({
         metodo: 'post',

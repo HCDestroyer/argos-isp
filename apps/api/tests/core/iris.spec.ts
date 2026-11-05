@@ -137,9 +137,13 @@ test.group('integraciones · iris', (group) => {
             410,
         )
 
-        // un canje nuevo revoca el atk_ del anterior
+        // un canje nuevo (el conector ya se usó: reconexión, 0.6.3) revoca el atk_ del anterior en la
+        // primera llamada del nuevo, no antes
         const codigo2 = await generarEnlace(client, admin)
-        await estado(client.post(`${BASE}/conexion/canjear`).json(canje(codigo2)), 200)
+        const nuevo = await estado(client.post(`${BASE}/conexion/canjear`).json(canje(codigo2)), 200)
+        const vivo = await db.from('core.tokens_api').where('id', conector.token_argos_id).firstOrFail()
+        assert.isNull(vivo.revocado_en)
+        await estado(client.get(`${BASE}/estado`).bearerToken(nuevo.body().token), 200)
         const viejo = await db.from('core.tokens_api').where('id', conector.token_argos_id).firstOrFail()
         assert.isNotNull(viejo.revocado_en)
 

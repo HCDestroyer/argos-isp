@@ -40,6 +40,10 @@ async function cargarIris() {
 }
 
 const presentacionIris = computed(() => (conectorIris.value ? presentacionConectorIris(conectorIris.value) : null))
+/** Contrato Iris 0.6.3: canje pendiente o conector desconectado; sin `estado_canje`, nada. */
+const avisoCanjeTarjeta = computed(() => (conectorIris.value ? avisoCanjeIris(conectorIris.value) : null))
+const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconexionIris(conectorIris.value) : null))
+const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
 onMounted(() => {
     void cargar()
@@ -127,7 +131,57 @@ onMounted(() => {
                         variant="subtle"
                         data-prueba="marca-reconectar-tarjeta-iris"
                     />
+                    <UBadge
+                        v-if="avisoCanjeTarjeta?.estado === 'pendiente'"
+                        :label="MARCA_CANJE_PENDIENTE_IRIS.etiqueta"
+                        :icon="MARCA_CANJE_PENDIENTE_IRIS.icono"
+                        :color="MARCA_CANJE_PENDIENTE_IRIS.color"
+                        variant="subtle"
+                        class="whitespace-normal"
+                        data-prueba="marca-canje-pendiente-tarjeta-iris"
+                    />
+                    <UBadge
+                        v-else-if="avisoCanjeTarjeta?.estado === 'desconectado'"
+                        :label="MARCA_DESCONECTADO_IRIS.etiqueta"
+                        :icon="MARCA_DESCONECTADO_IRIS.icono"
+                        :color="MARCA_DESCONECTADO_IRIS.color"
+                        variant="subtle"
+                        data-prueba="marca-desconectado-tarjeta-iris"
+                    />
+                    <UBadge
+                        v-if="avisoReconexionTarjeta"
+                        :label="MARCA_RECONEXION_PENDIENTE_IRIS.etiqueta"
+                        :icon="MARCA_RECONEXION_PENDIENTE_IRIS.icono"
+                        :color="MARCA_RECONEXION_PENDIENTE_IRIS.color"
+                        variant="subtle"
+                        data-prueba="marca-reconexion-tarjeta-iris"
+                    />
                 </div>
+                <p
+                    v-if="avisoReconexionTarjeta"
+                    class="text-sm text-muted"
+                    data-prueba="reconexion-vence-tarjeta-iris"
+                >
+                    {{ textoReconexionIris(avisoReconexionTarjeta) }}
+                </p>
+                <p
+                    v-if="avisoCanjeTarjeta?.estado === 'pendiente' && avisoCanjeTarjeta.venceEn"
+                    class="text-sm text-muted"
+                    data-prueba="canje-vence-tarjeta-iris"
+                >
+                    Vence el {{ formatearFechaHora(avisoCanjeTarjeta.venceEn) }}
+                </p>
+                <p
+                    v-else-if="textoDesconexionTarjeta"
+                    class="flex items-start gap-1.5 text-sm text-error"
+                    data-prueba="motivo-desconexion-tarjeta-iris"
+                >
+                    <UIcon
+                        name="i-lucide-circle-x"
+                        class="mt-0.5 size-4 shrink-0"
+                    />
+                    <span>{{ textoDesconexionTarjeta }}</span>
+                </p>
                 <UButton
                     to="/configuracion/integraciones/iris"
                     label="Configurar"

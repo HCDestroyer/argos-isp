@@ -1,5 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import type { PresentacionEstadoUi } from './estados'
+import { formatearFechaHora } from './formato'
 
 /**
  * Presentación del conector con Iris (`contratos/iris.md` §1 y §2.3; API de A1 y A6). Réplica
@@ -59,6 +60,76 @@ export function avisoReconectarIris(conector: ConectorIris): AvisoReconectarIris
     }
     const motivo = conector.motivo_reconectar?.trim()
     return { titulo: 'Hay que volver a conectar Iris', motivo: motivo || MOTIVO_RECONECTAR_IRIS_GENERICO }
+}
+
+/**
+ * Contrato Iris 0.6.3: estado del último canje del enlace de conexión. Los cuatro campos son
+ * opcionales en el OpenAPI: si `estado_canje` no viene, la API es anterior a 0.6.3 y no se muestra
+ * nada. `confirmado` o null tampoco muestran nada. Un dato que falta (la hora de vencimiento, el
+ * motivo o la fecha de la desconexión) se omite; nunca se infiere de otros campos.
+ */
+export type EstadoCanjeIris = NonNullable<ConectorIris['estado_canje']>
+export type MotivoDesconexionIris = NonNullable<ConectorIris['motivo_desconexion']>
+
+export const MOTIVOS_DESCONEXION_IRIS: Record<MotivoDesconexionIris, string> = {
+    revocado_por_iris: 'Iris rechazó la conexión',
+    canje_sin_uso: 'La conexión no se activó en 24 h',
+}
+
+/** Marca informativa mientras Iris no usa el token del canje. */
+export const MARCA_CANJE_PENDIENTE_IRIS: PresentacionEstadoUi = { etiqueta: 'Esperando que Iris active la conexión', color: 'info', icono: 'i-lucide-hourglass' }
+
+/** Marca del conector desconectado (Iris revocó el token o el canje venció sin uso). */
+export const MARCA_DESCONECTADO_IRIS: PresentacionEstadoUi = { etiqueta: 'Desconectada', color: 'error', icono: 'i-lucide-unplug' }
+
+/** Instrucción para volver a conectar tras una desconexión. */
+export const INSTRUCCION_DESCONECTADO_IRIS = 'Para volver a conectarlo, genera un enlace de conexión y pégalo en Iris, o pulsa «Conectar con Argos» en Iris → Administración → Integraciones.'
+
+export type AvisoCanjeIris
+    = | { estado: 'pendiente', venceEn: string | null }
+        | { estado: 'desconectado', titulo: string, motivo: string | null, desconectadoEn: string | null }
+
+export function avisoCanjeIris(conector: ConectorIris): AvisoCanjeIris | null {
+    if (conector.estado_canje === 'pendiente') {
+        return { estado: 'pendiente', venceEn: conector.canje_vence_en ?? null }
+    }
+    if (conector.estado_canje === 'desconectado') {
+        const motivo = conector.motivo_desconexion ? MOTIVOS_DESCONEXION_IRIS[conector.motivo_desconexion] : null
+        return { estado: 'desconectado', titulo: 'Iris está desconectado', motivo: motivo ?? null, desconectadoEn: conector.desconectado_en ?? null }
+    }
+    return null
+}
+
+/**
+ * Contrato Iris 0.6.3: un enlace nuevo canjeado sobre un conector en uso queda como reconexión
+ * pendiente hasta que Iris lo usa; mientras tanto sigue la conexión actual. Solo con
+ * `reconexion_pendiente_desde` (opcional en el OpenAPI); sin `reconexion_vence_en` se omite la hora.
+ */
+export interface AvisoReconexionIris {
+    desde: string
+    venceEn: string | null
+}
+
+export const MARCA_RECONEXION_PENDIENTE_IRIS: PresentacionEstadoUi = { etiqueta: 'Reconexión pendiente', color: 'info', icono: 'i-lucide-refresh-cw' }
+
+export function avisoReconexionIris(conector: ConectorIris): AvisoReconexionIris | null {
+    if (!conector.reconexion_pendiente_desde) {
+        return null
+    }
+    return { desde: conector.reconexion_pendiente_desde, venceEn: conector.reconexion_vence_en ?? null }
+}
+
+/** «Iris la activa antes del <hora>; mientras tanto sigue la conexión actual.» */
+export function textoReconexionIris(aviso: AvisoReconexionIris): string {
+    const plazo = aviso.venceEn ? `Iris la activa antes del ${formatearFechaHora(aviso.venceEn)}` : 'Iris aún no la activa'
+    return `${plazo}; mientras tanto sigue la conexión actual.`
+}
+
+/** Motivo y fecha de la desconexión en una línea (tarjeta del índice); sin ninguno de los dos, `null`. */
+export function textoDesconexionIris(aviso: Extract<AvisoCanjeIris, { estado: 'desconectado' }>): string | null {
+    const fecha = aviso.desconectadoEn ? `${aviso.motivo ? 'desconectado' : 'Desconectado'} el ${formatearFechaHora(aviso.desconectadoEn)}` : null
+    const partes = [aviso.motivo, fecha].filter((parte): parte is string => parte !== null)
+    return partes.length ? partes.join(' · ') : null
 }
 
 /** `ConfigurarIris` no enciende el conector sin URL de Iris y token `iris_pat_`. */

@@ -205,10 +205,19 @@ test.group('Iris 0.6.2 · receptor_argos y requiere_reconectar', (group) => {
             200,
         )
         assert.isTrue(await pideReconectar(client, admin))
-        await estado(
+        const reconexion = await estado(
             client
                 .post(`${BASE_IRIS}/conexion/canjear`)
                 .json(canje(await codigoNuevo(client, admin), { receptor_argos: true })),
+            200,
+        )
+        // 0.6.3: el conector en uso no cambia hasta la primera llamada del atk_ nuevo
+        assert.isTrue(await pideReconectar(client, admin))
+        await estado(
+            client
+                .put(`${BASE_IRIS}/contrato`)
+                .bearerToken(reconexion.body().token)
+                .json({ contrato: '0.6.3' }),
             200,
         )
         assert.isFalse(await pideReconectar(client, admin))

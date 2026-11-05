@@ -6,6 +6,8 @@ import { contextoSistema } from '#shared/contexto'
 import { planesTemporalesPendientes } from '#core/planes_temporales'
 import IniciarPlanTemporal from '#core/actions/iniciar_plan_temporal'
 import TerminarPlanTemporal from '#core/actions/terminar_plan_temporal'
+import VencerCanjeIris, { type SalidaVencerCanjeIris } from '#integraciones/iris/actions/vencer_canje_iris'
+import { canjeIrisPorRevisar } from '#integraciones/iris/desconexion'
 
 /**
  * Crons del núcleo (A1) con BullMQ. Los atiende `node ace eventos:relay` (proceso de A1 que ya
@@ -14,6 +16,7 @@ import TerminarPlanTemporal from '#core/actions/terminar_plan_temporal'
  * | Job | Cada | Qué hace |
  * | --- | --- | --- |
  * | `planes_temporales` | 1 min | Termina los planes temporales activos con `fin ≤ ahora` y luego inicia los programados con `inicio ≤ ahora` (todo lo pendiente hasta ahora, nunca "los de hoy") |
+ * | `iris_canjes_sin_uso` | 5 min | Contrato Iris 0.6.3: confirma el canje del conector Iris cuyo `atk_` ya se usó y revoca (desconectando el conector) el que lleva 24 h sin uso. Solo llama a `iris.vencer_canje` si hay algo que hacer |
  *
  * Lock: el worker tiene concurrencia 1 y el job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia lo tiene, el disparo se omite.
@@ -26,6 +29,7 @@ export const NOMBRE_COLA_CORE = 'core-cron'
 
 export const CRONS_CORE = {
     planes_temporales: 60_000,
+    iris_canjes_sin_uso: 5 * 60_000,
 } as const
 export type NombreCronCore = keyof typeof CRONS_CORE
 
@@ -120,11 +124,37 @@ export async function procesarPlanesTemporales(ahora: Date = new Date()): Promis
     return resultado
 }
 
+/**
+ * Canje del conector Iris pendiente de confirmar hasta `ahora` (contrato Iris 0.6.3). La fila es
+ * una sola; la acción vuelve a leerla bloqueada. null si no había nada que hacer.
+ */
+export async function procesarCanjesIrisSinUso(
+    ahora: Date = new Date(),
+): Promise<SalidaVencerCanjeIris | null> {
+    if (!(await canjeIrisPorRevisar(ahora))) return null
+    const ctx = contextoSistema('cron', `core-iris_canjes_sin_uso-${ahora.toISOString()}`)
+    return new VencerCanjeIris().execute({ ahora }, ctx)
+}
+
 /** Ejecuta un cron del núcleo por nombre con su lock (lo usa el worker; las pruebas lo llaman directo). */
+export async function ejecutarCronCore(
+    nombre: 'planes_temporales',
+    ahora?: Date,
+): Promise<{ omitido: boolean; resultado?: ResultadoPlanesTemporales }>
+export async function ejecutarCronCore(
+    nombre: 'iris_canjes_sin_uso',
+    ahora?: Date,
+): Promise<{ omitido: boolean; resultado?: SalidaVencerCanjeIris | null }>
+export async function ejecutarCronCore(
+    nombre: string,
+    ahora?: Date,
+): Promise<{ omitido: boolean; resultado?: unknown }>
 export async function ejecutarCronCore(nombre: string, ahora: Date = new Date()) {
     switch (nombre) {
         case 'planes_temporales':
             return conLock(nombre, () => procesarPlanesTemporales(ahora))
+        case 'iris_canjes_sin_uso':
+            return conLock(nombre, () => procesarCanjesIrisSinUso(ahora))
         default:
             throw new Error(`Cron del núcleo desconocido: ${nombre}`)
     }

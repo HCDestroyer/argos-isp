@@ -1,8 +1,10 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { ConflictoVersion, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { descartarPendienteIris } from '#integraciones/iris/desconexion'
 import { cifrar } from '#shared/cifrado'
 import {
     FORMATO_TOKEN_IRIS,
+    TABLA_CONECTOR_IRIS,
     bloquearConectorIris,
     errorUrlIris,
     guardarConectorIris,
@@ -39,6 +41,9 @@ function limpio(valor: string | null | undefined): string | null | undefined {
  * - El `iris_pat_` y el secreto van cifrados (`app/shared/cifrado.ts`), de solo escritura: en la
  *   respuesta y la auditoría salen como `***`.
  * - Encender exige URL base y token.
+ * - Contrato 0.6.3: encender un conector **desconectado** lo deja como configurado a mano: sin
+ *   `conectado_por_enlace_en`, `token_argos_id` ni `canje_confirmado_en` (`estado_canje: null`), y
+ *   descarta una reconexión pendiente. Así el barrido de canjes sin uso no lo vuelve a desconectar.
  */
 export default class ConfigurarIris extends DomainAction<EntradaConfigurarIris, VistaConectorIris> {
     readonly nombre = 'iris.configurar'
@@ -83,6 +88,19 @@ export default class ConfigurarIris extends DomainAction<EntradaConfigurarIris, 
             cambios.webhook_salida_secreto_cifrado = secreto === null ? null : cifrar(secreto)
         }
         if (input.activo !== undefined) cambios.activo = input.activo
+        // 0.6.3: encender a mano un conector desconectado lo deja como conector configurado a mano, sin
+        // canje: ni pendiente ni vencido (el barrido no lo vuelve a tomar). El `atk_` de aquel canje ya
+        // está revocado; Iris usa uno creado en el panel (`POST /integraciones/iris/tokens`).
+        const reencender = input.activo === true && Boolean(antes?.desconectado_en)
+        if (reencender) {
+            Object.assign(cambios, {
+                desconectado_en: null,
+                motivo_desconexion: null,
+                conectado_por_enlace_en: null,
+                token_argos_id: null,
+                canje_confirmado_en: null,
+            })
+        }
 
         const activo = input.activo ?? antes?.activo ?? false
         const urlFinal = 'url_base' in cambios ? cambios.url_base : (antes?.url_base ?? null)
@@ -96,7 +114,14 @@ export default class ConfigurarIris extends DomainAction<EntradaConfigurarIris, 
         }
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
-        const despues = await guardarConectorIris(t, antes, cambios, { version: input.version })
+        let base = antes
+        if (reencender && antes?.pendiente_token_argos_id) {
+            if ((antes.version ?? 0) !== input.version) throw new ConflictoVersion(TABLA_CONECTOR_IRIS, 1)
+            base = await descartarPendienteIris(t, antes, 'reemplazado')
+        }
+        const despues = await guardarConectorIris(t, base, cambios, {
+            version: base === antes ? input.version : base!.version,
+        })
         return vistaConectorIris(despues)
     }
 }
