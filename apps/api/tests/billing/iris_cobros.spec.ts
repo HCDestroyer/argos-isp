@@ -412,6 +412,40 @@ test.group('Iris 0.6.0 · reactivación por un comprobante de Iris', () => {
 })
 
 test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
+    test('H79: comprobante sin servicio queda ligado al servicio reconectado (diff) y aprobarlo cumple la reconexión', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const datos = await servicioCortado()
+        await habilitarReconexion(datos.plantillaId)
+        const cuenta = await cuentaBancariaPrueba()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(datos.clienteId, null, cuenta.id)),
+            201,
+        )
+        assert.isNull(boleta.body().servicio_id)
+        const r = await estado(
+            reconectar(client, token, boleta.body().id, { servicio_id: datos.servicioId }),
+            201,
+        )
+        const fila = await db.from('billing.comprobantes').where('id', boleta.body().id).firstOrFail()
+        assert.equal(Number(fila.servicio_id), datos.servicioId)
+        const diff = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'comprobante', entidad_id: boleta.body().id, campo: 'servicio_id' })
+        assert.lengthOf(diff, 1)
+        await estado(
+            client.post(`/api/v1/comprobantes/${boleta.body().id}/aprobar`).bearerToken(admin).json({}),
+            200,
+        )
+        const promesa = await db.from('billing.promesas').where('id', r.body().promesa_id).firstOrFail()
+        assert.equal(promesa.estado, 'cumplida')
+        assert.equal(await estadoServicio(datos.servicioId), 'activo')
+        await afirmarLibroCuadrado(assert)
+    })
+
     test('201: promesa reconexion_temporal ligada al comprobante; el servicio se reactiva por evaluarEstadoServicio', async ({
         client,
         assert,

@@ -33,6 +33,10 @@ import type { EstadoServicioConPendiente } from '#shared/eventos'
  * | `cupo_agotado` | ya tuvo `max_por_periodo` reconexiones en el periodo de facturación (en cualquier estado) |
  * | `comprobante_no_cubre` | el monto del comprobante no cubre todo lo vencido del servicio |
  *
+ * Si el comprobante no tenía servicio, queda ligado al reconectado (`servicio_id`, diff en
+ * `audit.cambios`; H79): al aprobarlo, el pago se aplica primero a las facturas de ese servicio.
+ * Un comprobante de otro servicio u otro cliente responde `servicio_de_otro_cliente`.
+ *
  * La promesa: `tipo = reconexion_temporal`, `comprobante_id`, `monto` = lo vencido (cubre esas
  * facturas, regla `facturas`), `vence_en` = ahora + `horas_max`, canal `ia` u `operador` según
  * `X-Iris-Actor`, `sistema_origen = iris`. Evento `promesa.creada` (Iris le explica al cliente;
@@ -245,6 +249,24 @@ export default class RegistrarReconexionTemporal extends DomainAction<
                 cobertura.monto.lte(0)
                     ? `El servicio ${servicio.id} no tiene facturas vencidas que cubrir`
                     : `El comprobante es de Q${aTexto(comprobante.monto)} y lo vencido del servicio suma Q${aTexto(cobertura.monto)}`,
+            )
+        }
+
+        // H79: un comprobante sin servicio queda ligado al servicio reconectado, así al aprobarlo
+        // el pago se aplica primero a sus facturas (las que cubre la reconexión) y no a otro servicio
+        if (comprobante.servicio_id === null) {
+            await t.trx
+                .from('billing.comprobantes')
+                .where('id', comprobante.id)
+                .update({
+                    servicio_id: servicio.id,
+                    version: t.trx.knexRawQuery('version + 1'),
+                    updated_at: t.trx.knexRawQuery('now()'),
+                } as Record<string, unknown>)
+            await t.registrarCambios(
+                { tipo: 'comprobante', id: comprobante.id },
+                { servicio_id: null },
+                { servicio_id: servicio.id },
             )
         }
 
