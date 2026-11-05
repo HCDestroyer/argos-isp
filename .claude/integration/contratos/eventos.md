@@ -222,7 +222,7 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 
 Payload común de `promesa.creada`, `promesa.cumplida`, `promesa.incumplida` y `promesa.cancelada`: `{ promesa_id, empresa_id, cliente_id, servicio_id, tipo, canal, comprobante_id, vence, monto, origen }`, siempre con todas las claves.
 
-`promesa.cancelada` (nuevo, 2026-11-05; aún no está en la tabla de `CLAUDE.md`: lo agrega el líder) suma `estado` (`cancelada` \| `rechazada`), `motivo` y `detalle`:
+`promesa.cancelada` (nuevo, 2026-11-05) suma `estado` (`cancelada` \| `rechazada`), `motivo` y `detalle`:
 
 | `motivo` | Cuándo | `estado` | `detalle` |
 | --- | --- | --- | --- |
