@@ -101,9 +101,24 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
     it('config: ips / prefijo_v6 / router → Disconnect; solo plan → CoA según el estado', () => {
         const config = (campos: string[]) =>
             leerEvento('servicio.config_cambiada', { servicio_id: 101, campos })!
-        for (const c of ['ips', 'prefijo_v6', 'router']) {
+        for (const c of ['ips', 'prefijo_v6', 'router', 'credenciales']) {
             assert.equal(decidir(config(['plan', c]), servicio(), SUSPENDIDO).accion, 'disconnect')
         }
+        // Credenciales (cambió user_ppp o pass_ppp): Disconnect para que reconecte con las nuevas,
+        // en cualquier estado (el suspendido vuelve a entrar con el perfil de corte).
+        assert.deepEqual(decidir(config(['credenciales']), servicio(), SUSPENDIDO), {
+            accion: 'disconnect',
+            razon: 'cambió credenciales',
+        })
+        assert.equal(
+            decidir(config(['credenciales']), servicio({ estado: 'suspendido' }), SUSPENDIDO).accion,
+            'disconnect',
+        )
+        assert.deepEqual(leerEvento('servicio.config_cambiada', { servicio_id: 7, campos: ['credenciales'] }), {
+            evento: 'servicio.config_cambiada',
+            servicio_id: 7,
+            campos: ['credenciales'],
+        })
         assert.deepEqual(decidir(config(['plan']), servicio({ estado: 'limitado' }), SUSPENDIDO), {
             accion: 'coa',
             razon: 'cambió el plan',
@@ -376,6 +391,32 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         assert.equal(cambio.decision?.accion, 'disconnect')
         assert.equal(nas.recibidos.length, 1)
         assert.equal(nas.recibidos[0]?.codigo, 'Disconnect-Request')
+    })
+
+    it('credenciales cambiadas: Disconnect a las sesiones del servicio (por servicio_id) abiertas antes; el duplicado no repite', async () => {
+        almacen.servicios.set(101, servicio({ estado: 'activo' }))
+        // Cambió el usuario: la sesión abierta sigue con el viejo y se encuentra por servicio_id.
+        almacen.sesiones.set(101, [sesion({ user_ppp: 'usuario-viejo' })])
+        const evento = {
+            id: 77,
+            evento: 'servicio.config_cambiada',
+            payload: { servicio_id: 101, empresa_id: 1, campos: ['credenciales'] },
+            requestId: 'req-cred',
+        }
+        const r = await dispatcher.procesar(evento)
+        assert.equal(r.decision?.accion, 'disconnect')
+        assert.equal(nas.recibidos.length, 1)
+        assert.equal(nas.recibidos[0]?.codigo, 'Disconnect-Request')
+        assert.deepEqual(almacen.pedidas.at(-1), { servicio_id: 101, antesDelEvento: '77' })
+        assert.equal(almacen.red.at(-1)?.tipo, 'disconnect')
+        assert.equal(almacen.red.at(-1)?.ok, true)
+        // Entrega repetida: ya procesado para esa sesión, no vuelve a cortar.
+        const otra = await dispatcher.procesar(evento)
+        assert.equal(otra.sesiones[0]?.resultado, 'ya_procesado')
+        assert.equal(nas.recibidos.length, 1)
+        // Otros campos no filtran por la hora del evento.
+        await dispatcher.procesar({ ...evento, id: 78, payload: { ...evento.payload, campos: ['ips'] } })
+        assert.deepEqual(almacen.pedidas.at(-1), { servicio_id: 101 })
     })
 
     it('router sin secret: audit.red sin envío y coa.fallido', async () => {

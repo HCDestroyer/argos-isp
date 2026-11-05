@@ -59,7 +59,12 @@ export interface CoaFallido {
 
 export interface Almacen {
     servicio(servicioId: number): Promise<ServicioActual | null>
-    sesionesActivas(servicioId: number): Promise<SesionActiva[]>
+    /**
+     * Sesiones abiertas del servicio (por `servicio_id`: con usuario nuevo la sesión sigue con el viejo).
+     * `antesDelEvento`: solo las abiertas antes de ese evento del outbox (una entrega repetida no corta
+     * la sesión que ya reconectó con las credenciales nuevas).
+     */
+    sesionesActivas(servicioId: number, opciones?: { antesDelEvento?: string }): Promise<SesionActiva[]>
     /** La sesión si sigue abierta (sin `fin`); null si no existe o ya terminó. */
     sesionAbierta(sesionId: number): Promise<SesionPorId | null>
     /** true si el evento ya terminó para esa sesión (ACK, NAK o reintentos agotados). */
@@ -127,7 +132,12 @@ export class AlmacenPg implements Almacen {
         }
     }
 
-    async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {
+    async sesionesActivas(
+        servicioId: number,
+        opciones: { antesDelEvento?: string } = {},
+    ): Promise<SesionActiva[]> {
+        // Id del outbox (lo publica el relay); si no es un id numérico o no existe, no se filtra.
+        const evento = /^\d+$/.test(opciones.antesDelEvento ?? '') ? opciones.antesDelEvento! : null
         const { rows } = await this.pool.query<SesionActiva>(
             `SELECT ses.id::int AS id, COALESCE(host(r.nas_ip), host(ses.nas_ip)) AS nas_ip,
                     host(ses.nas_ip) AS nas_ip_sesion, ses.acct_session_id, ses.user_ppp,
@@ -140,8 +150,10 @@ export class AlmacenPg implements Almacen {
                  (SELECT r2.id FROM network.routers r2 WHERE r2.nas_ip = ses.nas_ip ORDER BY r2.id LIMIT 1)
              )
              WHERE ses.servicio_id = $1 AND ses.fin IS NULL AND ses.origen = 'accounting'
+               AND ($2::bigint IS NULL OR ses.inicio <= COALESCE(
+                   (SELECT o.created_at FROM audit.outbox o WHERE o.id = $2::bigint), 'infinity'))
              ORDER BY ses.inicio`,
-            [servicioId],
+            [servicioId, evento],
         )
         return rows
     }
