@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
-import { huellaTablas, verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { huellaTablas, verificarLibro, type Violacion } from '#tests/contabilidad/verificar_libro'
 import {
     cuentaBancariaPrueba,
     estadoServicio,
@@ -167,13 +167,27 @@ async function cambiosFueraDeEvaluar(servicioId: number) {
 }
 
 /**
- * Invariantes de la empresa 1 (la de las cuentas y servicios de estas pruebas) y de sus clientes. No
- * se revisan las demás empresas: en la base compartida de `tests/contabilidad` + `tests/billing`
- * otras suites dejan sus propias empresas a medio armar (p. ej. un libro emitido de prueba), que no
- * son de este frente.
+ * Violaciones que dejó **esta prueba**: las de `verificarLibro` (empresa 1, la de sus cuentas y
+ * servicios, y sus clientes) que no estaban antes de empezarla. En la corrida completa de `apps/api`
+ * otras suites dejan en la empresa 1 datos de prueba armados a mano (cajas, kardex, series) que
+ * rompen invariantes sin filtro por cliente; no son de este frente. Una violación previa que esta
+ * prueba empeora cambia su detalle y sí sale.
  */
-async function invariantes(clientes: number[]) {
+let previas = new Set<string>()
+const huellaViolacion = (v: Violacion) => JSON.stringify([v.invariante, v.detalle])
+
+async function revisarEmpresa(clientes: number[]) {
     return verificarLibro(1, { clientes, sinFuncionesProducto: true })
+}
+
+async function fijarPrevias() {
+    const antes = await revisarEmpresa([])
+    previas = new Set(antes.map(huellaViolacion))
+}
+
+async function invariantes(clientes: number[]) {
+    const ahora = await revisarEmpresa(clientes)
+    return ahora.filter((v) => !previas.has(huellaViolacion(v)))
 }
 
 async function cortadoConBoleta(monto = '300.00') {
@@ -184,7 +198,9 @@ async function cortadoConBoleta(monto = '300.00') {
     return { ...datos, cuenta, comprobanteId: k.id }
 }
 
-test.group('Auditor · Iris 0.6.0 · comprobantes y el libro', () => {
+test.group('Auditor · Iris 0.6.0 · comprobantes y el libro', (group) => {
+    group.each.setup(fijarPrevias)
+
     test('pendiente y rechazado no tocan ledger ni el auxiliar; aprobado = un pago por su monto con su asiento', async ({
         assert,
     }) => {
@@ -241,7 +257,9 @@ test.group('Auditor · Iris 0.6.0 · comprobantes y el libro', () => {
     })
 })
 
-test.group('Auditor · Iris 0.6.0 · reconexión temporal', () => {
+test.group('Auditor · Iris 0.6.0 · reconexión temporal', (group) => {
+    group.each.setup(fijarPrevias)
+
     test('crear la reconexión no mueve el libro; el servicio sube solo por evaluarEstadoServicio', async ({
         assert,
     }) => {
