@@ -95,6 +95,7 @@ export default class EmergenciaSecretsPpp extends BaseCommand {
         for (const o of r.omitidos) {
             this.logger.warning(`Omitido servicio ${o.servicio_id} (${o.user_ppp}): ${o.motivo}`)
         }
+        for (const a of r.avisos) this.logger.warning(a)
         this.logger.info('El archivo tiene contraseñas en claro: bórralo cuando ya no haga falta.')
     }
 }

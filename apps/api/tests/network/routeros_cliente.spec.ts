@@ -155,7 +155,7 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
         )
     })
 
-    test('opera los dieciséis menús administrados', async ({ assert }) => {
+    test('opera los dieciocho menús administrados', async ({ assert }) => {
         const c = cliente(falso)
         const props: Record<RutaRouterOS, Record<string, string>> = {
             '/queue/simple': { target: '10.0.0.1/32', 'max-limit': '1M/2M' },
@@ -210,6 +210,8 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
                 'dst-address-list': 'argos-portal',
             },
             '/interface/list': { name: 'suspendidos' },
+            '/interface/vlan': { name: 'vlan101', 'vlan-id': '101', interface: 'sfp1' },
+            '/interface/pppoe-server/server': { 'service-name': 'fibra-101', interface: 'vlan101' },
         }
         for (const ruta of RUTAS) {
             const comment = `argosisp:prueba:${ruta}`

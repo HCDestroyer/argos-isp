@@ -1067,22 +1067,60 @@ export const SincronizacionPlan = definirEsquema(
 /** `GET /routers/:id/vista-previa-reconciliar`: lo que «Reconciliar ahora» haría, sin escribir. */
 export const VistaPreviaReconciliar = definirEsquema(
     'VistaPreviaReconciliar',
-    objeto({
-        router_id: id,
-        cambios: lista(
-            objeto({
-                ruta: texto,
-                clave: texto,
-                accion: enumerado(['crear', 'actualizar', 'borrar', 'mover']),
-                grupo: enumerado(['servicio', 'velocidad', 'corte']),
-            }),
-        ),
-        menus: lista(
-            objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero, mover: entero }),
-        ),
-        avisos: lista(texto),
-        error: { ...nulable(texto), description: 'El router no respondió o no tiene credenciales' },
-    }),
+    objeto(
+        {
+            router_id: id,
+            cambios: lista(
+                objeto({
+                    ruta: texto,
+                    clave: texto,
+                    accion: enumerado(['crear', 'actualizar', 'borrar', 'mover']),
+                    grupo: enumerado(['servicio', 'velocidad', 'corte']),
+                }),
+            ),
+            menus: lista(
+                objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero, mover: entero }),
+            ),
+            avisos: lista(texto),
+            red_acceso: {
+                ...lista(
+                    objeto({
+                        ruta: texto,
+                        clave: {
+                            ...texto,
+                            description: 'comment de Argos (`argosisp:vlan:<id>`, `argosisp:pppoe:<id>`…)',
+                        },
+                        accion: enumerado(['crear', 'actualizar', 'borrar']),
+                    }),
+                ),
+                description:
+                    'Deriva de la red de acceso administrada (VLAN, perfil del servidor y servidor PPPoE; contratos/red-acceso.md §6). Lo adoptado y lo ajeno no aparecen: nunca se tocan',
+            },
+            conflictos: {
+                ...lista(
+                    objeto({
+                        codigo: enumerado([
+                            'radius_y_colas_api',
+                            'arbol_y_simples',
+                            'perfil_con_rate_limit_y_colas',
+                            'perfil_de_fabrica_con_rate_limit',
+                        ]),
+                        mensaje: texto,
+                        objetos: {
+                            ...lista(texto),
+                            description: 'Objetos del router implicados (`menú name`), hasta 20',
+                        },
+                    }),
+                ),
+                description:
+                    'Formas de limitar que chocan en el router (RADIUS + colas por API, árbol + simples, perfil con rate-limit + colas). Solo informa: Argos nunca borra lo ajeno',
+            },
+            error: { ...nulable(texto), description: 'El router no respondió o no tiene credenciales' },
+        },
+        // `red_acceso` y `conflictos` (2026-11-05): la API siempre los envía; opcionales en el esquema hasta
+        // que las fixtures del panel los traigan (pedido a A4 en `a2.md`)
+        ['red_acceso', 'conflictos'],
+    ),
 )
 
 /** `GET /routers/:id/diagnostico-corte`: el chequeo `corte` de «Probar conexión». */

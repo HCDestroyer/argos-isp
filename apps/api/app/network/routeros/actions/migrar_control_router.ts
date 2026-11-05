@@ -13,7 +13,7 @@ import {
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
-import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
+import { estadoVelocidadRouter, localAddressCorte } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
 import { solicitarVelocidad } from '#network/sesiones/velocidad'
@@ -177,6 +177,7 @@ export default class MigrarControlRouterOS extends DomainAction<
                                 {
                                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                                     redes_v4: await redesV4DeRouter(input.router_id, t.trx),
+                                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
                                 },
                                 lecturaCorte.get('/ppp/profile') ?? [],
                             )

@@ -118025,6 +118025,68 @@
               "type": "string"
             }
           },
+          "red_acceso": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ruta",
+                "clave",
+                "accion"
+              ],
+              "properties": {
+                "ruta": {
+                  "type": "string"
+                },
+                "clave": {
+                  "type": "string",
+                  "description": "comment de Argos (`argosisp:vlan:<id>`, `argosisp:pppoe:<id>`…)"
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "crear",
+                    "actualizar",
+                    "borrar"
+                  ]
+                }
+              }
+            },
+            "description": "Deriva de la red de acceso administrada (VLAN, perfil del servidor y servidor PPPoE; contratos/red-acceso.md §6). Lo adoptado y lo ajeno no aparecen: nunca se tocan"
+          },
+          "conflictos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "mensaje",
+                "objetos"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "enum": [
+                    "radius_y_colas_api",
+                    "arbol_y_simples",
+                    "perfil_con_rate_limit_y_colas",
+                    "perfil_de_fabrica_con_rate_limit"
+                  ]
+                },
+                "mensaje": {
+                  "type": "string"
+                },
+                "objetos": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Objetos del router implicados (`menú name`), hasta 20"
+                }
+              }
+            },
+            "description": "Formas de limitar que chocan en el router (RADIUS + colas por API, árbol + simples, perfil con rate-limit + colas). Solo informa: Argos nunca borra lo ajeno"
+          },
           "error": {
             "type": [
               "string",
