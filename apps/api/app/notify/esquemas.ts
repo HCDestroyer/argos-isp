@@ -226,6 +226,7 @@ export const ConsentimientoWhatsapp = definirEsquema(
     'ConsentimientoWhatsapp',
     objeto({
         id,
+        empresa_id: { ...id, description: 'Empresa del permiso de contacto (obligatoria en Iris)' },
         cliente_id: id,
         canal: enumerado(['whatsapp']),
         estado: enumerado(['acepta', 'baja']),
@@ -243,6 +244,12 @@ export const ConsentimientoWhatsapp = definirEsquema(
         intentos: entero,
         ultimo_error: nulable(texto),
         enviado_en: nulable(instante),
+        consentimiento_id: { ...nulable(texto), description: 'Id del registro en Iris (al entregarse)' },
+        estado_vigente: {
+            ...nulable(enumerado(['acepta', 'baja'])),
+            description:
+                'Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)',
+        },
     }),
 )
 
@@ -269,7 +276,7 @@ export const WhatsappCliente = definirEsquema(
                     origen: {
                         type: 'string',
                         description:
-                            '`argos_panel`, `argos_portal` o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`',
+                            '`argos_panel`, `argos_portal`, `iris_vigente` (Iris respondió otro estado vigente) o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`',
                     },
                 }),
             ),

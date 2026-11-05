@@ -48088,6 +48088,11 @@
                       "baja"
                     ],
                     "description": "`acepta`: marcó «Acepta avisos por WhatsApp»; `baja`: la desmarcó"
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`"
                   }
                 },
                 "required": [
@@ -87925,6 +87930,7 @@
         "type": "object",
         "required": [
           "id",
+          "empresa_id",
           "cliente_id",
           "canal",
           "estado",
@@ -87934,12 +87940,19 @@
           "entrega",
           "intentos",
           "ultimo_error",
-          "enviado_en"
+          "enviado_en",
+          "consentimiento_id",
+          "estado_vigente"
         ],
         "properties": {
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa del permiso de contacto (obligatoria en Iris)"
           },
           "cliente_id": {
             "type": "integer",
@@ -87997,6 +88010,24 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "consentimiento_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id del registro en Iris (al entregarse)"
+          },
+          "estado_vigente": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "acepta",
+              "baja"
+            ],
+            "description": "Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)"
           }
         }
       },
@@ -119765,7 +119796,7 @@
               },
               "origen": {
                 "type": "string",
-                "description": "`argos_panel`, `argos_portal` o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`"
+                "description": "`argos_panel`, `argos_portal`, `iris_vigente` (Iris respondió otro estado vigente) o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente`"
               }
             },
             "description": "Último estado de contacto por WhatsApp conocido en Argos (el registro vive en Iris)"

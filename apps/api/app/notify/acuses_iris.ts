@@ -6,8 +6,9 @@ import type { Transaccion } from '#shared/domain_action'
  * esperan hace más de 24 h (`ConciliarAvisosIris`). Solo se llama dentro de una acción.
  *
  * - Solo mueve un envío `whatsapp` que sigue `encolado`: `entregado` → `enviado` (con
- *   `entregado_en` y `leido_en`), `fallido` → `fallido` con el motivo de Iris. Cada transición
- *   emite `notificacion.enviada`.
+ *   `entregado_en` y `leido_en`), `fallido` → `fallido` con el motivo de Iris (las dos emiten
+ *   `notificacion.enviada`), `bloqueado` (solo por `GET /mensajeria/avisos/:id`, Iris 0.6.1) →
+ *   `omitido` con el motivo, sin evento (como un `202 bloqueado`).
  * - Idempotente: un acuse repetido o atrasado no cambia nada (`cambio: false`). Un `leido_en` que
  *   llega después de la entrega solo completa esa columna.
  * - Sin respaldo por correo: el aviso ya salió por todos los canales del cliente al programarse.
@@ -15,7 +16,7 @@ import type { Transaccion } from '#shared/domain_action'
 
 export interface Acuse {
     envioId: number
-    tipo: 'entregado' | 'fallido'
+    tipo: 'entregado' | 'fallido' | 'bloqueado'
     avisoId: string | null
     entregadoEn?: string | null
     leidoEn?: string | null
@@ -71,6 +72,17 @@ export async function aplicarAcuseIris(t: Transaccion, acuse: Acuse): Promise<Re
     const comun = {
         proveedor_id: envio.proveedor_id ?? acuse.avisoId,
         updated_at: t.trx.knexRawQuery('now()'),
+    }
+    if (acuse.tipo === 'bloqueado') {
+        await t.trx
+            .from('notify.envios')
+            .where('id', envio.id)
+            .update({
+                ...comun,
+                estado: 'omitido',
+                motivo: `Iris: ${acuse.motivo ?? 'bloqueado'}`.slice(0, 500),
+            })
+        return { ...base, cambio: true, estado: 'omitido' }
     }
     if (acuse.tipo === 'entregado') {
         const entregado = instante(acuse.entregadoEn)

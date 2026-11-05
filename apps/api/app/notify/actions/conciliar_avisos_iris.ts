@@ -15,6 +15,8 @@ export interface ResultadoConciliarAvisos {
     revisados: number
     entregados: number
     fallidos: number
+    /** Iris lo dejó `bloqueado`: el envío queda `omitido` */
+    omitidos: number
     /** Iris no respondió la consulta de alguno (se vuelve a intentar en la próxima vuelta) */
     errores: number
 }
@@ -32,12 +34,18 @@ export default class ConciliarAvisosIris extends DomainAction<
     readonly nombre = 'notificaciones.conciliar_avisos_iris'
 
     protected override auditarExito(salida: ResultadoConciliarAvisos): boolean {
-        return salida.entregados + salida.fallidos > 0
+        return salida.entregados + salida.fallidos + salida.omitidos > 0
     }
 
     protected async handle(input: EntradaConciliarAvisos, t: Transaccion): Promise<ResultadoConciliarAvisos> {
         t.fijarEmpresa(null)
-        const resultado: ResultadoConciliarAvisos = { revisados: 0, entregados: 0, fallidos: 0, errores: 0 }
+        const resultado: ResultadoConciliarAvisos = {
+            revisados: 0,
+            entregados: 0,
+            fallidos: 0,
+            omitidos: 0,
+            errores: 0,
+        }
         const conector = await estadoConectorWhatsapp(t.trx)
         if (!conector.disponible) return resultado
         const ahora = input.ahora ?? new Date()
@@ -62,12 +70,13 @@ export default class ConciliarAvisosIris extends DomainAction<
                 logger.warn({ envioId: fila.id, err: error }, 'notify: no se pudo consultar un aviso en Iris')
                 continue
             }
+            // Iris 0.6.1: entregado → enviado, fallido → fallido, bloqueado → omitido, en_cola sigue
             const tipo =
-                consulta.estado === 'entregado'
-                    ? 'entregado'
-                    : consulta.estado === 'fallido' || consulta.estado === 'bloqueado'
-                      ? 'fallido'
-                      : null
+                consulta.estado === 'entregado' ||
+                consulta.estado === 'fallido' ||
+                consulta.estado === 'bloqueado'
+                    ? consulta.estado
+                    : null
             if (!tipo) continue
             const acuse = await aplicarAcuseIris(t, {
                 envioId: Number(fila.id),
@@ -75,10 +84,14 @@ export default class ConciliarAvisosIris extends DomainAction<
                 avisoId: fila.proveedor_id,
                 entregadoEn: consulta.entregado_en,
                 leidoEn: consulta.leido_en,
-                motivo: consulta.motivo ?? (consulta.estado === 'bloqueado' ? 'bloqueado' : null),
-                detalle: 'conciliado con GET /mensajeria/avisos/:id',
+                motivo: consulta.motivo,
+                detalle: consulta.detalle ?? 'conciliado con GET /mensajeria/avisos/:id',
             })
-            if (acuse.cambio) resultado[tipo === 'entregado' ? 'entregados' : 'fallidos']++
+            if (acuse.cambio) {
+                resultado[
+                    tipo === 'entregado' ? 'entregados' : tipo === 'fallido' ? 'fallidos' : 'omitidos'
+                ]++
+            }
         }
         return resultado
     }

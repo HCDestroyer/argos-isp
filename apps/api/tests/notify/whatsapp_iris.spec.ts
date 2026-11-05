@@ -186,6 +186,7 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         // Iris confirma la entrega por webhook firmado; repetido, se deduplica
         const acuse = {
             aviso_id: 'av-1',
+            empresa_id: 1,
             idempotency_key: `argos:aviso:factura_vencida:${wa.id}`,
             canal: 'whatsapp',
             entregado_en: '2026-11-05T15:00:00.000Z',
@@ -245,6 +246,7 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
                 'aviso.fallido',
                 {
                     aviso_id: 'av-c',
+                    empresa_id: 1,
                     idempotency_key: `argos:aviso:pago_recibido:${segundo!.id}`,
                     canal: 'whatsapp',
                     motivo: 'numero_invalido',
@@ -434,7 +436,12 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         assert.containsSubset(await entregarConsentimientosIris(), { en_espera: 1 })
 
         let status = 503
-        iris.responder(CONSENTIMIENTOS, () => ({ status, cuerpo: { ok: status < 300 } }))
+        // Iris 0.6.1: 201 { consentimiento_id, estado_vigente }; aquí quedó vigente una baja del chat
+        iris.responder(CONSENTIMIENTOS, () =>
+            status < 300
+                ? { status, cuerpo: { consentimiento_id: 'cons-1', estado_vigente: 'baja' } }
+                : { status, cuerpo: { error: 'caido' } },
+        )
         await fijarConector()
         assert.containsSubset(await entregarConsentimientosIris(), { reintentar: 1 })
         status = 201
@@ -447,6 +454,7 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         assert.equal(peticiones[0]!.cuerpo, peticiones[1]!.cuerpo)
         assert.equal(peticiones[1]!.cabeceras['idempotency-key'], creado.idempotency_key)
         assert.deepEqual(peticiones[1]!.json, {
+            empresa_id: 1,
             cliente_id: clienteId,
             canal: 'whatsapp',
             estado: 'acepta',
@@ -454,7 +462,12 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
             ocurrido_en: creado.ocurrido_en,
         })
         const fila = await db.from('notify.consentimientos_iris').where('id', creado.id).firstOrFail()
-        assert.containsSubset(fila, { entrega: 'enviado', intentos: 2 })
+        assert.containsSubset(fila, {
+            entrega: 'enviado',
+            intentos: 2,
+            consentimiento_id: 'cons-1',
+            estado_vigente: 'baja',
+        })
 
         const ficha = await estado(
             client.get(`/api/v1/notificaciones/whatsapp/clientes/${clienteId}`).bearerToken(token),
@@ -463,8 +476,9 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         assert.containsSubset(ficha.body(), {
             cliente_id: clienteId,
             canal: { activo: false, disponible: false },
-            contacto: { estado: 'acepta', origen: 'argos_panel' },
-            ultimo_consentimiento: { id: creado.id, entrega: 'enviado' },
+            // Argos adopta el estado vigente de Iris: no pide avisos por WhatsApp
+            contacto: { estado: 'baja', origen: 'iris_vigente' },
+            ultimo_consentimiento: { id: creado.id, entrega: 'enviado', estado_vigente: 'baja' },
         })
     })
 
@@ -540,5 +554,62 @@ test.group('notify · WhatsApp por Iris (contrato 0.6.0 §6)', (group) => {
         assert.containsSubset(r, { entregados: 1 })
         const fila = await db.from('notify.envios').where('id', wa.id).firstOrFail()
         assert.equal(fila.estado, 'enviado')
+    })
+
+    test('consentimiento: 422 de Iris no se reintenta; empresa obligatoria', async ({ assert }) => {
+        iris.responder(CONSENTIMIENTOS, () => ({ status: 422, cuerpo: { type: 'validacion' } }))
+        await fijarConector()
+        const clienteId = await crearCliente()
+        const r = await new RegistrarConsentimientoWhatsapp().execute(
+            { cliente_id: clienteId, estado: 'baja', origen: 'argos_portal', empresa_id: 1 },
+            contextoPrueba(),
+        )
+        assert.equal(r.empresa_id, 1)
+        assert.containsSubset(await entregarConsentimientosIris(), { fallidos: 1 })
+        const fila = await db.from('notify.consentimientos_iris').where('id', r.id).firstOrFail()
+        assert.containsSubset(fila, { entrega: 'fallido', intentos: 1, ultimo_status: 422 })
+        assert.lengthOf(iris.de(CONSENTIMIENTOS), 1)
+    })
+
+    test('conciliación: bloqueado en el GET → omitido con el motivo; X-Webhook-Id distinto del id → 400', async ({
+        assert,
+        client,
+    }) => {
+        iris.responder(AVISOS, () => ({ status: 202, cuerpo: { aviso_id: 'av-bloq', estado: 'en_cola' } }))
+        iris.responder(`${AVISOS}/av-bloq`, () => ({
+            status: 200,
+            cuerpo: { aviso_id: 'av-bloq', estado: 'bloqueado', motivo: 'limite_diario', detalle: null },
+        }))
+        await fijarConector()
+        await fijarWhatsapp(true)
+        const { clienteId, servicioId, facturaId } = await clienteConVencida()
+        const wa = (await waDe('factura.vencida', {
+            factura_id: facturaId,
+            empresa_id: 1,
+            servicio_id: servicioId,
+            cliente_id: clienteId,
+        }))!
+        await enviar(wa.id)
+        const r = await new ConciliarAvisosIris().execute(
+            { ahora: new Date(Date.now() + 25 * 3600 * 1000) },
+            contextoSistema('worker'),
+        )
+        assert.isAtLeast(r.omitidos, 1)
+        const fila = await db.from('notify.envios').where('id', wa.id).firstOrFail()
+        assert.containsSubset(fila, { estado: 'omitido', motivo: 'Iris: limite_diario' })
+
+        const cuerpo = JSON.stringify({
+            id: 'otro-id',
+            evento: 'aviso.entregado',
+            ocurrido_en: null,
+            payload: {},
+        })
+        await estado(
+            client
+                .post('/api/v1/integraciones/iris/webhook')
+                .headers(cabecerasFirmadas(SECRETO_ENTRADA, 'iris-wh-dist', cuerpo))
+                .json(JSON.parse(cuerpo)),
+            400,
+        )
     })
 })

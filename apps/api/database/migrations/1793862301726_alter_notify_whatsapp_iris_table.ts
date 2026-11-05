@@ -29,6 +29,7 @@ export default class extends BaseSchema {
 
             CREATE TABLE notify.consentimientos_iris (
                 id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                empresa_id bigint NOT NULL REFERENCES core.empresas (id),
                 cliente_id bigint NOT NULL REFERENCES core.clientes (id),
                 canal text NOT NULL CHECK (canal IN ('whatsapp')),
                 estado text NOT NULL CHECK (estado IN ('acepta', 'baja')),
@@ -42,6 +43,9 @@ export default class extends BaseSchema {
                 ultimo_status integer,
                 ultimo_error text,
                 enviado_en timestamptz,
+                -- respuesta de Iris (0.6.1): su id y el estado que quedó vigente (puede diferir)
+                consentimiento_id text,
+                estado_vigente text CHECK (estado_vigente IN ('acepta', 'baja')),
                 registrado_por bigint REFERENCES core.usuarios (id),
                 request_id text,
                 created_at timestamptz NOT NULL DEFAULT now(),

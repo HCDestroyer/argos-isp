@@ -12843,6 +12843,8 @@ export interface components {
         };
         ConsentimientoWhatsapp: {
             id: number;
+            /** @description Empresa del permiso de contacto (obligatoria en Iris) */
+            empresa_id: number;
             cliente_id: number;
             /** @enum {string} */
             canal: "whatsapp";
@@ -12863,6 +12865,13 @@ export interface components {
             ultimo_error: string | null;
             /** Format: date-time */
             enviado_en: string | null;
+            /** @description Id del registro en Iris (al entregarse) */
+            consentimiento_id: string | null;
+            /**
+             * @description Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)
+             * @enum {string|null}
+             */
+            estado_vigente: "acepta" | "baja" | null;
         };
         ConstanciaRetencion: {
             id: number;
@@ -20520,7 +20529,7 @@ export interface components {
                 estado: "acepta" | "baja";
                 /** Format: date-time */
                 ocurrido_en: string;
-                /** @description `argos_panel`, `argos_portal` o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente` */
+                /** @description `argos_panel`, `argos_portal`, `iris_vigente` (Iris respondió otro estado vigente) o, con una baja que dio el cliente en Iris, `iris_cliente` / `iris_agente` */
                 origen: string;
             } | null;
             ultimo_consentimiento: components["schemas"]["ConsentimientoWhatsapp"] | null;
@@ -46472,6 +46481,8 @@ export interface operations {
                      * @enum {string}
                      */
                     estado: "acepta" | "baja";
+                    /** @description Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida` */
+                    empresa_id?: number;
                 };
             };
         };

@@ -261,5 +261,9 @@ export const registrarConsentimientoValidator = vine.compile(
         estado: vine.enum(['acepta', 'baja'] as const).meta({
             description: '`acepta`: marcó «Acepta avisos por WhatsApp»; `baja`: la desmarcó',
         }),
+        empresa_id: vine.number().withoutDecimals().positive().optional().meta({
+            description:
+                'Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`',
+        }),
     }),
 )

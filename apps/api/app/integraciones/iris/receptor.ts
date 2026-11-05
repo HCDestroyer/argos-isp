@@ -11,7 +11,7 @@ import type { EntradaRecibirWebhookIris } from '#integraciones/iris/actions/reci
  * `X-Webhook-Timestamp`, `X-Webhook-Signature: v1=<hex(HMAC-SHA256(secreto, timestamp.cuerpo))>`,
  * ±5 min), con el secreto de entrada que Argos entregó en el canje (`webhook.secreto`). Con el
  * conector apagado, 503 `iris_apagado` (Iris reintenta). Cuerpo `{ id, evento, ocurrido_en,
- * payload }` (la forma de §2.3; se aceptan también `event`/`occurred_at`/`data`, la de Horus).
+ * payload }` (forma confirmada por Iris, 0.6.1) con `X-Webhook-Id` = `id`; si no coinciden, 400.
  */
 
 export class IrisApagado extends Problema {
@@ -59,16 +59,19 @@ export async function autenticarWebhookIris(
         throw new SolicitudInvalida('El cuerpo debe ser un objeto JSON')
     }
     const datos = json as Record<string, unknown>
-    // `X-Webhook-Id` manda: es la clave de deduplicación del contrato (§6.6)
+    // `X-Webhook-Id` es la clave de deduplicación del contrato (§6.6) y vale lo mismo que `id`
     const id = textoONulo(cabeceras.id) ?? textoONulo(datos.id)
-    const evento = textoONulo(datos.evento) ?? textoONulo(datos.event)
+    const evento = textoONulo(datos.evento)
     if (!id || id.length > 200) throw new SolicitudInvalida('Falta el id del webhook (X-Webhook-Id)')
+    if (textoONulo(datos.id) && textoONulo(cabeceras.id) && datos.id !== cabeceras.id) {
+        throw new SolicitudInvalida('X-Webhook-Id no coincide con el id del cuerpo')
+    }
     if (!evento) throw new SolicitudInvalida('Falta evento')
-    const payload = datos.payload ?? datos.data
+    const payload = datos.payload
     return {
         webhook_id: id,
         evento: evento.slice(0, 100),
-        ocurrido_en: textoONulo(datos.ocurrido_en) ?? textoONulo(datos.occurred_at),
+        ocurrido_en: textoONulo(datos.ocurrido_en),
         payload:
             payload && typeof payload === 'object' && !Array.isArray(payload)
                 ? (payload as Record<string, unknown>)

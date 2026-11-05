@@ -1,6 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
-import type { QueryClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { configIris } from '#integraciones/iris/configuracion'
 import { REINTENTOS_S } from '#integraciones/webhooks_salientes'
 import { estadoConectorWhatsapp, type EstadoWhatsapp } from '#notify/whatsapp'
@@ -11,13 +11,17 @@ import { configPara } from '#notify/configuracion'
  * `RegistrarConsentimientoWhatsapp` deja la marca en `notify.consentimientos_iris`; aquí se entrega
  * (`iris:worker`) y se lee (ficha del cliente).
  *
- * - `POST <iris>/api/v1/mensajeria/consentimientos` con `{ cliente_id, canal, estado, origen,
- *   ocurrido_en }`, el token del conector e `Idempotency-Key = argos:consentimiento:<cliente_id>:
- *   <canal>:<ocurrido_en>`. Mismos bytes en cada reintento.
+ * - `POST <iris>/api/v1/mensajeria/consentimientos` con `{ empresa_id, cliente_id, canal, estado,
+ *   origen, ocurrido_en }` (forma de Iris 0.6.1), el token del conector e `Idempotency-Key =
+ *   argos:consentimiento:<cliente_id>:<canal>:<ocurrido_en>`. Mismos bytes en cada reintento.
+ * - `201`/`200 { consentimiento_id, estado_vigente }`: se guardan. `estado_vigente` puede diferir de lo
+ *   que se mandó (una baja dada en el chat manda): Argos lo adopta como último estado de contacto
+ *   (`notify.contacto_iris`) para no pedir avisos a quien quedó de baja.
  * - Con el conector apagado, sin URL o token, o con contrato < 0.6.0: sigue `pendiente` sin gastar
  *   intentos (sale al activarse, §6.4).
  * - `2xx` → `enviado`. Red, timeout, `429`, `5xx` y `409 idempotencia_en_curso` se reintentan a 1 min,
- *   5 min, 30 min, 2 h y 12 h (como los webhooks); después, `fallido`. Otro `4xx` → `fallido`.
+ *   5 min, 30 min, 2 h y 12 h (como los webhooks); después, `fallido`. `422` y otro `4xx` → `fallido`
+ *   sin reintento.
  */
 
 export function claveConsentimiento(clienteId: number, canal: string, ocurridoEn: string): string {
@@ -26,6 +30,7 @@ export function claveConsentimiento(clienteId: number, canal: string, ocurridoEn
 
 export interface VistaConsentimiento {
     id: number
+    empresa_id: number
     cliente_id: number
     canal: 'whatsapp'
     estado: 'acepta' | 'baja'
@@ -37,10 +42,15 @@ export interface VistaConsentimiento {
     intentos: number
     ultimo_error: string | null
     enviado_en: string | null
+    /** id del registro en Iris (null hasta que Iris responde) */
+    consentimiento_id: string | null
+    /** estado que quedó vigente en Iris; puede diferir de `estado` */
+    estado_vigente: 'acepta' | 'baja' | null
 }
 
 interface FilaConsentimiento {
     id: number
+    empresa_id: number
     cliente_id: number
     canal: 'whatsapp'
     estado: 'acepta' | 'baja'
@@ -51,10 +61,13 @@ interface FilaConsentimiento {
     intentos: number
     ultimo_error: string | null
     enviado_en: Date | null
+    consentimiento_id: string | null
+    estado_vigente: 'acepta' | 'baja' | null
 }
 
 const COLUMNAS = [
     'id',
+    'empresa_id',
     'cliente_id',
     'canal',
     'estado',
@@ -65,11 +78,14 @@ const COLUMNAS = [
     'intentos',
     'ultimo_error',
     'enviado_en',
+    'consentimiento_id',
+    'estado_vigente',
 ]
 
 function vista(f: FilaConsentimiento): VistaConsentimiento {
     return {
         id: Number(f.id),
+        empresa_id: Number(f.empresa_id),
         cliente_id: Number(f.cliente_id),
         canal: f.canal,
         estado: f.estado,
@@ -80,6 +96,8 @@ function vista(f: FilaConsentimiento): VistaConsentimiento {
         intentos: Number(f.intentos),
         ultimo_error: f.ultimo_error,
         enviado_en: f.enviado_en ? new Date(f.enviado_en).toISOString() : null,
+        consentimiento_id: f.consentimiento_id,
+        estado_vigente: f.estado_vigente,
     }
 }
 
@@ -95,11 +113,12 @@ export async function verConsentimiento(
     return vista(fila)
 }
 
-/** Cuerpo exacto de `POST /mensajeria/consentimientos` (§6.4). */
+/** Cuerpo exacto de `POST /mensajeria/consentimientos` (§6.4, forma de Iris 0.6.1). */
 export function cuerpoConsentimiento(
-    f: Pick<VistaConsentimiento, 'cliente_id' | 'canal' | 'estado' | 'origen' | 'ocurrido_en'>,
+    f: Pick<VistaConsentimiento, 'empresa_id' | 'cliente_id' | 'canal' | 'estado' | 'origen' | 'ocurrido_en'>,
 ) {
     return JSON.stringify({
+        empresa_id: f.empresa_id,
         cliente_id: f.cliente_id,
         canal: f.canal,
         estado: f.estado,
@@ -167,6 +186,10 @@ export async function entregarConsentimientosIris(
         let status: number | null = null
         let error: string | null = null
         let reintentable = true
+        let respuestaIris: { consentimiento_id: string | null; estado_vigente: 'acepta' | 'baja' | null } = {
+            consentimiento_id: null,
+            estado_vigente: null,
+        }
         try {
             const respuesta = await fetchConsentimientos(url, {
                 method: 'POST',
@@ -185,22 +208,31 @@ export async function entregarConsentimientosIris(
                 error = `Iris ${status} ${crudo.slice(0, 500)}`
                 reintentable =
                     status >= 500 || status === 429 || (status === 409 && /idempotencia_en_curso/.test(crudo))
+            } else {
+                respuestaIris = leerRespuesta(crudo)
             }
         } catch (e) {
             error = `Iris no respondió: ${e instanceof Error ? e.message : String(e)}`
         }
 
         if (!error) {
-            await db
-                .from('notify.consentimientos_iris')
-                .where('id', datos.id)
-                .update({
-                    entrega: 'enviado',
-                    ultimo_status: status,
-                    ultimo_error: null,
-                    enviado_en: db.knexRawQuery('now()'),
-                    updated_at: db.knexRawQuery('now()'),
-                })
+            await db.transaction(async (trx) => {
+                await trx
+                    .from('notify.consentimientos_iris')
+                    .where('id', datos.id)
+                    .update({
+                        entrega: 'enviado',
+                        ultimo_status: status,
+                        ultimo_error: null,
+                        consentimiento_id: respuestaIris.consentimiento_id,
+                        estado_vigente: respuestaIris.estado_vigente,
+                        enviado_en: trx.knexRawQuery('now()'),
+                        updated_at: trx.knexRawQuery('now()'),
+                    })
+                if (respuestaIris.estado_vigente && respuestaIris.estado_vigente !== datos.estado) {
+                    await adoptarEstadoVigente(trx, datos, respuestaIris.estado_vigente)
+                }
+            })
             resultado.enviados++
             continue
         }
@@ -226,6 +258,44 @@ export async function entregarConsentimientosIris(
         }
     }
     return resultado
+}
+
+function leerRespuesta(crudo: string): {
+    consentimiento_id: string | null
+    estado_vigente: 'acepta' | 'baja' | null
+} {
+    try {
+        const json = JSON.parse(crudo) as Record<string, unknown>
+        const id = json.consentimiento_id
+        const vigente = json.estado_vigente
+        return {
+            consentimiento_id:
+                typeof id === 'string' || typeof id === 'number' ? String(id).slice(0, 200) : null,
+            estado_vigente: vigente === 'acepta' || vigente === 'baja' ? vigente : null,
+        }
+    } catch {
+        return { consentimiento_id: null, estado_vigente: null }
+    }
+}
+
+/**
+ * Iris dejó vigente otro estado (p. ej. el cliente dio de baja en el chat): Argos lo adopta como
+ * último estado de contacto, salvo que ya tenga uno más nuevo.
+ */
+async function adoptarEstadoVigente(
+    trx: TransactionClientContract,
+    datos: VistaConsentimiento,
+    vigente: 'acepta' | 'baja',
+) {
+    await trx.rawQuery(
+        `INSERT INTO notify.contacto_iris (cliente_id, canal, estado, ocurrido_en, origen, empresa_id)
+         VALUES (?, ?, ?, ?, 'iris_vigente', ?)
+         ON CONFLICT (cliente_id, canal) DO UPDATE SET
+            estado = EXCLUDED.estado, origen = EXCLUDED.origen, empresa_id = EXCLUDED.empresa_id,
+            webhook_id = NULL, updated_at = now()
+         WHERE notify.contacto_iris.ocurrido_en <= EXCLUDED.ocurrido_en`,
+        [datos.cliente_id, datos.canal, vigente, datos.ocurrido_en, datos.empresa_id] as any[],
+    )
 }
 
 // ── Lectura (ficha del cliente) ──────────────────────────────────────────────────────────────

@@ -68,7 +68,12 @@ const notify: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             await exigirCliente(ctx, cuerpo.cliente_id)
             return new RegistrarConsentimientoWhatsapp().execute(
-                { cliente_id: cuerpo.cliente_id, estado: cuerpo.estado, origen: 'argos_panel' },
+                {
+                    cliente_id: cuerpo.cliente_id,
+                    estado: cuerpo.estado,
+                    origen: 'argos_panel',
+                    empresa_id: cuerpo.empresa_id ?? ctx.empresa?.activa ?? null,
+                },
                 ctx.contextoAccion(),
             )
         },

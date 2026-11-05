@@ -61,9 +61,11 @@ export function cuerpoAvisoIris(plantilla: string, aviso: NonNullable<OpcionesEn
     })
 }
 
+/** `GET /mensajeria/avisos/:id` (Iris 0.6.1): `estado` en_cola | bloqueado | entregado | fallido. */
 export interface ConsultaAvisoIris {
     estado: string | null
     motivo: string | null
+    detalle: string | null
     entregado_en: string | null
     leido_en: string | null
 }
@@ -189,6 +191,7 @@ export class CanalWhatsappIris implements Canal {
         return {
             estado: texto(json.estado),
             motivo: texto(json.motivo),
+            detalle: texto(json.detalle),
             entregado_en: texto(json.entregado_en),
             leido_en: texto(json.leido_en),
         }
@@ -197,7 +200,7 @@ export class CanalWhatsappIris implements Canal {
     async estado(id: string): Promise<EstadoEntrega> {
         const consulta = await this.consultar(id)
         if (consulta.estado === 'entregado') return 'entregado'
-        if (consulta.estado === 'fallido' || consulta.estado === 'bloqueado') return 'fallido'
+        if (consulta.estado === 'fallido') return 'fallido'
         if (consulta.estado === 'en_cola') return 'enviado'
         return 'desconocido'
     }
