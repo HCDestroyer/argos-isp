@@ -80,9 +80,29 @@ export const ConectorIris = definirEsquema(
                     '`revocado_por_iris`: Iris revocó su token (`POST /integraciones/iris/conexion/revocar`); ' +
                     '`canje_sin_uso`: nadie usó el token del canje en 24 h. Volver a conectar es otro canje',
             },
+            reconexion_pendiente_desde: {
+                ...nulable(instante),
+                description:
+                    'Contrato Iris 0.6.3: cuándo se canjeó un enlace nuevo sobre este conector en uso. Hasta su ' +
+                    'primera llamada autenticada, el conector sigue con el canje anterior (su `atk_`, URL y ' +
+                    'secretos); al confirmarse se aplica y se revoca el `atk_` anterior. null si no hay',
+            },
+            reconexion_vence_en: {
+                ...nulable(instante),
+                description:
+                    'Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior ' +
+                    'sigue igual. null si no hay',
+            },
             version: { type: 'integer', minimum: 0 },
         },
-        ['estado_canje', 'canje_vence_en', 'desconectado_en', 'motivo_desconexion'],
+        [
+            'estado_canje',
+            'canje_vence_en',
+            'desconectado_en',
+            'motivo_desconexion',
+            'reconexion_pendiente_desde',
+            'reconexion_vence_en',
+        ],
     ),
 )
 

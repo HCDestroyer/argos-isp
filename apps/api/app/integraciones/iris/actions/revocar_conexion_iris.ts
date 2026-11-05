@@ -2,7 +2,11 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Prohibido } from '#shared/errores'
 import { usuarioIris } from '#core/integraciones_iris'
 import { bloquearConectorIris } from '#integraciones/iris/configuracion'
-import { desconectarConectorIris, revocarTokenIrisSiVigente } from '#integraciones/iris/desconexion'
+import {
+    descartarPendienteIris,
+    desconectarConectorIris,
+    revocarTokenIrisSiVigente,
+} from '#integraciones/iris/desconexion'
 
 export interface EntradaRevocarConexionIris {
     /** id (`core.tokens_api.id`) del token que hizo la petición; no se llama `token_*` para que la auditoría no lo enmascare */
@@ -21,6 +25,8 @@ export interface SalidaRevocarConexionIris {
  *
  * - **Solo el token `atk_` del usuario técnico Iris**, y se revoca ese mismo token (403 con
  *   cualquier otra credencial). Un token ya revocado no pasa la autenticación: 401.
+ * - Si es el `atk_` de una **reconexión pendiente** (canje nuevo sobre un conector en uso): la
+ *   descarta y el conector sigue igual, con su `atk_` y sus secretos (`desconectado: false`).
  * - Si es el `atk_` del conector (`token_argos_id`): además lo desconecta (`desconectarConectorIris`:
  *   apagado, sin secretos, `desconectado_en` y `motivo_desconexion = revocado_por_iris`) sin borrar
  *   el historial. Otro token vigente del usuario técnico (uno creado a mano en el panel) solo se
@@ -52,6 +58,12 @@ export default class RevocarConexionIris extends DomainAction<
             throw new Prohibido('Solo el token de la integración Iris puede revocar su conexión')
         }
         const antes = await bloquearConectorIris(t)
+        if (antes && Number(antes.pendiente_token_argos_id) === Number(input.atk_id)) {
+            // reconexión pendiente: se descarta; el conector en uso no cambia
+            t.fijarEntidad('conector_iris', 1)
+            await descartarPendienteIris(t, antes, 'revocado_por_iris')
+            return { desconectado: false }
+        }
         if (antes && Number(antes.token_argos_id) === Number(input.atk_id) && !antes.desconectado_en) {
             await desconectarConectorIris(t, antes, 'revocado_por_iris')
             return { desconectado: true }

@@ -245,7 +245,8 @@ const iris: Ruta[] = [
         resumen: 'Iris revoca su propio token atk_ (por ejemplo, al rechazar un canje)',
         descripcion:
             'Contrato Iris 0.6.3. Solo con el token `atk_` del usuario técnico Iris, y revoca ese mismo token ' +
-            '(403 con cualquier otra credencial). Si es el `atk_` del último canje, el conector queda ' +
+            '(403 con cualquier otra credencial). Si es el `atk_` de una reconexión pendiente, la descarta y ' +
+            'el conector sigue igual con el `atk_` anterior. Si es el `atk_` del último canje, el conector queda ' +
             'desconectado: apagado, sin secretos, `estado_canje: desconectado` y `motivo_desconexion: ' +
             'revocado_por_iris` en `GET /integraciones/iris`, sin borrar el historial; volver a conectar es ' +
             'otro canje. Sin cuerpo; responde 204. Repetirlo con el mismo token responde 401 (el token ya no ' +

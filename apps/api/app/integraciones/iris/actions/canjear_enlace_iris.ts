@@ -6,7 +6,11 @@ import { generarSecretoWebhook } from '#integraciones/horus/firma'
 import { EnlaceVencido } from '#integraciones/horus/errores'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { hashTokenApi } from '#core/auth/token_api_guard'
-import { revocarTokenIrisSiVigente } from '#integraciones/iris/desconexion'
+import {
+    cifrarPendienteIris,
+    descartarPendienteIris,
+    revocarTokenIrisSiVigente,
+} from '#integraciones/iris/desconexion'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -17,10 +21,13 @@ import {
     FORMATO_TOKEN_IRIS,
     RUTA_RECEPTOR_IRIS,
     bloquearConectorIris,
+    conectorIrisEnUso,
     errorUrlIris,
     guardarConectorIris,
     origenIris,
     versionesIris,
+    type FilaConectorIris,
+    type JuegoPendienteIris,
 } from '#integraciones/iris/configuracion'
 
 export interface EntradaCanjearEnlaceIris {
@@ -102,8 +109,10 @@ export async function empresasDelAlcance(
  *
  * - Guarda cifrados el `iris_pat_`, el origen de Iris y su receptor con el secreto.
  * - Emite el `atk_` del usuario técnico Iris (`GenerarTokenIris`, que crea usuario y rol la primera
- *   vez) y revoca el del canje anterior; genera el secreto del receptor de Argos.
- * - El conector queda **apagado** hasta que un administrador lo encienda. Todo en una transacción.
+ *   vez); genera el secreto del receptor de Argos. El `atk_` anterior se revoca al momento solo si
+ *   el conector no estaba en uso; si lo estaba, al confirmar el canje nuevo (0.6.3).
+ * - El conector nuevo queda **apagado** hasta que un administrador lo encienda (en una reconexión,
+ *   `activo` se conserva). Todo en una transacción.
  * - La MISMA petición repetida antes de que el enlace venza recibe la misma respuesta (guardada
  *   cifrada) sin emitir otro token; cualquier otra con un código usado → 410.
  * - Informa las empresas del alcance del token (`empresas[]` con `id`, `nombre` y `nit`, y
@@ -121,6 +130,11 @@ export async function empresasDelAlcance(
  *   el primer uso autenticado del `atk_`; sin uso en 24 h, el cron `iris_canjes_sin_uso` lo revoca.
  *   Si Iris rechaza el canje, revoca el token con `POST /integraciones/iris/conexion/revocar`. La
  *   repetición de un canje cuyo token ya se revocó responde 410.
+ * - Contrato 0.6.3, **reconexión**: si el conector está en uso (`conectorIrisEnUso`), el canje no lo
+ *   toca: deja el juego nuevo en `pendiente_*` (cifrado) y el conector sigue con su `atk_`, URL y
+ *   secretos. La primera llamada autenticada del `atk_` nuevo lo aplica y revoca el anterior
+ *   (`iris.confirmar_canje`); si se revoca o vence sin uso, se descarta. Un canje nuevo reemplaza a
+ *   la reconexión pendiente anterior (revoca su `atk_`). `activo` no cambia en la reconexión.
  */
 export default class CanjearEnlaceIris extends DomainAction<
     EntradaCanjearEnlaceIris,
@@ -208,30 +222,55 @@ export default class CanjearEnlaceIris extends DomainAction<
         const errores = validarDatosDeIris(input)
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
-        const antes = await bloquearConectorIris(t)
-        if (antes?.token_argos_id) await revocarTokenIrisSiVigente(t, Number(antes.token_argos_id))
+        let antes = await bloquearConectorIris(t)
+        // 0.6.3: una reconexión pendiente anterior la reemplaza esta (se revoca su atk_)
+        if (antes?.pendiente_token_argos_id) antes = await descartarPendienteIris(t, antes, 'reemplazado')
         const emitido = await new GenerarTokenIris().execute(
             { nombre: `Iris (enlace de conexión ${new Date().toISOString().slice(0, 10)})` },
             t.ctx,
             { trx: t.trx },
         )
         const secretoEntrada = generarSecretoWebhook()
-        const despues = await guardarConectorIris(t, antes, {
-            activo: false,
-            url_base: origenIris(input.base_url).origen,
-            token_cifrado: cifrar(input.token),
-            webhook_salida_url: input.webhook.url,
-            webhook_salida_secreto_cifrado: cifrar(input.webhook.secreto),
-            webhook_entrada_secreto_cifrado: cifrar(secretoEntrada),
-            token_argos_id: Number(emitido.datos.id),
-            conectado_por_enlace_en: t.trx.knexRawQuery('now()'),
-            contrato: input.contrato ?? null,
-            receptor_argos: input.receptor_argos ?? null,
-            // 0.6.3: pendiente de confirmar hasta el primer uso del atk_ (cron `iris_canjes_sin_uso`)
-            canje_confirmado_en: null,
-            desconectado_en: null,
-            motivo_desconexion: null,
-        })
+        const urlBase = origenIris(input.base_url).origen!
+        let despues: FilaConectorIris
+        if (conectorIrisEnUso(antes)) {
+            // 0.6.3, reconexión: el conector en uso sigue igual (su atk_, URL y secretos) hasta la primera
+            // llamada autenticada del atk_ nuevo, que aplica este juego y revoca el anterior
+            t.anotarAuditoria({ reconexion: true })
+            const juego: JuegoPendienteIris = {
+                url_base: urlBase,
+                token: input.token,
+                webhook_salida_url: input.webhook.url,
+                webhook_salida_secreto: input.webhook.secreto,
+                webhook_entrada_secreto: secretoEntrada,
+                contrato: input.contrato ?? null,
+                receptor_argos: input.receptor_argos ?? null,
+            }
+            despues = await guardarConectorIris(t, antes, {
+                pendiente_token_argos_id: Number(emitido.datos.id),
+                pendiente_canjeado_en: t.trx.knexRawQuery('now()'),
+                pendiente_secreto_cifrado: cifrarPendienteIris(juego),
+            })
+        } else {
+            // sin conector en uso (nuevo, desconectado o con un canje que nadie usó): se reemplaza ya
+            if (antes?.token_argos_id) await revocarTokenIrisSiVigente(t, Number(antes.token_argos_id))
+            despues = await guardarConectorIris(t, antes, {
+                activo: false,
+                url_base: urlBase,
+                token_cifrado: cifrar(input.token),
+                webhook_salida_url: input.webhook.url,
+                webhook_salida_secreto_cifrado: cifrar(input.webhook.secreto),
+                webhook_entrada_secreto_cifrado: cifrar(secretoEntrada),
+                token_argos_id: Number(emitido.datos.id),
+                conectado_por_enlace_en: t.trx.knexRawQuery('now()'),
+                contrato: input.contrato ?? null,
+                receptor_argos: input.receptor_argos ?? null,
+                // 0.6.3: pendiente de confirmar hasta el primer uso del atk_
+                canje_confirmado_en: null,
+                desconectado_en: null,
+                motivo_desconexion: null,
+            })
+        }
         const salida: SalidaCanjearEnlaceIris = {
             token: emitido.token,
             webhook: { url: `${enlace.base_url}${RUTA_RECEPTOR_IRIS}`, secreto: secretoEntrada },
