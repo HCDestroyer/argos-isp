@@ -358,26 +358,23 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         const arbol = await plan()
         const simple = await plan()
         const router = await db.from('network.routers').where('id', routerId).firstOrFail()
-        // Inválida primero (perfil_ppp para IP estática): 422 con el porqué
+        // Modo único por router (§11): la API ya no crea excepciones por plan (422); una que ya existía
+        // (dato anterior) sigue aplicándose hasta unificar.
         const mal = await client
             .post(`/api/v1/planes/${arbol}/routers/${routerId}/estrategia-velocidad`)
             .bearerToken(tokenAdmin)
             .json({ estrategia_velocidad: { ip_estatica: { aplicacion: 'perfil_ppp' } } })
         mal.assertStatus(422)
-        assert.equal(mal.body().errors[0].rule, 'aplicacion_tipo')
-        await estado(
-            client
-                .post(`/api/v1/planes/${arbol}/routers/${routerId}/estrategia-velocidad`)
-                .bearerToken(tokenAdmin)
-                .json({
-                    estrategia_velocidad: {
-                        pppoe: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                        ip_estatica: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                        dhcp_fija: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
-                    },
-                }),
-            200,
-        )
+        assert.equal(mal.body().errors[0].rule, 'estrategia_por_router')
+        await db.table('network.planes_routers').insert({
+            plan_id: arbol,
+            router_id: routerId,
+            estrategia_velocidad: JSON.stringify({
+                pppoe: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+                ip_estatica: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+                dhcp_fija: { aplicacion: 'arbol_pcq', padre: 'por_plan', tipo_cola: 'pcq' },
+            }),
+        })
         assert.equal(router.control_velocidad, 'simple')
         const a = await wisp(client, arbol)
         const b = await wisp(client, simple)
@@ -524,6 +521,81 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         // aaa ya entrega la estrategia nueva a la próxima conexión
         const registro = await construirRegistroAaa(pppoe.userPpp)
         assert.equal(registro!.velocidad.aplicacion, 'pcq_plan')
+    })
+
+    test('unificar (modo único por router): los eventos de un pedido van en una sola corrida, sin cortar', async ({
+        client,
+        assert,
+    }) => {
+        // Dos planes con excepción WISP (pcq_plan) sobre un router con cola_simple.
+        const p1 = await plan(4)
+        const p2 = await plan(4)
+        const excepcion = { ip_estatica: { aplicacion: 'pcq_plan', tipo_cola: 'pcq', padre: 'ninguno' } }
+        for (const id of [p1, p2]) {
+            await db.table('network.planes_routers').insert({
+                plan_id: id,
+                router_id: routerId,
+                estrategia_velocidad: JSON.stringify(excepcion),
+            })
+        }
+        const s1 = await wisp(client, p1)
+        const s2 = await wisp(client, p2)
+        await reconciliar()
+        assert.include(cola(`${commentPlan(p1)}:pcq`)!.target!, `${s1.ipv4}/32`)
+        assert.isUndefined(cola(commentServicio(s1.id)))
+
+        // Lo que hace `routers.unificar_control_velocidad` (A1): quitar las excepciones y un evento por plan.
+        await db
+            .from('network.planes_routers')
+            .where('router_id', routerId)
+            .update({ estrategia_velocidad: null })
+        const requestId = unico('req')
+        const eventos: EventoEntrante[] = [p1, p2].map((planId, i) => ({
+            id: 900_000 + i,
+            evento: 'router.estrategia_cambiada',
+            requestId,
+            payload: {
+                router_id: routerId,
+                plan_id: planId,
+                de: excepcion,
+                a: null,
+                capas: ['aplicacion', 'tipo_cola'],
+                reconectar: false,
+                motivo: 'unificar',
+            },
+        }))
+        const entradas: Array<Parameters<typeof ejecutarCambioControl>[0]> = []
+        const consumidor = new ConsumidorRouterOS(OPCIONES, async (entrada) => {
+            entradas.push(entrada)
+            return ejecutarCambioControl(entrada, { ...OPCIONES, pausaMs: 0 })
+        })
+        // entrega repetida incluida: idempotente
+        for (const ev of [...eventos, eventos[0]!]) await consumidor.procesar(ev)
+
+        assert.lengthOf(new Set(entradas.map((x) => x.evento_id)), 1)
+        assert.isTrue(entradas.every((x) => x.plan_id === null && x.reconectar === false))
+        const terminadas = await db
+            .from('audit.red')
+            .where('router_id', routerId)
+            .whereRaw(`comando->>'operacion' = 'cambiar_control'`)
+            .whereRaw(`comando->>'fase' = 'terminar'`)
+            .whereRaw(`comando->>'evento_id' = ?`, [String(entradas[0]!.evento_id)])
+        assert.lengthOf(terminadas, 1)
+        // Los dos planes ya siguen la estrategia del router: cola propia creada, PCQ del plan borrada.
+        for (const [planId, s] of [
+            [p1, s1],
+            [p2, s2],
+        ] as const) {
+            assert.isDefined(cola(commentServicio(s.id)))
+            assert.isUndefined(cola(`${commentPlan(planId)}:pcq`))
+        }
+        assert.lengthOf(
+            await db
+                .from('audit.outbox')
+                .where('evento', 'sesion.desconexion_solicitada')
+                .where('request_id', requestId),
+            0,
+        )
     })
 
     test('cambiar de estrategia con reconectar: Disconnect por lotes a las sesiones PPPoE', async ({

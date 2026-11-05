@@ -408,7 +408,8 @@ test.group('IPAM IPv4', () => {
         const s3 = await crearServicioFila({ cliente_id: await crearClienteFila(), router_id: r })
         await db.transaction(async (trx) => {
             const asignada = await asignarIpv4(trx, { servicioId: s3, routerId: r })
-            assert.equal(asignada.ip, est.replace('.0/24', '.1'))
+            // sin gateway, la .1 es el gateway derivado (`contratos/red-acceso.md` §2): nunca se asigna
+            assert.equal(asignada.ip, est.replace('.0/24', '.2'))
         })
     })
 })

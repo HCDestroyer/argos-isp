@@ -99,8 +99,12 @@ async function guardar() {
         <div class="flex flex-wrap items-center justify-between gap-2">
             <h2
                 id="titulo-qos-router"
-                class="text-base font-semibold text-highlighted"
+                class="flex items-center gap-2 text-base font-semibold text-highlighted"
             >
+                <UIcon
+                    name="i-lucide-list-ordered"
+                    class="size-5 shrink-0 text-primary"
+                />
                 Prioridad por clases (QoS)
             </h2>
             <UButton
@@ -124,7 +128,7 @@ async function guardar() {
                 class="mt-0.5 size-4 shrink-0"
             />
             <span v-if="tiposConQos.length">Prendido en {{ tiposConQos.map(t => ETIQUETAS_TIPO_CONEXION[t]).join(', ') }}.</span>
-            <span v-else>Apagado: se prende en el control de velocidad (árbol de colas con PCQ y FastTrack verificado). Cada plan puede tener su excepción.</span>
+            <span v-else>Apagado: se prende en el control de velocidad (árbol de colas con PCQ y FastTrack verificado).</span>
         </p>
 
         <ProblemaAlerta

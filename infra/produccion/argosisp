@@ -287,7 +287,7 @@ estado_wireguard() {
     fi
     # ?incluir=servicio del script: datos de la red de clientes sin valor por defecto (.env.example)
     local v faltan=()
-    for v in WAN_INTERFAZ PPP_LOCAL_V4 POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO \
+    for v in WAN_INTERFAZ POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO \
         PORTAL_V4 PORTAL_V6 DNS_V4; do
         [ -n "$(leer_env "ROUTERS_SERVICIO_$v")" ] || faltan+=("ROUTERS_SERVICIO_$v")
     done

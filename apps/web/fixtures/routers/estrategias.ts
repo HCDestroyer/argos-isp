@@ -490,12 +490,25 @@ function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'
 
 function vistaReconciliar(router: Router): VistaPreviaReconciliar {
     if (!router.tiene_api_password || !router.api_usuario) {
-        return { router_id: router.id, cambios: [], menus: [], avisos: [], error: SIN_API }
+        return { router_id: router.id, cambios: [], menus: [], avisos: [], red_acceso: [], conflictos: [], error: SIN_API }
     }
     if (bd.routersSinRespuesta.includes(router.id)) {
-        return { router_id: router.id, cambios: [], menus: [], avisos: [], error: NO_RESPONDE }
+        return { router_id: router.id, cambios: [], menus: [], avisos: [], red_acceso: [], conflictos: [], error: NO_RESPONDE }
     }
     const cambios = pendientesReconciliar(router)
+    // Red de acceso administrada (A2, `red-acceso.md` §6): lo que Argos creó y el router aún no tiene
+    // (sin `ros_id`) se crea; en el RB-Centro el servidor tiene otra MTU en el router. Tras reconciliar, nada.
+    const reconciliado = bd.routersReconciliados.includes(router.id)
+    const red_acceso: VistaPreviaReconciliar['red_acceso'] = reconciliado
+        ? []
+        : [
+                ...bd.redAcceso.vlans.filter(v => v.router_id === router.id && v.estado === 'administrado' && !v.ros_id).map(v => ({ ruta: '/interface/vlan', clave: `argosisp:vlan:${v.id}`, accion: 'crear' as const })),
+                ...bd.redAcceso.servidoresPppoe.filter(s => s.router_id === router.id && s.estado === 'administrado').map(s => ({ ruta: '/interface/pppoe-server/server', clave: `argosisp:pppoe:${s.id}`, accion: (s.ros_id ? 'actualizar' : 'crear') as 'actualizar' | 'crear' })),
+            ]
+    // Formas de limitar que chocan (solo informa: Argos nunca borra lo ajeno).
+    const conflictos: VistaPreviaReconciliar['conflictos'] = router.id === 2
+        ? [{ codigo: 'arbol_y_simples', mensaje: 'El router limita con queue tree de Argos y tiene colas simples que no son de Argos: el tráfico que pasa por una cola simple no lo ve el árbol.', objetos: ['/queue/simple cliente-viejo-14', '/queue/simple cliente-viejo-22'] }]
+        : []
     const rutas = [...new Set(cambios.map(c => c.ruta))].sort((x, y) => x.localeCompare(y, 'en'))
     const cuenta = (ruta: string, accion: VistaPreviaReconciliar['cambios'][number]['accion']) => cambios.filter(c => c.ruta === ruta && c.accion === accion).length
     return {
@@ -503,6 +516,8 @@ function vistaReconciliar(router: Router): VistaPreviaReconciliar {
         cambios,
         menus: rutas.map(ruta => ({ ruta, crear: cuenta(ruta, 'crear'), actualizar: cuenta(ruta, 'actualizar'), borrar: cuenta(ruta, 'borrar'), mover: cuenta(ruta, 'mover') })),
         avisos: router.id === 2 ? ['ROUTERS_SERVICIO_WALLED_GARDEN no está configurado: el walled garden no se administra'] : [],
+        red_acceso,
+        conflictos,
         error: null,
     }
 }

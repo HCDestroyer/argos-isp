@@ -64,7 +64,7 @@
     },
     "ppp_local_v4": {
       "patron": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
-      "descripcion": "Dirección del router en los enlaces PPP y DNS de los clientes"
+      "descripcion": "Dirección del router en los enlaces PPP y DNS de los clientes: gateway efectivo de las redes IPv4 del router en Argos (lo calcula la API, no sale del entorno)"
     },
     "pool_v4_rangos": {
       "patron": "^[0-9.,/-]+$",

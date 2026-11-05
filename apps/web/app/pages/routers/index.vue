@@ -45,13 +45,15 @@ const columnas: TableColumn<RouterNas>[] = [
     { accessorKey: 'nombre', header: 'Router', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'nas_ip', header: 'NAS', meta: SOLO_ESCRITORIO },
     { id: 'contacto', header: 'Contacto', meta: SOLO_ANCHO },
-    { id: 'control', header: 'Colas', meta: SOLO_ANCHO },
+    { id: 'control', header: 'Control de velocidad', meta: SOLO_ANCHO },
     { id: 'capacidad', header: 'Capacidad (bajada / subida)', meta: SOLO_ESCRITORIO },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
 
-function controlDe(router: RouterNas): ControlVelocidad {
-    return router.control_velocidad ?? (router.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')
+/** El modo del router (el de PPPoE, como la primera tarjeta de la ficha): mismo texto e icono que la ficha. */
+function modoDe(router: RouterNas): { etiqueta: string, icono: string } {
+    const aplicacion = router.estrategia_velocidad.pppoe.aplicacion
+    return { etiqueta: OPCIONES_APLICACION[aplicacion].etiqueta, icono: DETALLE_APLICACION[aplicacion].icono }
 }
 
 function capacidad(router: RouterNas): string {
@@ -177,7 +179,7 @@ onMounted(() => void lista.recargar())
                                 compacto
                                 class="sm:hidden"
                             />
-                            <span class="text-xs text-muted sm:hidden">{{ CONTROLES_VELOCIDAD[controlDe(row.original)].etiqueta }} · {{ capacidad(row.original) }}</span>
+                            <span class="text-xs text-muted sm:hidden">{{ modoDe(row.original).etiqueta }} · {{ capacidad(row.original) }}</span>
                         </div>
                     </template>
                     <template #nas_ip-cell="{ row }">
@@ -195,8 +197,8 @@ onMounted(() => void lista.recargar())
                     </template>
                     <template #control-cell="{ row }">
                         <UBadge
-                            :label="CONTROLES_VELOCIDAD[controlDe(row.original)].etiqueta"
-                            :icon="CONTROLES_VELOCIDAD[controlDe(row.original)].icono"
+                            :label="modoDe(row.original).etiqueta"
+                            :icon="modoDe(row.original).icono"
                             color="neutral"
                             variant="subtle"
                             size="sm"

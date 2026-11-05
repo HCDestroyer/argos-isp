@@ -195,6 +195,17 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
     'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
+    // Núcleo de routers: el control de velocidad, la salud y la red de acceso van en la ficha (`routers.ver`) y el panel lateral.
+    'RouterControlVelocidad.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue', 'components/RouterVelocidad.vue'], exentos: { 'components/RouterVelocidad.vue': ['routers.ver'] } },
+    'RouterSalud.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    // Red de acceso (`contratos/red-acceso.md`, A1): la pestaña con `red_acceso.ver`; cada modal con el permiso de su acción.
+    'RouterRedAcceso.vue': { permisos: ['red_acceso.ver', 'routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'OltsSlideover.vue': { permisos: ['red_acceso.ver', 'olts.crear', 'olts.editar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['olts.crear', 'olts.editar'] } },
+    'RedAccesoDescubrir.vue': { permisos: ['red_acceso.descubrir', 'red_acceso.adoptar'], desde: ['components/RouterRedAcceso.vue'], exentos: { 'components/RouterRedAcceso.vue': ['red_acceso.adoptar'] } },
+    'VlanModal.vue': { permisos: ['vlans.crear', 'vlans.editar'], desde: ['components/RouterRedAcceso.vue'] },
+    'TomarControlModal.vue': { permisos: ['red_acceso.tomar_control'], desde: ['components/RouterRedAcceso.vue'] },
+    'ServidorPppoeModal.vue': { permisos: ['servidores_pppoe.crear', 'servidores_pppoe.editar'], desde: ['components/RouterRedAcceso.vue'] },
+    'RouterExcepcionesAviso.vue': { permisos: ['routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
     // Menú de acciones del router: lo montan la lista y la ficha (las dos con `routers.ver`).
     'RouterAcciones.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue', 'pages/routers/[id].vue'] },
     // Direccionamiento del router (contratos/pools.md): lo monta la ficha (`routers.ver`) y abre los
@@ -207,7 +218,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Conexión por WireGuard (contratos/conexion-routers.md): la ficha monta la sección (`routers.ver`) y
     // cada botón comprueba su permiso; el script lo abren la sección y el menú de acciones.
     'RouterConexionSeccion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
-    'RouterPruebaConexionModal.vue': { permisos: ['routers.probar_conexion'], desde: ['components/RouterAcciones.vue'] },
+    'RouterPruebaConexionModal.vue': { permisos: ['routers.probar_conexion'], desde: ['components/RouterAcciones.vue', 'pages/routers/[id].vue'] },
     'RouterClaveModal.vue': { permisos: ['routers.conexion_clave'], desde: ['components/RouterConexionSeccion.vue'] },
     // Con `modo="rotar"` usa `routers.rotar_conexion`; el menú de acciones solo lo abre para generar.
     'RouterScriptModal.vue': { permisos: ['routers.generar_script', 'routers.rotar_conexion'], desde: ['components/RouterConexionSeccion.vue', 'components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.rotar_conexion'] } },
@@ -249,11 +260,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
     // Control de velocidad por capas (`contratos/control-velocidad.md`, A2).
     // La matriz pide `routers.ver`: «Velocidad» solo se abre desde la lista de routers, que ya lo exige.
-    'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterVelocidad.vue'], exentos: { 'components/RouterVelocidad.vue': ['routers.ver'] } },
-    'EstrategiaPlanModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/PlanRouters.vue'] },
+    'EstrategiaVelocidadModal.vue': { permisos: ['routers.cambiar_control_velocidad', 'routers.ver'], desde: ['components/RouterControlVelocidad.vue'], exentos: { 'components/RouterControlVelocidad.vue': ['routers.ver'] } },
     'SincronizarPlanModal.vue': { permisos: ['planes.sincronizar'], desde: ['components/PlanRouters.vue', 'pages/planes/[id].vue'] },
     // «Reconciliar ahora» con vista previa: desde el menú del router, «Velocidad» y el chequeo del corte de «Probar conexión».
-    'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterVelocidad.vue', 'components/RouterPruebaConexionModal.vue'] },
+    'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterRedAcceso.vue', 'components/RouterPruebaConexionModal.vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },

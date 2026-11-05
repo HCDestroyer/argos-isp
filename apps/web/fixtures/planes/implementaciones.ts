@@ -33,6 +33,34 @@ export const implementacionesPlan: PlanRouter[] = [
         created_at: creado,
         updated_at: creado,
     },
+    {
+        id: 2,
+        plan_id: 4,
+        router_id: 2,
+        profile_ppp: null,
+        pool_ipv4: null,
+        pool_ipv6_enlace: null,
+        pool_ipv6_delegacion: null,
+        local_address: null,
+        no_crear_reglas: false,
+        rate_limit_override: null,
+        reuso: null,
+        garantizado_pct: null,
+        rafaga_bajada_kbps: null,
+        rafaga_subida_kbps: null,
+        rafaga_umbral_pct: null,
+        rafaga_segundos: null,
+        prioridad: null,
+        // Excepción heredada de antes del modo único por router: ráfaga propia en el árbol del CCR-Mixco.
+        estrategia_velocidad: {
+            pppoe: { extras: { rafaga: true } },
+            ip_estatica: { extras: { rafaga: true } },
+            dhcp_fija: { extras: { rafaga: true } },
+        },
+        version: 1,
+        created_at: creado,
+        updated_at: creado,
+    },
 ]
 
 const TEXTOS = ['profile_ppp', 'pool_ipv4', 'pool_ipv6_enlace', 'pool_ipv6_delegacion', 'local_address', 'rate_limit_override'] as const

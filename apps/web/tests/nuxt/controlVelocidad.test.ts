@@ -44,7 +44,8 @@ describe('control de velocidad por capas', () => {
         expect(MATRIZ.atajos.arbol_pcq).toEqual(bd.routers[1]?.estrategia_velocidad)
         expect(MATRIZ.tipos_cola.find(t => t.valor === 'cake')?.routeros_minimo).toBe('7')
         expect(MATRIZ.aplicaciones.find(a => a.valor === 'pcq_plan')).toMatchObject({ familia: 'simple', coa_en_vivo: false, tipos_cola: ['pcq'] })
-        expect(bd.implementacionesPlan.every(i => i.estrategia_velocidad === null)).toBe(true)
+        // Modo único por router: solo queda una excepción heredada (plan 4 en el CCR-Mixco) para «Unificar».
+        expect(bd.implementacionesPlan.filter(i => i.estrategia_velocidad !== null).map(i => [i.plan_id, i.router_id])).toEqual([[4, 2]])
     })
 
     it('estrategia efectiva: el plan sobrescribe capa por capa y los extras campo por campo', () => {

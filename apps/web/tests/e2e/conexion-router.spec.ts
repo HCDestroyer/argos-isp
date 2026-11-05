@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Conexión del router por WireGuard (`contratos/conexion-routers.md`), en escritorio y teléfono:
@@ -11,6 +11,7 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
     await ir(page, 'Routers', /\/routers$/)
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
+    await pestanaRouter(page, 'Conexión')
 
     const conexion = page.locator('[data-prueba="conexion-router"]')
     await expect(conexion.locator('[data-prueba="estado-tunel"]')).toHaveText('Conectado')
@@ -69,6 +70,7 @@ test('router sin secreto RADIUS: el script explica qué falta', async ({ page })
     await page.locator('[data-prueba="vista-routers"]').getByRole('tab', { name: 'Inactivos' }).click()
     await expect(page).toHaveURL(/vista=inactivos/)
     await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: /RB-Bodega/ }).click()
+    await pestanaRouter(page, 'Conexión')
     const conexion = page.locator('[data-prueba="conexion-router"]')
     await expect(conexion.locator('[data-prueba="estado-tunel"]')).toHaveText('Sin configurar')
     await conexion.locator('[data-prueba="abrir-script"]').click()

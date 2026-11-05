@@ -22,6 +22,7 @@ import { reconciliarIncluidos } from '#core/adicionales'
 import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 import { telefonoParaGuardar } from '#core/telefonos'
+import { resolverServidorServicio } from '#network/red_acceso/servicio'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -60,6 +61,11 @@ export interface EntradaCrearServicio {
     ipv4?: string
     /** red IPv4 del router de la que asignar (pedido de A4); si no viene, la regla general */
     red_ipv4_id?: number
+    /**
+     * Servidor PPPoE del router (`contratos/red-acceso.md` §3). Sin él se deriva de la red; con varios
+     * candidatos, 422 `servidor_pppoe_requerido`. La IPv4 sale de su red y los prefijos de sus pools.
+     */
+    servidor_pppoe_id?: number | null
     ipv6_modo?: ModoIpv6
     ipv6_duid?: string | null
     prefijo_delegado_v6?: string
@@ -171,6 +177,15 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         const contactoTelefono =
             telefonoParaGuardar('contacto_telefono', input.contacto_telefono, undefined, t.ctx) ?? null
 
+        const servidor = await resolverServidorServicio(t.trx, {
+            routerId: input.router_id,
+            tipo,
+            empresaId,
+            servidorId: input.servidor_pppoe_id,
+            ipv4: input.ipv4,
+            redIpv4Id: input.red_ipv4_id,
+        })
+
         let userPpp: string | null = null
         let passPpp: string | null = null
         if (tipo === 'pppoe') {
@@ -203,6 +218,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 excluir_firewall: input.excluir_firewall ?? false,
                 ipv6_modo: modo,
                 ipv6_duid: input.ipv6_duid ?? null,
+                servidor_pppoe_id: servidor?.id ?? null,
                 ...(input.estado_inicial === 'pendiente_instalacion'
                     ? { estado: 'pendiente_instalacion', instalado_en: null }
                     : {}),
@@ -219,8 +235,12 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             modo,
             tipoConexion: tipo,
             ipv4: input.ipv4,
-            redIpv4Id: input.red_ipv4_id,
+            // sin IP ni red pedidas, la IPv4 sale de la red del servidor PPPoE
+            redIpv4Id: input.red_ipv4_id ?? (input.ipv4 ? undefined : (servidor?.red_ipv4_id ?? undefined)),
             prefijoEstatico: input.prefijo_delegado_v6,
+            poolsV6: servidor
+                ? { enlace: servidor.ipv6_pool_enlace_id, delegacion: servidor.ipv6_pool_delegacion_id }
+                : undefined,
         })
 
         await registrarTramo(t.trx, id, 'alta')

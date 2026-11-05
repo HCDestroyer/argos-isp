@@ -37,6 +37,9 @@ import {
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { estrategiaLocal } from '#network/routeros/pppoe_local'
 import { perfilQosRouter } from '#network/consultas/qos'
+import { leerRedGateway, type RedGateway } from '#network/routeros/local_address'
+import { sqlHostGatewayEfectivo, sqlLocalAddress } from '#network/red_acceso/local_address'
+import type { ServidorGateway } from '#network/routeros/red_acceso'
 
 /**
  * Lecturas del dispatcher de RouterOS. Todo sale de Postgres en el momento de aplicar (nunca del
@@ -117,6 +120,20 @@ function consultaServicios(cliente: QueryClientContract) {
                 `(SELECT host(a.ip) FROM network.ipv4_asignaciones a
                    WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS ipv4`,
             ),
+            // local-address (pppoe-local.md §2 bis): la red de la IPv4 fija y la del servidor PPPoE (avisos y perfiles).
+            cliente.raw(
+                `(SELECT jsonb_build_object('red_id', r4.id, 'cidr', r4.cidr::text, 'gateway', ${sqlHostGatewayEfectivo('r4')})
+                    FROM network.ipv4_asignaciones a JOIN network.redes_ipv4 r4 ON r4.id = a.red_id
+                   WHERE a.servicio_id = s.id AND a.fin IS NULL ORDER BY a.id DESC LIMIT 1) AS red_ipv4`,
+            ),
+            cliente.raw(
+                `(SELECT jsonb_build_object('red_id', r4.id, 'cidr', r4.cidr::text, 'gateway', ${sqlHostGatewayEfectivo('r4')})
+                    FROM network.servidores_pppoe sp JOIN network.redes_ipv4 r4 ON r4.id = sp.red_ipv4_id
+                   WHERE sp.id = s.servidor_pppoe_id) AS red_servidor`,
+            ),
+            // La regla única de A1 (`contratos/red-acceso.md` §2): red de la IPv4 o red del servidor.
+            cliente.raw(`${sqlLocalAddress('s')} AS local_address`),
+            's.servidor_pppoe_id',
             cliente.raw(
                 // Solo el prefijo delegado (propio del servicio): el /64 de enlace de WISP es el del
                 // segmento, compartido con RA (`infra/mikrotik/README.md`), y no va en la cola.
@@ -178,6 +195,13 @@ function aServicio(fila: FilaServicio): ServicioRed {
         user_ppp: texto(fila.user_ppp),
         pass_ppp: texto(fila.pass_ppp),
         prefijo_enlace: texto(fila.prefijo_enlace),
+        red_ipv4: leerRedGateway(fila.red_ipv4),
+        red_servidor: leerRedGateway(fila.red_servidor),
+        local_address: texto(fila.local_address),
+        servidor_pppoe_id:
+            fila.servidor_pppoe_id === null || fila.servidor_pppoe_id === undefined
+                ? null
+                : Number(fila.servidor_pppoe_id),
         pools: {
             ipv4: texto(fila.pool_ipv4),
             enlace: texto(fila.pool_ipv6_enlace),
@@ -359,6 +383,28 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
         hijas.targets.push(...targetsServicio(s))
         hijas.limit_at_kbps.subida += limitAt.subida
         hijas.limit_at_kbps.bajada += limitAt.bajada
+    }
+    // local-address del perfil (`local_address.ts`): red del pool del plan y redes de sus PPPoE.
+    for (const g of grupos.values()) {
+        if (!g.perfil) continue
+        const delPlan = servicios.filter(
+            (s) =>
+                s.plan_id === g.plan_id &&
+                s.tipo_conexion === 'pppoe' &&
+                s.estado !== 'retirado' &&
+                s.estado !== 'pendiente_instalacion',
+        )
+        g.redes = {
+            // la red de cada servicio, como `sqlLocalAddress`: la de su IPv4 o, sin IPv4, la de su servidor
+            servicios: delPlan.flatMap((s) => {
+                const red = s.red_ipv4 ?? (s.ipv4 ? null : s.red_servidor)
+                return red ? [red] : []
+            }),
+            router: router.redes_ipv4 ?? [],
+        }
+        g.servidores = [
+            ...new Set(delPlan.flatMap((s) => (s.servidor_pppoe_id ? [s.servidor_pppoe_id] : []))),
+        ].sort((a, b) => a - b)
     }
     return [...grupos.values()].sort((a, b) => a.plan_id - b.plan_id || a.familia.localeCompare(b.familia))
 }
@@ -557,9 +603,55 @@ export async function routerDispatcher(
             capacidad_bajada_kbps: kbps(r.capacidad_bajada_kbps),
             capacidad_subida_kbps: kbps(r.capacidad_subida_kbps),
             qos: await perfilQosRouter(r.qos_perfil_id === null ? null : Number(r.qos_perfil_id), cliente),
+            redes_ipv4: await redesGatewayDeRouter(Number(r.id), cliente),
+            servidores_pppoe: await servidoresGatewayDeRouter(Number(r.id), cliente),
         },
         con_credenciales: texto(r.api_usuario) !== null && texto(r.api_password) !== null,
     }
+}
+
+/** Redes IPv4 del router con su gateway efectivo (`sqlGatewayEfectivo`: el definido o la primera IP utilizable). */
+export async function redesGatewayDeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<RedGateway[]> {
+    const filas = (await cliente
+        .from('network.redes_ipv4 as r')
+        .where('r.router_id', routerId)
+        .orderBy('r.id')
+        .select(
+            'r.id',
+            cliente.raw('r.cidr::text AS cidr'),
+            cliente.raw(`${sqlHostGatewayEfectivo('r')} AS gateway`),
+        )) as Array<{
+        id: number
+        cidr: string
+        gateway: string | null
+    }>
+    return filas.flatMap((f) => leerRedGateway({ red_id: f.id, cidr: f.cidr, gateway: f.gateway }) ?? [])
+}
+
+/** Servidores PPPoE activos del router con el gateway de su red (`localAddressServidor` en bloque). */
+export async function servidoresGatewayDeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<ServidorGateway[]> {
+    const filas = (await cliente
+        .from('network.servidores_pppoe as sp')
+        .leftJoin('network.redes_ipv4 as r', 'r.id', 'sp.red_ipv4_id')
+        .where('sp.router_id', routerId)
+        .where('sp.activo', true)
+        .orderBy('sp.id')
+        .select(
+            'sp.id',
+            cliente.raw(
+                `CASE WHEN r.id IS NULL THEN NULL ELSE ${sqlHostGatewayEfectivo('r')} END AS gateway`,
+            ),
+        )) as Array<{
+        id: number
+        gateway: string | null
+    }>
+    return filas.map((f) => ({ id: Number(f.id), local_address: f.gateway }))
 }
 
 /** Redes IPv4 de clientes del router (`argos-clientes`, exclusión de FastTrack). */

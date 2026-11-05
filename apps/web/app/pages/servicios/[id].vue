@@ -211,11 +211,16 @@ async function alCrearPromesa() {
     }
 }
 
+/** Servidor PPPoE del servicio (`red_acceso.ver`), para su nombre; sin permiso se ve el id. */
+const servidorPppoe = shallowRef<ServidorPppoe | null>(null)
+
 async function cargarRelacionados(actual: Servicio) {
-    const [resultadoPlanes, resultadoPlantillas] = await Promise.all([
+    const [resultadoPlanes, resultadoPlantillas, resultadoServidor] = await Promise.all([
         puede('planes.ver') ? usePlanes().listar() : null,
         puede('plantillas.ver') && actual.plantilla_facturacion_id ? usePlantillas().listar() : null,
+        puede('red_acceso.ver') && actual.servidor_pppoe_id ? useRedAcceso().verServidor(actual.servidor_pppoe_id) : null,
     ])
+    servidorPppoe.value = resultadoServidor?.ok ? resultadoServidor.data : null
     plan.value = resultadoPlanes?.ok ? (resultadoPlanes.data.data.find(p => p.id === actual.plan_id) ?? null) : null
     plantilla.value = resultadoPlantillas?.ok ? (resultadoPlantillas.data.find(p => p.id === actual.plantilla_facturacion_id) ?? null) : null
 }
@@ -625,6 +630,19 @@ onMounted(cargar)
                         <DatoFicha
                             etiqueta="Tipo de conexión"
                             :valor="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
+                        />
+                        <DatoFicha
+                            v-if="conPppoe && servicio.servidor_pppoe_id"
+                            etiqueta="Servidor PPPoE"
+                            :valor="servidorPppoe?.nombre ?? `Servidor #${servicio.servidor_pppoe_id}`"
+                            data-prueba="servicio-servidor-pppoe"
+                        />
+                        <DatoFicha
+                            v-if="conPppoe"
+                            etiqueta="Gateway (local-address)"
+                            :valor="servicio.local_address ? `${servicio.local_address}${servicio.local_address_derivado ? `, ${MARCA_GATEWAY_DERIVADO}` : ''}` : 'Sin red IPv4'"
+                            :mono="Boolean(servicio.local_address)"
+                            data-prueba="servicio-local-address"
                         />
                         <DatoFicha
                             v-if="!conPppoe"

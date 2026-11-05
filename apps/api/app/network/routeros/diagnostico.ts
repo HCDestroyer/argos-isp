@@ -26,7 +26,17 @@ import {
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { estadoVelocidadRouter, sobrantesVelocidad } from '#network/routeros/velocidad_router'
+import {
+    estadoVelocidadRouter,
+    gatewaysDeRedes,
+    localAddressCorte,
+    objetoAlDia,
+    sobrantesVelocidad,
+} from '#network/routeros/velocidad_router'
+import { detectarConflictos, type Conflicto } from '#network/routeros/red_acceso'
+import { derivaAcceso, leerAcceso } from '#network/routeros/aplicar_red_acceso'
+import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
+import { familia } from '#network/estrategia_velocidad'
 import {
     estadoDeseado,
     estadoVacio,
@@ -70,6 +80,10 @@ export interface VistaPreviaReconciliar {
     cambios: CambioVistaPrevia[]
     menus: Array<{ ruta: string; crear: number; actualizar: number; borrar: number; mover: number }>
     avisos: string[]
+    /** Deriva de la red de acceso administrada (`derivaAcceso`): VLAN, perfil del servidor y servidor */
+    red_acceso: Array<{ ruta: string; clave: string; accion: 'crear' | 'actualizar' | 'borrar' }>
+    /** Conflictos de control de velocidad en el router (`detectarConflictos`); solo informa */
+    conflictos: Conflicto[]
     /** El router no respondió o no tiene credenciales: no hay vista previa */
     error: string | null
 }
@@ -89,6 +103,8 @@ export async function vistaPreviaReconciliar(
         cambios: [],
         menus: [],
         avisos: [],
+        red_acceso: [],
+        conflictos: [],
         error: null,
     }
     const todos = await serviciosVigentesDeRouter(routerId)
@@ -103,6 +119,8 @@ export async function vistaPreviaReconciliar(
                 {
                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                     redes_v4: await redesV4DeRouter(routerId),
+                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
                 },
                 lecturaCorte.get('/ppp/profile') ?? [],
             )
@@ -122,7 +140,7 @@ export async function vistaPreviaReconciliar(
                 const clave = o.clave.comment ?? o.clave.name ?? ''
                 if (existentes.length === 0) {
                     salida.cambios.push({ ruta: o.ruta, clave, accion: 'crear', grupo: 'velocidad' })
-                } else if (existentes.length > 1 || !igual(o.propiedades, existentes[0])) {
+                } else if (existentes.length > 1 || !objetoAlDia(o, existentes[0]!)) {
                     salida.cambios.push({ ruta: o.ruta, clave, accion: 'actualizar', grupo: 'velocidad' })
                 }
             }
@@ -133,6 +151,35 @@ export async function vistaPreviaReconciliar(
                     accion: 'borrar',
                     grupo: 'velocidad',
                 })
+            }
+
+            // Conflictos de formas de limitar (antes de aplicar; contratos/red-acceso.md §6)
+            const enUso = estrategiasEnUso(router.velocidad, todos)
+            const ppp = router.velocidad.estrategias.pppoe
+            salida.conflictos = detectarConflictos({
+                pppoe_por_radius:
+                    router.red.modo_seguridad !== 'api' &&
+                    (ppp.aplicacion === 'radius_rate_limit' || ppp.aplicacion === 'perfil_ppp'),
+                usa_arbol: enUso.some((e) => familia(e.aplicacion) === 'arbol'),
+                usa_simples: enUso.some(
+                    (e) =>
+                        familia(e.aplicacion) === 'simple' &&
+                        (e.aplicacion === 'cola_simple' ||
+                            e.aplicacion === 'pcq_plan' ||
+                            e.padre !== 'ninguno'),
+                ),
+                colas_simples: lectura.get('/queue/simple') ?? [],
+                arbol: lectura.get('/queue/tree') ?? [],
+                perfiles: lectura.get('/ppp/profile') ?? [],
+            })
+
+            // Red de acceso administrada: deriva por objeto (crear / actualizar / borrar)
+            const acceso = await redAccesoDeRouter(routerId)
+            const lecturaAcceso = await leerAcceso(cliente)
+            const deriva = derivaAcceso(acceso.vlans, acceso.servidores, lecturaAcceso)
+            salida.avisos.push(...deriva.avisos)
+            for (const d of deriva.deriva) {
+                salida.red_acceso.push({ ruta: d.ruta, clave: d.comment, accion: d.accion })
             }
 
             // Servicios
@@ -792,7 +839,12 @@ export async function diagnosticoCorte(
             const fasttrack = pideFasttrack(estrategiasEnUso(router.velocidad, todos))
             const corte = estadoCorteRouter(
                 config,
-                { fasttrack, redes_v4: await redesV4DeRouter(routerId) },
+                {
+                    fasttrack,
+                    redes_v4: await redesV4DeRouter(routerId),
+                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
+                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
+                },
                 lectura.get('/ppp/profile') ?? [],
             )
             const plan = planCorte(corte, lectura).filter((c) => c.accion !== 'borrar')

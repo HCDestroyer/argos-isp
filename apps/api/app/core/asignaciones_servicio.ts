@@ -174,6 +174,8 @@ export async function reconciliarAsignaciones(
         /** red de la que tomar la IPv4 (debe ser del router) */
         redIpv4Id?: number | null
         prefijoEstatico?: string | null
+        /** pools IPv6 del servidor PPPoE del servicio, preferidos al reservar (`contratos/red-acceso.md` §3) */
+        poolsV6?: { enlace: number | null; delegacion: number | null }
     },
 ): Promise<Asignaciones> {
     const { servicioId, routerId, plan, modo } = entrada
@@ -214,12 +216,19 @@ export async function reconciliarAsignaciones(
 
     switch (modo) {
         case 'radius_servicio':
-            await reservarPrefijo(trx, { servicioId, routerId, tipo: 'enlace', tamano: 64 })
+            await reservarPrefijo(trx, {
+                servicioId,
+                routerId,
+                tipo: 'enlace',
+                tamano: 64,
+                poolPreferido: entrada.poolsV6?.enlace,
+            })
             await reservarPrefijo(trx, {
                 servicioId,
                 routerId,
                 tipo: 'delegacion',
                 tamano: plan.tamano_prefijo_delegado,
+                poolPreferido: entrada.poolsV6?.delegacion,
             })
             break
         case 'duid':

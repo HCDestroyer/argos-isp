@@ -5,8 +5,12 @@ import type { RouterVista } from '#network/consultas/routers'
  * Valores del grupo `servicio` de `infra/mikrotik/variables.json` para `?incluir=servicio`
  * (`conexion-servicio.rsc.tpl`: PPPoE, perfiles y corte). Argos todavía no guarda estos datos por
  * router, así que salen del entorno de la API (`ROUTERS_SERVICIO_<NOMBRE>`, p. ej.
- * `ROUTERS_SERVICIO_PPP_LOCAL_V4`), salvo:
+ * `ROUTERS_SERVICIO_POOL_V4_RANGOS`), salvo:
  *
+ * - `ppp_local_v4` (el `local-address` de los perfiles `default` y `suspendido` del script): **nunca del
+ *   entorno**; es el gateway efectivo de las redes IPv4 del router (`contratos/red-acceso.md` §2: el
+ *   `gateway` o la primera IP utilizable). Sin redes, o con redes de gateways distintos, 422
+ *   `servicio_incompleto` (con varios gateways el `local-address` lo pone Argos por servidor PPPoE);
  * - `pppoe_interfaz`: `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`;
  * - `susp_rate_limit`: `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` o `ROUTEROS_SUSPENDIDO_RATE_LIMIT`
  *   (256k/256k, el del perfil de corte);
@@ -40,13 +44,27 @@ export const variableEntorno = (nombre: string) => `ROUTERS_SERVICIO_${nombre.to
 
 export function valoresServicio(
     router: Pick<RouterVista, 'interfaz_clientes'>,
+    /** gateways efectivos (distintos) de las redes IPv4 del router */
+    gateways: string[],
     entorno: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
     const valores: Record<string, string> = {}
     const faltan: string[] = []
     for (const nombre of VARIABLES_SERVICIO) {
-        let valor = leer(variableEntorno(nombre))
+        let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))
+        if (nombre === 'ppp_local_v4') {
+            const unicos = [...new Set(gateways)]
+            if (unicos.length === 1) valor = unicos[0]!
+            else {
+                faltan.push(
+                    unicos.length === 0
+                        ? 'una red IPv4 del router (su gateway es el local-address)'
+                        : `un solo gateway en las redes del router (hay ${unicos.join(', ')}; con varios, Argos pone el local-address por servidor PPPoE)`,
+                )
+                continue
+            }
+        }
         if (nombre === 'pppoe_interfaz') {
             valor = router.interfaz_clientes ?? valor ?? leer('ROUTEROS_INTERFAZ_CLIENTES')
         }

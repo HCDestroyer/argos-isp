@@ -505,6 +505,20 @@ export const Servicio = definirEsquema(
             prefijo_delegado_v6: nulable(texto),
             ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
             ipv6_duid: nulable(texto),
+            servidor_pppoe_id: {
+                ...nulable(id),
+                description:
+                    'Servidor PPPoE del router (contratos/red-acceso.md §3); null fuera de PPPoE o en routers sin servidores',
+            },
+            local_address: {
+                ...nulable(texto),
+                description:
+                    'local-address del PPPoE: gateway de la red de su IPv4 o de su servidor; sin gateway, la primera IP utilizable (calculado; nunca el del perfil default)',
+            },
+            local_address_derivado: {
+                ...booleano,
+                description: 'true: la red no tiene gateway y el local-address es su primera IP utilizable',
+            },
             // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
             cliente_nombre: texto,
             plan_nombre: texto,
@@ -552,7 +566,16 @@ export const Servicio = definirEsquema(
         // `warnings` es opcional de verdad: solo viene al crear o editar. `referencia`, `contacto_nombre` y
         // `contacto_telefono` (Iris 0.5.0): la API siempre los envía; opcionales en el esquema hasta que
         // las fixtures del panel los traigan (pedido a A4 en `a1.md`)
-        ['warnings', 'referencia', 'contacto_nombre', 'contacto_telefono'],
+        // `servidor_pppoe_id` y `local_address` (red de acceso, 2026-11-05): igual, opcionales hasta las fixtures
+        [
+            'warnings',
+            'referencia',
+            'contacto_nombre',
+            'contacto_telefono',
+            'servidor_pppoe_id',
+            'local_address',
+            'local_address_derivado',
+        ],
     ),
 )
 
@@ -929,64 +952,81 @@ export const RevocacionVinculaciones = definirEsquema(
  */
 export const AaaServicio = definirEsquema(
     'AaaServicio',
-    objeto({
-        servicio_id: id,
-        version: { type: 'integer', minimum: 1, description: 'core.servicios.version (diagnóstico)' },
-        user_ppp: texto,
-        pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
-        estado: EstadoServicio,
-        router_id: id,
-        control_velocidad: {
-            ...enumerado(['simple', 'arbol_pcq']),
-            description: 'network.routers.control_velocidad del router del servicio',
-        },
-        plan: objeto({
-            id,
-            subida_kbps: entero,
-            bajada_kbps: entero,
-            subida_limitada_kbps: entero,
-            bajada_limitada_kbps: entero,
-            rate_limit_override: nulable(texto),
-            profile_ppp: nulable(texto),
-            rate_limit: {
-                type: 'string',
+    objeto(
+        {
+            servicio_id: id,
+            version: { type: 'integer', minimum: 1, description: 'core.servicios.version (diagnóstico)' },
+            user_ppp: texto,
+            pass_ppp: { type: 'string', description: 'Cifrada (formato v1); el servicio aaa la descifra' },
+            estado: EstadoServicio,
+            router_id: id,
+            control_velocidad: {
+                ...enumerado(['simple', 'arbol_pcq']),
+                description: 'network.routers.control_velocidad del router del servicio',
+            },
+            plan: objeto({
+                id,
+                subida_kbps: entero,
+                bajada_kbps: entero,
+                subida_limitada_kbps: entero,
+                bajada_limitada_kbps: entero,
+                rate_limit_override: nulable(texto),
+                profile_ppp: nulable(texto),
+                rate_limit: {
+                    type: 'string',
+                    description:
+                        'Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override)',
+                },
+                rate_limit_limitado: {
+                    type: 'string',
+                    description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+                },
+                reuso: {
+                    type: 'integer',
+                    minimum: 1,
+                    maximum: 64,
+                    description: 'Reuso efectivo 1:N en el router',
+                },
+            }),
+            ipv4: {
+                anyOf: [
+                    objeto({ modo: enumerado(['estatico']), ip: texto }),
+                    objeto({ modo: enumerado(['pool']), pool: texto }),
+                    { type: 'null' },
+                ],
+            },
+            ipv6: {
+                anyOf: [
+                    objeto({
+                        modo: enumerado(['radius_servicio']),
+                        prefijo_enlace: nulable(texto),
+                        prefijo_delegado: nulable(texto),
+                    }),
+                    objeto({
+                        modo: enumerado(['radius_pool']),
+                        pool_enlace: nulable(texto),
+                        pool_delegacion: nulable(texto),
+                    }),
+                    objeto({ modo: enumerado(['duid', 'estatico', 'ninguno']) }),
+                ],
+            },
+            red_acceso: {
+                ...objeto({
+                    servidor_pppoe_id: nulable(id),
+                    local_address: nulable(texto),
+                    perfil_por_servidor: {
+                        ...booleano,
+                        description:
+                            'El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2)',
+                    },
+                }),
                 description:
-                    'Mikrotik-Rate-Limit completo en estado activo: "rx/tx ráfaga-rx/tx umbral-rx/tx tiempo-rx/tx prioridad limit-at-rx/tx" (o rate_limit_override)',
+                    'Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). ' +
+                    'Ausente en registros anteriores',
             },
-            rate_limit_limitado: {
-                type: 'string',
-                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
-            },
-            reuso: {
-                type: 'integer',
-                minimum: 1,
-                maximum: 64,
-                description: 'Reuso efectivo 1:N en el router',
-            },
-        }),
-        ipv4: {
-            anyOf: [
-                objeto({ modo: enumerado(['estatico']), ip: texto }),
-                objeto({ modo: enumerado(['pool']), pool: texto }),
-                { type: 'null' },
-            ],
         },
-        ipv6: {
-            anyOf: [
-                objeto({
-                    modo: enumerado(['radius_servicio']),
-                    prefijo_enlace: nulable(texto),
-                    prefijo_delegado: nulable(texto),
-                }),
-                objeto({
-                    modo: enumerado(['radius_pool']),
-                    pool_enlace: nulable(texto),
-                    pool_delegacion: nulable(texto),
-                }),
-                objeto({ modo: enumerado(['duid', 'estatico', 'ninguno']) }),
-            ],
-        },
-    }),
+        ['red_acceso'],
+    ),
 )
 
 /*

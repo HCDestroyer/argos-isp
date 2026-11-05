@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import type { ManejadorFixture, RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { ipEnCidr, ipv4ANumero } from '~/utils/red'
 import { bd, siguienteId } from '../bd'
+import { localAddressServicio, resolverServidorServicio } from '../redAcceso/rutas'
 import {
     ahora,
     conIdempotencia,
@@ -71,7 +72,8 @@ export function nombresDe(clienteId: number, planId: number, routerId: number): 
 
 /** El servicio como lo devuelve la API: con los nombres al día (un cliente renombrado, por ejemplo). */
 function vista(servicio: Servicio): Servicio {
-    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id) }
+    // Red de acceso (A1): la API siempre envía el servidor PPPoE y el local-address (null si no hay).
+    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id), servidor_pppoe_id: servicio.servidor_pppoe_id ?? null, local_address: servicio.local_address ?? null, local_address_derivado: servicio.local_address_derivado ?? false }
 }
 
 function texto(valor: unknown): string | null {
@@ -669,6 +671,22 @@ export const rutasServicios: RutasFixture = {
         if (sinRadius) {
             return sinRadius
         }
+        // Servidor PPPoE (A1, `contratos/red-acceso.md` §3): el elegido o el único; con varios, 422.
+        const alta = cuerpoObjeto(solicitud)
+        const servidor = resolverServidorServicio({
+            routerId: resultado.router_id,
+            tipo: resultado.tipo_conexion ?? 'pppoe',
+            servidorId: typeof alta.servidor_pppoe_id === 'number' ? alta.servidor_pppoe_id : null,
+            ipv4: typeof alta.ipv4 === 'string' ? alta.ipv4 : null,
+            redIpv4Id: typeof alta.red_ipv4_id === 'number' ? alta.red_ipv4_id : null,
+        })
+        if ('status' in servidor) {
+            return servidor
+        }
+        resultado.servidor_pppoe_id = servidor.servidor?.id ?? null
+        const local = resultado.tipo_conexion === 'pppoe' ? localAddressServicio(resultado) : { local_address: null, derivado: false }
+        resultado.local_address = local.local_address
+        resultado.local_address_derivado = local.derivado
         bd.servicios.push(resultado)
         const { pass_ppp: clave, ...entrada } = cuerpoObjeto(solicitud)
         if (resultado.tipo_conexion === 'pppoe') {
@@ -723,8 +741,20 @@ export const rutasServicios: RutasFixture = {
         if (sinRadius) {
             return sinRadius
         }
+        // Servidor PPPoE: se conserva; se elige o cambia con `servidor_pppoe_id`; al dejar PPPoE, null.
+        let servidorId = tipo === 'pppoe' ? (actual.servidor_pppoe_id ?? null) : null
+        if (tipo === 'pppoe' && ('servidor_pppoe_id' in cuerpo || tipoAntes !== 'pppoe')) {
+            const servidor = resolverServidorServicio({ routerId: actual.router_id, tipo, servidorId: typeof cuerpo.servidor_pppoe_id === 'number' ? cuerpo.servidor_pppoe_id : null, ipv4: actual.ipv4 })
+            if ('status' in servidor) {
+                return servidor
+            }
+            servidorId = servidor.servidor?.id ?? null
+        }
         const actualizado: Servicio = {
             ...actual,
+            servidor_pppoe_id: servidorId,
+            local_address: tipo === 'pppoe' ? localAddressServicio({ ...actual, servidor_pppoe_id: servidorId }).local_address : null,
+            local_address_derivado: tipo === 'pppoe' && localAddressServicio({ ...actual, servidor_pppoe_id: servidorId }).derivado,
             plan_id: planId,
             tipo_conexion: tipo,
             amarre_ip_mac: amarre,

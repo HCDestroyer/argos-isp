@@ -45,6 +45,7 @@ import { asientos, cuentas } from './libro/datos'
 import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
+import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } from './redAcceso/datos'
 import { nodosPortal } from './nodosPortal/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
@@ -115,6 +116,8 @@ interface BaseFixtures {
     planesPorRouter: Record<number, number[]>
     /** Implementación de cada plan en un router (`GET /planes/:id/routers`). */
     implementacionesPlan: Schema<'PlanRouter'>[]
+    /** Red de acceso (`contratos/red-acceso.md`): OLT, puertos PON, VLAN y servidores PPPoE. */
+    redAcceso: RedAccesoFixtures
     /** QoS por clases (A2, `contratos/qos.md`): perfiles (sin clases) y sus clases. */
     qosPerfiles: PerfilQosFila[]
     qosClases: ClaseQosFixture[]
@@ -317,6 +320,7 @@ function inicial(): BaseFixtures {
         planes,
         planesPorRouter,
         implementacionesPlan,
+        redAcceso: redAccesoInicial(),
         plantillas,
         // Las corridas del cron (facturar y vencer) van al final, con ids que siguen a la semilla.
         acciones: [...acciones, ...accionesCorridas.map((a, i) => ({ ...a, id: siguienteId(acciones) + i, request_id: `req-cron-${siguienteId(acciones) + i}` }))],
@@ -433,6 +437,7 @@ function inicial(): BaseFixtures {
         activos: activosIniciales(),
         diferimientos: diferimientosIniciales(),
     })
+    sembrarServidoresServicios(datos.servicios, datos.redAcceso, datos.redesIpv4)
     sembrarNotasCredito(datos)
     sembrarFel(datos)
     // Fase 4: pagos con proveedor de cobro (anticipos), sus asientos y las cuentas nuevas.

@@ -4,7 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { cifrar, descifrar } from '#shared/cifrado'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearRouterFila } from '#tests/core/fabricas'
+import { crearRouterFila, redUnica } from '#tests/core/fabricas'
 import { CA_PEM } from '#tests/network/certificados'
 
 /** Clave pública WireGuard válida (32 bytes en base64). */
@@ -167,13 +167,29 @@ test.group('Conexión de routers · API', (group) => {
             422,
         )
         assert.equal(falta.body().type, 'urn:argosisp:problema:servicio_incompleto')
-        assert.include(falta.body().detail, 'ROUTERS_SERVICIO_PPP_LOCAL_V4')
+        // el local-address del script sale del gateway de la red, nunca del entorno (`contratos/red-acceso.md` §2)
+        assert.include(falta.body().detail, 'red IPv4 del router')
         assert.notInclude(falta.body().detail, 'interfaz_clientes')
 
         Object.assign(process.env, SERVICIO)
+        const cidr = redUnica()
+        const base = cidr.replace('.0/24', '')
+        await db.table('network.redes_ipv4').insert({ router_id: routerId, cidr, tipo: 'estatico' })
         const script = await generar(client, token, routerId, { incluir: 'servicio' })
         assert.match(script, /pppoe-server/)
         assert.notMatch(script, /\{\{/)
+        // sin gateway: la primera IP utilizable; el valor del entorno (10.10.0.1) ya no se usa
+        assert.include(script, `:local pppLocalV4 "${base}.1"`)
+
+        await db.table('network.redes_ipv4').insert({ router_id: routerId, cidr: redUnica(), tipo: 'pool' })
+        const dos = await estado(
+            client
+                .get(`/api/v1/routers/${routerId}/script-conexion`)
+                .qs({ incluir: 'servicio' })
+                .bearerToken(token),
+            422,
+        )
+        assert.include(dos.body().detail, 'un solo gateway')
     })
 
     test('registro por token: aplica clave, CA, host, nas_ip y api_url al túnel; un solo uso; vencido 410', async ({

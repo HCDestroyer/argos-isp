@@ -29,8 +29,12 @@
 
 # --- PPPoE ---
 :local pppoeServicio "argosisp"
-# Dirección del router en los enlaces PPP (también DNS para los clientes)
-:local pppLocalV4 "10.10.0.1"
+# Dirección del router en los enlaces PPP (también DNS para los clientes). Debe ser el gateway
+# efectivo de la red IPv4 que registras en Argos para este router (su `gateway` o, sin él, la primera
+# IP utilizable; contratos/red-acceso.md §2): Argos pone ese mismo local-address en los perfiles y
+# secrets. scripts/laboratorio/01-datos.sh registra 10.10.1.0/24 sin gateway, de ahí 10.10.1.1.
+# El script de conexión (?incluir=servicio) lo calcula la API; aquí, a mano, va la misma regla.
+:local pppLocalV4 "10.10.1.1"
 # Pool IPv4 dinámico (modo pool). Las IPs estáticas del IPAM (Framed-IP-Address) salen de otro
 # rango, p. ej. 10.10.1.0/24, que NO debe solaparse con este pool.
 :local poolV4 "argos-v4-pppoe"

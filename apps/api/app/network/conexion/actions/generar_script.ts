@@ -15,6 +15,7 @@ import {
 } from '#network/conexion/consultas'
 import { leerMikrotik, plantillaConexion, renderizar, variablesMikrotik } from '#network/conexion/render'
 import { valoresServicio } from '#network/conexion/servicio'
+import { sqlHostGatewayEfectivo } from '#network/red_acceso/local_address'
 
 export interface EntradaGenerarScript {
     router_id: number
@@ -104,7 +105,9 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
         const argosUrl = urlBaseApi(input.origen)
 
         const secreto = sinRadius ? null : await secretoRadius(t, routerId)
-        const servicio = input.incluir_servicio ? valoresServicio(router) : {}
+        const servicio = input.incluir_servicio
+            ? valoresServicio(router, await gatewaysDeRouter(t, routerId))
+            : {}
 
         const antes = await filaConexion(routerId, t.trx, true)
         const token = generarToken()
@@ -173,4 +176,13 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
         })
         return { script: texto, nombre_archivo: `argosisp-router-${routerId}.rsc` }
     }
+}
+
+/** Gateways efectivos distintos de las redes IPv4 del router (`ppp_local_v4` del script). */
+async function gatewaysDeRouter(t: Transaccion, routerId: number): Promise<string[]> {
+    const filas = (await t.trx
+        .from('network.redes_ipv4 as r')
+        .where('r.router_id', routerId)
+        .select(t.trx.raw(`${sqlHostGatewayEfectivo('r')} AS gateway`))) as Array<{ gateway: string }>
+    return [...new Set(filas.map((f) => f.gateway))].sort()
 }

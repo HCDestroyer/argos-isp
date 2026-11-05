@@ -91,6 +91,16 @@ export interface ServicioAaa {
     plan: PlanAaa
     ipv4: Ipv4Aaa
     ipv6: Ipv6Aaa
+    /**
+     * Servidor PPPoE y `local-address` (`contratos/red-acceso.md` §3); ausente en registros viejos.
+     * `perfil_por_servidor`: el router tiene servidores con gateways distintos y Argos mantiene
+     * `plan-<id>-s<srv>` (A2, `routeros/red_acceso.ts`); ausente = false.
+     */
+    red_acceso?: {
+        servidor_pppoe_id: number | null
+        local_address: string | null
+        perfil_por_servidor?: boolean
+    } | null
 }
 
 /**
@@ -203,6 +213,18 @@ export function parsearRegistro(v: unknown): RegistroAaa {
         },
         ipv4: ipv4(v.ipv4),
         ipv6: ipv6(v.ipv6),
+        ...(v.red_acceso !== undefined ? { red_acceso: redAcceso(v.red_acceso) } : {}),
+    }
+}
+
+/** `red_acceso` (aditivo, `contratos/red-acceso.md` §3): ausente o mal formado = null (lo de antes). */
+function redAcceso(v: unknown): ServicioAaa['red_acceso'] {
+    if (!esObj(v)) return null
+    const id = v.servidor_pppoe_id
+    return {
+        servidor_pppoe_id: typeof id === 'number' && Number.isInteger(id) && id > 0 ? id : null,
+        local_address: typeof v.local_address === 'string' && v.local_address !== '' ? v.local_address : null,
+        perfil_por_servidor: v.perfil_por_servidor === true,
     }
 }
 

@@ -408,6 +408,10 @@ export const crearServicioValidator = vine.compile(
         ipv4: ipv4()
             .optional()
             .meta({ description: 'IP fija; si no viene se asigna de las redes del router' }),
+        servidor_pppoe_id: idEntidad().nullable().optional().meta({
+            description:
+                'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
+        }),
         red_ipv4_id: idEntidad().optional().meta({
             description: 'Red IPv4 del router de la que asignar la IP (422 si no es del router o está llena)',
         }),
@@ -458,6 +462,10 @@ export const editarServicioValidator = vine.compile(
         fecha_instalacion: fechaIso().nullable().optional(),
         costo_override: dinero().nullable().optional(),
         excluir_firewall: vine.boolean().optional(),
+        servidor_pppoe_id: idEntidad().nullable().optional().meta({
+            description:
+                'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
+        }),
         ipv4: ipv4().optional(),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
