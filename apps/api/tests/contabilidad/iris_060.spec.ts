@@ -39,8 +39,8 @@ import { dec } from '#ledger/dinero'
  * - idempotencia de `POST /comprobantes/:id/reconexion-temporal`;
  * - los invariantes 26.* de `verificar_libro.ts` (comprobante ↔ pago, reconexión ↔ comprobante).
  *
- * Hallazgos abiertos (`.fails`):
- * - **H79 · media**: un comprobante **sin `servicio_id`** respalda la reconexión del servicio que
+ * Hallazgos (todos cerrados):
+ * - **H79 · media, cerrado en 01f4d2c** (la reconexión fija `comprobantes.servicio_id` con su diff): un comprobante **sin `servicio_id`** respalda la reconexión del servicio que
  *   pide Iris (`servicio_id` en el cuerpo), pero al aprobarlo `AprobarComprobante` no lo sabe y el
  *   pago se aplica a lo más antiguo del cliente (otro servicio). La reconexión no se cumple aunque el
  *   comprobante cubría todo lo vencido del servicio: al llegar `hasta` se **incumple**, el servicio se
@@ -166,8 +166,14 @@ async function cambiosFueraDeEvaluar(servicioId: number) {
     return rows
 }
 
+/**
+ * Invariantes de la empresa 1 (la de las cuentas y servicios de estas pruebas) y de sus clientes. No
+ * se revisan las demás empresas: en la base compartida de `tests/contabilidad` + `tests/billing`
+ * otras suites dejan sus propias empresas a medio armar (p. ej. un libro emitido de prueba), que no
+ * son de este frente.
+ */
 async function invariantes(clientes: number[]) {
-    return verificarLibro(null, { clientes, sinFuncionesProducto: true })
+    return verificarLibro(1, { clientes, sinFuncionesProducto: true })
 }
 
 async function cortadoConBoleta(monto = '300.00') {
@@ -405,7 +411,7 @@ test.group('Auditor · Iris 0.6.0 · reconexión temporal', () => {
         assert.lengthOf(await eventosDe('promesa.creada', 'promesa_id', a.body().promesa_id), 1)
     })
 
-    test('H79 · media: comprobante sin servicio; el pago va a otro servicio del cliente y la reconexión se incumple', async ({
+    test('H79 (cerrado en 01f4d2c): comprobante sin servicio; la reconexión lo liga y el pago salda el servicio reconectado', async ({
         assert,
     }) => {
         const d = await servicioCortado()
@@ -425,11 +431,28 @@ test.group('Auditor · Iris 0.6.0 · reconexión temporal', () => {
         const k = await boleta(d.clienteId, null, cuenta.id, '300.00')
         const r = await reconectar(k.id, d.servicioId)
         assert.equal(r.servicio.estado, 'activo')
-        await aprobar(k.id)
+        const ligado = await db.from('billing.comprobantes').where('id', k.id).firstOrFail()
+        assert.equal(Number(ligado.servicio_id), d.servicioId, 'la reconexión liga el comprobante')
+        const diff = await db
+            .from('audit.cambios')
+            .where('entidad_tipo', 'comprobante')
+            .where('entidad_id', k.id)
+            .where('campo', 'servicio_id')
+        assert.lengthOf(diff, 1, 'con su diff en audit.cambios')
+        const a = await aprobar(k.id)
+        // todo el pago fue a las facturas del servicio reconectado, nada al servicio viejo
+        const aplicaciones = (await db
+            .from('billing.pagos_aplicaciones as x')
+            .join('billing.facturas as f', 'f.id', 'x.factura_id')
+            .where('x.pago_id', a.pago.id)
+            .select('f.servicio_id', 'x.monto')) as Array<{ servicio_id: number; monto: string }>
+        assert.isTrue(aplicaciones.length > 0)
+        for (const x of aplicaciones) assert.equal(Number(x.servicio_id), d.servicioId)
+        assert.equal(await estadoPromesa(r.promesa_id), 'cumplida', 'cumplida al aprobar')
         await vencer(d.servicioId)
         assert.deepEqual(await invariantes([d.clienteId]), [])
         // el comprobante cubría todo lo vencido del servicio reconectado: debió cumplirse
         assert.equal(await estadoPromesa(r.promesa_id), 'cumplida')
         assert.equal(await estadoServicio(d.servicioId), 'activo')
-    }).fails('H79: AprobarComprobante no aplica el pago al servicio de la reconexión ligada')
+    })
 })

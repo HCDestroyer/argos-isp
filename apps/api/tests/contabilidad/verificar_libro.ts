@@ -612,7 +612,9 @@ async function verificarLibroCon(
         `SELECT c.id AS cobro_id, c.monto::text, sum(p.monto)::text AS pagos,
                 count(*)::int AS n, count(DISTINCT p.empresa_id)::int AS empresas
            FROM billing.cobros c JOIN billing.pagos p ON p.cobro_id = c.id
-          WHERE ${E('p.empresa_id')}
+          -- el cobro entra si toca alguna empresa del alcance, pero se suman todos sus pagos: un
+          -- cobro repartido entre empresas no cuadra mirando solo la parte de una
+          WHERE EXISTS (SELECT 1 FROM billing.pagos x WHERE x.cobro_id = c.id AND ${E('x.empresa_id')})
           GROUP BY c.id
          HAVING sum(p.monto) <> c.monto OR count(*) <> count(DISTINCT p.empresa_id)`,
     )
@@ -1209,10 +1211,14 @@ async function verificarLibroCon(
           WHERE ${E('a.empresa_id')}
             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales r WHERE r.cierre_id = c.id)`,
     )
+    // Un cierre sin `resumen` no tiene foto con qué comparar: la columna es nullable desde que se
+    // agregó (1792164046875, sin relleno para los cierres anteriores) y el ayudante `cerrarMes` de las
+    // pruebas de semana 1 inserta el cierre a mano sin ella. `CerrarPeriodo` siempre la escribe. Ese
+    // mes lo sigue cubriendo `7.asiento_en_mes_cerrado`.
     const vigentes = await filas(
         `SELECT c.id, c.empresa_id, to_char(c.periodo, 'YYYY-MM-DD') AS periodo, c.resumen
            FROM ledger.cierres_mensuales c
-          WHERE ${E('c.empresa_id')}
+          WHERE ${E('c.empresa_id')} AND c.resumen IS NOT NULL
             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales r WHERE r.cierre_id = c.id)`,
     )
     for (const cierre of vigentes) {
