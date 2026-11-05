@@ -301,6 +301,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'portal.cerrar_sesion': 'Sesión del portal cerrada',
     'portal.editar_contacto': 'Contacto editado desde el portal',
     'portal.desvincular_telegram': 'Telegram desvinculado desde el portal',
+    'portal.registrar_whatsapp': 'Avisos por WhatsApp elegidos desde el portal',
     'promesas.rechazar': 'Promesa de pago rechazada',
     'promesas.cancelar': 'Promesa de pago cancelada',
     'promesas.cumplir': 'Promesa de pago cumplida',
