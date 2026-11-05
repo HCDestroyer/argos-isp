@@ -52274,7 +52274,9 @@
                       "string",
                       "null"
                     ],
-                    "format": "ipv4"
+                    "format": "ipv4",
+                    "deprecated": true,
+                    "description": "Obsoleto: se ignora. El local-address sale del gateway de la red IPv4 (o su primera IP utilizable)"
                   },
                   "no_crear_reglas": {
                     "type": "boolean"
@@ -78355,7 +78357,8 @@
             "type": "object",
             "required": [
               "servidor_pppoe_id",
-              "local_address"
+              "local_address",
+              "perfil_por_servidor"
             ],
             "properties": {
               "servidor_pppoe_id": {
@@ -78370,6 +78373,10 @@
                   "string",
                   "null"
                 ]
+              },
+              "perfil_por_servidor": {
+                "type": "boolean",
+                "description": "El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2)"
               }
             },
             "description": "Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). Ausente en registros anteriores"
@@ -102215,7 +102222,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)"
           },
           "no_crear_reglas": {
             "type": "boolean"
@@ -102297,7 +102306,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)"
           },
           "no_crear_reglas": {
             "type": "boolean"

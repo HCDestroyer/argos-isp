@@ -626,7 +626,11 @@ export const implementacionPlanValidator = vine.compile(
         pool_ipv4: vine.string().trim().maxLength(100).nullable().optional(),
         pool_ipv6_enlace: vine.string().trim().maxLength(100).nullable().optional(),
         pool_ipv6_delegacion: vine.string().trim().maxLength(100).nullable().optional(),
-        local_address: ipv4().nullable().optional(),
+        local_address: ipv4().nullable().optional().meta({
+            deprecated: true,
+            description:
+                'Obsoleto: se ignora. El local-address sale del gateway de la red IPv4 (o su primera IP utilizable)',
+        }),
         no_crear_reglas: vine.boolean().optional(),
         rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
             description: 'Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo',

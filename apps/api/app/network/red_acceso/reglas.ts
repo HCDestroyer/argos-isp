@@ -4,6 +4,7 @@ import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { ContextoAccion } from '#shared/contexto'
 import type { CatalogoEventos } from '#shared/eventos'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 /**
  * Reglas comunes de la red de acceso (`contratos/red-acceso.md`): unicidad con código propio,
@@ -117,6 +118,13 @@ export function camposCambiados(antes: Record<string, unknown> | null, despues: 
         .filter((c) => JSON.stringify(antes?.[c] ?? null) !== JSON.stringify(despues[c] ?? null))
 }
 
+/**
+ * `red_acceso.cambiada` por outbox. Si es un servidor PPPoE, reescribe `aaa:user:*` del router al
+ * confirmar: su `local_address` y `perfil_por_servidor` dependen de los servidores y sus gateways.
+ */
 export async function emitirRedAcceso(t: Transaccion, payload: CatalogoEventos['red_acceso.cambiada']) {
     await t.emit('red_acceso.cambiada', payload)
+    if (payload.entidad === 'servidor_pppoe' && payload.router_id !== null) {
+        refrescarAaaAlConfirmar(t, { routerId: payload.router_id })
+    }
 }

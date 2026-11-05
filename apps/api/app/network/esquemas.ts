@@ -570,7 +570,12 @@ export const PlanRouter = definirEsquema(
         pool_ipv4: nulable(texto),
         pool_ipv6_enlace: nulable(texto),
         pool_ipv6_delegacion: nulable(texto),
-        local_address: nulable(texto),
+        local_address: {
+            ...nulable(texto),
+            deprecated: true,
+            description:
+                'Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)',
+        },
         no_crear_reglas: booleano,
         rate_limit_override: nulable(texto),
         // excepciones de velocidad (semana 2): null = hereda del plan
@@ -623,7 +628,12 @@ export const PlanEfectivo = definirEsquema(
         pool_ipv4: nulable(texto),
         pool_ipv6_enlace: nulable(texto),
         pool_ipv6_delegacion: nulable(texto),
-        local_address: nulable(texto),
+        local_address: {
+            ...nulable(texto),
+            deprecated: true,
+            description:
+                'Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)',
+        },
         no_crear_reglas: booleano,
         tipo: {
             ...enumerado(TIPOS_PLAN),

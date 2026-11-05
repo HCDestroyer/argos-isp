@@ -1011,7 +1011,15 @@ export const AaaServicio = definirEsquema(
                 ],
             },
             red_acceso: {
-                ...objeto({ servidor_pppoe_id: nulable(id), local_address: nulable(texto) }),
+                ...objeto({
+                    servidor_pppoe_id: nulable(id),
+                    local_address: nulable(texto),
+                    perfil_por_servidor: {
+                        ...booleano,
+                        description:
+                            'El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2)',
+                    },
+                }),
                 description:
                     'Servidor PPPoE del servicio y su local-address (gateway de la red; contratos/red-acceso.md §3). ' +
                     'Ausente en registros anteriores',

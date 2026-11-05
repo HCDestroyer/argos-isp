@@ -122,7 +122,8 @@ test.group('Planes por router', () => {
             plan_id: local,
             router_id: r1,
             profile_ppp: 'argos-20M',
-            local_address: '10.255.0.1',
+            // obsoleto (`contratos/red-acceso.md` §2): se ignora, el local-address sale de la red
+            local_address: null,
             version: 1,
         })
 

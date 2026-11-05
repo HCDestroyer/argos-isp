@@ -10402,6 +10402,8 @@ export interface components {
             red_acceso?: {
                 servidor_pppoe_id: number | null;
                 local_address: string | null;
+                /** @description El router tiene servidores con gateways distintos: Mikrotik-Group = plan-<id>-s<srv> (A2) */
+                perfil_por_servidor: boolean;
             };
         };
         AccionAuditoria: {
@@ -16350,6 +16352,10 @@ export interface components {
             pool_ipv4: string | null;
             pool_ipv6_enlace: string | null;
             pool_ipv6_delegacion: string | null;
+            /**
+             * @deprecated
+             * @description Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)
+             */
             local_address: string | null;
             no_crear_reglas: boolean;
             /**
@@ -16366,6 +16372,10 @@ export interface components {
             pool_ipv4: string | null;
             pool_ipv6_enlace: string | null;
             pool_ipv6_delegacion: string | null;
+            /**
+             * @deprecated
+             * @description Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)
+             */
             local_address: string | null;
             no_crear_reglas: boolean;
             rate_limit_override: string | null;
@@ -48560,7 +48570,11 @@ export interface operations {
                     pool_ipv4?: string | null;
                     pool_ipv6_enlace?: string | null;
                     pool_ipv6_delegacion?: string | null;
-                    /** Format: ipv4 */
+                    /**
+                     * Format: ipv4
+                     * @deprecated
+                     * @description Obsoleto: se ignora. El local-address sale del gateway de la red IPv4 (o su primera IP utilizable)
+                     */
                     local_address?: string | null;
                     no_crear_reglas?: boolean;
                     /** @description Cadena Mikrotik-Rate-Limit completa que reemplaza la calculada en estado activo */

@@ -115,7 +115,10 @@ Las vistas `ServidorPppoe` y `Servicio` traen `local_address` y `local_address_d
 - **IPv4:** sin `ipv4` ni `red_ipv4_id`, la IPv4 sale de la red del servidor (si la tiene). Al cambiar de servidor, si la IPv4 vigente no es de la red del servidor nuevo, se cambia por una de esa red. Una `ipv4` a mano de otra red del router se acepta (el `local-address` es el gateway de su red, §2).
 - **IPv6 (`radius_servicio`):** los prefijos se reservan primero en los pools del servidor (si el tamaño coincide; si no, en los del router, como antes). Un prefijo vigente se conserva (estable). `radius_pool` sigue con los nombres de pool del plan en el router.
 - Evento: cambiar el servidor emite `servicio.config_cambiada` con `campos` ⊇ `['servidor_pppoe']` (aditivo; junto con `ips`/`prefijo_v6` si cambiaron) y `asignacion.cambiada` si cambió una dirección. El alta va en `servicio.creado` como siempre.
-- `aaa:user:*` (aditivo, `contratos/aaa.md`): `red_acceso: { servidor_pppoe_id, local_address }`. Un registro viejo sin el campo = `null`.
+- `aaa:user:*` (aditivo, `contratos/aaa.md`): `red_acceso: { servidor_pppoe_id, local_address, perfil_por_servidor }`. `perfil_por_servidor` = `perfilesPorServidor()` de A2 (`#network/routeros/red_acceso`) sobre los servidores activos del router con el gateway **efectivo** de su red: con `true` y `servidor_pppoe_id`, `aaa` manda `Mikrotik-Group = plan-<id>-s<srv>`. Toda `red_acceso.cambiada` de un servidor (alta, edición, baja, adopción, tomar control, unir, cambio de gateway) reescribe `aaa:user:*` del router. Un registro viejo sin el campo = como antes.
+
+- **Script de conexión** (`?incluir=servicio`): `ppp_local_v4` (el `local-address` de `default` y `suspendido` en la plantilla) ya no sale de `ROUTERS_SERVICIO_PPP_LOCAL_V4` sino del gateway efectivo de las redes del router; sin redes o con gateways distintos, 422 `servicio_incompleto`. Era la causa del `local-address` desconocido (10.10.0.1 del compose).
+- **`planes_routers.local_address`**: obsoleto; `PUT /planes/:id/routers/:routerId` lo acepta y lo ignora (`deprecated` en el OpenAPI).
 
 ## §4 API (`/api/v1`, todo en `packages/contracts`)
 
