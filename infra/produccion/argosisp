@@ -287,8 +287,8 @@ estado_wireguard() {
     fi
     # ?incluir=servicio del script: datos de la red de clientes sin valor por defecto (.env.example)
     local v faltan=()
-    for v in WAN_INTERFAZ POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO \
-        PORTAL_V4 PORTAL_V6; do
+    # (la IP y el puerto del portal de corte no: se editan en el panel, Configuración → Portal de corte)
+    for v in WAN_INTERFAZ POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO; do
         [ -n "$(leer_env "ROUTERS_SERVICIO_$v")" ] || faltan+=("ROUTERS_SERVICIO_$v")
     done
     if [ "${#faltan[@]}" -gt 0 ]; then

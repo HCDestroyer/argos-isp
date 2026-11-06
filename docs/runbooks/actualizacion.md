@@ -37,6 +37,12 @@ Cada corrida deja su registro en `/opt/argosisp/registros/actualizar-<fecha>.log
 - `api-portal` (la misma API para el tráfico del portal) se actualiza, se vigila y se revierte junto con `api`: misma imagen, misma base. Si una instalación anterior no tiene `ARGOSISP_API_PORTAL` en el `.env`, `argosisp actualizar` lo escribe: `si`, o `no` con menos de 3 GB de RAM (lo avisa en el registro). Apagarlo: `ARGOSISP_API_PORTAL=no` y `sudo argosisp levantar`.
 - **Nodos portal:** actualiza primero el servidor principal y después cada nodo con `sudo argosisp actualizar`. El nodo solo cambia su imagen del portal, toma como objetivo la versión de `GET /api/v1/version` del central y se niega a pasarla (ni con `--version`). Si no puede leer la versión del central (token revocado, central caído), no se actualiza. `argosisp estado` en el nodo avisa si no coincide. `argosisp revertir` en un nodo solo vuelve a la imagen anterior (no tiene base que restaurar).
 
+## Portal de corte en el panel (desde la versión con «Configuración → Portal de corte»)
+
+- El destino del dst-nat de los suspendidos (IPv4, IPv6 y puerto del portal) y el modo de suspensión (`desconectar` o `coa`) pasan del `.env` al panel: **Configuración → Portal de corte**. Al actualizar no hay que hacer nada: mientras nadie guarde esa pantalla, ArgosIsp sigue usando los valores del `.env` de antes (`ROUTERS_SERVICIO_PORTAL_V4/_V6`, `PORTAL_CORTE_V4`, `PORTAL_CORTE_PUERTO` y `COA_SUSPENDER`), y la pantalla los muestra con origen «entorno».
+- Desde la primera vez que se guarda, esas variables ya no se leen para el corte: cambiarlas en el `.env` no hace nada. Se cambia en el panel; ArgosIsp reconcilia todos los routers y `coa` lee el modo de la API (`GET /api/v1/internal/corte/configuracion`).
+- `PORTAL_CORTE_PUERTO` sigue siendo, además, el puerto en que escucha Caddy para `/corte` (8088 por defecto): eso es del servidor y se cambia en el `.env` con `sudo argosisp levantar`. Si lo cambias, pon el mismo puerto en el panel.
+
 ## Parches automáticos (opcional, apagado por defecto)
 
 ```sh

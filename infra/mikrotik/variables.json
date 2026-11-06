@@ -95,6 +95,10 @@
       "descripcion": "IPv4 del portal (destino del dst-nat de /corte)"
     },
     "portal_v6": { "patron": "^[0-9A-Fa-f:]+$", "descripcion": "IPv6 del portal" },
+    "portal_puerto": {
+      "patron": "^[0-9]{1,5}$",
+      "descripcion": "Puerto del dst-nat de /corte (to-ports): el de Configuración → Portal de corte (core.portal_corte; 80, u 8088 con el puerto dedicado del Caddy de Argos)"
+    },
     "portal_fqdn": {
       "patron": "^[A-Za-z0-9.-]{1,253}$",
       "descripcion": "Nombre del portal (DOMINIO_PORTAL)"

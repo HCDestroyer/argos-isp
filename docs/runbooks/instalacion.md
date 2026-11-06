@@ -8,7 +8,7 @@ Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las
 | --- | --- |
 | Sistema | Ubuntu 22.04/24.04 o Debian 12 (también Raspberry Pi OS de 64 bits), amd64 o arm64, con systemd |
 | Memoria y disco | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos) |
-| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), UDP 1812 y 1813 (RADIUS) y, con WireGuard, UDP 51820 |
+| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), TCP 8088 (`/corte` con cualquier Host, `PORTAL_CORTE_PUERTO`), UDP 1812 y 1813 (RADIUS) y, con WireGuard, UDP 51820 |
 | DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
 | Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt |
 
@@ -94,7 +94,9 @@ Para cuando los MikroTik no están en la misma red que el servidor (lo normal co
 
 **Conectar un router:** en el panel, ficha del router → «Script de conexión» → descárgalo y aplícalo en el MikroTik (pasos y qué hace: `infra/mikrotik/README.md`, «Conectar un router»). En menos de un minuto el router aparece como «conectado».
 
-**Script con «configuración de servicio»** (para un router nuevo que ArgosIsp configura completo: PPPoE, perfiles y corte): necesita los datos de tu red de clientes, que van en el `.env` como `ROUTERS_SERVICIO_*` (interfaz de internet del router, IP del router en los enlaces PPP, pool PPPoE, prefijos IPv4 e IPv6 de clientes, IPs del portal y DNS; qué va en cada una y ejemplos en `infra/produccion/.env.example`). No tienen valor por defecto: ArgosIsp no inventa rangos. El portal sale de `DOMINIO_PORTAL` y la interfaz PPPoE de la ficha del router. Mientras falten, el panel dice cuáles (y `argosisp estado` también); el script solo de conexión funciona igual. Después de llenarlas: `sudo argosisp levantar`.
+**Script con «configuración de servicio»** (para un router nuevo que ArgosIsp configura completo: PPPoE, perfiles y corte): necesita los datos de tu red de clientes, que van en el `.env` como `ROUTERS_SERVICIO_*` (interfaz de internet del router, IP del router en los enlaces PPP, pool PPPoE, prefijos IPv4 e IPv6 de clientes y DNS; qué va en cada una y ejemplos en `infra/produccion/.env.example`). No tienen valor por defecto: ArgosIsp no inventa rangos. El portal sale de `DOMINIO_PORTAL` y la interfaz PPPoE de la ficha del router. Mientras falten, el panel dice cuáles (y `argosisp estado` también); el script solo de conexión funciona igual. Después de llenarlas: `sudo argosisp levantar`.
+
+**Portal de corte** (a dónde manda el router a los suspendidos y cómo se suspende): se configura en el panel, **Configuración → Portal de corte** (IPv4, IPv6 y puerto del dst-nat; modo de suspensión «desconectar» o «CoA»), no en el `.env`. Al guardar, ArgosIsp reconcilia todos los routers con API y el script de conexión sale con esos valores. Lo normal: la IPv4 del servidor que ven los routers y el puerto **8088**, el que escucha Caddy con cualquier `Host` (`PORTAL_CORTE_PUERTO` en el `.env`, abierto por el instalador; es del servidor y sí se cambia en el `.env`). `ROUTERS_SERVICIO_PORTAL_V4/_V6`, `PORTAL_CORTE_V4` y `COA_SUSPENDER` solo dan el valor inicial de esa pantalla hasta que se guarda por primera vez.
 
 **Activarlo después de instalar:** en el `.env` pon `ARGOSISP_WIREGUARD=1` y `RADIUS_BIND_IP=10.255.0.1` (la `.1` de `ARGOSISP_WG_RED`), crea el archivo de `sysctl` de arriba (`echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/90-argosisp-wireguard.conf && sudo sysctl --system`), abre el UDP en el proveedor y `sudo argosisp levantar`. Los routers que ya llegaban por la LAN siguen igual hasta que les apliques el script.
 
