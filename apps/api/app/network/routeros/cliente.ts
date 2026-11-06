@@ -62,7 +62,7 @@ export type RutaOrdenada = (typeof RUTAS_ORDENADAS)[number]
  * Comandos de diagnóstico que el router ejecuta sin cambiar su configuración (`POST /rest/<comando>`):
  * si el router llega al portal de corte.
  */
-export const COMANDOS = ['/tool/fetch', '/ping'] as const
+export const COMANDOS = ['/tool/fetch', '/ping', '/execute'] as const
 export type ComandoRouterOS = (typeof COMANDOS)[number]
 
 /**
@@ -79,6 +79,8 @@ export const RUTAS_LECTURA = [
     '/interface/pppoe-server',
     '/ip/pool',
     '/ipv6/pool',
+    // Diagnóstico de corte: ¿el destino del NAT es una dirección del propio router?
+    '/ip/address',
 ] as const
 export type RutaLectura = (typeof RUTAS_LECTURA)[number]
 
@@ -202,6 +204,17 @@ export class ClienteRouterOS {
 
     cerrar(): void {
         this.#agente.destroy()
+    }
+
+    /**
+     * `GET /rest/ip/dns`: el resolver del router (`servers`, `dynamic-servers`, `allow-remote-requests`).
+     * Solo lectura: los DNS son configuración del operador y ArgosIsp nunca los cambia.
+     */
+    async leerDns(): Promise<Record<string, string>> {
+        return this.#conReintentos(async () => {
+            const r = await this.#http('GET', 'ip/dns')
+            return this.#objeto(r.cuerpo, r.status) as Record<string, string>
+        })
     }
 
     /** `GET /rest/system/resource`: prueba de vida y de credenciales. */

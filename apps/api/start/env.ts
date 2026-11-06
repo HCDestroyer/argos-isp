@@ -89,6 +89,7 @@ export default await Env.create(new URL('../', import.meta.url), {
     ROUTEROS_DHCP_SERVIDOR: Env.schema.string.optional(),
     /** ms entre reconciliaciones completas (900000) y entre sondeos de routers caídos (30000) */
     ROUTEROS_RECONCILIAR_CADA_MS: Env.schema.number.optional(),
+    ROUTEROS_SONDA_PORTAL_MS: Env.schema.number.optional(),
     ROUTEROS_RECUPERAR_CADA_MS: Env.schema.number.optional(),
     /**
      * Contacto de los routers (`Router.en_linea`, A2): ms entre sondeos de la API REST a los routers

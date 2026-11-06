@@ -88,9 +88,11 @@
 :local walledGarden {"app.recurrente.com"}
 
 # --- DNS ---
-# Resolutores que el router usa y que los suspendidos pueden consultar
-:local dnsV4 {"192.0.2.53";"198.51.100.53"}
-:local dnsV6 {"2001:db8:ffff::53"}
+# Resolutores REALES del router (los de tu proveedor, p. ej. {"1.1.1.1";"8.8.8.8"}). Vacíos = se queda con
+# los que ya tiene el router (/ip dns servers); si el router no tiene ninguno, el script se detiene.
+# Nunca IPs de documentación (192.0.2.x, 198.51.100.x, 203.0.113.x, 2001:db8::): el script las rechaza.
+:local dnsV4 [:toarray ""]
+:local dnsV6 [:toarray ""]
 
 # --- WISP sin PPPoE (contratos/routeros.md): ip_estatica y dhcp_fija ---
 :local wispHabilitar true

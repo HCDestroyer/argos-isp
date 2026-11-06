@@ -1,6 +1,6 @@
 import type { Almacen, SesionActiva } from './almacen.ts'
 import { descifrar } from './cifrado.ts'
-import type { ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
+import type { ModoSuspension, ModoSuspensionIpv6, PerfilSuspendido } from './config.ts'
 import {
     decidir,
     decidirVelocidad,
@@ -44,8 +44,10 @@ export interface OpcionesDispatcher {
     nas: ClienteNas
     claveSecretos: Buffer
     suspendido: PerfilSuspendido
-    /** `COA_SUSPENDER_CON_IPV6` (ver `config.ts`); por defecto `coa` */
+    /** `COA_SUSPENDER_CON_IPV6` (ver `config.ts`; el entorno da `disconnect` por defecto); sin valor, `coa` */
     suspenderConIpv6?: ModoSuspensionIpv6
+    /** `COA_SUSPENDER` (ver `config.ts`; el entorno da `disconnect` por defecto); sin valor, `coa` */
+    suspender?: ModoSuspension
     puertoNas: number
     timeoutMs: number
     reintentos: number
@@ -139,6 +141,12 @@ export class Dispatcher {
         decision: Exclude<Decision, { accion: 'nada' }>,
         sesion: SesionActiva,
     ): Exclude<Decision, { accion: 'nada' }> {
+        if (decision.accion === 'coa' && decision.suspender && this.#op.suspender === 'disconnect') {
+            return {
+                accion: 'disconnect',
+                razon: `${decision.razon} (reconecta con el perfil suspendido y sin sus conexiones abiertas)`,
+            }
+        }
         if (
             decision.accion === 'coa' &&
             decision.suspender &&

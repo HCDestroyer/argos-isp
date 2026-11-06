@@ -39,7 +39,7 @@ const SERVICIO: Record<string, string> = {
     ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
     ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
     ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
-    ROUTERS_SERVICIO_DNS_V4: '192.0.2.53',
+    ROUTERS_SERVICIO_DNS_V4: '1.1.1.1',
 }
 
 async function routerRadius(datos: Record<string, unknown> = {}) {

@@ -21,11 +21,30 @@
 # ============================================================================
 # 3. DNS del router (los clientes PPP usan pppLocalV4 como DNS)
 # ============================================================================
+# Bug v1.9.0 (5 nov): el script dejaba como DNS del router las IPs de documentación del ejemplo y el
+# router no resolvía nada (el suspendido veía "sin internet"). Ahora: los DNS dados, o los que ya
+# tiene el router; nunca IPs de documentación; y si no hay ninguno, se detiene.
 :local dnsServidores ""
 :foreach d in=($dnsV4, $dnsV6) do={
+    :local doc false
+    :if ([:typeof [:toip $d]] = "ip") do={
+        :if (([:toip $d] in 192.0.2.0/24) || ([:toip $d] in 198.51.100.0/24) || ([:toip $d] in 203.0.113.0/24)) do={ :set doc true }
+    }
+    :if ([:typeof [:toip6 $d]] = "ip6") do={
+        :if ([:toip6 $d] in 2001:db8::/32) do={ :set doc true }
+    }
+    :if ($doc) do={ :error ("argosisp: " . $d . " es una IP de documentacion, no un DNS real: pon los DNS de tu proveedor en dnsV4/dnsV6 (o dejalos vacios para usar los del router)") }
     :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
 }
-/ip dns set allow-remote-requests=yes servers=$dnsServidores
+:if ($dnsServidores = "") do={
+    :if (([:len [/ip dns get servers]] = 0) && ([:len [/ip dns get dynamic-servers]] = 0)) do={
+        :error "argosisp: el router no tiene DNS (/ip dns servers vacio): define dnsV4 con los DNS de tu proveedor, p. ej. {\"1.1.1.1\";\"8.8.8.8\"}"
+    }
+    :put "argosisp: DNS del router sin cambios (los que ya tenia)"
+    /ip dns set allow-remote-requests=yes
+} else={
+    /ip dns set allow-remote-requests=yes servers=$dnsServidores
+}
 
 # ============================================================================
 # 4. Lista de interfaces y perfiles PPP

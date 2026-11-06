@@ -243,9 +243,25 @@
 }
 :local dnsServidores ""
 :foreach d in=($dnsV4, $dnsV6) do={
+    :local doc false
+    :if ([:typeof [:toip $d]] = "ip") do={
+        :if (([:toip $d] in 192.0.2.0/24) || ([:toip $d] in 198.51.100.0/24) || ([:toip $d] in 203.0.113.0/24)) do={ :set doc true }
+    }
+    :if ([:typeof [:toip6 $d]] = "ip6") do={
+        :if ([:toip6 $d] in 2001:db8::/32) do={ :set doc true }
+    }
+    :if ($doc) do={ :error ("argosisp: " . $d . " es una IP de documentacion, no un DNS real: pon los DNS de tu proveedor en dnsV4/dnsV6 (o dejalos vacios para usar los del router)") }
     :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
 }
-/ip dns set allow-remote-requests=yes servers=$dnsServidores
+:if ($dnsServidores = "") do={
+    :if (([:len [/ip dns get servers]] = 0) && ([:len [/ip dns get dynamic-servers]] = 0)) do={
+        :error "argosisp: el router no tiene DNS (/ip dns servers vacio): define dnsV4 con los DNS de tu proveedor, p. ej. {\"1.1.1.1\";\"8.8.8.8\"}"
+    }
+    :put "argosisp: DNS del router sin cambios (los que ya tenia)"
+    /ip dns set allow-remote-requests=yes
+} else={
+    /ip dns set allow-remote-requests=yes servers=$dnsServidores
+}
 :put "argosisp: perfiles PPP"
 :if ([:len [/interface list find where name="suspendidos"]] = 0) do={
     /interface list add name=suspendidos comment="argosisp: interfaces PPP suspendidas"
@@ -302,8 +318,8 @@ add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-co
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
 add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
-add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
-add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
+add chain=argos-corte protocol=udp dst-port=53 action=accept comment="argosisp: corte DNS udp a cualquier resolver"
+add chain=argos-corte protocol=tcp dst-port=53 action=accept comment="argosisp: corte DNS tcp a cualquier resolver"
 add chain=argos-corte dst-address-list=argos-portal action=accept comment="argosisp: corte portal"
 add chain=argos-corte dst-address-list=argos-walled action=accept comment="argosisp: corte walled garden"
 add chain=argos-corte protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte TCP reset"
@@ -322,6 +338,13 @@ add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="a
 add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
 add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
 :put "argosisp: firewall IPv6"
+:if ($portalV6 != "") do={
+    /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
+    /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
+    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
+    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
+    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+}
 /ipv6 firewall filter
 add chain=input src-address-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por address-list"
 add chain=input in-interface-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por interface-list"
@@ -330,8 +353,8 @@ add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-co
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
 add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
-add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
-add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
+add chain=argos-corte protocol=udp dst-port=53 action=accept comment="argosisp: corte DNS udp a cualquier resolver"
+add chain=argos-corte protocol=tcp dst-port=53 action=accept comment="argosisp: corte DNS tcp a cualquier resolver"
 add chain=argos-corte dst-address-list=argos-portal action=accept comment="argosisp: corte portal"
 add chain=argos-corte dst-address-list=argos-walled action=accept comment="argosisp: corte walled garden"
 add chain=argos-corte protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte TCP reset"

@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http'
+import env from '#start/env'
 import {
     RUTAS_ORDENADAS,
     type ClienteRouterOS,
@@ -10,11 +12,13 @@ import { ErrorRouterOS } from '#network/routeros/errores'
 import { RouterSinCredenciales } from '#network/routeros/router'
 import { diferencias } from '#network/routeros/normalizar'
 import {
+    clientesUsanDnsRouter,
     configCorteResuelta,
     ENTRADA_SUSPENDIDOS,
     estadoCorteRouter,
     normalizarDireccion,
     REGLA_NAT_HTTP,
+    revisarDnsRouter,
     urlNat,
     type ConfigCorte,
     type EstadoCorte,
@@ -54,6 +58,7 @@ import {
     type CambioCorte,
     type LecturaCorte,
     type OpcionesDispatcher,
+    type SondaPortal,
 } from '#network/routeros/dispatcher'
 
 /**
@@ -259,6 +264,9 @@ export type ClaveChequeoCorte =
     | 'fasttrack'
     | 'perfil_suspendido'
     | 'walled_garden'
+    | 'dns_router'
+    | 'portal_host'
+    | 'portal_en_router'
 
 export type CodigoProblemaCorte =
     | 'sin_api'
@@ -276,6 +284,11 @@ export type CodigoProblemaCorte =
     | 'portal_sin_corte'
     | 'suspendidos_fuera_de_lista'
     | 'fasttrack'
+    | 'dns_router_sin_servidores'
+    | 'dns_router_documentacion'
+    | 'dns_router_sin_remotas'
+    | 'portal_no_acepta_host'
+    | 'portal_en_router'
 
 export interface ChequeoCorte {
     clave: ClaveChequeoCorte
@@ -344,8 +357,13 @@ export const LIMITES_CORTE = [
     'HTTPS (puerto 443) no se redirige: el router corta la conexión con un reset TCP y el navegador muestra ' +
         '«no se puede conectar», no la página de corte. El cliente la ve al abrir un sitio http:// o cuando su ' +
         'teléfono o computadora prueba la conexión (aviso de «iniciar sesión en la red»).',
-    'IPv6 no se redirige: al suspendido solo se le deja DNS y el portal por IPv6; el resto se rechaza. Si su ' +
-        'equipo prefiere IPv6, la página aparece cuando el navegador cae a IPv4 por http.',
+    'IPv6 se redirige igual que IPv4 solo si Argos conoce la IPv6 del portal (ROUTERS_SERVICIO_PORTAL_V6) y el ' +
+        'suspendido entró con el perfil de corte (PPPoE que reconectó al suspender, o WISP); si no, el HTTP por ' +
+        'IPv6 recibe un reset y el equipo cae a IPv4 para llegar a la página.',
+    'El DNS del suspendido responde con cualquier resolver (el del router, el del perfil PPP o uno fijo como ' +
+        '8.8.8.8). DNS cifrado (DoT 853, DoH) recibe un reset y el equipo vuelve al DNS normal, salvo Android con ' +
+        '«DNS privado» en modo estricto (un nombre fijo): ahí el teléfono dice «sin internet» hasta que el cliente ' +
+        'lo pone en «Automático».',
     'El portal debe responder /corte con cualquier encabezado Host (llega el del sitio que el cliente quiso ' +
         'abrir) y ver la IP real del cliente, sin NAT de origen, para saber quién es.',
 ]
@@ -782,6 +800,132 @@ function chequeoWalled(config: ConfigCorte, lista4: ObjetoRouterOS[]): ChequeoCo
     )
 }
 
+/** 8 · `/ip dns` del router: con servidores reales y, si los clientes lo usan, con consultas remotas. */
+function chequeoDns(dns: Record<string, string> | null, usaDnsRouter: boolean): ChequeoCorte {
+    if (!dns) return { ...bien('dns_router', 'No se pudo leer /ip dns del router'), ok: null }
+    const problemas = revisarDnsRouter(dns, usaDnsRouter)
+    if (problemas.length === 0) {
+        return bien('dns_router', `El router resuelve con ${dns.servers || dns['dynamic-servers']}`)
+    }
+    return mal(
+        'dns_router',
+        problemas[0]!.codigo,
+        problemas.map((p) => p.mensaje).join('. '),
+        problemas.flatMap((p) => p.comandos),
+        false,
+    )
+}
+
+/**
+ * 10 · El destino del NAT no es una dirección del propio router. Si lo es (Argos detrás de este mismo
+ * MikroTik, publicado con un port-forward en la IP pública del router), el dst-nat del corte manda el
+ * HTTP del suspendido al router: va a `input`, no a `forward`, y `argos-corte-in` lo rechaza (o lo
+ * atiende el `www` del router). El port-forward del operador no se aplica: el NAT ya se hizo.
+ */
+function chequeoPortalEnRouter(
+    portal: DiagnosticoCorte['portal'],
+    direcciones: ObjetoRouterOS[],
+): ChequeoCorte {
+    if (!portal.destino_nat) return { ...bien('portal_en_router', 'Sin destino del NAT'), ok: null }
+    const ip = new URL(portal.destino_nat).hostname
+    const propia = direcciones.find((d) => (d.address ?? '').split('/')[0] === ip && d.disabled !== 'true')
+    if (!propia) return bien('portal_en_router', `${ip} no es una dirección del router`)
+    return mal(
+        'portal_en_router',
+        'portal_en_router',
+        `El NAT de corte manda a ${ip}, que es una dirección del propio router (${propia.interface ?? 'interfaz'}): el ` +
+            'HTTP del suspendido termina en el router y no en el portal, y el teléfono dice «sin internet». Usa la IP ' +
+            'interna del servidor de Argos: ROUTERS_SERVICIO_PORTAL_V4=<IP LAN del servidor> y «Reconciliar ahora»',
+        ['/ip address print where address~"' + ip + '/"'],
+        false,
+    )
+}
+
+/** Host de una sonda de portal cautivo real (Android): el que llega al portal por el dst-nat. */
+export const HOST_SONDA = 'connectivitycheck.gstatic.com'
+
+/** Timeout de la sonda HTTP desde Argos (`ROUTEROS_SONDA_PORTAL_MS`; 0 = no se prueba). */
+function esperaSondaMs(): number {
+    const v = env.get('ROUTEROS_SONDA_PORTAL_MS') ?? 3000
+    return v >= 0 ? v : 3000
+}
+
+/** GET sin seguir redirecciones, con el `Host` dado, desde el servidor de Argos. */
+export const sondaPortalHttp: SondaPortal = (url, host) =>
+    new Promise((resolver, rechazar) => {
+        const req = httpRequest(
+            url,
+            { method: 'GET', headers: { Host: host }, timeout: esperaSondaMs() },
+            (res) => {
+                res.resume()
+                const location = res.headers.location
+                resolver({
+                    status: res.statusCode ?? 0,
+                    location: typeof location === 'string' ? location : null,
+                })
+            },
+        )
+        req.on('timeout', () => req.destroy(new Error('sin respuesta')))
+        req.on('error', rechazar)
+        req.end()
+    })
+
+/**
+ * 9 · Lo que hay en el destino del NAT acepta CUALQUIER Host: un `GET /generate_204` con el Host de la
+ * sonda de Android debe dar 302 a `/corte`. Un proxy delante (Nginx Proxy Manager…) que solo atiende sus
+ * dominios responde 404 o su página por defecto y el teléfono dice «sin internet». Se prueba desde
+ * Argos; si Argos no llega a esa IP, no se puede comprobar (lo prueba el router en `portal_http`).
+ */
+async function chequeoHost(
+    portal: DiagnosticoCorte['portal'],
+    sonda: SondaPortal | undefined,
+): Promise<ChequeoCorte> {
+    if (!portal.destino_nat) return { ...bien('portal_host', 'Sin destino del NAT: no se prueba'), ok: null }
+    if (!sonda && esperaSondaMs() === 0) {
+        return { ...bien('portal_host', 'Prueba del Host apagada (ROUTEROS_SONDA_PORTAL_MS=0)'), ok: null }
+    }
+    const base = new URL(portal.destino_nat)
+    const url = `${base.origin}/generate_204`
+    const curl = `curl -sI -H 'Host: ${HOST_SONDA}' ${url}`
+    let r: { status: number; location: string | null }
+    try {
+        r = await (sonda ?? sondaPortalHttp)(url, HOST_SONDA)
+    } catch (error) {
+        return {
+            ...bien(
+                'portal_host',
+                `Argos no llega a ${base.origin} para probar el Host (${(error as Error).message}); pruébalo desde la ` +
+                    `red de clientes: ${curl} debe dar 302 a /corte`,
+            ),
+            ok: null,
+        }
+    }
+    if (
+        r.status >= 300 &&
+        r.status < 400 &&
+        r.location &&
+        /\/corte(?:[?#]|$)/.test(new URL(r.location, url).pathname)
+    ) {
+        return bien(
+            'portal_host',
+            `${base.origin} con Host ${HOST_SONDA} responde ${r.status} a ${r.location}`,
+        )
+    }
+    return mal(
+        'portal_host',
+        'portal_no_acepta_host',
+        `${base.origin} (destino del NAT de corte) responde HTTP ${r.status}${r.location ? ` a ${r.location}` : ''} ` +
+            `a una sonda con Host ${HOST_SONDA}; debía ser 302 a /corte. Suele ser un proxy delante del portal ` +
+            '(Nginx Proxy Manager, otro sitio en el mismo puerto) que solo atiende sus dominios: el teléfono ve «sin ' +
+            'internet». Arreglo recomendado: apunta el NAT al puerto dedicado del Caddy de Argos (PORTAL_CORTE_PUERTO, ' +
+            '8088; ROUTERS_SERVICIO_PORTAL_PUERTO=8088 y ábrelo desde la red de los routers) y «Reconciliar ahora». ' +
+            'Alternativa en Nginx Proxy Manager: Settings → Default Site → Redirect to http://<dominio del portal>/corte ' +
+            '(nunca a la misma IP: volvería al proxy)',
+        [curl],
+        false,
+    )
+}
+
 /** Suspendidos del router con su IPv4: la de la sesión abierta (PPPoE) o la asignada (WISP). */
 function suspendidosConIp(servicios: ServicioRed[]): SuspendidoFueraDeLista[] {
     return servicios
@@ -859,6 +1003,24 @@ export async function diagnosticoCorte(
                 chequeoFasttrack(corte, lectura, fasttrack),
                 chequeoPerfil(config, lectura),
                 chequeoWalled(config, lista4),
+                chequeoDns(
+                    await cliente.leerDns().catch((error: unknown) => {
+                        if (error instanceof ErrorRouterOS) return null
+                        throw error
+                    }),
+                    clientesUsanDnsRouter(
+                        lectura.get('/ppp/profile') ?? [],
+                        gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    ),
+                ),
+                await chequeoHost(salida.portal, opciones.sondaPortal),
+                chequeoPortalEnRouter(
+                    salida.portal,
+                    await cliente.listar('/ip/address').catch((error: unknown) => {
+                        if (error instanceof ErrorRouterOS) return []
+                        throw error
+                    }),
+                ),
             )
         } finally {
             cliente.cerrar()

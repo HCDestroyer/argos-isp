@@ -45,6 +45,7 @@ services:
       DOMINIO_PORTAL: ${DOMINIO_PORTAL}
       PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
       PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+      PORTAL_CORTE_PUERTO: ${PORTAL_CORTE_PUERTO:-8088}
       # API central: nombre (Host y SNI) y a dónde conectarse (por defecto, el mismo nombre en 443)
       NODO_CENTRAL_HOST: ${NODO_CENTRAL_HOST:?Falta NODO_CENTRAL_HOST en .env}
       NODO_CENTRAL_DIRECCION: ${NODO_CENTRAL_DIRECCION:-${NODO_CENTRAL_HOST}:443}
@@ -61,6 +62,9 @@ services:
     ports:
       - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTP_PORT:-80}:80
       - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTPS_PORT:-443}:443
+      # Corte por puerto dedicado (Caddyfile): el dst-nat de los suspendidos llega aquí sin pasar por
+      # otro proxy. Abre este puerto desde la red de los routers.
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${PORTAL_CORTE_PUERTO:-8088}:${PORTAL_CORTE_PUERTO:-8088}
     extra_hosts:
       # Pruebas con el central en el mismo servidor (NODO_CENTRAL_DIRECCION=host.docker.internal:443)
       - host.docker.internal:host-gateway

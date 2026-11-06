@@ -249,6 +249,7 @@ Endpoints (todos en `packages/contracts`):
 | Filtro IPv4 e IPv6: saltos `argosisp:top corte …` y `Filter-Id de RADIUS/CoA`; cadenas `argos-corte`, `argos-corte-in`, `argos-activo` (DNS, portal, walled garden, `tcp-reset`, `icmp-admin-prohibited`) | siempre | `comment` |
 | Filtro: `argosisp:top sin fasttrack: clientes con colas (subida/bajada)` | si alguna estrategia del router tiene `excluir_fasttrack` | `comment` |
 | NAT IPv4: saltos `argosisp:top corte NAT …` y cadena `argos-corte-nat` (portal y walled garden sin NAT; HTTP → `to-addresses` = IPv4 del portal) | siempre (el `dst-nat`, solo con IPv4 del portal) | `comment` |
+| NAT IPv6: lo mismo en `/ipv6/firewall/nat` (HTTP → `to-address` = IPv6 del portal `/128`) | solo con IPv6 del portal (§10.5) | `comment` |
 
 - **Los mismos comentarios y propiedades que `infra/mikrotik/lab.rsc` y el script de conexión con `incluir=servicio`**: si el router ya tiene lo del script, el reconciliador no cambia nada; si corre primero, el script lo reemplaza por lo mismo. Solo toca objetos con esos comentarios `argosisp:`; las reglas del script que no son suyas (CoA desde aaa, DNS solo interno, WireGuard, NAT de salida) no se tocan ni se mueven.
 - **Orden seguro**: crear lo nuevo → mover (`POST /rest/<menú>/move`, `numbers` + `destination`) → borrar lo que sobra. Los saltos `argosisp:top` quedan al inicio de su tabla (después de los `argosisp:top` del script y antes de FastTrack y de `accept established,related`), en el orden de `lab.rsc`; las cadenas, juntas y en orden. **Verificar en el laboratorio** el `move` por REST.
@@ -288,8 +289,39 @@ Los comandos usan la sintaxis de la terminal (`/ip firewall nat add …`, `enabl
 ### 10.3 · Límites del corte (el panel los muestra siempre; `limites[]`)
 
 - **HTTPS (443) no se redirige**: no se puede redirigir TLS sin un certificado del sitio que el cliente quiso abrir. El router corta con un reset TCP (`argosisp: corte TCP reset`) y el navegador muestra «no se puede conectar». La página aparece al abrir un sitio `http://` o con la detección de portal cautivo del teléfono o la computadora (que usa HTTP).
-- **IPv6 no se redirige**: no hay NAT a `/corte` en IPv6; al suspendido solo se le deja DNS, el portal y el walled garden, y el resto se rechaza. Si su equipo prefiere IPv6, la página aparece cuando el navegador cae a IPv4.
+- **IPv6 se redirige solo con la IPv6 del portal** (`ROUTERS_SERVICIO_PORTAL_V6`) y para sesiones que entraron con el perfil `suspendido` (§10.5). Si no, el HTTP por IPv6 recibe `tcp-reset` y el equipo cae a IPv4.
+- **DNS privado estricto de Android** (un nombre fijo, p. ej. `dns.google`): DoT recibe reset y el teléfono dice «sin internet» hasta que el cliente lo pone en «Automático». En «Automático» cae al DNS normal.
 - **El portal** (A5) debe responder `/corte` por HTTP en `ROUTERS_SERVICIO_PORTAL_PUERTO` **con cualquier encabezado `Host`** (llega el del sitio que el cliente intentó abrir) y ver la **IP real del cliente** (sin NAT de origen entre el router y el portal, o con `X-Forwarded-For` de un proxy de confianza) para identificarlo por `network.sesiones`.
+
+### 10.4 · Chequeos nuevos del diagnóstico (bug v1.9.0, 5 nov)
+
+| `clave` | Qué verifica | En rojo (`codigo`) |
+| --- | --- | --- |
+| `dns_router` | `GET /rest/ip/dns`: hay `servers` o `dynamic-servers`; ninguno es de documentación (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32); `allow-remote-requests=yes` si los clientes usan el router como DNS (`dns-server` del perfil `default`/`suspendido` = un gateway del router). **ArgosIsp nunca cambia `/ip dns`**: es del operador | `dns_router_sin_servidores`, `dns_router_documentacion`, `dns_router_sin_remotas` (comandos `/ip dns set …`) |
+| `portal_host` | Desde la API: `GET http://<destino del NAT>/generate_204` con `Host: connectivitycheck.gstatic.com`, sin seguir redirecciones: debe dar 3xx a `…/corte`. Un proxy delante (Nginx Proxy Manager) que solo atiende sus dominios da 404 o su página por defecto. Sin conexión desde la API: `ok: null` (no se pudo comprobar). `ROUTEROS_SONDA_PORTAL_MS` (3000; 0 = apagado) | `portal_no_acepta_host` |
+| `portal_en_router` | El destino del NAT no es una dirección de `/ip/address` del propio router (Argos detrás del mismo MikroTik con port-forward: el HTTP iría a `input` y no al portal) | `portal_en_router` |
+
+El reconciliador hace la misma revisión de `/ip dns` en cada pasada: cada problema va a `avisos[]` y emite `routeros.fallido` (`operacion: "dns del router (<codigo>)"`, `servicio_id: null`).
+
+**Puerto dedicado del corte**: el Caddy de producción (y el del nodo portal) atiende también `:${PORTAL_CORTE_PUERTO}` (8088) con el mismo sitio HTTP de cualquier Host. Con `PORTAL_CORTE_V4`/`PORTAL_CORTE_PUERTO` en el `.env`, el compose fija `ROUTERS_SERVICIO_PORTAL_V4`/`_PORTAL_PUERTO` y el dst-nat va directo al Caddy de Argos sin pasar por NPM. El puerto debe estar abierto desde la red de los routers.
+
+### 10.5 · Qué deja pasar el corte y cómo se corta lo ya abierto (bug v1.9.0)
+
+Causa del bug: `argos-corte` solo aceptaba DNS hacia `argos-dns` (el router y `ROUTERS_SERVICIO_DNS_V4`). Con otro resolver (8.8.8.8 en el perfil PPP, el CPE o el teléfono) el suspendido no resolvía el host de la sonda, nunca pedía el HTTP que va a `/corte` y el sistema mostraba «sin internet» (Chrome: `DNS_PROBE_STARTED`).
+
+| Tráfico del suspendido (IPv4 e IPv6) | Qué hace el router |
+| --- | --- |
+| DNS udp/tcp 53 a **cualquier** resolver | `accept` (`argosisp: corte DNS udp/tcp a cualquier resolver`): respuesta real, sin NAT; no depende de `allow-remote-requests` del router |
+| TCP 80 a cualquier sitio (sondas de Android, Apple, Windows, Firefox…) | `dst-nat` al portal (`argosisp: corte-nat HTTP a /corte`; IPv6 en `/ipv6/firewall/nat` con `to-address=<portal_v6>/128`, solo con IPv6 del portal); el portal responde 302 a `/corte` |
+| Portal y walled garden (pasarela) | `accept`, sin NAT |
+| TCP 443, DoT 853, DoH | `reject tcp-reset` (falla al instante; nunca `drop`) |
+| Lo demás (QUIC UDP/443, ICMP de eco…) | `reject icmp-admin-prohibited` |
+
+- Las reglas viejas `argosisp: corte DNS udp` y `argosisp: corte DNS tcp` (con `dst-address-list=argos-dns`) se **borran** en la siguiente reconciliación (`REGLAS_RETIRADAS`); `argos-dns` queda como lista informativa.
+- **Conexiones ya abiertas** (en FastTrack no pasan por el filtro: el suspendido seguía navegando):
+  - PPPoE con RADIUS: `coa` suspende con **Disconnect** a toda sesión (`COA_SUSPENDER=disconnect`, por defecto). El CPE reconecta en segundos con `Mikrotik-Group=suspendido` (address-list e interface-list IPv4/IPv6) y abre sus conexiones de nuevo, que entran al corte. `COA_SUSPENDER=coa` vuelve al CoA sin reconectar (`COA_SUSPENDER_CON_IPV6`, ahora `disconnect` por defecto, decide las sesiones con IPv6).
+  - PPPoE sin RADIUS: el cambio de perfil del secret ya quita la sesión (`/ppp active remove`).
+  - WISP (IP fija o DHCP): al escribir su entrada en `suspendidos`, el dispatcher manda `POST /rest/execute` con `/ip firewall connection remove [find where src-address~"^<ip>:" or dst-address~"^<ip>:"]` (una vez, en `audit.red`; el resultado lleva `accion: conexiones_cortadas`). Sus prefijos IPv6 también van a `/ipv6/firewall/address-list suspendidos` (`argosisp:servicio:<id>:delegado`).
 
 ## 11. Modo de velocidad único por router (decisión del PM, 2026-11-05)
 

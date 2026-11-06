@@ -51,8 +51,11 @@ add chain=forward connection-state=established,related src-address-list=argos-cl
 add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
 
 # Cadena de corte (tráfico del cliente suspendido hacia fuera). Filter-Id = "argos-corte.in".
-add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
-add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
+# DNS hacia CUALQUIER resolver (el del router, el del perfil PPP o uno fijo como 8.8.8.8), con la
+# respuesta real: si el equipo no resuelve, nunca pide el HTTP que va a /corte y dice "sin internet".
+# DoT (853) y DoH (443) caen en el tcp-reset y el equipo vuelve al DNS normal.
+add chain=argos-corte protocol=udp dst-port=53 action=accept comment="argosisp: corte DNS udp a cualquier resolver"
+add chain=argos-corte protocol=tcp dst-port=53 action=accept comment="argosisp: corte DNS tcp a cualquier resolver"
 add chain=argos-corte dst-address-list=argos-portal action=accept comment="argosisp: corte portal"
 add chain=argos-corte dst-address-list=argos-walled action=accept comment="argosisp: corte walled garden"
 # Rechazo explícito en vez de drop: HTTPS y el resto de TCP fallan al instante (sin esperar el
@@ -80,26 +83,22 @@ add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$
 add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
 
 # ============================================================================
-# 9. Firewall IPv6 (espejo del IPv4, SIN NAT: decisión del PM, día 4)
+# 9. Firewall IPv6 (espejo del IPv4, con NAT de HTTP a /corte si hay IPv6 del portal)
 # ============================================================================
-# Se suspende por CoA sin reconectar (COA_SUSPENDER_CON_IPV6=coa). El cliente siempre tiene IPv4 y
-# llega a /corte por ahí: en IPv6 el suspendido solo alcanza DNS (nuestros resolvers y el router), el
-# portal y el walled garden, y el resto se RECHAZA al instante (tcp-reset / icmp-admin-prohibited,
-# nunca drop) para que Happy Eyeballs caiga a IPv4 sin esperar y la detección de portal cautivo
-# funcione. Detalle y verificación en infra/mikrotik/README.md, "Corte por IPv6".
+# Mismo trato que IPv4 (bug v1.9.0, 5 nov): DNS a cualquier resolver, portal y walled garden, TCP/80
+# redirigido al portal por IPv6 y el resto RECHAZADO al instante (tcp-reset / icmp-admin-prohibited,
+# nunca drop). El NAT IPv6 coincide con las sesiones que entraron con el perfil suspendido (lista de
+# interfaces o address-list IPv6): PPPoE con COA_SUSPENDER_CON_IPV6=disconnect (por defecto), que
+# reconecta al suspendido, y WISP por su entrada IPv6 en suspendidos. Sin portalV6 no hay NAT IPv6:
+# el HTTP por IPv6 recibe reset y el equipo cae a IPv4. infra/mikrotik/README.md, "Corte por IPv6".
 :put "argosisp: firewall IPv6"
-#
-# Alternativa (solo con COA_SUSPENDER_CON_IPV6=disconnect, que reconecta al suspendido con
-# Mikrotik-Group=suspendido y llena las listas IPv6): redirigir TCP/80 por IPv6 al portal con
-# /ipv6 firewall nat. No se aplica; para usarla, quita los "#" (la limpieza de la sección 0 y el
-# orden de la sección 10 ya cubren /ipv6 firewall nat).
-#:if ($portalV6 != "") do={
-#    /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
-#    /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
-#    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
-#    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
-#    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
-#}
+:if ($portalV6 != "") do={
+    /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
+    /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
+    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
+    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
+    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+}
 /ipv6 firewall filter
 add chain=input src-address-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por address-list"
 add chain=input in-interface-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por interface-list"
@@ -109,8 +108,11 @@ add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
 add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
 
-add chain=argos-corte protocol=udp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS udp"
-add chain=argos-corte protocol=tcp dst-port=53 dst-address-list=argos-dns action=accept comment="argosisp: corte DNS tcp"
+# DNS hacia CUALQUIER resolver (el del router, el del perfil PPP o uno fijo como 8.8.8.8), con la
+# respuesta real: si el equipo no resuelve, nunca pide el HTTP que va a /corte y dice "sin internet".
+# DoT (853) y DoH (443) caen en el tcp-reset y el equipo vuelve al DNS normal.
+add chain=argos-corte protocol=udp dst-port=53 action=accept comment="argosisp: corte DNS udp a cualquier resolver"
+add chain=argos-corte protocol=tcp dst-port=53 action=accept comment="argosisp: corte DNS tcp a cualquier resolver"
 add chain=argos-corte dst-address-list=argos-portal action=accept comment="argosisp: corte portal"
 add chain=argos-corte dst-address-list=argos-walled action=accept comment="argosisp: corte walled garden"
 # Rechazo explícito, nunca drop: TCP recibe reset y lo demás (QUIC, ICMPv6 de eco) admin-prohibited.

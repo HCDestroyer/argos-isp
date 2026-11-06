@@ -18,7 +18,12 @@ import {
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
+import {
+    clientesUsanDnsRouter,
+    configCorteResuelta,
+    estadoCorteRouter,
+    revisarDnsRouter,
+} from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
@@ -215,6 +220,27 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     )
                     salida.avisos.push(...corte.avisos)
                     salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
+                    // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
+                    let dnsRouter: Record<string, string> | null = null
+                    try {
+                        dnsRouter = await cliente.leerDns()
+                    } catch (error) {
+                        if (!(error instanceof ErrorRouterOS)) throw error
+                        salida.avisos.push(`no se pudo leer /ip dns: ${error.message}`)
+                    }
+                    const usaDns = clientesUsanDnsRouter(
+                        lecturaCorte.get('/ppp/profile') ?? [],
+                        gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    )
+                    for (const p of dnsRouter ? revisarDnsRouter(dnsRouter, usaDns) : []) {
+                        salida.avisos.push(p.mensaje)
+                        await t.emit('routeros.fallido', {
+                            servicio_id: null,
+                            router_id: input.router_id,
+                            operacion: `dns del router (${p.codigo})`,
+                            error: p.mensaje,
+                        })
+                    }
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
                 nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null

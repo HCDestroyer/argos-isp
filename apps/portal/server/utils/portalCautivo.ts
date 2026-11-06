@@ -38,7 +38,9 @@ export const SONDAS: readonly SondaPortalCautivo[] = [
     { sistema: 'Android / ChromeOS / Chrome', host: 'connectivitycheck.gstatic.com', ruta: '/generate_204', exito: { status: 204 } },
     { sistema: 'Android (antiguo)', host: 'clients3.google.com', ruta: '/generate_204', exito: { status: 204 } },
     { sistema: 'Android (Google)', host: 'www.google.com', ruta: '/gen_204', exito: { status: 204 } },
-    { sistema: 'Samsung / Xiaomi / Huawei', host: 'connect.rom.miui.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Samsung (One UI)', host: 'connectivitycheck.samsung.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Xiaomi (MIUI / HyperOS)', host: 'connect.rom.miui.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Huawei / Honor', host: 'connectivitycheck.platform.hicloud.com', ruta: '/generate_204', exito: { status: 204 } },
     {
         sistema: 'iOS / iPadOS / macOS',
         host: 'captive.apple.com',
@@ -52,6 +54,7 @@ export const SONDAS: readonly SondaPortalCautivo[] = [
         exito: { status: 200, cuerpo: '<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>' },
     },
     { sistema: 'Windows 10 / 11', host: 'www.msftconnecttest.com', ruta: '/connecttest.txt', exito: { status: 200, cuerpo: 'Microsoft Connect Test' } },
+    { sistema: 'Windows 10 / 11 (IPv6)', host: 'ipv6.msftconnecttest.com', ruta: '/connecttest.txt', exito: { status: 200, cuerpo: 'Microsoft Connect Test' } },
     { sistema: 'Windows 10 / 11 (abre el navegador)', host: 'www.msftconnecttest.com', ruta: '/redirect', exito: { status: 200 } },
     { sistema: 'Windows 7 / 8', host: 'www.msftncsi.com', ruta: '/ncsi.txt', exito: { status: 200, cuerpo: 'Microsoft NCSI' } },
     { sistema: 'Firefox', host: 'detectportal.firefox.com', ruta: '/success.txt', exito: { status: 200, cuerpo: 'success\n' } },

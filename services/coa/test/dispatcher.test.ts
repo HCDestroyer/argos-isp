@@ -564,8 +564,48 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         )
     })
 
+    it('suspender con COA_SUSPENDER=disconnect: Disconnect a toda sesión (sale de FastTrack y entra al perfil de corte)', async () => {
+        const conV6 = sesion({ prefijo_enlace_v6: '2001:db8:101:1::/64' })
+        const soloV4 = sesion({ id: 2, acct_session_id: '81a00004' })
+        almacen.sesiones.set(101, [conV6, soloV4])
+        const todas = new Dispatcher({
+            almacen,
+            nas: new ClienteNasUdp(),
+            claveSecretos: CLAVE,
+            suspendido: SUSPENDIDO,
+            suspender: 'disconnect',
+            puertoNas: nas.puerto,
+            timeoutMs: TIMEOUT_ACK_MS,
+            reintentos: 0,
+            esperaMs: 10,
+            log: silencio,
+        })
+        nas.recibidos.length = 0
+        const r = await todas.procesar(suspender(40))
+        assert.deepEqual(
+            r.sesiones.map((x) => [x.sesion_id, x.tipo, x.resultado]),
+            [
+                [1, 'disconnect', 'ack'],
+                [2, 'disconnect', 'ack'],
+            ],
+        )
+        assert.deepEqual(
+            nas.recibidos.map((p) => p.codigo),
+            ['Disconnect-Request', 'Disconnect-Request'],
+        )
+        const fila = almacen.red.find((f) => f.comando.evento_id === '40' && f.tipo === 'disconnect')!
+        assert.match(String(fila.comando.razon), /sin sus conexiones abiertas/)
+    })
+
+    it('leerConfig: COA_SUSPENDER acepta disconnect (por defecto) | coa', () => {
+        assert.equal(leerConfig({}).suspender, 'disconnect')
+        assert.equal(leerConfig({ COA_SUSPENDER: 'coa' }).suspender, 'coa')
+        assert.throws(() => leerConfig({ COA_SUSPENDER: 'otro' }), /COA_SUSPENDER/)
+    })
+
     it('leerConfig: COA_SUSPENDER_CON_IPV6 acepta coa | disconnect', () => {
-        assert.equal(leerConfig({}).suspenderConIpv6, 'coa')
+        assert.equal(leerConfig({}).suspenderConIpv6, 'disconnect')
+        assert.equal(leerConfig({ COA_SUSPENDER_CON_IPV6: 'coa' }).suspenderConIpv6, 'coa')
         assert.equal(leerConfig({ COA_SUSPENDER_CON_IPV6: 'disconnect' }).suspenderConIpv6, 'disconnect')
         assert.throws(() => leerConfig({ COA_SUSPENDER_CON_IPV6: 'otro' }), /COA_SUSPENDER_CON_IPV6/)
     })

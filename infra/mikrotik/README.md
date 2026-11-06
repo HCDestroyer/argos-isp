@@ -317,6 +317,8 @@ Recomendación para `coa`:
 
 ## Corte por IPv6: rechazo rápido, `/corte` por IPv4
 
+> **Actualizado en v1.9.1 (bug del portal cautivo, 5 nov; `contratos/control-velocidad.md` §10.5).** El DNS del suspendido pasa a **cualquier** resolver (IPv4 e IPv6), no solo a `argos-dns`. Con `portalV6` hay NAT IPv6 de TCP/80 a `/corte` (sección 9 de `lab.rsc`, ya no comentado), y `coa` suspende con Disconnect por defecto (`COA_SUSPENDER=disconnect`) para que la sesión entre con el perfil `suspendido` y sus conexiones en FastTrack se corten. Lo que sigue describe la decisión del día 4 (CoA sin reconectar), que queda con `COA_SUSPENDER=coa`. Guía de verificación con Android e iPhone: `docs/laboratorio/portal-cautivo.md`.
+
 **Decisión del PM (día 4, opción 1):** se suspende por **CoA sin reconectar** (`COA_SUSPENDER_CON_IPV6=coa`, valor por defecto del compose y el de producción). No hay NAT ni redirección IPv6: el cliente siempre tiene IPv4 y llega a `/corte` por ahí. En IPv6 el router solo tiene que fallar **rápido**, para que el navegador (Happy Eyeballs) y la detección de portal cautivo pasen a IPv4 sin esperar timeouts.
 
 Qué hace `lab.rsc` (sección 9) con el tráfico IPv6 de un suspendido (por `Filter-Id = "argos-corte.in"` del CoA, o por las listas `suspendidos` si entró ya suspendido):

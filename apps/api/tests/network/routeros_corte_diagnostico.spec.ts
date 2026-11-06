@@ -32,7 +32,7 @@ const fabrica: FabricaClientes = (router) =>
 const ENTORNO = {
     PORTAL_URL_PUBLICA: 'https://portal.isp.example',
     ROUTERS_SERVICIO_WALLED_GARDEN: 'app.recurrente.com',
-    ROUTERS_SERVICIO_DNS_V4: '192.0.2.53',
+    ROUTERS_SERVICIO_DNS_V4: '1.1.1.1',
 }
 const BORRAR = [
     'ROUTERS_SERVICIO_PORTAL_V4',
@@ -146,9 +146,10 @@ test.group('RouterOS · corte con el portal por FQDN y diagnóstico de corte', (
         })
         // /tool/fetch fue al destino real del NAT, no a PORTAL_URL_PUBLICA
         assert.deepEqual(fetches(), ['http://198.51.100.7:80/corte'])
-        assert.lengthOf(d.limites, 3)
+        assert.lengthOf(d.limites, 4)
         assert.match(d.limites[0]!, /HTTPS \(puerto 443\) no se redirige/)
-        assert.match(d.limites[1]!, /IPv6 no se redirige/)
+        assert.match(d.limites[1]!, /IPv6 se redirige igual que IPv4 solo si/)
+        assert.match(d.limites[2]!, /DNS del suspendido responde con cualquier resolver/)
 
         // El DNS cambia: la siguiente reconciliación corrige el NAT y la lista del portal.
         dns.set('portal.isp.example', ['198.51.100.8'])
@@ -377,6 +378,6 @@ test.group('RouterOS · corte con el portal por FQDN y diagnóstico de corte', (
         const ok = despues.chequeos.find((c) => c.clave === 'corte')!
         assert.isTrue(ok.ok, ok.detalle)
         assert.match(ok.detalle, /^Corte listo/)
-        assert.lengthOf(ok.corte!.limites, 3)
+        assert.lengthOf(ok.corte!.limites, 4)
     })
 })

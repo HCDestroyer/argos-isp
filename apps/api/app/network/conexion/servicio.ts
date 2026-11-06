@@ -1,4 +1,5 @@
 import { ReglaNegocio } from '#shared/errores'
+import { esIpDocumentacion } from '#network/routeros/corte_router'
 import type { RouterVista } from '#network/consultas/routers'
 
 /**
@@ -14,7 +15,8 @@ import type { RouterVista } from '#network/consultas/routers'
  * - `pppoe_interfaz`: `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`;
  * - `susp_rate_limit`: `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` o `ROUTEROS_SUSPENDIDO_RATE_LIMIT`
  *   (256k/256k, el del perfil de corte);
- * - `clientes_v6`, `walled_garden` y `dns_v6` pueden quedar vacíos.
+ * - `clientes_v6`, `walled_garden`, `dns_v4` y `dns_v6` pueden quedar vacíos (sin DNS, el script deja
+ *   los del router). Un DNS de documentación (192.0.2.x, 2001:db8::…) da 422: no es un DNS real.
  *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
@@ -38,7 +40,8 @@ export const VARIABLES_SERVICIO = [
     'dns_v6',
 ] as const
 
-const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v6'])
+// `dns_v4`/`dns_v6` vacíos: el script deja los DNS que ya tiene el router (y se detiene si no tiene).
+const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v4', 'dns_v6'])
 
 export const variableEntorno = (nombre: string) => `ROUTERS_SERVICIO_${nombre.toUpperCase()}`
 
@@ -75,6 +78,18 @@ export function valoresServicio(
         if (valor === null) {
             faltan.push(nombre === 'pppoe_interfaz' ? 'interfaz_clientes' : variableEntorno(nombre))
         } else valores[nombre] = valor
+    }
+    const documentacion = [valores.dns_v4, valores.dns_v6]
+        .flatMap((v) => (v ?? '').split(','))
+        .map((d) => d.trim())
+        .filter((d) => d !== '' && esIpDocumentacion(d))
+    if (documentacion.length > 0) {
+        throw new ReglaNegocio(
+            `${documentacion.join(', ')} son IPs de documentación, no DNS reales: el router no resolvería nada y el ` +
+                'suspendido vería «sin internet». Pon los DNS de tu proveedor en ROUTERS_SERVICIO_DNS_V4 / _V6 (o ' +
+                'déjalos vacíos para conservar los del router)',
+            'dns_documentacion',
+        )
     }
     if (faltan.length > 0) {
         throw new ReglaNegocio(

@@ -961,6 +961,11 @@ const CODIGOS_CORTE = [
     'portal_sin_corte',
     'suspendidos_fuera_de_lista',
     'fasttrack',
+    'dns_router_sin_servidores',
+    'dns_router_documentacion',
+    'dns_router_sin_remotas',
+    'portal_no_acepta_host',
+    'portal_en_router',
 ]
 
 const problemaEstrategia = objeto({
@@ -1171,11 +1176,17 @@ export const DiagnosticoCorte = definirEsquema(
                         'fasttrack',
                         'perfil_suspendido',
                         'walled_garden',
+                        'dns_router',
+                        'portal_host',
+                        'portal_en_router',
                     ]),
                     description:
                         'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
                         'portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la ' +
-                        'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden',
+                        'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, ' +
+                        'dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los ' +
+                        'clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), ' +
+                        'portal_en_router (el destino del NAT no es una IP del propio router)',
                 },
                 ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
                 codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },
@@ -1238,7 +1249,8 @@ export const DiagnosticoCorte = definirEsquema(
         }),
         limites: {
             ...lista(texto),
-            description: 'Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre',
+            description:
+                'Lo que el corte no hace por diseño (HTTPS no se redirige; IPv6 solo con la IPv6 del portal; DNS privado estricto); mostrar siempre',
         },
     }),
 )
@@ -1371,7 +1383,13 @@ export const SincronizacionServicio = definirEsquema(
                     router_id: id,
                     ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
                     comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
-                    accion: enumerado(['creado', 'actualizado', 'borrado', 'desconectado']),
+                    accion: enumerado([
+                        'creado',
+                        'actualizado',
+                        'borrado',
+                        'desconectado',
+                        'conexiones_cortadas',
+                    ]),
                     duplicados: entero,
                 },
                 ['duplicados'],

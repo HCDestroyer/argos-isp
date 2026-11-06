@@ -240,6 +240,9 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             REDIS_HOST: env.get('REDIS_HOST') ?? '127.0.0.1',
             REDIS_PORT: String(env.get('REDIS_PORT') ?? 6379),
             COA_STREAM: STREAM,
+            // Estas pruebas cubren el CoA de suspensión (`COA_SUSPENDER=coa`); el valor por defecto,
+            // `disconnect`, lo prueban services/coa/test/dispatcher.test.ts y la guía de laboratorio.
+            COA_SUSPENDER: 'coa',
             COA_GRUPO_INICIO: '0',
             DB_HOST: env.get('DB_HOST'),
             DB_PORT: String(env.get('DB_PORT')),

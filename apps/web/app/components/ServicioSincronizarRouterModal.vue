@@ -23,6 +23,7 @@ const ACCIONES: Record<SincronizacionServicio['cambios'][number]['accion'], { et
     actualizado: { etiqueta: 'Corregido', color: 'info' },
     borrado: { etiqueta: 'Borrado', color: 'warning' },
     desconectado: { etiqueta: 'Sesión desconectada', color: 'warning' },
+    conexiones_cortadas: { etiqueta: 'Conexiones abiertas cortadas', color: 'warning' },
 }
 
 watch(abierto, (valor) => {

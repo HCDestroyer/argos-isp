@@ -104,12 +104,12 @@
       "descripcion": "Dominios que alcanza un suspendido además del portal (A5)"
     },
     "dns_v4": {
-      "patron": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(,([0-9]{1,3}\\.){3}[0-9]{1,3})*$",
-      "descripcion": "Resolutores IPv4 del router (al menos uno)"
+      "patron": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}(,([0-9]{1,3}\\.){3}[0-9]{1,3})*)?$",
+      "descripcion": "DNS IPv4 reales del router (los de tu proveedor). Vacío = los que ya tiene el router; nunca IPs de documentación"
     },
     "dns_v6": {
       "patron": "^([0-9A-Fa-f:]+(,[0-9A-Fa-f:]+)*)?$",
-      "descripcion": "Resolutores IPv6 del router"
+      "descripcion": "DNS IPv6 reales del router (vacío = los que ya tiene); nunca 2001:db8::"
     }
   }
 }

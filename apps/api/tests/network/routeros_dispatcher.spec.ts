@@ -178,6 +178,8 @@ test.group('RouterOS · dispatcher WISP', (group) => {
                 'PATCH /queue/simple',
                 'PATCH /queue/simple',
                 'PUT /ip/firewall/address-list',
+                // Al suspender: sus conexiones abiertas (FastTrack) se cortan una vez
+                'POST /execute',
                 'PATCH /queue/simple',
                 'DELETE /ip/firewall/address-list',
             ],
