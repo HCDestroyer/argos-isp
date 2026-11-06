@@ -25,6 +25,7 @@ const PANTALLAS = [
     ['sugerencias por zona y router', '/configuracion/empresas?tab=sugerencias'],
     ['usuarios', '/usuarios'],
     ['notificaciones', '/configuracion/notificaciones'],
+    ['portal de corte', '/configuracion/portal-corte'],
     ['notificaciones de una empresa', '/configuracion/notificaciones?empresa=2'],
     ['servicio de otra empresa', '/servicios/4'],
     ['cliente con dos empresas', '/clientes/3?tab=cuenta'],
