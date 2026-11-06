@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/HCDestroyer/argos-isp/compare/v1.10.0...v1.11.0) (2026-11-06)
+
+
+### Funcionalidades
+
+* **red:** tipo de conexión por router, editar IP y credenciales, reúso a prueba de bugs y portal de corte ([#226](https://github.com/HCDestroyer/argos-isp/issues/226)) ([d08403f](https://github.com/HCDestroyer/argos-isp/commit/d08403f4cea766d2c8053a115fcf8bc838b58a3f))
+
 ## [1.10.0](https://github.com/HCDestroyer/argos-isp/compare/v1.9.0...v1.10.0) (2026-11-06)
 
 
