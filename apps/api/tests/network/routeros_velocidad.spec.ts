@@ -8,6 +8,7 @@ import {
     crearEscenarioRouter,
     crearPlanFila,
     crearServicioFila,
+    routerConTipo,
 } from '#tests/core/fabricas'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
@@ -97,6 +98,7 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
     }
 
     async function crear(client: any, planId: number, cuerpo: Record<string, unknown> = {}) {
+        await routerConTipo(routerId, cuerpo.tipo_conexion ?? 'ip_estatica')
         const requestId = unico('req')
         const r = await estado(
             client

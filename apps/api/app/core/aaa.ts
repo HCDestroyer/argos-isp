@@ -31,7 +31,8 @@ import {
  * - `construirRegistroAaa` arma el JSON desde Postgres (lo devuelve `GET /internal/aaa/servicio`).
  * - `publicarAaa(servicioIds)` lo escribe en Redis `aaa:user:<user_ppp>` (write-through, SIN TTL).
  *   Un servicio retirado se escribe como lápida. La escritura compara `version`: nunca pisa un
- *   registro del mismo servicio con `version` mayor (un gancho atrasado no deja datos viejos).
+ *   registro del mismo servicio con `version` mayor (un gancho atrasado no deja datos viejos), y una
+ *   lápida o lectura vieja nunca pisa la clave de un usuario reutilizado por otro servicio (`SCRIPT_SET`).
  * - `refrescarAaaAlConfirmar(t, ...)` agenda la publicación después del COMMIT de la acción.
  */
 
@@ -371,10 +372,39 @@ export async function paginaRegistrosAaa(
 }
 
 /**
- * SET condicionado: no reemplaza un registro (o lápida) del MISMO servicio con `version` mayor.
- * KEYS[1] = clave; ARGV = json, servicio_id, version.
+ * SET condicionado (KEYS[1] = clave; ARGV = json, servicio_id, version, lápida '1'/'0'):
+ * - nunca reemplaza un registro (o lápida) del MISMO servicio con `version` mayor (gancho atrasado);
+ * - una lápida nunca reemplaza lo que hay de OTRO servicio: el usuario ya se reutilizó (renombre o
+ *   eliminación) y la lápida atrasada del dueño anterior lo dejaría rechazado (devuelve 0);
+ * - un registro vivo reemplaza la lápida de otro servicio (reúso), pero no el registro vivo de otro
+ *   servicio: devuelve 2 y `escribirRegistrosAaa` decide con Postgres quién es el dueño (una lectura
+ *   vieja del dueño anterior dejaría su contraseña en el usuario del nuevo).
  */
 const SCRIPT_SET = `
+local actual = redis.call('GET', KEYS[1])
+if actual then
+    local ok, previo = pcall(cjson.decode, actual)
+    if ok and type(previo) == 'table' and previo['servicio_id'] ~= nil then
+        if tonumber(previo['servicio_id']) == tonumber(ARGV[2]) then
+            if tonumber(previo['version']) ~= nil and tonumber(previo['version']) > tonumber(ARGV[3]) then
+                return 0
+            end
+        elseif ARGV[4] == '1' then
+            return 0
+        elseif previo['eliminado'] ~= true then
+            return 2
+        end
+    end
+end
+redis.call('SET', KEYS[1], ARGV[1])
+return 1
+`
+
+/**
+ * Escritura del dueño que dice Postgres: solo respeta la `version` mayor del mismo servicio
+ * (KEYS[1] = clave; ARGV = json, servicio_id, version).
+ */
+const SCRIPT_SET_DUENO = `
 local actual = redis.call('GET', KEYS[1])
 if actual then
     local ok, previo = pcall(cjson.decode, actual)
@@ -431,13 +461,57 @@ export async function escribirRegistrosAaa(
             JSON.stringify(valor),
             String(valor.servicio_id),
             String(valor.version),
+            'eliminado' in valor ? '1' : '0',
         )
     }
     const resultados = (await tuberia.exec()) ?? []
     const error = resultados.find(([e]) => e)?.[0]
     if (error) throw error
-    const escritos = resultados.filter(([, r]) => r === 1 || r === 'OK').length
+    let escritos = resultados.filter(([, r]) => r === 1 || r === 'OK').length
+    const choques = valores.filter((_, i) => resultados[i]?.[1] === 2)
+    if (choques.length > 0) escritos += await resolverChoques(choques.map((v) => v.user_ppp))
     return { escritos, omitidos: valores.length - escritos }
+}
+
+/**
+ * La clave tiene el registro vivo de otro servicio: escribe el de quien tiene hoy el usuario en
+ * Postgres (el dueño), o la lápida si ya no es de nadie. Corre después del COMMIT, así que la lectura
+ * ve el cambio que provocó la escritura; si otro cambio confirma después, su gancho vuelve a pasar
+ * por aquí. Devuelve cuántas claves escribió.
+ */
+async function resolverChoques(usuarios: string[]): Promise<number> {
+    const unicos = [...new Set(usuarios)]
+    const registros = await registrosAaaPorUserPpp(unicos)
+    const duenos = new Map(registros.map((r) => [r.user_ppp, r]))
+    let escritos = 0
+    for (const userPpp of unicos) {
+        const dueno = duenos.get(userPpp)
+        const actual = await redis().get(claveAaa(userPpp))
+        let previo: { servicio_id?: unknown; version?: unknown } = {}
+        try {
+            previo = actual ? (JSON.parse(actual) as typeof previo) : {}
+        } catch {
+            previo = {}
+        }
+        const valor: RegistroAaa | LapidaAaa = dueno
+            ? valorRedis(dueno)
+            : {
+                  eliminado: true,
+                  user_ppp: userPpp,
+                  servicio_id: Number(previo.servicio_id ?? 0),
+                  version: Number(previo.version ?? 0) + 1,
+              }
+        const r = await redis().eval(
+            SCRIPT_SET_DUENO,
+            1,
+            claveAaa(userPpp),
+            JSON.stringify(valor),
+            String(valor.servicio_id),
+            String(valor.version),
+        )
+        if (r === 1) escritos++
+    }
+    return escritos
 }
 
 export interface ResumenRepoblado {
@@ -530,6 +604,49 @@ export async function publicarAaa(servicioIds: Iterable<number>): Promise<void> 
         const registros = await registrosAaaPorServicio(ids.slice(i, i + LOTE))
         await escribirRegistrosAaa(registros.map(valorRedis))
     }
+}
+
+/**
+ * Red de seguridad de los renombres (consumidor `aaa-cache`): los `user_ppp` que el servicio tuvo antes
+ * (`audit.cambios`, campo `user_ppp`) y ya no tiene. Si el usuario es hoy de otro servicio se publica
+ * ese; si no es de nadie, lápida del servicio con su `version` actual (solo reemplaza lo que sea de
+ * este servicio: el SET condicionado no pisa a otro). Cubre el gancho que no llegó a Redis al
+ * renombrar o al dejar PPPoE. Idempotente.
+ */
+export async function lapidarUsuariosAnteriores(servicioId: number): Promise<void> {
+    const servicio = (await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .select('user_ppp', 'version')
+        .first()) as {
+        user_ppp: string | null
+        version: number
+    } | null
+    if (!servicio) return
+    const { rows } = (await db.rawQuery(
+        `SELECT DISTINCT antes #>> '{}' AS user_ppp FROM audit.cambios
+          WHERE entidad_tipo = 'servicio' AND entidad_id = ? AND campo = 'user_ppp'
+            AND jsonb_typeof(antes) = 'string'`,
+        [servicioId],
+    )) as { rows: Array<{ user_ppp: string }> }
+    const anteriores = rows.map((r) => r.user_ppp).filter((u) => u && u !== servicio.user_ppp)
+    if (anteriores.length === 0) return
+    const duenos = (await db
+        .from('core.servicios')
+        .whereIn('user_ppp', anteriores)
+        .select('id', 'user_ppp')) as Array<{ id: number; user_ppp: string }>
+    const conDueno = new Set(duenos.map((d) => d.user_ppp))
+    await escribirRegistrosAaa(
+        anteriores
+            .filter((u) => !conDueno.has(u))
+            .map((u) => ({
+                eliminado: true,
+                user_ppp: u,
+                servicio_id: servicioId,
+                version: Number(servicio.version),
+            })),
+    )
+    await publicarAaa(duenos.map((d) => Number(d.id)))
 }
 
 /** Lápida en la clave de un `user_ppp` que dejó de existir (borrado o renombrado). */

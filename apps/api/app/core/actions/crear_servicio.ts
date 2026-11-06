@@ -23,6 +23,7 @@ import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 import { telefonoParaGuardar } from '#core/telefonos'
 import { resolverServidorServicio } from '#network/red_acceso/servicio'
+import { exigirTipoDelRouter } from '#network/tipo_conexion_router'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
 export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
@@ -42,8 +43,17 @@ export interface EntradaCrearServicio {
      * (`plantillaPorDefecto`). Lo pide `POST /servicios`; las llamadas internas no.
      */
     plantillaPorDefecto?: boolean
-    /** `pppoe` por defecto; `ip_estatica` y `dhcp_fija` sin credenciales (`contratos/routeros.md`) */
+    /**
+     * El del router (`network.routers.tipo_conexion`; `contratos/tipo-conexion-router.md`). Opcional: si
+     * llega distinto, 422 `tipo_conexion_del_router`. `ip_estatica` y `dhcp_fija` van sin credenciales
+     * (`contratos/routeros.md`).
+     */
     tipo_conexion?: TipoConexion
+    /**
+     * Solo interno (importador, nunca por la API): el servicio ya existe en el sistema de origen con su
+     * tipo y se conserva aunque difiera del router (como los servicios anteriores a la regla).
+     */
+    conservarTipo?: boolean
     amarre_ip_mac?: boolean
     user_ppp?: string
     pass_ppp?: string
@@ -87,14 +97,55 @@ export async function exigirReferencia(t: Transaccion, tabla: string, id: number
     if (!fila) throw new ValidacionFallida([{ field: campo, message: 'No existe', rule: 'exists' }])
 }
 
-/** 409 si el `user_ppp` ya existe. */
-export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
-    const repetido = await t.trx.from('core.servicios').where('user_ppp', userPpp).first()
-    if (repetido) throw new Conflicto(`El user_ppp ${userPpp} ya existe`, 'user_ppp_duplicado')
+/**
+ * Reserva el `user_ppp` para el servicio (`servicioId`; sin él, un alta) dentro de la transacción:
+ * - advisory lock por usuario: dos altas o renombres a la vez al mismo usuario se serializan y el
+ *   segundo ve el primero confirmado (409 `user_ppp_duplicado`, nunca el 23505 genérico);
+ * - 409 `user_ppp_duplicado` si otro servicio lo tiene, también uno retirado (su usuario no se
+ *   reutiliza: bitácora, sesiones y el CPE viejo que sigue marcando con él);
+ * - 409 `user_ppp_en_sesion` si hay una sesión abierta con ese usuario que no es del servicio (el
+ *   usuario se liberó por renombre o eliminación y el NAS todavía no cerró la sesión vieja). Se
+ *   libera solo al cerrarse la sesión (Stop, Disconnect o `sesiones.cerrar_colgadas`), sin TTL.
+ * Distingue mayúsculas, como RADIUS (`aaa` busca la clave exacta) y el `/ppp secret` de RouterOS.
+ */
+export async function exigirUserPppLibre(t: Transaccion, userPpp: string, servicioId?: number) {
+    await t.trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('core:user_ppp:' || ?::text))`, [userPpp])
+    const repetido = (await t.trx
+        .from('core.servicios')
+        .where('user_ppp', userPpp)
+        .if(servicioId !== undefined, (q) => q.whereNot('id', servicioId!))
+        .select('id')
+        .first()) as { id: number } | null
+    if (repetido) {
+        throw new Conflicto(
+            `El user_ppp ${userPpp} ya existe en el servicio ${repetido.id}`,
+            'user_ppp_duplicado',
+        )
+    }
+    const sesion = (await t.trx
+        .from('network.sesiones')
+        .where('user_ppp', userPpp)
+        .whereNull('fin')
+        // del propio servicio sí: vuelve a su usuario (A→B→A) con la sesión vieja todavía abierta
+        .if(servicioId !== undefined, (q) =>
+            q.where((w) => w.whereNull('servicio_id').orWhereNot('servicio_id', servicioId!)),
+        )
+        .select('id')
+        .first()) as { id: number } | null
+    if (sesion) {
+        throw new Conflicto(
+            `El user_ppp ${userPpp} tiene todavía una sesión abierta (${sesion.id}) de otro servicio: ` +
+                'se puede usar cuando el router la cierre',
+            'user_ppp_en_sesion',
+            'Usuario PPPoE en uso',
+        )
+    }
 }
 
 /**
  * Alta de un servicio: valida cliente, router activo, plan disponible en el router y plantilla.
+ * El tipo de conexión es el del router (`contratos/tipo-conexion-router.md`): `tipo_conexion` es
+ * opcional y, si llega distinto, 422 `tipo_conexion_del_router`.
  * - `pppoe` (por defecto): genera `user_ppp` y `pass_ppp` si no vienen (la contraseña se guarda
  *   cifrada v1).
  * - `ip_estatica` / `dhcp_fija`: sin credenciales; IPv4 obligatoria de las redes del router;
@@ -126,9 +177,10 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
         const router = (await t.trx
             .from('network.routers')
             .where('id', input.router_id)
-            .select('activo')
+            .select('activo', 'tipo_conexion')
             .first()) as {
             activo: boolean
+            tipo_conexion: TipoConexion
         } | null
         if (!router) {
             throw new ValidacionFallida([
@@ -160,7 +212,11 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
 
         const excepciones = input.excepciones ? await validarExcepciones(input.excepciones) : {}
 
-        const tipo = input.tipo_conexion ?? 'pppoe'
+        // el tipo lo define el router (decisión del PM, 5 nov); distinto → 422 `tipo_conexion_del_router`
+        if (!input.conservarTipo) exigirTipoDelRouter(router.tipo_conexion, input.tipo_conexion)
+        const tipo = input.conservarTipo
+            ? (input.tipo_conexion ?? router.tipo_conexion)
+            : router.tipo_conexion
         const modo = input.ipv6_modo ?? modoIpv6PorDefecto(plan, tipo)
         validarTipoConexion(plan, {
             tipo,

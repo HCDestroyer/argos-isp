@@ -17,13 +17,27 @@ function patron(regex: RegExp, mensaje: string) {
  * Espejo de `editarServicioValidator` + `validarTipoConexion` (A1) para la edición desde la ficha:
  * plan del mismo router, tipo de conexión (al pasar a PPPoE la API genera las credenciales; al
  * salir de PPPoE las borra), MAC (obligatoria en `dhcp_fija` y con amarre), amarre IP-MAC (solo
- * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), ubicación y contacto en sitio, e instalación y
- * facturación.
+ * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), IPv4 fija, contraseña PPPoE, ubicación y contacto
+ * en sitio, e instalación y facturación.
+ *
+ * IPv4: con `cambiar_ipv4` se escribe la nueva con la misma validación del alta
+ * (`problemasIpv4Fija`); la red es obligatoria si se ven las redes del router (`redes`) y no se
+ * manda: la API la busca por la IP. Con `quitar_ipv4` (solo PPPoE) va `ipv4: null` y el servicio toma
+ * su IP del pool del router. Sin cambios `ipv4` no viaja: nunca `""` (la API lo lee como null).
+ *
+ * Credenciales PPPoE (solo un PPPoE que sigue siéndolo): `user_ppp` con el patrón del backend (409
+ * `user_ppp_duplicado` si ya existe) y `pass_ppp` (6 a 64; vacía deja la que tiene).
+ *
+ * Tipo de conexión: lo define el router (`contratos/tipo-conexion-router.md`). No se elige: un
+ * servicio que difiere de su router solo puede pasar al tipo del router («unificar» este servicio).
  *
  * `guardado` es el servicio que se edita: su `contacto_telefono` no se valida si no cambió (la API
  * tampoco lo revisa; los teléfonos viejos no se migraron).
  */
-export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_telefono'> | null) {
+export function esquemaEdicionServicioPara(
+    guardado?: Pick<Servicio, 'contacto_telefono' | 'tipo_conexion'> | null,
+    redes: readonly { id: number, cidr: string }[] = [],
+) {
     return z.object({
         plan_id: z.number().int().min(1, 'Elige el plan'),
         tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
@@ -43,7 +57,30 @@ export function esquemaEdicionServicioPara(guardado?: Pick<Servicio, 'contacto_t
         excluir_firewall: z.boolean(),
         /** Servidor PPPoE del router (`contratos/red-acceso.md` §3); 0 = sin servidor o que lo derive la API. */
         servidor_pppoe_id: z.number().int(),
+        /** Solo de la pantalla: se escribe una IPv4 nueva. */
+        cambiar_ipv4: z.boolean(),
+        /** Solo de la pantalla: PPPoE sin IP fija (`ipv4: null`). */
+        quitar_ipv4: z.boolean(),
+        user_ppp: z.string().trim(),
+        /** Solo de la pantalla: la red de la IP nueva (no viaja). */
+        red_id: z.number().int().optional(),
+        ipv4: z.string().trim(),
+        pass_ppp: z.string(),
     }).superRefine((datos, ctx) => {
+        if (datos.cambiar_ipv4) {
+            for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: redes.length > 0, redes })) {
+                ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
+            }
+        }
+        if (datos.quitar_ipv4 && datos.tipo_conexion !== 'pppoe') {
+            ctx.addIssue({ code: 'custom', path: ['ipv4'], message: 'Sin PPPoE la IPv4 es obligatoria: cámbiala por otra en vez de quitarla' })
+        }
+        if (datos.tipo_conexion === 'pppoe' && guardado?.tipo_conexion === 'pppoe' && !PATRON_USUARIO_PPP.test(datos.user_ppp)) {
+            ctx.addIssue({ code: 'custom', path: ['user_ppp'], message: 'De 3 a 64 caracteres: letras, números, punto, guion, guion bajo o @' })
+        }
+        if (datos.tipo_conexion === 'pppoe' && datos.pass_ppp !== '' && (datos.pass_ppp.length < 6 || datos.pass_ppp.length > 64)) {
+            ctx.addIssue({ code: 'custom', path: ['pass_ppp'], message: 'De 6 a 64 caracteres' })
+        }
         if (datos.tipo_conexion === 'pppoe' && datos.amarre_ip_mac) {
             ctx.addIssue({ code: 'custom', path: ['amarre_ip_mac'], message: 'El amarre IP-MAC es solo para servicios sin PPPoE' })
         }
@@ -89,6 +126,12 @@ export function entradaEdicionDesde(servicio: Servicio): EntradaEdicionServicio 
         costo_override: servicio.costo_override ?? '',
         excluir_firewall: servicio.excluir_firewall,
         servidor_pppoe_id: servicio.servidor_pppoe_id ?? 0,
+        cambiar_ipv4: false,
+        quitar_ipv4: false,
+        user_ppp: servicio.user_ppp ?? '',
+        red_id: undefined,
+        ipv4: servicio.ipv4 ?? '',
+        pass_ppp: '',
     }
 }
 
@@ -154,5 +197,43 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     if (datos.excluir_firewall !== antes.excluir_firewall) {
         cambios.excluir_firewall = datos.excluir_firewall
     }
+    if (datos.quitar_ipv4 && datos.tipo_conexion === 'pppoe' && original.ipv4) {
+        cambios.ipv4 = null
+    }
+    else if (datos.cambiar_ipv4 && datos.ipv4 && datos.ipv4 !== (original.ipv4 ?? '')) {
+        cambios.ipv4 = datos.ipv4
+    }
+    // Solo un PPPoE que sigue siendo PPPoE; al pasar a PPPoE la API genera usuario y contraseña.
+    const sigueEnPppoe = datos.tipo_conexion === 'pppoe' && antes.tipo_conexion === 'pppoe'
+    if (sigueEnPppoe && datos.user_ppp && datos.user_ppp !== (original.user_ppp ?? '')) {
+        cambios.user_ppp = datos.user_ppp
+    }
+    if (sigueEnPppoe && datos.pass_ppp !== '') {
+        cambios.pass_ppp = datos.pass_ppp
+    }
     return cambios
+}
+
+/*
+ * 409 que no son de versión: la IP, el prefijo o el usuario PPPoE ya son de otro servicio, o todavía
+ * los usa una sesión abierta de otro (A1, `a1/reuso`: cuarentena sin TTL; se liberan cuando el router
+ * cierra la sesión o la barre `sesiones.cerrar_colgadas`, cada 5 min). Van en su campo.
+ */
+const CONFLICTOS_EN_CAMPO: Record<string, { campo: 'ipv4' | 'prefijo_delegado_v6' | 'user_ppp', texto?: string }> = {
+    ip_ocupada: { campo: 'ipv4' },
+    ip_en_sesion: { campo: 'ipv4', texto: 'Esa IP todavía la usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).' },
+    prefijo_ocupado: { campo: 'prefijo_delegado_v6' },
+    prefijo_en_sesion: { campo: 'prefijo_delegado_v6', texto: 'Ese prefijo IPv6 todavía lo usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).' },
+    user_ppp_duplicado: { campo: 'user_ppp' },
+    user_ppp_en_sesion: { campo: 'user_ppp', texto: 'Ese usuario PPPoE todavía lo usa una sesión abierta de otro servicio; se libera en cuanto se cierre (máx. 5 min).' },
+}
+
+/** El error de un 409 de IP, prefijo o usuario en su campo del formulario; `null` si es otro problema. */
+export function conflictoEnCampo(problema: { status: number, type: string, detail?: string, title: string }): { name: 'ipv4' | 'prefijo_delegado_v6' | 'user_ppp', message: string } | null {
+    const codigo = problema.status === 409 ? codigoProblema(problema) : null
+    const conflicto = codigo ? CONFLICTOS_EN_CAMPO[codigo] : undefined
+    if (!conflicto) {
+        return null
+    }
+    return { name: conflicto.campo, message: conflicto.texto ?? problema.detail ?? problema.title }
 }

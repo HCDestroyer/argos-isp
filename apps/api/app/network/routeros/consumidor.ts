@@ -88,8 +88,11 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
         if (EVENTOS_SERVICIO.has(evento.evento)) {
             const servicioId = Number(evento.payload.servicio_id)
             if (!Number.isInteger(servicioId) || servicioId <= 0) return
+            const campos = Array.isArray(evento.payload.campos)
+                ? evento.payload.campos.filter((c): c is string => typeof c === 'string')
+                : undefined
             await new AplicarRedServicio(opciones).execute(
-                { servicio_id: servicioId, evento_id: String(evento.id), evento: evento.evento },
+                { servicio_id: servicioId, evento_id: String(evento.id), evento: evento.evento, campos },
                 ctx,
             )
             return

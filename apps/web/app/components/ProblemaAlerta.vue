@@ -8,12 +8,15 @@ import type { Problem } from '@argosisp/contracts'
 const props = withDefaults(defineProps<{
     problema: Problem
     reintentar?: () => void
+    /** Texto del botón: «Recargar» en un 409 de versión, por ejemplo. */
+    etiquetaReintentar?: string
     /** Pone el botón "Reintentar" en espera mientras se repite la llamada. */
     reintentando?: boolean
     /** Lista también `errors[]` (p. ej. las líneas repetidas de un extracto, 409 `extracto_duplicado`). */
     conErrores?: boolean
 }>(), {
     reintentar: undefined,
+    etiquetaReintentar: 'Reintentar',
     reintentando: false,
     conErrores: false,
 })
@@ -35,7 +38,7 @@ const acciones = computed(() => {
         return undefined
     }
     return [{
-        label: 'Reintentar',
+        label: props.etiquetaReintentar,
         icon: 'i-lucide-rotate-cw',
         color: 'error' as const,
         variant: 'outline' as const,

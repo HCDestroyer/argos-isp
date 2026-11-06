@@ -4,7 +4,8 @@ import type { Problem } from '@argosisp/contracts'
 /**
  * Usuario y contraseña PPPoE. La contraseña solo se pide al hacer clic (`GET
  * /servicios/:id/credenciales`, permiso `servicios.ver_credenciales`) porque cada consulta
- * queda en la bitácora; la vista `Servicio` nunca la trae.
+ * queda en la bitácora; la vista `Servicio` nunca la trae. Al guardar una edición (otra `version`,
+ * p. ej. contraseña nueva desde «Editar servicio») se olvida la leída y se pide otra vez.
  */
 const props = defineProps<{
     servicio: Servicio
@@ -50,7 +51,7 @@ async function copiar(texto: string, que: string) {
     }
 }
 
-watch(() => props.servicio.id, () => {
+watch([() => props.servicio.id, () => props.servicio.version], () => {
     clave.value = null
     visible.value = false
     problema.value = null

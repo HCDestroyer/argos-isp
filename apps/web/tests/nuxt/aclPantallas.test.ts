@@ -296,6 +296,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Contrato Iris 0.6.0: el WhatsApp de la ficha con `notificaciones.ver`; rechazar con causa con `comprobantes.rechazar`.
     'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['pages/comprobantes/[id].vue'] },
+    // Tipo de conexión por router (`contratos/tipo-conexion-router.md`): la sección de la ficha lee con el
+    // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.
+    'RouterTipoConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'CambiarTipoConexionModal.vue': { permisos: ['routers.cambiar_tipo_conexion', 'routers.ver'], desde: ['components/RouterTipoConexion.vue'], exentos: { 'components/RouterTipoConexion.vue': ['routers.ver'] } },
     'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 

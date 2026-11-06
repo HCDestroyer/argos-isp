@@ -15,6 +15,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | → `retirado`                             | Disconnect | (al reconectar `aaa` lo rechaza)                                |
  * | `pendiente_instalacion` → `activo`       | Disconnect | (sin sesión no se envía nada: `aaa` rechazaba al pendiente)     |
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
+ * | config: `credenciales` (user_ppp, pass_ppp) | Disconnect | (reconecta con las credenciales nuevas; sesiones abiertas antes del cambio) |
  * | config: `router` con `union_routers`     | nada       | (mismo equipo físico: la sesión sigue; `contratos/routers.md`)  |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
@@ -43,7 +44,7 @@ export const ESTADOS: readonly EstadoServicio[] = [
     'retirado',
 ]
 
-export type CampoConfig = 'plan' | 'ips' | 'prefijo_v6' | 'router'
+export type CampoConfig = 'plan' | 'ips' | 'prefijo_v6' | 'router' | 'credenciales'
 
 /** `servicio.config_cambiada` de `routers.unir` (A1, `contratos/routers.md`) */
 export const MOTIVO_UNION_ROUTERS = 'union_routers'
@@ -205,7 +206,9 @@ export function decidir(
     // Unión de routers (`routers.unir`, A1): dos registros del mismo MikroTik. El NAS no cambia, la
     // sesión sigue y A1 reatribuye su accounting al router que queda: no hay nada que cortar.
     if (evento.motivo === MOTIVO_UNION_ROUTERS) campos.delete('router')
-    const reconectar = (['ips', 'prefijo_v6', 'router'] as const).filter((c) => campos.has(c))
+    // `credenciales` (A1, cambió `user_ppp` o `pass_ppp`): la sesión sigue con las de antes; al
+    // reconectar autentica con las nuevas (o la rechaza `aaa` si las viejas ya no valen).
+    const reconectar = (['ips', 'prefijo_v6', 'router', 'credenciales'] as const).filter((c) => campos.has(c))
     if (reconectar.length > 0) return { accion: 'disconnect', razon: `cambió ${reconectar.join(', ')}` }
     if (!campos.has('plan')) {
         return {
@@ -347,7 +350,7 @@ export function leerEvento(nombre: string, payload: unknown): EventoServicio | n
         evento: nombre,
         servicio_id: servicioId,
         campos: p.campos.filter((c): c is CampoConfig =>
-            ['plan', 'ips', 'prefijo_v6', 'router'].includes(String(c)),
+            ['plan', 'ips', 'prefijo_v6', 'router', 'credenciales'].includes(String(c)),
         ),
         ...(typeof p.motivo === 'string' ? { motivo: p.motivo } : {}),
     }

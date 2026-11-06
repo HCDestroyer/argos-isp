@@ -2,6 +2,7 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
+import { bd } from '~~/fixtures/bd'
 import PaginaServicio from '~/pages/servicios/[id].vue'
 import PaginaServicios from '~/pages/servicios/index.vue'
 import { esperar } from '../ayudas/esperar'
@@ -16,8 +17,14 @@ function campos(resultado: ReturnType<typeof esquemaServicio.safeParse>): string
     return resultado.success ? [] : resultado.error.issues.map(i => i.path.join('.'))
 }
 
+/** El tipo lo define el router (`contratos/tipo-conexion-router.md`): RB-Centro (router 1) pasa a `tipo`. */
+function tipoDelRouter1(tipo: TipoConexion) {
+    bd.routers.find(r => r.id === 1)!.tipo_conexion = tipo
+}
+
 async function crearWisp(tipo: 'ip_estatica' | 'dhcp_fija', extra: Partial<DatosServicio> = {}): Promise<Servicio> {
-    const resultado = await useServicios().crear({ cliente_id: 4, router_id: 1, plan_id: 1, tipo_conexion: tipo, ipv6_modo: 'ninguno', plantilla_facturacion_id: 1, ...extra }, nuevaClaveIdempotencia())
+    tipoDelRouter1(tipo)
+    const resultado = await useServicios().crear({ cliente_id: 4, router_id: 1, plan_id: 1, ipv6_modo: 'ninguno', plantilla_facturacion_id: 1, ...extra }, nuevaClaveIdempotencia())
     if (!resultado.ok) {
         throw new Error(resultado.problema.title)
     }
@@ -48,14 +55,21 @@ describe('semana 2 · servicios WISP', () => {
         expect(campos(esquemaServicio.safeParse(entrada({ amarre_ip_mac: true, mac: MAC })))).toEqual(['amarre_ip_mac'])
     })
 
-    it('el cuerpo del alta WISP no lleva credenciales y sí el tipo y el amarre', () => {
+    it('el cuerpo del alta WISP no lleva credenciales ni el tipo (es el del router), sí el amarre', () => {
         const wisp = cuerpoServicio(esquemaServicio.parse(entrada({ tipo_conexion: 'dhcp_fija', mac: MAC, amarre_ip_mac: true, ipv6_modo: 'ninguno' })))
-        expect(wisp).toMatchObject({ tipo_conexion: 'dhcp_fija', mac: MAC, amarre_ip_mac: true })
+        expect(wisp).toMatchObject({ mac: MAC, amarre_ip_mac: true })
+        expect(wisp).not.toHaveProperty('tipo_conexion')
         expect(wisp).not.toHaveProperty('user_ppp')
         expect(wisp).not.toHaveProperty('pass_ppp')
         const pppoe = cuerpoServicio(esquemaServicio.parse(entrada()))
-        expect(pppoe).toMatchObject({ tipo_conexion: 'pppoe', user_ppp: 'ana.lopez1' })
+        expect(pppoe).toMatchObject({ user_ppp: 'ana.lopez1' })
+        expect(pppoe).not.toHaveProperty('tipo_conexion')
         expect(pppoe).not.toHaveProperty('amarre_ip_mac')
+    })
+
+    it('alta: otro tipo que el del router responde 422 tipo_conexion_del_router', async () => {
+        const distinto = await useServicios().crear({ cliente_id: 4, router_id: 1, plan_id: 1, tipo_conexion: 'ip_estatica', ipv6_modo: 'ninguno', plantilla_facturacion_id: 1 }, nuevaClaveIdempotencia())
+        expect(!distinto.ok && [distinto.problema.status, codigoProblema(distinto.problema), distinto.problema.errors?.[0]?.field]).toEqual([422, 'tipo_conexion_del_router', 'tipo_conexion'])
     })
 
     it('alta WISP: sin usuario PPP, nombrado por su IPv4, sin credenciales ni desconectar', async () => {
@@ -67,20 +81,26 @@ describe('semana 2 · servicios WISP', () => {
         expect(!credenciales.ok && credenciales.problema.status).toBe(422)
         const desconectar = ACCIONES_SERVICIO.find(a => a.accion === 'desconectar')
         expect(desconectar && accionDisponible(desconectar, servicio)).toBe(false)
-        const sinMac = await useServicios().crear({ cliente_id: 4, router_id: 1, plan_id: 1, tipo_conexion: 'dhcp_fija', ipv6_modo: 'ninguno', plantilla_facturacion_id: 1 }, nuevaClaveIdempotencia())
+        const sinMac = await useServicios().crear({ cliente_id: 4, router_id: 1, plan_id: 1, ipv6_modo: 'ninguno', plantilla_facturacion_id: 1 }, nuevaClaveIdempotencia())
         expect(!sinMac.ok && sinMac.problema.errors?.map(e => e.field)).toEqual(['mac'])
     })
 
-    it('edición: solo viaja lo que cambió; pasar a PPPoE genera usuario, salir lo borra', async () => {
+    it('edición: solo viaja lo que cambió; pasar al tipo del router (PPPoE) genera usuario, salir lo borra', async () => {
         const servicio = await crearWisp('ip_estatica')
         const entradaEdicion = { ...entradaEdicionDesde(servicio), direccion: 'Km 14 carretera a El Salvador' }
         expect(cambiosServicio(esquemaEdicionServicio.parse(entradaEdicion), servicio)).toEqual({ version: 1, direccion: 'Km 14 carretera a El Salvador' })
 
+        // El router es PPPoE y el servicio quedó IP estática (dato anterior a la regla): puede pasar a PPPoE.
+        tipoDelRouter1('pppoe')
         const aPppoe = await useServicios().editar(servicio.id, cambiosServicio(esquemaEdicionServicio.parse({ ...entradaEdicionDesde(servicio), tipo_conexion: 'pppoe' }), servicio))
         expect(aPppoe.ok && aPppoe.data.user_ppp).toBeTruthy()
         if (!aPppoe.ok) {
             return
         }
+        // Otro tipo que el del router: 422 `tipo_conexion_del_router`.
+        const otro = await useServicios().editar(servicio.id, { version: aPppoe.data.version, tipo_conexion: 'dhcp_fija', ipv6_modo: 'ninguno' })
+        expect(!otro.ok && codigoProblema(otro.problema)).toBe('tipo_conexion_del_router')
+        tipoDelRouter1('dhcp_fija')
         const deVuelta = await useServicios().editar(servicio.id, { version: aPppoe.data.version, tipo_conexion: 'dhcp_fija', ipv6_modo: 'ninguno' })
         expect(!deVuelta.ok && deVuelta.problema.errors?.map(e => e.field)).toEqual(['mac'])
         const conMac = await useServicios().editar(servicio.id, { version: aPppoe.data.version, tipo_conexion: 'dhcp_fija', ipv6_modo: 'ninguno', mac: MAC })

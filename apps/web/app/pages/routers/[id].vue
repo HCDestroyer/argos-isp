@@ -326,10 +326,16 @@ async function alProbar() {
                     data-prueba="pestanas-router"
                 >
                     <template #velocidad>
-                        <RouterControlVelocidad
-                            :router="nas"
-                            @actualizado="alActualizar"
-                        />
+                        <div class="flex flex-col gap-6">
+                            <RouterTipoConexion
+                                :router="nas"
+                                @actualizado="alActualizar"
+                            />
+                            <RouterControlVelocidad
+                                :router="nas"
+                                @actualizado="alActualizar"
+                            />
+                        </div>
                     </template>
                     <template #red-acceso>
                         <RouterRedAcceso

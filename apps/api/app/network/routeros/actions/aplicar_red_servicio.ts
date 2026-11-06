@@ -44,6 +44,29 @@ export interface EntradaAplicarRed {
     /** id del evento que lo disparó (va a `audit.red`) */
     evento_id?: string | null
     evento?: string | null
+    /** `campos` de `servicio.config_cambiada` (con `credenciales` se fuerza el secret, `pppoe-local.md` §2 ter) */
+    campos?: string[]
+}
+
+/** ¿Este evento ya escribió el secret del servicio en el router? (`audit.red`, escritura aceptada) */
+async function secretYaEscrito(
+    t: Transaccion,
+    routerId: number,
+    servicioId: number,
+    eventoId: string | null,
+): Promise<boolean> {
+    if (!eventoId) return false
+    const fila = await t.trx
+        .from('audit.red')
+        .where('router_id', routerId)
+        .where('servicio_id', servicioId)
+        .where('tipo', 'routeros')
+        .where('ok', true)
+        .whereRaw(`comando->>'evento_id' = ?`, [eventoId])
+        .whereRaw(`comando->>'ruta' = '/ppp/secret'`)
+        .whereRaw(`comando->>'metodo' IN ('PUT', 'PATCH')`)
+        .first()
+    return Boolean(fila)
 }
 
 export interface ResultadoRouter {
@@ -201,6 +224,14 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                     // Un PPPoE que sigue en este router pero ahora con RADIUS (de `api` a `radius`): se
                     // borra el secret sin cortar la sesión; reconecta por RADIUS cuando se caiga.
                     const migrando = deseado && servicio.tipo_conexion === 'pppoe' && modo === 'radius'
+                    // Credenciales cambiadas (A1: `servicio.config_cambiada` con `credenciales`): el router no
+                    // devuelve la contraseña sin la política `sensitive`, así que se escribe a la fuerza y
+                    // se corta la sesión, una sola vez por evento (si `audit.red` ya tiene el secret de
+                    // este evento, una entrega repetida no vuelve a cortar la sesión reconectada).
+                    const forzar =
+                        deseadoSecret !== null &&
+                        (input.campos ?? []).includes('credenciales') &&
+                        !(await secretYaEscrito(t, routerId, input.servicio_id, input.evento_id ?? null))
                     const cambiosSecret = await asegurarSecret(
                         cliente,
                         input.servicio_id,
@@ -208,6 +239,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         ctx,
                         {
                             desconectar: !migrando,
+                            credenciales: forzar,
                         },
                     )
                     fila.cambios.push(...cambiosSecret)
