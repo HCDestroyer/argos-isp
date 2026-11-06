@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/HCDestroyer/argos-isp/compare/v1.9.0...v1.10.0) (2026-11-06)
+
+
+### Funcionalidades
+
+* **inventario:** contrato Iris 0.6.4 — nombre de bodega en GET /inventario/tecnicos (A22) ([#223](https://github.com/HCDestroyer/argos-isp/issues/223)) ([08e066e](https://github.com/HCDestroyer/argos-isp/commit/08e066eabcf70caead11c608154e788d6f288c54))
+
+
+### Correcciones
+
+* **routeros:** reglas de velocidad del modo activo, PPPoE con colas simples, tope del padre con ráfagas y DNS del router ([#225](https://github.com/HCDestroyer/argos-isp/issues/225)) ([bc2f089](https://github.com/HCDestroyer/argos-isp/commit/bc2f0890c484b2c9d8b1c1ea422791ae97e98f98))
+
 ## [1.9.0](https://github.com/HCDestroyer/argos-isp/compare/v1.8.0...v1.9.0) (2026-11-05)
 
 
