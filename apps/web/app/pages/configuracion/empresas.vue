@@ -87,6 +87,7 @@ const columnas: TableColumn<EmpresaGrupo>[] = [
     { accessorKey: 'nombre_comercial', header: 'Empresa' },
     { accessorKey: 'nit', header: 'NIT', meta: SOLO_ANCHO },
     { accessorKey: 'regimen_isr', header: 'Régimen', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'url_corte', header: 'Página de corte', meta: SOLO_ESCRITORIO },
     { accessorKey: 'activa', header: 'Estado' },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right' } } },
 ]
@@ -160,6 +161,10 @@ const columnas: TableColumn<EmpresaGrupo>[] = [
                                 </span>
                                 <span class="truncate text-xs text-muted">{{ row.original.razon_social ?? 'Sin razón social' }}</span>
                                 <span class="font-mono text-xs text-muted sm:hidden">{{ row.original.nit ?? 'Sin NIT' }}</span>
+                                <span
+                                    v-if="row.original.url_corte"
+                                    class="truncate font-mono text-xs text-muted lg:hidden"
+                                >Corte: {{ row.original.url_corte }}</span>
                             </div>
                         </div>
                     </template>
@@ -168,6 +173,22 @@ const columnas: TableColumn<EmpresaGrupo>[] = [
                     </template>
                     <template #regimen_isr-cell="{ row }">
                         {{ row.original.regimen_isr ? REGIMENES_ISR[row.original.regimen_isr] : '—' }}
+                    </template>
+                    <template #url_corte-cell="{ row }">
+                        <ULink
+                            v-if="row.original.url_corte"
+                            :to="row.original.url_corte"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="block max-w-64 truncate font-mono text-sm"
+                            data-prueba="url-corte-empresa"
+                        >
+                            {{ row.original.url_corte }}
+                        </ULink>
+                        <span
+                            v-else
+                            class="text-sm text-muted"
+                        >La de Argos</span>
                     </template>
                     <template #activa-cell="{ row }">
                         <UBadge
