@@ -288,7 +288,7 @@ estado_wireguard() {
     # ?incluir=servicio del script: datos de la red de clientes sin valor por defecto (.env.example)
     local v faltan=()
     for v in WAN_INTERFAZ POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO \
-        PORTAL_V4 PORTAL_V6 DNS_V4; do
+        PORTAL_V4 PORTAL_V6; do
         [ -n "$(leer_env "ROUTERS_SERVICIO_$v")" ] || faltan+=("ROUTERS_SERVICIO_$v")
     done
     if [ "${#faltan[@]}" -gt 0 ]; then
@@ -297,6 +297,26 @@ estado_wireguard() {
     if [ "$(leer_env RADIUS_BIND_IP)" != "$(wg_ip_servidor)" ]; then
         echo "AVISO: con WireGuard, RADIUS_BIND_IP debería ser $(wg_ip_servidor) (ahora: $(leer_env RADIUS_BIND_IP))"
     fi
+}
+
+# ¿Es una IP de redes de documentación (RFC 5737: 192.0.2/24, 198.51.100/24, 203.0.113/24; RFC 3849:
+# 2001:db8::/32)? Nunca son resolutores reales.
+es_ip_documentacion() {
+    local ip="${1,,}"
+    [[ "$ip" =~ ^(192\.0\.2|198\.51\.100|203\.0\.113)\.[0-9]+$ ]] || [[ "$ip" =~ ^2001:0?db8(:|$) ]]
+}
+
+# AVISO si ROUTERS_SERVICIO_DNS_V4/V6 trae IPs de documentación: la API no genera el script de servicio
+# con ellas (422 dns_documentacion) y un router que las tenga en /ip dns servers no resuelve nada.
+avisos_dns() {
+    local v ip malas=()
+    for v in ROUTERS_SERVICIO_DNS_V4 ROUTERS_SERVICIO_DNS_V6; do
+        for ip in $(leer_env "$v" | tr ',;' '  '); do
+            if es_ip_documentacion "$ip"; then malas+=("$v=$ip"); fi
+        done
+    done
+    [ "${#malas[@]}" -eq 0 ] && return 0
+    echo "AVISO: DNS de documentación en el .env (${malas[*]}): no son resolutores reales. Déjalas vacías (el script no toca el DNS del router) o pon los de tu red y ejecuta argosisp levantar. En cada router que ya los tenga: /ip dns set servers=<tus resolutores> (infra/mikrotik/README.md, «DNS del router»)"
 }
 
 # api-portal está activo y el compose de <versión> lo trae
@@ -814,6 +834,7 @@ cmd_estado() {
     fi
     if ! es_nodo_portal; then
         estado_wireguard
+        avisos_dns
     fi
     local red
     red="$(diagnostico_red "$v" 2> /dev/null || true)"
@@ -835,6 +856,11 @@ cmd_levantar() {
     requiere_instalacion
     bloquear
     fijar_api_portal
+    if ! es_nodo_portal; then
+        local dns
+        dns="$(avisos_dns)"
+        [ -z "$dns" ] || log "$dns"
+    fi
     levantar_version "$(version_instalada)" || morir "la versión $(version_instalada) no quedó sana (argosisp logs)"
     log "ArgosIsp $(version_instalada) arriba y sano"
 }

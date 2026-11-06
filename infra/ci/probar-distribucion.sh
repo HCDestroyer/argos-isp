@@ -278,6 +278,15 @@ if login_ok "$OTRO" "$clave"; then fallar "la clave anterior sigue sirviendo"; f
 psql_ci -c 'CREATE TABLE public.marca_ci (n int); INSERT INTO public.marca_ci VALUES (1)' > /dev/null
 cli compose exec -T api sh -c 'echo uno > /comprobantes/marca-ci-1.txt'
 
+# DNS de documentación en un .env ya instalado (bug del 6 nov): argosisp estado avisa y cómo corregir
+sudo sed -i "s|^ROUTERS_SERVICIO_DNS_V4=.*|ROUTERS_SERVICIO_DNS_V4=192.0.2.53,1.1.1.1|" "$DIR/.env"
+estado="$(cli estado)"
+grep -q 'AVISO: DNS de documentación en el .env (ROUTERS_SERVICIO_DNS_V4=192.0.2.53)' <<< "$estado" ||
+    fallar "argosisp estado no avisa del DNS de documentación"
+sudo sed -i "s|^ROUTERS_SERVICIO_DNS_V4=.*|ROUTERS_SERVICIO_DNS_V4=|" "$DIR/.env"
+estado="$(cli estado)"
+if grep -q 'DNS de documentación' <<< "$estado"; then fallar "argosisp estado avisa del DNS sin tenerlo"; fi
+
 # ---------------------------------------------------------------------------
 paso "actualizar $V1 → $V2 con COMPOSE_SUBNET_V4 cambiado en el .env ($SUBRED_V4_NUEVA, sin levantar)"
 echo "$V2" > "$FUENTE/estable"

@@ -165,7 +165,7 @@ El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gatew
 
 ### Corte: `argos-dns`
 
-`argos-dns` (lo que un suspendido puede consultar) lleva el DNS del router = el `local-address` de los clientes: el **gateway efectivo de cada red** del router (`gatewaysDeRedes`). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo se usa si el router no tiene redes (compatibilidad), más los DNS de `ROUTERS_SERVICIO_DNS_V4`.
+`argos-dns` (lo que un suspendido puede consultar) lleva el DNS del router = el `local-address` de los clientes: el **gateway efectivo de cada red** del router (`gatewaysDeRedes`). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo se usa si el router no tiene redes (compatibilidad), más los DNS de `ROUTERS_SERVICIO_DNS_V4` (opcional; con IPs de documentación el corte las deja como aviso). Las entradas `argosisp: DNS resolutor del router` (los resolutores que tenía el router al correr el script) son del script y no se administran aquí (`contratos/routeros.md`, «DNS del router»).
 
 ## PPPoE sin RADIUS (`contratos/pppoe-local.md`)
 

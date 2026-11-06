@@ -97,23 +97,47 @@ Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, 
 
 `conexion-servicio.rsc.tpl` necesita el grupo `servicio` de `variables.json`. Argos todavía no los guarda por router: la API los lee de su entorno (`apps/api/app/network/conexion/servicio.ts`). Si falta alguno obligatorio responde 422 `servicio_incompleto` con la lista.
 
-| Variable del script                          | Entorno de la API                                                                              | Ejemplo (`lab.rsc`)                   | Origen           |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------- |
-| `pppoe_interfaz`                             | `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`                                  | `ether2`                              | ficha del router |
-| `wan_interfaz`                               | `ROUTERS_SERVICIO_WAN_INTERFAZ`                                                                | `ether1`                              | `.env`           |
-| `ppp_local_v4`                               | gateway efectivo de las redes IPv4 del router (nunca del entorno; 422 si hay varios o ninguno) | `10.10.1.1`                           | redes del router |
-| `pool_v4_rangos`                             | `ROUTERS_SERVICIO_POOL_V4_RANGOS`                                                              | `10.10.0.10-10.10.0.250`              | `.env`           |
-| `clientes_v4`                                | `ROUTERS_SERVICIO_CLIENTES_V4`                                                                 | `10.10.0.0/16`                        | `.env`           |
-| `clientes_v6` (puede ir vacía)               | `ROUTERS_SERVICIO_CLIENTES_V6`                                                                 | `2001:db8:100::/48,2001:db8:200::/40` | `.env`           |
-| `susp_rate_limit`                            | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`)          | `256k/256k`                           | derivada         |
-| `pool_v6_enlace_prefijo`                     | `ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO`                                                      | `2001:db8:100::/48`                   | `.env`           |
-| `pool_v6_pd_prefijo`                         | `ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO`                                                          | `2001:db8:200::/40`                   | `.env`           |
-| `portal_v4`, `portal_v6`                     | `ROUTERS_SERVICIO_PORTAL_V4`, `ROUTERS_SERVICIO_PORTAL_V6`                                     | `192.0.2.20`, `2001:db8:ffff::20`     | `.env`           |
-| `portal_fqdn`                                | `ROUTERS_SERVICIO_PORTAL_FQDN` (en producción, `DOMINIO_PORTAL` por defecto)                   | `portal.argosisp.example`             | derivada         |
-| `walled_garden` (puede ir vacía)             | `ROUTERS_SERVICIO_WALLED_GARDEN`                                                               | `app.recurrente.com`                  | `.env`           |
-| `dns_v4`, `dns_v6` (`dns_v6` puede ir vacía) | `ROUTERS_SERVICIO_DNS_V4`, `ROUTERS_SERVICIO_DNS_V6`                                           | `192.0.2.53,198.51.100.53`            | `.env`           |
+| Variable del script                   | Entorno de la API                                                                              | Ejemplo (`lab.rsc`)                   | Origen           |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------- |
+| `pppoe_interfaz`                      | `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`                                  | `ether2`                              | ficha del router |
+| `wan_interfaz`                        | `ROUTERS_SERVICIO_WAN_INTERFAZ`                                                                | `ether1`                              | `.env`           |
+| `ppp_local_v4`                        | gateway efectivo de las redes IPv4 del router (nunca del entorno; 422 si hay varios o ninguno) | `10.10.1.1`                           | redes del router |
+| `pool_v4_rangos`                      | `ROUTERS_SERVICIO_POOL_V4_RANGOS`                                                              | `10.10.0.10-10.10.0.250`              | `.env`           |
+| `clientes_v4`                         | `ROUTERS_SERVICIO_CLIENTES_V4`                                                                 | `10.10.0.0/16`                        | `.env`           |
+| `clientes_v6` (puede ir vacía)        | `ROUTERS_SERVICIO_CLIENTES_V6`                                                                 | `2001:db8:100::/48,2001:db8:200::/40` | `.env`           |
+| `susp_rate_limit`                     | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`)          | `256k/256k`                           | derivada         |
+| `pool_v6_enlace_prefijo`              | `ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO`                                                      | `2001:db8:100::/48`                   | `.env`           |
+| `pool_v6_pd_prefijo`                  | `ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO`                                                          | `2001:db8:200::/40`                   | `.env`           |
+| `portal_v4`, `portal_v6`              | `ROUTERS_SERVICIO_PORTAL_V4`, `ROUTERS_SERVICIO_PORTAL_V6`                                     | `192.0.2.20`, `2001:db8:ffff::20`     | `.env`           |
+| `portal_fqdn`                         | `ROUTERS_SERVICIO_PORTAL_FQDN` (en producción, `DOMINIO_PORTAL` por defecto)                   | `portal.argosisp.example`             | derivada         |
+| `walled_garden` (puede ir vacía)      | `ROUTERS_SERVICIO_WALLED_GARDEN`                                                               | `app.recurrente.com`                  | `.env`           |
+| `dns_v4`, `dns_v6` (pueden ir vacías) | `ROUTERS_SERVICIO_DNS_V4`, `ROUTERS_SERVICIO_DNS_V6`                                           | vacías (ver «DNS del router»)         | `.env`           |
 
-En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio). En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio), **salvo los DNS**, que no tienen valor por defecto en ningún compose. En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+
+### DNS del router
+
+Los clientes PPP y WISP usan al router como DNS (`dns-server = local-address`), y el corte también: un suspendido solo resuelve por el router o por `argos-dns`. Por eso el script **nunca** deja el DNS del router sin resolutores reales:
+
+- **`ROUTERS_SERVICIO_DNS_V4` vacía (lo normal):** el script **no toca** `/ip dns servers`; el router sigue con los que ya tiene y con los dinámicos de la WAN (`dynamic-servers`, de DHCP o PPPoE del proveedor). Solo asegura `allow-remote-requests=yes`.
+- **Con valor** (p. ej. `1.1.1.1,8.8.8.8`, y `DNS_V6` detrás): el script los pone en `servers=` como antes.
+- **IPs de documentación** (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32`) en cualquiera de las dos: la API responde **422 `dns_documentacion`** y no genera el script; el reconciliador del corte lo deja como aviso en el diagnóstico. `argosisp estado` y `argosisp levantar` avisan si el `.env` las tiene.
+- **`argos-dns`** (lo que un suspendido puede consultar fuera del router) lleva la IP del router (`pppLocalV4`, `argosisp: DNS del router`), `dnsV4`/`dnsV6` (`argosisp: DNS`) y los resolutores que el router usa al correr el script (`servers` + `dynamic-servers`, `argosisp: DNS resolutor del router`; el reconciliador no los borra). Si el router no tiene ninguno, el script imprime `argosisp: AVISO el router no tiene DNS`.
+- **Sin abrir el DNS a internet:** reglas `argosisp:top` en `input` de IPv4 **e IPv6**: `drop` de 53 UDP/TCP desde `wanIf` y desde la lista `WAN` (si existe), y `accept` desde `argos-clientes` y desde la lista `LAN` (si existe). Van al inicio de la tabla, el `drop` antes que los `accept`; las reglas del operador no se borran ni se reordenan entre sí (quedan debajo, como estaban). Con más de una salida a internet, agrega las otras WAN a la lista `WAN`.
+
+**Router que ya quedó con DNS de documentación** (scripts anteriores al 6 nov, `servers=192.0.2.53,198.51.100.53,2001:db8:ffff::53`):
+
+```
+/ip dns print
+/ip dns set servers=1.1.1.1,8.8.8.8
+# o, si el proveedor los da por DHCP/PPPoE en la WAN, vaciarlos y usar los dinámicos:
+/ip dns set servers=""
+/ip firewall address-list remove [find where list=argos-dns and (address~"^192\\.0\\.2\\." or address~"^198\\.51\\.100\\.")]
+/ipv6 firewall address-list remove [find where list=argos-dns and address~"^2001:db8:"]
+:put [:resolve example.com]
+```
+
+Después, quita `ROUTERS_SERVICIO_DNS_V4/V6` del `.env` (o pon los reales) y `argosisp levantar`. Volver a correr el script con «incluir configuración de servicio» también deja `argos-dns` y las reglas de entrada al día. El diagnóstico de corte del panel (A5) marca un router con DNS vacíos o de documentación.
 
 ### Render (para A1)
 
@@ -198,7 +222,7 @@ Para el modo `radius_servicio` (IP y prefijos fijos por servicio), el IPAM debe 
 
 ## Aplicar
 
-1. Edita solo el bloque **Variables** de `lab.rsc`: interfaces, IPs, `radiusSecret` (= `RADIUS_LAB_SECRET`), `radiusSrc` (= `RADIUS_LAB_NAS_IP`), portal, walled garden (trae `app.recurrente.com`, la pasarela real; los dominios de recursos del checkout y del 3-D Secure se confirman en el laboratorio), DNS y prefijos. Los valores de ejemplo son de documentación (RFC 5737, RFC 1918, `2001:db8::/32`, `.example`).
+1. Edita solo el bloque **Variables** de `lab.rsc`: interfaces, IPs, `radiusSecret` (= `RADIUS_LAB_SECRET`), `radiusSrc` (= `RADIUS_LAB_NAS_IP`), portal, walled garden (trae `app.recurrente.com`, la pasarela real; los dominios de recursos del checkout y del 3-D Secure se confirman en el laboratorio), DNS (vacío por defecto: no se tocan los del router) y prefijos. Los valores de ejemplo son de documentación (RFC 5737, RFC 1918, `2001:db8::/32`, `.example`).
 2. Si el cambio es remoto, activa **Safe Mode** (`Ctrl+X` en la terminal) antes de importar: si pierdes la sesión, RouterOS revierte.
 3. Sube el archivo y aplícalo:
 
@@ -323,7 +347,7 @@ Qué hace `lab.rsc` (sección 9) con el tráfico IPv6 de un suspendido (por `Fil
 
 | Tráfico                                                                       | Acción                                     |
 | ----------------------------------------------------------------------------- | ------------------------------------------ |
-| DNS (UDP/TCP 53) a nuestros resolvers (`dnsV6` → `argos-dns`) y al router     | `accept`                                   |
+| DNS (UDP/TCP 53) a `argos-dns` (`dnsV6` y los del router) y al router         | `accept`                                   |
 | Portal (`argos-portal`: `portalV6` y el FQDN) y walled garden por FQDN (AAAA) | `accept`                                   |
 | ICMPv6 (ND, RA), DHCPv6 (renovación del PD) hacia el router                   | `accept`                                   |
 | Cualquier otro TCP                                                            | `reject reject-with=tcp-reset`             |
@@ -576,7 +600,7 @@ Con ArgosIsp levantado (`docker compose ... up -d`), el dispatcher WISP de A2 y 
 
 - `radiusSecret` largo y aleatorio (`openssl rand -hex 16`), distinto por router. Nunca en el repo: va en `infra/.env` del servidor y en el router.
 - RouterOS 7.15+ exige `Message-Authenticator` en las respuestas (`require-message-auth=yes-for-request-resp`, mitigación de Blast-RADIUS); FreeRADIUS 3.2.10 lo envía y `clients.conf` lo exige al router.
-- `allow-remote-requests=yes` del DNS se limita con las reglas `argosisp:top DNS del router solo interno` sobre `wanIf`.
+- `allow-remote-requests=yes` del DNS se limita, en IPv4 e IPv6, con las reglas `argosisp:top DNS del router …`: `drop` desde `wanIf` y la lista `WAN`, `accept` desde `argos-clientes` y la lista `LAN` (ver «DNS del router»).
 - Las reglas de este script no sustituyen el firewall base del router (input desde WAN, gestión solo por IPs de administración); aplícalo antes.
 - La API REST va solo por HTTPS con verificación del certificado (CA del router o una pública); el usuario `argosisp-api` tiene los permisos mínimos y solo entra desde `apiDesde`. `apiPassword` no se commitea: se edita en el router al importar.
 

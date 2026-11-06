@@ -1,4 +1,5 @@
-import { ReglaNegocio } from '#shared/errores'
+import { ReglaNegocio, type ErrorCampo } from '#shared/errores'
+import { dnsDeDocumentacion } from '#network/conexion/dns'
 import type { RouterVista } from '#network/consultas/routers'
 
 /**
@@ -14,7 +15,12 @@ import type { RouterVista } from '#network/consultas/routers'
  * - `pppoe_interfaz`: `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`;
  * - `susp_rate_limit`: `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` o `ROUTEROS_SUSPENDIDO_RATE_LIMIT`
  *   (256k/256k, el del perfil de corte);
- * - `clientes_v6`, `walled_garden` y `dns_v6` pueden quedar vacíos.
+ * - `clientes_v6`, `walled_garden`, `dns_v4` y `dns_v6` pueden quedar vacíos. Sin `dns_v4` el script
+ *   **no toca** los `servers` del DNS del router (usa los que ya tiene, más los dinámicos de la WAN) y
+ *   solo asegura `allow-remote-requests=yes`, cerrado desde la WAN (`infra/mikrotik/README.md`, «DNS
+ *   del router»). Con `dns_v4`, el script los pone como `servers` (y `dns_v6` detrás);
+ * - un DNS de documentación (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32) en
+ *   `ROUTERS_SERVICIO_DNS_V4` o `_V6` es un error: 422 `dns_documentacion` y no se genera el script.
  *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
@@ -38,7 +44,7 @@ export const VARIABLES_SERVICIO = [
     'dns_v6',
 ] as const
 
-const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v6'])
+const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v4', 'dns_v6'])
 
 export const variableEntorno = (nombre: string) => `ROUTERS_SERVICIO_${nombre.toUpperCase()}`
 
@@ -49,6 +55,23 @@ export function valoresServicio(
     entorno: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
+    const documentacion: ErrorCampo[] = (['dns_v4', 'dns_v6'] as const).flatMap((nombre) =>
+        dnsDeDocumentacion(leer(variableEntorno(nombre))).map((ip) => ({
+            field: variableEntorno(nombre),
+            message: `${ip} es una IP de documentación (RFC 5737/3849), no un resolutor real`,
+            rule: 'dns_documentacion',
+        })),
+    )
+    if (documentacion.length > 0) {
+        throw new ReglaNegocio(
+            `${[...new Set(documentacion.map((e) => e.field))].join(' y ')} trae IPs de documentación ` +
+                `(${documentacion.map((e) => e.message.split(' ')[0]).join(', ')}): con ellas el router no resuelve ` +
+                'nada y la página de corte no carga. Pon los resolutores reales de tu red o deja la variable ' +
+                'vacía para que el script no toque el DNS del router, y ejecuta `sudo argosisp levantar`',
+            'dns_documentacion',
+            documentacion,
+        )
+    }
     const valores: Record<string, string> = {}
     const faltan: string[] = []
     for (const nombre of VARIABLES_SERVICIO) {

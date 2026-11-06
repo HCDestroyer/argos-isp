@@ -160,7 +160,7 @@ const PASOS = [
                     </UFormField>
                     <UFormField
                         name="incluir_servicio"
-                        help="Solo en un router nuevo que ArgosIsp configura completo: suma PPPoE, perfiles y corte."
+                        help="Solo en un router nuevo que ArgosIsp configura completo: suma PPPoE, perfiles y corte. El DNS del router no se cambia, salvo que el servidor defina ROUTERS_SERVICIO_DNS_V4; siempre queda cerrado desde internet."
                     >
                         <UCheckbox
                             v-model="estado.incluir_servicio"

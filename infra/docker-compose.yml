@@ -105,8 +105,10 @@ x-api-env: &api-env
   ROUTERS_SERVICIO_PORTAL_V6: ${ROUTERS_SERVICIO_PORTAL_V6:-2001:db8:ffff::20}
   ROUTERS_SERVICIO_PORTAL_FQDN: ${ROUTERS_SERVICIO_PORTAL_FQDN:-portal.argosisp.example}
   ROUTERS_SERVICIO_WALLED_GARDEN: ${ROUTERS_SERVICIO_WALLED_GARDEN:-app.recurrente.com}
-  ROUTERS_SERVICIO_DNS_V4: ${ROUTERS_SERVICIO_DNS_V4:-192.0.2.53,198.51.100.53}
-  ROUTERS_SERVICIO_DNS_V6: ${ROUTERS_SERVICIO_DNS_V6:-2001:db8:ffff::53}
+  # Sin valor por defecto (bug del 6 nov): vacía = el script no toca los servers del DNS del router.
+  # Nunca IPs de documentación: la API las rechaza (422 dns_documentacion).
+  ROUTERS_SERVICIO_DNS_V4: ${ROUTERS_SERVICIO_DNS_V4:-}
+  ROUTERS_SERVICIO_DNS_V6: ${ROUTERS_SERVICIO_DNS_V6:-}
   # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
   # Bearer de GET /metrics (Prometheus, perfil monitoreo). Vacío = /metrics responde 404.
