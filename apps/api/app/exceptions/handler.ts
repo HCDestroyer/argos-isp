@@ -46,6 +46,38 @@ interface ErrorConCodigo {
     detail?: unknown
 }
 
+/**
+ * Restricciones de unicidad que respaldan una regla con su propio código (`#network/ipam_v4`,
+ * `#network/ipam_v6`, `exigirUserPppLibre`). Las acciones ya responden ese código cuando lo ven antes
+ * de escribir; esto cubre la carrera que solo detecta la base (dos transacciones a la vez).
+ */
+const RESTRICCIONES_UNICAS: Record<string, { codigo: string; detalle: string }> = {
+    ipv4_asignaciones_ip_vigente: {
+        codigo: 'ip_ocupada',
+        detalle: 'La IP ya está asignada a otro servicio; elige otra',
+    },
+    ipv4_asignaciones_servicio_vigente: {
+        codigo: 'concurrencia',
+        detalle: 'Otra operación cambió la IPv4 del servicio a la vez; reintenta',
+    },
+    ipv6_asignaciones_prefijo_vigente: {
+        codigo: 'prefijo_ocupado',
+        detalle: 'El prefijo IPv6 ya está asignado a otro servicio',
+    },
+    ipv6_asignaciones_sin_traslape: {
+        codigo: 'prefijo_ocupado',
+        detalle: 'El prefijo IPv6 se traslapa con uno vigente de otro servicio',
+    },
+    ipv6_asignaciones_servicio_tipo_vigente: {
+        codigo: 'concurrencia',
+        detalle: 'Otra operación cambió los prefijos IPv6 del servicio a la vez; reintenta',
+    },
+    servicios_user_ppp_unico: {
+        codigo: 'user_ppp_duplicado',
+        detalle: 'El user_ppp ya existe en otro servicio (también en uno retirado); elige otro',
+    },
+}
+
 /** Convierte cualquier error en un Problem JSON. */
 export function aProblema(error: unknown, debug: boolean): ProblemaJson {
     if (error instanceof Problema) return error.toJSON()
@@ -85,12 +117,24 @@ export function aProblema(error: unknown, debug: boolean): ProblemaJson {
             return problema(404, 'no_encontrado', 'No encontrado', 'El recurso no existe')
         // Postgres
         case '23505':
+        case '23P01': {
+            const conocida = RESTRICCIONES_UNICAS[String(e.constraint ?? '')]
+            if (conocida) return problema(409, conocida.codigo, 'Conflicto', conocida.detalle)
+            if (codigo === '23P01') {
+                return problema(
+                    409,
+                    'traslape',
+                    'Conflicto',
+                    'Los datos se traslapan con un registro vigente',
+                )
+            }
             return problema(
                 409,
                 'duplicado',
                 'Conflicto',
                 `Ya existe un registro con esos datos (${String(e.constraint ?? '')})`,
             )
+        }
         case '23503':
             return problema(
                 422,
