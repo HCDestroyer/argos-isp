@@ -264,8 +264,30 @@ export function porQuitar(
     if (!actual) return []
     return (objeto.quitar ?? []).filter((k) => {
         const v = actual[k]
-        return v !== undefined && v !== '' && v !== '0.0.0.0'
+        return v !== undefined && v !== '' && v !== '0.0.0.0' && v !== 'none'
     })
+}
+
+/**
+ * Propiedades de un perfil `plan-<id>` que dependen de la estrategia o de los pools del plan: si la
+ * estrategia vigente no las pone, se quitan (`unset`). `asegurar` solo corrige lo que se desea, así
+ * que sin esto un perfil que pasó de árbol a colas simples (o de `perfil_ppp` a `cola_simple`)
+ * conservaría su `address-list`, `rate-limit` o `parent-queue` viejos y no quedaría igual que uno
+ * creado de cero.
+ */
+export const PROPIEDADES_VARIABLES_PERFIL = [
+    'address-list',
+    'parent-queue',
+    'queue-type',
+    'rate-limit',
+    'remote-address',
+    'remote-ipv6-prefix-pool',
+    'dhcpv6-pd-pool',
+] as const
+
+/** `quitar` de un perfil administrado: lo de `extra` y lo variable que `propiedades` no pone. */
+export function quitarDePerfil(propiedades: Propiedades, extra: string[] = []): string[] {
+    return [...new Set([...extra, ...PROPIEDADES_VARIABLES_PERFIL.filter((k) => !(k in propiedades))])]
 }
 
 /** ¿El objeto del router ya está como se desea (propiedades iguales y nada que quitar)? */
@@ -742,23 +764,30 @@ function estadoSimple(
                 ...(tipo ? { 'queue-type': tipo } : {}),
                 ...(ep.aplicacion === 'perfil_ppp' ? { 'rate-limit': rateLimitServicio(vp, 'activo') } : {}),
             }
+            const propiedadesPerfil = {
+                ...base,
+                ...local.propiedades,
+                name: nombrePerfil(id),
+                ...velocidadPerfil,
+            }
             perfiles.push({
                 ruta: '/ppp/profile',
                 clave: { comment: commentPlan(id) },
-                quitar: local.quitar,
-                propiedades: { ...base, ...local.propiedades, name: nombrePerfil(id), ...velocidadPerfil },
+                quitar: quitarDePerfil(propiedadesPerfil, local.quitar),
+                propiedades: propiedadesPerfil,
             })
             for (const v of variantes) {
+                const propiedadesVariante = {
+                    ...base,
+                    'local-address': v.gateway,
+                    name: nombrePerfilPlanServidor(id, v.srv),
+                    ...velocidadPerfil,
+                }
                 perfiles.push({
                     ruta: '/ppp/profile',
                     clave: { comment: commentPerfilPlanServidor(id, v.srv) },
-                    quitar: [],
-                    propiedades: {
-                        ...base,
-                        'local-address': v.gateway,
-                        name: nombrePerfilPlanServidor(id, v.srv),
-                        ...velocidadPerfil,
-                    },
+                    quitar: quitarDePerfil(propiedadesVariante),
+                    propiedades: propiedadesVariante,
                 })
             }
         }

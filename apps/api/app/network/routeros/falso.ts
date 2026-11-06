@@ -199,6 +199,8 @@ export class RouterOSFalso {
         status: 500,
         despues: false,
     }
+    /** `averiarTras`: escrituras que faltan antes de que el router empiece a responder `status` */
+    #averia: { escrituras: number; status: number } | null = null
     #puerto = 0
     #arriba = false
 
@@ -260,6 +262,21 @@ export class RouterOSFalso {
         this.#fallos = { restantes: n, status, despues: opciones.despues ?? false }
     }
 
+    /**
+     * Tras `n` escrituras más (PUT, PATCH, DELETE, POST) que sí se ejecutan, todas las peticiones
+     * responden `status` (500 por defecto) hasta `sanar()`: un router que se cae o se traba a mitad de
+     * un aplicar (p. ej. `averiarTras(2)` = el tercer comando y los siguientes fallan).
+     */
+    averiarTras(n: number, status = 500): void {
+        this.#averia = { escrituras: n, status }
+    }
+
+    /** Quita la avería de `averiarTras` y los fallos pendientes de `fallar`. */
+    sanar(): void {
+        this.#averia = null
+        this.#fallos = { restantes: 0, status: 500, despues: false }
+    }
+
     /** Estado del menú (referencia viva: se puede modificar a mano en una prueba). */
     /** Menú de solo lectura (`/ipv6/dhcp-server/binding`, `/ppp/active`), referencia viva. */
     lectura(ruta: RutaLectura): ObjetoRouterOS[] {
@@ -310,6 +327,12 @@ export class RouterOSFalso {
 
         const esperado = `Basic ${Buffer.from(`${this.usuario}:${this.password}`).toString('base64')}`
         if (req.headers.authorization !== esperado) return this.#error(res, 401, 'Unauthorized')
+        if (this.#averia) {
+            if (this.#averia.escrituras <= 0) {
+                return this.#error(res, this.#averia.status, 'Internal Server Error')
+            }
+            if (metodo !== 'GET') this.#averia.escrituras--
+        }
         if (this.#fallos.restantes > 0) {
             this.#fallos.restantes--
             if (!this.#fallos.despues) return this.#error(res, this.#fallos.status, 'Internal Server Error')

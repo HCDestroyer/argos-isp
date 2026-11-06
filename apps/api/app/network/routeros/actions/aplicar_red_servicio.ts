@@ -30,6 +30,7 @@ import {
     limpiarVelocidad,
     fabricaPorDefecto,
     LOCK_ROUTEROS,
+    LOCK_ROUTEROS_SERVICIO,
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
@@ -99,7 +100,8 @@ export interface ResultadoAplicarRed {
  * - Si el router no responde tras los reintentos del cliente, o no tiene credenciales: emite
  *   `routeros.fallido` por outbox, marca el router como pendiente (lo repone el job `recuperar`
  *   del reconciliador cuando vuelva) y **no lanza**: reintentar el evento no arregla un router caído.
- * - Serializa por router con `pg_advisory_xact_lock` (el reconciliador toma el mismo).
+ * - Serializa por servicio (`LOCK_ROUTEROS_SERVICIO`, antes de leer) y por router con
+ *   `pg_advisory_xact_lock` (el reconciliador toma el mismo del router).
  * - Auditoría: solo cuando hubo cambios o errores. Un evento de un servicio PPPoE (la mayoría) no
  *   toca el router ni deja fila: es una evaluación sin efecto (regla 9; pedido al Líder BE en
  *   `.claude/integration/a2.md`).
@@ -123,6 +125,13 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
 
     protected async handle(input: EntradaAplicarRed, t: Transaccion): Promise<ResultadoAplicarRed> {
         t.fijarEntidad('servicio', input.servicio_id)
+        // Dos aplicar del mismo servicio a la vez (evento repetido, evento y «Sincronizar», dos workers):
+        // se serializan antes de leer, así el segundo lee lo que dejó confirmado el primero y nunca
+        // escribe un estado más viejo encima de uno nuevo. Orden de locks: servicio → routers (por id).
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [
+            LOCK_ROUTEROS_SERVICIO,
+            input.servicio_id,
+        ])
         const servicio = await servicioRed(input.servicio_id, t.trx)
         const historial = await routersConHistorial(input.servicio_id, t.trx)
 

@@ -10,6 +10,7 @@ import {
     objetoAlDia,
     porQuitar,
     PROPIEDADES_PERFIL_BASE,
+    quitarDePerfil,
     type LecturaVelocidad,
     type PlanRouter,
     type RouterVelocidad,
@@ -153,7 +154,9 @@ test.group('local-address · derivado del gateway de la red', () => {
         const perfil = estado.presentes.find((o) => o.ruta === '/ppp/profile')!
         assert.equal(perfil.propiedades['local-address'], '10.1.0.1')
         assert.equal(perfil.propiedades['dns-server'], '10.10.0.1') // lo demás sí se copia
-        assert.deepEqual(perfil.quitar, [])
+        // Nada de `local-address` que quitar; sí lo que depende de la estrategia y el perfil no pone.
+        assert.notInclude(perfil.quitar!, 'local-address')
+        assert.deepEqual(perfil.quitar, quitarDePerfil(perfil.propiedades))
     })
 
     test('estado RADIUS con dos gateways: sin local-address, se quita el viejo y queda el aviso', ({
@@ -167,7 +170,7 @@ test.group('local-address · derivado del gateway de la red', () => {
         )
         const perfil = estado.presentes.find((o) => o.ruta === '/ppp/profile')!
         assert.notProperty(perfil.propiedades, 'local-address')
-        assert.deepEqual(perfil.quitar, ['local-address'])
+        assert.deepEqual(perfil.quitar, quitarDePerfil(perfil.propiedades, ['local-address']))
         assert.isTrue(estado.avisos.some((a) => a.includes('gateways distintos')))
         // un perfil con el local-address copiado de antes no está al día
         const viejo = { '.id': '*9', ...perfil.propiedades, 'local-address': '10.10.0.1' } as ObjetoRouterOS
@@ -231,7 +234,7 @@ test.group('local-address · derivado del gateway de la red', () => {
         )
         for (const p of vacio.presentes.filter((o) => o.ruta === '/ppp/profile')) {
             assert.notProperty(p.propiedades, 'local-address')
-            assert.deepEqual(p.quitar, ['local-address'])
+            assert.deepEqual(p.quitar, quitarDePerfil(p.propiedades, ['local-address']))
         }
         assert.lengthOf(vacio.avisos, 0)
     })

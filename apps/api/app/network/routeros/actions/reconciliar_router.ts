@@ -250,19 +250,21 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     }
                     actuales.set(ruta, porComment)
                 }
-                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
+                // Huérfanos primero: objetos de servicios que ya no deben estar en este router (retirados,
+                // movidos, eliminados). Su IP, MAC o lease puede haberla tomado otro servicio vigente: si
+                // se borraran al final, el PUT del nuevo chocaría con el viejo y la pasada no convergería.
                 const vigentes = new Set(todos.map((s) => s.servicio_id))
+                for (const id of [...enRouter].filter((s) => !vigentes.has(s)).sort((a, b) => a - b)) {
+                    salida.correcciones.push(
+                        ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
+                    )
+                }
+                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
                 for (const servicio of todos) {
                     const estado = estadoDeseado(servicio, router.red, perfilSuspendido())
                     salida.avisos.push(...estado.avisos.map((a) => `servicio ${servicio.servicio_id}: ${a}`))
                     salida.correcciones.push(
                         ...(await aplicarEstado(cliente, estado, ctx(servicio.servicio_id), actuales)),
-                    )
-                }
-                // Huérfanos: objetos de servicios que ya no deben estar en este router.
-                for (const id of [...enRouter].filter((s) => !vigentes.has(s)).sort((a, b) => a - b)) {
-                    salida.correcciones.push(
-                        ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
                     )
                 }
                 // Secrets PPPoE (`contratos/pppoe-local.md` §7): después de los perfiles a los que

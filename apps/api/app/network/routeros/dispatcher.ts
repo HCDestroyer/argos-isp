@@ -321,6 +321,9 @@ export async function limpiarVelocidad(
 /** Espacio de los advisory locks por router (`pg_advisory_xact_lock(LOCK_ROUTEROS, router_id)`). */
 export const LOCK_ROUTEROS = 4102
 
+/** Advisory lock por servicio de `routeros.aplicar_servicio` (se toma antes que los de sus routers). */
+export const LOCK_ROUTEROS_SERVICIO = 4106
+
 /*
 |--------------------------------------------------------------------------
 | Corte y FastTrack (objetos de nivel router, `corte_router.ts`)
