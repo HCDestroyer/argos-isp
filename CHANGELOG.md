@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/HCDestroyer/argos-isp/compare/v1.11.0...v1.12.0) (2026-11-06)
+
+
+### Funcionalidades
+
+* **portal:** portal de corte configurable desde el panel (destino del NAT y modo de suspensión) ([#228](https://github.com/HCDestroyer/argos-isp/issues/228)) ([d98ad07](https://github.com/HCDestroyer/argos-isp/commit/d98ad07d48f0bf697eb4e493471076d5de3b6445))
+
 ## [1.11.0](https://github.com/HCDestroyer/argos-isp/compare/v1.10.0...v1.11.0) (2026-11-06)
 
 
