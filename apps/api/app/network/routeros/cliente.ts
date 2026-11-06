@@ -154,6 +154,26 @@ interface RespuestaHttp {
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Prefijo del comment de los objetos propios de un servicio (`argosisp:servicio:<id>[:sufijo]`). */
+const PREFIJO_SERVICIO = 'argosisp:servicio:'
+
+/**
+ * Claves que RouterOS no deja repetir en un menú (las que pueden chocar entre servicios): una IP o
+ * una MAC liberada por un servicio y tomada por otro, o un `user_ppp` que pasó de uno a otro. El
+ * nombre de las colas y perfiles lleva el id del servicio o del plan, así que no choca.
+ */
+const UNICAS: Partial<Record<RutaRouterOS, string[][]>> = {
+    '/ip/firewall/address-list': [['list', 'address']],
+    '/ipv6/firewall/address-list': [['list', 'address']],
+    '/ip/dhcp-server/lease': [
+        ['mac-address', 'server'],
+        ['address', 'server'],
+    ],
+    '/ip/arp': [['address', 'interface']],
+    '/ppp/secret': [['name']],
+    '/queue/simple': [['name']],
+}
+
 export function esRuta(ruta: string): ruta is RutaRouterOS {
     return (RUTAS as readonly string[]).includes(ruta)
 }
@@ -276,13 +296,9 @@ export class ClienteRouterOS {
             const [primero, ...sobrantes] = existentes
             for (const sobrante of sobrantes) await this.#borrarId(ruta, sobrante, ctx, intento)
             if (!primero) {
-                const objeto = await this.#escribir(
-                    'PUT',
-                    ruta,
-                    null,
-                    { ...propiedades, ...clave },
-                    ctx,
-                    intento,
+                const datos = { ...propiedades, ...clave }
+                const objeto = await this.#conClavesLibres(ruta, clave, datos, ctx, intento, () =>
+                    this.#escribir('PUT', ruta, null, datos, ctx, intento),
                 )
                 return { accion: 'creado', objeto, duplicados: sobrantes.length }
             }
@@ -290,11 +306,68 @@ export class ClienteRouterOS {
             if (Object.keys(cambios).length === 0) {
                 return { accion: 'sin_cambios', objeto: primero, duplicados: sobrantes.length }
             }
-            const objeto = await this.#escribir('PATCH', ruta, primero['.id'], cambios, ctx, intento, {
-                antes: Object.fromEntries(Object.keys(cambios).map((k) => [k, primero[k] ?? null])),
-            })
+            const objeto = await this.#conClavesLibres(
+                ruta,
+                clave,
+                { ...primero, ...cambios } as Propiedades,
+                ctx,
+                intento,
+                () =>
+                    this.#escribir('PATCH', ruta, primero['.id'], cambios, ctx, intento, {
+                        antes: Object.fromEntries(Object.keys(cambios).map((k) => [k, primero[k] ?? null])),
+                    }),
+            )
             return { accion: 'actualizado', objeto, duplicados: sobrantes.length }
         })
+    }
+
+    /**
+     * Escribe y, si el router la rechaza (400) porque una clave única (`UNICAS`: IP, MAC, `user_ppp`)
+     * ya la tiene otro objeto **de otro servicio de ArgosIsp** (`argosisp:servicio:<otro>`), borra ese
+     * objeto y escribe otra vez. Pasa cuando un servicio liberó la IP o el usuario con el router caído
+     * y otro la tomó: lo viejo con su comment se borra, nunca se reutiliza con el comment equivocado.
+     * Lo ajeno (sin ese comment, o de un plan) nunca se toca: el 400 sigue su camino.
+     */
+    async #conClavesLibres(
+        ruta: RutaRouterOS,
+        clave: Propiedades,
+        datos: Propiedades,
+        ctx: ContextoRed,
+        intento: number,
+        escribir: () => Promise<ObjetoRouterOS>,
+    ): Promise<ObjetoRouterOS> {
+        try {
+            return await escribir()
+        } catch (error) {
+            const propio = clave.comment
+            if (
+                !(error instanceof RouterOSSolicitud) ||
+                error.status !== 400 ||
+                !propio?.startsWith(PREFIJO_SERVICIO)
+            ) {
+                throw error
+            }
+            let liberadas = 0
+            for (const claves of UNICAS[ruta] ?? []) {
+                if (claves.some((k) => !datos[k])) continue
+                const ocupantes = await this.#listar(
+                    ruta,
+                    Object.fromEntries(claves.map((k) => [k, datos[k]!])),
+                )
+                for (const o of ocupantes) {
+                    if (o.comment === propio || !o.comment?.startsWith(PREFIJO_SERVICIO)) continue
+                    await this.#borrarId(
+                        ruta,
+                        o,
+                        { ...ctx, motivo: `liberar ${claves.join('+')} para ${propio}` },
+                        intento,
+                    )
+                    liberadas++
+                }
+            }
+            if (liberadas === 0) throw error
+            return escribir()
+        }
     }
 
     /** Borra todo lo que lleve ese `comment`. Devuelve cuántos objetos borró (0 si no había). */

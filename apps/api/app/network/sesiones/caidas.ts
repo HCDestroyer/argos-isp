@@ -18,11 +18,12 @@ import type { FilaSesion } from '#network/sesiones/sesiones'
  *   si la última del servicio terminó (`hasta`) dentro de la ventana actual, así que las sesiones
  *   contadas por la siguiente son siempre posteriores a la anterior.
  * - **Concurrencia:** dos Stop del mismo servicio en workers distintos se ordenan con
- *   `pg_advisory_xact_lock(4105, servicio_id)`, tomado solo cuando se alcanzó el umbral.
+ *   `pg_advisory_xact_lock(4107, servicio_id)`, tomado solo cuando se alcanzó el umbral.
  * - No decide estados ni toca la red: es un aviso.
  */
 
-const LOCK_CAIDAS = 4105
+// 4105 es `LOCK_SONDEO_PPP` (por router): con el mismo espacio, servicio 7 y router 7 se bloqueaban entre sí.
+const LOCK_CAIDAS = 4107
 
 export const CAUSAS_IGNORADAS_POR_DEFECTO = [
     'Admin-Reset',
