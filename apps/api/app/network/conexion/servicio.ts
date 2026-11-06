@@ -22,7 +22,7 @@ import type { RouterVista } from '#network/consultas/routers'
  * - un DNS de documentación (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32) en
  *   `ROUTERS_SERVICIO_DNS_V4` o `_V6` es un error: 422 `dns_documentacion` y no se genera el script.
  *
- * - `portal_v4` y `portal_v6`: con `portal` (la configuración «Portal de corte», `core.portal_corte`) salen
+ * - `portal_v4`, `portal_v6` y `portal_puerto` (el `to-ports` del NAT de corte): con `portal` (la configuración «Portal de corte», `core.portal_corte`) salen
  *   de ahí y no del entorno; el entorno solo siembra esa configuración mientras nadie la guarda.
  *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
@@ -41,6 +41,7 @@ export const VARIABLES_SERVICIO = [
     'pool_v6_pd_prefijo',
     'portal_v4',
     'portal_v6',
+    'portal_puerto',
     'portal_fqdn',
     'walled_garden',
     'dns_v4',
@@ -56,7 +57,7 @@ export function valoresServicio(
     /** gateways efectivos (distintos) de las redes IPv4 del router */
     gateways: string[],
     entorno: NodeJS.ProcessEnv = process.env,
-    portal?: { portal_v4: string | null; portal_v6: string | null },
+    portal?: { portal_v4: string | null; portal_v6: string | null; portal_puerto: number },
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
     const documentacion: ErrorCampo[] = (['dns_v4', 'dns_v6'] as const).flatMap((nombre) =>
@@ -81,6 +82,7 @@ export function valoresServicio(
     for (const nombre of VARIABLES_SERVICIO) {
         let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))
         if (portal && (nombre === 'portal_v4' || nombre === 'portal_v6')) valor = portal[nombre]
+        if (nombre === 'portal_puerto') valor = portal ? String(portal.portal_puerto) : (valor ?? '80')
         if (nombre === 'ppp_local_v4') {
             const unicos = [...new Set(gateways)]
             if (unicos.length === 1) valor = unicos[0]!

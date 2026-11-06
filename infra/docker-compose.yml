@@ -101,8 +101,13 @@ x-api-env: &api-env
   ROUTERS_SERVICIO_CLIENTES_V6: ${ROUTERS_SERVICIO_CLIENTES_V6:-2001:db8:100::/48,2001:db8:101::/48,2001:db8:200::/40,2001:db8:300::/40}
   ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO:-2001:db8:100::/48}
   ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO:-2001:db8:200::/40}
+  # Portal de corte (destino del dst-nat y modo de suspensión): se edita en el panel (Configuración →
+  # Portal de corte, core.portal_corte). Estas variables y COA_SUSPENDER solo siembran mientras nadie la
+  # guarda; COA_SUSPENDER es el mismo valor que recibe coa, para que la siembra coincida.
   ROUTERS_SERVICIO_PORTAL_V4: ${ROUTERS_SERVICIO_PORTAL_V4:-192.0.2.20}
   ROUTERS_SERVICIO_PORTAL_V6: ${ROUTERS_SERVICIO_PORTAL_V6:-2001:db8:ffff::20}
+  ROUTERS_SERVICIO_PORTAL_PUERTO: ${ROUTERS_SERVICIO_PORTAL_PUERTO:-}
+  COA_SUSPENDER: ${COA_SUSPENDER:-disconnect}
   ROUTERS_SERVICIO_PORTAL_FQDN: ${ROUTERS_SERVICIO_PORTAL_FQDN:-portal.argosisp.example}
   ROUTERS_SERVICIO_WALLED_GARDEN: ${ROUTERS_SERVICIO_WALLED_GARDEN:-app.recurrente.com}
   # Sin valor por defecto (bug del 6 nov): vacía = el script no toca los servers del DNS del router.

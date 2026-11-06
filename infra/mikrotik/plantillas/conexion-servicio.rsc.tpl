@@ -77,7 +77,7 @@
 :local poolV6PdPrefijo "{{pool_v6_pd_prefijo}}"
 :local poolV6PdLongitud 56
 :local portalV4 "{{portal_v4}}"
-:local portalCortePuerto 80
+:local portalCortePuerto [:tonum "{{portal_puerto}}"]
 :local portalV6 "{{portal_v6}}"
 :local portalFqdn "{{portal_fqdn}}"
 :local walledGarden [:toarray "{{walled_garden}}"]

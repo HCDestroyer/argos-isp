@@ -50,6 +50,7 @@ const VALORES = {
     pool_v6_pd_prefijo: '2001:db8:200::/40',
     portal_v4: '192.0.2.20',
     portal_v6: '2001:db8:ffff::20',
+    portal_puerto: '8088',
     portal_fqdn: 'portal.miisp.example',
     walled_garden: 'app.recurrente.com',
     dns_v4: '192.0.2.53,198.51.100.53',
@@ -134,6 +135,8 @@ test('render: sin variables pendientes y secretos escapados', () => {
     // El script de conexión solo no trae la configuración de servicio
     assert.doesNotMatch(r, /pppoe-server/)
     assert.match(renderizar(leer(PLANTILLAS[1]), VALORES), /pppoe-server/)
+    // el puerto del dst-nat de corte sale de Configuración → Portal de corte (portal_puerto), no fijo en 80
+    assert.match(renderizar(leer(PLANTILLAS[1]), VALORES), /:local portalCortePuerto \[:tonum "8088"\]/)
 })
 
 test('render: falta una variable, no cumple su patrón o trae un salto de línea → error', () => {

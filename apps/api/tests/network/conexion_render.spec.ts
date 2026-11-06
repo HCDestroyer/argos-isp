@@ -9,7 +9,7 @@ import {
     variablesDe,
     variablesMikrotik,
 } from '#network/conexion/render'
-import { VARIABLES_SERVICIO } from '#network/conexion/servicio'
+import { VARIABLES_SERVICIO, valoresServicio } from '#network/conexion/servicio'
 import { leerRedTunel, parsearAdmin } from '#network/conexion/config'
 
 /**
@@ -43,6 +43,7 @@ const VALORES: Record<string, string> = {
     pool_v6_pd_prefijo: '2001:db8:200::/40',
     portal_v4: '192.0.2.20',
     portal_v6: '2001:db8:ffff::20',
+    portal_puerto: '8088',
     portal_fqdn: 'portal.miisp.example',
     walled_garden: 'app.recurrente.com',
     dns_v4: '192.0.2.53,198.51.100.53',
@@ -73,6 +74,43 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
         assert.include(r, ':local adminIps [:toarray "203.0.113.7,198.51.100.0/24"]')
         assert.notMatch(r, /pppoe-server/)
         assert.match(renderizar(leerMikrotik(PLANTILLAS.servicio), VALORES), /pppoe-server/)
+        assert.include(
+            renderizar(leerMikrotik(PLANTILLAS.servicio), VALORES),
+            ':local portalCortePuerto [:tonum "8088"]',
+        )
+    })
+
+    test('portal_puerto: de Configuración → Portal de corte; sin ella, del entorno o 80', ({ assert }) => {
+        const entorno: NodeJS.ProcessEnv = {
+            ROUTERS_SERVICIO_WAN_INTERFAZ: 'ether1',
+            ROUTERS_SERVICIO_POOL_V4_RANGOS: '10.10.0.10-10.10.0.250',
+            ROUTERS_SERVICIO_CLIENTES_V4: '10.10.0.0/16',
+            ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: '2001:db8:100::/48',
+            ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: '2001:db8:200::/40',
+            ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
+            ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
+            ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
+        }
+        const router = { interfaz_clientes: 'ether2' }
+        assert.equal(valoresServicio(router, ['10.10.0.1'], entorno).portal_puerto, '80')
+        assert.equal(
+            valoresServicio(router, ['10.10.0.1'], { ...entorno, ROUTERS_SERVICIO_PORTAL_PUERTO: '8088' })
+                .portal_puerto,
+            '8088',
+        )
+        // con la configuración del panel, el entorno ya no manda
+        const v = valoresServicio(
+            router,
+            ['10.10.0.1'],
+            { ...entorno, ROUTERS_SERVICIO_PORTAL_PUERTO: '80' },
+            { portal_v4: '198.51.100.10', portal_v6: '2001:db8:ffff::21', portal_puerto: 8088 },
+        )
+        assert.equal(v.portal_puerto, '8088')
+        assert.equal(v.portal_v4, '198.51.100.10')
+        assert.include(
+            renderizar(leerMikrotik(PLANTILLAS.servicio), { ...VALORES, ...v }),
+            ':local portalCortePuerto [:tonum "8088"]',
+        )
     })
 
     test('sin RADIUS: plantilla por modo; sin radius_secret, use-radius=no y sensitive', ({ assert }) => {

@@ -73,7 +73,11 @@ Crea uno por dominio: `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>`. L
 
 ## 4. Página de corte (MikroTik)
 
-El dst-nat de TCP/80 de los suspendidos va **al puerto HTTP de Argos (8080), nunca a NPM**. Llega con cualquier `Host` (el del sitio que el cliente quería abrir) y NPM no tiene un Proxy Host para ese dominio. En `infra/mikrotik/lab.rsc` es la variable `portalCortePuerto`:
+El dst-nat de TCP/80 de los suspendidos va **al puerto de corte de Argos (8088, o el HTTP 8080), nunca a NPM**. Llega con cualquier `Host` (el del sitio que el cliente quería abrir) y NPM no tiene un Proxy Host para ese dominio.
+
+En el panel, **Configuración → Portal de corte**: IPv4 del servidor de Argos y el puerto. Al guardar, ArgosIsp corrige el dst-nat de todos los routers con API y el script de conexión sale con ese puerto. No se cambia en el `.env` (`PORTAL_CORTE_V4`/`PORTAL_CORTE_PUERTO` solo dan el valor inicial; `PORTAL_CORTE_PUERTO` sigue siendo el puerto en que escucha Caddy).
+
+Para un router sin API, a mano. En `infra/mikrotik/lab.rsc` es la variable `portalCortePuerto`:
 
 ```routeros
 :local portalV4 "<IP del servidor de Argos>"
@@ -117,7 +121,7 @@ curl -s https://portal.<dominio>/api/v1/portal/quien-soy     # lo mismo, pasando
 | 502 en NPM y, desde el host de NPM, `curl -kI https://<IP del servidor>:8443 -H 'Host: panel.<dominio>'` da `curl: (35) … tlsv1 alert internal error` (con `--resolve panel.<dominio>:8443:<IP del servidor> https://panel.<dominio>:8443` sí responde) | Argos ≤ 1.4.0: Caddy no acepta TLS sin SNI y NPM se conecta sin SNI. Actualiza (`sudo argosisp actualizar`) o, mientras tanto, en "Advanced" de cada Proxy Host de NPM pon `proxy_ssl_server_name on; proxy_ssl_name $host;` (paso 3, SNI) |
 | 502 en NPM (el `curl` sin SNI sí responde) | Scheme en `http`, puerto distinto de 8443 o `127.0.0.1` como destino. Revisa la tabla del paso 3. `curl -kI https://<IP del servidor>:8443 -H 'Host: panel.<dominio>'` desde el host de NPM debe responder |
 | Bucle de redirecciones en el panel o la API | El Proxy Host va en `http` al 8080: cámbialo a `https` y 8443 |
-| El suspendido no ve `/corte` | El dst-nat apunta a NPM o al 80. Debe ir a `<IP de Argos>:8080` (paso 4) |
+| El suspendido no ve `/corte` | El dst-nat apunta a NPM o al 80. Debe ir a `<IP de Argos>:8080` (o al 8088): Configuración → Portal de corte (paso 4) |
 | "el puerto TCP 80 ya está en uso" al instalar | Faltan `ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443` en el comando |
 
 ## Cómo se prueba

@@ -77,7 +77,7 @@ En el servidor del laboratorio:
     - `COMPOSE_PROFILES=lab`
     - `COMPOSE_IPV6=true`: la red de compose recibe `COMPOSE_SUBNET_V6`.
     - `PORTAL_BIND_IP` = `portalV4` de `lab.rsc`.
-    - `PORTAL_CORTE_PORT_HOST` = `portalCortePuerto` (80).
+    - `PORTAL_CORTE_PORT_HOST` = `portalCortePuerto` (80). En el panel, Configuración → Portal de corte debe tener la misma IP y puerto: de ahí sale el dst-nat que reconcilia ArgosIsp y el `portalCortePuerto` del script de conexión.
     - `PORTAL_URL_PUBLICA=http://<portalFqdn>`: la usan el portal (302 a `/corte`) y la API (retorno del pago en línea a `/corte?pago=<id>`). `PASARELA_RETORNO_ORIGENES` toma ese origen por defecto; si el cliente también entra por otro origen (HTTPS, la IP), agrégalo separado por coma.
     - `PORTAL_HOSTS=<portalV4>,<portalV6>`.
 3. Para publicar también por IPv6, agrega una línea `"[<portalV6>]:80:3001"` a `ports` del servicio `portal`. `PORTAL_BIND_IP` acepta una sola dirección.
