@@ -188,6 +188,14 @@ export class RouterOSFalso {
      * RouterOS). Por defecto la devuelve.
      */
     ocultarPassword = false
+    /** `/ip dns` (lo que devuelve `GET /rest/ip/dns`) */
+    dns: Record<string, string> = {
+        servers: '1.1.1.1,8.8.8.8',
+        'dynamic-servers': '',
+        'allow-remote-requests': 'true',
+    }
+    /** Conexiones de `/ip firewall connection` (`src-address` y `dst-address` con puerto) */
+    conexiones: Array<{ 'src-address': string; 'dst-address': string }> = []
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -351,6 +359,24 @@ export class RouterOSFalso {
         if (!url.pathname.startsWith('/rest/')) return this.#error(res, 404, 'Not Found')
         const camino = url.pathname.slice('/rest'.length)
 
+        if (camino === '/ip/dns' && metodo === 'GET') {
+            return this.#json(res, 200, this.dns)
+        }
+        // `/execute` (solo el `connection remove` que manda ArgosIsp al suspender): quita de
+        // `conexiones` las que coinciden con cada `src-address~"^<ip>:"` / `dst-address~"^<ip>:"`.
+        if (camino === '/execute' && metodo === 'POST') {
+            const script = cuerpo?.script ?? ''
+            const prefijos = [...script.matchAll(/-address~"\^([^"]+):"/g)].map((m) =>
+                m[1]!.replaceAll('\\', ''),
+            )
+            this.conexiones = this.conexiones.filter(
+                (c) =>
+                    !prefijos.some(
+                        (p) => c['src-address'].startsWith(`${p}:`) || c['dst-address'].startsWith(`${p}:`),
+                    ),
+            )
+            return this.#json(res, 200, { ret: '' })
+        }
         if (camino === '/system/resource' && metodo === 'GET') {
             return this.#json(res, 200, {
                 'board-name': 'falso',

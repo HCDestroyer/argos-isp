@@ -844,6 +844,18 @@ const camposEmpresa = {
         .optional(),
     horario: textoEmpresa(200),
     instrucciones_pago: textoEmpresa(1000),
+    url_corte: vine
+        .string()
+        .trim()
+        .maxLength(500)
+        .url({ require_protocol: true, protocols: ['http', 'https'] })
+        .nullable()
+        .optional()
+        .meta({
+            description:
+                'URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí ' +
+                '(302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte',
+        }),
     color_marca: vine
         .string()
         .trim()

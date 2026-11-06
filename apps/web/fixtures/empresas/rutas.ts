@@ -129,6 +129,7 @@ export const rutasEmpresas: RutasFixture = {
             sitio_web: null,
             horario: null,
             instrucciones_pago: null,
+            url_corte: null,
             color_marca: null,
             regimen_isr: null,
             codigo_establecimiento: null,

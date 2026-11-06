@@ -40,6 +40,7 @@ const dispatcher = new Dispatcher({
     claveSecretos: clave,
     suspendido: config.suspendido,
     suspenderConIpv6: config.suspenderConIpv6,
+    suspender: config.suspender,
     puertoNas: config.nas.puerto,
     timeoutMs: config.nas.timeoutMs,
     reintentos: config.nas.reintentos,

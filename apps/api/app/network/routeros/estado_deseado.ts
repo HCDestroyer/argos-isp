@@ -19,7 +19,7 @@ import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
  * | Objeto | Cuándo |
  * | --- | --- |
  * | Cola simple (`/queue/simple`) | `cola_simple`: siempre (rate-limit de `rateLimitServicio`, `parent` al padre del plan con reuso); PPPoE solo activo o limitado, con las direcciones de la sesión (`targetsColaServicio`). `arbol_pcq` y `pcq_plan` (WISP): solo suspendido |
- * | Address-list `suspendidos` | Solo en `suspendido` (mismo NAT a `/corte` que PPPoE) |
+ * | Address-list `suspendidos` | Solo en `suspendido`: la IPv4 y sus prefijos IPv6 (mismo corte y NAT a `/corte` que PPPoE) |
  * | Address-list `argosisp-plan-<id>[-limitado]` (IPv4 e IPv6) | `arbol_pcq`, activo o limitado: IPv4 y prefijo delegado (WISP) o las direcciones de la sesión abierta (PPPoE: IPv4, /64, /56) |
  * | Lease DHCP | Solo en `dhcp_fija` (también suspendido: necesita su IP para llegar a `/corte`) |
  * | ARP estático | Solo con `amarre_ip_mac` y `mac` |
@@ -339,6 +339,16 @@ export function estadoDeseado(
             comment,
             propiedades: { list: suspendido.addressList, address: servicio.ipv4, disabled: 'no' },
         })
+        // Sus prefijos IPv6 también (mismo trato que IPv4: filtro de corte y NAT de HTTP a /corte por
+        // IPv6). Sin esto, un WISP suspendido seguía navegando por IPv6.
+        const sufijos: SufijoV6[] = ['delegado', 'delegado-2']
+        for (const [i, prefijo] of servicio.prefijos_v6.slice(0, sufijos.length).entries()) {
+            presentes.push({
+                ruta: '/ipv6/firewall/address-list',
+                comment: commentServicioV6(id, sufijos[i]!),
+                propiedades: { list: suspendido.addressList, address: prefijo, disabled: 'no' },
+            })
+        }
     } else if (arbol) {
         // WISP: solo el prefijo delegado propio (el /64 del segmento es compartido).
         const sufijos: SufijoV6[] = ['delegado', 'delegado-2']

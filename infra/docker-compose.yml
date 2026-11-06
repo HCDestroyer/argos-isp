@@ -659,7 +659,8 @@ services:
       COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
       # Suspender sesiones con IPv6: coa (sin reconectar; IPv6 bloqueado con reset) o disconnect
       # (reconecta con el perfil suspendido y el router redirige IPv6 a /corte). Decide el PM.
-      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
+      COA_SUSPENDER: ${COA_SUSPENDER:-disconnect}
+      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-disconnect}
       # Prefijo de aaa:user:<user_ppp> en Redis (mismo que aaa y la API): rate-limit de los CoA de velocidad
       AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
       # Respaldo por la API interna (A2) cuando Redis no tiene el servicio: GET /internal/aaa/servicio

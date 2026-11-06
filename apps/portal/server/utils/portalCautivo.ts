@@ -38,7 +38,9 @@ export const SONDAS: readonly SondaPortalCautivo[] = [
     { sistema: 'Android / ChromeOS / Chrome', host: 'connectivitycheck.gstatic.com', ruta: '/generate_204', exito: { status: 204 } },
     { sistema: 'Android (antiguo)', host: 'clients3.google.com', ruta: '/generate_204', exito: { status: 204 } },
     { sistema: 'Android (Google)', host: 'www.google.com', ruta: '/gen_204', exito: { status: 204 } },
-    { sistema: 'Samsung / Xiaomi / Huawei', host: 'connect.rom.miui.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Samsung (One UI)', host: 'connectivitycheck.samsung.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Xiaomi (MIUI / HyperOS)', host: 'connect.rom.miui.com', ruta: '/generate_204', exito: { status: 204 } },
+    { sistema: 'Huawei / Honor', host: 'connectivitycheck.platform.hicloud.com', ruta: '/generate_204', exito: { status: 204 } },
     {
         sistema: 'iOS / iPadOS / macOS',
         host: 'captive.apple.com',
@@ -52,6 +54,7 @@ export const SONDAS: readonly SondaPortalCautivo[] = [
         exito: { status: 200, cuerpo: '<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>' },
     },
     { sistema: 'Windows 10 / 11', host: 'www.msftconnecttest.com', ruta: '/connecttest.txt', exito: { status: 200, cuerpo: 'Microsoft Connect Test' } },
+    { sistema: 'Windows 10 / 11 (IPv6)', host: 'ipv6.msftconnecttest.com', ruta: '/connecttest.txt', exito: { status: 200, cuerpo: 'Microsoft Connect Test' } },
     { sistema: 'Windows 10 / 11 (abre el navegador)', host: 'www.msftconnecttest.com', ruta: '/redirect', exito: { status: 200 } },
     { sistema: 'Windows 7 / 8', host: 'www.msftncsi.com', ruta: '/ncsi.txt', exito: { status: 200, cuerpo: 'Microsoft NCSI' } },
     { sistema: 'Firefox', host: 'detectportal.firefox.com', ruta: '/success.txt', exito: { status: 200, cuerpo: 'success\n' } },
@@ -170,3 +173,26 @@ export function redireccionPortalCautivo(
     }
     return destino
 }
+
+/**
+ * URL de corte del operador (`empresas.url_corte`, `GET /api/v1/portal/destino-corte`): solo se usa si es
+ * `http(s)://` con host. Cualquier otra cosa (vacía, otro esquema) cae a la `/corte` del portal.
+ */
+export function destinoDelOperador(url: unknown): string | null {
+    if (typeof url !== 'string' || url.trim() === '') {
+        return null
+    }
+    try {
+        const valor = new URL(url.trim())
+        return (valor.protocol === 'http:' || valor.protocol === 'https:') && valor.hostname ? valor.toString() : null
+    }
+    catch {
+        return null
+    }
+}
+
+/** Ruta de la API que dice a dónde redirigir al suspendido de la IP de origen. */
+export const RUTA_DESTINO_CORTE = '/api/v1/portal/destino-corte'
+
+/** Espera máxima de esa consulta: si la API tarda, se usa la `/corte` del portal. */
+export const ESPERA_DESTINO_MS = 1500

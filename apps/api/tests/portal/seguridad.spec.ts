@@ -129,6 +129,7 @@ function preparar(group: { each: { setup: (fn: () => () => void) => void } }) {
 const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalQuienSoy: () => undefined,
     portalEstado: () => undefined,
+    portalDestinoCorte: () => undefined,
     portalSolicitarCodigo: () => ({ identificador: 'nadie-123' }),
     portalVerificarCodigo: () => ({ solicitud: randomUUID(), codigo: '000000' }),
     portalSalir: () => undefined,

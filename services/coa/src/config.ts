@@ -8,15 +8,27 @@ export interface PerfilSuspendido {
 
 /**
  * Cómo se suspende una sesión que tiene IPv6 (`prefijo_enlace_v6` o `prefijo_delegado_v6`):
- * - `coa` (por defecto): CoA con el perfil de corte, sin reconectar. IPv6 queda bloqueado por
+ * - `coa`: CoA con el perfil de corte, sin reconectar. IPv6 queda bloqueado por
  *   `Filter-Id`, pero RouterOS no agrega el /64 ni el /56 a la address-list IPv6 por CoA, así que el
  *   router no puede hacer dst-nat de IPv6 a `/corte` (TCP recibe reset).
- * - `disconnect`: Disconnect-Request; al reconectar `aaa` entrega `Mikrotik-Group=suspendido` y el
+ * - `disconnect` (por defecto): Disconnect-Request; al reconectar `aaa` entrega `Mikrotik-Group=suspendido` y el
  *   perfil PPP mete IPv4, /64 y /56 en `suspendidos` (IPv4 e IPv6), con lo que `lab.rsc` puede
  *   redirigir HTTP por IPv6 al portal. Las sesiones solo IPv4 siguen por CoA.
  * Ver `infra/mikrotik/README.md` ("Corte IPv6 hacia /corte").
  */
 export type ModoSuspensionIpv6 = 'coa' | 'disconnect'
+
+/**
+ * Cómo se suspende CUALQUIER sesión (`COA_SUSPENDER`, bug del portal cautivo v1.9.0):
+ * - `disconnect` (por defecto): Disconnect-Request a toda sesión. El CPE reconecta en segundos con
+ *   el perfil `suspendido` (address-list e interface-list IPv4/IPv6) y, al caerse su WAN, abre todas
+ *   sus conexiones de nuevo: las que el router tenía en FastTrack (que no pasan por el filtro) dejan
+ *   de usarse y las nuevas entran al corte. Con CoA el servicio cortado seguía navegando por las
+ *   conexiones ya abiertas.
+ * - `coa`: el comportamiento anterior (CoA sin reconectar; `COA_SUSPENDER_CON_IPV6` decide las
+ *   sesiones con IPv6).
+ */
+export type ModoSuspension = 'coa' | 'disconnect'
 
 export interface Config {
     port: number
@@ -49,6 +61,7 @@ export interface Config {
     }
     suspendido: PerfilSuspendido
     suspenderConIpv6: ModoSuspensionIpv6
+    suspender: ModoSuspension
 }
 
 function numero(valor: string | undefined, porDefecto: number): number {
@@ -58,9 +71,17 @@ function numero(valor: string | undefined, porDefecto: number): number {
     return n
 }
 
+function modoSuspension(valor: string | undefined): ModoSuspension {
+    if (valor === undefined || valor === '' || valor === 'disconnect') return 'disconnect'
+    if (valor === 'coa') return 'coa'
+    throw new Error(`COA_SUSPENDER inválido: ${valor} (disconnect | coa)`)
+}
+
 function modoSuspensionIpv6(valor: string | undefined): ModoSuspensionIpv6 {
-    if (valor === undefined || valor === '' || valor === 'coa') return 'coa'
-    if (valor === 'disconnect') return 'disconnect'
+    // `disconnect` por defecto desde v1.9.1 (bug del portal cautivo, 5 nov): solo así el suspendido con
+    // IPv6 entra con el perfil `suspendido` y su HTTP por IPv6 también se redirige a `/corte`.
+    if (valor === undefined || valor === '' || valor === 'disconnect') return 'disconnect'
+    if (valor === 'coa') return 'coa'
     throw new Error(`COA_SUSPENDER_CON_IPV6 inválido: ${valor} (coa | disconnect)`)
 }
 
@@ -111,5 +132,6 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             filterId: env.COA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',
         },
         suspenderConIpv6: modoSuspensionIpv6(env.COA_SUSPENDER_CON_IPV6),
+        suspender: modoSuspension(env.COA_SUSPENDER),
     }
 }

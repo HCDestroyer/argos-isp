@@ -7542,6 +7542,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/destino-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A dónde redirige el portal cautivo al suspendido de la IP de origen
+         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalDestinoCorte"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/empresa": {
         parameters: {
             query?: never;
@@ -13752,6 +13772,10 @@ export interface components {
                 nombre: string;
             }[];
         };
+        DestinoCorte: {
+            /** @description URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL) */
+            url: string | null;
+        };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
             vencida: components["schemas"]["Dinero"];
@@ -13764,17 +13788,17 @@ export interface components {
             ok: boolean;
             chequeos: {
                 /**
-                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router)
                  * @enum {string}
                  */
-                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden";
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden" | "dns_router" | "portal_host" | "portal_en_router";
                 /** @description null: no se pudo comprobar */
                 ok: boolean | null;
                 /**
                  * @description null si salió bien
                  * @enum {string|null}
                  */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | null;
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | null;
                 /** @description Qué se vio y qué hacer, en lenguaje simple */
                 detalle: string;
                 /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
@@ -13784,7 +13808,7 @@ export interface components {
             }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */
@@ -13824,7 +13848,7 @@ export interface components {
                     ipv4: string;
                 }[];
             };
-            /** @description Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre */
+            /** @description Lo que el corte no hace por diseño (HTTPS no se redirige; IPv6 solo con la IPv6 del portal; DNS privado estricto); mostrar siempre */
             limites: string[];
         };
         Diario: {
@@ -14163,6 +14187,8 @@ export interface components {
             sitio_web: string | null;
             horario: string | null;
             instrucciones_pago: string | null;
+            /** @description URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte */
+            url_corte: string | null;
             /** @description `#RRGGBB`; solo PDF y correo */
             color_marca: string | null;
             /** @description País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais */
@@ -19761,7 +19787,7 @@ export interface components {
                 /** @description `argosisp:servicio:<id>` o `argosisp:plan:<id>` */
                 comment: string;
                 /** @enum {string} */
-                accion: "creado" | "actualizado" | "borrado" | "desconectado";
+                accion: "creado" | "actualizado" | "borrado" | "desconectado" | "conexiones_cortadas";
                 duplicados?: number;
             }[];
             /** @description Nada que corregir y el router respondió */
@@ -31233,6 +31259,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -31369,6 +31400,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -51071,6 +51107,35 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalDestinoCorte: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destino del 302 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinoCorte"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */

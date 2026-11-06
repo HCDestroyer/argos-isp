@@ -15,10 +15,17 @@ import {
     necesitaVelocidad,
     planesDeRouter,
     redesV4DeRouter,
+    urlsCorte,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
+import {
+    clientesUsanDnsRouter,
+    configCorteResuelta,
+    conUrlsCorte,
+    estadoCorteRouter,
+    revisarDnsRouter,
+} from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
@@ -52,7 +59,16 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos' | 'red_acceso'
+    motivo:
+        | 'periodico'
+        | 'recuperado'
+        | 'plan'
+        | 'manual'
+        | 'control'
+        | 'conexion'
+        | 'qos'
+        | 'red_acceso'
+        | 'portal'
     evento_id?: string | null
 }
 
@@ -193,7 +209,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     const lecturaCorte = await leerCorteRouter(cliente)
                     // El FQDN del portal se resuelve en cada pasada (sin caché): si no resuelve, error
                     // visible y la regla de NAT que haya queda como está.
-                    const config = await configCorteResuelta(process.env, this.#resolver)
+                    const config = conUrlsCorte(
+                        await configCorteResuelta(process.env, this.#resolver),
+                        await urlsCorte(t.trx),
+                    )
                     if (config.portal_v4_error) {
                         salida.error_portal = config.portal_v4_error
                         await t.emit('routeros.fallido', {
@@ -215,6 +234,27 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     )
                     salida.avisos.push(...corte.avisos)
                     salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
+                    // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
+                    let dnsRouter: Record<string, string> | null = null
+                    try {
+                        dnsRouter = await cliente.leerDns()
+                    } catch (error) {
+                        if (!(error instanceof ErrorRouterOS)) throw error
+                        salida.avisos.push(`no se pudo leer /ip dns: ${error.message}`)
+                    }
+                    const usaDns = clientesUsanDnsRouter(
+                        lecturaCorte.get('/ppp/profile') ?? [],
+                        gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    )
+                    for (const p of dnsRouter ? revisarDnsRouter(dnsRouter, usaDns) : []) {
+                        salida.avisos.push(p.mensaje)
+                        await t.emit('routeros.fallido', {
+                            servicio_id: null,
+                            router_id: input.router_id,
+                            operacion: `dns del router (${p.codigo})`,
+                            error: p.mensaje,
+                        })
+                    }
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
                 nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null

@@ -19918,6 +19918,15 @@
                     ],
                     "maxLength": 1000
                   },
+                  "url_corte": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "format": "uri",
+                    "description": "URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte"
+                  },
                   "color_marca": {
                     "type": [
                       "string",
@@ -20220,6 +20229,15 @@
                       "null"
                     ],
                     "maxLength": 1000
+                  },
+                  "url_corte": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "format": "uri",
+                    "description": "URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte"
                   },
                   "color_marca": {
                     "type": [
@@ -56414,6 +56432,39 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/destino-corte": {
+      "get": {
+        "operationId": "portalDestinoCorte",
+        "summary": "A dónde redirige el portal cautivo al suspendido de la IP de origen",
+        "description": "Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destino del 302",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinoCorte"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/empresa": {
       "get": {
         "operationId": "portalEmpresa",
@@ -92135,6 +92186,21 @@
           }
         }
       },
+      "DestinoCorte": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL)"
+          }
+        }
+      },
       "DeudaEvaluada": {
         "type": "object",
         "required": [
@@ -92201,9 +92267,12 @@
                     "sesiones_suspendidas",
                     "fasttrack",
                     "perfil_suspendido",
-                    "walled_garden"
+                    "walled_garden",
+                    "dns_router",
+                    "portal_host",
+                    "portal_en_router"
                   ],
-                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden"
+                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router)"
                 },
                 "ok": {
                   "type": [
@@ -92232,7 +92301,12 @@
                     "portal_inalcanzable",
                     "portal_sin_corte",
                     "suspendidos_fuera_de_lista",
-                    "fasttrack"
+                    "fasttrack",
+                    "dns_router_sin_servidores",
+                    "dns_router_documentacion",
+                    "dns_router_sin_remotas",
+                    "portal_no_acepta_host",
+                    "portal_en_router"
                   ],
                   "description": "null si salió bien"
                 },
@@ -92282,7 +92356,12 @@
                     "portal_inalcanzable",
                     "portal_sin_corte",
                     "suspendidos_fuera_de_lista",
-                    "fasttrack"
+                    "fasttrack",
+                    "dns_router_sin_servidores",
+                    "dns_router_documentacion",
+                    "dns_router_sin_remotas",
+                    "portal_no_acepta_host",
+                    "portal_en_router"
                   ]
                 },
                 "mensaje": {
@@ -92453,7 +92532,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre"
+            "description": "Lo que el corte no hace por diseño (HTTPS no se redirige; IPv6 solo con la IPv6 del portal; DNS privado estricto); mostrar siempre"
           }
         }
       },
@@ -93837,6 +93916,7 @@
           "sitio_web",
           "horario",
           "instrucciones_pago",
+          "url_corte",
           "color_marca",
           "pais",
           "regimen_isr",
@@ -93928,6 +94008,13 @@
               "string",
               "null"
             ]
+          },
+          "url_corte": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte"
           },
           "color_marca": {
             "type": [
@@ -117212,7 +117299,8 @@
                     "creado",
                     "actualizado",
                     "borrado",
-                    "desconectado"
+                    "desconectado",
+                    "conexiones_cortadas"
                   ]
                 },
                 "duplicados": {

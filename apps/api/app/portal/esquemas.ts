@@ -81,6 +81,18 @@ export const QuienSoy = definirEsquema(
     }),
 )
 
+export const DestinoCorte = definirEsquema(
+    'DestinoCorte',
+    objeto({
+        url: {
+            ...nulable(texto),
+            description:
+                'URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la ' +
+                'página /corte del portal (IP sin servicio o empresa sin URL)',
+        },
+    }),
+)
+
 export const EstadoPortal = definirEsquema(
     'EstadoPortal',
     objeto({

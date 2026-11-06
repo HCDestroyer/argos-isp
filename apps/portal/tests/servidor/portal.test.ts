@@ -71,6 +71,33 @@ describe('sondas de portal cautivo (con URL pública)', () => {
         esperarRedireccionACorte(await pedir(`${sonda.ruta}?t=1`, { host: sonda.host }), `${URL_PUBLICA}/corte`)
     })
 
+    it('URL de corte del operador (empresas.url_corte): las sondas y el HTTP ajeno reciben 302 a ella', async () => {
+        const URL_OPERADOR = 'https://pagos.isp.example/corte?origen=portal'
+        api.respuestas.set('/api/v1/portal/destino-corte', JSON.stringify({ url: URL_OPERADOR }))
+        try {
+            api.rutas.length = 0
+            api.cabeceras.length = 0
+            for (const sonda of SONDAS) {
+                const respuesta = await pedir(sonda.ruta, { host: sonda.host, headers: { 'x-forwarded-for': '10.10.0.5' } })
+                esperarRedireccionACorte(respuesta, URL_OPERADOR)
+                esperarSinExito(respuesta, sonda)
+            }
+            esperarRedireccionACorte(await pedir('/noticias', { host: 'example.com' }), URL_OPERADOR)
+            // La API recibió la IP del cliente para saber de qué empresa es
+            const i = api.rutas.indexOf('/api/v1/portal/destino-corte')
+            expect(i).toBeGreaterThanOrEqual(0)
+            expect(String(api.cabeceras[i]?.['x-forwarded-for'])).toContain('10.10.0.5')
+            // El portal mismo sigue sirviendo /corte
+            expect((await pedir('/corte', { host: 'portal.argosisp.example' })).status).toBe(200)
+            // Una URL que no es http(s) se ignora: /corte del portal
+            api.respuestas.set('/api/v1/portal/destino-corte', JSON.stringify({ url: 'javascript:alert(1)' }))
+            esperarRedireccionACorte(await pedir('/generate_204', { host: 'connectivitycheck.gstatic.com' }), `${URL_PUBLICA}/corte`)
+        }
+        finally {
+            api.respuestas.delete('/api/v1/portal/destino-corte')
+        }
+    })
+
     it('las sondas que piden la raíz de su host también reciben 302 a /corte', async () => {
         for (const host of ['captive.apple.com', 'networkcheck.kde.org', 'connectivity-check.ubuntu.com', 'neverssl.com']) {
             esperarRedireccionACorte(await pedir('/', { host }), `${URL_PUBLICA}/corte`)
@@ -86,8 +113,9 @@ describe('sondas de portal cautivo (con URL pública)', () => {
         }
     })
 
-    it('ninguna sonda llega a la API', () => {
-        expect(api.rutas).toEqual([])
+    it('las sondas solo preguntan a la API a dónde redirigir (destino-corte), nada más', () => {
+        expect(api.rutas.length).toBeGreaterThan(0)
+        expect(api.rutas.every(ruta => ruta === '/api/v1/portal/destino-corte')).toBe(true)
     })
 })
 

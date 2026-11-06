@@ -1,3 +1,4 @@
+import { isIPv4 } from 'node:net'
 import db from '@adonisjs/lucid/services/db'
 import type { Transaccion } from '#shared/domain_action'
 import env from '#start/env'
@@ -110,7 +111,12 @@ export interface OpcionesDispatcher {
     red?: PredeterminadosRed
     /** DNS para el FQDN del portal (`configCorteResuelta`); por defecto `getaddrinfo` */
     resolver?: ResolverIPv4
+    /** Sonda HTTP al destino del NAT con un Host ajeno (diagnóstico de corte); por defecto `sondaPortalHttp` */
+    sondaPortal?: SondaPortal
 }
+
+/** Respuesta de la sonda: status y `Location` (sin seguir redirecciones); lanza si no hay conexión. */
+export type SondaPortal = (url: string, host: string) => Promise<{ status: number; location: string | null }>
 
 export const fabricaPorDefecto: FabricaClientes = (router, opciones = {}) =>
     clienteDeRouter(router, {
@@ -178,7 +184,8 @@ export interface Cambio {
     /** `/ppp/active`: una sesión quitada para que tome el secret o el perfil nuevo (PPPoE sin RADIUS) */
     ruta: RutaRouterOS | '/ppp/active'
     comment: string
-    accion: 'creado' | 'actualizado' | 'borrado' | 'movido' | 'desconectado'
+    /** `conexiones_cortadas`: conntrack del servicio quitado al suspender (WISP) */
+    accion: 'creado' | 'actualizado' | 'borrado' | 'movido' | 'desconectado' | 'conexiones_cortadas'
     /** Objetos duplicados borrados además del cambio */
     duplicados?: number
     /** `/ppp/active` quitada (PPPoE sin RADIUS): su `acct_session_id` de sondeo */
@@ -221,6 +228,43 @@ export async function aplicarEstado(
         if (borrados > 0) cambios.push({ ruta, comment, accion: 'borrado' })
     }
     return cambios
+}
+
+/** Script de `/execute` que quita del conntrack las conexiones de una IPv4 (origen o destino). */
+export function scriptCortarConexiones(ipv4: string): string {
+    if (!isIPv4(ipv4)) throw new Error(`IPv4 inválida: ${ipv4}`)
+    const re = `^${ipv4.replaceAll('.', '\\\\.')}:`
+    return `/ip firewall connection remove [find where src-address~"${re}" or dst-address~"${re}"]`
+}
+
+/**
+ * Al suspender un servicio sin PPPoE (WISP con IP fija o DHCP): quita sus conexiones abiertas del
+ * conntrack. Las que ya iban por FastTrack no pasan por el filtro y el cliente seguía navegando por
+ * ellas aunque su IP ya estuviera en `suspendidos` (bug v1.9.0, 5 nov). Solo cuando la entrada de
+ * `suspendidos` se acaba de escribir (la suspensión: creada, o movida desde la lista del plan en
+ * `arbol_pcq`), no en cada pasada; queda en `audit.red`. PPPoE no lo
+ * necesita: al suspender se desconecta la sesión (`COA_SUSPENDER=disconnect`, o el secret local).
+ */
+export async function cortarConexionesSiSuspendio(
+    cliente: ClienteRouterOS,
+    estado: EstadoDeseado,
+    cambios: Cambio[],
+    listaSuspendidos: string,
+    ctx: ContextoRed,
+): Promise<Cambio | null> {
+    const entrada = estado.presentes.find(
+        (o) => o.ruta === '/ip/firewall/address-list' && o.propiedades.list === listaSuspendidos,
+    )
+    if (!entrada?.propiedades.address) return null
+    const recien = cambios.some(
+        (c) =>
+            c.ruta === '/ip/firewall/address-list' &&
+            c.comment === entrada.comment &&
+            (c.accion === 'creado' || c.accion === 'actualizado'),
+    )
+    if (!recien) return null
+    await cliente.ejecutar('/execute', { script: scriptCortarConexiones(entrada.propiedades.address) }, ctx)
+    return { ruta: '/ip/firewall/address-list', comment: entrada.comment, accion: 'conexiones_cortadas' }
 }
 
 /**

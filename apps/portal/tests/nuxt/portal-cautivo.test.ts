@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     RUTAS_DETECCION,
     SONDAS,
+    destinoDelOperador,
     esSonda,
     hostsDelPortal,
     nombreHost,
@@ -85,6 +86,16 @@ describe('redireccionPortalCautivo', () => {
         for (const host of ['portal.argosisp.example', '192.0.2.20', '[2001:db8:ffff::20]', 'localhost:3001']) {
             expect(redireccionPortalCautivo({ host, ruta: '/' }, CON_URL)).toBeNull()
             expect(redireccionPortalCautivo({ host, ruta: '/mi-cuenta' }, CON_URL)).toBeNull()
+        }
+    })
+})
+
+describe('destinoDelOperador (empresas.url_corte)', () => {
+    it('solo http(s):// con host; lo demás cae a la /corte del portal', () => {
+        expect(destinoDelOperador('https://pagos.isp.example/corte')).toBe('https://pagos.isp.example/corte')
+        expect(destinoDelOperador(' http://isp.example ')).toBe('http://isp.example/')
+        for (const malo of [null, undefined, '', 'javascript:alert(1)', 'ftp://isp.example', '/corte', 42]) {
+            expect(destinoDelOperador(malo)).toBeNull()
         }
     })
 })

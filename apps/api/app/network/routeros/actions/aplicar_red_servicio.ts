@@ -24,6 +24,7 @@ import {
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
     aplicarEstado,
+    cortarConexionesSiSuspendio,
     asegurarVelocidad,
     enTransicion,
     leerVelocidadRouter,
@@ -198,6 +199,18 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 }
                 // Los objetos del plan no son del servicio: van a `audit.red` sin servicio_id.
                 const ctxPlan = { ...ctx, servicio_id: null }
+                // Suspensión de un WISP: sus conexiones abiertas (FastTrack) se cortan una vez.
+                const cortar = async () => {
+                    if (!porServicio) return
+                    const c = await cortarConexionesSiSuspendio(
+                        cliente,
+                        estado,
+                        fila.cambios,
+                        perfilSuspendido().addressList,
+                        ctx,
+                    )
+                    if (c) fila.cambios.push(c)
+                }
                 const secret = async () => {
                     if (!conSecret) return
                     let deseadoSecret: SecretDeseado | null = null
@@ -271,6 +284,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         )
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
                         if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
+                        await cortar()
                         // El secret después de los perfiles a los que apunta y antes de borrar los que sobran.
                         await secret()
                         // Durante un cambio de modo, lo del modo anterior lo borra el cambio al final.
@@ -282,6 +296,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         }
                     } else {
                         fila.cambios = await aplicarEstado(cliente, estado, ctx)
+                        await cortar()
                         await secret()
                     }
                 } finally {

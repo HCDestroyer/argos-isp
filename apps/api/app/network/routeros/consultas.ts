@@ -743,3 +743,26 @@ export async function firmaEstrategia(
 export function firmaDeEvento(planId: number | null, a: unknown): string {
     return JSON.stringify(planId === null ? leerEstrategias(a) : leerExcepcion(a))
 }
+
+/** URLs de corte configuradas (`core.empresas.url_corte` de las empresas activas), para el walled garden. */
+export async function urlsCorte(cliente: QueryClientContract = db.connection()): Promise<string[]> {
+    const filas = (await cliente
+        .from('core.empresas')
+        .where('activa', true)
+        .whereNotNull('url_corte')
+        .orderBy('id')
+        .select('url_corte')) as Array<{ url_corte: string }>
+    return filas.map((f) => f.url_corte)
+}
+
+/** Routers activos con credenciales de la API (los que el reconciliador puede tocar). */
+export async function routersConApi(cliente: QueryClientContract = db.connection()): Promise<number[]> {
+    const filas = (await cliente
+        .from('network.routers')
+        .where('activo', true)
+        .whereNotNull('api_usuario')
+        .whereNotNull('api_password')
+        .orderBy('id')
+        .select('id')) as Array<{ id: number }>
+    return filas.map((f) => Number(f.id))
+}

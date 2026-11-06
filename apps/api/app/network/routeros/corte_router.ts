@@ -19,7 +19,7 @@ import { esIpDocumentacion } from '#network/conexion/dns'
  * | `/ppp/profile` | `suspendido`: rate-limit mínimo, `address-list` e `interface-list` | `name` |
  * | `/ip(v6)/firewall/address-list` | `argos-portal`, `argos-dns`, `argos-walled`, `argos-clientes`, `suspendidos` | `list` + `address` |
  * | `/ip(v6)/firewall/filter` | saltos `argosisp:top` (corte, Filter-Id, sin FastTrack) y cadenas `argos-corte`, `argos-corte-in`, `argos-activo` | `comment` |
- * | `/ip/firewall/nat` | saltos `argosisp:top` y cadena `argos-corte-nat` (HTTP → `/corte` del portal) | `comment` |
+ * | `/ip(v6)/firewall/nat` | saltos `argosisp:top` y cadena `argos-corte-nat` (HTTP → `/corte` del portal; IPv6 solo con `portal_v6`) | `comment` |
  *
  * Solo se toca lo que lleva esos comentarios. Las entradas de address-list solo se administran si la
  * configuración las define (si falta, lo que haya puesto el script queda como está).
@@ -45,6 +45,8 @@ export interface ConfigCorte {
     /** Destino real del dst-nat: `http://<portal_v4>:<puerto>/corte`; null sin IPv4 del portal */
     nat_url: string | null
     walled_garden: string[]
+    /** Hosts de las URL de corte de las empresas (`conUrlsCorte`): grupo propio, siempre administrado */
+    walled_url_corte: string[]
     dns_v4: string[]
     dns_v6: string[]
     /** Dirección del router en los enlaces PPP (DNS para los clientes) */
@@ -103,6 +105,7 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env): ConfigCor
         portal_url: entorno.PORTAL_URL_PUBLICA?.trim() || null,
         nat_url: portalV4 ? urlNat(portalV4, puerto) : null,
         walled_garden: [...new Set(walled)],
+        walled_url_corte: [],
         dns_v4: separar(leer('DNS_V4')),
         dns_v6: separar(leer('DNS_V6')),
         ppp_local_v4: leer('PPP_LOCAL_V4'),
@@ -239,9 +242,20 @@ export const ENTRADA_SUSPENDIDOS = '192.0.2.255'
 /** Comentario del dst-nat HTTP → `/corte` (el mismo de `lab.rsc` y del script de conexión). */
 export const REGLA_NAT_HTTP = 'argosisp: corte-nat HTTP a /corte'
 
+/** DNS del suspendido hacia cualquier resolver (IPv4 e IPv6). */
+export const REGLA_DNS_UDP = 'argosisp: corte DNS udp a cualquier resolver'
+export const REGLA_DNS_TCP = 'argosisp: corte DNS tcp a cualquier resolver'
+
+/**
+ * Reglas que ArgosIsp escribía antes y ya no van: llevan comment `argosisp:` y el reconciliador las
+ * borra de los routers existentes. `corte DNS udp/tcp` solo aceptaba DNS hacia `argos-dns`.
+ */
+export const REGLAS_RETIRADAS = ['argosisp: corte DNS udp', 'argosisp: corte DNS tcp'] as const
+
 const FILTRO = '/ip/firewall/filter'
 const FILTRO6 = '/ipv6/firewall/filter'
 const NAT = '/ip/firewall/nat'
+const NAT6 = '/ipv6/firewall/nat'
 
 function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fasttrack: boolean): ReglaCorte[] {
     const r = (comment: string, propiedades: Propiedades, arriba = false): ReglaCorte => ({
@@ -298,19 +312,15 @@ function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fastt
         }
     }
     const corte = (comment: string, p: Propiedades) => r(comment, { chain: 'argos-corte', ...p })
+    // DNS hacia CUALQUIER resolver (bug de producción v1.9.0, 5 nov): con el DNS limitado a `argos-dns`,
+    // el cliente que consulta otro resolver (8.8.8.8 del perfil PPP, uno fijo en el CPE o en el teléfono)
+    // no resolvía nada, nunca hacía la petición HTTP que el dst-nat lleva a /corte y el sistema decía
+    // «sin internet» (Chrome: DNS_PROBE_STARTED). Se deja pasar la consulta tal cual: las respuestas son
+    // las reales y no depende de que el router tenga `allow-remote-requests`. DoT (853) y DoH (443) siguen
+    // cayendo en el `tcp-reset`, así que el equipo vuelve al DNS normal. Detalle: contratos/control-velocidad.md §10.5.
     salida.push(
-        corte('argosisp: corte DNS udp', {
-            protocol: 'udp',
-            'dst-port': '53',
-            'dst-address-list': 'argos-dns',
-            action: 'accept',
-        }),
-        corte('argosisp: corte DNS tcp', {
-            protocol: 'tcp',
-            'dst-port': '53',
-            'dst-address-list': 'argos-dns',
-            action: 'accept',
-        }),
+        corte(REGLA_DNS_UDP, { protocol: 'udp', 'dst-port': '53', action: 'accept' }),
+        corte(REGLA_DNS_TCP, { protocol: 'tcp', 'dst-port': '53', action: 'accept' }),
         corte('argosisp: corte portal', { 'dst-address-list': 'argos-portal', action: 'accept' }),
         corte('argosisp: corte walled garden', { 'dst-address-list': 'argos-walled', action: 'accept' }),
         corte('argosisp: corte TCP reset', { protocol: 'tcp', action: 'reject', 'reject-with': 'tcp-reset' }),
@@ -346,9 +356,20 @@ function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fastt
     return salida
 }
 
-function reglasNat(lista: string, config: ConfigCorte): { reglas: ReglaCorte[]; conservar: string[] } {
+/**
+ * NAT del corte (IPv4 en `/ip/firewall/nat`; IPv6 en `/ipv6/firewall/nat`, solo con IPv6 del portal):
+ * saltos `argosisp:top`, portal y walled garden sin NAT y TCP/80 → `/corte`. En IPv6 el salto coincide
+ * con las sesiones que entraron con el perfil `suspendido` (lista de interfaces o address-list IPv6):
+ * PPPoE al reconectar (`COA_SUSPENDER_CON_IPV6=disconnect`, el valor por defecto) y WISP por la entrada
+ * IPv6 de `suspendidos` que pone el dispatcher.
+ */
+function reglasNat(
+    lista: string,
+    config: ConfigCorte,
+    v6 = false,
+): { reglas: ReglaCorte[]; conservar: string[] } {
     const r = (comment: string, propiedades: Propiedades, arriba = false): ReglaCorte => ({
-        ruta: NAT,
+        ruta: v6 ? NAT6 : NAT,
         comment,
         propiedades: { ...propiedades, disabled: 'no' },
         arriba,
@@ -376,6 +397,21 @@ function reglasNat(lista: string, config: ConfigCorte): { reglas: ReglaCorte[]; 
         }),
     ]
     const http = REGLA_NAT_HTTP
+    if (v6) {
+        // Sin IPv6 del portal no hay NAT IPv6: el HTTP por IPv6 recibe `tcp-reset` y el equipo cae a IPv4.
+        if (!config.portal_v6) return { reglas: [], conservar: [] }
+        reglas.push(
+            r(http, {
+                chain: 'argos-corte-nat',
+                protocol: 'tcp',
+                'dst-port': '80',
+                action: 'dst-nat',
+                'to-address': `${config.portal_v6}/128`,
+                'to-ports': String(config.portal_puerto),
+            }),
+        )
+        return { reglas, conservar: [] }
+    }
     if (!config.portal_v4) return { reglas, conservar: [http] }
     reglas.push(
         r(http, {
@@ -396,12 +432,16 @@ function comentariosPropios(config: ConfigCorte): Map<RutaOrdenada, Set<string>>
         ...reglasFiltro(FILTRO, config.address_list, true),
         ...reglasFiltro(FILTRO6, config.address_list, true),
         ...reglasNat(config.address_list, { ...config, portal_v4: config.portal_v4 ?? '0.0.0.0' }).reglas,
+        ...reglasNat(config.address_list, { ...config, portal_v6: config.portal_v6 ?? '::' }, true).reglas,
     ]
     const salida = new Map<RutaOrdenada, Set<string>>()
     for (const regla of todas) {
         const set = salida.get(regla.ruta) ?? new Set<string>()
         set.add(regla.comment)
         salida.set(regla.ruta, set)
+    }
+    for (const ruta of [FILTRO, FILTRO6] as const) {
+        for (const comment of REGLAS_RETIRADAS) salida.get(ruta)!.add(comment)
     }
     return salida
 }
@@ -476,12 +516,22 @@ export function estadoCorteRouter(
     agregar(v4, 'argos-dns', 'argosisp: DNS del router', dnsRouter)
     agregar(v4, 'argos-dns', 'argosisp: DNS', config.dns_v4)
     agregar(v4, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
+    // URL de corte: el grupo se administra siempre (al quitarla, su host sale del walled garden).
+    const urlCorte = (ruta: EntradaListaCorte['ruta']) => {
+        const comment = 'argosisp: walled garden URL de corte'
+        grupos.push({ ruta, list: 'argos-walled', comment })
+        for (const address of config.walled_url_corte) {
+            entradas.push({ ruta, list: 'argos-walled', address, comment })
+        }
+    }
+    urlCorte(v4)
     agregar(v4, 'argos-clientes', 'argosisp: clientes PPPoE', config.clientes_v4)
     agregar(v4, 'argos-clientes', 'argosisp: clientes WISP', opciones.redes_v4)
     agregar(v6, 'argos-portal', 'argosisp: portal IP', [config.portal_v6])
     agregar(v6, 'argos-portal', 'argosisp: portal FQDN', [config.portal_fqdn])
     agregar(v6, 'argos-dns', 'argosisp: DNS', config.dns_v6)
     agregar(v6, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
+    urlCorte(v6)
     agregar(v6, 'argos-clientes', 'argosisp: clientes IPv6', config.clientes_v6)
 
     const nat = reglasNat(lista, config)
@@ -500,6 +550,12 @@ export function estadoCorteRouter(
                 'las tiene en /ip dns servers, corrígelo con /ip dns set servers=<tus resolutores>',
         )
     }
+    const nat6 = reglasNat(lista, config, true)
+    if (!config.portal_v6) {
+        avisos.push(
+            'sin IPv6 del portal (ROUTERS_SERVICIO_PORTAL_V6): el HTTP por IPv6 de un suspendido recibe tcp-reset y el equipo cae a IPv4 para llegar a /corte',
+        )
+    }
     if (!config.portal_fqdn && !config.portal_v4) {
         avisos.push('sin portal configurado: argos-portal queda vacía')
     }
@@ -516,6 +572,7 @@ export function estadoCorteRouter(
             ...reglasFiltro(FILTRO, lista, opciones.fasttrack),
             ...reglasFiltro(FILTRO6, lista, opciones.fasttrack),
             ...nat.reglas,
+            ...nat6.reglas,
         ],
         propias: comentariosPropios(config),
         conservar: new Set(nat.conservar),
@@ -593,4 +650,89 @@ export function esCambioDeCorte(c: { ruta: string; comment: string }): boolean {
     }
     if (c.ruta === '/ppp/profile') return !c.comment.startsWith('argosisp:plan:')
     return c.ruta.endsWith('/address-list') && !c.comment.startsWith('argosisp:servicio:')
+}
+
+/*
+|--------------------------------------------------------------------------
+| DNS del router (bug v1.9.0, 5 nov)
+|--------------------------------------------------------------------------
+| En el router del PM `/ip dns servers` tenía las IPs de documentación de `lab-sin-radius.rsc`
+| (192.0.2.53, 198.51.100.53, 2001:db8:ffff::53): el resolver del router no resolvía nada y los
+| clientes que lo usan quedaban sin DNS (`DNS_PROBE_STARTED`). ArgosIsp nunca cambia los DNS del router
+| (son del operador): lo detecta, lo muestra en el diagnóstico y emite `routeros.fallido`.
+*/
+
+// `esIpDocumentacion` vive en `#network/conexion/dns`: una sola implementación para el 422 y el diagnóstico.
+
+export interface ProblemaDnsRouter {
+    codigo: 'dns_router_sin_servidores' | 'dns_router_documentacion' | 'dns_router_sin_remotas'
+    mensaje: string
+    comandos: string[]
+}
+
+/**
+ * Qué está mal en `/ip dns` del router. `usaDnsRouter`: los clientes reciben el router como DNS (el
+ * `dns-server` del perfil PPP es un gateway del router, o el router es el DNS de las redes WISP); solo
+ * entonces hace falta `allow-remote-requests`.
+ */
+export function revisarDnsRouter(
+    dns: Record<string, string | undefined>,
+    usaDnsRouter: boolean,
+): ProblemaDnsRouter[] {
+    const salida: ProblemaDnsRouter[] = []
+    const servidores = separar(dns.servers)
+    const dinamicos = separar(dns['dynamic-servers'])
+    const arreglo = '/ip dns set servers=<DNS reales de tu proveedor, p. ej. 1.1.1.1,8.8.8.8>'
+    if (servidores.length === 0 && dinamicos.length === 0) {
+        salida.push({
+            codigo: 'dns_router_sin_servidores',
+            mensaje:
+                'El router no tiene servidores DNS (/ip dns servers vacío y sin DNS dinámicos): no resuelve nada y los ' +
+                'clientes que lo usan como DNS no navegan ni ven la página de corte. Pon los DNS de tu proveedor',
+            comandos: [arreglo, '/ip dns print'],
+        })
+    }
+    const documentacion = [...servidores, ...dinamicos].filter(esIpDocumentacion)
+    if (documentacion.length > 0) {
+        salida.push({
+            codigo: 'dns_router_documentacion',
+            mensaje:
+                `El router usa como DNS ${documentacion.join(', ')}: son direcciones de documentación (RFC 5737 / RFC ` +
+                '3849, ejemplos de los scripts), no responden. El router no resuelve y el suspendido ve «sin internet» ' +
+                'en lugar de la página de corte. Cámbialos por los DNS reales de tu proveedor',
+            comandos: [arreglo, '/ip dns cache flush', ':put [:resolve connectivitycheck.gstatic.com]'],
+        })
+    }
+    const remotas = dns['allow-remote-requests']
+    if (usaDnsRouter && remotas !== undefined && remotas !== 'true' && remotas !== 'yes') {
+        salida.push({
+            codigo: 'dns_router_sin_remotas',
+            mensaje:
+                'Los clientes reciben al router como DNS pero /ip dns tiene allow-remote-requests=no: el router no les ' +
+                'responde. Actívalo (el script de conexión ya bloquea el 53 desde la WAN)',
+            comandos: ['/ip dns set allow-remote-requests=yes'],
+        })
+    }
+    return salida
+}
+
+/** ¿Los clientes usan al router como DNS? (`dns-server` del perfil `default` o `suspendido` = un gateway). */
+export function clientesUsanDnsRouter(perfiles: ObjetoRouterOS[], gateways: Array<string | null>): boolean {
+    const propios = new Set(gateways.filter((g): g is string => !!g))
+    if (propios.size === 0) return false
+    return perfiles
+        .filter((p) => p.name === PERFIL_PPP_BASE || p.name === 'suspendido')
+        .some((p) => separar(p['dns-server']).some((d) => propios.has(d)))
+}
+
+/**
+ * URL de corte de las empresas (`core.empresas.url_corte`, §10.6): sus hosts entran en el walled garden
+ * (`argos-walled`, IPv4 e IPv6, por FQDN que resuelve el router) para que el suspendido redirigido allí
+ * la pueda abrir. Se leen en cada reconciliación; `portal.config_cambiada` reconcilia los routers.
+ */
+export function conUrlsCorte(config: ConfigCorte, urls: Array<string | null>): ConfigCorte {
+    const hosts = urls
+        .map((u) => hostDe(u ?? undefined)?.toLowerCase())
+        .filter((h): h is string => !!h && !config.walled_garden.includes(h))
+    return { ...config, walled_url_corte: [...new Set(hosts)] }
 }
