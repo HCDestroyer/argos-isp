@@ -173,3 +173,26 @@ export function redireccionPortalCautivo(
     }
     return destino
 }
+
+/**
+ * URL de corte del operador (`empresas.url_corte`, `GET /api/v1/portal/destino-corte`): solo se usa si es
+ * `http(s)://` con host. Cualquier otra cosa (vacía, otro esquema) cae a la `/corte` del portal.
+ */
+export function destinoDelOperador(url: unknown): string | null {
+    if (typeof url !== 'string' || url.trim() === '') {
+        return null
+    }
+    try {
+        const valor = new URL(url.trim())
+        return (valor.protocol === 'http:' || valor.protocol === 'https:') && valor.hostname ? valor.toString() : null
+    }
+    catch {
+        return null
+    }
+}
+
+/** Ruta de la API que dice a dónde redirigir al suspendido de la IP de origen. */
+export const RUTA_DESTINO_CORTE = '/api/v1/portal/destino-corte'
+
+/** Espera máxima de esa consulta: si la API tarda, se usa la `/corte` del portal. */
+export const ESPERA_DESTINO_MS = 1500

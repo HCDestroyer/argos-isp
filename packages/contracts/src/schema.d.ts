@@ -7542,6 +7542,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/destino-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A dónde redirige el portal cautivo al suspendido de la IP de origen
+         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalDestinoCorte"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/empresa": {
         parameters: {
             query?: never;
@@ -13712,6 +13732,10 @@ export interface components {
                 nombre: string;
             }[];
         };
+        DestinoCorte: {
+            /** @description URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL) */
+            url: string | null;
+        };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
             vencida: components["schemas"]["Dinero"];
@@ -14123,6 +14147,8 @@ export interface components {
             sitio_web: string | null;
             horario: string | null;
             instrucciones_pago: string | null;
+            /** @description URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte */
+            url_corte: string | null;
             /** @description `#RRGGBB`; solo PDF y correo */
             color_marca: string | null;
             /** @description País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais */
@@ -31124,6 +31150,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -31260,6 +31291,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -50962,6 +50998,35 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalDestinoCorte: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destino del 302 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinoCorte"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */

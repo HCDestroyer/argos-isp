@@ -14,6 +14,7 @@ import { diferencias } from '#network/routeros/normalizar'
 import {
     clientesUsanDnsRouter,
     configCorteResuelta,
+    conUrlsCorte,
     ENTRADA_SUSPENDIDOS,
     estadoCorteRouter,
     normalizarDireccion,
@@ -29,6 +30,7 @@ import {
     redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
+    urlsCorte,
 } from '#network/routeros/consultas'
 import {
     estadoVelocidadRouter,
@@ -120,7 +122,7 @@ export async function vistaPreviaReconciliar(
             // Corte
             const lecturaCorte = await leerCorteRouter(cliente)
             const corte = estadoCorteRouter(
-                await configCorteResuelta(process.env, opciones.resolver),
+                conUrlsCorte(await configCorteResuelta(process.env, opciones.resolver), await urlsCorte()),
                 {
                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                     redes_v4: await redesV4DeRouter(routerId),
@@ -772,7 +774,7 @@ function chequeoWalled(config: ConfigCorte, lista4: ObjetoRouterOS[]): ChequeoCo
             .filter((d): d is string => d !== null)
             .filter((d) => !enLista(d, 'argos-portal'))
             .map((d) => ['argos-portal', d] as const),
-        ...config.walled_garden
+        ...[...config.walled_garden, ...config.walled_url_corte]
             .filter((d) => !enLista(d, 'argos-walled'))
             .map((d) => ['argos-walled', d] as const),
     ]
@@ -790,7 +792,9 @@ function chequeoWalled(config: ConfigCorte, lista4: ObjetoRouterOS[]): ChequeoCo
         faltan.map(([list, d]) => {
             const comment =
                 list === 'argos-walled'
-                    ? 'argosisp: walled garden'
+                    ? config.walled_url_corte.includes(d)
+                        ? 'argosisp: walled garden URL de corte'
+                        : 'argosisp: walled garden'
                     : d === config.portal_v4
                       ? 'argosisp: portal IP'
                       : 'argosisp: portal FQDN'
@@ -945,7 +949,7 @@ export async function diagnosticoCorte(
 ): Promise<DiagnosticoCorte> {
     const router = await routerDispatcher(routerId, undefined, opciones.red)
     if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
-    const config = await configCorteResuelta(process.env, opciones.resolver)
+    const config = conUrlsCorte(await configCorteResuelta(process.env, opciones.resolver), await urlsCorte())
     const salida: DiagnosticoCorte = {
         router_id: routerId,
         ok: false,

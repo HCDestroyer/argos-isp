@@ -323,6 +323,13 @@ Causa del bug: `argos-corte` solo aceptaba DNS hacia `argos-dns` (el router y `R
   - PPPoE sin RADIUS: el cambio de perfil del secret ya quita la sesión (`/ppp active remove`).
   - WISP (IP fija o DHCP): al escribir su entrada en `suspendidos`, el dispatcher manda `POST /rest/execute` con `/ip firewall connection remove [find where src-address~"^<ip>:" or dst-address~"^<ip>:"]` (una vez, en `audit.red`; el resultado lleva `accion: conexiones_cortadas`). Sus prefijos IPv6 también van a `/ipv6/firewall/address-list suspendidos` (`argosisp:servicio:<id>:delegado`).
 
+### 10.6 · URL de corte del operador por empresa (pedido del PM, 6 nov)
+
+- `core.empresas.url_corte` (`text`, null; CHECK `^https?://host`), editable con `empresas.editar` (`PUT /empresas/:id`, validador `http(s)://`, máx. 500) y en el alta. Diff en `audit.cambios`; si cambia, `portal.config_cambiada` (`empresa_id`, `campos: ['url_corte']`).
+- El router **no cambia**: sigue el `dst-nat` de TCP/80 al portal. El portal (Nitro, `server/middleware/portal-cautivo.ts`), ante una sonda de portal cautivo o cualquier HTTP con Host ajeno, pregunta `GET /api/v1/portal/destino-corte` (público, limitado por IP, sin datos del cliente: `{ url }` = la `url_corte` de la empresa del servicio de la IP de origen, o null) y responde `302 Location: <url_corte>`; con null, si la API falla o tarda más de 1,5 s, o si la URL no es `http(s)://`, `302` a su propia `/corte`. **Nunca un 204** ni la respuesta de éxito de una sonda. `/corte` en el host del portal se sigue sirviendo igual.
+- Walled garden: el host de cada `url_corte` de las empresas activas va a `argos-walled` (IPv4 e IPv6, por FQDN que resuelve el router) con el comentario `argosisp: walled garden URL de corte`. Ese grupo se administra siempre: al quitar la URL, su entrada se borra. `portal.config_cambiada` reconcilia todos los routers con API (`motivo: portal`); el ciclo periódico también lo corrige. Lo que necesite esa página además de su host (CDN, pasarela) lo agrega el operador en `ROUTERS_SERVICIO_WALLED_GARDEN`.
+- Panel (A4): campo «URL de la página de corte» en la empresa (`Schema<'Empresa'>.url_corte`).
+
 ## 11. Modo de velocidad único por router (decisión del PM, 2026-11-05)
 
 El modo de control de velocidad se decide **por router**: todos sus servicios siguen la misma lógica. Se quitan las excepciones por plan. Manda sobre §2, §4 y §9 donde choquen.

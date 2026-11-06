@@ -19918,6 +19918,15 @@
                     ],
                     "maxLength": 1000
                   },
+                  "url_corte": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "format": "uri",
+                    "description": "URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte"
+                  },
                   "color_marca": {
                     "type": [
                       "string",
@@ -20220,6 +20229,15 @@
                       "null"
                     ],
                     "maxLength": 1000
+                  },
+                  "url_corte": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "format": "uri",
+                    "description": "URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte"
                   },
                   "color_marca": {
                     "type": [
@@ -56414,6 +56432,39 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/destino-corte": {
+      "get": {
+        "operationId": "portalDestinoCorte",
+        "summary": "A dónde redirige el portal cautivo al suspendido de la IP de origen",
+        "description": "Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Destino del 302",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinoCorte"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/empresa": {
       "get": {
         "operationId": "portalEmpresa",
@@ -91873,6 +91924,21 @@
           }
         }
       },
+      "DestinoCorte": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL)"
+          }
+        }
+      },
       "DeudaEvaluada": {
         "type": "object",
         "required": [
@@ -93588,6 +93654,7 @@
           "sitio_web",
           "horario",
           "instrucciones_pago",
+          "url_corte",
           "color_marca",
           "pais",
           "regimen_isr",
@@ -93679,6 +93746,13 @@
               "string",
               "null"
             ]
+          },
+          "url_corte": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte"
           },
           "color_marca": {
             "type": [

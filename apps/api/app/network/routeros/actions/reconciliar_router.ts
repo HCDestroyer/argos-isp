@@ -15,12 +15,14 @@ import {
     necesitaVelocidad,
     planesDeRouter,
     redesV4DeRouter,
+    urlsCorte,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import {
     clientesUsanDnsRouter,
     configCorteResuelta,
+    conUrlsCorte,
     estadoCorteRouter,
     revisarDnsRouter,
 } from '#network/routeros/corte_router'
@@ -57,7 +59,16 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos' | 'red_acceso'
+    motivo:
+        | 'periodico'
+        | 'recuperado'
+        | 'plan'
+        | 'manual'
+        | 'control'
+        | 'conexion'
+        | 'qos'
+        | 'red_acceso'
+        | 'portal'
     evento_id?: string | null
 }
 
@@ -198,7 +209,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     const lecturaCorte = await leerCorteRouter(cliente)
                     // El FQDN del portal se resuelve en cada pasada (sin caché): si no resuelve, error
                     // visible y la regla de NAT que haya queda como está.
-                    const config = await configCorteResuelta(process.env, this.#resolver)
+                    const config = conUrlsCorte(
+                        await configCorteResuelta(process.env, this.#resolver),
+                        await urlsCorte(t.trx),
+                    )
                     if (config.portal_v4_error) {
                         salida.error_portal = config.portal_v4_error
                         await t.emit('routeros.fallido', {

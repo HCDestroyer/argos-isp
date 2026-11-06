@@ -44,6 +44,8 @@ export interface ConfigCorte {
     /** Destino real del dst-nat: `http://<portal_v4>:<puerto>/corte`; null sin IPv4 del portal */
     nat_url: string | null
     walled_garden: string[]
+    /** Hosts de las URL de corte de las empresas (`conUrlsCorte`): grupo propio, siempre administrado */
+    walled_url_corte: string[]
     dns_v4: string[]
     dns_v6: string[]
     /** Dirección del router en los enlaces PPP (DNS para los clientes) */
@@ -102,6 +104,7 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env): ConfigCor
         portal_url: entorno.PORTAL_URL_PUBLICA?.trim() || null,
         nat_url: portalV4 ? urlNat(portalV4, puerto) : null,
         walled_garden: [...new Set(walled)],
+        walled_url_corte: [],
         dns_v4: separar(leer('DNS_V4')),
         dns_v6: separar(leer('DNS_V6')),
         ppp_local_v4: leer('PPP_LOCAL_V4'),
@@ -512,12 +515,22 @@ export function estadoCorteRouter(
     agregar(v4, 'argos-dns', 'argosisp: DNS del router', dnsRouter)
     agregar(v4, 'argos-dns', 'argosisp: DNS', config.dns_v4)
     agregar(v4, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
+    // URL de corte: el grupo se administra siempre (al quitarla, su host sale del walled garden).
+    const urlCorte = (ruta: EntradaListaCorte['ruta']) => {
+        const comment = 'argosisp: walled garden URL de corte'
+        grupos.push({ ruta, list: 'argos-walled', comment })
+        for (const address of config.walled_url_corte) {
+            entradas.push({ ruta, list: 'argos-walled', address, comment })
+        }
+    }
+    urlCorte(v4)
     agregar(v4, 'argos-clientes', 'argosisp: clientes PPPoE', config.clientes_v4)
     agregar(v4, 'argos-clientes', 'argosisp: clientes WISP', opciones.redes_v4)
     agregar(v6, 'argos-portal', 'argosisp: portal IP', [config.portal_v6])
     agregar(v6, 'argos-portal', 'argosisp: portal FQDN', [config.portal_fqdn])
     agregar(v6, 'argos-dns', 'argosisp: DNS', config.dns_v6)
     agregar(v6, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
+    urlCorte(v6)
     agregar(v6, 'argos-clientes', 'argosisp: clientes IPv6', config.clientes_v6)
 
     const nat = reglasNat(lista, config)
@@ -707,4 +720,16 @@ export function clientesUsanDnsRouter(perfiles: ObjetoRouterOS[], gateways: Arra
     return perfiles
         .filter((p) => p.name === PERFIL_PPP_BASE || p.name === 'suspendido')
         .some((p) => separar(p['dns-server']).some((d) => propios.has(d)))
+}
+
+/**
+ * URL de corte de las empresas (`core.empresas.url_corte`, §10.6): sus hosts entran en el walled garden
+ * (`argos-walled`, IPv4 e IPv6, por FQDN que resuelve el router) para que el suspendido redirigido allí
+ * la pueda abrir. Se leen en cada reconciliación; `portal.config_cambiada` reconcilia los routers.
+ */
+export function conUrlsCorte(config: ConfigCorte, urls: Array<string | null>): ConfigCorte {
+    const hosts = urls
+        .map((u) => hostDe(u ?? undefined)?.toLowerCase())
+        .filter((h): h is string => !!h && !config.walled_garden.includes(h))
+    return { ...config, walled_url_corte: [...new Set(hosts)] }
 }

@@ -54,6 +54,8 @@ export interface ApiFalsa {
     rutas: string[]
     /** Cabeceras de cada petición que llegó (mismo orden que `rutas`). */
     cabeceras: IncomingHttpHeaders[]
+    /** Cuerpo JSON por ruta (sin query); las demás responden `{}`. */
+    respuestas: Map<string, string>
     cerrar: () => Promise<void>
 }
 
@@ -61,11 +63,12 @@ export interface ApiFalsa {
 export async function levantarApiFalsa(): Promise<ApiFalsa> {
     const rutas: string[] = []
     const cabeceras: IncomingHttpHeaders[] = []
+    const respuestas = new Map<string, string>()
     const servidor: Server = createServer((peticion, respuesta) => {
         rutas.push(peticion.url ?? '')
         cabeceras.push(peticion.headers)
         respuesta.setHeader('content-type', 'application/json')
-        respuesta.end('{}')
+        respuesta.end(respuestas.get((peticion.url ?? '').split('?')[0] ?? '') ?? '{}')
     })
     await new Promise<void>(resolver => servidor.listen(0, '127.0.0.1', resolver))
     const { port } = servidor.address() as AddressInfo
@@ -73,6 +76,7 @@ export async function levantarApiFalsa(): Promise<ApiFalsa> {
         url: `http://127.0.0.1:${port}`,
         rutas,
         cabeceras,
+        respuestas,
         cerrar: () => new Promise<void>(resolver => servidor.close(() => resolver())),
     }
 }

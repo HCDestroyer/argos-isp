@@ -786,6 +786,12 @@ export interface CatalogoEventos {
         campos: string[]
     }
 
+    // portal (A5, `contratos/control-velocidad.md` §10.6): URL de corte de una empresa
+    'portal.config_cambiada': {
+        empresa_id: number
+        campos: string[]
+    }
+
     // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
     'fiscal.localizacion_instalada': {
         empresa_id: number
@@ -1356,6 +1362,7 @@ export const EVENTOS = [
     'libro.emitido',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'portal.config_cambiada',
     'fiscal.localizacion_instalada',
     'fiscal.parametros_cambiados',
     'fiscal.config_cambiada',

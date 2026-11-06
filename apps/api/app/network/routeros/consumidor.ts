@@ -8,7 +8,7 @@ import { encolarPrefijo } from '#network/routeros/prefijos'
 import { encolarCambioControl } from '#network/routeros/jobs'
 import type { EntradaCambioControl } from '#network/routeros/cambio_control'
 import type { ControlVelocidad } from '#network/velocidad'
-import { routerDispatcher, firmaDeEvento, firmaEstrategia } from '#network/routeros/consultas'
+import { routerDispatcher, firmaDeEvento, firmaEstrategia, routersConApi } from '#network/routeros/consultas'
 import { controlDerivado, leerEstrategias } from '#network/estrategia_velocidad'
 import { sincronizarPlan } from '#network/routeros/sincronizar'
 
@@ -78,7 +78,8 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             evento === 'router.conexion_registrada' ||
             evento === 'router.radius_cambiado' ||
             evento === 'red_acceso.cambiada' ||
-            evento === 'sesion.desconexion_solicitada'
+            evento === 'sesion.desconexion_solicitada' ||
+            evento === 'portal.config_cambiada'
         )
     }
 
@@ -184,6 +185,16 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
                 plan_id: planId,
                 reconectar: evento.payload.reconectar === true,
             })
+            return
+        }
+        if (evento.evento === 'portal.config_cambiada') {
+            // URL de corte de una empresa (§10.6): su host entra o sale del walled garden de cada router.
+            for (const routerId of await routersConApi()) {
+                await new ReconciliarRouterOS(opciones).execute(
+                    { router_id: routerId, motivo: 'portal', evento_id: String(evento.id) },
+                    ctx,
+                )
+            }
             return
         }
         if (evento.evento === 'qos.config_cambiada') {

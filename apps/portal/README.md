@@ -72,6 +72,8 @@ con el Host de la sonda o con el del portal (IPv4, `[portalV6]:80` o nombre). El
 
 `/corte` responde 200 con HTML y no contiene ninguno de esos textos de éxito.
 
+**URL de corte del operador** (`empresas.url_corte`, `contratos/control-velocidad.md` §10.6): antes del 302 el servidor del portal pregunta `GET /api/v1/portal/destino-corte` (con la IP del cliente) y, si la empresa del servicio tiene URL, el 302 va a ella. Sin URL, si la API falla o tarda más de 1,5 s, a `/corte`. Nunca un 204.
+
 Para A6: ningún dominio de esta tabla puede estar en el walled garden; si lo estuviera, la sonda
 llegaría al sitio real, recibiría su respuesta de éxito y el teléfono no avisaría.
 

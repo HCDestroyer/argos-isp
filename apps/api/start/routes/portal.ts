@@ -9,6 +9,7 @@ import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { lista, objeto, pagina } from '#shared/openapi/esquemas'
 import {
+    DestinoCorte,
     Empresa,
     EmpresaPublica,
     EstadoPortal,
@@ -82,7 +83,7 @@ import EditarEmpresa from '#portal/actions/editar_empresa'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
 import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
 import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#portal/marca'
-import { resolverServicio } from '#portal/consultas'
+import { leerDestinoCorte, resolverServicio } from '#portal/consultas'
 import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
 import { rechazarSiPendiente } from '#core/instalacion'
@@ -266,6 +267,25 @@ const publicas: Ruta[] = [
         handler: async (ctx) => {
             const ip = await ipDelCliente(ctx, 'quien-soy')
             return new IdentificarPorIp().execute({ ip }, ctx.contextoAccion('portal'))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/destino-corte',
+        operacion: 'portalDestinoCorte',
+        resumen: 'A dónde redirige el portal cautivo al suspendido de la IP de origen',
+        descripcion:
+            'Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de ' +
+            'cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos ' +
+            `del cliente. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Destino del 302', esquema: DestinoCorte },
+        handler: async (ctx) => {
+            const ip = await ipDelCliente(ctx, 'destino-corte')
+            return leerDestinoCorte(ip)
         },
     }),
     definirRuta({
