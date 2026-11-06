@@ -58871,7 +58871,7 @@ export interface operations {
                     amarre_ip_mac?: boolean;
                     /** @description Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
-                    /** @description Solo pppoe; se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene. Distingue mayúsculas. 409 user_ppp_duplicado si ya existe (también en un retirado) o user_ppp_en_sesion si una sesión abierta de otro servicio lo usa */
                     user_ppp?: string;
                     /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
@@ -58895,7 +58895,7 @@ export interface operations {
                     excluir_firewall?: boolean;
                     /**
                      * Format: ipv4
-                     * @description IP fija; si no viene se asigna de las redes del router
+                     * @description IP fija; si no viene se asigna de las redes del router. 409 ip_ocupada si la tiene otro servicio e ip_en_sesion si una sesión abierta de otro servicio todavía la usa
                      */
                     ipv4?: string;
                     /** @description Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido */
@@ -59054,7 +59054,7 @@ export interface operations {
                     tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
                     amarre_ip_mac?: boolean;
-                    /** @description Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe). Emite servicio.config_cambiada con credenciales */
+                    /** @description Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe, también en un retirado; 409 user_ppp_en_sesion si una sesión abierta de otro servicio lo usa). Distingue mayúsculas. Emite servicio.config_cambiada con credenciales */
                     user_ppp?: string;
                     /** @description Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con credenciales (nunca el valor; en audit.cambios queda ***) */
                     pass_ppp?: string;
@@ -59080,7 +59080,7 @@ export interface operations {
                     servidor_pppoe_id?: number | null;
                     /**
                      * Format: ipv4
-                     * @description IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar
+                     * @description IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar. 409 ip_ocupada (otro servicio la tiene) o ip_en_sesion (una sesión abierta de otro servicio la usa)
                      */
                     ipv4?: string | null;
                     /** @enum {string} */

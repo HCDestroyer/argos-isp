@@ -97,10 +97,49 @@ export async function exigirReferencia(t: Transaccion, tabla: string, id: number
     if (!fila) throw new ValidacionFallida([{ field: campo, message: 'No existe', rule: 'exists' }])
 }
 
-/** 409 si el `user_ppp` ya existe. */
-export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
-    const repetido = await t.trx.from('core.servicios').where('user_ppp', userPpp).first()
-    if (repetido) throw new Conflicto(`El user_ppp ${userPpp} ya existe`, 'user_ppp_duplicado')
+/**
+ * Reserva el `user_ppp` para el servicio (`servicioId`; sin él, un alta) dentro de la transacción:
+ * - advisory lock por usuario: dos altas o renombres a la vez al mismo usuario se serializan y el
+ *   segundo ve el primero confirmado (409 `user_ppp_duplicado`, nunca el 23505 genérico);
+ * - 409 `user_ppp_duplicado` si otro servicio lo tiene, también uno retirado (su usuario no se
+ *   reutiliza: bitácora, sesiones y el CPE viejo que sigue marcando con él);
+ * - 409 `user_ppp_en_sesion` si hay una sesión abierta con ese usuario que no es del servicio (el
+ *   usuario se liberó por renombre o eliminación y el NAS todavía no cerró la sesión vieja). Se
+ *   libera solo al cerrarse la sesión (Stop, Disconnect o `sesiones.cerrar_colgadas`), sin TTL.
+ * Distingue mayúsculas, como RADIUS (`aaa` busca la clave exacta) y el `/ppp secret` de RouterOS.
+ */
+export async function exigirUserPppLibre(t: Transaccion, userPpp: string, servicioId?: number) {
+    await t.trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('core:user_ppp:' || ?::text))`, [userPpp])
+    const repetido = (await t.trx
+        .from('core.servicios')
+        .where('user_ppp', userPpp)
+        .if(servicioId !== undefined, (q) => q.whereNot('id', servicioId!))
+        .select('id')
+        .first()) as { id: number } | null
+    if (repetido) {
+        throw new Conflicto(
+            `El user_ppp ${userPpp} ya existe en el servicio ${repetido.id}`,
+            'user_ppp_duplicado',
+        )
+    }
+    const sesion = (await t.trx
+        .from('network.sesiones')
+        .where('user_ppp', userPpp)
+        .whereNull('fin')
+        // del propio servicio sí: vuelve a su usuario (A→B→A) con la sesión vieja todavía abierta
+        .if(servicioId !== undefined, (q) =>
+            q.where((w) => w.whereNull('servicio_id').orWhereNot('servicio_id', servicioId!)),
+        )
+        .select('id')
+        .first()) as { id: number } | null
+    if (sesion) {
+        throw new Conflicto(
+            `El user_ppp ${userPpp} tiene todavía una sesión abierta (${sesion.id}) de otro servicio: ` +
+                'se puede usar cuando el router la cierre',
+            'user_ppp_en_sesion',
+            'Usuario PPPoE en uso',
+        )
+    }
 }
 
 /**

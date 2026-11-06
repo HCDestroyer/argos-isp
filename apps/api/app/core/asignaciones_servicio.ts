@@ -301,6 +301,8 @@ export async function generarUserPpp(
             .find((parte) => parte.length > 0)
             ?.slice(0, 16) ?? 'cliente'
     const raiz = `${base}.${clienteId}`
+    // dos altas a la vez del mismo cliente: la segunda espera y ve el usuario de la primera
+    await trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('core:user_ppp_raiz:' || ?::text))`, [raiz])
     const existentes = new Set(
         (
             (await trx.from('core.servicios').whereLike('user_ppp', `${raiz}%`).select('user_ppp')) as Array<{

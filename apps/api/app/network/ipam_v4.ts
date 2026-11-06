@@ -11,7 +11,9 @@ import { sqlGatewayEfectivo, sqlLimitesRedV4 } from '#network/ocupacion'
  * la primera IP libre del router, primero en redes `estatico` y luego en `pool`, dentro del rango
  * de la red (`rango_inicio`–`rango_fin`; sin rango, toda la red) y sin la dirección de red,
  * broadcast ni gateway (sin gateway, la primera IP utilizable: es el local-address). Una IP pedida a mano también debe caer dentro del rango. Un advisory lock
- * por router serializa asignaciones concurrentes.
+ * por router serializa asignaciones concurrentes; los índices únicos de IP vigente y de servicio
+ * vigente lo respaldan en la base (`ipv4_asignaciones_ip_vigente`, `ipv4_asignaciones_servicio_vigente`).
+ * Una IP liberada no se entrega mientras una sesión abierta la use (`sesionConIp`).
  */
 
 export interface Ipv4Asignada {
@@ -50,6 +52,22 @@ export async function liberarIpv4(
         ip: string
     }>
     return filas[0]?.ip ?? null
+}
+
+/**
+ * Cuarentena de una IP liberada (decisión del 5 nov): no se entrega a otro servicio mientras haya una
+ * sesión abierta con ella (el NAS todavía no cerró la sesión vieja: dos clientes con la misma IP).
+ * Explícita y sin TTL: la IP queda libre en cuanto la sesión se cierra (Stop, Disconnect o
+ * `sesiones.cerrar_colgadas`). Las sesiones del propio servicio no cuentan.
+ */
+async function sesionConIp(trx: TransactionClientContract, ip: string, servicioId: number) {
+    return (await trx
+        .from('network.sesiones')
+        .whereNull('fin')
+        .whereRaw('ipv4 = ?::inet', [ip])
+        .whereRaw('servicio_id IS DISTINCT FROM ?::bigint', [servicioId])
+        .select('id', 'servicio_id')
+        .first()) as { id: number; servicio_id: number | null } | null
 }
 
 /** 422 en `red_ipv4_id` si la red no existe o no es del router. */
@@ -155,6 +173,16 @@ export async function asignarIpv4(
                 'ip_ocupada',
             )
         }
+        const sesion = await sesionConIp(trx, entrada.ip, entrada.servicioId)
+        if (sesion) {
+            throw new Conflicto(
+                `La IP ${entrada.ip} la usa todavía una sesión abierta` +
+                    (sesion.servicio_id ? ` del servicio ${sesion.servicio_id}` : '') +
+                    ': se puede asignar cuando el router la cierre',
+                'ip_en_sesion',
+                'IP en uso por una sesión',
+            )
+        }
         if (actual) await liberarIpv4(trx, entrada.servicioId)
         await trx
             .insertQuery()
@@ -185,9 +213,14 @@ export async function asignarIpv4(
                 SELECT 1 FROM network.ipv4_asignaciones a
                  WHERE a.fin IS NULL AND a.ip = k.base + g.n
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM network.sesiones se
+                 WHERE se.fin IS NULL AND se.ipv4 = k.base + g.n
+                   AND se.servicio_id IS DISTINCT FROM ?::bigint
+            )
           ORDER BY (r.tipo = 'estatico') DESC, r.id, g.n
           LIMIT 1`,
-        [entrada.routerId, entrada.redId ?? 0, entrada.redId ?? 0],
+        [entrada.routerId, entrada.redId ?? 0, entrada.redId ?? 0, entrada.servicioId],
     )) as { rows: Array<{ red_id: number; ip: string }> }
     const libre = rows[0]
     if (!libre && entrada.redId) {

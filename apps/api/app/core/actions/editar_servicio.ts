@@ -302,12 +302,12 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 .firstOrFail()) as { nombre: string }
             const nuevoUser =
                 userPppEntrada ?? (await generarUserPpp(t.trx, antes.cliente_id, cliente.nombre))
-            await exigirUserPppLibre(t, nuevoUser)
+            await exigirUserPppLibre(t, nuevoUser, id)
             columnas.user_ppp = nuevoUser
             columnas.pass_ppp = cifrar(passPpp ?? generarPassPpp())
         } else if (tipo === 'pppoe' && userPppEntrada !== undefined && userPppEntrada !== antes.user_ppp) {
             // cambiar el usuario de un PPPoE (pedido del PM, 5 nov): único; la clave vieja recibe la lápida
-            await exigirUserPppLibre(t, userPppEntrada)
+            await exigirUserPppLibre(t, userPppEntrada, id)
             columnas.user_ppp = userPppEntrada
         } else if (cambiaTipo && antes.tipo_conexion === 'pppoe') {
             columnas.user_ppp = null

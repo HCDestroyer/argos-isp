@@ -10,8 +10,9 @@ import { capacidad, indiceEnPool, separarPrefijo, subprefijo } from '#network/ip
  * - Estable: si el servicio ya tiene un prefijo vigente del tipo y tamaño pedidos en un pool del
  *   router, se conserva. Si lo perdió (cambio de router o de plan) y su prefijo anterior en ese
  *   pool sigue libre, lo recupera.
- * - Único: índice único de prefijo vigente + advisory lock por pool; además no se entrega un
- *   prefijo que se traslape con otro vigente (p. ej. un estático manual).
+ * - Único: advisory lock por pool (y uno global para los estáticos); no se entrega un prefijo que se
+ *   traslape con otro vigente (p. ej. un estático manual). La base lo respalda:
+ *   `ipv6_asignaciones_sin_traslape` (EXCLUDE de prefijos vigentes que se traslapan).
  */
 
 export type TipoPrefijo = 'enlace' | 'delegacion'
@@ -83,22 +84,42 @@ async function insertar(
     return guardada.prefijo
 }
 
-async function libre(trx: TransactionClientContract, prefijo: string): Promise<boolean> {
-    const ocupado = await trx
-        .from('network.ipv6_asignaciones')
-        .whereNull('fin')
-        .whereRaw('prefijo && ?::cidr', [prefijo])
-        .first()
-    return !ocupado
+/**
+ * Prefijos ocupados que se traslapan con `rango`: los vigentes de cualquier servicio y, en cuarentena,
+ * los de sesiones abiertas de otros servicios (el NAS no cerró la sesión vieja; igual que la IPv4 en
+ * `#network/ipam_v4`, sin TTL: quedan libres al cerrarse la sesión).
+ */
+async function ocupados(
+    trx: TransactionClientContract,
+    rango: string,
+    servicioId: number,
+): Promise<Array<{ prefijo: string; servicio_id: number | null; sesion: boolean }>> {
+    const { rows } = (await trx.rawQuery(
+        `SELECT prefijo::text AS prefijo, servicio_id, false AS sesion FROM network.ipv6_asignaciones
+          WHERE fin IS NULL AND prefijo && ?::cidr
+         UNION ALL
+         SELECT p.prefijo::text, s.servicio_id, true FROM network.sesiones s
+          CROSS JOIN LATERAL (VALUES (s.prefijo_enlace_v6), (s.prefijo_delegado_v6)) p(prefijo)
+          WHERE s.fin IS NULL AND p.prefijo IS NOT NULL AND p.prefijo && ?::cidr
+            AND s.servicio_id IS DISTINCT FROM ?::bigint`,
+        [rango, rango, servicioId],
+    )) as { rows: Array<{ prefijo: string; servicio_id: number | null; sesion: boolean }> }
+    return rows
 }
 
-/** Primer índice libre del pool, considerando cualquier prefijo vigente que se traslape. */
-async function primerIndiceLibre(trx: TransactionClientContract, pool: PoolFila, tamano: number) {
-    const vigentes = (await trx
-        .from('network.ipv6_asignaciones')
-        .whereNull('fin')
-        .whereRaw('prefijo && ?::cidr', [pool.prefijo])
-        .select(trx.raw('prefijo::text AS prefijo'))) as Array<{ prefijo: string }>
+async function libre(trx: TransactionClientContract, prefijo: string, servicioId: number): Promise<boolean> {
+    const choques = await ocupados(trx, prefijo, servicioId)
+    return choques.length === 0
+}
+
+/** Primer índice libre del pool, considerando cualquier prefijo ocupado que se traslape. */
+async function primerIndiceLibre(
+    trx: TransactionClientContract,
+    pool: PoolFila,
+    tamano: number,
+    servicioId: number,
+) {
+    const vigentes = await ocupados(trx, pool.prefijo, servicioId)
 
     const { largo: largoPool } = separarPrefijo(pool.prefijo)
     const rangos: Array<[bigint, bigint]> = []
@@ -170,11 +191,11 @@ export async function reservarPrefijo(
             .orderBy('fin', 'desc')
             .select(trx.raw('prefijo::text AS prefijo'))
             .first()) as { prefijo: string } | null
-        if (previo && (await libre(trx, previo.prefijo))) {
+        if (previo && (await libre(trx, previo.prefijo, entrada.servicioId))) {
             return insertar(trx, { ...entrada, poolId: pool.id, prefijo: previo.prefijo })
         }
 
-        const indice = await primerIndiceLibre(trx, pool, entrada.tamano)
+        const indice = await primerIndiceLibre(trx, pool, entrada.tamano, entrada.servicioId)
         if (indice !== null) {
             const prefijo = subprefijo(pool.prefijo, entrada.tamano, indice)
             return insertar(trx, { ...entrada, poolId: pool.id, prefijo })
@@ -195,18 +216,34 @@ export async function asignarPrefijoEstatico(
 
     const actual = await prefijoVigente(trx, entrada.servicioId, 'delegacion')
     if (actual?.prefijo === red) return actual.prefijo
+
+    // serializa con otros estáticos (no tienen pool) y con las reservas de los pools que toca
+    await trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('ipam:v6:estatico'))`)
+    const tocados = (await trx
+        .from('network.ipv6_pools')
+        .whereRaw('prefijo && ?::cidr', [red])
+        .orderBy('id')
+        .select('id')) as Array<{ id: number }>
+    for (const pool of tocados) {
+        await trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('ipam:v6:pool:' || ?::text))`, [pool.id])
+    }
     if (actual) await liberarPrefijos(trx, entrada.servicioId, 'delegacion')
 
-    const ocupado = (await trx
-        .from('network.ipv6_asignaciones')
-        .whereNull('fin')
-        .whereRaw('prefijo && ?::cidr', [red])
-        .select('servicio_id')
-        .first()) as { servicio_id: number } | null
-    if (ocupado) {
+    const choques = await ocupados(trx, red, entrada.servicioId)
+    const ocupado = choques.find((c) => !c.sesion) ?? choques[0]
+    if (ocupado && !ocupado.sesion) {
         throw new Conflicto(
             `El prefijo se traslapa con uno vigente del servicio ${ocupado.servicio_id}`,
             'prefijo_ocupado',
+        )
+    }
+    if (ocupado) {
+        throw new Conflicto(
+            `El prefijo ${ocupado.prefijo} lo usa todavía una sesión abierta` +
+                (ocupado.servicio_id ? ` del servicio ${ocupado.servicio_id}` : '') +
+                ': se puede asignar cuando el router la cierre',
+            'prefijo_en_sesion',
+            'Prefijo en uso por una sesión',
         )
     }
     const pool = (await trx
