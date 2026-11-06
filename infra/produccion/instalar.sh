@@ -27,7 +27,7 @@
 # paquetes de empaquetar.sh), ARGOSISP_SIN_DESCARGA=1 (imágenes ya cargadas), ARGOSISP_TLS=interno
 # (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO,
 # ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
-# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PROXIES_CONFIABLES (IP o
+# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PORTAL_CORTE_PUERTO (corte, 8088), ARGOSISP_PROXIES_CONFIABLES (IP o
 # CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md),
 # ARGOSISP_WG_RED, ARGOSISP_WG_PUERTO y ARGOSISP_WG_ENDPOINT (túnel WireGuard: red, puerto UDP y
 # nombre o IP pública para los routers; infra/wireguard/README.md), y para un nodo portal de prueba
@@ -58,6 +58,8 @@ TOKEN=""
 RAM_MINIMA_MB=1900
 HTTP_PORT="${ARGOSISP_HTTP_PORT:-80}"
 HTTPS_PORT="${ARGOSISP_HTTPS_PORT:-443}"
+# Puerto del corte (dst-nat de los routers al Caddy de Argos, cualquier Host; contratos/control-velocidad.md §10)
+CORTE_PORT="${ARGOSISP_PORTAL_CORTE_PUERTO:-8088}"
 PROXIES="${ARGOSISP_PROXIES_CONFIABLES:-}"
 WIREGUARD="${ARGOSISP_WIREGUARD:-}"
 WG_RED="${ARGOSISP_WG_RED:-10.255.0.0/16}"
@@ -193,9 +195,9 @@ if [ -n "$faltan" ]; then
     apt-get install -y -qq $faltan < /dev/null > /dev/null
 fi
 
-for puerto in "$HTTP_PORT" "$HTTPS_PORT"; do
+for puerto in "$HTTP_PORT" "$HTTPS_PORT" "$CORTE_PORT"; do
     if ss -Hltn "sport = :$puerto" | grep -q .; then
-        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal). Si ya hay un proxy en 80 y 443 (Nginx Proxy Manager…): ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443, docs/runbooks/detras-de-proxy.md"
+        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal). Si ya hay un proxy en 80 y 443 (Nginx Proxy Manager…): ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443; si el 8088 del corte está ocupado: ARGOSISP_PORTAL_CORTE_PUERTO=<otro>. docs/runbooks/detras-de-proxy.md"
     fi
 done
 [ "$ROL" = portal ] || for puerto in 1812 1813; do
@@ -383,6 +385,7 @@ NODO_CENTRAL_DIRECCION=${ARGOSISP_NODO_CENTRAL_DIRECCION:-$CENTRAL_HOST:$CENTRAL
 NODO_CENTRAL_TLS_EXTRA=$tls_extra
 NODO_PORTAL_TOKEN=$TOKEN
 EOF
+    [ "$CORTE_PORT" = 8088 ] || echo "PORTAL_CORTE_PUERTO=$CORTE_PORT" >> "$DIR/.env.nuevo"
 else
 cat > "$DIR/.env.nuevo" << EOF
 # ArgosIsp · configuración de producción. Lo generó instalar.sh el $(date -u +%Y-%m-%dT%H:%M:%SZ).
@@ -473,6 +476,7 @@ NOTIFY_EMPRESA_NOMBRE=ArgosIsp
 EOF
 [ "$HTTP_PORT" = 80 ] || echo "ARGOSISP_HTTP_PORT=$HTTP_PORT" >> "$DIR/.env.nuevo"
 [ "$HTTPS_PORT" = 443 ] || echo "ARGOSISP_HTTPS_PORT=$HTTPS_PORT" >> "$DIR/.env.nuevo"
+[ "$CORTE_PORT" = 8088 ] || echo "PORTAL_CORTE_PUERTO=$CORTE_PORT" >> "$DIR/.env.nuevo"
 cat >> "$DIR/.env.nuevo" << EOF
 
 # Proxy de delante (Nginx Proxy Manager…): IP o CIDR separados por espacio de los que Caddy acepta
