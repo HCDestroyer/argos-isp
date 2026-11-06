@@ -463,6 +463,14 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
         emit('creado', resultado.data)
         return
     }
+    // 409 de IP, prefijo o usuario PPPoE (de otro servicio o de una sesión abierta): en su campo.
+    const enCampo = conflictoEnCampo(resultado.problema)
+    if (enCampo) {
+        problema.value = null
+        formulario.value?.setErrors([enCampo])
+        paso.value = pasoDeCampo(enCampo.name)
+        return
+    }
     problema.value = resultado.problema
     if (resultado.problema.status === 422) {
         const errores = erroresDeFormulario(resultado.problema)

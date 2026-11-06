@@ -213,3 +213,27 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     }
     return cambios
 }
+
+/*
+ * 409 que no son de versión: la IP, el prefijo o el usuario PPPoE ya son de otro servicio, o todavía
+ * los usa una sesión abierta de otro (A1, `a1/reuso`: cuarentena sin TTL; se liberan cuando el router
+ * cierra la sesión o la barre `sesiones.cerrar_colgadas`, cada 5 min). Van en su campo.
+ */
+const CONFLICTOS_EN_CAMPO: Record<string, { campo: 'ipv4' | 'prefijo_delegado_v6' | 'user_ppp', texto?: string }> = {
+    ip_ocupada: { campo: 'ipv4' },
+    ip_en_sesion: { campo: 'ipv4', texto: 'Esa IP todavía la usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).' },
+    prefijo_ocupado: { campo: 'prefijo_delegado_v6' },
+    prefijo_en_sesion: { campo: 'prefijo_delegado_v6', texto: 'Ese prefijo IPv6 todavía lo usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).' },
+    user_ppp_duplicado: { campo: 'user_ppp' },
+    user_ppp_en_sesion: { campo: 'user_ppp', texto: 'Ese usuario PPPoE todavía lo usa una sesión abierta de otro servicio; se libera en cuanto se cierre (máx. 5 min).' },
+}
+
+/** El error de un 409 de IP, prefijo o usuario en su campo del formulario; `null` si es otro problema. */
+export function conflictoEnCampo(problema: { status: number, type: string, detail?: string, title: string }): { name: 'ipv4' | 'prefijo_delegado_v6' | 'user_ppp', message: string } | null {
+    const codigo = problema.status === 409 ? codigoProblema(problema) : null
+    const conflicto = codigo ? CONFLICTOS_EN_CAMPO[codigo] : undefined
+    if (!conflicto) {
+        return null
+    }
+    return { name: conflicto.campo, message: conflicto.texto ?? problema.detail ?? problema.title }
+}

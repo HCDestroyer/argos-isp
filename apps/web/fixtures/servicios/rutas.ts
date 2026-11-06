@@ -671,6 +671,11 @@ function ipv4DeEdicion(servicio: Servicio, ip: unknown, tipo: string): { errores
     if (otro) {
         return { conflicto: problemaTipado(409, 'ip_ocupada', 'Conflicto', `La IP ${ip} ya está asignada al servicio ${otro.id}`) }
     }
+    // Cuarentena sin TTL (A1, `a1/reuso`): una sesión abierta de otro servicio con esa IP la retiene.
+    const sesion = bd.sesiones.find(x => x.fin === null && x.ipv4 === ip && x.servicio_id !== servicio.id)
+    if (sesion) {
+        return { conflicto: problemaTipado(409, 'ip_en_sesion', 'IP en uso por una sesión', `La IP ${ip} la usa todavía una sesión abierta${sesion.servicio_id ? ` del servicio ${sesion.servicio_id}` : ''}: se puede asignar cuando el router la cierre`) }
+    }
     return { ip }
 }
 
@@ -840,6 +845,12 @@ export const rutasServicios: RutasFixture = {
         const usuarioNuevo = typeof cuerpo.user_ppp === 'string' ? cuerpo.user_ppp.trim() : null
         if (usuarioNuevo && usuarioNuevo !== actual.user_ppp && bd.servicios.some(s => s.user_ppp === usuarioNuevo)) {
             return problemaTipado(409, 'user_ppp_duplicado', 'Conflicto', `El user_ppp ${usuarioNuevo} ya existe`)
+        }
+        const sesionUsuario = usuarioNuevo && usuarioNuevo !== actual.user_ppp
+            ? bd.sesiones.find(x => x.fin === null && x.user_ppp === usuarioNuevo && x.servicio_id !== actual.id)
+            : undefined
+        if (sesionUsuario) {
+            return problemaTipado(409, 'user_ppp_en_sesion', 'Usuario PPPoE en uso', `El user_ppp ${usuarioNuevo} tiene todavía una sesión abierta (${sesionUsuario.id}) de otro servicio: se puede usar cuando el router la cierre`)
         }
         // Servidor PPPoE: se conserva; se elige o cambia con `servidor_pppoe_id`; al dejar PPPoE, null.
         let servidorId = tipo === 'pppoe' ? (actual.servidor_pppoe_id ?? null) : null

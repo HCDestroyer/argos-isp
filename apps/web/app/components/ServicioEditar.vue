@@ -7,8 +7,9 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  * `version`): plan del mismo router, tipo de conexión PPPoE / IP estática / DHCP fija, MAC,
  * amarre IP-MAC, modo IPv6, IPv4 fija, contraseña PPPoE, ubicación y contacto en sitio (pedidos
  * A12–A14 de Iris), instalación y precio especial. Solo viaja lo que cambió; los 422 se muestran
- * junto a cada campo (el teléfono con `rule: 'telefono'`), el 409 `ip_ocupada` en la IP y el 409 de
- * versión ofrece recargar.
+ * junto a cada campo (el teléfono con `rule: 'telefono'`); los 409 de IP, prefijo o usuario PPPoE
+ * (`ip_ocupada`, `ip_en_sesion`, `prefijo_ocupado`, `prefijo_en_sesion`, `user_ppp_duplicado`,
+ * `user_ppp_en_sesion`; `conflictoEnCampo`) en su campo, y el 409 de versión ofrece recargar.
  *
  * IPv4: se cambia con el mismo selector del alta (`ServicioIpv4Fija`); en PPPoE además se quita
  * («usar el pool», `ipv4: null`). Credenciales de un PPPoE (`servicios.editar`, el permiso de la
@@ -217,11 +218,10 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
         avisarAdvertencias(toast, resultado.data.warnings, 'Servicio guardado con advertencias')
         return
     }
-    // 409 que no son de versión: la IP de otro servicio y el usuario PPPoE repetido van en su campo.
-    const enCampo = { ip_ocupada: 'ipv4', user_ppp_duplicado: 'user_ppp' } as const
-    const codigo = codigoProblema(resultado.problema)
-    if (codigo === 'ip_ocupada' || codigo === 'user_ppp_duplicado') {
-        formulario.value?.setErrors([{ name: enCampo[codigo], message: resultado.problema.detail ?? resultado.problema.title }])
+    // 409 que no son de versión (IP, prefijo o usuario de otro servicio o de una sesión abierta): en su campo.
+    const enCampo = conflictoEnCampo(resultado.problema)
+    if (enCampo) {
+        formulario.value?.setErrors([enCampo])
         return
     }
     const errores = erroresDeFormulario(resultado.problema)

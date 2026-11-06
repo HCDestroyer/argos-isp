@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import { agregarServicioIpEstatica, servicioPppoeEdicion } from '~~/fixtures/servicios/edicion'
+import { nuevaSesion } from '~~/fixtures/sesiones/datos'
 import ServicioCredenciales from '~/components/ServicioCredenciales.vue'
 import ServicioEditar from '~/components/ServicioEditar.vue'
 import { esperar } from '../ayudas/esperar'
@@ -261,6 +262,39 @@ describe('«Editar servicio»: IPv4 y credenciales', () => {
         await flushPromises()
         expect(cuerpo().querySelector('[data-prueba="editar-pasar-tipo-router"]')).toBeNull()
         pppoe.unmount()
+    })
+
+    it('IP o usuario retenidos por una sesión abierta de otro servicio (409 *_en_sesion): en su campo', async () => {
+        const servicio = servicioPppoeEdicion()
+        const retirado = bd.servicios.find(s => s.estado === 'retirado')!
+        // El NAS no cerró todavía la sesión del servicio retirado: su IP y su usuario siguen en uso.
+        bd.sesiones.push({ ...nuevaSesion(9001, retirado, '2026-11-05T10:00:00.000Z'), ipv4: '100.64.10.90', user_ppp: 'viejo.usuario', fin: null })
+        const panel = await abrir(servicio)
+        clic('editar-cambiar-ipv4')
+        await esperar(() => expect(cuerpo().querySelector('[name="ipv4"]')).not.toBeNull())
+        escribir('ipv4', '100.64.10.90')
+        enviar()
+        await esperar(() => expect(texto()).toContain('Esa IP todavía la usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).'))
+        expect(cuerpo().querySelector('[data-prueba="editar-servicio-error"]')).toBeNull()
+
+        clic('editar-mantener-ipv4')
+        escribir('user_ppp', 'viejo.usuario')
+        enviar()
+        await esperar(() => expect(texto()).toContain('Ese usuario PPPoE todavía lo usa una sesión abierta de otro servicio; se libera en cuanto se cierre (máx. 5 min).'))
+        expect(panel.emitted('guardado')).toBeUndefined()
+        panel.unmount()
+    })
+
+    it('conflictoEnCampo: cada 409 de IP, prefijo o usuario va a su campo; el de versión no', () => {
+        const de = (codigo: string, status = 409) => conflictoEnCampo({ status, type: `urn:argosisp:problema:${codigo}`, title: 'Conflicto', detail: 'detalle' })
+        expect(de('ip_ocupada')).toEqual({ name: 'ipv4', message: 'detalle' })
+        expect(de('ip_en_sesion')?.name).toBe('ipv4')
+        expect(de('prefijo_en_sesion')).toEqual({ name: 'prefijo_delegado_v6', message: 'Ese prefijo IPv6 todavía lo usa una sesión abierta de otro cliente; se libera en cuanto se cierre (máx. 5 min).' })
+        expect(de('prefijo_ocupado')?.name).toBe('prefijo_delegado_v6')
+        expect(de('user_ppp_duplicado')?.name).toBe('user_ppp')
+        expect(de('user_ppp_en_sesion')?.name).toBe('user_ppp')
+        expect(de('conflicto_version')).toBeNull()
+        expect(de('ip_en_sesion', 422)).toBeNull()
     })
 
     it('«Mantener la actual» descarta la IP escrita', async () => {
