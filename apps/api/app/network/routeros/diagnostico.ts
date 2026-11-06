@@ -1,4 +1,5 @@
 import { request as httpRequest } from 'node:http'
+import { configCorteVigente } from '#network/routeros/corte_vigente'
 import env from '#start/env'
 import {
     RUTAS_ORDENADAS,
@@ -13,8 +14,6 @@ import { RouterSinCredenciales } from '#network/routeros/router'
 import { diferencias } from '#network/routeros/normalizar'
 import {
     clientesUsanDnsRouter,
-    configCorteResuelta,
-    conUrlsCorte,
     ENTRADA_SUSPENDIDOS,
     estadoCorteRouter,
     normalizarDireccion,
@@ -30,7 +29,6 @@ import {
     redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
-    urlsCorte,
 } from '#network/routeros/consultas'
 import {
     estadoVelocidadRouter,
@@ -122,7 +120,7 @@ export async function vistaPreviaReconciliar(
             // Corte
             const lecturaCorte = await leerCorteRouter(cliente)
             const corte = estadoCorteRouter(
-                conUrlsCorte(await configCorteResuelta(process.env, opciones.resolver), await urlsCorte()),
+                await configCorteVigente(opciones.resolver),
                 {
                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                     redes_v4: await redesV4DeRouter(routerId),
@@ -359,7 +357,7 @@ export const LIMITES_CORTE = [
     'HTTPS (puerto 443) no se redirige: el router corta la conexión con un reset TCP y el navegador muestra ' +
         '«no se puede conectar», no la página de corte. El cliente la ve al abrir un sitio http:// o cuando su ' +
         'teléfono o computadora prueba la conexión (aviso de «iniciar sesión en la red»).',
-    'IPv6 se redirige igual que IPv4 solo si Argos conoce la IPv6 del portal (ROUTERS_SERVICIO_PORTAL_V6) y el ' +
+    'IPv6 se redirige igual que IPv4 solo si Argos conoce la IPv6 del portal (Configuración → Portal de corte) y el ' +
         'suspendido entró con el perfil de corte (PPPoE que reconectó al suspender, o WISP); si no, el HTTP por ' +
         'IPv6 recibe un reset y el equipo cae a IPv4 para llegar a la página.',
     'El DNS del suspendido responde con cualquier resolver (el del router, el del perfil PPP o uno fijo como ' +
@@ -570,8 +568,8 @@ async function chequeoPortal(
         return mal(
             'portal_http',
             'portal_sin_configurar',
-            'Argos no sabe la dirección del portal: define PORTAL_URL_PUBLICA (o ROUTERS_SERVICIO_PORTAL_V4 con la ' +
-                'IPv4 del portal) en el servidor y usa «Reconciliar ahora»',
+            'Argos no sabe la dirección del portal: pon la IPv4 del portal en Configuración → Portal de corte ' +
+                '(o define PORTAL_URL_PUBLICA en el servidor); al guardarla se reconcilian todos los routers',
             [],
             false,
         )
@@ -587,7 +585,7 @@ async function chequeoPortal(
     if (!enRouter && config.portal_v4_origen === 'dns') {
         notas.push(
             `IP resuelta de ${config.portal_fqdn} desde el servidor de Argos; si el router debe usar otra (p. ej. la ` +
-                'pública), fíjala con ROUTERS_SERVICIO_PORTAL_V4',
+                'pública), fíjala en Configuración → Portal de corte',
         )
     }
     const comandosPrueba = [`/tool fetch url="${url}" output=none`, `/ping ${ip} count=3`]
@@ -839,7 +837,7 @@ function chequeoPortalEnRouter(
         'portal_en_router',
         `El NAT de corte manda a ${ip}, que es una dirección del propio router (${propia.interface ?? 'interfaz'}): el ` +
             'HTTP del suspendido termina en el router y no en el portal, y el teléfono dice «sin internet». Usa la IP ' +
-            'interna del servidor de Argos: ROUTERS_SERVICIO_PORTAL_V4=<IP LAN del servidor> y «Reconciliar ahora»',
+            'interna del servidor de Argos en Configuración → Portal de corte (IPv4 del portal = IP LAN del servidor)',
         ['/ip address print where address~"' + ip + '/"'],
         false,
     )
@@ -921,8 +919,8 @@ async function chequeoHost(
         `${base.origin} (destino del NAT de corte) responde HTTP ${r.status}${r.location ? ` a ${r.location}` : ''} ` +
             `a una sonda con Host ${HOST_SONDA}; debía ser 302 a /corte. Suele ser un proxy delante del portal ` +
             '(Nginx Proxy Manager, otro sitio en el mismo puerto) que solo atiende sus dominios: el teléfono ve «sin ' +
-            'internet». Arreglo recomendado: apunta el NAT al puerto dedicado del Caddy de Argos (PORTAL_CORTE_PUERTO, ' +
-            '8088; ROUTERS_SERVICIO_PORTAL_PUERTO=8088 y ábrelo desde la red de los routers) y «Reconciliar ahora». ' +
+            'internet». Arreglo recomendado: apunta el NAT al puerto dedicado del Caddy de Argos (8088): puerto 8088 en ' +
+            'Configuración → Portal de corte (se reconcilian todos los routers) y ábrelo desde la red de los routers. ' +
             'Alternativa en Nginx Proxy Manager: Settings → Default Site → Redirect to http://<dominio del portal>/corte ' +
             '(nunca a la misma IP: volvería al proxy)',
         [curl],
@@ -949,7 +947,7 @@ export async function diagnosticoCorte(
 ): Promise<DiagnosticoCorte> {
     const router = await routerDispatcher(routerId, undefined, opciones.red)
     if (!router) throw new NoEncontrado(`El router ${routerId} no existe`)
-    const config = conUrlsCorte(await configCorteResuelta(process.env, opciones.resolver), await urlsCorte())
+    const config = await configCorteVigente(opciones.resolver)
     const salida: DiagnosticoCorte = {
         router_id: routerId,
         ok: false,

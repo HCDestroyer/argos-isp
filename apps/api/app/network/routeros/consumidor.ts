@@ -1,4 +1,5 @@
 import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
+import { CAMPOS_RED_PORTAL } from '#portal/corte'
 import { contextoSistema } from '#shared/contexto'
 import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
 import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
@@ -192,6 +193,10 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
         }
         if (evento.evento === 'portal.config_cambiada') {
             // URL de corte de una empresa (§10.6): su host entra o sale del walled garden de cada router.
+            // Destino del NAT de «Portal de corte» (§10.7): el dst-nat y `argos-portal` de cada router.
+            // Solo `modo_suspension` no toca los routers (lo lee `coa`).
+            const campos = Array.isArray(evento.payload.campos) ? evento.payload.campos : null
+            if (campos && !campos.some((c) => typeof c === 'string' && CAMPOS_RED_PORTAL.has(c))) return
             for (const routerId of await routersConApi()) {
                 await new ReconciliarRouterOS(opciones).execute(
                     { router_id: routerId, motivo: 'portal', evento_id: String(evento.id) },

@@ -1,4 +1,5 @@
 import logger from '@adonisjs/core/services/logger'
+import { configCorteVigente } from '#network/routeros/corte_vigente'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import type { ObjetoRouterOS } from '#network/routeros/cliente'
 import { ErrorRouterOS } from '#network/routeros/errores'
@@ -15,17 +16,10 @@ import {
     necesitaVelocidad,
     planesDeRouter,
     redesV4DeRouter,
-    urlsCorte,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import {
-    clientesUsanDnsRouter,
-    configCorteResuelta,
-    conUrlsCorte,
-    estadoCorteRouter,
-    revisarDnsRouter,
-} from '#network/routeros/corte_router'
+import { clientesUsanDnsRouter, estadoCorteRouter, revisarDnsRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
@@ -209,10 +203,7 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     const lecturaCorte = await leerCorteRouter(cliente)
                     // El FQDN del portal se resuelve en cada pasada (sin caché): si no resuelve, error
                     // visible y la regla de NAT que haya queda como está.
-                    const config = conUrlsCorte(
-                        await configCorteResuelta(process.env, this.#resolver),
-                        await urlsCorte(t.trx),
-                    )
+                    const config = await configCorteVigente(this.#resolver, t.trx)
                     if (config.portal_v4_error) {
                         salida.error_portal = config.portal_v4_error
                         await t.emit('routeros.fallido', {

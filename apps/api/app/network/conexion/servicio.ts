@@ -22,6 +22,9 @@ import type { RouterVista } from '#network/consultas/routers'
  * - un DNS de documentación (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32) en
  *   `ROUTERS_SERVICIO_DNS_V4` o `_V6` es un error: 422 `dns_documentacion` y no se genera el script.
  *
+ * - `portal_v4` y `portal_v6`: con `portal` (la configuración «Portal de corte», `core.portal_corte`) salen
+ *   de ahí y no del entorno; el entorno solo siembra esa configuración mientras nadie la guarda.
+ *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
  */
@@ -53,6 +56,7 @@ export function valoresServicio(
     /** gateways efectivos (distintos) de las redes IPv4 del router */
     gateways: string[],
     entorno: NodeJS.ProcessEnv = process.env,
+    portal?: { portal_v4: string | null; portal_v6: string | null },
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
     const documentacion: ErrorCampo[] = (['dns_v4', 'dns_v6'] as const).flatMap((nombre) =>
@@ -76,6 +80,7 @@ export function valoresServicio(
     const faltan: string[] = []
     for (const nombre of VARIABLES_SERVICIO) {
         let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))
+        if (portal && (nombre === 'portal_v4' || nombre === 'portal_v6')) valor = portal[nombre]
         if (nombre === 'ppp_local_v4') {
             const unicos = [...new Set(gateways)]
             if (unicos.length === 1) valor = unicos[0]!
@@ -96,7 +101,15 @@ export function valoresServicio(
         }
         if (valor === null && PUEDEN_QUEDAR_VACIAS.has(nombre)) valor = ''
         if (valor === null) {
-            faltan.push(nombre === 'pppoe_interfaz' ? 'interfaz_clientes' : variableEntorno(nombre))
+            faltan.push(
+                nombre === 'pppoe_interfaz'
+                    ? 'interfaz_clientes'
+                    : portal && nombre === 'portal_v4'
+                      ? 'la IPv4 del portal (Configuración → Portal de corte)'
+                      : portal && nombre === 'portal_v6'
+                        ? 'la IPv6 del portal (Configuración → Portal de corte)'
+                        : variableEntorno(nombre),
+            )
         } else valores[nombre] = valor
     }
     if (faltan.length > 0) {

@@ -15563,6 +15563,178 @@
         "x-implementado": true
       }
     },
+    "/api/v1/corte/configuracion": {
+      "get": {
+        "operationId": "portalCorteVer",
+        "summary": "Configuración del portal de corte (destino del NAT de los routers y modo de suspensión)",
+        "description": "Global (un router sirve a varias empresas; la página por empresa es `empresas.url_corte`). `version` 0 = nunca se guardó: los valores salen de las variables de antes (`ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO`, `COA_SUSPENDER`), que desde la primera edición ya no se leen.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso portal_corte.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "portal_corte.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "portalCorteConfigurar",
+        "summary": "Edita la configuración del portal de corte",
+        "description": "Global (un router sirve a varias empresas; la página por empresa es `empresas.url_corte`). `version` 0 = nunca se guardó: los valores salen de las variables de antes (`ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO`, `COA_SUSPENDER`), que desde la primera edición ya no se leen. Solo cambia los campos enviados; 409 si `version` cambió. Si algo cambió emite `portal.config_cambiada` (`empresa_id: null`): con IPv4, IPv6 o puerto se reconcilian todos los routers con API (dst-nat y `argos-portal`); el modo de suspensión lo relee `coa` y aplica desde la siguiente suspensión. Diff por campo en audit.cambios.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se guardó); si cambió responde 409"
+                  },
+                  "portal_v4": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "IPv4 del portal para el dst-nat; null = deducirla de PORTAL_URL_PUBLICA"
+                  },
+                  "portal_v6": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv6",
+                    "description": "IPv6 del portal para el NAT de IPv6; null = sin NAT de IPv6"
+                  },
+                  "portal_puerto": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "Puerto del dst-nat (to-ports)"
+                  },
+                  "modo_suspension": {
+                    "type": "string",
+                    "enum": [
+                      "desconectar",
+                      "coa"
+                    ]
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso portal_corte.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "portal_corte.configurar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cuentas-bancarias": {
       "get": {
         "operationId": "cuentasBancariasListar",
@@ -29232,6 +29404,44 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/internal/corte/configuracion": {
+      "get": {
+        "operationId": "internoPortalCorte",
+        "summary": "Configuración del portal de corte para los servicios internos (coa)",
+        "description": "Token interno (`INTERNAL_TOKEN`). Mismo JSON que `GET /corte/configuracion`. `coa` lo lee al arrancar y otra vez con cada `portal.config_cambiada` cuyo `campos` traiga `modo_suspension` (`desconectar` = su `disconnect`, `coa` = `coa`).",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCorte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -65668,6 +65878,8 @@
                         "plantillas.editar",
                         "plantillas.retirar",
                         "plantillas.ver",
+                        "portal_corte.configurar",
+                        "portal_corte.ver",
                         "productos.crear",
                         "productos.crear_lote",
                         "productos.desactivar",
@@ -66046,6 +66258,8 @@
                         "plantillas.editar",
                         "plantillas.retirar",
                         "plantillas.ver",
+                        "portal_corte.configurar",
+                        "portal_corte.ver",
                         "productos.crear",
                         "productos.crear_lote",
                         "productos.desactivar",
@@ -77939,6 +78153,8 @@
                             "plantillas.editar",
                             "plantillas.retirar",
                             "plantillas.ver",
+                            "portal_corte.configurar",
+                            "portal_corte.ver",
                             "productos.crear",
                             "productos.crear_lote",
                             "productos.desactivar",
@@ -92440,7 +92656,7 @@
                   "string",
                   "null"
                 ],
-                "description": "IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe"
+                "description": "IPv4 del portal que Argos pone en el NAT: la de «Portal de corte» (`GET /corte/configuracion`), la IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe"
               },
               "origen": {
                 "type": [
@@ -92448,10 +92664,12 @@
                   "null"
                 ],
                 "enum": [
+                  "configuracion",
                   "variable",
                   "url",
                   "dns"
-                ]
+                ],
+                "description": "configuracion: guardada en «Portal de corte»; variable: siembra de ROUTERS_SERVICIO_PORTAL_V4 (la configuración nunca se guardó); url: IP de PORTAL_URL_PUBLICA; dns: su FQDN resuelto"
               },
               "destino_nat": {
                 "type": [
@@ -101163,6 +101381,8 @@
           "plantillas.editar",
           "plantillas.retirar",
           "plantillas.ver",
+          "portal_corte.configurar",
+          "portal_corte.ver",
           "productos.crear",
           "productos.crear_lote",
           "productos.desactivar",
@@ -101434,6 +101654,8 @@
           "Editar plantillas de facturación",
           "Retirar una plantilla de facturación (sigue con sus servicios; no se asigna a nuevos)",
           "Ver plantillas de facturación",
+          "Configurar el portal de corte: IPv4/IPv6 y puerto a donde los routers redirigen a los suspendidos y modo de suspensión (desconectar o CoA); solo admin",
+          "Ver la configuración del portal de corte (destino del NAT de los routers y modo de suspensión)",
           "Crear productos del inventario",
           "Crear productos por lotes (con su saldo inicial opcional)",
           "Desactivar productos del inventario (sin existencias)",
@@ -105376,6 +105598,76 @@
             "type": "integer",
             "minimum": 1,
             "description": "Envíala al editar (409 si cambió)"
+          }
+        }
+      },
+      "PortalCorte": {
+        "type": "object",
+        "required": [
+          "portal_v4",
+          "portal_v6",
+          "portal_puerto",
+          "modo_suspension",
+          "origen",
+          "portal_url",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "portal_v4": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IPv4 a la que el dst-nat de los routers manda el HTTP de los suspendidos (`to-addresses`). null = se deduce de `portal_url` (su IP, o su nombre resuelto desde el servidor en cada reconciliación)"
+          },
+          "portal_v6": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IPv6 del portal para el NAT de IPv6. null = el HTTP por IPv6 de un suspendido recibe reset y el equipo cae a IPv4"
+          },
+          "portal_puerto": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "Puerto del dst-nat (`to-ports`): 80, u 8088 con el puerto dedicado del Caddy de Argos"
+          },
+          "modo_suspension": {
+            "type": "string",
+            "enum": [
+              "desconectar",
+              "coa"
+            ],
+            "description": "Cómo se suspende una sesión PPPoE con RADIUS: `desconectar` (Disconnect-Request: reconecta con el perfil de corte y sin las conexiones abiertas; recomendado) o `coa` (CoA sin reconectar). Lo aplica el servicio coa desde la siguiente suspensión"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "configuracion",
+              "entorno"
+            ],
+            "description": "`entorno`: nunca se guardó; los valores son los de las variables de antes (`ROUTERS_SERVICIO_PORTAL_*`, `COA_SUSPENDER`). `configuracion`: guardada; el entorno ya no se lee"
+          },
+          "portal_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`PORTAL_URL_PUBLICA` del servidor (solo lectura): de ahí sale la IPv4 si `portal_v4` es null"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 = nunca se guardó. Envíala al editar (409 si cambió)"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -115188,6 +115480,8 @@
               "plantillas.editar",
               "plantillas.retirar",
               "plantillas.ver",
+              "portal_corte.configurar",
+              "portal_corte.ver",
               "productos.crear",
               "productos.crear_lote",
               "productos.desactivar",
@@ -115606,6 +115900,7 @@
               "pagos.ver",
               "planes.ver",
               "plantillas.ver",
+              "portal_corte.ver",
               "promesas.ver",
               "proveedores.ver",
               "qos.ver",

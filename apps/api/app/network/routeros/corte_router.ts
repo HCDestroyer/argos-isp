@@ -33,8 +33,12 @@ export interface ConfigCorte {
      * el estado deseado, nunca se guarda ni se cachea.
      */
     portal_v4: string | null
-    /** De dónde salió `portal_v4`: la variable, la IP de `PORTAL_URL_PUBLICA` o el DNS del FQDN */
-    portal_v4_origen: 'variable' | 'url' | 'dns' | null
+    /**
+     * De dónde salió `portal_v4`: la configuración «Portal de corte» (`core.portal_corte`), la variable
+     * de antes (siembra mientras la configuración no se guardó), la IP de `PORTAL_URL_PUBLICA` o el DNS
+     * del FQDN
+     */
+    portal_v4_origen: 'configuracion' | 'variable' | 'url' | 'dns' | null
     /** El FQDN del portal no resolvió a IPv4: por qué (y qué hacer) */
     portal_v4_error: string | null
     portal_v6: string | null
@@ -75,12 +79,27 @@ function hostDe(url: string | undefined): string | null {
 }
 
 /**
+ * Destino del dst-nat de corte que se edita en el panel (`core.portal_corte`, `#portal/corte`). `origen`
+ * `entorno` = nunca se guardó y los valores son la siembra de `ROUTERS_SERVICIO_PORTAL_*`.
+ */
+export interface PortalCorteRed {
+    portal_v4: string | null
+    portal_v6: string | null
+    portal_puerto: number
+    origen: 'configuracion' | 'entorno'
+}
+
+/**
  * Configuración del corte desde el entorno de la API: `ROUTERS_SERVICIO_<NOMBRE>` (las mismas variables
  * del script de conexión de A1), con lo que se pueda deducir de la configuración de Argos:
  * - el portal (FQDN o IP) de `PORTAL_URL_PUBLICA`;
  * - el walled garden de la pasarela (`PASARELA_URL_PUBLICA`, o `app.recurrente.com` con Recurrente).
+ *
+ * Con `portal` (la configuración «Portal de corte», `configCorteVigente`), IPv4, IPv6 y puerto del NAT
+ * salen de ahí y `ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO` no se leen; sin `portal` (cálculos puros que no
+ * escriben el NAT, pruebas) se usan esas variables.
  */
-export function configCorte(entorno: NodeJS.ProcessEnv = process.env): ConfigCorte {
+export function configCorte(entorno: NodeJS.ProcessEnv = process.env, portal?: PortalCorteRed): ConfigCorte {
     const leer = (nombre: string) => entorno[`ROUTERS_SERVICIO_${nombre}`]?.trim() || null
     const hostPortal = hostDe(entorno.PORTAL_URL_PUBLICA)
     const walled = separar(leer('WALLED_GARDEN'))
@@ -89,17 +108,25 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env): ConfigCor
         if (pasarela && !isIPv4(pasarela) && !isIPv6(pasarela)) walled.push(pasarela)
         if (entorno.PASARELA_PROVEEDOR === 'recurrente') walled.push('app.recurrente.com')
     }
-    const variableV4 = leer('PORTAL_V4')
+    const variableV4 = portal ? portal.portal_v4 : leer('PORTAL_V4')
     const portalV4 = variableV4 ?? (hostPortal && isIPv4(hostPortal) ? hostPortal : null)
     const portalFqdn =
         leer('PORTAL_FQDN') ?? (hostPortal && !isIPv4(hostPortal) && !isIPv6(hostPortal) ? hostPortal : null)
-    const leido = Number(leer('PORTAL_PUERTO') ?? 80)
+    const leido = portal ? portal.portal_puerto : Number(leer('PORTAL_PUERTO') ?? 80)
     const puerto = Number.isInteger(leido) && leido > 0 && leido < 65536 ? leido : 80
     return {
         portal_v4: portalV4,
-        portal_v4_origen: variableV4 ? 'variable' : portalV4 ? 'url' : null,
+        portal_v4_origen: variableV4
+            ? portal?.origen === 'configuracion'
+                ? 'configuracion'
+                : 'variable'
+            : portalV4
+              ? 'url'
+              : null,
         portal_v4_error: null,
-        portal_v6: leer('PORTAL_V6') ?? (hostPortal && isIPv6(hostPortal) ? hostPortal : null),
+        portal_v6:
+            (portal ? portal.portal_v6 : leer('PORTAL_V6')) ??
+            (hostPortal && isIPv6(hostPortal) ? hostPortal : null),
         portal_fqdn: portalFqdn,
         portal_puerto: puerto,
         portal_url: entorno.PORTAL_URL_PUBLICA?.trim() || null,
@@ -147,7 +174,7 @@ export const resolverIPv4: ResolverIPv4 = async (host) => {
 
 /**
  * `configCorte` con la IPv4 del portal resuelta cuando el portal es un nombre (lo normal: `PORTAL_URL_PUBLICA`
- * con FQDN y sin `ROUTERS_SERVICIO_PORTAL_V4`). Se llama en cada reconciliación y en cada diagnóstico:
+ * con FQDN y sin IPv4 en «Portal de corte»). Se llama en cada reconciliación y en cada diagnóstico:
  * la IP resuelta solo entra en el estado deseado (`to-addresses` del dst-nat y `argos-portal`), nunca se
  * guarda, y si el DNS cambia la siguiente pasada corrige el router. Si no resuelve, `portal_v4` queda
  * null y `portal_v4_error` dice por qué: el reconciliador emite `routeros.fallido` y conserva la regla
@@ -156,8 +183,9 @@ export const resolverIPv4: ResolverIPv4 = async (host) => {
 export async function configCorteResuelta(
     entorno: NodeJS.ProcessEnv = process.env,
     resolver: ResolverIPv4 = resolverIPv4,
+    portal?: PortalCorteRed,
 ): Promise<ConfigCorte> {
-    const config = configCorte(entorno)
+    const config = configCorte(entorno, portal)
     if (config.portal_v4 || !config.portal_fqdn) return config
     const fqdn = config.portal_fqdn
     let ips: string[] = []
@@ -175,7 +203,7 @@ export async function configCorteResuelta(
             portal_v4_error:
                 `No se pudo resolver ${fqdn} a IPv4 desde el servidor de Argos (${causa}): sin esa IP no se ` +
                 'escribe el NAT de HTTP a /corte y el suspendido no ve la página de corte. Arregla el DNS del ' +
-                'servidor o fija la IP con ROUTERS_SERVICIO_PORTAL_V4=<IPv4 del portal> y usa «Reconciliar ahora»',
+                'servidor o fija la IPv4 del portal en Configuración → Portal de corte (se reconcilian todos los routers)',
         }
     }
     const ip = ips[0]!
@@ -539,7 +567,7 @@ export function estadoCorteRouter(
         avisos.push(config.portal_v4_error)
     } else if (!config.portal_v4) {
         avisos.push(
-            'sin IPv4 del portal (ROUTERS_SERVICIO_PORTAL_V4, o PORTAL_URL_PUBLICA con IP o con un nombre que resuelva): no se escribe el NAT de HTTP a /corte',
+            'sin IPv4 del portal (Configuración → Portal de corte, o PORTAL_URL_PUBLICA con IP o con un nombre que resuelva): no se escribe el NAT de HTTP a /corte',
         )
     }
     const dnsDocumentacion = [...config.dns_v4, ...config.dns_v6].filter(esIpDocumentacion)
@@ -553,7 +581,7 @@ export function estadoCorteRouter(
     const nat6 = reglasNat(lista, config, true)
     if (!config.portal_v6) {
         avisos.push(
-            'sin IPv6 del portal (ROUTERS_SERVICIO_PORTAL_V6): el HTTP por IPv6 de un suspendido recibe tcp-reset y el equipo cae a IPv4 para llegar a /corte',
+            'sin IPv6 del portal (Configuración → Portal de corte): el HTTP por IPv6 de un suspendido recibe tcp-reset y el equipo cae a IPv4 para llegar a /corte',
         )
     }
     if (!config.portal_fqdn && !config.portal_v4) {

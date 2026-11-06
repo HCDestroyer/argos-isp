@@ -1050,3 +1050,53 @@ export const PortalSorteoPublico = definirEsquema(
         ganadores: { ...nulable(lista(GanadorPublico)), description: 'Solo después de ejecutar' },
     }),
 )
+
+/** Configuración del portal de corte (`core.portal_corte`, global; `GET/PUT /corte/configuracion`). */
+export const PortalCorte = definirEsquema(
+    'PortalCorte',
+    objeto({
+        portal_v4: {
+            ...nulable(texto),
+            description:
+                'IPv4 a la que el dst-nat de los routers manda el HTTP de los suspendidos (`to-addresses`). null = ' +
+                'se deduce de `portal_url` (su IP, o su nombre resuelto desde el servidor en cada reconciliación)',
+        },
+        portal_v6: {
+            ...nulable(texto),
+            description:
+                'IPv6 del portal para el NAT de IPv6. null = el HTTP por IPv6 de un suspendido recibe reset y el ' +
+                'equipo cae a IPv4',
+        },
+        portal_puerto: {
+            ...entero,
+            minimum: 1,
+            maximum: 65535,
+            description:
+                'Puerto del dst-nat (`to-ports`): 80, u 8088 con el puerto dedicado del Caddy de Argos',
+        },
+        modo_suspension: {
+            ...enumerado(['desconectar', 'coa']),
+            description:
+                'Cómo se suspende una sesión PPPoE con RADIUS: `desconectar` (Disconnect-Request: reconecta con el ' +
+                'perfil de corte y sin las conexiones abiertas; recomendado) o `coa` (CoA sin reconectar). Lo aplica ' +
+                'el servicio coa desde la siguiente suspensión',
+        },
+        origen: {
+            ...enumerado(['configuracion', 'entorno']),
+            description:
+                '`entorno`: nunca se guardó; los valores son los de las variables de antes (`ROUTERS_SERVICIO_PORTAL_*`, ' +
+                '`COA_SUSPENDER`). `configuracion`: guardada; el entorno ya no se lee',
+        },
+        portal_url: {
+            ...nulable(texto),
+            description:
+                '`PORTAL_URL_PUBLICA` del servidor (solo lectura): de ahí sale la IPv4 si `portal_v4` es null',
+        },
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 = nunca se guardó. Envíala al editar (409 si cambió)',
+        },
+        updated_at: nulable(instante),
+    }),
+)

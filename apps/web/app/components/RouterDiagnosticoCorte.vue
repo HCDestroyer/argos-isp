@@ -34,7 +34,8 @@ const PASOS: Record<Chequeo['clave'], string> = {
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {
-    variable: 'fijada en ROUTERS_SERVICIO_PORTAL_V4',
+    configuracion: 'fijada en Configuración → Portal de corte',
+    variable: 'valor inicial del servidor (ROUTERS_SERVICIO_PORTAL_V4; aún no guardada en Portal de corte)',
     url: 'tomada de la URL del portal',
     dns: 'resuelta del nombre del portal',
 }
