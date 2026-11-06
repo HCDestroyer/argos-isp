@@ -78,7 +78,7 @@ const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 const pasos = computed<Paso[]>(() => [
     ...(clienteFijo.value ? [] : [{ id: 'cliente' as const, title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] as (keyof EntradaServicio)[] }]),
-    { id: 'conexion', title: 'Conexión', description: 'Router, plan y tipo', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
+    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
     {
         id: 'red',
         title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
@@ -188,7 +188,7 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
     }
     const elegido = planes.value.find(p => p.id === datos.plan_id)
     if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
-        ctx.addIssue({ code: 'custom', path: ['tipo_conexion'], message: 'El plan es solo IPv6: elige PPPoE u otro plan con IPv4' })
+        ctx.addIssue({ code: 'custom', path: ['plan_id'], message: `El plan es solo IPv6 y ${TIPOS_CONEXION[datos.tipo_conexion].etiqueta} necesita IPv4: elige otro plan` })
     }
     // Espejo de `exigirPppoeAdmitido` (A2): 422 `pppoe_local_requiere_api` en `router_id`.
     const elegidoRouter = routers.value.find(r => r.id === datos.router_id)
@@ -197,11 +197,10 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
     }
 }))
 
-const itemsTipoConexion = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: tipo === 'pppoe' && routerSinRadius.value ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[tipo].descripcion,
-})))
+/** El tipo lo define el router (`contratos/tipo-conexion-router.md`): el servicio lo toma, no se elige. */
+watch([() => estado.router_id, () => router.value?.tipo_conexion], () => {
+    estado.tipo_conexion = router.value?.tipo_conexion ?? 'pppoe'
+}, { immediate: true })
 
 const itemsRouter = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
     label: r.nombre,
@@ -639,19 +638,24 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         :router-id="estado.router_id || null"
                     />
                     <UFormField
+                        v-if="router"
                         name="tipo_conexion"
                         label="Tipo de conexión"
-                        :help="routerSinRadius ? (conPppoe ? AYUDA_PPPOE_SIN_RADIUS : 'Sin PPPoE el router identifica al cliente por su IP (y su MAC con DHCP fija).') : 'PPPoE es lo habitual. Sin PPPoE el router identifica al cliente por su IP.'"
-                        required
+                        :help="routerSinRadius && conPppoe ? AYUDA_PPPOE_SIN_RADIUS : 'Lo define el router: todos sus servicios lo usan. Se cambia en la ficha del router.'"
                     >
-                        <URadioGroup
-                            v-model="estado.tipo_conexion"
-                            :items="itemsTipoConexion"
-                            variant="card"
-                            class="w-full"
-                            :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-3' }"
+                        <div
+                            class="flex items-start gap-3 rounded-md border border-default p-3"
                             data-prueba="tipo-conexion"
-                        />
+                        >
+                            <UIcon
+                                :name="TIPOS_CONEXION[estado.tipo_conexion].icono"
+                                class="mt-0.5 size-5 shrink-0 text-primary"
+                            />
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span class="text-sm font-medium text-highlighted">{{ TIPOS_CONEXION[estado.tipo_conexion].etiqueta }}</span>
+                                <span class="text-xs text-muted">{{ TIPOS_CONEXION[estado.tipo_conexion].descripcion }}</span>
+                            </div>
+                        </div>
                     </UFormField>
 
                     <UFormField

@@ -87,23 +87,24 @@ describe('PPPoE sin RADIUS', () => {
     })
 
     describe('alta de servicio', () => {
-        it('en un router sin RADIUS PPPoE sigue elegido, con la ayuda del secret local', async () => {
+        it('en un router sin RADIUS PPPoE es el tipo del router, con la ayuda del secret local', async () => {
             const router = routerApi(95)
             const wrapper = await mountSuspended(ServicioAltaFormulario, { props: { cliente: structuredClone(bd.clientes[0]!), compacto: true } })
             const raiz = wrapper.element.parentElement ?? wrapper.element
             await esperar(() => expect(radio('[data-prueba="alta-servicio"]', router.id, raiz)).not.toBeNull())
             elegir('[data-prueba="alta-servicio"]', router.id, raiz)
             await esperar(() => expect(raiz.querySelector('[data-prueba="router-sin-radius"]')).not.toBeNull())
-            const pppoe = radio('[data-prueba="tipo-conexion"]', 'pppoe', raiz)!
-            expect(pppoe.hasAttribute('data-disabled')).toBe(false)
-            expect(pppoe.getAttribute('aria-checked')).toBe('true')
-            expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('Sin RADIUS: el usuario se crea como secret en el MikroTik; sin consumo de datos ni cambios al instante')
+            // El tipo lo define el router (`contratos/tipo-conexion-router.md`): solo lectura.
+            expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('PPPoE')
+            expect(raiz.querySelectorAll('[data-prueba="tipo-conexion"] [role="radio"]')).toHaveLength(0)
+            expect(raiz.textContent).toContain('Sin RADIUS: el usuario se crea como secret en el MikroTik; sin consumo de datos ni cambios al instante')
             expect(wrapper.text()).toContain('RB-Norte API no usa RADIUS')
             expect(raiz.querySelector('[data-prueba="pppoe-local-requiere-api"]')).toBeNull()
         })
 
         it('sin credenciales de la API avisa antes de enviar, con el enlace a la ficha del router', async () => {
             const router = routerApi(96, { nombre: 'RB-Sin API', api_usuario: null, tiene_api_password: false })
+            const wisp = routerApi(94, { nombre: 'RB-WISP', api_usuario: null, tiene_api_password: false, tipo_conexion: 'ip_estatica' })
             const wrapper = await mountSuspended(enApp(ServicioAltaFormulario, { cliente: structuredClone(bd.clientes[0]!), compacto: true }))
             const raiz = wrapper.element.parentElement ?? wrapper.element
             await esperar(() => expect(radio('[data-prueba="alta-servicio"]', router.id, raiz)).not.toBeNull())
@@ -116,9 +117,10 @@ describe('PPPoE sin RADIUS', () => {
             })
             expect(aviso.textContent).toContain('El router no tiene credenciales de la API: agrégalas en la ficha del router.')
             expect(aviso.querySelector('a')?.getAttribute('href')).toBe(`/routers/${router.id}`)
-            // Con IP estática no hace falta: el aviso se va.
-            elegir('[data-prueba="tipo-conexion"]', 'ip_estatica', raiz)
+            // Un router IP estática no necesita las credenciales para PPPoE: el aviso se va.
+            elegir('[data-prueba="alta-servicio"]', wisp.id, raiz)
             await esperar(() => expect(raiz.querySelector('[data-prueba="pppoe-local-requiere-api"]')).toBeNull())
+            expect(raiz.querySelector('[data-prueba="tipo-conexion"]')!.textContent).toContain('IP estática')
         })
 
         it('la API crea el PPPoE con credenciales y responde 422 pppoe_local_requiere_api sin ellas', async () => {
@@ -139,7 +141,7 @@ describe('PPPoE sin RADIUS', () => {
     })
 
     describe('edición de servicio', () => {
-        it('ofrece pasar a PPPoE; sin credenciales avisa y muestra el 422 con el enlace', async () => {
+        it('un IP estática en un router PPPoE puede pasar al tipo del router; sin credenciales avisa y responde 422', async () => {
             const router = routerApi(99, { api_usuario: null, tiene_api_password: false })
             const base = bd.servicios.find(s => s.tipo_conexion === 'ip_estatica') ?? bd.servicios[0]!
             const servicio = { ...structuredClone(base), id: 990, router_id: router.id, tipo_conexion: 'ip_estatica' as const, user_ppp: null, ipv6_modo: 'ninguno' as const, mac: null, amarre_ip_mac: false }
@@ -150,12 +152,15 @@ describe('PPPoE sin RADIUS', () => {
                 return
             }
             await mountSuspended(enApp(ServicioEditar, { servicio: vista.data, open: true }))
-            await esperar(() => expect(radio('[data-prueba="editar-tipo-conexion"]', 'pppoe')).not.toBeNull())
-            expect(radio('[data-prueba="editar-tipo-conexion"]', 'pppoe')!.hasAttribute('data-disabled')).toBe(false)
-            // La ayuda llega con el router (`routers.ver`).
+            // El router (`routers.ver`) dice su tipo: se ofrece pasar a él.
+            const casilla = await esperar(() => {
+                const elemento = document.body.querySelector<HTMLElement>('[data-prueba="editar-pasar-tipo-router"]')
+                expect(elemento).not.toBeNull()
+                return elemento!
+            })
+            const marcar = casilla.matches('[role="checkbox"]') ? casilla : casilla.querySelector<HTMLElement>('[role="checkbox"]')!
+            marcar.click()
             await esperar(() => expect(document.body.querySelector('[data-prueba="editar-tipo-conexion"]')!.textContent).toContain('Sin RADIUS: el usuario se crea como secret en el MikroTik'))
-
-            elegir('[data-prueba="editar-tipo-conexion"]', 'pppoe')
             await esperar(() => expect(document.body.querySelector('[data-prueba="pppoe-local-requiere-api"]')).not.toBeNull())
 
             const resultado = await useServicios().editar(servicio.id, { version: vista.data.version, tipo_conexion: 'pppoe' })

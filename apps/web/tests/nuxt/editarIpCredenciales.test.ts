@@ -9,9 +9,10 @@ import ServicioEditar from '~/components/ServicioEditar.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**
- * Pedido del PM (5 nov): en «Editar servicio» se cambia la IPv4 fija (selector del alta) y la
- * contraseña PPPoE (`PUT /servicios/:id`, `servicios.editar`, con `version`). La API no admite
- * quitar la IPv4 (`ipv4` no es `null`) ni cambiar el usuario de un PPPoE (solo al pasar a PPPoE).
+ * Pedido del PM (5 nov): en «Editar servicio» se cambia la IPv4 fija (selector del alta) o, en PPPoE,
+ * se quita (`ipv4: null`, el pool del router), y el usuario y la contraseña PPPoE (`PUT /servicios/:id`,
+ * `servicios.editar`, con `version`; A1 en `a1/tipo-por-router`, el corte de sesión de A2 en
+ * `a2/credenciales`).
  */
 
 function cuerpo(): HTMLElement {
@@ -100,8 +101,10 @@ describe('esquema y cuerpo de la edición: IPv4 y contraseña', () => {
         const ocupada = await servicios.editar(servicio.id, { version: servicio.version, ipv4: otro.ipv4! })
         expect(!ocupada.ok && [ocupada.problema.status, codigoProblema(ocupada.problema)]).toEqual([409, 'ip_ocupada'])
 
-        const usuario = await servicios.editar(servicio.id, { version: servicio.version, user_ppp: 'otro.usuario' })
-        expect(!usuario.ok && usuario.problema.errors?.map(e => e.field)).toEqual(['user_ppp'])
+        const repetido = await servicios.editar(servicio.id, { version: servicio.version, user_ppp: otro.user_ppp! })
+        expect(!repetido.ok && [repetido.problema.status, codigoProblema(repetido.problema)]).toEqual([409, 'user_ppp_duplicado'])
+        const malUsuario = await servicios.editar(servicio.id, { version: servicio.version, user_ppp: 'a b' })
+        expect(!malUsuario.ok && malUsuario.problema.errors?.map(e => e.field)).toEqual(['user_ppp'])
 
         const guardado = await servicios.editar(servicio.id, { version: servicio.version, ipv4: '100.64.10.77', pass_ppp: 'Nueva2026' })
         expect(guardado.ok && [guardado.data.ipv4, guardado.data.version]).toEqual(['100.64.10.77', servicio.version + 1])
@@ -109,9 +112,33 @@ describe('esquema y cuerpo de la edición: IPv4 y contraseña', () => {
         const accion = bd.acciones.findLast(a => a.accion === 'servicios.editar')
         expect(JSON.stringify(accion)).not.toContain('Nueva2026')
 
+        const usuario = await servicios.editar(servicio.id, { version: servicio.version + 1, user_ppp: 'nuevo.usuario' })
+        expect(usuario.ok && usuario.data.user_ppp).toBe('nuevo.usuario')
+
+        const alPool = await servicios.editar(servicio.id, { version: servicio.version + 2, ipv4: null })
+        expect(alPool.ok && alPool.data.ipv4).toBeNull()
+
         const estatico = agregarServicioIpEstatica()
-        const conClave = await servicios.editar(estatico.id, { version: estatico.version, pass_ppp: 'Nueva2026' })
-        expect(!conClave.ok && conClave.problema.errors?.map(e => e.field)).toEqual(['pass_ppp'])
+        const conClave = await servicios.editar(estatico.id, { version: estatico.version, pass_ppp: 'Nueva2026', user_ppp: 'x.y.z' })
+        expect(!conClave.ok && conClave.problema.errors?.map(e => e.field)).toEqual(['pass_ppp', 'user_ppp'])
+        const sinIp = await servicios.editar(estatico.id, { version: estatico.version, ipv4: null })
+        expect(!sinIp.ok && sinIp.problema.errors?.map(e => [e.field, e.rule])).toEqual([['ipv4', 'required']])
+    })
+
+    it('quitar la IP solo en PPPoE manda `ipv4: null`; nunca `ipv4: ""`', () => {
+        const servicio = servicioPppoeEdicion()
+        const esquema = esquemaEdicionServicioPara(servicio)
+        const base = entradaEdicionDesde(servicio)
+        expect(cambiosServicio(esquema.parse({ ...base, quitar_ipv4: true }), servicio)).toEqual({ version: servicio.version, ipv4: null })
+        expect(cambiosServicio({ ...esquema.parse(base), cambiar_ipv4: true, ipv4: '' }, servicio)).not.toHaveProperty('ipv4')
+        const usuario = cambiosServicio(esquema.parse({ ...base, user_ppp: 'nuevo.usuario' }), servicio)
+        expect(usuario).toEqual({ version: servicio.version, user_ppp: 'nuevo.usuario' })
+        const malo = esquema.safeParse({ ...base, user_ppp: 'a b' })
+        expect(malo.success ? [] : malo.error.issues.map(i => i.path.join('.'))).toEqual(['user_ppp'])
+
+        const estatico = agregarServicioIpEstatica()
+        const sinIp = esquemaEdicionServicioPara(estatico).safeParse({ ...entradaEdicionDesde(estatico), quitar_ipv4: true })
+        expect(sinIp.success ? [] : sinIp.error.issues.map(i => i.path.join('.'))).toEqual(['ipv4'])
     })
 })
 
@@ -125,10 +152,9 @@ describe('«Editar servicio»: IPv4 y credenciales', () => {
         const servicio = servicioPppoeEdicion()
         const panel = await abrir(servicio)
         expect(cuerpo().querySelector('[data-prueba="editar-ipv4-actual"]')!.textContent).toContain(servicio.ipv4!)
-        // El usuario se ve, pero no se edita (la API no lo admite fuera del paso a PPPoE).
-        const usuario = cuerpo().querySelector<HTMLInputElement>('[data-prueba="editar-user-ppp"] input, input[data-prueba="editar-user-ppp"]')!
+        const usuario = cuerpo().querySelector<HTMLInputElement>('[name="user_ppp"]')!
         expect(usuario.value).toBe(servicio.user_ppp)
-        expect(usuario.disabled).toBe(true)
+        expect(usuario.disabled).toBe(false)
 
         clic('editar-cambiar-ipv4')
         await esperar(() => expect(cuerpo().querySelector('[name="ipv4"]')).not.toBeNull())
@@ -142,7 +168,7 @@ describe('«Editar servicio»: IPv4 y credenciales', () => {
         await esperar(() => expect(cuerpo().querySelector('[data-prueba="aviso-clave"]')).not.toBeNull())
         const clave = cuerpo().querySelector<HTMLInputElement>('[name="pass_ppp"]')!.value
         expect(clave).toMatch(/^[A-Za-z0-9]{10}$/)
-        expect(texto()).toContain('La sesión abierta no se corta')
+        expect(texto()).toContain('Al guardar, el cliente se desconecta y vuelve a conectarse con el usuario y la contraseña nuevos.')
 
         enviar()
         await esperar(() => expect(panel.emitted('guardado')).toBeDefined())
@@ -177,6 +203,64 @@ describe('«Editar servicio»: IPv4 y credenciales', () => {
         await esperar(() => expect(panel.emitted('guardado')).toBeDefined())
         expect(bd.servicios.find(s => s.id === servicio.id)!.ipv4).toBe('100.64.10.201')
         panel.unmount()
+    })
+
+    it('PPPoE: «Quitar IP fija (usar el pool)» deja el servicio sin IPv4 fija', async () => {
+        const servicio = servicioPppoeEdicion()
+        const panel = await abrir(servicio)
+        clic('editar-quitar-ipv4')
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="aviso-quitar-ipv4"]')).not.toBeNull())
+        expect(texto()).toContain(`Al guardar se libera ${servicio.ipv4}`)
+        enviar()
+        await esperar(() => expect(panel.emitted('guardado')).toBeDefined())
+        expect(bd.servicios.find(s => s.id === servicio.id)!.ipv4).toBeNull()
+        panel.unmount()
+    })
+
+    it('ip_estatica: no ofrece quitar la IP', async () => {
+        const servicio = agregarServicioIpEstatica()
+        const panel = await abrir(servicio)
+        expect(cuerpo().querySelector('[data-prueba="editar-quitar-ipv4"]')).toBeNull()
+        expect(cuerpo().querySelector('[data-prueba="editar-cambiar-ipv4"]')).not.toBeNull()
+        panel.unmount()
+    })
+
+    it('cambia el usuario PPPoE; el repetido (409 user_ppp_duplicado) se marca en el campo', async () => {
+        const servicio = servicioPppoeEdicion()
+        const otro = bd.servicios.find(s => s.id !== servicio.id && s.user_ppp)!
+        const panel = await abrir(servicio)
+        await esperar(() => expect(cuerpo().querySelector('[name="user_ppp"]')).not.toBeNull())
+        escribir('user_ppp', otro.user_ppp!)
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="aviso-clave"]')).not.toBeNull())
+        enviar()
+        await esperar(() => expect(texto()).toContain(`El user_ppp ${otro.user_ppp} ya existe`))
+        expect(cuerpo().querySelector('[data-prueba="editar-servicio-error"]')).toBeNull()
+        escribir('user_ppp', 'maria.nueva')
+        enviar()
+        await esperar(() => expect(panel.emitted('guardado')).toBeDefined())
+        expect(bd.servicios.find(s => s.id === servicio.id)!.user_ppp).toBe('maria.nueva')
+        panel.unmount()
+    })
+
+    it('tipo de conexión: solo lectura; si difiere del router se ofrece pasar al del router', async () => {
+        const servicio = agregarServicioIpEstatica()
+        const panel = await abrir(servicio)
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="editar-pasar-tipo-router"]')).not.toBeNull())
+        expect(cuerpo().querySelector('[data-prueba="editar-tipo-actual"]')!.textContent).toBe('IP estática')
+        expect(cuerpo().querySelectorAll('[data-prueba="editar-tipo-conexion"] [role="radio"]')).toHaveLength(0)
+        const casilla = cuerpo().querySelector<HTMLElement>('[data-prueba="editar-pasar-tipo-router"]')!
+        const marcar = casilla.matches('[role="checkbox"]') ? casilla : casilla.querySelector<HTMLElement>('[role="checkbox"]')!
+        marcar.click()
+        await esperar(() => expect(cuerpo().querySelector('[data-prueba="editar-tipo-actual"]')!.textContent).toBe('PPPoE'))
+        enviar()
+        await esperar(() => expect(panel.emitted('guardado')).toBeDefined())
+        expect(bd.servicios.find(s => s.id === servicio.id)).toMatchObject({ tipo_conexion: 'pppoe' })
+        panel.unmount()
+
+        const pppoe = await abrir(servicioPppoeEdicion())
+        await flushPromises()
+        expect(cuerpo().querySelector('[data-prueba="editar-pasar-tipo-router"]')).toBeNull()
+        pppoe.unmount()
     })
 
     it('«Mantener la actual» descarta la IP escrita', async () => {

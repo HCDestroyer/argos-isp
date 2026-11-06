@@ -20,18 +20,22 @@ function patron(regex: RegExp, mensaje: string) {
  * sin PPPoE), modo IPv6 (sin PPPoE, sin RADIUS), IPv4 fija, contraseña PPPoE, ubicación y contacto
  * en sitio, e instalación y facturación.
  *
- * IPv4 (`ipv4`, opcional en la API y nunca `null`): con `cambiar_ipv4` se escribe la nueva con la
- * misma validación del alta (`problemasIpv4Fija`); la red es obligatoria si se ven las redes del
- * router (`redes`) y no se manda: la API la busca por la IP. Quitar la IPv4 no lo admite la API.
+ * IPv4: con `cambiar_ipv4` se escribe la nueva con la misma validación del alta
+ * (`problemasIpv4Fija`); la red es obligatoria si se ven las redes del router (`redes`) y no se
+ * manda: la API la busca por la IP. Con `quitar_ipv4` (solo PPPoE) va `ipv4: null` y el servicio toma
+ * su IP del pool del router. Sin cambios `ipv4` no viaja: nunca `""` (la API lo lee como null).
  *
- * Contraseña PPPoE (`pass_ppp`, 6 a 64): vacía deja la que tiene. El usuario PPPoE no se edita: la
- * API solo lo acepta al pasar el servicio a PPPoE (422 `user_ppp` en otro caso).
+ * Credenciales PPPoE (solo un PPPoE que sigue siéndolo): `user_ppp` con el patrón del backend (409
+ * `user_ppp_duplicado` si ya existe) y `pass_ppp` (6 a 64; vacía deja la que tiene).
+ *
+ * Tipo de conexión: lo define el router (`contratos/tipo-conexion-router.md`). No se elige: un
+ * servicio que difiere de su router solo puede pasar al tipo del router («unificar» este servicio).
  *
  * `guardado` es el servicio que se edita: su `contacto_telefono` no se valida si no cambió (la API
  * tampoco lo revisa; los teléfonos viejos no se migraron).
  */
 export function esquemaEdicionServicioPara(
-    guardado?: Pick<Servicio, 'contacto_telefono'> | null,
+    guardado?: Pick<Servicio, 'contacto_telefono' | 'tipo_conexion'> | null,
     redes: readonly { id: number, cidr: string }[] = [],
 ) {
     return z.object({
@@ -55,6 +59,9 @@ export function esquemaEdicionServicioPara(
         servidor_pppoe_id: z.number().int(),
         /** Solo de la pantalla: se escribe una IPv4 nueva. */
         cambiar_ipv4: z.boolean(),
+        /** Solo de la pantalla: PPPoE sin IP fija (`ipv4: null`). */
+        quitar_ipv4: z.boolean(),
+        user_ppp: z.string().trim(),
         /** Solo de la pantalla: la red de la IP nueva (no viaja). */
         red_id: z.number().int().optional(),
         ipv4: z.string().trim(),
@@ -64,6 +71,12 @@ export function esquemaEdicionServicioPara(
             for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: redes.length > 0, redes })) {
                 ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
             }
+        }
+        if (datos.quitar_ipv4 && datos.tipo_conexion !== 'pppoe') {
+            ctx.addIssue({ code: 'custom', path: ['ipv4'], message: 'Sin PPPoE la IPv4 es obligatoria: cámbiala por otra en vez de quitarla' })
+        }
+        if (datos.tipo_conexion === 'pppoe' && guardado?.tipo_conexion === 'pppoe' && !PATRON_USUARIO_PPP.test(datos.user_ppp)) {
+            ctx.addIssue({ code: 'custom', path: ['user_ppp'], message: 'De 3 a 64 caracteres: letras, números, punto, guion, guion bajo o @' })
         }
         if (datos.tipo_conexion === 'pppoe' && datos.pass_ppp !== '' && (datos.pass_ppp.length < 6 || datos.pass_ppp.length > 64)) {
             ctx.addIssue({ code: 'custom', path: ['pass_ppp'], message: 'De 6 a 64 caracteres' })
@@ -114,6 +127,8 @@ export function entradaEdicionDesde(servicio: Servicio): EntradaEdicionServicio 
         excluir_firewall: servicio.excluir_firewall,
         servidor_pppoe_id: servicio.servidor_pppoe_id ?? 0,
         cambiar_ipv4: false,
+        quitar_ipv4: false,
+        user_ppp: servicio.user_ppp ?? '',
         red_id: undefined,
         ipv4: servicio.ipv4 ?? '',
         pass_ppp: '',
@@ -182,11 +197,18 @@ export function cambiosServicio(datos: SalidaEdicionServicio, original: Servicio
     if (datos.excluir_firewall !== antes.excluir_firewall) {
         cambios.excluir_firewall = datos.excluir_firewall
     }
-    if (datos.cambiar_ipv4 && datos.ipv4 && datos.ipv4 !== (original.ipv4 ?? '')) {
+    if (datos.quitar_ipv4 && datos.tipo_conexion === 'pppoe' && original.ipv4) {
+        cambios.ipv4 = null
+    }
+    else if (datos.cambiar_ipv4 && datos.ipv4 && datos.ipv4 !== (original.ipv4 ?? '')) {
         cambios.ipv4 = datos.ipv4
     }
-    // Solo un PPPoE que sigue siendo PPPoE; al pasar a PPPoE la API genera la contraseña.
-    if (datos.tipo_conexion === 'pppoe' && antes.tipo_conexion === 'pppoe' && datos.pass_ppp !== '') {
+    // Solo un PPPoE que sigue siendo PPPoE; al pasar a PPPoE la API genera usuario y contraseña.
+    const sigueEnPppoe = datos.tipo_conexion === 'pppoe' && antes.tipo_conexion === 'pppoe'
+    if (sigueEnPppoe && datos.user_ppp && datos.user_ppp !== (original.user_ppp ?? '')) {
+        cambios.user_ppp = datos.user_ppp
+    }
+    if (sigueEnPppoe && datos.pass_ppp !== '') {
         cambios.pass_ppp = datos.pass_ppp
     }
     return cambios

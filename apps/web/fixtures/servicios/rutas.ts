@@ -158,9 +158,29 @@ function erroresContacto(cuerpo: Record<string, unknown>, actual?: Servicio): Er
     return errores
 }
 
+/** Tipo del router (`contratos/tipo-conexion-router.md`): el servicio lo toma. */
+function tipoDelRouter(routerId: number): Servicio['tipo_conexion'] & string {
+    return bd.routers.find(r => r.id === routerId)?.tipo_conexion ?? 'pppoe'
+}
+
+const ETIQUETA_TIPO_SERVICIO: Record<string, string> = { pppoe: 'PPPoE', ip_estatica: 'IP estática', dhcp_fija: 'DHCP fija' }
+
+/** Como `exigirTipoDelRouter` (A1): otro tipo que el del router → 422 `tipo_conexion_del_router`. */
+function tipoDistintoDelRouter(tipoRouter: string, pedido: unknown): RespuestaFixture | null {
+    if (pedido === undefined || pedido === tipoRouter || !tipoDe(pedido)) {
+        return null
+    }
+    const mensaje = `El tipo de conexión lo define el router: este router es ${ETIQUETA_TIPO_SERVICIO[tipoRouter]} y todos sus `
+        + `servicios usan ese tipo. No mandes tipo_conexion (o manda ${tipoRouter}); para usar `
+        + `${ETIQUETA_TIPO_SERVICIO[String(pedido)]}, elige un router de ese tipo o cambia el tipo del router`
+    return problemaTipado(422, 'tipo_conexion_del_router', 'Regla de negocio', mensaje, [
+        { field: 'tipo_conexion', rule: 'tipo_conexion_del_router', message: mensaje },
+    ])
+}
+
 function validarAlta(cuerpo: Record<string, unknown>): Errores {
     const errores: Errores = []
-    const tipo = cuerpo.tipo_conexion === undefined ? 'pppoe' : tipoDe(cuerpo.tipo_conexion)
+    const tipo = cuerpo.tipo_conexion === undefined ? tipoDelRouter(Number(cuerpo.router_id)) : tipoDe(cuerpo.tipo_conexion)
     if (!tipo) {
         errores.push({ field: 'tipo_conexion', message: 'Debe ser pppoe, ip_estatica o dhcp_fija', rule: 'enum' })
     }
@@ -234,7 +254,7 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     const id = siguienteId(bd.servicios)
     const cliente = bd.clientes.find(c => c.id === cuerpo.cliente_id)
     const plan = bd.planes.find(p => p.id === cuerpo.plan_id)
-    const tipo = tipoDe(cuerpo.tipo_conexion) ?? 'pppoe'
+    const tipo = tipoDelRouter(routerId)
     const modo = (cuerpo.ipv6_modo as Servicio['ipv6_modo'] | undefined) ?? (tipo === 'pppoe' ? 'radius_servicio' : 'ninguno')
     const conV6 = modo === 'radius_servicio' && plan?.dual_stack !== 'v4' && bd.ipv6Bloques.some(b => b.router_id === routerId)
     const momento = ahora()
@@ -623,9 +643,15 @@ function sincronizarRouter(solicitud: SolicitudFixture): ReturnType<ManejadorFix
  * `ipv4` si no es IPv4, si no es de una red del router o si es red, broadcast o gateway; 409
  * `ip_ocupada` si otro servicio la tiene.
  */
-function ipv4DeEdicion(servicio: Servicio, ip: unknown): { errores: Errores } | { conflicto: RespuestaFixture } | { ip: string | null } {
+function ipv4DeEdicion(servicio: Servicio, ip: unknown, tipo: string): { errores: Errores } | { conflicto: RespuestaFixture } | { ip: string | null } {
     if (ip === undefined) {
         return { ip: servicio.ipv4 }
+    }
+    // `ipv4: null` (A1, `a1/tipo-por-router`): solo PPPoE la quita y queda en el pool del router.
+    if (ip === null) {
+        return tipo === 'pppoe'
+            ? { ip: null }
+            : { errores: [{ field: 'ipv4', message: 'Sin PPPoE la IPv4 es obligatoria: la cola, la address-list y el lease se identifican por ella. Cámbiala por otra en vez de quitarla', rule: 'required' }] }
     }
     if (typeof ip !== 'string' || !PATRON_IPV4.test(ip)) {
         return { errores: [{ field: 'ipv4', message: 'El campo ipv4 debe ser una dirección IPv4 válida', rule: 'ipAddress' }] }
@@ -649,13 +675,17 @@ function ipv4DeEdicion(servicio: Servicio, ip: unknown): { errores: Errores } | 
 }
 
 /**
- * Credenciales en `PUT /servicios/:id`, como `EditarServicio` (A1): `user_ppp` solo al pasar a
- * PPPoE; `pass_ppp` de 6 a 64 (y solo en PPPoE, lo revisa `validarTipo`).
+ * Credenciales en `PUT /servicios/:id`, como `EditarServicio` (A1): `user_ppp` solo en PPPoE (con el
+ * patrón del validador; 409 `user_ppp_duplicado` aparte); `pass_ppp` de 6 a 64 (y solo en PPPoE, lo
+ * revisa `validarTipo`).
  */
-function erroresCredencialesEdicion(cuerpo: Record<string, unknown>, tipoAntes: string, tipo: string): Errores {
+function erroresCredencialesEdicion(cuerpo: Record<string, unknown>, tipo: string): Errores {
     const errores: Errores = []
-    if (cuerpo.user_ppp !== undefined && !(tipo === 'pppoe' && tipoAntes !== 'pppoe')) {
-        errores.push({ field: 'user_ppp', message: 'El user_ppp solo se indica al cambiar el servicio a pppoe', rule: 'tipo_conexion' })
+    if (cuerpo.user_ppp !== undefined && tipo !== 'pppoe') {
+        errores.push({ field: 'user_ppp', message: 'Solo los servicios pppoe tienen user_ppp', rule: 'tipo_conexion' })
+    }
+    else if (cuerpo.user_ppp !== undefined && (typeof cuerpo.user_ppp !== 'string' || !/^[A-Za-z0-9._@-]{3,64}$/.test(cuerpo.user_ppp.trim()))) {
+        errores.push({ field: 'user_ppp', message: 'El formato de user_ppp no es válido', rule: 'regex' })
     }
     const clave = cuerpo.pass_ppp
     if (clave !== undefined && (typeof clave !== 'string' || clave.length < 6 || clave.length > 64)) {
@@ -709,6 +739,10 @@ export const rutasServicios: RutasFixture = {
     }),
 
     'POST /api/v1/servicios': conPermiso('servicios.crear', conIdempotencia((solicitud) => {
+        const distinto = tipoDistintoDelRouter(tipoDelRouter(Number(cuerpoObjeto(solicitud).router_id)), cuerpoObjeto(solicitud).tipo_conexion)
+        if (distinto) {
+            return distinto
+        }
         const resultado = crearServicio(solicitud)
         if (Array.isArray(resultado)) {
             return datosInvalidos(resultado)
@@ -759,10 +793,18 @@ export const rutasServicios: RutasFixture = {
             return versionCambiada()
         }
         const tipoAntes = actual.tipo_conexion ?? 'pppoe'
-        const tipo = cuerpo.tipo_conexion === undefined ? tipoAntes : tipoDe(cuerpo.tipo_conexion)
-        if (!tipo) {
+        const pedido = cuerpo.tipo_conexion === undefined ? undefined : tipoDe(cuerpo.tipo_conexion)
+        if (pedido === null) {
             return datosInvalidos([{ field: 'tipo_conexion', message: 'Debe ser pppoe, ip_estatica o dhcp_fija', rule: 'enum' }])
         }
+        // Como `tipoEfectivo` (A1): en el mismo router, el que tiene o el del router; otro, 422.
+        if (pedido !== undefined && pedido !== tipoAntes) {
+            const distinto = tipoDistintoDelRouter(tipoDelRouter(actual.router_id), pedido)
+            if (distinto) {
+                return distinto
+            }
+        }
+        const tipo = pedido ?? tipoAntes
         const mac = 'mac' in cuerpo ? texto(cuerpo.mac) : actual.mac
         const modo = typeof cuerpo.ipv6_modo === 'string' ? (cuerpo.ipv6_modo as Servicio['ipv6_modo']) : actual.ipv6_modo
         const amarre = tipo !== 'pppoe' && (typeof cuerpo.amarre_ip_mac === 'boolean' ? cuerpo.amarre_ip_mac : (actual.amarre_ip_mac ?? false))
@@ -775,8 +817,8 @@ export const rutasServicios: RutasFixture = {
             conUsuario: false,
             conClave: cuerpo.pass_ppp !== undefined,
         })
-        errores.push(...erroresCredencialesEdicion(cuerpo, tipoAntes, tipo))
-        const ipv4 = ipv4DeEdicion(actual, cuerpo.ipv4)
+        errores.push(...erroresCredencialesEdicion(cuerpo, tipo))
+        const ipv4 = ipv4DeEdicion(actual, cuerpo.ipv4, tipo)
         if ('errores' in ipv4) {
             errores.push(...ipv4.errores)
         }
@@ -795,6 +837,10 @@ export const rutasServicios: RutasFixture = {
         if ('conflicto' in ipv4) {
             return ipv4.conflicto
         }
+        const usuarioNuevo = typeof cuerpo.user_ppp === 'string' ? cuerpo.user_ppp.trim() : null
+        if (usuarioNuevo && usuarioNuevo !== actual.user_ppp && bd.servicios.some(s => s.user_ppp === usuarioNuevo)) {
+            return problemaTipado(409, 'user_ppp_duplicado', 'Conflicto', `El user_ppp ${usuarioNuevo} ya existe`)
+        }
         // Servidor PPPoE: se conserva; se elige o cambia con `servidor_pppoe_id`; al dejar PPPoE, null.
         let servidorId = tipo === 'pppoe' ? (actual.servidor_pppoe_id ?? null) : null
         if (tipo === 'pppoe' && ('servidor_pppoe_id' in cuerpo || tipoAntes !== 'pppoe')) {
@@ -812,7 +858,7 @@ export const rutasServicios: RutasFixture = {
             plan_id: planId,
             tipo_conexion: tipo,
             amarre_ip_mac: amarre,
-            user_ppp: tipo === 'pppoe' ? (actual.user_ppp ?? texto(cuerpo.user_ppp) ?? `cliente${actual.cliente_id}.${actual.id}`) : null,
+            user_ppp: tipo === 'pppoe' ? (usuarioNuevo ?? actual.user_ppp ?? `cliente${actual.cliente_id}.${actual.id}`) : null,
             mac,
             ipv4: 'ip' in ipv4 ? ipv4.ip : actual.ipv4,
             ipv6_modo: modo,

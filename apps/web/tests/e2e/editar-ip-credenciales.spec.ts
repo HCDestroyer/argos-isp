@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
+import { servicios } from '../../fixtures/servicios/datos'
 import { entrar } from './ayudas'
 
 /**
- * Pedido del PM (5 nov): «Editar servicio» cambia la IPv4 fija (con el selector del alta) y la
- * contraseña PPPoE (`PUT /servicios/:id`). Servicio 1 de los fixtures: PPPoE en RB-Centro con
- * 100.64.10.11. Corre en escritorio (1280 px) y en teléfono (390 px).
+ * Pedido del PM (5 nov): «Editar servicio» cambia la IPv4 fija (con el selector del alta) o la
+ * quita en PPPoE (`ipv4: null`), y el usuario y la contraseña PPPoE (`PUT /servicios/:id`).
+ * Servicio 1 de los fixtures: PPPoE en RB-Centro con 100.64.10.11. Corre en escritorio (1280 px) y
+ * en teléfono (390 px).
  */
 
 async function abrirEdicion(page: Page) {
@@ -40,12 +42,21 @@ test('cambiar la IPv4 fija del servicio', async ({ page }) => {
     await expect(page.getByText('100.64.10.77').first()).toBeVisible()
 })
 
-test('cambiar la contraseña PPPoE (el usuario no se edita)', async ({ page }) => {
+test('cambiar el usuario y la contraseña PPPoE', async ({ page }) => {
+    const otro = servicios.find(x => x.id === 2)!.user_ppp!
     const panel = await abrirEdicion(page)
     const credenciales = panel.locator('[data-prueba="editar-credenciales"]')
     await credenciales.scrollIntoViewIfNeeded()
-    await expect(credenciales.getByLabel('Usuario PPPoE')).toBeDisabled()
+    const usuario = credenciales.getByRole('textbox', { name: 'Usuario PPPoE' })
+    await expect(usuario).toBeEnabled()
 
+    // Un usuario de otro servicio: 409 `user_ppp_duplicado`, en el campo.
+    await usuario.fill(otro)
+    await expect(credenciales.locator('[data-prueba="aviso-clave"]')).toContainText('Al guardar, el cliente se desconecta y vuelve a conectarse con el usuario y la contraseña nuevos.')
+    await panel.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect(credenciales.getByText(`El user_ppp ${otro} ya existe`)).toBeVisible()
+
+    await usuario.fill('maria.nueva')
     const clave = credenciales.getByLabel('Contraseña nueva')
     await clave.fill('abc')
     await panel.getByRole('button', { name: 'Guardar cambios' }).click()
@@ -55,12 +66,22 @@ test('cambiar la contraseña PPPoE (el usuario no se edita)', async ({ page }) =
     await expect(clave).toHaveAttribute('type', 'text')
     const generada = await clave.inputValue()
     expect(generada).toMatch(/^[A-Za-z0-9]{10}$/)
-    await expect(credenciales.locator('[data-prueba="aviso-clave"]')).toContainText('La sesión abierta no se corta')
 
     await panel.getByRole('button', { name: 'Guardar cambios' }).click()
     await expect(panel).toBeHidden()
 
-    // La ficha muestra la contraseña nueva al pedirla (queda en la bitácora).
+    // La ficha muestra el usuario nuevo y la contraseña nueva al pedirla (queda en la bitácora).
+    await expect(page.getByText('maria.nueva').first()).toBeVisible()
     await page.getByRole('button', { name: 'Mostrar' }).click()
     await expect(page.getByText(generada)).toBeVisible()
+})
+
+test('quitar la IP fija de un PPPoE (usar el pool)', async ({ page }) => {
+    const panel = await abrirEdicion(page)
+    await panel.getByRole('button', { name: 'Quitar IP fija (usar el pool)' }).click()
+    await expect(panel.locator('[data-prueba="aviso-quitar-ipv4"]')).toContainText('Al guardar se libera 100.64.10.11')
+    await panel.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect(panel).toBeHidden()
+    await page.locator('[data-prueba="editar-servicio"]').click()
+    await expect(page.getByRole('dialog', { name: /^Editar / }).locator('[data-prueba="editar-ipv4-actual"]')).toHaveText('Sin IP fija: la entrega el pool del router')
 })

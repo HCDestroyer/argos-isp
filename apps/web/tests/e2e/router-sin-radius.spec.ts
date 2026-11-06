@@ -70,7 +70,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(page.locator(`[data-prueba="modo-${routerId}"]`)).toHaveText('Sin RADIUS')
     await expect(page.locator('[data-prueba="modo-1"]')).toHaveText('RADIUS')
 
-    // Servicio PPPoE en ese router: queda elegido, con la ayuda del secret local.
+    // Servicio PPPoE en ese router (su tipo), con la ayuda del secret local.
     await ir(page, 'Clientes', /\/clientes$/)
     // El primer cliente de la lista (activo, sin servicio en este router).
     await page.locator('table a[href^="/clientes/"]').first().click()
@@ -80,9 +80,9 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(servicio).toBeVisible()
     await servicio.getByRole('radio', { name: /RB-Norte API/ }).click()
     await expect(servicio.locator('[data-prueba="router-sin-radius"]')).toContainText('RB-Norte API no usa RADIUS')
-    await expect(servicio.getByRole('radio', { name: /^PPPoE/ })).toBeEnabled()
-    await expect(servicio.getByRole('radio', { name: /^PPPoE/ })).toBeChecked()
-    await expect(servicio.locator('[data-prueba="tipo-conexion"]')).toContainText('Sin RADIUS: el usuario se crea como secret en el MikroTik; sin consumo de datos ni cambios al instante')
+    // El tipo es el del router (`contratos/tipo-conexion-router.md`), en solo lectura.
+    await expect(servicio.locator('[data-prueba="tipo-conexion"]')).toContainText('PPPoE')
+    await expect(servicio.getByText('Sin RADIUS: el usuario se crea como secret en el MikroTik; sin consumo de datos ni cambios al instante')).toBeVisible()
     await expect(servicio.locator('[data-prueba="pppoe-local-requiere-api"]')).toBeHidden()
     await servicio.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     await servicio.getByRole('button', { name: 'Siguiente' }).click()

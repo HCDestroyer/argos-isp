@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Edición de un servicio desde su ficha (`PUT /servicios/:id`, `servicios.editar`, con
@@ -10,10 +10,14 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
  * junto a cada campo (el teléfono con `rule: 'telefono'`), el 409 `ip_ocupada` en la IP y el 409 de
  * versión ofrece recargar.
  *
- * IPv4: se cambia con el mismo selector del alta (`ServicioIpv4Fija`); no se quita (la API no
- * admite `ipv4: null`). Credenciales: solo la contraseña de un PPPoE (`servicios.editar`, el permiso
- * de la ruta); el usuario lo genera la API al pasar a PPPoE y no se cambia después. Cambiar la
- * contraseña no corta la sesión abierta: el equipo la necesita en su próxima conexión.
+ * IPv4: se cambia con el mismo selector del alta (`ServicioIpv4Fija`); en PPPoE además se quita
+ * («usar el pool», `ipv4: null`). Credenciales de un PPPoE (`servicios.editar`, el permiso de la
+ * ruta): usuario (409 `user_ppp_duplicado` en el campo) y contraseña. Cambiarlas desconecta la sesión
+ * (A2: Disconnect con RADIUS; en un router `api`, secret reescrito y sesión quitada) y el cliente
+ * vuelve a conectarse con las nuevas.
+ *
+ * Tipo de conexión (`contratos/tipo-conexion-router.md`): lo define el router y aquí no se elige.
+ * Si el servicio difiere del tipo de su router (dato anterior a la regla), se ofrece pasarlo a ese.
  *
  * En un router sin RADIUS (`modo_seguridad = 'api'`) PPPoE va como secret local en el MikroTik
  * (`contratos/pppoe-local.md`), con su ayuda. Si el router no tiene credenciales de la API, pasar a
@@ -74,11 +78,16 @@ const routerSinRadius = computed(() => esSinRadius(routerServicio.value))
 const faltanCredencialesApi = computed(() => conPppoe.value && pppoeSinCredencialesApi(routerServicio.value))
 const credencialesRechazadas = computed(() => esPppoeLocalRequiereApi(problema.value))
 
-const itemsTipo = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: tipo === 'pppoe' && routerSinRadius.value ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[tipo].descripcion,
-})))
+/** El tipo del router (sin `routers.ver` no se sabe y no se ofrece unificar). */
+const tipoRouter = computed<TipoConexion | null>(() => routerServicio.value?.tipo_conexion ?? null)
+/** El servicio no usa el tipo de su router: se puede pasar a él (unificar este servicio). */
+const difiereDelRouter = computed(() => tipoRouter.value !== null && tipoRouter.value !== tipoConexionDe(props.servicio))
+const pasarAlRouter = computed({
+    get: () => tipoRouter.value !== null && estado.tipo_conexion === tipoRouter.value && difiereDelRouter.value,
+    set: (valor: boolean) => {
+        estado.tipo_conexion = valor && tipoRouter.value ? tipoRouter.value : tipoConexionDe(props.servicio)
+    },
+})
 
 const itemsPlan = computed<SelectItem[]>(() => {
     const lista = planes.value.filter(p => p.activo || p.id === props.servicio.plan_id)
@@ -137,6 +146,7 @@ function redSugerida(): number | undefined {
 }
 
 function cambiarIpv4() {
+    estado.quitar_ipv4 = false
     estado.cambiar_ipv4 = true
     estado.ipv4 = ''
     estado.red_id = redSugerida()
@@ -157,8 +167,22 @@ function mantenerIpv4() {
     formulario.value?.clear('red_id')
 }
 
-/** Contraseña PPPoE: solo un PPPoE que sigue siéndolo; al pasar a PPPoE la genera la API. */
+/** «Quitar IP fija (usar el pool)»: solo PPPoE con IP fija (`ipv4: null`). */
+const puedeQuitarIpv4 = computed(() => conPppoe.value && eraPppoe.value && Boolean(props.servicio.ipv4))
+
+function quitarIpv4() {
+    mantenerIpv4()
+    estado.quitar_ipv4 = true
+}
+
+function deshacerQuitarIpv4() {
+    estado.quitar_ipv4 = false
+    formulario.value?.clear('ipv4')
+}
+
+/** Credenciales PPPoE: solo un PPPoE que sigue siéndolo; al pasar a PPPoE las genera la API. */
 const editaClave = computed(() => eraPppoe.value && conPppoe.value && puede('servicios.editar'))
+const cambianCredenciales = computed(() => estado.pass_ppp !== '' || (estado.user_ppp.trim() !== '' && estado.user_ppp.trim() !== (props.servicio.user_ppp ?? '')))
 
 function generarClave() {
     estado.pass_ppp = generarClavePpp()
@@ -193,9 +217,11 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
         avisarAdvertencias(toast, resultado.data.warnings, 'Servicio guardado con advertencias')
         return
     }
-    // IP de otro servicio: 409 `ip_ocupada`, se muestra en la IP (no es un conflicto de versión).
-    if (codigoProblema(resultado.problema) === 'ip_ocupada') {
-        formulario.value?.setErrors([{ name: 'ipv4', message: resultado.problema.detail ?? 'La IP ya está asignada a otro servicio' }])
+    // 409 que no son de versión: la IP de otro servicio y el usuario PPPoE repetido van en su campo.
+    const enCampo = { ip_ocupada: 'ipv4', user_ppp_duplicado: 'user_ppp' } as const
+    const codigo = codigoProblema(resultado.problema)
+    if (codigo === 'ip_ocupada' || codigo === 'user_ppp_duplicado') {
+        formulario.value?.setErrors([{ name: enCampo[codigo], message: resultado.problema.detail ?? resultado.problema.title }])
         return
     }
     const errores = erroresDeFormulario(resultado.problema)
@@ -272,15 +298,33 @@ const accionProblema = computed(() => {
                 <UFormField
                     name="tipo_conexion"
                     label="Tipo de conexión"
+                    :help="difiereDelRouter ? undefined : 'Lo define el router: se cambia en su ficha, para todos sus servicios.'"
                 >
-                    <URadioGroup
-                        v-model="estado.tipo_conexion"
-                        :items="itemsTipo"
-                        variant="card"
-                        class="w-full"
-                        :ui="{ fieldset: 'grid gap-2' }"
+                    <div
+                        class="flex flex-col gap-3 rounded-md border border-default p-3"
                         data-prueba="editar-tipo-conexion"
-                    />
+                    >
+                        <div class="flex items-start gap-3">
+                            <UIcon
+                                :name="TIPOS_CONEXION[estado.tipo_conexion].icono"
+                                class="mt-0.5 size-5 shrink-0 text-primary"
+                            />
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span
+                                    class="text-sm font-medium text-highlighted"
+                                    data-prueba="editar-tipo-actual"
+                                >{{ TIPOS_CONEXION[estado.tipo_conexion].etiqueta }}</span>
+                                <span class="text-xs text-muted">{{ estado.tipo_conexion === 'pppoe' && routerSinRadius ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[estado.tipo_conexion].descripcion }}</span>
+                            </div>
+                        </div>
+                        <UCheckbox
+                            v-if="difiereDelRouter && tipoRouter"
+                            v-model="pasarAlRouter"
+                            :label="`Pasar a ${TIPOS_CONEXION[tipoRouter].etiqueta}, el tipo de ${nombreRouter(servicio)}`"
+                            description="Este servicio es de antes de que el tipo fuera uno por router: los demás servicios del router ya lo usan."
+                            data-prueba="editar-pasar-tipo-router"
+                        />
+                    </div>
                 </UFormField>
                 <UAlert
                     v-if="avisoTipo"
@@ -334,15 +378,39 @@ const accionProblema = computed(() => {
                                 data-prueba="editar-ipv4-actual"
                             >{{ estado.cambiar_ipv4 ? `Actual: ${textoIpv4Actual}` : textoIpv4Actual }}</span>
                         </div>
+                        <div
+                            v-if="!estado.cambiar_ipv4 && !estado.quitar_ipv4"
+                            class="flex flex-wrap gap-2"
+                        >
+                            <UButton
+                                v-if="puedeQuitarIpv4"
+                                label="Quitar IP fija (usar el pool)"
+                                icon="i-lucide-circle-minus"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                data-prueba="editar-quitar-ipv4"
+                                @click="quitarIpv4"
+                            />
+                            <UButton
+                                label="Cambiar IP"
+                                icon="i-lucide-pencil"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                data-prueba="editar-cambiar-ipv4"
+                                @click="cambiarIpv4"
+                            />
+                        </div>
                         <UButton
-                            v-if="!estado.cambiar_ipv4"
-                            label="Cambiar IP"
-                            icon="i-lucide-pencil"
+                            v-else-if="estado.quitar_ipv4"
+                            label="Mantener la IP fija"
+                            icon="i-lucide-undo-2"
                             color="neutral"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            data-prueba="editar-cambiar-ipv4"
-                            @click="cambiarIpv4"
+                            data-prueba="editar-mantener-ipv4"
+                            @click="deshacerQuitarIpv4"
                         />
                         <UButton
                             v-else
@@ -362,6 +430,18 @@ const accionProblema = computed(() => {
                         :redes="redes"
                         :exigir-red="redes.length > 0"
                     />
+                    <UFormField
+                        v-if="estado.quitar_ipv4"
+                        name="ipv4"
+                    >
+                        <UAlert
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-info"
+                            :description="`Al guardar se libera ${servicio.ipv4} y el servicio toma su IP del pool del router en la próxima conexión.`"
+                            data-prueba="aviso-quitar-ipv4"
+                        />
+                    </UFormField>
                     <p
                         v-if="estado.cambiar_ipv4 && !conPppoe"
                         class="text-xs text-muted"
@@ -378,14 +458,14 @@ const accionProblema = computed(() => {
                     <span class="text-sm font-medium text-highlighted">Credenciales PPPoE</span>
                     <div class="grid gap-4 sm:grid-cols-2">
                         <UFormField
+                            name="user_ppp"
                             label="Usuario PPPoE"
-                            help="Lo genera la API al pasar a PPPoE; no se cambia después."
+                            help="Letras, números, punto, guion, guion bajo o @."
                         >
                             <UInput
-                                :model-value="servicio.user_ppp ?? ''"
-                                disabled
+                                v-model="estado.user_ppp"
+                                autocomplete="off"
                                 class="w-full font-mono"
-                                aria-label="Usuario PPPoE"
                                 data-prueba="editar-user-ppp"
                             />
                         </UFormField>
@@ -421,11 +501,11 @@ const accionProblema = computed(() => {
                         </UFormField>
                     </div>
                     <UAlert
-                        v-if="estado.pass_ppp"
+                        v-if="cambianCredenciales"
                         color="warning"
                         variant="subtle"
                         icon="i-lucide-triangle-alert"
-                        description="La sesión abierta no se corta. Configura la contraseña nueva en el equipo del cliente: con la anterior no volverá a conectarse."
+                        description="Al guardar, el cliente se desconecta y vuelve a conectarse con el usuario y la contraseña nuevos."
                         data-prueba="aviso-clave"
                     />
                 </section>

@@ -4,7 +4,7 @@ import * as z from 'zod'
 /**
  * Espejo de `crearServicioValidator` (apps/api/app/core/validators.ts) para el asistente de alta.
  *
- * WISP (A1, semana 2): `tipo_conexion` `pppoe` | `ip_estatica` | `dhcp_fija`. Sin PPPoE no hay
+ * WISP (A1, semana 2): `tipo_conexion` `pppoe` | `ip_estatica` | `dhcp_fija`, el del router (no se manda; `contratos/tipo-conexion-router.md`). Sin PPPoE no hay
  * credenciales ni IPv6 por RADIUS; `dhcp_fija` y el amarre IP-MAC exigen la MAC (formato
  * `PATRON_MAC`); la IPv4 es obligatoria (automática de una red del router o fija).
  *
@@ -147,7 +147,7 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
         cliente_id: datos.cliente_id,
         router_id: datos.router_id,
         plan_id: datos.plan_id,
-        tipo_conexion: datos.tipo_conexion,
+        // Sin `tipo_conexion`: el servicio toma el del router (`contratos/tipo-conexion-router.md` §2).
         mac: datos.mac,
         direccion: datos.direccion,
         referencia: datos.referencia,
