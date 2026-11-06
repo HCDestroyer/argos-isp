@@ -565,9 +565,10 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
         )
     })
 
-    test('suspender → CoA-ACK del NAS con el perfil de corte; reactivar → Disconnect-ACK', async ({
-        assert: a,
-    }) => {
+    // Desde el arreglo del portal cautivo (COA_SUSPENDER=disconnect por defecto) suspender también
+    // desconecta: la sesión vuelve con el perfil de corte completo (v4 y v6) y fuera de FastTrack.
+    // El CoA con el perfil de corte (COA_SUSPENDER=coa) lo cubren las pruebas de services/coa.
+    test('suspender → Disconnect-ACK del NAS; reactivar → Disconnect-ACK', async ({ assert: a }) => {
         const s = await servicio('activo')
         const { acct } = await iniciarSesion(s)
 
@@ -580,14 +581,11 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
         const inicio = Date.now()
         const { final } = await respuestaFinal(suspender!)
         a.isBelow(Date.now() - inicio, 5000)
-        a.equal(final.tipo, 'coa')
+        a.equal(final.tipo, 'disconnect')
         a.isTrue(final.ok)
-        a.equal(final.respuesta.codigo, 'CoA-ACK')
-        // el NAS (FreeRADIUS) decodificó los atributos y la firma con el secret del router
-        a.equal(
-            final.respuesta.atributos['Reply-Message'],
-            `CoA-Request|256k/256k|suspendidos|argos-corte.in|${acct}`,
-        )
+        a.equal(final.respuesta.codigo, 'Disconnect-ACK')
+        // el NAS (FreeRADIUS) decodificó la firma con el secret del router
+        a.equal(final.respuesta.atributos['Reply-Message'], `Disconnect-Request||||${acct}`)
 
         desde = await ultimoOutbox()
         await new CambiarEstadoServicio().execute(

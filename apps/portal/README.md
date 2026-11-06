@@ -56,10 +56,10 @@ con el Host de la sonda o con el del portal (IPv4, `[portalV6]:80` o nombre). El
 | --- | --- | --- | --- |
 | Android, ChromeOS, Chrome | `connectivitycheck.gstatic.com/generate_204`, `clients3.google.com/generate_204` | 204 sin cuerpo | 302 → `/corte` |
 | Android (Google) | `www.google.com/gen_204` | 204 | 302 → `/corte` |
-| Samsung, Xiaomi, Huawei | `connect.rom.miui.com/generate_204` y equivalentes | 204 | 302 → `/corte` |
+| Samsung, Xiaomi, Huawei | `connectivitycheck.samsung.com/generate_204`, `connect.rom.miui.com/generate_204`, `connectivitycheck.platform.hicloud.com/generate_204` | 204 | 302 → `/corte` |
 | Huawei / Honor antiguos | `/mobile/status.php` | 204 | 302 → `/corte` |
 | iOS, iPadOS, macOS | `captive.apple.com/hotspot-detect.html`, `www.apple.com/library/test/success.html` | 200 con `<TITLE>Success</TITLE>` | 302 → `/corte` |
-| Windows 10 / 11 | `www.msftconnecttest.com/connecttest.txt` | 200 `Microsoft Connect Test` | 302 → `/corte` |
+| Windows 10 / 11 | `www.msftconnecttest.com/connecttest.txt`, `ipv6.msftconnecttest.com/connecttest.txt` (y `dns.msftncsi.com` debe resolver a su IP real: el DNS del suspendido pasa a cualquier resolver) | 200 `Microsoft Connect Test` | 302 → `/corte` |
 | Windows 10 / 11 (abre el navegador) | `www.msftconnecttest.com/redirect` | 200 | 302 → `/corte` |
 | Windows 7 / 8 | `www.msftncsi.com/ncsi.txt` | 200 `Microsoft NCSI` | 302 → `/corte` |
 | Firefox | `detectportal.firefox.com/success.txt`, `/canonical.html` | 200 `success` | 302 → `/corte` |
@@ -71,6 +71,8 @@ con el Host de la sonda o con el del portal (IPv4, `[portalV6]:80` o nombre). El
 | Cualquier otra URL HTTP de un suspendido | | | 302 → `/corte` (Host ajeno) |
 
 `/corte` responde 200 con HTML y no contiene ninguno de esos textos de éxito.
+
+**URL de corte del operador** (`empresas.url_corte`, `contratos/control-velocidad.md` §10.6): antes del 302 el servidor del portal pregunta `GET /api/v1/portal/destino-corte` (con la IP del cliente) y, si la empresa del servicio tiene URL, el 302 va a ella. Sin URL, si la API falla o tarda más de 1,5 s, a `/corte`. Nunca un 204.
 
 Para A6: ningún dominio de esta tabla puede estar en el walled garden; si lo estuviera, la sonda
 llegaría al sitio real, recibiría su respuesta de éxito y el teléfono no avisaría.

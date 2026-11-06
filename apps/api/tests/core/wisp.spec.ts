@@ -5,7 +5,13 @@ import { redis } from '#shared/redis'
 import { claveAaa } from '#core/aaa'
 import { verificarRestriccionesDiferidas } from '#shared/domain_action'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila, crearRouterFila } from '#tests/core/fabricas'
+import {
+    crearClienteFila,
+    crearEscenarioRouter,
+    crearPlanFila,
+    crearRouterFila,
+    routerConTipo,
+} from '#tests/core/fabricas'
 import { limpiarClavesAaa } from '#tests/core/ayudas_aaa'
 
 /**
@@ -24,7 +30,20 @@ async function escenario() {
     return { ...esc, planId, clienteId }
 }
 
-function crear(client: any, token: string, cuerpo: Record<string, unknown>, requestId = unico('req')) {
+const TIPOS = new Set(['pppoe', 'ip_estatica', 'dhcp_fija'])
+
+/**
+ * El tipo lo define el router (`contratos/tipo-conexion-router.md`): antes del alta o de pasar un
+ * servicio a un tipo, su router queda en ese tipo.
+ */
+async function alTipo(routerId: unknown, tipo: unknown) {
+    if (typeof routerId === 'number' && (tipo === undefined || TIPOS.has(String(tipo)))) {
+        await routerConTipo(routerId, tipo)
+    }
+}
+
+async function crear(client: any, token: string, cuerpo: Record<string, unknown>, requestId = unico('req')) {
+    await alTipo(cuerpo.router_id, cuerpo.tipo_conexion)
     return client
         .post('/api/v1/servicios')
         .bearerToken(token)
@@ -32,13 +51,17 @@ function crear(client: any, token: string, cuerpo: Record<string, unknown>, requ
         .json({ plantilla_facturacion_id: null, ...cuerpo })
 }
 
-function editar(
+async function editar(
     client: any,
     token: string,
     id: number,
     cuerpo: Record<string, unknown>,
     requestId = unico('req'),
 ) {
+    if (cuerpo.tipo_conexion !== undefined) {
+        const servicio = await db.from('core.servicios').where('id', id).select('router_id').firstOrFail()
+        await alTipo(Number(servicio.router_id), cuerpo.tipo_conexion)
+    }
     return client
         .put(`/api/v1/servicios/${id}`)
         .bearerToken(token)

@@ -60,7 +60,11 @@ export class AlmacenMemoria implements Almacen {
         return this.servicios.get(id) ?? null
     }
 
-    async sesionesActivas(id: number) {
+    /** Opciones con las que se pidió cada lista de sesiones (filtro de credenciales). */
+    readonly pedidas: Array<{ servicio_id: number; antesDelEvento?: string }> = []
+
+    async sesionesActivas(id: number, opciones: { antesDelEvento?: string } = {}) {
+        this.pedidas.push({ servicio_id: id, ...opciones })
         return this.sesiones.get(id) ?? []
     }
 

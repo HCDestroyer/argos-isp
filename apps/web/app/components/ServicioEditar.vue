@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Edición de un servicio desde su ficha (`PUT /servicios/:id`, `servicios.editar`, con
  * `version`): plan del mismo router, tipo de conexión PPPoE / IP estática / DHCP fija, MAC,
- * amarre IP-MAC, modo IPv6, ubicación y contacto en sitio (pedidos A12–A14 de Iris), instalación y
- * precio especial. Solo viaja lo que cambió; los 422 se muestran junto a cada campo (el teléfono con
- * `rule: 'telefono'`) y el 409 ofrece recargar.
+ * amarre IP-MAC, modo IPv6, IPv4 fija, contraseña PPPoE, ubicación y contacto en sitio (pedidos
+ * A12–A14 de Iris), instalación y precio especial. Solo viaja lo que cambió; los 422 se muestran
+ * junto a cada campo (el teléfono con `rule: 'telefono'`); los 409 de IP, prefijo o usuario PPPoE
+ * (`ip_ocupada`, `ip_en_sesion`, `prefijo_ocupado`, `prefijo_en_sesion`, `user_ppp_duplicado`,
+ * `user_ppp_en_sesion`; `conflictoEnCampo`) en su campo, y el 409 de versión ofrece recargar.
+ *
+ * IPv4: se cambia con el mismo selector del alta (`ServicioIpv4Fija`); en PPPoE además se quita
+ * («usar el pool», `ipv4: null`). Credenciales de un PPPoE (`servicios.editar`, el permiso de la
+ * ruta): usuario (409 `user_ppp_duplicado` en el campo) y contraseña. Cambiarlas desconecta la sesión
+ * (A2: Disconnect con RADIUS; en un router `api`, secret reescrito y sesión quitada) y el cliente
+ * vuelve a conectarse con las nuevas.
+ *
+ * Tipo de conexión (`contratos/tipo-conexion-router.md`): lo define el router y aquí no se elige.
+ * Si el servicio difiere del tipo de su router (dato anterior a la regla), se ofrece pasarlo a ese.
  *
  * En un router sin RADIUS (`modo_seguridad = 'api'`) PPPoE va como secret local en el MikroTik
  * (`contratos/pppoe-local.md`), con su ayuda. Si el router no tiene credenciales de la API, pasar a
@@ -28,7 +39,7 @@ const toast = useToast()
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaEdicionServicio>(entradaEdicionDesde(props.servicio))
 /** El teléfono guardado no se valida si no cambió (puede ser un dato viejo con otro formato). */
-const esquema = computed(() => esquemaEdicionServicioPara(props.servicio))
+const esquema = computed(() => esquemaEdicionServicioPara(props.servicio, redes.value))
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 const planes = shallowRef<PlanEfectivo[]>([])
@@ -36,6 +47,9 @@ const planes = shallowRef<PlanEfectivo[]>([])
 const routerServicio = shallowRef<RouterNas | null>(null)
 /** Servidores PPPoE del router (`red_acceso.ver`); vacío = router sin servidores. */
 const servidores = shallowRef<ServidorPppoe[]>([])
+/** Redes IPv4 del router (`redes.ver`), para elegir la IP nueva; sin permiso se escribe la IP sola. */
+const redes = shallowRef<RedIpv4[]>([])
+const claveVisible = ref(false)
 
 watch(abierto, async (valor) => {
     if (!valor) {
@@ -43,14 +57,17 @@ watch(abierto, async (valor) => {
     }
     Object.assign(estado, entradaEdicionDesde(props.servicio))
     problema.value = null
-    const [resultadoPlanes, resultadoRouter, resultadoServidores] = await Promise.all([
+    claveVisible.value = false
+    const [resultadoPlanes, resultadoRouter, resultadoServidores, resultadoRedes] = await Promise.all([
         puede('planes.ver') ? useRouters().planes(props.servicio.router_id) : null,
         puede('routers.ver') ? useRouters().ver(props.servicio.router_id) : null,
         puede('red_acceso.ver') ? useRedAcceso().servidores(props.servicio.router_id) : null,
+        puede('redes.ver') ? useRouters().redesIpv4(props.servicio.router_id) : null,
     ])
     planes.value = resultadoPlanes?.ok ? resultadoPlanes.data : []
     routerServicio.value = resultadoRouter?.ok ? resultadoRouter.data : null
     servidores.value = resultadoServidores?.ok ? resultadoServidores.data : []
+    redes.value = resultadoRedes?.ok ? resultadoRedes.data : []
 }, { immediate: true })
 
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
@@ -62,11 +79,16 @@ const routerSinRadius = computed(() => esSinRadius(routerServicio.value))
 const faltanCredencialesApi = computed(() => conPppoe.value && pppoeSinCredencialesApi(routerServicio.value))
 const credencialesRechazadas = computed(() => esPppoeLocalRequiereApi(problema.value))
 
-const itemsTipo = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: tipo === 'pppoe' && routerSinRadius.value ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[tipo].descripcion,
-})))
+/** El tipo del router (sin `routers.ver` no se sabe y no se ofrece unificar). */
+const tipoRouter = computed<TipoConexion | null>(() => routerServicio.value?.tipo_conexion ?? null)
+/** El servicio no usa el tipo de su router: se puede pasar a él (unificar este servicio). */
+const difiereDelRouter = computed(() => tipoRouter.value !== null && tipoRouter.value !== tipoConexionDe(props.servicio))
+const pasarAlRouter = computed({
+    get: () => tipoRouter.value !== null && estado.tipo_conexion === tipoRouter.value && difiereDelRouter.value,
+    set: (valor: boolean) => {
+        estado.tipo_conexion = valor && tipoRouter.value ? tipoRouter.value : tipoConexionDe(props.servicio)
+    },
+})
 
 const itemsPlan = computed<SelectItem[]>(() => {
     const lista = planes.value.filter(p => p.activo || p.id === props.servicio.plan_id)
@@ -109,6 +131,65 @@ const sinCambioServidor = computed(() => estado.servidor_pppoe_id === (props.ser
 const gatewayServicio = computed(() => (sinCambioServidor.value ? props.servicio.local_address : servidorElegido.value?.local_address) ?? null)
 const gatewayDerivado = computed(() => Boolean(sinCambioServidor.value ? props.servicio.local_address_derivado : servidorElegido.value?.local_address_derivado))
 
+/*
+ * IPv4 fija: el plan solo IPv6 no lleva IPv4. Sin PPPoE es obligatoria (se cambia, no se quita);
+ * en PPPoE sin IP fija la entrega el pool del router.
+ */
+const planElegido = computed(() => planes.value.find(p => p.id === estado.plan_id) ?? null)
+const conIpv4 = computed(() => planElegido.value?.dual_stack !== 'v6')
+const textoIpv4Actual = computed(() => props.servicio.ipv4 ?? (eraPppoe.value ? 'Sin IP fija: la entrega el pool del router' : 'Sin IPv4'))
+
+/** La red de la IP actual (o la única del router), para empezar a escribir la nueva en ella. */
+function redSugerida(): number | undefined {
+    const actual = props.servicio.ipv4
+    return (actual ? redes.value.find(r => ipEnCidr(actual, r.cidr))?.id : undefined)
+        ?? (redes.value.length === 1 ? redes.value[0]?.id : undefined)
+}
+
+function cambiarIpv4() {
+    estado.quitar_ipv4 = false
+    estado.cambiar_ipv4 = true
+    estado.ipv4 = ''
+    estado.red_id = redSugerida()
+}
+
+// Las redes pueden llegar después de pulsar «Cambiar IP».
+watch(redes, () => {
+    if (estado.cambiar_ipv4 && estado.red_id === undefined) {
+        estado.red_id = redSugerida()
+    }
+})
+
+function mantenerIpv4() {
+    estado.cambiar_ipv4 = false
+    estado.red_id = undefined
+    estado.ipv4 = props.servicio.ipv4 ?? ''
+    formulario.value?.clear('ipv4')
+    formulario.value?.clear('red_id')
+}
+
+/** «Quitar IP fija (usar el pool)»: solo PPPoE con IP fija (`ipv4: null`). */
+const puedeQuitarIpv4 = computed(() => conPppoe.value && eraPppoe.value && Boolean(props.servicio.ipv4))
+
+function quitarIpv4() {
+    mantenerIpv4()
+    estado.quitar_ipv4 = true
+}
+
+function deshacerQuitarIpv4() {
+    estado.quitar_ipv4 = false
+    formulario.value?.clear('ipv4')
+}
+
+/** Credenciales PPPoE: solo un PPPoE que sigue siéndolo; al pasar a PPPoE las genera la API. */
+const editaClave = computed(() => eraPppoe.value && conPppoe.value && puede('servicios.editar'))
+const cambianCredenciales = computed(() => estado.pass_ppp !== '' || (estado.user_ppp.trim() !== '' && estado.user_ppp.trim() !== (props.servicio.user_ppp ?? '')))
+
+function generarClave() {
+    estado.pass_ppp = generarClavePpp()
+    claveVisible.value = true
+}
+
 /** Qué pasa con las credenciales al cambiar el tipo. */
 const avisoTipo = computed(() => {
     if (eraPppoe.value && !conPppoe.value) {
@@ -137,6 +218,12 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
         avisarAdvertencias(toast, resultado.data.warnings, 'Servicio guardado con advertencias')
         return
     }
+    // 409 que no son de versión (IP, prefijo o usuario de otro servicio o de una sesión abierta): en su campo.
+    const enCampo = conflictoEnCampo(resultado.problema)
+    if (enCampo) {
+        formulario.value?.setErrors([enCampo])
+        return
+    }
     const errores = erroresDeFormulario(resultado.problema)
     if (errores.length) {
         formulario.value?.setErrors(errores)
@@ -147,14 +234,34 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
     }
 }
 
+const recargando = ref(false)
+
+/** 409 de versión: se lee el servicio otra vez y el formulario vuelve a lo guardado. */
 async function recargar() {
+    recargando.value = true
     const resultado = await useServicios().ver(props.servicio.id)
-    if (resultado.ok) {
-        emit('guardado', resultado.data)
-        Object.assign(estado, entradaEdicionDesde(resultado.data))
-        problema.value = null
+    recargando.value = false
+    if (!resultado.ok) {
+        problema.value = resultado.problema
+        return
     }
+    emit('guardado', resultado.data)
+    Object.assign(estado, entradaEdicionDesde(resultado.data))
+    problema.value = null
 }
+
+/** Falla de red o del servidor: se envía de nuevo lo mismo. */
+function reenviar() {
+    void formulario.value?.submit()
+}
+
+const accionProblema = computed(() => {
+    const status = problema.value?.status ?? 0
+    if (status === 409) {
+        return { accion: recargar, etiqueta: 'Recargar' }
+    }
+    return status >= 500 || status === 0 ? { accion: reenviar, etiqueta: 'Reintentar' } : null
+})
 </script>
 
 <template>
@@ -191,15 +298,33 @@ async function recargar() {
                 <UFormField
                     name="tipo_conexion"
                     label="Tipo de conexión"
+                    :help="difiereDelRouter ? undefined : 'Lo define el router: se cambia en su ficha, para todos sus servicios.'"
                 >
-                    <URadioGroup
-                        v-model="estado.tipo_conexion"
-                        :items="itemsTipo"
-                        variant="card"
-                        class="w-full"
-                        :ui="{ fieldset: 'grid gap-2' }"
+                    <div
+                        class="flex flex-col gap-3 rounded-md border border-default p-3"
                         data-prueba="editar-tipo-conexion"
-                    />
+                    >
+                        <div class="flex items-start gap-3">
+                            <UIcon
+                                :name="TIPOS_CONEXION[estado.tipo_conexion].icono"
+                                class="mt-0.5 size-5 shrink-0 text-primary"
+                            />
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span
+                                    class="text-sm font-medium text-highlighted"
+                                    data-prueba="editar-tipo-actual"
+                                >{{ TIPOS_CONEXION[estado.tipo_conexion].etiqueta }}</span>
+                                <span class="text-xs text-muted">{{ estado.tipo_conexion === 'pppoe' && routerSinRadius ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[estado.tipo_conexion].descripcion }}</span>
+                            </div>
+                        </div>
+                        <UCheckbox
+                            v-if="difiereDelRouter && tipoRouter"
+                            v-model="pasarAlRouter"
+                            :label="`Pasar a ${TIPOS_CONEXION[tipoRouter].etiqueta}, el tipo de ${nombreRouter(servicio)}`"
+                            description="Este servicio es de antes de que el tipo fuera uno por router: los demás servicios del router ya lo usan."
+                            data-prueba="editar-pasar-tipo-router"
+                        />
+                    </div>
                 </UFormField>
                 <UAlert
                     v-if="avisoTipo"
@@ -238,6 +363,152 @@ async function recargar() {
                         Gateway (local-address): <span class="font-mono text-default">{{ gatewayServicio ?? 'sale de la red del servidor' }}</span><span v-if="gatewayServicio && gatewayDerivado">, {{ MARCA_GATEWAY_DERIVADO }}</span>
                     </p>
                 </UFormField>
+
+                <section
+                    v-if="conIpv4"
+                    class="flex flex-col gap-3"
+                    data-prueba="editar-ipv4"
+                >
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex min-w-0 flex-col gap-0.5">
+                            <span class="text-sm font-medium text-highlighted">IPv4</span>
+                            <span
+                                class="break-all text-sm text-muted"
+                                :class="{ 'font-mono': servicio.ipv4 }"
+                                data-prueba="editar-ipv4-actual"
+                            >{{ estado.cambiar_ipv4 ? `Actual: ${textoIpv4Actual}` : textoIpv4Actual }}</span>
+                        </div>
+                        <div
+                            v-if="!estado.cambiar_ipv4 && !estado.quitar_ipv4"
+                            class="flex flex-wrap gap-2"
+                        >
+                            <UButton
+                                v-if="puedeQuitarIpv4"
+                                label="Quitar IP fija (usar el pool)"
+                                icon="i-lucide-circle-minus"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                data-prueba="editar-quitar-ipv4"
+                                @click="quitarIpv4"
+                            />
+                            <UButton
+                                label="Cambiar IP"
+                                icon="i-lucide-pencil"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                data-prueba="editar-cambiar-ipv4"
+                                @click="cambiarIpv4"
+                            />
+                        </div>
+                        <UButton
+                            v-else-if="estado.quitar_ipv4"
+                            label="Mantener la IP fija"
+                            icon="i-lucide-undo-2"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            data-prueba="editar-mantener-ipv4"
+                            @click="deshacerQuitarIpv4"
+                        />
+                        <UButton
+                            v-else
+                            label="Mantener la actual"
+                            icon="i-lucide-undo-2"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            data-prueba="editar-mantener-ipv4"
+                            @click="mantenerIpv4"
+                        />
+                    </div>
+                    <ServicioIpv4Fija
+                        v-if="estado.cambiar_ipv4"
+                        v-model:red-id="estado.red_id"
+                        v-model:ipv4="estado.ipv4"
+                        :redes="redes"
+                        :exigir-red="redes.length > 0"
+                    />
+                    <UFormField
+                        v-if="estado.quitar_ipv4"
+                        name="ipv4"
+                    >
+                        <UAlert
+                            color="neutral"
+                            variant="subtle"
+                            icon="i-lucide-info"
+                            :description="`Al guardar se libera ${servicio.ipv4} y el servicio toma su IP del pool del router en la próxima conexión.`"
+                            data-prueba="aviso-quitar-ipv4"
+                        />
+                    </UFormField>
+                    <p
+                        v-if="estado.cambiar_ipv4 && !conPppoe"
+                        class="text-xs text-muted"
+                    >
+                        {{ TIPOS_CONEXION[estado.tipo_conexion].etiqueta }}: la IPv4 es obligatoria; se cambia, no se quita.
+                    </p>
+                </section>
+
+                <section
+                    v-if="editaClave"
+                    class="flex flex-col gap-3"
+                    data-prueba="editar-credenciales"
+                >
+                    <span class="text-sm font-medium text-highlighted">Credenciales PPPoE</span>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <UFormField
+                            name="user_ppp"
+                            label="Usuario PPPoE"
+                            help="Letras, números, punto, guion, guion bajo o @."
+                        >
+                            <UInput
+                                v-model="estado.user_ppp"
+                                autocomplete="off"
+                                class="w-full font-mono"
+                                data-prueba="editar-user-ppp"
+                            />
+                        </UFormField>
+                        <UFormField
+                            name="pass_ppp"
+                            label="Contraseña nueva"
+                            help="Vacía: se queda la que tiene."
+                        >
+                            <UFieldGroup class="w-full">
+                                <UInput
+                                    v-model="estado.pass_ppp"
+                                    :type="claveVisible ? 'text' : 'password'"
+                                    autocomplete="new-password"
+                                    class="w-full font-mono"
+                                    data-prueba="editar-pass-ppp"
+                                />
+                                <UButton
+                                    :icon="claveVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                                    color="neutral"
+                                    variant="outline"
+                                    :aria-label="claveVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                                    @click="claveVisible = !claveVisible"
+                                />
+                                <UButton
+                                    icon="i-lucide-refresh-cw"
+                                    color="neutral"
+                                    variant="outline"
+                                    aria-label="Generar contraseña"
+                                    data-prueba="editar-generar-pass"
+                                    @click="generarClave"
+                                />
+                            </UFieldGroup>
+                        </UFormField>
+                    </div>
+                    <UAlert
+                        v-if="cambianCredenciales"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-triangle-alert"
+                        description="Al guardar, el cliente se desconecta y vuelve a conectarse con el usuario y la contraseña nuevos."
+                        data-prueba="aviso-clave"
+                    />
+                </section>
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <UFormField
@@ -415,7 +686,9 @@ async function recargar() {
                 <ProblemaAlerta
                     v-else-if="problema"
                     :problema="problema"
-                    :reintentar="problema.status === 409 ? recargar : undefined"
+                    :reintentar="accionProblema?.accion"
+                    :etiqueta-reintentar="accionProblema?.etiqueta"
+                    :reintentando="recargando || enviando"
                     data-prueba="editar-servicio-error"
                 />
             </UForm>

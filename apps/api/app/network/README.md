@@ -91,17 +91,25 @@ Pedido del PM (5 nov): un servidor PPPoE por VLAN, una o dos VLAN por puerto PON
 
 Decisión del PM (5 nov): no hay excepciones de estrategia por plan nuevas (`POST /planes/:id/routers/:routerId/estrategia-velocidad` y `planes[]` de la vista previa solo aceptan `null`; un objeto → 422 `estrategia_por_router`). Las que existen siguen aplicándose hasta `routers.unificar_control_velocidad` (`POST /routers/:id/unificar-control-velocidad`, solo admin), con la vista previa `GET /routers/:id/vista-previa-unificar-velocidad` (`consultas/unificar_velocidad.ts`): qué planes, qué capas cambian y cuántas sesiones reconectan. Emite un `router.estrategia_cambiada` por plan con `motivo: 'unificar'`.
 
+## Tipo de conexión por router (`tipo_conexion_router.ts`, `contratos/tipo-conexion-router.md`)
+
+Decisión del PM (5 nov): `network.routers.tipo_conexion` (`pppoe` por defecto) define el tipo de todos sus servicios. El alta toma el del router (otro: 422 `tipo_conexion_del_router`); mover un servicio de router adopta el del destino. `PUT /routers/:id` lo cambia solo sin servicios que cambien (422 `tipo_conexion_con_servicios`). Con servicios: `GET /routers/:id/vista-previa-tipo-conexion?tipo=` (qué cambia, qué falta, `difiere_del_router`) y `routers.cambiar_tipo_conexion` (`POST /routers/:id/cambiar-tipo-conexion`), que pasa cada servicio por `servicios.editar` (diff y `servicio.config_cambiada` con `tipo_conexion`) y emite `router.tipo_conexion_cambiado` (`cambio`, `unificar` o `edicion`). Los servicios anteriores que difieren se quedan como están hasta unificarlos.
+
 ## IPAM IPv4 (`ipam_v4.ts`)
 
 - `asignarIpv4(trx, { servicioId, routerId, ip?, redId? })`: la IP pedida (debe estar en una red del router, no ser red/broadcast/gateway y estar libre: 422/409) o la primera libre, prefiriendo redes `estatico` sobre `pool`. Con `redId`, solo de esa red: 422 en `red_ipv4_id` si no es del router o está llena (`rule: llena`), y 422 en `ipv4` si la IP pedida no es de esa red. Advisory lock por router.
 - `liberarIpv4(trx, servicioId)`: cierra la asignación vigente (`fin = now()`); el historial queda en `network.ipv4_asignaciones`.
+- **Unicidad en la base** (5 nov, «reúso a prueba de bugs»): `ipv4_asignaciones_ip_vigente` (una IP vigente, un servicio) y `ipv4_asignaciones_servicio_vigente` (un servicio, a lo sumo una IPv4 vigente). Si una carrera se salta el lock, el 23505 sale como 409 `ip_ocupada` (`app/exceptions/handler.ts`).
+- **Cuarentena sin TTL**: una IP liberada no se entrega a otro servicio mientras haya una sesión abierta (`network.sesiones.fin IS NULL`) con esa IPv4: a mano 409 `ip_en_sesion`, en la automática se salta. Queda libre en cuanto la sesión se cierra (Stop, Disconnect o `sesiones.cerrar_colgadas`). Las sesiones del propio servicio no cuentan (puede volver a su IP). Motivo: el NAS no cerró todavía la sesión vieja y dos clientes quedarían con la misma IP; un plazo fijo («N minutos») no garantiza nada y sería un TTL.
 - Redes: no se traslapan (409 `red_traslapada`), el CIDR debe venir normalizado y el gateway dentro de la red.
 
 ## IPAM IPv6 (`ipam_v6.ts`, `ipv6.ts`)
 
 - Bloques por router (`/routers/:id/ipv6-bloques`) y pools dentro del bloque (`/ipv6-bloques/:id/pools`): `enlace` entrega /64, `delegacion` /56 o /48. Prefijos normalizados y sin traslapes.
 - `reservarPrefijo(trx, { servicioId, routerId, tipo, tamano })`: conserva el vigente si sigue en un pool válido del router; si no, recupera el anterior del servicio en ese pool si está libre; si no, el primer subprefijo libre (saltando cualquier vigente que se traslape). Advisory lock por pool.
-- `asignarPrefijoEstatico` (modo `estatico`) y `liberarPrefijos` (retiro, cambio de modo). Historial en `network.ipv6_asignaciones`.
+- `asignarPrefijoEstatico` (modo `estatico`) y `liberarPrefijos` (retiro, cambio de modo). Historial en `network.ipv6_asignaciones`. El estático toma un advisory lock global de estáticos y el de cada pool que toca (antes no tomaba ninguno: dos estáticos que se traslapaban entraban a la vez).
+- **Sin traslapes en la base**: `ipv6_asignaciones_sin_traslape` (EXCLUDE gist `prefijo &&` entre vigentes); 23P01 → 409 `prefijo_ocupado`. Misma cuarentena que IPv4: un prefijo de una sesión abierta de otro servicio no se entrega (estático: 409 `prefijo_en_sesion`).
+- Migración `1793922389658_create_network_reuso_restricciones_table`: revisa los datos antes; si hay servicios con dos IPv4 vigentes o prefijos vigentes traslapados, falla con la lista (no borra nada). Consultas para detectarlos en su comentario.
 
 ## Pools editables, ocupación y migración (`contratos/pools.md`)
 

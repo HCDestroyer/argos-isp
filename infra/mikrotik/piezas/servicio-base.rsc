@@ -21,6 +21,18 @@
 # ============================================================================
 # 3. DNS del router (los clientes PPP usan pppLocalV4 como DNS)
 # ============================================================================
+# Bug v1.9.0 (5 nov): el script dejaba como DNS del router las IPs de documentacion del ejemplo y el
+# router no resolvia nada (el suspendido veia "sin internet"). Ahora se rechazan y el script se detiene.
+:foreach d in=($dnsV4, $dnsV6) do={
+    :local doc false
+    :if ([:typeof [:toip $d]] = "ip") do={
+        :if (([:toip $d] in 192.0.2.0/24) || ([:toip $d] in 198.51.100.0/24) || ([:toip $d] in 203.0.113.0/24)) do={ :set doc true }
+    }
+    :if ([:typeof [:toip6 $d]] = "ip6") do={
+        :if ([:toip6 $d] in 2001:db8::/32) do={ :set doc true }
+    }
+    :if ($doc) do={ :error ("argosisp: " . $d . " es una IP de documentacion, no un DNS real: pon los DNS de tu proveedor en dnsV4/dnsV6 (o dejalos vacios para usar los del router)") }
+}
 # Con dnsV4 vacio NO se tocan los resolutores del router (servers): se quedan los que ya tiene, mas los
 # dinamicos de la WAN (dynamic-servers). allow-remote-requests=yes siempre, porque clientes y corte
 # usan el router como DNS; la seccion 8 lo cierra desde la WAN (argosisp:top DNS del router ...).

@@ -11,6 +11,7 @@ import {
     crearServicioFila,
     ipUnica,
     redUnica,
+    routerConTipo,
 } from '#tests/core/fabricas'
 
 /**
@@ -248,6 +249,8 @@ test.group('Routers sin RADIUS · alta y edición', () => {
         const planId = await crearPlanFila()
         const pppoe = await crearServicioFila({ cliente_id: clienteId, router_id: id, plan_id: planId })
         await crearServicioFila({ cliente_id: clienteId, router_id: id, plan_id: planId, estado: 'retirado' })
+        // un servicio que difiere del router (dato anterior a `contratos/tipo-conexion-router.md`)
+        await routerConTipo(id, 'ip_estatica')
         await estado(
             crearServicio(client, token, {
                 cliente_id: clienteId,
@@ -426,11 +429,14 @@ test.group('Routers sin RADIUS · servicios', () => {
         const pppoe = await estado(crearServicio(client, token, base), 201)
         assert.equal(pppoe.body().tipo_conexion, 'pppoe')
 
+        // el tipo lo define el router (`contratos/tipo-conexion-router.md`)
+        await routerConTipo(routerId, 'ip_estatica')
         const estatica = await estado(
             crearServicio(client, token, { ...base, tipo_conexion: 'ip_estatica' }),
             201,
         )
         assert.equal(estatica.body().tipo_conexion, 'ip_estatica')
+        await routerConTipo(routerId, 'dhcp_fija')
         await estado(
             crearServicio(client, token, { ...base, tipo_conexion: 'dhcp_fija', mac: 'AA:BB:CC:00:11:33' }),
             201,
@@ -462,18 +468,19 @@ test.group('Routers sin RADIUS · servicios', () => {
         )
         assert.equal(codigo(r), 'pppoe_local_requiere_api')
 
-        // moverlo cambiando a ip_estatica en la misma edición sí se puede
+        // a un router api de ip_estatica sí: adopta su tipo (`contratos/tipo-conexion-router.md`)
+        await routerConTipo(api.routerId, 'ip_estatica')
         r = await estado(
             client.put(`/api/v1/servicios/${pppoe.body().id}`).bearerToken(token).json({
                 version: pppoe.body().version,
                 router_id: api.routerId,
-                tipo_conexion: 'ip_estatica',
             }),
             200,
         )
         assert.containsSubset(r.body(), { router_id: api.routerId, tipo_conexion: 'ip_estatica' })
 
-        // y de vuelta a pppoe en el router api: 422 sin credenciales, 200 con ellas (secret local)
+        // y de vuelta a pppoe cuando el router api pasa a pppoe: 422 sin credenciales, 200 con ellas
+        await routerConTipo(api.routerId, 'pppoe')
         const r2 = await estado(
             client
                 .put(`/api/v1/servicios/${pppoe.body().id}`)

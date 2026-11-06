@@ -78,7 +78,7 @@ const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 const pasos = computed<Paso[]>(() => [
     ...(clienteFijo.value ? [] : [{ id: 'cliente' as const, title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] as (keyof EntradaServicio)[] }]),
-    { id: 'conexion', title: 'Conexión', description: 'Router, plan y tipo', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
+    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
     {
         id: 'red',
         title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
@@ -180,13 +180,15 @@ const nacePendiente = computed({
 
 /** El esquema base más la regla que necesita las redes cargadas: la IP fija cae en la red elegida. */
 const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
-    const elegida = redes.value.find(r => r.id === datos.red_id)
-    if (datos.asignacion === 'fija' && elegida && PATRON_IPV4.test(datos.ipv4) && !ipEnCidr(datos.ipv4, elegida.cidr)) {
-        ctx.addIssue({ code: 'custom', path: ['ipv4'], message: `Escribe una IP dentro de ${elegida.cidr} o elige otra red` })
+    // El formato y la red ya los revisa `esquemaServicio`; aquí, que la IP caiga en la red elegida.
+    if (datos.asignacion === 'fija' && PATRON_IPV4.test(datos.ipv4)) {
+        for (const { campo, mensaje } of problemasIpv4Fija(datos, { exigirRed: false, redes: redes.value })) {
+            ctx.addIssue({ code: 'custom', path: [campo], message: mensaje })
+        }
     }
     const elegido = planes.value.find(p => p.id === datos.plan_id)
     if (datos.tipo_conexion !== 'pppoe' && elegido?.dual_stack === 'v6') {
-        ctx.addIssue({ code: 'custom', path: ['tipo_conexion'], message: 'El plan es solo IPv6: elige PPPoE u otro plan con IPv4' })
+        ctx.addIssue({ code: 'custom', path: ['plan_id'], message: `El plan es solo IPv6 y ${TIPOS_CONEXION[datos.tipo_conexion].etiqueta} necesita IPv4: elige otro plan` })
     }
     // Espejo de `exigirPppoeAdmitido` (A2): 422 `pppoe_local_requiere_api` en `router_id`.
     const elegidoRouter = routers.value.find(r => r.id === datos.router_id)
@@ -195,11 +197,10 @@ const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
     }
 }))
 
-const itemsTipoConexion = computed<RadioGroupItem[]>(() => (Object.keys(TIPOS_CONEXION) as TipoConexion[]).map(tipo => ({
-    label: TIPOS_CONEXION[tipo].etiqueta,
-    value: tipo,
-    description: tipo === 'pppoe' && routerSinRadius.value ? AYUDA_PPPOE_SIN_RADIUS : TIPOS_CONEXION[tipo].descripcion,
-})))
+/** El tipo lo define el router (`contratos/tipo-conexion-router.md`): el servicio lo toma, no se elige. */
+watch([() => estado.router_id, () => router.value?.tipo_conexion], () => {
+    estado.tipo_conexion = router.value?.tipo_conexion ?? 'pppoe'
+}, { immediate: true })
 
 const itemsRouter = computed<RadioGroupItem[]>(() => routers.value.map(r => ({
     label: r.nombre,
@@ -222,17 +223,11 @@ const itemsAsignacion: RadioGroupItem[] = [
     { label: 'IP fija', value: 'fija', description: 'Para IP pública o reglas por IP: la escribes tú.' },
 ]
 
-function etiquetaRed(r: RedIpv4): string {
-    return `${r.cidr} · ${r.tipo === 'pool' ? 'pool' : 'estática'}`
-}
-
-const itemsRed = computed<SelectItem[]>(() => redes.value.map(r => ({ label: etiquetaRed(r), value: r.id })))
-
 /** Asignación automática: red opcional (`red_ipv4_id`); "cualquiera" = la API elige. */
 const CUALQUIER_RED = 'cualquiera'
 const itemsRedAutomatica = computed<SelectItem[]>(() => [
     { label: 'Cualquier red del router', value: CUALQUIER_RED },
-    ...redes.value.map(r => ({ label: etiquetaRed(r), value: String(r.id) })),
+    ...redes.value.map(r => ({ label: etiquetaRedIpv4(r), value: String(r.id) })),
 ])
 const redAutomatica = computed({
     get: () => (estado.red_id === undefined ? CUALQUIER_RED : String(estado.red_id)),
@@ -468,6 +463,14 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
         emit('creado', resultado.data)
         return
     }
+    // 409 de IP, prefijo o usuario PPPoE (de otro servicio o de una sesión abierta): en su campo.
+    const enCampo = conflictoEnCampo(resultado.problema)
+    if (enCampo) {
+        problema.value = null
+        formulario.value?.setErrors([enCampo])
+        paso.value = pasoDeCampo(enCampo.name)
+        return
+    }
     problema.value = resultado.problema
     if (resultado.problema.status === 422) {
         const errores = erroresDeFormulario(resultado.problema)
@@ -643,19 +646,24 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         :router-id="estado.router_id || null"
                     />
                     <UFormField
+                        v-if="router"
                         name="tipo_conexion"
                         label="Tipo de conexión"
-                        :help="routerSinRadius ? (conPppoe ? AYUDA_PPPOE_SIN_RADIUS : 'Sin PPPoE el router identifica al cliente por su IP (y su MAC con DHCP fija).') : 'PPPoE es lo habitual. Sin PPPoE el router identifica al cliente por su IP.'"
-                        required
+                        :help="routerSinRadius && conPppoe ? AYUDA_PPPOE_SIN_RADIUS : 'Lo define el router: todos sus servicios lo usan. Se cambia en la ficha del router.'"
                     >
-                        <URadioGroup
-                            v-model="estado.tipo_conexion"
-                            :items="itemsTipoConexion"
-                            variant="card"
-                            class="w-full"
-                            :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-3' }"
+                        <div
+                            class="flex items-start gap-3 rounded-md border border-default p-3"
                             data-prueba="tipo-conexion"
-                        />
+                        >
+                            <UIcon
+                                :name="TIPOS_CONEXION[estado.tipo_conexion].icono"
+                                class="mt-0.5 size-5 shrink-0 text-primary"
+                            />
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span class="text-sm font-medium text-highlighted">{{ TIPOS_CONEXION[estado.tipo_conexion].etiqueta }}</span>
+                                <span class="text-xs text-muted">{{ TIPOS_CONEXION[estado.tipo_conexion].descripcion }}</span>
+                            </div>
+                        </div>
                     </UFormField>
 
                     <UFormField
@@ -746,37 +754,12 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             />
                         </UFormField>
 
-                        <div
+                        <ServicioIpv4Fija
                             v-if="estado.asignacion === 'fija'"
-                            class="grid gap-4 sm:grid-cols-2"
-                        >
-                            <UFormField
-                                name="red_id"
-                                label="Red"
-                                help="La red del router a la que pertenece la IP."
-                                required
-                            >
-                                <USelect
-                                    v-model="estado.red_id"
-                                    :items="itemsRed"
-                                    placeholder="Elige la red"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField
-                                name="ipv4"
-                                label="IP fija"
-                                :help="red ? `Dentro de ${red.cidr}.` : 'Elige primero la red.'"
-                                required
-                            >
-                                <UInput
-                                    v-model="estado.ipv4"
-                                    inputmode="decimal"
-                                    placeholder="100.64.10.50"
-                                    class="w-full font-mono"
-                                />
-                            </UFormField>
-                        </div>
+                            v-model:red-id="estado.red_id"
+                            v-model:ipv4="estado.ipv4"
+                            :redes="redes"
+                        />
 
                         <div
                             v-else
@@ -802,7 +785,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                                 <UBadge
                                     v-for="r in redes"
                                     :key="r.id"
-                                    :label="etiquetaRed(r)"
+                                    :label="etiquetaRedIpv4(r)"
                                     color="neutral"
                                     variant="outline"
                                     class="font-mono"

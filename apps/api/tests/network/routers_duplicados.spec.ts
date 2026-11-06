@@ -9,6 +9,7 @@ import {
     crearPlanFila,
     crearRouterFila,
     ipUnica,
+    routerConTipo,
 } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
 import { clienteDeRouter } from '#network/routeros/router'
@@ -401,6 +402,7 @@ test.group('Routers duplicados · unir', (group) => {
 
     async function crearServicio(client: any, routerId: number, planId: number) {
         const requestId = unico('req')
+        await routerConTipo(routerId, 'ip_estatica')
         const r = await estado(
             client
                 .post('/api/v1/servicios')

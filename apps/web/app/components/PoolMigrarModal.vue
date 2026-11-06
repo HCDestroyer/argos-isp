@@ -7,7 +7,9 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
  * (`POST /ipv6-bloques/:id/migrar`, `ipv6.migrar`) a otro router. Primero se simula (`simular: true`)
  * y se muestran los servicios afectados con sus direcciones antes y después; luego se confirma. Un
  * servicio nunca queda en otro router que sus direcciones: con servicios hay que marcar «Mover
- * también los servicios» (si no, 422 `pool_con_servicios` con la lista).
+ * también los servicios» (si no, 422 `pool_con_servicios` con la lista). Los servicios que se mueven
+ * toman el tipo de conexión del router de destino (`contratos/tipo-conexion-router.md` §2): se avisa
+ * si es otro que el del router de origen.
  */
 const props = defineProps<{
     tipo: 'red' | 'bloque'
@@ -48,6 +50,7 @@ watch(abierto, async (valor) => {
     problema.value = null
     const resultado = await useRouters().listar({ activo: true })
     routers.value = resultado.ok ? resultado.data.data.filter(r => r.id !== props.entidad.router_id) : []
+    tipoOrigen.value = resultado.ok ? (resultado.data.data.find(r => r.id === props.entidad.router_id)?.tipo_conexion ?? null) : null
     if (!resultado.ok) {
         problema.value = resultado.problema
     }
@@ -61,7 +64,20 @@ watch([destino, moverServicios, junto], () => {
 
 const itemsRouter = computed<SelectItem[]>(() => routers.value.map(r => ({ label: r.nombre, value: r.id, description: r.host })))
 const itemsJunto = computed(() => props.acompanantes.map(a => ({ label: 'cidr' in a ? `Red ${a.cidr}` : `Bloque ${a.prefijo}`, value: a.id })))
-const nombreDestino = computed(() => routers.value.find(r => r.id === destino.value)?.nombre ?? '')
+const routerDestino = computed(() => routers.value.find(r => r.id === destino.value) ?? null)
+const nombreDestino = computed(() => routerDestino.value?.nombre ?? '')
+/** El router de origen (viene en la lista completa; sin él no se puede comparar y no se avisa). */
+const tipoOrigen = ref<TipoConexion | null>(null)
+const avisoTipo = computed(() => {
+    const tipoDestino = routerDestino.value?.tipo_conexion
+    if (!moverServicios.value || !tipoDestino || !tipoOrigen.value || tipoDestino === tipoOrigen.value) {
+        return null
+    }
+    const extra = tipoDestino === 'pppoe'
+        ? 'A cada uno se le generan usuario y contraseña PPPoE.'
+        : tipoDestino === 'dhcp_fija' ? 'DHCP fija necesita la MAC de cada equipo: sin ella no se mueve.' : 'Dejan de usar usuario y contraseña PPPoE.'
+    return `${nombreDestino.value} es ${TIPOS_CONEXION[tipoDestino].etiqueta} y los servicios toman el tipo del router al que pasan. ${extra}`
+})
 
 function cuerpo(simular: boolean) {
     const base = { version: props.entidad.version, router_id: destino.value ?? 0, mover_servicios: moverServicios.value, simular }
@@ -164,6 +180,15 @@ function direcciones(d: FilaServicio['antes']): string[] {
                     />
                 </UFormField>
 
+                <UAlert
+                    v-if="avisoTipo"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-cable"
+                    title="Los servicios cambian de tipo de conexión"
+                    :description="avisoTipo"
+                    data-prueba="migrar-aviso-tipo"
+                />
                 <ProblemaPools
                     v-if="problema"
                     :problema="problema"

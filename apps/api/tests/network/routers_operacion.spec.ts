@@ -142,7 +142,7 @@ test.group('Routers · probar conexión', (group) => {
         )
         const corte = cuerpo.chequeos.find((c: { clave: string }) => c.clave === 'corte')
         assert.isArray(corte.corte.chequeos)
-        assert.lengthOf(corte.corte.limites, 3)
+        assert.lengthOf(corte.corte.limites, 4)
         const equipo = cuerpo.chequeos.find((c: { clave: string }) => c.clave === 'equipo')
         assert.deepEqual(equipo.datos, {
             version: '7.24.5 (stable)',

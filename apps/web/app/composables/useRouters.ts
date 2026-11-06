@@ -27,6 +27,11 @@ export type PruebaConexion = Schema<'PruebaConexion'>
 export type ChequeoConexion = Schema<'ChequeoConexion'>
 export type ReconciliacionEncolada = Schema<'ReconciliacionEncolada'>
 export type OpcionesScript = NonNullable<paths['/api/v1/routers/{id}/script-conexion']['get']['parameters']['query']>
+/** `GET …/vista-previa-tipo-conexion` (`contratos/tipo-conexion-router.md` §3). */
+export type VistaPreviaTipoConexion = Schema<'VistaPreviaTipoConexion'>
+export type ServicioVistaPreviaTipo = VistaPreviaTipoConexion['servicios'][number]
+export type DatosCambiarTipoConexion = paths['/api/v1/routers/{id}/cambiar-tipo-conexion']['post']['requestBody']['content']['application/json']
+export type ResultadoCambiarTipoConexion = Schema<'ResultadoCambiarTipoConexion'>
 /** `GET …/eliminable` (`contratos/eliminar.md` §1): si se puede eliminar y por qué no. */
 export type Eliminable = Schema<'Eliminable'>
 
@@ -183,6 +188,27 @@ export function useRouters() {
         }))
     }
 
+    /**
+     * `GET /routers/:id/vista-previa-tipo-conexion?tipo=` (`routers.ver`; no escribe ni habla con el
+     * router): qué servicios cambian, qué les falta y qué se completa solo. Sin `tipo`, el actual del
+     * router: la vista de «unificar» (los que difieren).
+     */
+    function vistaPreviaTipoConexion(id: number, tipo?: TipoConexion): Promise<Resultado<VistaPreviaTipoConexion>> {
+        return resolver(api.GET('/api/v1/routers/{id}/vista-previa-tipo-conexion', { params: { path: { id }, query: tipo ? { tipo } : {} } }))
+    }
+
+    /**
+     * `POST /routers/:id/cambiar-tipo-conexion` (`routers.cambiar_tipo_conexion`, solo admin): pone el
+     * tipo del router y pasa cada servicio a él. Con el tipo actual = unificar. 409 si la `version`
+     * del router cambió.
+     */
+    function cambiarTipoConexion(id: number, datos: DatosCambiarTipoConexion, claveIdempotencia: string): Promise<Resultado<ResultadoCambiarTipoConexion>> {
+        return resolver(api.POST('/api/v1/routers/{id}/cambiar-tipo-conexion', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
     /** `GET /routers/:id/eliminable` (`routers.ver`): si nunca se usó y, si no, los motivos. */
     function eliminable(id: number): Promise<Resultado<Eliminable>> {
         return resolver(api.GET('/api/v1/routers/{id}/eliminable', { params: { path: { id } } }))
@@ -198,5 +224,5 @@ export function useRouters() {
         }))
     }
 
-    return { duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    return { vistaPreviaTipoConexion, cambiarTipoConexion, duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

@@ -27,6 +27,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.10.0.1',
         modo_seguridad: 'radius',
+        tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Control por capas (A2): migrado de «simple», RouterOS 7 leído por la reconciliación.
         estrategia_velocidad: estrategiaSimple(),
@@ -53,6 +54,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.20.0.1',
         modo_seguridad: 'radius',
+        tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Migrado de «árbol PCQ»; RouterOS 6 (sin fq_codel ni CAKE).
         estrategia_velocidad: estrategiaArbol(),
@@ -80,6 +82,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.30.0.1',
         modo_seguridad: 'radius',
+        tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Nunca respondió a la API: sin versión conocida (`routeros_version` null, el valor por defecto).
         estrategia_velocidad: estrategiaSimple(),
@@ -108,6 +111,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.10.0.2',
         modo_seguridad: 'radius',
+        tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Control por capas (A2): el atajo «árbol PCQ»; es el mismo equipo que el RB-Centro (RouterOS 7).
         estrategia_velocidad: estrategiaArbol(),

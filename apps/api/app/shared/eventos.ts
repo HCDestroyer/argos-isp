@@ -306,6 +306,8 @@ export interface CatalogoEventos {
             | 'empresa'
             /** cambió `servidor_pppoe_id` (`contratos/red-acceso.md` §3) */
             | 'servidor_pppoe'
+            /** cambió `user_ppp` o `pass_ppp` de un PPPoE que sigue PPPoE (nunca los valores; pedido del PM, 5 nov) */
+            | 'credenciales'
         >
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
@@ -413,6 +415,23 @@ export interface CatalogoEventos {
         accion: 'creada' | 'editada' | 'eliminada' | 'adoptada' | 'tomar_control'
         estado: 'administrado' | 'adoptado' | null
         campos: string[]
+    }
+    /**
+     * Cambió el tipo de conexión de un router (decisión del PM, 5 nov; `contratos/tipo-conexion-router.md`):
+     * `routers.cambiar_tipo_conexion` (`motivo: 'cambio'`, o `'unificar'` con el mismo tipo: solo pasaron
+     * los servicios que diferían) o `routers.editar` sin servicios que cambien (`motivo: 'edicion'`). Cada
+     * servicio de `servicios[]` emitió antes su `servicio.config_cambiada` con `tipo_conexion`: la red
+     * reacciona por esos; este evento es informativo (panel, Iris, catálogos).
+     */
+    'router.tipo_conexion_cambiado': {
+        router_id: number
+        /** empresa sugerida del router; null = compartido */
+        empresa_id: number | null
+        de: 'pppoe' | 'ip_estatica' | 'dhcp_fija'
+        a: 'pppoe' | 'ip_estatica' | 'dhcp_fija'
+        /** servicios que pasaron a `a` */
+        servicios: number[]
+        motivo: 'cambio' | 'unificar' | 'edicion'
     }
     'router.estrategia_cambiada': {
         router_id: number
@@ -783,6 +802,12 @@ export interface CatalogoEventos {
     'notificaciones.config_cambiada': {
         configuracion_id: number
         empresa_id: number | null
+        campos: string[]
+    }
+
+    // portal (A5, `contratos/control-velocidad.md` §10.6): URL de corte de una empresa
+    'portal.config_cambiada': {
+        empresa_id: number
         campos: string[]
     }
 
@@ -1311,6 +1336,7 @@ export const EVENTOS = [
     'servicio.eliminado',
     'router.eliminado',
     'router.estrategia_cambiada',
+    'router.tipo_conexion_cambiado',
     'red_acceso.cambiada',
     'qos.config_cambiada',
     'router.conexion_generada',
@@ -1356,6 +1382,7 @@ export const EVENTOS = [
     'libro.emitido',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'portal.config_cambiada',
     'fiscal.localizacion_instalada',
     'fiscal.parametros_cambiados',
     'fiscal.config_cambiada',

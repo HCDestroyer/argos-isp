@@ -5,6 +5,7 @@ import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacio
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
+import type { TipoConexion } from '#core/consultas/servicios'
 import { estrategiasDeFila, type EstrategiasRouter } from '#network/estrategia_velocidad'
 import { sqlContactoRouter } from '#network/contacto_router'
 import { sqlGatewayEfectivo, sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
@@ -26,6 +27,11 @@ export interface RouterVista {
     nas_ip: string | null
     /** `radius`: PPPoE por RADIUS. `api`: router sin RADIUS, solo `ip_estatica`/`dhcp_fija` por la API REST */
     modo_seguridad: 'radius' | 'api'
+    /**
+     * Tipo de conexión de los servicios del router (decisión del PM, 5 nov): los nuevos lo toman de aquí;
+     * se cambia con `routers.cambiar_tipo_conexion` (`contratos/tipo-conexion-router.md`)
+     */
+    tipo_conexion: TipoConexion
     /** cola simple por servicio o árbol con PCQ por plan (`contratos/velocidad.md`) */
     control_velocidad: ControlVelocidad
     /** estrategia de control de velocidad por tipo de conexión (`contratos/control-velocidad.md`) */
@@ -110,6 +116,7 @@ const COLUMNAS_ROUTER = [
     db.raw('(radius_secret IS NOT NULL) AS tiene_radius_secret'),
     db.raw('host(nas_ip) AS nas_ip'),
     'modo_seguridad',
+    'tipo_conexion',
     'control_velocidad',
     'estrategia_velocidad',
     'routeros_version',

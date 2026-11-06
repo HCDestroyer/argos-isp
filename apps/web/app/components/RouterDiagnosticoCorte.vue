@@ -28,6 +28,9 @@ const PASOS: Record<Chequeo['clave'], string> = {
     fasttrack: 'El corte va antes de FastTrack',
     perfil_suspendido: 'Perfil PPP del suspendido',
     walled_garden: 'Portal y pasarela permitidos (walled garden)',
+    dns_router: 'El router resuelve nombres (DNS reales)',
+    portal_host: 'La página de corte responde con cualquier dominio',
+    portal_en_router: 'La página de corte no está en el propio router',
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {

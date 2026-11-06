@@ -64,7 +64,13 @@ export async function saldoTexto(clienteId: number): Promise<string> {
     return saldo.toFixed(2)
 }
 
-/** Caja nueva con su cuenta hija de 1.1.01. */
+/**
+ * Caja nueva con su cuenta hija de 1.1.01. El nombre sale de la secuencia de `audit.outbox` (la de
+ * `unicoBd` por defecto), igual que las cajas que crean las demás ayudas (`Caja-<n>`). Con la
+ * secuencia de `ledger.cajas` el mismo `Caja-<n>` podía salir dos veces (una por cada secuencia) en
+ * empresas distintas: el índice `(empresa_id, nombre)` lo acepta, pero el `down` de la migración de
+ * multiempresa vuelve a `UNIQUE (nombre)` y el rollback completo fallaba.
+ */
 export async function nuevaCaja(): Promise<number> {
     const padre = await db.from('ledger.cuentas').where('codigo', '1.1.01').select('id').firstOrFail()
     const [cuenta] = (await db
@@ -78,7 +84,7 @@ export async function nuevaCaja(): Promise<number> {
         .returning('id')) as Array<{ id: number }>
     const [caja] = (await db
         .table('ledger.cajas')
-        .insert({ nombre: await unicoBd('Caja', 'ledger.cajas'), cuenta_id: cuenta!.id })
+        .insert({ nombre: await unicoBd('Caja'), cuenta_id: cuenta!.id })
         .returning('id')) as Array<{ id: number }>
     return caja!.id
 }

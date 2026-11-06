@@ -298,6 +298,93 @@ test.group('PPPoE sin RADIUS · secrets locales', (group) => {
         assert.isUndefined(perfil(`plan-${planId}-limitado`))
     })
 
+    /** Edita las credenciales por la acción de A1 y entrega sus eventos (el último, para repetirlo). */
+    async function editarCredenciales(servicioId: number, cambios: { user_ppp?: string; pass_ppp?: string }) {
+        const fila = await db.from('core.servicios').where('id', servicioId).firstOrFail()
+        const ctx = contextoPrueba()
+        await new EditarServicio().execute({ id: servicioId, version: fila.version, ...cambios }, ctx)
+        const eventos = await eventosDe(ctx.requestId)
+        const config = eventos.find(
+            (e) =>
+                e.evento === 'servicio.config_cambiada' &&
+                (e.payload.campos as string[]).includes('credenciales'),
+        )!
+        await entregar(eventos)
+        return config
+    }
+    const redSecret = (servicioId: number, eventoId: number | string) =>
+        db
+            .from('audit.red')
+            .where('servicio_id', servicioId)
+            .whereRaw(`comando->>'evento_id' = ?`, [String(eventoId)])
+            .whereIn(db.raw("comando->>'ruta'"), ['/ppp/secret', '/ppp/active'])
+            .orderBy('id')
+
+    test('credenciales: cambiar la contraseña reescribe el secret aunque el router no la devuelva y corta la sesión', async ({
+        client,
+        assert,
+    }) => {
+        const { servicio, user } = await crear(client)
+        conectar(user, servicio.ipv4, 'c1')
+        // Usuario de la API sin `sensitive`: GET /ppp/secret no trae la contraseña.
+        falso.ocultarPassword = true
+        const evento = await editarCredenciales(servicio.id, { pass_ppp: 'clave-nueva-123' })
+        falso.ocultarPassword = false
+        assert.equal(secret(servicio.id)[0]!.password, 'clave-nueva-123')
+        assert.equal(secret(servicio.id)[0]!.name, user)
+        assert.lengthOf(activas(), 0)
+        const red = await redSecret(servicio.id, evento.id)
+        assert.deepEqual(
+            red.filter((f) => f.ok).map((f) => `${f.comando.metodo} ${f.comando.ruta}`),
+            ['PATCH /ppp/secret', 'DELETE /ppp/active'],
+        )
+        assert.notInclude(JSON.stringify(red), 'clave-nueva-123')
+
+        // Entrega repetida del mismo evento: el cliente ya reconectó con la clave nueva y no se corta.
+        conectar(user, servicio.ipv4, 'c2')
+        falso.ocultarPassword = true
+        const escrituras = falso.escrituras.length
+        await entregar([evento])
+        falso.ocultarPassword = false
+        assert.equal(falso.escrituras.length, escrituras)
+        assert.lengthOf(activas(), 1)
+    })
+
+    test('credenciales: cambiar el usuario renombra el secret de Argos, corta la sesión del viejo y no toca lo ajeno', async ({
+        client,
+        assert,
+    }) => {
+        const { servicio, user, clave } = await crear(client)
+        conectar(user, servicio.ipv4, 'c3')
+        // Un secret ajeno (sin comment de ArgosIsp) con otro nombre queda igual.
+        falso.tabla('/ppp/secret').push({
+            '.id': '*AJENO',
+            name: 'tecnico-pruebas',
+            password: 'x',
+            service: 'pppoe',
+            profile: 'default',
+            disabled: 'false',
+        } as ObjetoRouterOS)
+        const nuevo = unico('nuevo')
+        const evento = await editarCredenciales(servicio.id, { user_ppp: nuevo })
+        assert.lengthOf(secret(servicio.id), 1)
+        assert.containsSubset(secret(servicio.id)[0], { name: nuevo, password: clave })
+        assert.isUndefined(falso.tabla('/ppp/secret').find((o) => o.name === user))
+        assert.isDefined(falso.tabla('/ppp/secret').find((o) => o.name === 'tecnico-pruebas'))
+        assert.lengthOf(activas(), 0)
+        const red = await redSecret(servicio.id, evento.id)
+        assert.deepEqual(
+            red.filter((f) => f.ok).map((f) => `${f.comando.metodo} ${f.comando.ruta}`),
+            ['PATCH /ppp/secret', 'DELETE /ppp/active'],
+        )
+        // Repetido: nada más que escribir ni cortar.
+        conectar(nuevo, servicio.ipv4, 'c4')
+        const escrituras = falso.escrituras.length
+        await entregar([evento])
+        assert.equal(falso.escrituras.length, escrituras)
+        assert.lengthOf(activas(), 1)
+    })
+
     test('retirar y eliminar: el secret se borra y la sesión se quita', async ({ client, assert }) => {
         const { servicio, user } = await crear(client)
         conectar(user, servicio.ipv4, 'A1')

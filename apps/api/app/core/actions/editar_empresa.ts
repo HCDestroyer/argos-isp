@@ -69,6 +69,10 @@ export default class EditarEmpresa extends DomainAction<EntradaEditarEmpresa, Em
         await actualizarConVersion(t.trx, 'core.empresas', id, version, datos)
         const despues = await verEmpresaCompleta(id, t.trx)
         await t.registrarCambios({ tipo: 'empresa', id }, sinDerivados(antes), sinDerivados(despues))
+        // Walled garden de los routers (host de la URL de corte): invalidación por evento (regla 5).
+        if (despues.url_corte !== antes.url_corte) {
+            await t.emit('portal.config_cambiada', { empresa_id: id, campos: ['url_corte'] })
+        }
         return despues
     }
 }

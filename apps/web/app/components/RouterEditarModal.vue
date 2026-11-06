@@ -18,6 +18,11 @@ import * as z from 'zod'
  * Si el router tiene servicios PPPoE sin retirar, la API responde 422 `servicios_pppoe_en_router`
  * y aquí se listan con su enlace. Al volver de «Sin RADIUS» a RADIUS se avisa que el reconciliador
  * borra los secrets PPPoE de Argos (`contratos/pppoe-local.md` §9).
+ *
+ * Tipo de conexión (`contratos/tipo-conexion-router.md`): aquí solo cambia si ningún servicio del
+ * router tendría que cambiar; si no, la API responde 422 `tipo_conexion_con_servicios` y se listan
+ * con su enlace y la indicación de usar «Cambiar tipo de conexión» en la ficha (vista previa y
+ * servicio por servicio).
  */
 const props = defineProps<{
     router: RouterNas
@@ -41,6 +46,7 @@ const KBPS = z.number().int('Escribe los kbps sin decimales').min(1, 'Escribe al
  */
 const esquema = z.object({
     modo_seguridad: z.enum(['radius', 'api']),
+    tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
     nombre: z.string().trim().min(2, 'Escribe un nombre de al menos 2 caracteres').max(100, 'Acorta el nombre: máximo 100 caracteres'),
     host: z.string().trim().min(1, 'Escribe el host o la IP con la que el panel llega a la API').max(255, 'Máximo 255 caracteres'),
     nas_ip: z.string().trim(),
@@ -73,6 +79,7 @@ function entradaDe(router: RouterNas): Entrada {
         nas_ip: router.nas_ip ?? '',
         quitar_nas_ip: false,
         modo_seguridad: router.modo_seguridad,
+        tipo_conexion: router.tipo_conexion,
         api_usuario: router.api_usuario ?? '',
         api_password: '',
         radius_secret: '',
@@ -96,8 +103,14 @@ const duplicado = computed(() => esRouterDuplicado(problema.value))
 const conflicto = computed(() => problema.value?.status === 409 && !duplicado.value)
 // 422 `servicios_pppoe_en_router` (A1): no se puede pasar a «Sin RADIUS» con servicios PPPoE.
 const pppoeEnRouter = computed(() => serviciosPppoeEnRouter(problema.value))
-// 422 sin campos (p. ej. `router_unido` al reactivar un router unido) se explica arriba.
-const sinCampos = computed(() => problema.value?.status === 422 && !(problema.value.errors ?? []).length)
+// 422 `tipo_conexion_con_servicios` (A1): con servicios de otro tipo, el tipo se cambia desde la ficha.
+const conOtroTipo = computed(() => serviciosConOtroTipo(problema.value))
+// 422 sin campos del formulario (p. ej. `router_unido` al reactivar un router unido, o
+// `pppoe_local_requiere_api` en `router_id`) se explica arriba.
+const sinCampos = computed(() => problema.value?.status === 422
+    && !(problema.value.errors ?? []).some(e => Object.hasOwn(estado, e.field)))
+const itemsTipo = computed<RadioGroupItem[]>(() => itemsTipoConexionRouter(estado.modo_seguridad === 'api'))
+const cambiaTipo = computed(() => estado.tipo_conexion !== actual.value.tipo_conexion)
 
 const conRadius = computed(() => estado.modo_seguridad === 'radius')
 /** Pasa de RADIUS a «Sin RADIUS» en esta edición. */
@@ -195,6 +208,7 @@ function cambios(datos: Salida): CambiosRouter {
     if (datos.modo_seguridad === 'radius' && datos.nas_ip !== (anterior.nas_ip ?? '')) salida.nas_ip = datos.nas_ip
     if (datos.modo_seguridad === 'api' && datos.quitar_nas_ip && anterior.nas_ip) salida.nas_ip = null
     if (datos.modo_seguridad !== anterior.modo_seguridad) salida.modo_seguridad = datos.modo_seguridad
+    if (datos.tipo_conexion !== anterior.tipo_conexion) salida.tipo_conexion = datos.tipo_conexion
     if ((datos.api_usuario || null) !== anterior.api_usuario) salida.api_usuario = datos.api_usuario || null
     if (datos.api_password) salida.api_password = datos.api_password
     else if (datos.quitar_api_password) salida.quitar_api_password = true
@@ -226,7 +240,7 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
     guardando.value = false
     if (!resultado.ok) {
         // Los `servicios.<id>` de `servicios_pppoe_en_router` no son campos: se listan arriba.
-        const errores = serviciosPppoeEnRouter(resultado.problema) ? [] : erroresDeFormulario(resultado.problema)
+        const errores = serviciosPppoeEnRouter(resultado.problema) || serviciosConOtroTipo(resultado.problema) ? [] : erroresDeFormulario(resultado.problema)
         if (errores.length) {
             formulario.value?.setErrors(errores)
         }
@@ -321,6 +335,36 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         </div>
                     </template>
                 </UAlert>
+                <UAlert
+                    v-else-if="problema && conOtroTipo"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-cable"
+                    :title="conOtroTipo.total === 1 ? 'Hay 1 servicio que cambiaría de tipo' : `Hay ${conOtroTipo.total} servicios que cambiarían de tipo`"
+                    data-prueba="router-tipo-con-servicios"
+                >
+                    <template #description>
+                        <div class="flex flex-col gap-1.5">
+                            <p>Con servicios, el tipo del router se cambia con «Cambiar tipo de conexión» en su ficha: muestra qué cambia y qué le falta a cada servicio, y los pasa uno por uno.</p>
+                            <ul class="list-disc pl-5">
+                                <li
+                                    v-for="servicio in conOtroTipo.servicios"
+                                    :key="servicio.id"
+                                >
+                                    <ULink
+                                        :to="enlace(`/servicios/${servicio.id}`)"
+                                        class="underline hover:text-highlighted"
+                                    >
+                                        {{ servicio.texto }}
+                                    </ULink>
+                                </li>
+                            </ul>
+                            <p v-if="conOtroTipo.total > conOtroTipo.servicios.length">
+                                Y {{ conOtroTipo.total - conOtroTipo.servicios.length }} más.
+                            </p>
+                        </div>
+                    </template>
+                </UAlert>
                 <ProblemaAlerta
                     v-else-if="problema && (problema.status !== 422 || sinCampos)"
                     :problema="problema"
@@ -358,6 +402,21 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                     :description="AVISO_SIN_RADIUS_A_RADIUS"
                     data-prueba="aviso-a-radius"
                 />
+                <UFormField
+                    label="Tipo de conexión"
+                    name="tipo_conexion"
+                    required
+                    :help="cambiaTipo ? 'Solo se guarda si ningún servicio del router tiene otro tipo; si no, usa «Cambiar tipo de conexión» en la ficha.' : 'Uno por router: todos sus servicios lo usan.'"
+                >
+                    <URadioGroup
+                        v-model="estado.tipo_conexion"
+                        :items="itemsTipo"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2 sm:grid-cols-3' }"
+                        data-prueba="router-editar-tipo"
+                    />
+                </UFormField>
                 <UFormField
                     v-if="ofreceQuitarNas"
                     name="quitar_nas_ip"

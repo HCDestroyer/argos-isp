@@ -88,10 +88,10 @@
 :local walledGarden {"app.recurrente.com"}
 
 # --- DNS ---
-# Resolutores que el router usa y que los suspendidos pueden consultar, p. ej. {"1.1.1.1";"8.8.8.8"}.
+# Resolutores REALES que el router usa (los de tu proveedor), p. ej. {"1.1.1.1";"8.8.8.8"}.
 # Vacio (el valor por defecto) = no se tocan los "servers" del router: se usan los que ya tiene (y los
-# dinamicos de la WAN). Nunca pongas IPs de documentacion (192.0.2.x, 198.51.100.x, 2001:db8::):
-# el router no resolveria nada y la pagina de corte no cargaria.
+# dinamicos de la WAN); si no tiene ninguno, el script avisa. Nunca pongas IPs de documentacion
+# (192.0.2.x, 198.51.100.x, 203.0.113.x, 2001:db8::): el script las rechaza y se detiene.
 :local dnsV4 [:toarray ""]
 :local dnsV6 [:toarray ""]
 

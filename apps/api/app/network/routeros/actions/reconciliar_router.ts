@@ -15,10 +15,17 @@ import {
     necesitaVelocidad,
     planesDeRouter,
     redesV4DeRouter,
+    urlsCorte,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
+import {
+    clientesUsanDnsRouter,
+    configCorteResuelta,
+    conUrlsCorte,
+    estadoCorteRouter,
+    revisarDnsRouter,
+} from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
@@ -52,7 +59,16 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion' | 'qos' | 'red_acceso'
+    motivo:
+        | 'periodico'
+        | 'recuperado'
+        | 'plan'
+        | 'manual'
+        | 'control'
+        | 'conexion'
+        | 'qos'
+        | 'red_acceso'
+        | 'portal'
     evento_id?: string | null
 }
 
@@ -193,7 +209,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     const lecturaCorte = await leerCorteRouter(cliente)
                     // El FQDN del portal se resuelve en cada pasada (sin caché): si no resuelve, error
                     // visible y la regla de NAT que haya queda como está.
-                    const config = await configCorteResuelta(process.env, this.#resolver)
+                    const config = conUrlsCorte(
+                        await configCorteResuelta(process.env, this.#resolver),
+                        await urlsCorte(t.trx),
+                    )
                     if (config.portal_v4_error) {
                         salida.error_portal = config.portal_v4_error
                         await t.emit('routeros.fallido', {
@@ -215,6 +234,27 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     )
                     salida.avisos.push(...corte.avisos)
                     salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
+                    // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
+                    let dnsRouter: Record<string, string> | null = null
+                    try {
+                        dnsRouter = await cliente.leerDns()
+                    } catch (error) {
+                        if (!(error instanceof ErrorRouterOS)) throw error
+                        salida.avisos.push(`no se pudo leer /ip dns: ${error.message}`)
+                    }
+                    const usaDns = clientesUsanDnsRouter(
+                        lecturaCorte.get('/ppp/profile') ?? [],
+                        gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    )
+                    for (const p of dnsRouter ? revisarDnsRouter(dnsRouter, usaDns) : []) {
+                        salida.avisos.push(p.mensaje)
+                        await t.emit('routeros.fallido', {
+                            servicio_id: null,
+                            router_id: input.router_id,
+                            operacion: `dns del router (${p.codigo})`,
+                            error: p.mensaje,
+                        })
+                    }
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
                 nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null
@@ -250,19 +290,21 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     }
                     actuales.set(ruta, porComment)
                 }
-                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
+                // Huérfanos primero: objetos de servicios que ya no deben estar en este router (retirados,
+                // movidos, eliminados). Su IP, MAC o lease puede haberla tomado otro servicio vigente: si
+                // se borraran al final, el PUT del nuevo chocaría con el viejo y la pasada no convergería.
                 const vigentes = new Set(todos.map((s) => s.servicio_id))
+                for (const id of [...enRouter].filter((s) => !vigentes.has(s)).sort((a, b) => a - b)) {
+                    salida.correcciones.push(
+                        ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
+                    )
+                }
+                // Todos los vigentes (también PPPoE: sus entradas del árbol en `arbol_pcq`).
                 for (const servicio of todos) {
                     const estado = estadoDeseado(servicio, router.red, perfilSuspendido())
                     salida.avisos.push(...estado.avisos.map((a) => `servicio ${servicio.servicio_id}: ${a}`))
                     salida.correcciones.push(
                         ...(await aplicarEstado(cliente, estado, ctx(servicio.servicio_id), actuales)),
-                    )
-                }
-                // Huérfanos: objetos de servicios que ya no deben estar en este router.
-                for (const id of [...enRouter].filter((s) => !vigentes.has(s)).sort((a, b) => a - b)) {
-                    salida.correcciones.push(
-                        ...(await aplicarEstado(cliente, estadoVacio(id), ctx(id), actuales)),
                     )
                 }
                 // Secrets PPPoE (`contratos/pppoe-local.md` §7): después de los perfiles a los que

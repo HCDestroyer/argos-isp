@@ -37,6 +37,8 @@ export const CAMPOS_DATOS_EMPRESA = [
     'sitio_web',
     'horario',
     'instrucciones_pago',
+    // URL de corte del operador (contratos/control-velocidad.md §10.6): null = /corte del portal
+    'url_corte',
     'color_marca',
     'regimen_isr',
     'codigo_establecimiento',
@@ -65,6 +67,7 @@ export interface DatosEmpresaCompleta {
     sitio_web: string | null
     horario: string | null
     instrucciones_pago: string | null
+    url_corte: string | null
     color_marca: string | null
     regimen_isr: RegimenIsr | null
     codigo_establecimiento: number | null

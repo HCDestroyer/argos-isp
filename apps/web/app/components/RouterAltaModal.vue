@@ -5,7 +5,8 @@ import * as z from 'zod'
 
 /**
  * Alta de un router (`POST /routers`, `routers.crear`, A1): primero el modo de seguridad («RADIUS» o
- * «Sin RADIUS»), luego nombre, host de la API REST, IP del NAS y secreto RADIUS (solo con RADIUS),
+ * «Sin RADIUS»), el tipo de conexión de sus servicios (`contratos/tipo-conexion-router.md`: uno
+ * por router, PPPoE por defecto), luego nombre, host de la API REST, IP del NAS y secreto RADIUS (solo con RADIUS),
  * credenciales de la API (se guardan cifrados; nunca vuelven) y colas. Sin RADIUS (`api`) la IP del
  * NAS y el secreto no se piden ni se mandan (`utils/modoSeguridad.ts`). La conexión fina (puerto, TLS, CA, DHCP) se ajusta después en «Conexión» y la capacidad en
  * «Velocidad»; el modo de colas después del alta solo cambia con su acción. Si ese MikroTik ya
@@ -21,6 +22,7 @@ const emit = defineEmits<{ creado: [router: RouterNas] }>()
  */
 const esquema = z.object({
     modo_seguridad: z.enum(['radius', 'api']),
+    tipo_conexion: z.enum(['pppoe', 'ip_estatica', 'dhcp_fija']),
     nombre: z.string().trim().min(2, 'Al menos 2 caracteres').max(100, 'Máximo 100 caracteres'),
     host: z.string().trim().min(1, 'Escribe el host o la IP').max(255, 'Máximo 255 caracteres'),
     nas_ip: z.string().trim(),
@@ -36,7 +38,7 @@ const esquema = z.object({
     }
 })
 type Entrada = z.input<typeof esquema>
-const vacio = (): Entrada => ({ nombre: '', host: '', nas_ip: '', radius_secret: '', api_usuario: '', api_password: '', modo_seguridad: 'radius', control_velocidad: 'simple', activo: true })
+const vacio = (): Entrada => ({ nombre: '', host: '', nas_ip: '', radius_secret: '', api_usuario: '', api_password: '', modo_seguridad: 'radius', tipo_conexion: 'pppoe', control_velocidad: 'simple', activo: true })
 
 const formulario = useTemplateRef('formulario')
 const estado = reactive<Entrada>(vacio())
@@ -57,6 +59,7 @@ const itemsSeguridad: RadioGroupItem[] = (['radius', 'api'] as const).map(modo =
     description: MODOS_SEGURIDAD[modo].descripcion,
 }))
 const conRadius = computed(() => estado.modo_seguridad === 'radius')
+const itemsTipo = computed<RadioGroupItem[]>(() => itemsTipoConexionRouter(estado.modo_seguridad === 'api'))
 const itemsControl: SelectItem[] = (Object.keys(CONTROLES_VELOCIDAD) as ControlVelocidad[]).map(c => ({ label: CONTROLES_VELOCIDAD[c].etiqueta, value: c, icon: CONTROLES_VELOCIDAD[c].icono }))
 
 async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
@@ -72,6 +75,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
         api_usuario: d.api_usuario || null,
         api_password: d.api_password || null,
         modo_seguridad: d.modo_seguridad,
+        tipo_conexion: d.tipo_conexion,
         control_velocidad: d.control_velocidad,
         activo: d.activo,
     })
@@ -118,6 +122,21 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         class="w-full"
                         :ui="{ fieldset: 'grid gap-2' }"
                         data-prueba="router-modo"
+                    />
+                </UFormField>
+                <UFormField
+                    label="Tipo de conexión"
+                    name="tipo_conexion"
+                    required
+                    help="Uno por router: todos sus servicios lo usan. Con servicios se cambia desde su ficha."
+                >
+                    <URadioGroup
+                        v-model="estado.tipo_conexion"
+                        :items="itemsTipo"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2' }"
+                        data-prueba="router-tipo-conexion"
                     />
                 </UFormField>
                 <UFormField

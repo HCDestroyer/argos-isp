@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
 import { esCambioDeCorte } from '#network/routeros/corte_router'
 import { clienteDeRouter } from '#network/routeros/router'
@@ -79,6 +79,7 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
 
     async function crearPendiente(client: any, cuerpo: Record<string, unknown>) {
         const requestId = unico('req')
+        await routerConTipo(routerId, cuerpo.tipo_conexion)
         const r = await estado(
             client
                 .post('/api/v1/servicios')

@@ -100,7 +100,10 @@ x-api-env: &api-env
   ROUTERS_SERVICIO_CLIENTES_V6: ${ROUTERS_SERVICIO_CLIENTES_V6:-}
   ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO:-}
   ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO:-}
-  ROUTERS_SERVICIO_PORTAL_V4: ${ROUTERS_SERVICIO_PORTAL_V4:-}
+  # Destino del dst-nat de los suspendidos: PORTAL_CORTE_V4 / PORTAL_CORTE_PUERTO (el puerto dedicado
+  # del Caddy de Argos) si están; si no, la IP del portal y el 80.
+  ROUTERS_SERVICIO_PORTAL_V4: ${ROUTERS_SERVICIO_PORTAL_V4:-${PORTAL_CORTE_V4:-}}
+  ROUTERS_SERVICIO_PORTAL_PUERTO: ${ROUTERS_SERVICIO_PORTAL_PUERTO:-${PORTAL_CORTE_PUERTO:-80}}
   ROUTERS_SERVICIO_PORTAL_V6: ${ROUTERS_SERVICIO_PORTAL_V6:-}
   ROUTERS_SERVICIO_WALLED_GARDEN: ${ROUTERS_SERVICIO_WALLED_GARDEN:-}
   ROUTERS_SERVICIO_DNS_V4: ${ROUTERS_SERVICIO_DNS_V4:-}
@@ -489,7 +492,8 @@ services:
       COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
       COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
-      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
+      COA_SUSPENDER: ${COA_SUSPENDER:-disconnect}
+      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-disconnect}
       AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
       API_INTERNAL_URL: http://api:3333/api/v1/
       AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN}
@@ -622,6 +626,7 @@ services:
       # `email <correo>` (Let's Encrypt avisa vencimientos) o `local_certs` (CA interna: pruebas)
       PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
       PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+      PORTAL_CORTE_PUERTO: ${PORTAL_CORTE_PUERTO:-8088}
       # Proxy de delante (Nginx Proxy Manager…): CIDR separados por espacio de los que Caddy acepta
       # X-Forwarded-For / X-Real-IP. Vacía = ninguno (docs/runbooks/detras-de-proxy.md)
       ARGOSISP_PROXIES_CONFIABLES: ${ARGOSISP_PROXIES_CONFIABLES:-}
@@ -635,6 +640,9 @@ services:
     ports:
       - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTP_PORT:-80}:80
       - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTPS_PORT:-443}:443
+      # Corte por puerto dedicado (Caddyfile): el dst-nat de los suspendidos llega aquí sin pasar por
+      # otro proxy. Abre este puerto desde la red de los routers.
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${PORTAL_CORTE_PUERTO:-8088}:${PORTAL_CORTE_PUERTO:-8088}
     depends_on:
       api:
         condition: service_healthy

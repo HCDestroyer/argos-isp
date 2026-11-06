@@ -1,5 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { esUrlHttp } from '~/utils/esquemasEmpresa'
 import { bd, siguienteId } from '../bd'
 import { paisesFiscales } from '../fiscal/datos'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
@@ -7,7 +8,7 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe,
 type Empresa = Schema<'EmpresaGrupo'>
 
 /** Campos editables, como `crearEmpresaValidator` / `editarEmpresaValidator` (A1). */
-const TEXTOS = ['razon_social', 'nombre_comercial', 'direccion_fiscal', 'municipio', 'departamento', 'telefono', 'telefono_alterno', 'whatsapp', 'correo', 'sitio_web', 'horario', 'instrucciones_pago', 'color_marca'] as const
+const TEXTOS = ['razon_social', 'nombre_comercial', 'direccion_fiscal', 'municipio', 'departamento', 'telefono', 'telefono_alterno', 'whatsapp', 'correo', 'sitio_web', 'horario', 'instrucciones_pago', 'url_corte', 'color_marca'] as const
 const REGIMENES = ['sujeto_pagos_trimestrales', 'retencion_definitiva', 'pequeno_contribuyente'] as const
 
 /** NIT con dígito verificador (`1234567-8`, `123456-K`) o CUI de 13 dígitos. */
@@ -40,6 +41,12 @@ function errores(cuerpo: Record<string, unknown>, creando: boolean): NonNullable
     }
     if (typeof cuerpo.correo === 'string' && cuerpo.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cuerpo.correo)) {
         lista.push({ field: 'correo', message: 'Correo no válido', rule: 'email' })
+    }
+    if (typeof cuerpo.url_corte === 'string' && cuerpo.url_corte.trim() && !esUrlHttp(cuerpo.url_corte.trim())) {
+        lista.push({ field: 'url_corte', message: 'El campo url_corte debe ser una URL válida', rule: 'url' })
+    }
+    if (typeof cuerpo.url_corte === 'string' && cuerpo.url_corte.trim().length > 500) {
+        lista.push({ field: 'url_corte', message: 'El campo url_corte no debe tener más de 500 caracteres', rule: 'maxLength' })
     }
     if (typeof cuerpo.color_marca === 'string' && cuerpo.color_marca && !COLOR.test(cuerpo.color_marca)) {
         lista.push({ field: 'color_marca', message: 'Color #RRGGBB', rule: 'regex' })
@@ -129,6 +136,7 @@ export const rutasEmpresas: RutasFixture = {
             sitio_web: null,
             horario: null,
             instrucciones_pago: null,
+            url_corte: null,
             color_marca: null,
             regimen_isr: null,
             codigo_establecimiento: null,

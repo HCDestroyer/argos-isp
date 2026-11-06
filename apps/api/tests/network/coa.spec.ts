@@ -11,6 +11,7 @@ import { insertarEvento } from '#shared/outbox'
 import { claveAaa, prefijoAaa } from '#core/aaa'
 import { leerVelocidad, rateLimitServicio } from '#network/velocidad'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
+import EditarServicio from '#core/actions/editar_servicio'
 import IniciarSesion from '#network/sesiones/actions/iniciar_sesion'
 import DesconectarSesion from '#network/sesiones/actions/desconectar_sesion'
 import { contextoPrueba, unico } from '#tests/ayudas'
@@ -240,6 +241,9 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             REDIS_HOST: env.get('REDIS_HOST') ?? '127.0.0.1',
             REDIS_PORT: String(env.get('REDIS_PORT') ?? 6379),
             COA_STREAM: STREAM,
+            // Estas pruebas cubren el CoA de suspensión (`COA_SUSPENDER=coa`); el valor por defecto,
+            // `disconnect`, lo prueban services/coa/test/dispatcher.test.ts y la guía de laboratorio.
+            COA_SUSPENDER: 'coa',
             COA_GRUPO_INICIO: '0',
             DB_HOST: env.get('DB_HOST'),
             DB_PORT: String(env.get('DB_PORT')),
@@ -493,6 +497,102 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         const { final } = await respuestaFinal(eventoId)
         assert.equal(final.tipo, 'disconnect')
         assert.isTrue(final.ok)
+    })
+
+    /** Edita las credenciales por la acción de A1 y relaya su `servicio.config_cambiada`. */
+    async function editarCredenciales(servicioId: number, cambios: { user_ppp?: string; pass_ppp?: string }) {
+        const ultimo = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+        const fila = await db.from('core.servicios').where('id', servicioId).firstOrFail()
+        await new EditarServicio().execute(
+            { id: servicioId, version: fila.version, ...cambios },
+            contextoPrueba(),
+        )
+        const config = await db
+            .from('audit.outbox')
+            .where('evento', 'servicio.config_cambiada')
+            .where('id', '>', Number(ultimo.id ?? 0))
+            .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [servicioId])
+            .firstOrFail()
+        if (!(config.payload.campos as string[]).includes('credenciales')) throw new Error('sin credenciales')
+        await relayar(servicioId, Number(ultimo.id ?? 0))
+        return Number(config.id)
+    }
+
+    test('cambio de contraseña (credenciales) → Disconnect a la sesión; el repetido no corta la sesión nueva', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        const eventoId = await editarCredenciales(e.servicioId, { pass_ppp: 'clave-nueva-123' })
+        const { final, filas } = await respuestaFinal(eventoId)
+        assert.lengthOf(filas, 1)
+        assert.equal(final.tipo, 'disconnect')
+        assert.isTrue(final.ok)
+        assert.equal(Number(final.comando.sesion_id), e.sesionId)
+        assert.notInclude(JSON.stringify(filas), 'clave-nueva-123')
+
+        // El cliente reconecta con la clave nueva (sesión nueva) y el relay repite el evento:
+        // ni la sesión vieja (ya procesada) ni la nueva (abierta después del cambio) reciben nada.
+        await db
+            .from('network.sesiones')
+            .where('id', e.sesionId)
+            .update({ fin: new Date(), causa_fin: 'Admin-Reset' })
+        const nueva = unico('81a0')
+        await new IniciarSesion().execute(
+            {
+                tipo: 'Start',
+                nas_ip: '127.0.0.2',
+                acct_session_id: nueva,
+                user_ppp: e.userPpp,
+                ipv4: '10.10.1.11',
+                prefijo_enlace_v6: null,
+                prefijo_delegado_v6: null,
+                bytes_in: '0',
+                bytes_out: '0',
+                duracion_s: null,
+                causa_fin: null,
+                evento_en: new Date(Date.now() + 1000).toISOString(),
+            },
+            contextoPrueba(),
+        )
+        const fila = await db.from('audit.outbox').where('id', eventoId).firstOrFail()
+        const idStream = await redis.xadd(
+            STREAM,
+            '*',
+            'id',
+            String(eventoId),
+            'evento',
+            fila.evento,
+            'payload',
+            JSON.stringify(fila.payload),
+            'request_id',
+            '',
+        )
+        await esperarHasta(() => confirmado(idStream!))
+        assert.lengthOf(await filasRed(eventoId), 1)
+        assert.lengthOf(
+            nasAck.json<PaqueteNas>().filter((p) => p.atributos?.['Acct-Session-Id'] === nueva),
+            0,
+        )
+    })
+
+    test('cambio de usuario (credenciales) → Disconnect a la sesión del usuario viejo, buscada por servicio', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        const eventoId = await editarCredenciales(e.servicioId, { user_ppp: unico('nuevo') })
+        const { final } = await respuestaFinal(eventoId)
+        assert.equal(final.tipo, 'disconnect')
+        assert.isTrue(final.ok)
+        const paquete = await esperarHasta<PaqueteNas>(() =>
+            nasAck
+                .json<PaqueteNas>()
+                .find(
+                    (p) =>
+                        p.codigo === 'Disconnect-Request' &&
+                        p.atributos?.['Acct-Session-Id'] === e.acctSessionId,
+                ),
+        )
+        assert.equal(paquete.atributos?.['User-Name'], e.userPpp)
     })
 
     test('NAK del NAS → audit.red con Error-Cause y coa.fallido por outbox', async ({ assert }) => {

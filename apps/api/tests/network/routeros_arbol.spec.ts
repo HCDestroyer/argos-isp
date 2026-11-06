@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import { RouterOSFalso } from '#network/routeros/falso'
@@ -92,6 +92,7 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
     }
 
     async function crear(client: any, planId: number, cuerpo: Record<string, unknown> = {}) {
+        await routerConTipo(routerId, cuerpo.tipo_conexion ?? 'ip_estatica')
         const requestId = unico('req')
         const r = await estado(
             client
@@ -220,10 +221,23 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
 
         // Suspendido: sale de la lista; cola simple mínima y suspendidos; el nodo baja a 3 activos.
         const s3 = servicios[3]!
+        // Conexiones abiertas (en FastTrack no pasan por el filtro): al suspender se cortan las suyas.
+        falso.conexiones = [
+            { 'src-address': `${s3.ipv4}:51000`, 'dst-address': '142.250.65.163:443' },
+            { 'src-address': '142.250.65.163:443', 'dst-address': `${s3.ipv4}:51001` },
+            { 'src-address': `${servicios[0]!.ipv4}:40000`, 'dst-address': '1.1.1.1:443' },
+        ]
         await cambiarEstado(s3.id, 'suspendido')
+        assert.deepEqual(falso.conexiones, [
+            { 'src-address': `${servicios[0]!.ipv4}:40000`, 'dst-address': '1.1.1.1:443' },
+        ])
+        const ejecuciones = falso.escrituras.filter((p) => p.ruta.endsWith('/execute'))
+        assert.lengthOf(ejecuciones, 1)
         assert.notInclude(lista4(listaPlan(planId, false)), s3.ipv4)
         assert.notInclude(lista6(listaPlan(planId, false)), s3.prefijo_delegado_v6!)
         assert.include(lista4('suspendidos'), s3.ipv4)
+        // Mismo trato en IPv6: su /56 también va a suspendidos (filtro y NAT de HTTP a /corte por IPv6)
+        assert.include(lista6('suspendidos'), s3.prefijo_delegado_v6!)
         const colaSuspendida = falso.conComment('/queue/simple', commentServicio(s3.id))
         assert.lengthOf(colaSuspendida, 1)
         assert.isTrue(igual(colaSuspendida[0]!['max-limit'], '256k/256k'))
@@ -255,6 +269,7 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         assert.include(lista4(listaPlan(planId, false)), s3.ipv4)
         assert.lengthOf(falso.conComment('/queue/simple', commentServicio(s3.id)), 0)
         assert.notInclude(lista4('suspendidos'), s3.ipv4)
+        assert.notInclude(lista6('suspendidos'), s3.prefijo_delegado_v6!)
         assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
         assert.isTrue(igual(nodo(planId, 'bajada')!['limit-at'], '15M'))
     })

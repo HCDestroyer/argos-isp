@@ -117,6 +117,13 @@ export const Router = definirEsquema(
                     'radius: PPPoE por RADIUS (y servicios ip_estatica/dhcp_fija por la API REST). api: router sin RADIUS, ' +
                     'solo ip_estatica y dhcp_fija por la API REST; sin nas_ip ni radius_secret obligatorios y sin PPPoE',
             },
+            tipo_conexion: {
+                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                description:
+                    'Tipo de conexión de los servicios del router (contratos/tipo-conexion-router.md): los nuevos lo ' +
+                    'toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con ' +
+                    'POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)',
+            },
             control_velocidad: {
                 ...enumerado(['simple', 'arbol_pcq']),
                 description:
@@ -966,6 +973,11 @@ const CODIGOS_CORTE = [
     'portal_sin_corte',
     'suspendidos_fuera_de_lista',
     'fasttrack',
+    'dns_router_sin_servidores',
+    'dns_router_documentacion',
+    'dns_router_sin_remotas',
+    'portal_no_acepta_host',
+    'portal_en_router',
 ]
 
 const problemaEstrategia = objeto({
@@ -1176,11 +1188,17 @@ export const DiagnosticoCorte = definirEsquema(
                         'fasttrack',
                         'perfil_suspendido',
                         'walled_garden',
+                        'dns_router',
+                        'portal_host',
+                        'portal_en_router',
                     ]),
                     description:
                         'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
                         'portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la ' +
-                        'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden',
+                        'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, ' +
+                        'dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los ' +
+                        'clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), ' +
+                        'portal_en_router (el destino del NAT no es una IP del propio router)',
                 },
                 ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
                 codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },
@@ -1243,7 +1261,8 @@ export const DiagnosticoCorte = definirEsquema(
         }),
         limites: {
             ...lista(texto),
-            description: 'Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre',
+            description:
+                'Lo que el corte no hace por diseño (HTTPS no se redirige; IPv6 solo con la IPv6 del portal; DNS privado estricto); mostrar siempre',
         },
     }),
 )
@@ -1376,7 +1395,13 @@ export const SincronizacionServicio = definirEsquema(
                     router_id: id,
                     ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
                     comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
-                    accion: enumerado(['creado', 'actualizado', 'borrado', 'desconectado']),
+                    accion: enumerado([
+                        'creado',
+                        'actualizado',
+                        'borrado',
+                        'desconectado',
+                        'conexiones_cortadas',
+                    ]),
                     duplicados: entero,
                 },
                 ['duplicados'],
@@ -1524,5 +1549,83 @@ export const ResultadoUnificarVelocidad = definirEsquema(
     objeto({
         router_id: id,
         planes: { ...lista(id), description: 'Planes cuya excepción se quitó (un evento por plan)' },
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Tipo de conexión por router (A1, `contratos/tipo-conexion-router.md`)
+|--------------------------------------------------------------------------
+*/
+
+const tipoConexion = enumerado(['pppoe', 'ip_estatica', 'dhcp_fija'])
+
+export const VistaPreviaTipoConexion = definirEsquema(
+    'VistaPreviaTipoConexion',
+    objeto({
+        router_id: id,
+        router_version: { ...entero, description: 'version del router al calcular (va en el POST)' },
+        tipo_actual: { ...tipoConexion, description: 'Tipo del router hoy' },
+        tipo: { ...tipoConexion, description: 'Tipo al que pasaría (sin ?tipo=, el actual: «unificar»)' },
+        aplicable: {
+            ...booleano,
+            description:
+                'true si POST /routers/:id/cambiar-tipo-conexion con este tipo se aplicaría (sin bloqueos ni faltantes)',
+        },
+        bloqueos: {
+            ...lista(objeto({ codigo: enumerado(['pppoe_local_requiere_api']), mensaje: texto })),
+            description:
+                'Lo que impide el cambio en el router mismo (PPPoE en un router api sin credenciales de la API)',
+        },
+        resumen: objeto({
+            servicios: { ...entero, description: 'Servicios no retirados del router' },
+            cambian: { ...entero, description: 'Los que pasan al tipo nuevo' },
+            con_faltantes: { ...entero, description: 'Los que cambian y les falta algo (bloquean)' },
+            difieren_del_router: { ...entero, description: 'Los que hoy no usan el tipo del router' },
+        }),
+        servicios: lista(
+            objeto({
+                servicio_id: id,
+                cliente_id: id,
+                cliente_nombre: texto,
+                user_ppp: nulable(texto),
+                estado: texto,
+                tipo_conexion: { ...tipoConexion, description: 'Tipo del servicio hoy' },
+                difiere_del_router: {
+                    ...booleano,
+                    description:
+                        'No usa el tipo actual del router (dato anterior a la regla); el panel ofrece «unificar»',
+                },
+                cambia: { ...booleano, description: 'Pasa a `tipo`' },
+                faltan: {
+                    ...lista(enumerado(['mac', 'ipv4', 'plan'])),
+                    description:
+                        'Lo que le falta y bloquea el cambio: mac (dhcp_fija), ipv4 (sin IPv4 y el router sin redes), plan (solo IPv6)',
+                },
+                se_completa: {
+                    ...lista(enumerado(['credenciales', 'ipv4', 'ipv6_modo', 'amarre_ip_mac'])),
+                    description:
+                        'Lo que el cambio completa solo: credenciales PPPoE nuevas, IPv4 de las redes del router, modo IPv6 ' +
+                        'por RADIUS → ninguno, amarre IP-MAC que se quita al pasar a PPPoE',
+                },
+                mensajes: {
+                    ...lista(texto),
+                    description: 'Detalle en español de cada falta (mismo orden que faltan)',
+                },
+            }),
+        ),
+    }),
+)
+
+export const ResultadoCambiarTipoConexion = definirEsquema(
+    'ResultadoCambiarTipoConexion',
+    objeto({
+        router: Router,
+        de: tipoConexion,
+        a: tipoConexion,
+        servicios: {
+            ...lista(id),
+            description: 'Servicios que pasaron al tipo nuevo (cada uno con servicio.config_cambiada)',
+        },
     }),
 )

@@ -331,7 +331,7 @@ if cli compose exec -T api test -f /comprobantes/marca-ci-2.txt; then fallar "re
 probar_api_portal
 
 # ---------------------------------------------------------------------------
-paso "nodo portal: instalar.sh --rol portal contra este central (segundo proyecto, puertos 8080/8443)"
+paso "nodo portal: instalar.sh --rol portal contra este central (segundo proyecto, puertos 8080/8443 y corte 8089)"
 token="$(cli nodo-portal crear ci-nodo --solo-token)" || fallar "argosisp nodo-portal crear"
 [[ "$token" =~ ^argn_[A-Za-z0-9]{43}$ ]] || fallar "el token del nodo no tiene el formato del contrato"
 # Token válido: GET /api/v1/version sin sesión (contrato nodo-portal §3)
@@ -349,7 +349,7 @@ echo "    token válido 200 y revocado 401 en /api/v1/version"
 puerta="$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}')"
 sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
     ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" \
-    ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443 ARGOSISP_DOMINIO_PORTAL="nodo.$DOMINIO" \
+    ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443 ARGOSISP_PORTAL_CORTE_PUERTO=8089 ARGOSISP_DOMINIO_PORTAL="nodo.$DOMINIO" \
     ARGOSISP_NODO_CENTRAL_DIRECCION="$puerta:443" ARGOSISP_NODO_CENTRAL_TLS=inseguro \
     bash "$FUENTE/instalar.sh" --rol portal --central "https://api.$DOMINIO" --token "$token" \
     --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR_NODO" --si
@@ -378,7 +378,7 @@ for p in argosisp argosisp-portal; do
     [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan volúmenes de $p"
     [ -z "$(docker network ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan redes de $p"
 done
-for puerto in 80 443 8080 8443; do
+for puerto in 80 443 8080 8443 8088 8089; do
     if ss -Hltn "sport = :$puerto" | grep -q .; then fallar "el puerto TCP $puerto sigue ocupado"; fi
 done
 if sudo test -e "$DIR" || sudo test -e "$DIR_NODO"; then fallar "quedó la carpeta de la instalación"; fi

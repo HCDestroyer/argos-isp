@@ -188,6 +188,14 @@ export class RouterOSFalso {
      * RouterOS). Por defecto la devuelve.
      */
     ocultarPassword = false
+    /** `/ip dns` (lo que devuelve `GET /rest/ip/dns`) */
+    dns: Record<string, string> = {
+        servers: '1.1.1.1,8.8.8.8',
+        'dynamic-servers': '',
+        'allow-remote-requests': 'true',
+    }
+    /** Conexiones de `/ip firewall connection` (`src-address` y `dst-address` con puerto) */
+    conexiones: Array<{ 'src-address': string; 'dst-address': string }> = []
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -199,6 +207,8 @@ export class RouterOSFalso {
         status: 500,
         despues: false,
     }
+    /** `averiarTras`: escrituras que faltan antes de que el router empiece a responder `status` */
+    #averia: { escrituras: number; status: number } | null = null
     #puerto = 0
     #arriba = false
 
@@ -260,6 +270,21 @@ export class RouterOSFalso {
         this.#fallos = { restantes: n, status, despues: opciones.despues ?? false }
     }
 
+    /**
+     * Tras `n` escrituras más (PUT, PATCH, DELETE, POST) que sí se ejecutan, todas las peticiones
+     * responden `status` (500 por defecto) hasta `sanar()`: un router que se cae o se traba a mitad de
+     * un aplicar (p. ej. `averiarTras(2)` = el tercer comando y los siguientes fallan).
+     */
+    averiarTras(n: number, status = 500): void {
+        this.#averia = { escrituras: n, status }
+    }
+
+    /** Quita la avería de `averiarTras` y los fallos pendientes de `fallar`. */
+    sanar(): void {
+        this.#averia = null
+        this.#fallos = { restantes: 0, status: 500, despues: false }
+    }
+
     /** Estado del menú (referencia viva: se puede modificar a mano en una prueba). */
     /** Menú de solo lectura (`/ipv6/dhcp-server/binding`, `/ppp/active`), referencia viva. */
     lectura(ruta: RutaLectura): ObjetoRouterOS[] {
@@ -310,6 +335,12 @@ export class RouterOSFalso {
 
         const esperado = `Basic ${Buffer.from(`${this.usuario}:${this.password}`).toString('base64')}`
         if (req.headers.authorization !== esperado) return this.#error(res, 401, 'Unauthorized')
+        if (this.#averia) {
+            if (this.#averia.escrituras <= 0) {
+                return this.#error(res, this.#averia.status, 'Internal Server Error')
+            }
+            if (metodo !== 'GET') this.#averia.escrituras--
+        }
         if (this.#fallos.restantes > 0) {
             this.#fallos.restantes--
             if (!this.#fallos.despues) return this.#error(res, this.#fallos.status, 'Internal Server Error')
@@ -328,6 +359,24 @@ export class RouterOSFalso {
         if (!url.pathname.startsWith('/rest/')) return this.#error(res, 404, 'Not Found')
         const camino = url.pathname.slice('/rest'.length)
 
+        if (camino === '/ip/dns' && metodo === 'GET') {
+            return this.#json(res, 200, this.dns)
+        }
+        // `/execute` (solo el `connection remove` que manda ArgosIsp al suspender): quita de
+        // `conexiones` las que coinciden con cada `src-address~"^<ip>:"` / `dst-address~"^<ip>:"`.
+        if (camino === '/execute' && metodo === 'POST') {
+            const script = cuerpo?.script ?? ''
+            const prefijos = [...script.matchAll(/-address~"\^([^"]+):"/g)].map((m) =>
+                m[1]!.replaceAll('\\', ''),
+            )
+            this.conexiones = this.conexiones.filter(
+                (c) =>
+                    !prefijos.some(
+                        (p) => c['src-address'].startsWith(`${p}:`) || c['dst-address'].startsWith(`${p}:`),
+                    ),
+            )
+            return this.#json(res, 200, { ret: '' })
+        }
         if (camino === '/system/resource' && metodo === 'GET') {
             return this.#json(res, 200, {
                 'board-name': 'falso',

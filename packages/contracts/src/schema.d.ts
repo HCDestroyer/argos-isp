@@ -7542,6 +7542,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/destino-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A dónde redirige el portal cautivo al suspendido de la IP de origen
+         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalDestinoCorte"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/empresa": {
         parameters: {
             query?: never;
@@ -8972,7 +8992,7 @@ export interface paths {
         get: operations["routersVer"];
         /**
          * Editar router
-         * @description Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite `router.radius_cambiado`.
+         * @description Un router que queda en `radius` necesita `nas_ip` (422 en `nas_ip`; `nas_ip: null` solo en `api`). Pasar a `api` con servicios pppoe no retirados: 422 `servicios_pppoe_en_router` con un `errors[]` por servicio (`field: servicios.<id>`, hasta 50). Cambiar `modo_seguridad`, `nas_ip` o `radius_secret` emite `router.radius_cambiado`. Cambiar `tipo_conexion` solo si ningún servicio no retirado cambiaría (emite `router.tipo_conexion_cambiado` con motivo edicion); si no, 422 `tipo_conexion_con_servicios` con un errors[] por servicio: usar POST /routers/:id/cambiar-tipo-conexion.
          */
         put: operations["routersEditar"];
         post?: never;
@@ -9020,6 +9040,26 @@ export interface paths {
          * @description Valida la matriz (422 con el porqué), cambia el campo y emite `router.estrategia_cambiada`; el worker de RouterOS lo aplica por lotes sin cortar (crea lo nuevo, mueve, borra lo viejo). Las sesiones PPPoE vivas reciben CoA de velocidad y conservan lo demás hasta reconectar, salvo `reconectar: true`. Sin cambios: 200 sin evento. 409 si la `version` no coincide.
          */
         post: operations["routersCambiarEstrategiaVelocidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routers/{id}/cambiar-tipo-conexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el tipo de conexión del router y de todos sus servicios (o unificarlos)
+         * @description Solo admin. Pasa cada servicio no retirado con servicios.editar anidada (auditoría y diff por fila; servicio.config_cambiada con tipo_conexion, más ips/prefijo_v6 si cambiaron) y emite router.tipo_conexion_cambiado. Con el tipo actual unifica los que difieren (motivo unificar). 422 `tipo_conexion_servicios_incompletos` si a alguno le falta algo que no se completa solo (errors[] con `field: servicios.<id>.<mac|ipv4|plan>`); 422 `pppoe_local_requiere_api` (PPPoE en un router api sin credenciales de la API); 409 si la `version` del router cambió.
+         */
+        post: operations["routersCambiarTipoConexion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9517,6 +9557,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/vista-previa-tipo-conexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué servicios cambian y qué les falta si el router pasa a otro tipo de conexión (no escribe)
+         * @description contratos/tipo-conexion-router.md: un tipo por router. Lista los servicios no retirados del router con `cambia`, `faltan` (mac, ipv4, plan: bloquean), `se_completa` (credenciales, ipv4, ipv6_modo, amarre_ip_mac: no bloquean) y `difiere_del_router`. Sin `tipo`, el actual: los que difieren (unificar). `aplicable` dice si el POST pasaría. No habla con el router.
+         */
+        get: operations["routersVistaPreviaTipoConexion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/vista-previa-unificar-velocidad": {
         parameters: {
             query?: never;
@@ -9610,7 +9670,7 @@ export interface paths {
         put?: never;
         /**
          * Crear servicio PPPoE o sin PPPoE (asigna IPv4/IPv6, genera user_ppp en pppoe)
-         * @description 422 `pppoe_requiere_radius` si el servicio es pppoe (el tipo por defecto) y el router está en modo `api` (sin RADIUS): ahí solo van ip_estatica y dhcp_fija.
+         * @description El tipo de conexión es el del router (`Router.tipo_conexion`): `tipo_conexion` es opcional y, si llega distinto, 422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 `pppoe_local_requiere_api`.
          */
         post: operations["serviciosCrear"];
         delete?: never;
@@ -9630,7 +9690,7 @@ export interface paths {
         get: operations["serviciosVer"];
         /**
          * Editar servicio (plan, router, IPs, datos)
-         * @description Mover un servicio pppoe a un router en modo `api` (sin RADIUS) o pasar a pppoe uno que está en un router `api`: 422 `pppoe_requiere_radius`.
+         * @description Al cambiar `router_id` el servicio adopta el `tipo_conexion` del router destino (dhcp_fija sin mac: 422 en mac; a pppoe se generan credenciales). `tipo_conexion` solo acepta el del router o el actual: otro, 422 `tipo_conexion_del_router`. PPPoE en un router `api` sin credenciales de la API: 422 `pppoe_local_requiere_api`.
          */
         put: operations["serviciosEditar"];
         post?: never;
@@ -13712,6 +13772,10 @@ export interface components {
                 nombre: string;
             }[];
         };
+        DestinoCorte: {
+            /** @description URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL) */
+            url: string | null;
+        };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
             vencida: components["schemas"]["Dinero"];
@@ -13724,17 +13788,17 @@ export interface components {
             ok: boolean;
             chequeos: {
                 /**
-                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router)
                  * @enum {string}
                  */
-                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden";
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden" | "dns_router" | "portal_host" | "portal_en_router";
                 /** @description null: no se pudo comprobar */
                 ok: boolean | null;
                 /**
                  * @description null si salió bien
                  * @enum {string|null}
                  */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | null;
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | null;
                 /** @description Qué se vio y qué hacer, en lenguaje simple */
                 detalle: string;
                 /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
@@ -13744,7 +13808,7 @@ export interface components {
             }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */
@@ -13784,7 +13848,7 @@ export interface components {
                     ipv4: string;
                 }[];
             };
-            /** @description Lo que el corte no hace por diseño (HTTPS e IPv6 no se redirigen); mostrar siempre */
+            /** @description Lo que el corte no hace por diseño (HTTPS no se redirige; IPv6 solo con la IPv6 del portal; DNS privado estricto); mostrar siempre */
             limites: string[];
         };
         Diario: {
@@ -14123,6 +14187,8 @@ export interface components {
             sitio_web: string | null;
             horario: string | null;
             instrucciones_pago: string | null;
+            /** @description URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte */
+            url_corte: string | null;
             /** @description `#RRGGBB`; solo PDF y correo */
             color_marca: string | null;
             /** @description País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais */
@@ -15951,7 +16017,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -18852,6 +18918,15 @@ export interface components {
                 detalle: string;
             }[];
         };
+        ResultadoCambiarTipoConexion: {
+            router: components["schemas"]["Router"];
+            /** @enum {string} */
+            de: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @enum {string} */
+            a: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @description Servicios que pasaron al tipo nuevo (cada uno con servicio.config_cambiada) */
+            servicios: number[];
+        };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
             horas: string[];
@@ -19269,6 +19344,11 @@ export interface components {
              * @enum {string}
              */
             modo_seguridad: "radius" | "api";
+            /**
+             * @description Tipo de conexión de los servicios del router (contratos/tipo-conexion-router.md): los nuevos lo toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)
+             * @enum {string}
+             */
+            tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
             /**
              * @description Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple
              * @enum {string}
@@ -19707,7 +19787,7 @@ export interface components {
                 /** @description `argosisp:servicio:<id>` o `argosisp:plan:<id>` */
                 comment: string;
                 /** @enum {string} */
-                accion: "creado" | "actualizado" | "borrado" | "desconectado";
+                accion: "creado" | "actualizado" | "borrado" | "desconectado" | "conexiones_cortadas";
                 duplicados?: number;
             }[];
             /** @description Nada que corregir y el router respondió */
@@ -20564,6 +20644,61 @@ export interface components {
             }[];
             /** @description El router no respondió o no tiene credenciales */
             error: string | null;
+        };
+        VistaPreviaTipoConexion: {
+            router_id: number;
+            /** @description version del router al calcular (va en el POST) */
+            router_version: number;
+            /**
+             * @description Tipo del router hoy
+             * @enum {string}
+             */
+            tipo_actual: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /**
+             * @description Tipo al que pasaría (sin ?tipo=, el actual: «unificar»)
+             * @enum {string}
+             */
+            tipo: "pppoe" | "ip_estatica" | "dhcp_fija";
+            /** @description true si POST /routers/:id/cambiar-tipo-conexion con este tipo se aplicaría (sin bloqueos ni faltantes) */
+            aplicable: boolean;
+            /** @description Lo que impide el cambio en el router mismo (PPPoE en un router api sin credenciales de la API) */
+            bloqueos: {
+                /** @enum {string} */
+                codigo: "pppoe_local_requiere_api";
+                mensaje: string;
+            }[];
+            resumen: {
+                /** @description Servicios no retirados del router */
+                servicios: number;
+                /** @description Los que pasan al tipo nuevo */
+                cambian: number;
+                /** @description Los que cambian y les falta algo (bloquean) */
+                con_faltantes: number;
+                /** @description Los que hoy no usan el tipo del router */
+                difieren_del_router: number;
+            };
+            servicios: {
+                servicio_id: number;
+                cliente_id: number;
+                cliente_nombre: string;
+                user_ppp: string | null;
+                estado: string;
+                /**
+                 * @description Tipo del servicio hoy
+                 * @enum {string}
+                 */
+                tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
+                /** @description No usa el tipo actual del router (dato anterior a la regla); el panel ofrece «unificar» */
+                difiere_del_router: boolean;
+                /** @description Pasa a `tipo` */
+                cambia: boolean;
+                /** @description Lo que le falta y bloquea el cambio: mac (dhcp_fija), ipv4 (sin IPv4 y el router sin redes), plan (solo IPv6) */
+                faltan: ("mac" | "ipv4" | "plan")[];
+                /** @description Lo que el cambio completa solo: credenciales PPPoE nuevas, IPv4 de las redes del router, modo IPv6 por RADIUS → ninguno, amarre IP-MAC que se quita al pasar a PPPoE */
+                se_completa: ("credenciales" | "ipv4" | "ipv6_modo" | "amarre_ip_mac")[];
+                /** @description Detalle en español de cada falta (mismo orden que faltan) */
+                mensajes: string[];
+            }[];
         };
         VistaPreviaTomarControl: {
             /** @enum {string} */
@@ -31124,6 +31259,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -31260,6 +31400,11 @@ export interface operations {
                     sitio_web?: string | null;
                     horario?: string | null;
                     instrucciones_pago?: string | null;
+                    /**
+                     * Format: uri
+                     * @description URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí (302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte
+                     */
+                    url_corte?: string | null;
                     /** @description Color de marca `#RRGGBB`, solo para el PDF y el correo */
                     color_marca?: string | null;
                     /** @description Régimen de ISR. Solo lectura desde la localización fiscal: se acepta al crear (semilla del parámetro `regimen`); al editar, otro valor responde 422 `campo_solo_lectura` (POST /fiscal/regimen) */
@@ -50975,6 +51120,35 @@ export interface operations {
             };
         };
     };
+    portalDestinoCorte: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Destino del 302 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinoCorte"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalEmpresa: {
         parameters: {
             query?: {
@@ -55664,7 +55838,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -55722,7 +55896,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -55907,6 +56081,11 @@ export interface operations {
                      * @enum {string}
                      */
                     modo_seguridad?: "radius" | "api";
+                    /**
+                     * @description Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
@@ -56059,6 +56238,11 @@ export interface operations {
                      * @enum {string}
                      */
                     modo_seguridad?: "radius" | "api";
+                    /**
+                     * @description Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)
+                     * @enum {string}
+                     */
+                    tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description Empresa por defecto de los servicios nuevos (servicio > zona > router > empresa activa) */
                     empresa_sugerida_id?: number | null;
                     /** @description Zona del router (opcional); 422 si no existe */
@@ -56375,6 +56559,89 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso routers.cambiar_control_velocidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersCambiarTipoConexion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /**
+                     * @description Tipo nuevo del router; todos sus servicios no retirados pasan a él. Igual al actual = unificar
+                     * @enum {string}
+                     */
+                    tipo_conexion: "pppoe" | "ip_estatica" | "dhcp_fija";
+                    motivo?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Router y servicios cambiados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoCambiarTipoConexion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.cambiar_tipo_conexion; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -58217,6 +58484,67 @@ export interface operations {
             };
         };
     };
+    routersVistaPreviaTipoConexion: {
+        parameters: {
+            query?: {
+                /** @description Tipo al que pasaría el router; sin él, el actual (la vista de «unificar»: los servicios que difieren) */
+                tipo?: "pppoe" | "ip_estatica" | "dhcp_fija";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaTipoConexion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     routersVistaPreviaUnificarVelocidad: {
         parameters: {
             query?: {
@@ -58602,7 +58930,7 @@ export interface operations {
                     router_id: number;
                     plan_id: number;
                     /**
-                     * @description Por defecto pppoe
+                     * @description Opcional: el servicio toma el tipo de su router (Router.tipo_conexion). Si llega distinto: 422 tipo_conexion_del_router
                      * @enum {string}
                      */
                     tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
@@ -58610,7 +58938,7 @@ export interface operations {
                     amarre_ip_mac?: boolean;
                     /** @description Ausente: la plantilla marcada por_defecto; sin marcada, la única que haya (422 si hay varias). null: sin plantilla */
                     plantilla_facturacion_id?: number | null;
-                    /** @description Solo pppoe; se genera si no viene */
+                    /** @description Solo pppoe; se genera si no viene. Distingue mayúsculas. 409 user_ppp_duplicado si ya existe (también en un retirado) o user_ppp_en_sesion si una sesión abierta de otro servicio lo usa */
                     user_ppp?: string;
                     /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
@@ -58634,7 +58962,7 @@ export interface operations {
                     excluir_firewall?: boolean;
                     /**
                      * Format: ipv4
-                     * @description IP fija; si no viene se asigna de las redes del router
+                     * @description IP fija; si no viene se asigna de las redes del router. 409 ip_ocupada si la tiene otro servicio e ip_en_sesion si una sesión abierta de otro servicio todavía la usa
                      */
                     ipv4?: string;
                     /** @description Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido */
@@ -58787,15 +59115,15 @@ export interface operations {
                     plan_id?: number;
                     plantilla_facturacion_id?: number | null;
                     /**
-                     * @description pppoe (RADIUS, con user_ppp/pass_ppp), ip_estatica o dhcp_fija (sin credenciales, por API REST de RouterOS; dhcp_fija exige mac)
+                     * @description Solo el tipo del router (pasar a él) o el actual. Al cambiar router_id el servicio adopta el del destino (dhcp_fija exige mac; a pppoe se generan credenciales). Otro: 422 tipo_conexion_del_router
                      * @enum {string}
                      */
                     tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                     /** @description ARP estático IP-MAC en el router (solo sin PPPoE; exige mac) */
                     amarre_ip_mac?: boolean;
-                    /** @description Solo al cambiar a pppoe; se genera si no viene */
+                    /** @description Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe, también en un retirado; 409 user_ppp_en_sesion si una sesión abierta de otro servicio lo usa). Distingue mayúsculas. Emite servicio.config_cambiada con credenciales */
                     user_ppp?: string;
-                    /** @description Solo pppoe; al cambiar a pppoe se genera si no viene */
+                    /** @description Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con credenciales (nunca el valor; en audit.cambios queda ***) */
                     pass_ppp?: string;
                     mac?: string | null;
                     direccion?: string | null;
@@ -58817,8 +59145,11 @@ export interface operations {
                     excluir_firewall?: boolean;
                     /** @description Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido */
                     servidor_pppoe_id?: number | null;
-                    /** Format: ipv4 */
-                    ipv4?: string;
+                    /**
+                     * Format: ipv4
+                     * @description IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar. 409 ip_ocupada (otro servicio la tiene) o ip_en_sesion (una sesión abierta de otro servicio la usa)
+                     */
+                    ipv4?: string | null;
                     /** @enum {string} */
                     ipv6_modo?: "radius_servicio" | "radius_pool" | "duid" | "estatico" | "ninguno";
                     ipv6_duid?: string | null;
@@ -61655,7 +61986,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

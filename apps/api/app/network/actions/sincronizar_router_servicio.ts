@@ -18,7 +18,8 @@ export interface ResultadoSincronizar {
 }
 
 /** Clave del candado por servicio (distinta de `LOCK_ROUTEROS`, que es por router). */
-const LOCK_SINCRONIZAR = 4104
+// 4104 es también el espacio del cron de sesiones colgadas (`hashtext`): uno propio.
+const LOCK_SINCRONIZAR = 4108
 
 /**
  * `servicios.sincronizar_router` (pedido del PM, 29 oct): aplica ya el estado deseado de un servicio en

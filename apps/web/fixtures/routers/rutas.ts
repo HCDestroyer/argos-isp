@@ -8,6 +8,8 @@ import { extremoApi, routerDuplicado, rutasDuplicados } from './duplicados'
 import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
 import { estrategiaDeControl } from './estrategiasDatos'
+import { MENSAJE_API_PPPOE_LOCAL } from '../servicios/rutas'
+import { esTipoFixture, rutasTipoConexion, tipoConServicios } from './tipoConexion'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -146,6 +148,7 @@ function capacidadValida(valor: unknown): boolean {
 export const rutasRouters: RutasFixture = {
     // Antes de `/routers/:id`: la primera ruta que coincide responde.
     ...rutasDuplicados,
+    ...rutasTipoConexion,
 
     'GET /api/v1/routers': conPermiso('routers.ver', (solicitud) => {
         const activo = solicitud.query.get('activo')
@@ -189,6 +192,9 @@ export const rutasRouters: RutasFixture = {
         if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
             errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
         }
+        if (cuerpo.tipo_conexion !== undefined && !esTipoFixture(cuerpo.tipo_conexion)) {
+            errores.push({ field: 'tipo_conexion', message: 'El valor de tipo_conexion no es válido', rule: 'enum' })
+        }
         // Como `EditarRouter` (A1): `nas_ip: null` la quita; un router que queda en `radius` la exige.
         const modo = cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad
         const nasDespues = 'nas_ip' in cuerpo ? (typeof cuerpo.nas_ip === 'string' ? cuerpo.nas_ip.trim() : null) : router.nas_ip
@@ -205,6 +211,19 @@ export const rutasRouters: RutasFixture = {
             const conPppoe = serviciosPppoe(router.id)
             if (conPppoe) {
                 return conPppoe
+            }
+        }
+        // Como `exigirTipoSinServicios` (A1): el tipo cambia aquí solo si ningún servicio cambiaría.
+        const tipo = esTipoFixture(cuerpo.tipo_conexion) ? cuerpo.tipo_conexion : router.tipo_conexion
+        if (tipo !== router.tipo_conexion) {
+            const conServicios = tipoConServicios(router, tipo)
+            if (conServicios) {
+                return conServicios
+            }
+            if (tipo === 'pppoe' && modo === 'api' && !(router.api_usuario && router.tiene_api_password)) {
+                return problemaTipado(422, 'pppoe_local_requiere_api', 'Regla de negocio', MENSAJE_API_PPPOE_LOCAL, [
+                    { field: 'tipo_conexion', rule: 'pppoe_local_requiere_api', message: MENSAJE_API_PPPOE_LOCAL },
+                ])
             }
         }
         // Como `exigirSinDuplicado` (A1): solo lo que cambia (API, nas_ip) o reactivar, que revisa todo.
@@ -237,6 +256,7 @@ export const rutasRouters: RutasFixture = {
             host: texto('host'),
             nas_ip: nasDespues,
             modo_seguridad: modo,
+            tipo_conexion: tipo,
             api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
             // Vacío o null no cambia; `quitar_*` la borra a propósito.
             tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
@@ -361,6 +381,7 @@ export const rutasRouters: RutasFixture = {
             tiene_radius_secret: typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret.length > 0,
             nas_ip: nas,
             modo_seguridad: modo,
+            tipo_conexion: cuerpo.tipo_conexion === 'ip_estatica' || cuerpo.tipo_conexion === 'dhcp_fija' ? cuerpo.tipo_conexion : 'pppoe',
             control_velocidad: control,
             // Como `CrearRouter` (A2): la estrategia del atajo; sin versión hasta que la API responda.
             estrategia_velocidad: estrategiaDeControl(control),

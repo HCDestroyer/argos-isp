@@ -42,3 +42,41 @@ export function formatearVelocidad(kbps: number): string {
     }
     return `${kbps} kbps`
 }
+
+/** Error de una IPv4 fija en un campo del formulario (`ipv4` o `red_id`). */
+export interface ProblemaIpv4Fija {
+    campo: 'ipv4' | 'red_id'
+    mensaje: string
+}
+
+/**
+ * Lo que se revisa al elegir una IPv4 fija de una red del router, igual en el alta y en la edición
+ * del servicio: IPv4 válida, red elegida (si se exige) y, con la red a la vista, que la IP caiga en
+ * ella. La API además revisa que no sea red, broadcast ni gateway y que esté libre.
+ */
+export function problemasIpv4Fija(
+    datos: { ipv4: string, red_id?: number },
+    opciones: { exigirRed: boolean, redes?: readonly { id: number, cidr: string }[] },
+): ProblemaIpv4Fija[] {
+    const problemas: ProblemaIpv4Fija[] = []
+    const valida = PATRON_IPV4.test(datos.ipv4)
+    if (!valida) {
+        problemas.push({ campo: 'ipv4', mensaje: 'Escribe una IPv4 válida' })
+    }
+    if (datos.red_id === undefined) {
+        if (opciones.exigirRed) {
+            problemas.push({ campo: 'red_id', mensaje: 'Elige la red de la IP fija' })
+        }
+        return problemas
+    }
+    const red = opciones.redes?.find(r => r.id === datos.red_id)
+    if (valida && red && !ipEnCidr(datos.ipv4, red.cidr)) {
+        problemas.push({ campo: 'ipv4', mensaje: `Escribe una IP dentro de ${red.cidr} o elige otra red` })
+    }
+    return problemas
+}
+
+/** `100.64.10.0/24 · estática`: cómo se nombra una red IPv4 del router en los selectores. */
+export function etiquetaRedIpv4(red: { cidr: string, tipo: string }): string {
+    return `${red.cidr} · ${red.tipo === 'pool' ? 'pool' : 'estática'}`
+}

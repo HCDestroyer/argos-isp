@@ -11,7 +11,8 @@ import {
     exigirZona,
     type DatosRouter,
 } from '#network/actions/crear_router'
-import { exigirSinPppoe } from '#network/modo_seguridad'
+import { exigirPppoeAdmitido, exigirSinPppoe, MAXIMO_SERVICIOS_LISTADOS } from '#network/modo_seguridad'
+import { analizarServiciosRouter, ETIQUETA_TIPO } from '#network/tipo_conexion_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { extremoApi, exigirRouterUnico } from '#network/routers_duplicados'
@@ -120,6 +121,33 @@ async function exigirModoSeguridad(t: Transaccion, antes: RouterVista, datos: Da
 }
 
 /**
+ * Tipo de conexión (`contratos/tipo-conexion-router.md`): la edición lo cambia solo si ningún servicio
+ * no retirado tendría que cambiar; si no, 422 `tipo_conexion_con_servicios` con un `errors[]` por
+ * servicio, y se usa `routers.cambiar_tipo_conexion` (vista previa y servicio por servicio).
+ */
+async function exigirTipoSinServicios(
+    t: Transaccion,
+    antes: RouterVista,
+    tipo: RouterVista['tipo_conexion'],
+) {
+    const servicios = await analizarServiciosRouter(t.trx, antes.id, antes.tipo_conexion, tipo)
+    const cambian = servicios.filter((s) => s.cambia)
+    if (cambian.length === 0) return
+    const total = cambian.length
+    throw new ReglaNegocio(
+        `El router tiene ${total} ${total === 1 ? 'servicio' : 'servicios'} que no ${total === 1 ? 'es' : 'son'} ` +
+            `${ETIQUETA_TIPO[tipo]}. Para cambiar el tipo del router con servicios usa «Cambiar tipo de conexión» ` +
+            '(POST /routers/:id/cambiar-tipo-conexion): muestra qué cambia y qué les falta, y los pasa uno por uno',
+        'tipo_conexion_con_servicios',
+        cambian.slice(0, MAXIMO_SERVICIOS_LISTADOS).map((s) => ({
+            field: `servicios.${s.servicio_id}`,
+            rule: 'tipo_conexion_con_servicios',
+            message: `Servicio ${s.servicio_id} (${s.cliente_nombre}, ${ETIQUETA_TIPO[s.tipo_conexion]})`,
+        })),
+    )
+}
+
+/**
  * Edita un router (control optimista por `version`). Cambiar una credencial se audita como
  * campo cambiado con valor `***`, nunca en claro. Cambiar la capacidad del enlace emite
  * `router.control_cambiado` con `campos: ['capacidad']` (A2 recalcula el padre global). El
@@ -143,7 +171,11 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         exigirCaValida(datos.api_ca)
         await exigirModoSeguridad(t, antes, datos)
         await exigirSinDuplicado(t, antes, datos)
+        const cambiaTipo = datos.tipo_conexion !== undefined && datos.tipo_conexion !== antes.tipo_conexion
+        if (cambiaTipo) await exigirTipoSinServicios(t, antes, datos.tipo_conexion!)
         await actualizarConVersion(t.trx, 'network.routers', id, version, columnasRouter(datos))
+        // un router `api` necesita las credenciales de la API para PPPoE (las de esta misma edición cuentan)
+        if (cambiaTipo) await exigirPppoeAdmitido(t.trx, id, datos.tipo_conexion!)
         const despues = await verRouter(id, t.trx)
 
         const a = auditableRouter(antes)
@@ -167,6 +199,16 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
                 capacidad_subida_kbps: despues.capacidad_subida_kbps,
                 campos: ['capacidad'],
                 motivo: null,
+            })
+        }
+        if (cambiaTipo) {
+            await t.emit('router.tipo_conexion_cambiado', {
+                router_id: id,
+                empresa_id: despues.empresa_sugerida_id === null ? null : Number(despues.empresa_sugerida_id),
+                de: antes.tipo_conexion,
+                a: despues.tipo_conexion,
+                servicios: [],
+                motivo: 'edicion',
             })
         }
         const camposCatalogo: CampoCatalogoCambiado[] = []

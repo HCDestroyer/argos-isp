@@ -209,3 +209,23 @@ export function nombreParcial(nombre: string): string | null {
     const inicial = segunda ? ` ${segunda.charAt(0).toLocaleUpperCase('es')}.` : ''
     return `${primera}${inicial}`
 }
+
+/**
+ * A dónde manda el portal a un suspendido (`GET /portal/destino-corte`, contratos/control-velocidad.md
+ * §10.6): la `url_corte` de la empresa del servicio de esa IP, o null (la `/corte` del portal). Solo la
+ * URL que configuró el operador: ningún dato del cliente.
+ */
+export async function leerDestinoCorte(
+    ip: string,
+    cliente: QueryClientContract = db.connection(),
+): Promise<{ url: string | null }> {
+    const servicioId = await resolverServicio(cliente, ip)
+    if (!servicioId) return { url: null }
+    const fila = (await cliente
+        .from('core.servicios as s')
+        .join('core.empresas as e', 'e.id', 's.empresa_id')
+        .where('s.id', servicioId)
+        .select('e.url_corte')
+        .first()) as { url_corte: string | null } | null
+    return { url: fila?.url_corte ?? null }
+}

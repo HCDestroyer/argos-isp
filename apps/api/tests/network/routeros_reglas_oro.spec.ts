@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { cifrar, claveDesdeTexto } from '#shared/cifrado'
 import env from '#start/env'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } from '#tests/core/fabricas'
 import { RouterOSFalso } from '#network/routeros/falso'
 import { clienteDeRouter } from '#network/routeros/router'
 import { normalizarValor } from '#network/routeros/normalizar'
@@ -72,6 +72,7 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
     })
 
     async function crear(client: any, planId: number) {
+        await routerConTipo(routerId, 'ip_estatica')
         const requestId = unico('req')
         const r = await estado(
             client

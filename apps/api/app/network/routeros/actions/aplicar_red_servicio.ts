@@ -24,12 +24,14 @@ import {
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
     aplicarEstado,
+    cortarConexionesSiSuspendio,
     asegurarVelocidad,
     enTransicion,
     leerVelocidadRouter,
     limpiarVelocidad,
     fabricaPorDefecto,
     LOCK_ROUTEROS,
+    LOCK_ROUTEROS_SERVICIO,
     marcarPendiente,
     perfilSuspendido,
     registrarFallo,
@@ -44,6 +46,29 @@ export interface EntradaAplicarRed {
     /** id del evento que lo disparó (va a `audit.red`) */
     evento_id?: string | null
     evento?: string | null
+    /** `campos` de `servicio.config_cambiada` (con `credenciales` se fuerza el secret, `pppoe-local.md` §2 ter) */
+    campos?: string[]
+}
+
+/** ¿Este evento ya escribió el secret del servicio en el router? (`audit.red`, escritura aceptada) */
+async function secretYaEscrito(
+    t: Transaccion,
+    routerId: number,
+    servicioId: number,
+    eventoId: string | null,
+): Promise<boolean> {
+    if (!eventoId) return false
+    const fila = await t.trx
+        .from('audit.red')
+        .where('router_id', routerId)
+        .where('servicio_id', servicioId)
+        .where('tipo', 'routeros')
+        .where('ok', true)
+        .whereRaw(`comando->>'evento_id' = ?`, [eventoId])
+        .whereRaw(`comando->>'ruta' = '/ppp/secret'`)
+        .whereRaw(`comando->>'metodo' IN ('PUT', 'PATCH')`)
+        .first()
+    return Boolean(fila)
 }
 
 export interface ResultadoRouter {
@@ -76,7 +101,8 @@ export interface ResultadoAplicarRed {
  * - Si el router no responde tras los reintentos del cliente, o no tiene credenciales: emite
  *   `routeros.fallido` por outbox, marca el router como pendiente (lo repone el job `recuperar`
  *   del reconciliador cuando vuelva) y **no lanza**: reintentar el evento no arregla un router caído.
- * - Serializa por router con `pg_advisory_xact_lock` (el reconciliador toma el mismo).
+ * - Serializa por servicio (`LOCK_ROUTEROS_SERVICIO`, antes de leer) y por router con
+ *   `pg_advisory_xact_lock` (el reconciliador toma el mismo del router).
  * - Auditoría: solo cuando hubo cambios o errores. Un evento de un servicio PPPoE (la mayoría) no
  *   toca el router ni deja fila: es una evaluación sin efecto (regla 9; pedido al Líder BE en
  *   `.claude/integration/a2.md`).
@@ -100,6 +126,13 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
 
     protected async handle(input: EntradaAplicarRed, t: Transaccion): Promise<ResultadoAplicarRed> {
         t.fijarEntidad('servicio', input.servicio_id)
+        // Dos aplicar del mismo servicio a la vez (evento repetido, evento y «Sincronizar», dos workers):
+        // se serializan antes de leer, así el segundo lee lo que dejó confirmado el primero y nunca
+        // escribe un estado más viejo encima de uno nuevo. Orden de locks: servicio → routers (por id).
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [
+            LOCK_ROUTEROS_SERVICIO,
+            input.servicio_id,
+        ])
         const servicio = await servicioRed(input.servicio_id, t.trx)
         const historial = await routersConHistorial(input.servicio_id, t.trx)
 
@@ -166,6 +199,18 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 }
                 // Los objetos del plan no son del servicio: van a `audit.red` sin servicio_id.
                 const ctxPlan = { ...ctx, servicio_id: null }
+                // Suspensión de un WISP: sus conexiones abiertas (FastTrack) se cortan una vez.
+                const cortar = async () => {
+                    if (!porServicio) return
+                    const c = await cortarConexionesSiSuspendio(
+                        cliente,
+                        estado,
+                        fila.cambios,
+                        perfilSuspendido().addressList,
+                        ctx,
+                    )
+                    if (c) fila.cambios.push(c)
+                }
                 const secret = async () => {
                     if (!conSecret) return
                     let deseadoSecret: SecretDeseado | null = null
@@ -201,6 +246,14 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                     // Un PPPoE que sigue en este router pero ahora con RADIUS (de `api` a `radius`): se
                     // borra el secret sin cortar la sesión; reconecta por RADIUS cuando se caiga.
                     const migrando = deseado && servicio.tipo_conexion === 'pppoe' && modo === 'radius'
+                    // Credenciales cambiadas (A1: `servicio.config_cambiada` con `credenciales`): el router no
+                    // devuelve la contraseña sin la política `sensitive`, así que se escribe a la fuerza y
+                    // se corta la sesión, una sola vez por evento (si `audit.red` ya tiene el secret de
+                    // este evento, una entrega repetida no vuelve a cortar la sesión reconectada).
+                    const forzar =
+                        deseadoSecret !== null &&
+                        (input.campos ?? []).includes('credenciales') &&
+                        !(await secretYaEscrito(t, routerId, input.servicio_id, input.evento_id ?? null))
                     const cambiosSecret = await asegurarSecret(
                         cliente,
                         input.servicio_id,
@@ -208,6 +261,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         ctx,
                         {
                             desconectar: !migrando,
+                            credenciales: forzar,
                         },
                     )
                     fila.cambios.push(...cambiosSecret)
@@ -230,6 +284,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         )
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
                         if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
+                        await cortar()
                         // El secret después de los perfiles a los que apunta y antes de borrar los que sobran.
                         await secret()
                         // Durante un cambio de modo, lo del modo anterior lo borra el cambio al final.
@@ -241,6 +296,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                         }
                     } else {
                         fila.cambios = await aplicarEstado(cliente, estado, ctx)
+                        await cortar()
                         await secret()
                     }
                 } finally {

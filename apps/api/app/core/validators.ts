@@ -383,7 +383,13 @@ export const crearServicioValidator = vine.compile(
         }),
         router_id: idEntidad(),
         plan_id: idEntidad(),
-        tipo_conexion: tipoConexion().optional().meta({ description: 'Por defecto pppoe' }),
+        tipo_conexion: tipoConexion()
+            .optional()
+            .meta({
+                description:
+                    'Opcional: el servicio toma el tipo de su router (Router.tipo_conexion). Si llega distinto: 422 ' +
+                    'tipo_conexion_del_router',
+            }),
         amarre_ip_mac: amarreIpMac().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional().meta({
             description:
@@ -394,7 +400,11 @@ export const crearServicioValidator = vine.compile(
             .trim()
             .regex(/^[A-Za-z0-9._@-]{3,64}$/)
             .optional()
-            .meta({ description: 'Solo pppoe; se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe; se genera si no viene. Distingue mayúsculas. 409 user_ppp_duplicado si ya existe ' +
+                    '(también en un retirado) o user_ppp_en_sesion si una sesión abierta de otro servicio lo usa',
+            }),
         pass_ppp: vine
             .string()
             .minLength(6)
@@ -419,7 +429,11 @@ export const crearServicioValidator = vine.compile(
         excluir_firewall: vine.boolean().optional(),
         ipv4: ipv4()
             .optional()
-            .meta({ description: 'IP fija; si no viene se asigna de las redes del router' }),
+            .meta({
+                description:
+                    'IP fija; si no viene se asigna de las redes del router. 409 ip_ocupada si la tiene otro servicio ' +
+                    'e ip_en_sesion si una sesión abierta de otro servicio todavía la usa',
+            }),
         servidor_pppoe_id: idEntidad().nullable().optional().meta({
             description:
                 'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
@@ -444,20 +458,35 @@ export const editarServicioValidator = vine.compile(
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),
         plantilla_facturacion_id: idEntidad().nullable().optional(),
-        tipo_conexion: tipoConexion().optional(),
+        tipo_conexion: tipoConexion()
+            .optional()
+            .meta({
+                description:
+                    'Solo el tipo del router (pasar a él) o el actual. Al cambiar router_id el servicio adopta el del ' +
+                    'destino (dhcp_fija exige mac; a pppoe se generan credenciales). Otro: 422 tipo_conexion_del_router',
+            }),
         amarre_ip_mac: amarreIpMac().optional(),
         user_ppp: vine
             .string()
             .trim()
             .regex(/^[A-Za-z0-9._@-]{3,64}$/)
             .optional()
-            .meta({ description: 'Solo al cambiar a pppoe; se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado ' +
+                    'si ya existe, también en un retirado; 409 user_ppp_en_sesion si una sesión abierta de otro servicio ' +
+                    'lo usa). Distingue mayúsculas. Emite servicio.config_cambiada con credenciales',
+            }),
         pass_ppp: vine
             .string()
             .minLength(6)
             .maxLength(64)
             .optional()
-            .meta({ description: 'Solo pppoe; al cambiar a pppoe se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con ' +
+                    'credenciales (nunca el valor; en audit.cambios queda ***)',
+            }),
         mac: vine
             .string()
             .trim()
@@ -478,7 +507,15 @@ export const editarServicioValidator = vine.compile(
             description:
                 'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
         }),
-        ipv4: ipv4().optional(),
+        ipv4: ipv4()
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; ' +
+                    'en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar. ' +
+                    '409 ip_ocupada (otro servicio la tiene) o ip_en_sesion (una sesión abierta de otro servicio la usa)',
+            }),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional(),
@@ -807,6 +844,18 @@ const camposEmpresa = {
         .optional(),
     horario: textoEmpresa(200),
     instrucciones_pago: textoEmpresa(1000),
+    url_corte: vine
+        .string()
+        .trim()
+        .maxLength(500)
+        .url({ require_protocol: true, protocols: ['http', 'https'] })
+        .nullable()
+        .optional()
+        .meta({
+            description:
+                'URL de corte del operador (`http(s)://`): el portal manda a los suspendidos de esta empresa ahí ' +
+                '(302) en vez de a su /corte, y su host entra en el walled garden de los routers. null = /corte',
+        }),
     color_marca: vine
         .string()
         .trim()

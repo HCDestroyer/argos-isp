@@ -1076,6 +1076,11 @@ export const EmpresaGrupo = definirEsquema(
         sitio_web: nulable(texto),
         horario: nulable(texto),
         instrucciones_pago: nulable(texto),
+        url_corte: {
+            ...nulable(texto),
+            description:
+                'URL de corte del operador (302 de las sondas y del HTTP de los suspendidos); null = /corte',
+        },
         color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
         pais: {
             ...texto,

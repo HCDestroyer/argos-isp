@@ -99,6 +99,9 @@ export default class CrearEmpresa extends DomainAction<EntradaCrearEmpresa, Empr
         })
         const empresa = await verEmpresaCompleta(id, t.trx)
         await t.registrarCambios({ tipo: 'empresa', id }, null, sinDerivados(empresa))
+        if (empresa.url_corte) {
+            await t.emit('portal.config_cambiada', { empresa_id: id, campos: ['url_corte'] })
+        }
         return empresa
     }
 }
