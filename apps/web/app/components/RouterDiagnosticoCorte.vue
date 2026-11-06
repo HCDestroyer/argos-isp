@@ -34,9 +34,10 @@ const PASOS: Record<Chequeo['clave'], string> = {
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {
-    variable: 'fijada en ROUTERS_SERVICIO_PORTAL_V4',
-    url: 'tomada de la URL del portal',
-    dns: 'resuelta del nombre del portal',
+    configuracion: 'la guardada en Configuración → Portal de corte',
+    variable: 'valor inicial del servidor, todavía sin guardar en Configuración → Portal de corte',
+    url: 'tomada de la dirección pública del portal',
+    dns: 'resuelta del nombre de la dirección pública del portal',
 }
 
 function estado(chequeo: Chequeo): { etiqueta: string, color: 'success' | 'error' | 'neutral', icono: string } {
@@ -144,6 +145,18 @@ const fuera = computed(() => props.corte.suspendidos.fuera_de_lista)
                 data-prueba="corte-suspendidos"
             />
         </dl>
+        <ULink
+            v-if="puede('portal_corte.ver')"
+            to="/configuracion/portal-corte"
+            class="inline-flex items-center gap-1 self-start text-xs font-medium text-primary hover:underline"
+            data-prueba="corte-ir-configuracion"
+        >
+            <UIcon
+                name="i-lucide-settings"
+                class="size-3.5"
+            />
+            Cambiar la IP o el puerto del portal en Configuración → Portal de corte
+        </ULink>
         <p
             v-if="corte.portal.detalle"
             class="font-mono text-xs break-all text-muted"

@@ -23,6 +23,7 @@ import { clienteDeRouter } from '#network/routeros/router'
 import { bitacoraRed } from '#network/routeros/dispatcher'
 import { claveDesdeTexto } from '#shared/cifrado'
 import { crearClienteFila, crearPlanFila, crearRouterFila, crearServicioFila } from '#tests/core/fabricas'
+import ConfigurarPortalCorte from '#portal/actions/configurar_portal_corte'
 
 /**
  * Tarea 6 de A2, de punta a punta con procesos reales:
@@ -234,6 +235,13 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         nasNak = nasSimulado('127.0.0.3', 'nak')
         await esperarHasta(() => nasAck.lineas.some((l) => l.includes('"listo"')))
         await esperarHasta(() => nasNak.lineas.some((l) => l.includes('"listo"')))
+        // coa lee el modo de suspensión de la API (`GET internal/corte/configuracion`) al arrancar: estas
+        // pruebas cubren el CoA de suspensión, así que la configuración guardada dice `coa` (fixture
+        // directo, como `reiniciarFila` de tests/portal/portal_corte.spec.ts).
+        await db
+            .from('core.portal_corte')
+            .where('id', 1)
+            .update({ modo_suspension: 'coa', version: 1, updated_at: new Date() })
         coa = new Proceso(['services/coa/src/index.ts'], {
             PORT: '0',
             HOST: '127.0.0.1',
@@ -241,8 +249,7 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             REDIS_HOST: env.get('REDIS_HOST') ?? '127.0.0.1',
             REDIS_PORT: String(env.get('REDIS_PORT') ?? 6379),
             COA_STREAM: STREAM,
-            // Estas pruebas cubren el CoA de suspensión (`COA_SUSPENDER=coa`); el valor por defecto,
-            // `disconnect`, lo prueban services/coa/test/dispatcher.test.ts y la guía de laboratorio.
+            // Solo respaldo si la API no respondiera (la fuente es la configuración del panel).
             COA_SUSPENDER: 'coa',
             COA_GRUPO_INICIO: '0',
             DB_HOST: env.get('DB_HOST'),
@@ -268,6 +275,14 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         })
         await esperarHasta(() => coa.lineas.some((l) => l.includes('coa escuchando')))
         return async () => {
+            await db.from('core.portal_corte').where('id', 1).update({
+                portal_v4: null,
+                portal_v6: null,
+                portal_puerto: 80,
+                modo_suspension: 'desconectar',
+                version: 0,
+                updated_by: null,
+            })
             coa.detener()
             nasAck.detener()
             nasNak.detener()
@@ -768,6 +783,77 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             assert.isTrue(falso.tabla('/ip/firewall/nat').some((o) => o['src-address-list'] === lista))
         } finally {
             await falso.cerrar()
+        }
+    })
+    test('modo de suspensión desde el panel: coa → desconectar, portal.config_cambiada y la siguiente suspensión va por Disconnect', async ({
+        assert,
+    }) => {
+        // Arrancó leyendo `coa` de la API (no del entorno).
+        assert.isTrue(
+            coa
+                .json<{ msg: string; modo_suspension?: string; motivo?: string }>()
+                .some(
+                    (l) =>
+                        l.msg === 'coa: modo de suspensión leído' &&
+                        l.motivo === 'arranque' &&
+                        l.modo_suspension === 'coa',
+                ),
+        )
+        const leerVersion = async () =>
+            Number(
+                ((await db.from('core.portal_corte').where('id', 1).firstOrFail()) as { version: number })
+                    .version,
+            )
+        const publicarPortal = async (desde: number) => {
+            const filas = (await db
+                .from('audit.outbox')
+                .where('evento', 'portal.config_cambiada')
+                .where('id', '>', desde)
+                .orderBy('id')) as Array<{ id: number; evento: string; payload: unknown }>
+            assert.lengthOf(filas, 1)
+            return redis.xadd(
+                STREAM,
+                '*',
+                'id',
+                String(filas[0]!.id),
+                'evento',
+                filas[0]!.evento,
+                'payload',
+                JSON.stringify(filas[0]!.payload),
+                'request_id',
+                '',
+            )
+        }
+        const configurar = async (modo: 'coa' | 'desconectar') => {
+            const ultimo = (await db.from('audit.outbox').max('id as id').first()) as { id: number | null }
+            await new ConfigurarPortalCorte().execute(
+                { version: await leerVersion(), modo_suspension: modo },
+                contextoPrueba(),
+            )
+            const idStream = await publicarPortal(Number(ultimo.id ?? 0))
+            await esperarHasta(() => confirmado(idStream!))
+        }
+
+        await configurar('desconectar')
+        try {
+            assert.isTrue(
+                coa
+                    .json<{ msg: string; modo_suspension?: string }>()
+                    .some(
+                        (l) =>
+                            l.msg === 'coa: modo de suspensión cambiado' &&
+                            l.modo_suspension === 'disconnect',
+                    ),
+            )
+            const e = await escenario('127.0.0.2')
+            const eventoId = await cambiar(e.servicioId, 'suspendido')
+            const { final } = await respuestaFinal(eventoId)
+            assert.equal(final.tipo, 'disconnect')
+            assert.isTrue(final.ok)
+            assert.equal(final.respuesta.codigo, 'Disconnect-ACK')
+            assert.match(String(final.comando.razon), /sin sus conexiones abiertas/)
+        } finally {
+            await configurar('coa')
         }
     })
 })

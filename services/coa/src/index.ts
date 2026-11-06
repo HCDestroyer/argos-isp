@@ -8,6 +8,7 @@ import { Dispatcher } from './dispatcher.ts'
 import { crearLog } from './log.ts'
 import { ClienteNasUdp } from './nas.ts'
 import { MetricasCoa } from './metricas.ts'
+import { ModoSuspensionVigente } from './modo_suspension.ts'
 import { FuenteRedisApi } from './registro.ts'
 
 const config = leerConfig()
@@ -34,13 +35,17 @@ const almacen = new AlmacenPg(
     config.db,
     new FuenteRedisApi({ redis, prefijo: config.aaaPrefijo, api: config.api }),
 )
+// Modo de suspensión del panel (`GET internal/corte/configuracion`); `COA_SUSPENDER` solo es respaldo
+// mientras la API no responde al arrancar. Se relee con `portal.config_cambiada`.
+const modoSuspension = new ModoSuspensionVigente({ respaldo: config.suspender, api: config.api, log })
+await modoSuspension.iniciar()
 const dispatcher = new Dispatcher({
     almacen,
     nas: new ClienteNasUdp(config.nas.origen),
     claveSecretos: clave,
     suspendido: config.suspendido,
     suspenderConIpv6: config.suspenderConIpv6,
-    suspender: config.suspender,
+    suspender: modoSuspension,
     puertoNas: config.nas.puerto,
     timeoutMs: config.nas.timeoutMs,
     reintentos: config.nas.reintentos,
@@ -77,6 +82,8 @@ servidor.listen(config.port, config.host, () => {
             grupo: config.grupo,
             consumidor: config.consumidor,
             puerto_nas: config.nas.puerto,
+            modo_suspension: modoSuspension.valor,
+            modo_suspension_origen: modoSuspension.origen,
         },
         `coa escuchando en ${config.host}:${config.port}`,
     )
@@ -87,6 +94,7 @@ async function apagar(signal: string): Promise<void> {
     log.info({}, `${signal}: cerrando`)
     setTimeout(() => process.exit(1), 10_000).unref()
     await consumidor.detener()
+    await modoSuspension.detener()
     servidor.close()
     await almacen.cerrar().catch(() => {})
     redis.disconnect()

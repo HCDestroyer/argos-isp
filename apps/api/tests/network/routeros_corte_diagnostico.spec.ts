@@ -169,7 +169,7 @@ test.group('RouterOS · corte con el portal por FQDN y diagnóstico de corte', (
         const r = await reconciliar()
         assert.isNull(r.error)
         assert.match(r.error_portal!, /No se pudo resolver portal\.isp\.example a IPv4.*el nombre no existe/)
-        assert.match(r.error_portal!, /ROUTERS_SERVICIO_PORTAL_V4/)
+        assert.match(r.error_portal!, /Portal de corte/)
         assert.isUndefined(natHttp())
         const evento = await db
             .from('audit.outbox')

@@ -450,6 +450,8 @@ ARGOSISP_WG_ENDPOINT=$WG_ENDPOINT
 # Script de conexión con «configuración de servicio» (PPPoE, perfiles y corte): datos de TU red de
 # clientes, sin valor por defecto. Si faltan, el panel los lista y el script solo de conexión sirve
 # igual. Qué va en cada una: infra/produccion/.env.example. El portal sale de DOMINIO_PORTAL.
+# La IP y el puerto del portal de corte (destino del dst-nat) y el modo de suspensión se editan en el
+# panel: Configuración → Portal de corte (no aquí). PORTAL_CORTE_PUERTO es el puerto en que escucha Caddy.
 ROUTERS_SERVICIO_WAN_INTERFAZ=
 ROUTERS_SERVICIO_PPP_LOCAL_V4=
 ROUTERS_SERVICIO_POOL_V4_RANGOS=
@@ -457,8 +459,6 @@ ROUTERS_SERVICIO_CLIENTES_V4=
 ROUTERS_SERVICIO_CLIENTES_V6=
 ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO=
 ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO=
-ROUTERS_SERVICIO_PORTAL_V4=
-ROUTERS_SERVICIO_PORTAL_V6=
 ROUTERS_SERVICIO_WALLED_GARDEN=
 ROUTERS_SERVICIO_DNS_V4=
 ROUTERS_SERVICIO_DNS_V6=

@@ -309,3 +309,35 @@ export const avisosSorteoValidator = vine.compile(
         lugar: vine.enum(['portal_inicio', 'pagina_corte'] as const),
     }),
 )
+
+/** `PUT /corte/configuracion` (`portal_corte.configurar`). Espejo en el panel (A4). */
+export const configurarPortalCorteValidator = vine.compile(
+    vine.object({
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se guardó); si cambió responde 409' }),
+        portal_v4: vine
+            .string()
+            .trim()
+            .ipAddress(4)
+            .nullable()
+            .optional()
+            .meta({ description: 'IPv4 del portal para el dst-nat; null = deducirla de PORTAL_URL_PUBLICA' }),
+        portal_v6: vine
+            .string()
+            .trim()
+            .ipAddress(6)
+            .nullable()
+            .optional()
+            .meta({ description: 'IPv6 del portal para el NAT de IPv6; null = sin NAT de IPv6' }),
+        portal_puerto: vine
+            .number()
+            .withoutDecimals()
+            .range([1, 65535])
+            .optional()
+            .meta({ description: 'Puerto del dst-nat (to-ports)' }),
+        modo_suspension: vine.enum(['desconectar', 'coa'] as const).optional(),
+    }),
+)

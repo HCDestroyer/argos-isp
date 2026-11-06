@@ -1232,10 +1232,15 @@ export const DiagnosticoCorte = definirEsquema(
             ipv4: {
                 ...nulable(texto),
                 description:
-                    'IPv4 del portal que Argos pone en el NAT: ROUTERS_SERVICIO_PORTAL_V4, la IP de la URL o el ' +
-                    'FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe',
+                    'IPv4 del portal que Argos pone en el NAT: la de «Portal de corte» (`GET /corte/configuracion`), la ' +
+                    'IP de la URL o el FQDN resuelto en esta lectura (nunca se guarda); null si no la sabe',
             },
-            origen: nulable(enumerado(['variable', 'url', 'dns'])),
+            origen: {
+                ...nulable(enumerado(['configuracion', 'variable', 'url', 'dns'])),
+                description:
+                    'configuracion: guardada en «Portal de corte»; variable: siembra de ROUTERS_SERVICIO_PORTAL_V4 ' +
+                    '(la configuración nunca se guardó); url: IP de PORTAL_URL_PUBLICA; dns: su FQDN resuelto',
+            },
             destino_nat: {
                 ...nulable(texto),
                 description:

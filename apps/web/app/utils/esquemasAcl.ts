@@ -169,7 +169,7 @@ const ETIQUETAS_MODULO: Record<string, string> = {
     cuentas_bancarias: 'Cuentas bancarias', declaraciones: 'Declaraciones', documentos: 'Documentos', egresos: 'Egresos',
     empresa: 'Empresa (contacto)', empresas: 'Empresas', facturas: 'Facturas', fel: 'FEL', fiscal: 'Fiscal', horus: 'Horus',
     ip: 'IP', ipv6: 'IPv6', lealtad: 'Lealtad', libro: 'Libro contable', libros: 'Libros legales', nodos_portal: 'Nodos del portal',
-    notificaciones: 'Notificaciones', pagos: 'Pagos', planes: 'Planes', plantillas: 'Plantillas', promesas: 'Promesas',
+    notificaciones: 'Notificaciones', pagos: 'Pagos', planes: 'Planes', plantillas: 'Plantillas', portal_corte: 'Portal de corte', promesas: 'Promesas',
     proveedores: 'Proveedores', red: 'Red', redes: 'Redes IPv4', reportes: 'Reportes', roles: 'Roles', routers: 'Routers',
     servicios: 'Servicios', sesiones: 'Sesiones', sorteos: 'Sorteos', sso: 'Autologin', tokens: 'Tokens de API', usuarios: 'Usuarios',
     vinculaciones: 'Vinculaciones', zonas: 'Zonas',

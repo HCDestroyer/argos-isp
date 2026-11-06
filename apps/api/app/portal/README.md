@@ -451,9 +451,28 @@ por suspensión»). Solo los activos (bloqueados incluidos) de los servicios del
 credencial** ni el motivo interno de la cortesía. Por la IP no sale nada de esto (el identificador
 puede ser un correo). Pruebas: `tests/portal/adicionales.spec.ts`.
 
+## Portal de corte configurable (pedido del PM, 6 nov)
+
+`core.portal_corte` (una fila global; `corte.ts`): IPv4, IPv6 y puerto a los que el dst-nat de los routers
+manda el HTTP de los suspendidos, y el modo de suspensión (`desconectar` | `coa`) que aplica `services/coa`.
+Global porque un router sirve a varias empresas; la página por empresa es `empresas.url_corte`.
+
+| Endpoint                                                      | Acción / lectura                     | Qué hace                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/corte/configuracion` (`portal_corte.ver`)        | `verPortalCorte`                     | `PortalCorte`: los cuatro campos, `origen` (`entorno` \| `configuracion`), `portal_url`, `version`, `updated_at` |
+| `PUT /api/v1/corte/configuracion` (`portal_corte.configurar`) | `actions/configurar_portal_corte.ts` | Solo los campos enviados; `version` 0 la crea, 409 si cambió; diff en `audit.cambios` (`portal_corte`, 1)         |
+| `GET /api/v1/internal/corte/configuracion` (`INTERNAL_TOKEN`) | `verPortalCorte`                     | Lo mismo, para `coa`                                                                                              |
+
+Con `version = 0` la vista sale de `ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO` y `COA_SUSPENDER` (siembra);
+desde la primera edición el entorno ya no se lee. Sin caché: el reconciliador y el diagnóstico leen la fila
+en cada pasada (`configCorteVigente` de `#network/routeros/corte_vigente`). Contrato:
+`contratos/control-velocidad.md` §10.7. Pruebas: `tests/portal/portal_corte.spec.ts`.
+
 ## Eventos
 
-No emite ni consume eventos propios (`portal.registrar_whatsapp` tampoco: el permiso de WhatsApp no
+Emite `portal.config_cambiada` (`empresa_id: null`, `campos` de `portal_v4`, `portal_v6`, `portal_puerto`,
+`modo_suspension`) al cambiar el portal de corte: `routeros` reconcilia todos los routers con API (si
+cambió algo de red) y `coa` relee el modo de suspensión. Fuera de eso no emite ni consume eventos propios (`portal.registrar_whatsapp` tampoco: el permiso de WhatsApp no
 cambia estado de negocio de Argos). Las acciones de A3 que llama emiten los suyos
 (`promesa.creada`, `comprobante.recibido`; el webhook de la pasarela emite `pago.registrado` y
 `servicio.estado_cambiado`).

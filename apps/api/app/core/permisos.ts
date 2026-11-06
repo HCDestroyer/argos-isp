@@ -339,6 +339,10 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'portal_corte.ver':
+        'Ver la configuración del portal de corte (destino del NAT de los routers y modo de suspensión)',
+    'portal_corte.configurar':
+        'Configurar el portal de corte: IPv4/IPv6 y puerto a donde los routers redirigen a los suspendidos y modo de suspensión (desconectar o CoA); solo admin',
     'nodos_portal.administrar':
         'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':

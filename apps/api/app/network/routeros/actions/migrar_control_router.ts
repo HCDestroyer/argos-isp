@@ -1,4 +1,5 @@
 import logger from '@adonisjs/core/services/logger'
+import { configCorteVigente } from '#network/routeros/corte_vigente'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ErrorRouterOS } from '#network/routeros/errores'
 import { RouterSinCredenciales } from '#network/routeros/router'
@@ -12,7 +13,7 @@ import {
     servicioRed,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { configCorteResuelta, estadoCorteRouter } from '#network/routeros/corte_router'
+import { estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
@@ -173,7 +174,7 @@ export default class MigrarControlRouterOS extends DomainAction<
                         if (router.con_credenciales) {
                             const lecturaCorte = await leerCorteRouter(cliente)
                             const corte = estadoCorteRouter(
-                                await configCorteResuelta(process.env, this.#resolver),
+                                await configCorteVigente(this.#resolver, t.trx),
                                 {
                                     fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
                                     redes_v4: await redesV4DeRouter(input.router_id, t.trx),

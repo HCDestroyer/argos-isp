@@ -95,7 +95,7 @@
 }
 
 # Puerto dedicado del corte (PORTAL_CORTE_PUERTO, 8088 por defecto): el mismo sitio HTTP con cualquier
-# Host. El dst-nat de los suspendidos apunta aquí (ROUTERS_SERVICIO_PORTAL_PUERTO) para no pasar por un
+# Host. El dst-nat de los suspendidos apunta aquí (puerto de Configuración → Portal de corte) para no pasar por un
 # proxy de delante (Nginx Proxy Manager) que solo atiende sus dominios en el 80 (bug v1.9.0, 5 nov).
 http://, :{$PORTAL_CORTE_PUERTO:8088} {
 	@panelOApi host {$DOMINIO_API} {$DOMINIO_PANEL}

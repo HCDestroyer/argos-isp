@@ -23,6 +23,7 @@ import {
     NodoPortalInternoCreado,
     NodoPortalInternoRevocado,
     PortalBanco,
+    PortalCorte,
     PortalComprobante,
     PortalCuenta,
     PortalFactura,
@@ -41,6 +42,7 @@ import {
 } from '#portal/esquemas'
 import {
     condicionesPromesaValidator,
+    configurarPortalCorteValidator,
     crearNodoPortalValidator,
     editarContactoValidator,
     editarEmpresaValidator,
@@ -80,6 +82,8 @@ import { whatsappPortal } from '#portal/whatsapp'
 import RegistrarWhatsappPortal from '#portal/actions/registrar_whatsapp'
 import EditarPlantillaDocumento from '#portal/actions/editar_plantilla_documento'
 import EditarEmpresa from '#portal/actions/editar_empresa'
+import ConfigurarPortalCorte from '#portal/actions/configurar_portal_corte'
+import { verPortalCorte } from '#portal/corte'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
 import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
 import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#portal/marca'
@@ -1796,6 +1800,61 @@ const sorteosPortalRutas: Ruta[] = [
     }),
 ]
 
+/**
+ * Portal de corte (pedido del PM, 6 nov): destino del dst-nat de los routers y modo de suspensión,
+ * editables en el panel en vez de variables de entorno (`#portal/corte`). Global: los routers no son
+ * de una empresa. `GET /internal/corte/configuracion` lo lee `services/coa` (modo de suspensión).
+ */
+const SOBRE_PORTAL_CORTE =
+    'Global (un router sirve a varias empresas; la página por empresa es `empresas.url_corte`). `version` 0 = ' +
+    'nunca se guardó: los valores salen de las variables de antes (`ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO`, ' +
+    '`COA_SUSPENDER`), que desde la primera edición ya no se leen.'
+const portalCorte: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/corte/configuracion',
+        operacion: 'portalCorteVer',
+        resumen: 'Configuración del portal de corte (destino del NAT de los routers y modo de suspensión)',
+        descripcion: SOBRE_PORTAL_CORTE,
+        etiqueta: 'portal',
+        permiso: 'portal_corte.ver',
+        respuesta: { status: 200, descripcion: 'Configuración', esquema: PortalCorte },
+        handler: async () => verPortalCorte(),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/corte/configuracion',
+        operacion: 'portalCorteConfigurar',
+        resumen: 'Edita la configuración del portal de corte',
+        descripcion:
+            `${SOBRE_PORTAL_CORTE} Solo cambia los campos enviados; 409 si \`version\` cambió. Si algo cambió emite ` +
+            '`portal.config_cambiada` (`empresa_id: null`): con IPv4, IPv6 o puerto se reconcilian todos los ' +
+            'routers con API (dst-nat y `argos-portal`); el modo de suspensión lo relee `coa` y aplica desde la ' +
+            'siguiente suspensión. Diff por campo en audit.cambios.',
+        etiqueta: 'portal',
+        permiso: 'portal_corte.configurar',
+        versionada: true,
+        cuerpo: configurarPortalCorteValidator,
+        respuesta: { status: 200, descripcion: 'Configuración guardada', esquema: PortalCorte },
+        handler: (ctx, { cuerpo }) => new ConfigurarPortalCorte().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/internal/corte/configuracion',
+        operacion: 'internoPortalCorte',
+        resumen: 'Configuración del portal de corte para los servicios internos (coa)',
+        descripcion:
+            'Token interno (`INTERNAL_TOKEN`). Mismo JSON que `GET /corte/configuracion`. `coa` lo lee al arrancar y ' +
+            'otra vez con cada `portal.config_cambiada` cuyo `campos` traiga `modo_suspension` ' +
+            '(`desconectar` = su `disconnect`, `coa` = `coa`).',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Configuración', esquema: PortalCorte },
+        handler: async () => verPortalCorte(),
+    }),
+]
+
 const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
@@ -1810,6 +1869,7 @@ const portal: Ruta[] = [
     ...anunciosPortal,
     ...nodosPortal,
     ...nodosPortalInternos,
+    ...portalCorte,
     ...puntosPortalRutas,
     ...sorteosPortalRutas,
 ]

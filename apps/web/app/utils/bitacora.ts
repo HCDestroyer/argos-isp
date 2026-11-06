@@ -282,6 +282,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'horus.recibir_webhook': 'Aviso de Horus recibido',
     'nodos_portal.crear': 'Nodo portal creado',
     'nodos_portal.revocar': 'Nodo portal revocado',
+    'portal_corte.configurar': 'Portal de corte configurado (destino del NAT o modo de suspensión)',
     'adicionales.crear': 'Servicio adicional creado',
     'adicionales.editar': 'Servicio adicional editado',
     'adicionales.desactivar': 'Servicio adicional desactivado',
@@ -528,6 +529,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     conteo_inventario: { etiqueta: 'Conteo de inventario', ruta: id => `/inventario/conteos/${id}` },
     unidad: { etiqueta: 'Equipo (unidad)', ruta: id => `/inventario/unidades?unidad=${id}` },
     unidad_inventario: { etiqueta: 'Equipo (unidad)', ruta: id => `/inventario/unidades?unidad=${id}` },
+    // Portal de corte (A5): configuración global; la pantalla la hace A4.
+    portal_corte: { etiqueta: 'Portal de corte' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

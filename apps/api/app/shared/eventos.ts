@@ -805,9 +805,14 @@ export interface CatalogoEventos {
         campos: string[]
     }
 
-    // portal (A5, `contratos/control-velocidad.md` §10.6): URL de corte de una empresa
+    /**
+     * portal (A5, `contratos/control-velocidad.md` §10.6–10.7): la URL de corte de una empresa
+     * (`empresa_id`, campos `['url_corte']`) o la configuración global del portal de corte
+     * (`empresa_id: null`; `portal_v4`, `portal_v6`, `portal_puerto`, `modo_suspension`). Solo nombres,
+     * nunca valores: quien los necesite relee (`GET /internal/corte/configuracion`).
+     */
     'portal.config_cambiada': {
-        empresa_id: number
+        empresa_id: number | null
         campos: string[]
     }
 

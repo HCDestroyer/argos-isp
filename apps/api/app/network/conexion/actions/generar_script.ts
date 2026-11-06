@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import { portalCorteRed } from '#network/routeros/corte_vigente'
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrar, descifrar } from '#shared/cifrado'
@@ -106,7 +107,12 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
 
         const secreto = sinRadius ? null : await secretoRadius(t, routerId)
         const servicio = input.incluir_servicio
-            ? valoresServicio(router, await gatewaysDeRouter(t, routerId))
+            ? valoresServicio(
+                  router,
+                  await gatewaysDeRouter(t, routerId),
+                  process.env,
+                  await portalCorteRed(t.trx),
+              )
             : {}
 
         const antes = await filaConexion(routerId, t.trx, true)
