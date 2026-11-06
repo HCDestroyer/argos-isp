@@ -78,6 +78,7 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 ### Reglas de oro (validadas antes de escribir)
 
 - **Garantía coherente**: en `simple`, Σ `limit-at` de las hijas de un padre (colas WISP deseadas + colas dinámicas de PPPoE leídas del router) ≤ `max-limit` del padre, por sentido; en `arbol_pcq`, Σ `limit-at` de los nodos de plan ≤ capacidad del enlace (global). Si no se cumple, ese padre (o el árbol entero) **no se escribe**: queda como está en el router, se deja una fila `operacion = validar_velocidad` (`ok = false`, `regla`, detalle) en `audit.red` y se emite `routeros.fallido` con `operacion = validar velocidad (<regla>)` y el detalle (p. ej. un `rate_limit_override` que garantiza más que el reuso, o una capacidad menor que la suma de garantías). Un padre o nodo sin servicios que cuenten tiene `limit-at = 0`.
+- **`max-limit` de los padres** (`contratos/control-velocidad.md` §13): `clamp(ceil(Σ MIR / reuso), pico, max(Σ MIR, pico))` sobre los hijos que el padre contiene de verdad (activo con su ráfaga, limitado a la velocidad limitada; ni suspendidos ni servicios sin cola; sesiones PPPoE: lo mayor entre la base y lo leído del router). El padre del router y los globales del árbol: `min(capacidad, max(Σ MIR, pico))`. Sin hijos, el pico de un hijo (padre de plan) o la capacidad (router).
 - **IPv6 siempre**: el `target` de la cola WISP lleva el prefijo delegado; el del padre, todos los prefijos IPv6 de sus hijas (si faltara alguno, regla `ipv6`); en el árbol, las listas IPv6 llevan el /64 y el /56. El reconciliador repone un `target` al que le quitaron el IPv6 a mano.
 - **Métricas** (`/metrics` de la API, sección `routeros`; las guarda el reconciliador y el último paso del cambio de modo): `argosisp_routeros_colas_simples{router_id,router}` (la de A6), `argosisp_routeros_colas_arbol{router_id,router}` y `argosisp_routeros_control_velocidad{router_id,router,modo}` (1).
 
@@ -101,6 +102,12 @@ El modo por router pasó a ser una estrategia de cuatro capas (aplicación, padr
 - **Cambio** (`router.estrategia_cambiada`): job `cambiar_control` por lotes con firma del destino (si otro cambio lo superó, no hace nada). Sin `reconectar`, las sesiones PPPoE reciben CoA de velocidad (`sesion.velocidad_solicitada`) y conservan lo demás hasta reconectar; con `reconectar`, Disconnect por lotes. El último paso aplica también el corte.
 - **Sincronizar plan** (`POST /planes/:id/sincronizar` y `plan.velocidad_cambiada`): `sincronizar.ts`.
 - **Vista previa**: `vistaPreviaEstrategia` (Postgres, sin leer el router) y `vistaPreviaReconciliar` (lee el router).
+
+### Solo lo del modo activo (bug del PM, 5 nov; `contratos/control-velocidad.md` §12)
+
+- Un router escribe solo los objetos de la estrategia con la que se limita cada servicio que tiene (o su sesión PPPoE hasta reconectar). El perfil `plan-<id>` solo con servicios PPPoE del plan; los nodos globales del árbol solo si un plan del árbol con servicios los usa. Lo que sobra (comments `argosisp:` de velocidad) lo borra el reconciliador, cada `DELETE` en `audit.red`; lo ajeno no se toca.
+- PPPoE con `cola_simple`: cola `argosisp-servicio-<id>` con las direcciones de la sesión (`targetsColaServicio`, nunca `<pppoe-usuario>`), sin `Mikrotik-Rate-Limit`; sin RADIUS, un solo perfil `plan-<id>` sin rate-limit. Limitar reescribe la cola sin reconectar; el suspendido va por el perfil de corte.
+- Pruebas: `tests/network/routeros_reglas_modo.spec.ts` (cada modo × tipo de conexión × RADIUS/`api`).
 
 ### Corte de nivel router (`corte_router.ts`)
 
@@ -165,7 +172,7 @@ El `local-address` (gateway que ve el cliente PPPoE) sale **siempre** del `gatew
 
 ### Corte: `argos-dns`
 
-`argos-dns` (lo que un suspendido puede consultar) lleva el DNS del router = el `local-address` de los clientes: el **gateway efectivo de cada red** del router (`gatewaysDeRedes`). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo se usa si el router no tiene redes (compatibilidad), más los DNS de `ROUTERS_SERVICIO_DNS_V4`.
+`argos-dns` (lo que un suspendido puede consultar) lleva el DNS del router = el `local-address` de los clientes: el **gateway efectivo de cada red** del router (`gatewaysDeRedes`). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo se usa si el router no tiene redes (compatibilidad), más los DNS de `ROUTERS_SERVICIO_DNS_V4` (opcional; con IPs de documentación el corte las deja como aviso). Las entradas `argosisp: DNS resolutor del router` (los resolutores que tenía el router al correr el script) son del script y no se administran aquí (`contratos/routeros.md`, «DNS del router»).
 
 ## PPPoE sin RADIUS (`contratos/pppoe-local.md`)
 

@@ -148,16 +148,20 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
 
         // Sin colas simples por servicio
         assert.lengthOf(falso.tabla('/queue/simple'), 0)
-        // Globales con la capacidad del enlace
+        // Globales: lo que suman sus nodos (20M/5M), acotado por la capacidad del enlace (100M/50M);
+        // el nodo limitado vacío no aporta (contratos/control-velocidad.md §13)
         const globalBajada = falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('bajada'))!
         assert.containsSubset(globalBajada, { parent: 'global', comment: 'argosisp:global:bajada' })
-        assert.isTrue(igual(globalBajada['max-limit'], '100M'))
+        assert.isTrue(igual(globalBajada['max-limit'], '20M'))
         assert.isTrue(
             igual(
                 falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('subida'))!['max-limit'],
-                '50M',
+                '5M',
             ),
         )
+        // Nodo limitado sin clientes: listo para el primero (su MIR), sin garantía
+        assert.isTrue(igual(nodo(planId, 'bajada', true)!['max-limit'], '2M'))
+        assert.isTrue(igual(nodo(planId, 'bajada', true)!['limit-at'], '0'))
         // PCQ por plan: pcq-rate = MIR y /64 en IPv6
         const tipo = falso.tabla('/queue/type').find((o) => o.name === nombreNodo(planId, false, 'bajada'))!
         assert.containsSubset(tipo, {
@@ -223,7 +227,8 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         const colaSuspendida = falso.conComment('/queue/simple', commentServicio(s3.id))
         assert.lengthOf(colaSuspendida, 1)
         assert.isTrue(igual(colaSuspendida[0]!['max-limit'], '256k/256k'))
-        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '15M'))
+        // 3 activos: ceil(60M / 4) = 15M, pero nunca bajo un MIR (20M); limit-at = Σ CIR = 15M
+        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
         assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], `${await maxNodo(planId, 3)}k`))
         assert.isTrue(igual(nodo(planId, 'bajada')!['limit-at'], '15M'))
 
@@ -233,16 +238,25 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         assert.notInclude(lista4(listaPlan(planId, false)), s2.ipv4)
         assert.include(lista4(listaPlan(planId, true)), s2.ipv4)
         assert.include(lista6(listaPlan(planId, true)), s2.prefijo_delegado_v6!)
-        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '10M'))
-        // limitado: MIR limitado 2M × 1 / 4 = 500k; CIR 25 % de 2M = 500k
-        assert.isTrue(igual(nodo(planId, 'bajada', true)!['max-limit'], '500k'))
+        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
+        assert.isTrue(igual(nodo(planId, 'bajada')!['limit-at'], '10M'))
+        // limitado: 1 cliente a 2M navega a 2M (antes 2M / 4 = 500k); CIR 25 % de 2M = 500k
+        assert.isTrue(igual(nodo(planId, 'bajada', true)!['max-limit'], '2M'))
         assert.isTrue(igual(nodo(planId, 'bajada', true)!['limit-at'], '500k'))
+        // el global: 20M + 2M
+        assert.isTrue(
+            igual(
+                falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('bajada'))!['max-limit'],
+                '22M',
+            ),
+        )
         // Reactivar: vuelve a la lista del plan y sin cola simple
         await cambiarEstado(s3.id, 'activo')
         assert.include(lista4(listaPlan(planId, false)), s3.ipv4)
         assert.lengthOf(falso.conComment('/queue/simple', commentServicio(s3.id)), 0)
         assert.notInclude(lista4('suspendidos'), s3.ipv4)
-        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '15M'))
+        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
+        assert.isTrue(igual(nodo(planId, 'bajada')!['limit-at'], '15M'))
     })
 
     test('cambio de plan entre dos planes: listas y nodos de los dos; el viejo desaparece al vaciarse', async ({
@@ -270,8 +284,9 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         assert.deepEqual(lista4(listaPlan(planA, false)), [s2.ipv4])
         assert.deepEqual(lista4(listaPlan(planB, false)), [s1.ipv4])
         assert.deepEqual(lista6(listaPlan(planB, false)), [s1.prefijo_delegado_v6])
-        assert.isTrue(igual(nodo(planA, 'bajada')!['max-limit'], '5M'))
-        assert.isTrue(igual(nodo(planB, 'bajada')!['max-limit'], '25M'))
+        // 1 cliente en cada plan: navega a su plan (antes MIR / reuso)
+        assert.isTrue(igual(nodo(planA, 'bajada')!['max-limit'], '20M'))
+        assert.isTrue(igual(nodo(planB, 'bajada')!['max-limit'], '50M'))
         assert.equal(nodo(planB, 'bajada')!.priority, '4')
 
         await mover(s2)
@@ -377,7 +392,7 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         assert.isNull(r.error)
         assert.lengthOf(falso.conComment('/ipv6/firewall/mangle', `${commentPlan(planId)}:bajada`), 1)
         assert.include(lista4(listaPlan(planId, false)), s1.ipv4)
-        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '10M'))
+        assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
         assert.isUndefined(falso.tabla('/queue/type').find((o) => o.name === 'argosisp-plan-999999-bajada'))
         assert.isDefined(falso.tabla('/queue/type').find((o) => o.name === 'argosisp-plan-0-bajada'))
 

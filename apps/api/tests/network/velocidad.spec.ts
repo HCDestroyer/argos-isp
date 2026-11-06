@@ -3,8 +3,14 @@ import {
     formatoKbps,
     garantizadoKbps,
     leerVelocidad,
+    hijo,
+    hijosDelPlan,
     limitesPadrePlan,
+    mayorHijos,
     rateLimitServicio,
+    SIN_HIJOS,
+    sumarHijos,
+    topePadre,
     validarVelocidad,
     velocidadEfectiva,
     VELOCIDAD_POR_DEFECTO,
@@ -108,7 +114,28 @@ test.group('Velocidad · rateLimitServicio', () => {
 })
 
 test.group('Velocidad · limitesPadrePlan', () => {
-    test('1:4 de 20 Mbps con 4 activos comparten 20 Mbps; limit-at = CIR × activos', ({ assert }) => {
+    /** Plan del PM (5 nov): 20/10 Mbps, 1:4, con o sin ráfaga 30/15. */
+    const pm = (rafaga: boolean) =>
+        plan({
+            bajada_kbps: 20000,
+            subida_kbps: 10000,
+            reuso: 4,
+            rafaga_bajada_kbps: rafaga ? 30000 : null,
+            rafaga_subida_kbps: rafaga ? 15000 : null,
+        })
+
+    test('1 hijo con reuso 1:4: el padre deja pasar su plan completo (antes MIR/4)', ({ assert }) => {
+        const l = limitesPadrePlan(pm(false), 1)
+        assert.equal(l.max_limit, '10M/20M')
+        assert.equal(l.limit_at, '2500k/5M')
+    })
+
+    test('N hijos con reuso 4: ceil(Σ MIR / 4), nunca bajo un MIR ni sobre Σ MIR', ({ assert }) => {
+        assert.equal(limitesPadrePlan(pm(false), 2).max_limit, '10M/20M')
+        assert.equal(limitesPadrePlan(pm(false), 2).limit_at, '5M/10M')
+        assert.equal(limitesPadrePlan(pm(false), 4).max_limit, '10M/20M')
+        assert.equal(limitesPadrePlan(pm(false), 8).max_limit, '20M/40M')
+        assert.equal(limitesPadrePlan(pm(false), 8).limit_at, '20M/40M')
         const p = plan({ reuso: 4 })
         assert.deepEqual(limitesPadrePlan(p, 4), {
             max_limit: '5M/20M',
@@ -119,7 +146,7 @@ test.group('Velocidad · limitesPadrePlan', () => {
         })
     })
 
-    test('max-limit hacia arriba y limit-at hacia abajo: Σ hijos ≤ padre', ({ assert }) => {
+    test('max-limit hacia arriba y limit-at hacia abajo: Σ limit-at ≤ padre', ({ assert }) => {
         const p = plan({ reuso: 3 })
         const l = limitesPadrePlan(p, 5)
         assert.deepEqual(l.max_limit_kbps, { subida: 8334, bajada: 33334 })
@@ -128,15 +155,63 @@ test.group('Velocidad · limitesPadrePlan', () => {
         assert.equal(l.max_limit, '8334k/33334k')
     })
 
-    test('reuso 1: el padre es la suma de los MIR', ({ assert }) => {
+    test('reuso 1: el padre es la suma de los MIR (1 hijo = su plan)', ({ assert }) => {
         assert.equal(limitesPadrePlan(plan(), 3).max_limit, '15M/60M')
         assert.equal(limitesPadrePlan(plan(), 3).limit_at, '15M/60M')
+        assert.equal(limitesPadrePlan(plan(), 1).max_limit, '5M/20M')
     })
 
-    test('0 activos se calcula como 1 (max-limit 0 sería "sin límite" en RouterOS)', ({ assert }) => {
-        assert.equal(limitesPadrePlan(plan({ reuso: 4 }), 0).max_limit, '1250k/5M')
+    test('ráfaga: el padre nunca corta la ráfaga de un hijo; el agregado sigue en Σ MIR', ({ assert }) => {
+        // 1 hijo: clamp(5M, 30M, max(20M, 30M)) = 30M
+        assert.equal(limitesPadrePlan(pm(true), 1).max_limit, '15M/30M')
+        // 2 hijos: clamp(10M, 30M, 40M) = 30M
+        assert.equal(limitesPadrePlan(pm(true), 2).max_limit, '15M/30M')
+        // 8 hijos: clamp(40M, 30M, 160M) = 40M
+        assert.equal(limitesPadrePlan(pm(true), 8).max_limit, '20M/40M')
+        // con reuso 1 y 2 hijos: Σ MIR (40M) ya cubre la ráfaga de uno (30M)
+        assert.equal(limitesPadrePlan({ ...pm(true), reuso: 1 }, 2).max_limit, '20M/40M')
+        // la ráfaga no cambia la garantía
+        assert.equal(limitesPadrePlan(pm(true), 1).limit_at, '2500k/5M')
+    })
+
+    test('limitados cuentan con la velocidad limitada y sin ráfaga', ({ assert }) => {
+        // 6 activos (20M/5M) + 4 limitados (2048k/1024k), 1:4
+        const l = limitesPadrePlan(plan({ reuso: 4 }), { activos: 6, limitados: 4 })
+        assert.deepEqual(l.max_limit_kbps, { subida: 8524, bajada: 32048 })
+        assert.deepEqual(l.limit_at_kbps, { subida: 8524, bajada: 32048 })
+        // solo limitados, aunque el plan tenga ráfaga: pico = velocidad limitada
+        const solo = limitesPadrePlan(plan({ rafaga_bajada_kbps: 40000 }), { activos: 0, limitados: 2 })
+        assert.equal(solo.max_limit, '2048k/4096k')
+        assert.equal(solo.limit_at, '2048k/4096k')
+    })
+
+    test('un suspendido no es hijo: suspender uno de 4 baja el padre como si no estuviera', ({ assert }) => {
+        const p = plan({ reuso: 1 })
+        assert.equal(limitesPadrePlan(p, { activos: 3, limitados: 0 }).max_limit, '15M/60M')
+        assert.deepEqual(hijosDelPlan(p, { activos: 3 }), hijosDelPlan(p, { activos: 3, limitados: 0 }))
+    })
+
+    test('0 hijos: max-limit = un hijo del plan (0 sería "sin límite" en RouterOS), limit-at 0', ({
+        assert,
+    }) => {
+        assert.equal(limitesPadrePlan(plan({ reuso: 4 }), 0).max_limit, '5M/20M')
+        assert.equal(limitesPadrePlan(plan({ reuso: 4 }), 0).limit_at, '0/0')
+        assert.equal(limitesPadrePlan(pm(true), 0).max_limit, '15M/30M')
         assert.throws(() => limitesPadrePlan(plan(), -1), /activos/)
         assert.throws(() => limitesPadrePlan(plan(), 1.5), /activos/)
+        assert.throws(() => limitesPadrePlan(plan(), { activos: 1, limitados: -1 }), /limitados/)
+    })
+
+    test('topePadre: lo que el router tiene colgando también es hijo (mayorHijos)', ({ assert }) => {
+        const p = plan({ reuso: 1 })
+        // la base dice 1 sesión; el router ya tiene 2 colas dinámicas (accounting en camino)
+        const leidas = sumarHijos(
+            hijo({ subida: 5000, bajada: 20000 }, null, { subida: 5000, bajada: 20000 }),
+            hijo({ subida: 5000, bajada: 20000 }, null, { subida: 5000, bajada: 20000 }),
+        )
+        const suma = mayorHijos(hijosDelPlan(p, { activos: 1 }), leidas)
+        assert.deepEqual(topePadre(suma, 1), { subida: 10000, bajada: 40000 })
+        assert.deepEqual(topePadre(SIN_HIJOS, 4), { subida: 0, bajada: 0 })
     })
 
     test('lleva la prioridad del plan', ({ assert }) => {

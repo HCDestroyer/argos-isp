@@ -299,3 +299,74 @@ test('router sin RADIUS (modo_seguridad = api): sin /radius ni secreto, use-radi
         assert.match(leer(p), /\/ppp aaa set use-radius=yes/, p)
     }
 })
+
+test('DNS: sin dns_v4 no se tocan los servers del router; allow-remote-requests siempre y cerrado a la WAN', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    for (const p of CON_SERVICIO) {
+        const t = leer(p)
+        // servers= solo dentro de :if ([:len $dnsV4] > 0); el else deja solo allow-remote-requests
+        const inicio = t.indexOf(':if ([:len $dnsV4] > 0) do={')
+        assert.ok(inicio >= 0, `${p}: sin :if ([:len $dnsV4] > 0)`)
+        const elseDns = t.indexOf('\n} else={', inicio)
+        const finDns = t.indexOf('\n}', elseDns + 1)
+        const conServers = t.split('\n').filter((l) => /^\s*\/ip dns set[^\n]*servers=/.test(l))
+        assert.equal(conServers.length, 1, `${p}: un solo /ip dns set servers=`)
+        const pos = t.indexOf(conServers[0])
+        assert.ok(pos > inicio && pos < elseDns, `${p}: servers= fuera del :if de dnsV4`)
+        assert.match(
+            t.slice(elseDns, finDns + 2),
+            /else=\{\n\s*\/ip dns set allow-remote-requests=yes\n\}$/,
+            p,
+        )
+        // argos-dns: los resolutores que el router ya tiene (servers + dynamic-servers), sin fallar si se repiten
+        assert.match(t, /\[\/ip dns get servers\], \[\/ip dns get dynamic-servers\]/, p)
+        assert.match(t, /\$dnsRouterV4 do=\{ :do \{ \/ip firewall address-list add list=argos-dns/, p)
+        assert.match(t, /\$dnsRouterV6 do=\{ :do \{ \/ipv6 firewall address-list add list=argos-dns/, p)
+        assert.match(t, /add list=argos-dns address=\$pppLocalV4/, p)
+        // aviso si el router se queda sin DNS
+        assert.match(t, /AVISO el router no tiene DNS/, p)
+        // el puerto 53 del router: drop desde la WAN y accept desde clientes/LAN, en IPv4 e IPv6, todo argosisp:top
+        for (const fam of ['/ip', '/ipv6']) {
+            const reglas = t
+                .split('\n')
+                .filter((l) => /chain=input[^\n]*dst-port=53/.test(l) && !/argos-corte/.test(l))
+                .filter((l) => (fam === '/ip' ? !/\/ipv6/.test(l) : true))
+            assert.ok(reglas.length >= 4, `${p} ${fam}: reglas de DNS del router`)
+            for (const l of reglas) assert.match(l, /comment="argosisp:top /, `${p}: ${l.trim()}`)
+        }
+        assert.match(
+            t,
+            /\/ipv6 firewall filter\nadd chain=input in-interface=\$wanIf protocol=udp dst-port=53 action=drop/,
+            p,
+        )
+        assert.match(
+            t,
+            /\/ipv6 firewall filter add chain=input src-address-list=argos-clientes protocol=udp dst-port=53 action=accept/,
+            p,
+        )
+        // las listas WAN/LAN solo si existen (si no, la regla no se puede crear)
+        assert.match(t, /:if \(\[:len \[\/interface list find where name="WAN"\]\] > 0\)/, p)
+        assert.match(t, /:if \(\[:len \[\/interface list find where name="LAN"\]\] > 0\)/, p)
+        // drop desde la WAN antes que los accept (el orden de :top se conserva al moverlas)
+        assert.ok(
+            t.indexOf('DNS del router solo interno (udp)') < t.indexOf('DNS del router desde clientes (udp)'),
+            p,
+        )
+    }
+    // sin dns_v4 ni dns_v6 el render sale con arreglos vacíos
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        const r = renderizar(leer(p), { ...VALORES, dns_v4: '', dns_v6: '' })
+        assert.match(r, /:local dnsV4 \[:toarray ""\]/)
+        assert.match(r, /:local dnsV6 \[:toarray ""\]/)
+    }
+})
+
+test('DNS: ningún script del laboratorio ni plantilla trae resolutores de documentación', () => {
+    const doc = /(192\.0\.2\.53|198\.51\.100\.53|2001:db8:[0-9a-f:]*::53)\b/i
+    for (const salida of Object.keys(SALIDAS)) {
+        assert.doesNotMatch(leer(salida), doc, salida)
+    }
+    const lab = leer('lab.rsc')
+    assert.match(lab, /^:local dnsV4 \[:toarray ""\]$/m)
+    assert.match(lab, /^:local dnsV6 \[:toarray ""\]$/m)
+})

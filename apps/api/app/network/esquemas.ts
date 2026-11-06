@@ -838,13 +838,18 @@ export const VistaPreviaVelocidad = definirEsquema(
         padre: objeto({
             max_limit: {
                 type: 'string',
-                description: 'max-limit subida/bajada: MIR × activos / reuso, hacia arriba',
+                description:
+                    'max-limit subida/bajada: clamp(ceil(Σ MIR / reuso), pico de un hijo, max(Σ MIR, pico)); sin hijos, el pico de uno',
             },
-            limit_at: { type: 'string', description: 'limit-at subida/bajada: CIR × activos' },
+            limit_at: { type: 'string', description: 'limit-at subida/bajada: Σ CIR de los hijos' },
             prioridad: entero,
             max_limit_kbps: parKbps,
             limit_at_kbps: parKbps,
-            activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
+            activos: {
+                type: 'integer',
+                minimum: 0,
+                description: 'Hijos en estado activo; con 0 el padre queda en el pico de un hijo',
+            },
         }),
     }),
 )

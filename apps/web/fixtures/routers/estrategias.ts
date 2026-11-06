@@ -100,9 +100,7 @@ function problemasDe(e: Estrategia, tipo: TipoConexionVelocidad, campo: string, 
         errores.push({
             field: `${campo}.aplicacion`,
             rule: 'aplicacion_tipo',
-            message: e.aplicacion === 'cola_simple'
-                ? 'cola_simple no aplica a PPPoE: la sesión ya crea su cola dinámica; usa radius_rate_limit, perfil_ppp, pcq_plan o arbol_pcq'
-                : `${e.aplicacion} no aplica a ${NOMBRE_TIPO[tipo]}: sin sesión PPP no hay ${e.aplicacion === 'perfil_ppp' ? 'perfil' : 'atributo RADIUS'}; usa cola_simple, pcq_plan o arbol_pcq`,
+            message: `${e.aplicacion} no aplica a ${NOMBRE_TIPO[tipo]}: sin sesión PPP no hay ${e.aplicacion === 'perfil_ppp' ? 'perfil' : 'atributo RADIUS'}; usa cola_simple, pcq_plan o arbol_pcq`,
         })
     }
     if (usaPcq(e) && e.tipo_cola !== 'pcq') {
@@ -146,8 +144,8 @@ function sinRadius(router: Router, e: Pick<Estrategia, 'aplicacion'>, campo: str
         field: `${campo}.aplicacion`,
         rule: 'pppoe_sin_radius',
         message: e.aplicacion === 'radius_rate_limit'
-            ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
-            : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp o arbol_pcq',
+            ? 'el router no usa RADIUS: PPPoE se limita con el perfil del plan (perfil_ppp), con colas simples (cola_simple) o con el árbol (arbol_pcq), no con Mikrotik-Rate-Limit'
+            : 'el router no usa RADIUS: pcq_plan necesita las direcciones de la sesión al conectar (accounting); usa perfil_ppp, cola_simple o arbol_pcq',
     }]
 }
 

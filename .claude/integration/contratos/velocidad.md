@@ -27,17 +27,17 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
   - **PPPoE:** la dinámica que crea RouterOS con `Mikrotik-Rate-Limit` desde `aaa`.
   - **WISP:** estática, creada por el dispatcher de `contratos/routeros.md`.
 - **Formato completo del rate-limit:** `rx/tx burst-rx/burst-tx umbral-rx/umbral-tx tiempo-rx/tiempo-tx prioridad limit-at-rx/limit-at-tx`. Lo calcula **una sola función compartida** en `apps/api/app/network/velocidad.ts` (A1), y la usan `aaa`, el endpoint interno y el dispatcher, para que PPPoE y WISP nunca difieran.
-- **Reuso en este modo:** una cola padre por plan y router (`argosisp:plan:<plan_id>`) con `max-limit = MIR × servicios_activos / reuso`, y las colas de los servicios como hijas (`parent`).
+- **Reuso en este modo:** una cola padre por plan y router (`argosisp:plan:<plan_id>`) con el `max-limit` de `contratos/control-velocidad.md` §13 (`clamp(ceil(Σ MIR / reuso), pico, max(Σ MIR, pico))` sobre los hijos que contiene de verdad), y las colas de los servicios como hijas (`parent`).
   - **WISP:** el dispatcher fija `parent` en cada cola.
   - **PPPoE:** `aaa` manda `Mikrotik-Group = plan-<plan_id>`, y ese perfil PPP tiene `parent-queue` apuntando a la cola padre. ArgosIsp mantiene los perfiles y las colas padre por la API REST.
-- **Recálculo del padre:** el `max-limit` del padre se recalcula **por evento** (`servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada` con plan o router, retiro), nunca por intervalo. Los suspendidos no cuentan.
+- **Recálculo del padre:** el `max-limit` del padre se recalcula **por evento** (`servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada` con plan o router, retiro), nunca por intervalo. Los suspendidos y los servicios sin cola no cuentan; un limitado cuenta con la velocidad limitada (`control-velocidad.md` §13).
 - **Implementación (A2, tanda 2):** padre y perfil solo para planes con `reuso > 1` efectivo en el router (con reuso 1 no hay padre ni `Mikrotik-Group = plan-<id>`). El perfil `plan-<id>` copia pools, DNS e IPv6 del perfil `default` del router. El `target` del padre son los de sus hijas (colas WISP y colas dinámicas de PPPoE leídas del router; se recalcula también con `sesion.iniciada` / `sesion.terminada`); sin hijas, `192.0.2.255/32`. Un cambio de plan de una sesión PPPoE con reuso se aplica con Disconnect. Detalle en `apps/api/app/network/routeros/README.md`, "Control de velocidad".
 
 ## Modo `arbol_pcq` (recomendado para muchos clientes por router)
 
 - **Árbol en `global`:**
   - Padre de descarga y padre de subida con la capacidad del enlace.
-  - Debajo, un hijo por plan con `max-limit = MIR × activos / reuso` y `limit-at = CIR × activos`, más la `prioridad` del plan.
+  - Debajo, un hijo por plan con `max-limit` y `limit-at` de `control-velocidad.md` §13, más la `prioridad` del plan.
 - **Tipos de cola PCQ por plan:** `argosisp-plan-<id>-bajada` (`pcq-classifier=dst-address`) y `-subida` (`src-address`), con `pcq-rate = MIR` del plan y `pcq-dst-address6-mask=64` / `pcq-src-address6-mask=64` para que IPv6 cuente por cliente y no por dirección. Con eso cada cliente tiene su tope y el reuso lo pone el padre.
 - **Marcado:**
   - Address-list `argosisp-plan-<id>` con la IPv4, el /64 y el /56 de cada servicio activo del plan.
@@ -62,9 +62,9 @@ Las excepciones por router (`planes_routers`) pueden sobrescribir cualquiera de 
 
 - **Función única:** `apps/api/app/network/velocidad.ts`.
   - `rateLimitServicio(planEfectivo, estado)`: `Mikrotik-Rate-Limit` completo. Activo: velocidad normal con ráfaga, o el `rate_limit_override` del router. `limitado`, `suspendido` y `retirado`: velocidad limitada sin ráfaga, con la misma prioridad y el mismo % garantizado.
-  - `limitesPadrePlan(plan, activos)`: `max_limit` y `limit_at` (`subida/bajada`), la prioridad y los mismos valores en kbps.
+  - `limitesPadrePlan(plan, hijos)`: `max_limit` y `limit_at` (`subida/bajada`), la prioridad y los mismos valores en kbps; `hijos` = `{ activos, limitados }` (o un número de activos). Regla en `control-velocidad.md` §13.
   - `velocidadEfectiva(plan, excepcion)`: aplica las excepciones de `planes_routers` (null hereda). `validarVelocidad(plan)`: errores 422 por campo.
-- **Unidades y redondeos:** `k` = 1000 y `M` = 1 000 000 bit/s; múltiplos de 1000 kbps en `M`. CIR y umbral se redondean hacia abajo; el `max-limit` del padre, hacia arriba. Con 0 activos el padre se calcula como 1 (un `max-limit` 0 en RouterOS es "sin límite").
+- **Unidades y redondeos:** `k` = 1000 y `M` = 1 000 000 bit/s; múltiplos de 1000 kbps en `M`. CIR y umbral se redondean hacia abajo; el `max-limit` del padre, hacia arriba. Sin hijos el padre queda en el pico de un hijo (un `max-limit` 0 en RouterOS es "sin límite").
 - **Coherencia:** `garantizado_pct ≤ 100 / reuso` (garantiza Σ `limit-at` de los hijos ≤ `max-limit` del padre), `rafaga_umbral_pct` entre 1 y 99, `rafaga_*_kbps` mayor que la velocidad de esa dirección, prioridad 1..8, reuso 1..64. Las excepciones por router se validan junto con el plan.
 - **Router:** `control_velocidad` reemplaza a `modo_velocidad` (`pcq` → `arbol_pcq`); la vista sigue trayendo `modo_velocidad` derivado y obsoleto. Solo cambia con `POST /routers/:id/cambiar-control-velocidad` (permiso `routers.cambiar_control_velocidad`, solo `admin`), que cambia el campo y emite `router.control_cambiado`. `PUT /routers/:id` cambia la capacidad (mismo evento con `campos: ['capacidad']`).
 - **Eventos:** `plan.velocidad_cambiada` y `router.control_cambiado` (`contratos/eventos.md`).

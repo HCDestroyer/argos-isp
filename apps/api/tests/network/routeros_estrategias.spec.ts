@@ -100,9 +100,13 @@ test.group('Control de velocidad · matriz de combinaciones', () => {
             reglas(todas(e('radius_rate_limit', 'ninguno'), e('perfil_ppp', 'ninguno'))),
             'estrategia_velocidad.ip_estatica.aplicacion:aplicacion_tipo',
         )
-        assert.include(
-            reglas(todas(e('cola_simple', 'ninguno'), e('cola_simple', 'ninguno'))),
-            'estrategia_velocidad.pppoe.aplicacion:aplicacion_tipo',
+        // PPPoE con colas simples es válido (bug del PM, 5 nov), con y sin RADIUS
+        assert.deepEqual(reglas(todas(e('cola_simple', 'ninguno'), e('cola_simple', 'ninguno'))), [])
+        assert.deepEqual(
+            reglas(todas(e('cola_simple', 'por_plan', 'sfq'), e('cola_simple', 'por_plan', 'sfq')), {
+                modo_seguridad: 'api',
+            }),
+            [],
         )
         assert.include(
             reglas(todas(e('arbol_pcq', 'jerarquico', 'default'), e('arbol_pcq', 'jerarquico', 'pcq'))),
@@ -255,15 +259,21 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         await reconciliar()
         const techo = cola('argosisp:router')!
         assert.equal(techo.name, 'argosisp-router')
-        assert.isTrue(igual(techo['max-limit'], '500M/1000M'))
+        // Capacidad 500M/1000M; sus hijos suman 5M/20M (1 WISP): el padre del router queda en eso (§13)
+        assert.isTrue(igual(techo['max-limit'], '5M/20M'))
         assert.include(techo.target!, `${s.ipv4}/32`)
         assert.equal(cola(commentServicio(s.id))!.parent, 'argosisp-router')
+        // Sin servicios PPPoE no hay perfil del plan (es del modo PPPoE)
+        assert.lengthOf(falso.conComment('/ppp/profile', commentPlan(p)), 0)
+        // aaa manda el perfil del plan aunque el reuso sea 1
+        const pppoe = await pppoeConSesion(p, '10.88.1.1')
+        await reconciliar()
+        // la sesión PPPoE cuelga del router por el perfil: un hijo más
+        assert.isTrue(igual(cola('argosisp:router')!['max-limit'], '10M/40M'))
         assert.containsSubset(falso.conComment('/ppp/profile', commentPlan(p))[0], {
             name: `plan-${p}`,
             'parent-queue': 'argosisp-router',
         })
-        // aaa manda el perfil del plan aunque el reuso sea 1
-        const pppoe = await pppoeConSesion(p, '10.88.1.1')
         const registro = await construirRegistroAaa(pppoe.userPpp)
         assert.deepEqual(registro!.velocidad, {
             aplicacion: 'radius_rate_limit',
@@ -348,7 +358,8 @@ test.group('Control de velocidad · estrategias en el router', (group) => {
         assert.isUndefined(arbol.find((o) => o.name === 'argosisp-global-bajada'))
         const nodo = arbol.find((o) => o.comment === `${commentPlan(p)}:bajada`)!
         assert.equal(nodo.parent, 'global')
-        assert.isTrue(igual(nodo['max-limit'], '5M'))
+        // 1 cliente en 1:4: navega a su plan (antes 20M / 4 = 5M)
+        assert.isTrue(igual(nodo['max-limit'], '20M'))
     })
 
     test('dos formas en el mismo router: un plan por árbol y otro por cola simple (excepción del plan)', async ({

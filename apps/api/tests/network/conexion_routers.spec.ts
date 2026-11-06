@@ -39,7 +39,7 @@ const SERVICIO: Record<string, string> = {
     ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
     ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
     ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
-    ROUTERS_SERVICIO_DNS_V4: '192.0.2.53',
+    ROUTERS_SERVICIO_DNS_V4: '1.1.1.1,9.9.9.9',
 }
 
 async function routerRadius(datos: Record<string, unknown> = {}) {
@@ -190,6 +190,56 @@ test.group('Conexión de routers · API', (group) => {
             422,
         )
         assert.include(dos.body().detail, 'un solo gateway')
+    })
+
+    test('?incluir=servicio: DNS opcional (no toca los servers del router) y nunca de documentación', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const routerId = await routerRadius({ interfaz_clientes: 'ether2' })
+        await db
+            .table('network.redes_ipv4')
+            .insert({ router_id: routerId, cidr: redUnica(), tipo: 'estatico' })
+        Object.assign(process.env, SERVICIO)
+        delete process.env.ROUTERS_SERVICIO_DNS_V4
+        delete process.env.ROUTERS_SERVICIO_DNS_V6
+
+        // sin DNS: el script sale y no fija servers (solo allow-remote-requests y los del router a argos-dns)
+        const sinServers = await generar(client, token, routerId, { incluir: 'servicio' })
+        assert.include(sinServers, ':local dnsV4 [:toarray ""]')
+        assert.include(sinServers, ':local dnsV6 [:toarray ""]')
+        assert.include(sinServers, ':if ([:len $dnsV4] > 0) do={')
+        assert.include(sinServers, '[/ip dns get servers], [/ip dns get dynamic-servers]')
+
+        // con DNS reales: van como hoy
+        process.env.ROUTERS_SERVICIO_DNS_V4 = '1.1.1.1,9.9.9.9'
+        process.env.ROUTERS_SERVICIO_DNS_V6 = '2606:4700:4700::1111'
+        const conServers = await generar(client, token, routerId, { incluir: 'servicio' })
+        assert.include(conServers, ':local dnsV4 [:toarray "1.1.1.1,9.9.9.9"]')
+        assert.include(conServers, ':local dnsV6 [:toarray "2606:4700:4700::1111"]')
+
+        // de documentación (RFC 5737 / 3849): 422 con el detalle por variable, y no hay script
+        for (const [v4, v6, campos] of [
+            ['192.0.2.53,198.51.100.53', '', ['ROUTERS_SERVICIO_DNS_V4']],
+            ['1.1.1.1,203.0.113.9', '', ['ROUTERS_SERVICIO_DNS_V4']],
+            ['1.1.1.1', '2001:db8:ffff::53', ['ROUTERS_SERVICIO_DNS_V6']],
+            ['', '2001:DB8::53', ['ROUTERS_SERVICIO_DNS_V6']],
+        ] as const) {
+            process.env.ROUTERS_SERVICIO_DNS_V4 = v4
+            process.env.ROUTERS_SERVICIO_DNS_V6 = v6
+            const r = await estado(
+                client
+                    .get(`/api/v1/routers/${routerId}/script-conexion`)
+                    .qs({ incluir: 'servicio' })
+                    .bearerToken(token),
+                422,
+            )
+            assert.equal(r.body().type, 'urn:argosisp:problema:dns_documentacion')
+            assert.include(r.body().detail, 'documentación')
+            assert.deepEqual([...new Set(r.body().errors.map((e: any) => e.field))], [...campos])
+            assert.notInclude(r.text(), ':local dnsV4')
+        }
     })
 
     test('registro por token: aplica clave, CA, host, nas_ip y api_url al túnel; un solo uso; vencido 410', async ({

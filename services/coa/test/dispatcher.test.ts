@@ -153,6 +153,27 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
                 .accion,
             'coa',
         )
+        // PPPoE con colas simples (bug del PM, 5 nov): la cola estática la reescribe el dispatcher de
+        // RouterOS; ni CoA de velocidad (limitar/activar) ni de plan. Suspender sigue siendo CoA.
+        for (const [de, a] of [['activo', 'limitado'], ['limitado', 'activo']] as const) {
+            assert.equal(
+                decidir(estado(de, a), servicio({ estado: a, aplicacion: 'cola_simple', grupo: null }), SUSPENDIDO)
+                    .accion,
+                'nada',
+            )
+        }
+        assert.equal(
+            decidir(config(['plan']), servicio({ aplicacion: 'cola_simple', grupo: null }), SUSPENDIDO).accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(
+                estado('activo', 'suspendido'),
+                servicio({ estado: 'suspendido', aplicacion: 'cola_simple', grupo: null }),
+                SUSPENDIDO,
+            ).accion,
+            'coa',
+        )
     })
 
     it('config: router con motivo union_routers (mismo MikroTik) → nada; otro cambio de router sigue en Disconnect', () => {

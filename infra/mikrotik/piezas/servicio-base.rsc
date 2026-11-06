@@ -21,11 +21,31 @@
 # ============================================================================
 # 3. DNS del router (los clientes PPP usan pppLocalV4 como DNS)
 # ============================================================================
-:local dnsServidores ""
-:foreach d in=($dnsV4, $dnsV6) do={
-    :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
+# Con dnsV4 vacio NO se tocan los resolutores del router (servers): se quedan los que ya tiene, mas los
+# dinamicos de la WAN (dynamic-servers). allow-remote-requests=yes siempre, porque clientes y corte
+# usan el router como DNS; la seccion 8 lo cierra desde la WAN (argosisp:top DNS del router ...).
+:put "argosisp: DNS del router"
+:if ([:len $dnsV4] > 0) do={
+    :local dnsServidores ""
+    :foreach d in=($dnsV4, $dnsV6) do={
+        :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
+    }
+    /ip dns set allow-remote-requests=yes servers=$dnsServidores
+} else={
+    /ip dns set allow-remote-requests=yes
 }
-/ip dns set allow-remote-requests=yes servers=$dnsServidores
+# Resolutores efectivos del router (servers + dynamic-servers): van a argos-dns en la seccion 7.
+:local dnsRouterV4 [:toarray ""]
+:local dnsRouterV6 [:toarray ""]
+:foreach d in=([/ip dns get servers], [/ip dns get dynamic-servers]) do={
+    :local s [:tostr $d]
+    :if ($s != "") do={
+        :if ([:typeof [:find $s ":"]] = "num") do={ :set dnsRouterV6 ($dnsRouterV6, $s) } else={ :set dnsRouterV4 ($dnsRouterV4, $s) }
+    }
+}
+:if (([:len $dnsRouterV4] + [:len $dnsRouterV6]) = 0) do={
+    :put "argosisp: AVISO el router no tiene DNS (servers ni dynamic-servers): ni clientes ni la pagina de corte resuelven. Corrige con /ip dns set servers=<tus resolutores> y vuelve a correr el script"
+}
 
 # ============================================================================
 # 4. Lista de interfaces y perfiles PPP

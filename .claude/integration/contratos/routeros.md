@@ -55,3 +55,12 @@ Reglas:
 
 - Los cambios de estas columnas no emiten evento (no cambian el estado deseado de ningún servicio); el siguiente comando o la reconciliación leen el valor nuevo de Postgres. `dhcp_servidor` e `interfaz_clientes` sí cambian objetos en el router: la reconciliación periódica los corrige.
 - La precedencia para `dhcp_servidor` / `interfaz_clientes` es: columna del router → `PredeterminadosRed` del llamador → entorno (`ROUTEROS_*`) → `all` / sin ARP.
+
+## DNS del router (bug del 6 nov, A6)
+
+Los clientes (PPPoE y WISP) y el corte usan al router como DNS. Reglas para todo lo que escribe en el router (script de conexión con `incluir=servicio`, `lab.rsc` y reconciliador):
+
+- **Argos nunca escribe `/ip dns servers` por la API REST.** Solo el script lo hace, y solo si `ROUTERS_SERVICIO_DNS_V4` trae valor; vacía (lo normal), el router conserva sus resolutores (`servers` y `dynamic-servers`). El script siempre deja `allow-remote-requests=yes`.
+- **Nunca IPs de documentación** (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32`) como resolutores: `GET /routers/:id/script-conexion?incluir=servicio` responde 422 `dns_documentacion` (con `errors[]` por variable) y el reconciliador del corte lo reporta en `avisos` con cómo corregir el router. Función común: `esIpDocumentacion` en `apps/api/app/network/conexion/dns.ts`.
+- **`argos-dns`** (IPv4 e IPv6): `argosisp: DNS del router` (la IP del router; la administra el reconciliador), `argosisp: DNS` (`ROUTERS_SERVICIO_DNS_V4/V6`; la administra el reconciliador si hay valor) y `argosisp: DNS resolutor del router` (los resolutores que tenía el router al correr el script; **solo el script**, el reconciliador no los crea ni los borra).
+- **Entrada al DNS del router**: reglas `argosisp:top DNS del router …` en `/ip firewall filter` y `/ipv6 firewall filter` (drop desde `wanIf` y la lista `WAN`, accept desde `argos-clientes` y la lista `LAN`). Son del script: el reconciliador las conserva arriba, en su orden, y no las borra.

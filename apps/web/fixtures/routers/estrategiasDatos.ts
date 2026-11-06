@@ -37,7 +37,7 @@ export const QOS_MAX_HOJAS = 1024
 const TIPOS_POR_APLICACION: MatrizControlVelocidad['aplicaciones'][number]['tipos_conexion'][] = [
     ['pppoe'],
     ['pppoe'],
-    ['ip_estatica', 'dhcp_fija'],
+    ['pppoe', 'ip_estatica', 'dhcp_fija'],
     ['pppoe', 'ip_estatica', 'dhcp_fija'],
     ['pppoe', 'ip_estatica', 'dhcp_fija'],
 ]
@@ -55,7 +55,7 @@ export const MATRIZ: MatrizControlVelocidad = {
     padres: PADRES.map(valor => ({ valor })),
     extras: EXTRAS.map(valor => ({ valor, por_defecto: TODOS[valor] })),
     reglas: [
-        { rule: 'aplicacion_tipo', mensaje: 'radius_rate_limit y perfil_ppp solo en PPPoE; cola_simple solo en IP estática y DHCP fija' },
+        { rule: 'aplicacion_tipo', mensaje: 'radius_rate_limit y perfil_ppp solo en PPPoE; cola_simple, pcq_plan y arbol_pcq en todos los tipos' },
         { rule: 'tipo_cola', mensaje: 'pcq_plan y arbol_pcq exigen pcq; las demás no aceptan pcq' },
         { rule: 'version', mensaje: 'fq_codel y cake solo con RouterOS 7' },
         { rule: 'familia_router', mensaje: 'por_router y jerarquico en una sola familia (colas simples o queue tree) en todo el router' },
@@ -64,7 +64,7 @@ export const MATRIZ: MatrizControlVelocidad = {
         { rule: 'qos_familia', mensaje: 'qos (prioridad por clases) solo con arbol_pcq' },
         { rule: 'qos_fasttrack', mensaje: 'qos exige excluir_fasttrack' },
         { rule: 'qos_costo', mensaje: `como máximo ${QOS_MAX_HOJAS} hojas de QoS por router (planes con qos × 4 × clases)` },
-        { rule: 'pppoe_sin_radius', mensaje: 'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre) o arbol_pcq' },
+        { rule: 'pppoe_sin_radius', mensaje: 'en un router sin RADIUS (modo_seguridad api), PPPoE solo con perfil_ppp (cualquier padre), cola_simple o arbol_pcq' },
     ],
     advertencias: ['sin_techo', 'reuso_dedicado', 'sin_padre_prioridad', 'fasttrack', 'version_desconocida', 'fuera_del_techo', 'qos_sin_cuello'],
     atajos: { simple: estrategiaSimple(), arbol_pcq: estrategiaArbol() },
