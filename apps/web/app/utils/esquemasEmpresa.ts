@@ -19,6 +19,35 @@ export const REGIMENES_ISR = {
 
 export const SIN_REGIMEN = 'ninguno'
 
+/**
+ * Como `url({ require_protocol: true, protocols: ['http', 'https'] })` de VineJS (`isURL` de
+ * validator.js): con `http://` o `https://` y un host que es una IPv4 o un dominio con TLD de
+ * letras (`https://argosnet.gt/corte`).
+ */
+export function esUrlHttp(valor: string): boolean {
+    if (!/^https?:\/\/\S+$/i.test(valor)) {
+        return false
+    }
+    let host: string
+    try {
+        host = new URL(valor).hostname
+    }
+    catch {
+        return false
+    }
+    if (/^(\d{1,3})(\.\d{1,3}){3}$/.test(host)) {
+        return host.split('.').every(octeto => Number(octeto) <= 255)
+    }
+    const etiquetas = host.split('.')
+    const tld = etiquetas.at(-1) ?? ''
+    return etiquetas.length > 1
+        && etiquetas.every(etiqueta => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(etiqueta))
+        && /^([a-z]{2,}|xn--[a-z0-9-]{2,})$/i.test(tld)
+}
+
+/** Ayuda del campo «URL de corte» (formulario y ficha). */
+export const AYUDA_URL_CORTE = 'Al cortar un servicio, el cliente verá esta página en vez de la página de corte de Argos. Se permite automáticamente durante el corte.'
+
 function textoOpcional(maximo: number) {
     return z.string().trim().max(maximo, `Máximo ${maximo} caracteres`).transform(valor => valor || null)
 }
@@ -44,6 +73,10 @@ export const esquemaEmpresaGrupo = z.object({
         .transform(valor => valor || null),
     horario: textoOpcional(200),
     instrucciones_pago: textoOpcional(1000),
+    url_corte: z.string().trim()
+        .max(500, 'Máximo 500 caracteres')
+        .refine(valor => valor === '' || esUrlHttp(valor), 'Una dirección completa con http:// o https://')
+        .transform(valor => valor || null),
     color_marca: z.string().trim()
         .refine(valor => valor === '' || PATRON_COLOR.test(valor), 'Color #RRGGBB')
         .transform(valor => valor || null),
@@ -72,6 +105,7 @@ export function entradaEmpresaGrupo(empresa?: Schema<'EmpresaGrupo'> | null): En
         sitio_web: empresa?.sitio_web ?? '',
         horario: empresa?.horario ?? '',
         instrucciones_pago: empresa?.instrucciones_pago ?? '',
+        url_corte: empresa?.url_corte ?? '',
         color_marca: empresa?.color_marca ?? '',
         regimen_isr: empresa?.regimen_isr ?? SIN_REGIMEN,
         codigo_establecimiento: empresa?.codigo_establecimiento ? String(empresa.codigo_establecimiento) : '',

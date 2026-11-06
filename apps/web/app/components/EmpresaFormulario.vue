@@ -288,6 +288,26 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                         />
                     </UFormField>
                 </fieldset>
+
+                <fieldset class="grid gap-4">
+                    <legend class="mb-3 text-sm font-semibold text-highlighted">
+                        Corte
+                    </legend>
+                    <UFormField
+                        name="url_corte"
+                        label="URL de corte (opcional)"
+                        :help="AYUDA_URL_CORTE"
+                    >
+                        <UInput
+                            v-model="estado.url_corte"
+                            inputmode="url"
+                            placeholder="https://"
+                            autocomplete="off"
+                            class="w-full font-mono"
+                            data-prueba="url-corte"
+                        />
+                    </UFormField>
+                </fieldset>
             </UForm>
         </template>
 
