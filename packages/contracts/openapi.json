@@ -71986,7 +71986,7 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Solo pppoe; se genera si no viene"
+                    "description": "Solo pppoe; se genera si no viene. Distingue mayúsculas. 409 user_ppp_duplicado si ya existe (también en un retirado) o user_ppp_en_sesion si una sesión abierta de otro servicio lo usa"
                   },
                   "pass_ppp": {
                     "type": "string",
@@ -72065,7 +72065,7 @@
                   "ipv4": {
                     "type": "string",
                     "format": "ipv4",
-                    "description": "IP fija; si no viene se asigna de las redes del router"
+                    "description": "IP fija; si no viene se asigna de las redes del router. 409 ip_ocupada si la tiene otro servicio e ip_en_sesion si una sesión abierta de otro servicio todavía la usa"
                   },
                   "servidor_pppoe_id": {
                     "type": [
@@ -72454,7 +72454,7 @@
                   "user_ppp": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9._@-]{3,64}$",
-                    "description": "Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe). Emite servicio.config_cambiada con credenciales"
+                    "description": "Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado si ya existe, también en un retirado; 409 user_ppp_en_sesion si una sesión abierta de otro servicio lo usa). Distingue mayúsculas. Emite servicio.config_cambiada con credenciales"
                   },
                   "pass_ppp": {
                     "type": "string",
@@ -72544,7 +72544,7 @@
                       "null"
                     ],
                     "format": "ipv4",
-                    "description": "IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar"
+                    "description": "IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar. 409 ip_ocupada (otro servicio la tiene) o ip_en_sesion (una sesión abierta de otro servicio la usa)"
                   },
                   "ipv6_modo": {
                     "type": "string",

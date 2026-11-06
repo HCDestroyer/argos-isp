@@ -400,7 +400,11 @@ export const crearServicioValidator = vine.compile(
             .trim()
             .regex(/^[A-Za-z0-9._@-]{3,64}$/)
             .optional()
-            .meta({ description: 'Solo pppoe; se genera si no viene' }),
+            .meta({
+                description:
+                    'Solo pppoe; se genera si no viene. Distingue mayúsculas. 409 user_ppp_duplicado si ya existe ' +
+                    '(también en un retirado) o user_ppp_en_sesion si una sesión abierta de otro servicio lo usa',
+            }),
         pass_ppp: vine
             .string()
             .minLength(6)
@@ -425,7 +429,11 @@ export const crearServicioValidator = vine.compile(
         excluir_firewall: vine.boolean().optional(),
         ipv4: ipv4()
             .optional()
-            .meta({ description: 'IP fija; si no viene se asigna de las redes del router' }),
+            .meta({
+                description:
+                    'IP fija; si no viene se asigna de las redes del router. 409 ip_ocupada si la tiene otro servicio ' +
+                    'e ip_en_sesion si una sesión abierta de otro servicio todavía la usa',
+            }),
         servidor_pppoe_id: idEntidad().nullable().optional().meta({
             description:
                 'Servidor PPPoE del router (solo pppoe). Sin él se deriva de la red; con varios candidatos 422 servidor_pppoe_requerido',
@@ -466,7 +474,8 @@ export const editarServicioValidator = vine.compile(
             .meta({
                 description:
                     'Solo pppoe: al pasar a pppoe (se genera si no viene) o para cambiar el usuario (409 user_ppp_duplicado ' +
-                    'si ya existe). Emite servicio.config_cambiada con credenciales',
+                    'si ya existe, también en un retirado; 409 user_ppp_en_sesion si una sesión abierta de otro servicio ' +
+                    'lo usa). Distingue mayúsculas. Emite servicio.config_cambiada con credenciales',
             }),
         pass_ppp: vine
             .string()
@@ -504,7 +513,8 @@ export const editarServicioValidator = vine.compile(
             .meta({
                 description:
                     'IPv4 fija nueva. null (solo pppoe) la quita: se libera en IPAM y el servicio toma su IP del pool; ' +
-                    'en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar',
+                    'en ip_estatica y dhcp_fija la IPv4 es obligatoria (422 en ipv4). Ausente = no cambiar. ' +
+                    '409 ip_ocupada (otro servicio la tiene) o ip_en_sesion (una sesión abierta de otro servicio la usa)',
             }),
         ipv6_modo: vine.enum(modosIpv6).optional(),
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
