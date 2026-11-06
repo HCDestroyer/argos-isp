@@ -9,6 +9,7 @@ coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configurac
 | `servicio.estado_cambiado`                  | `coa.fallido` `{servicio_id, nas_ip, tipo: coa\|disconnect, error}` cuando una sesión no recibe ACK |
 | `servicio.config_cambiada`                  |                                                                                                     |
 | `sesion.desconexion_solicitada`             | (mismo `coa.fallido`; `servicio_id` null si la sesión no tiene servicio)                            |
+| `portal.config_cambiada`                    | — (relee el modo de suspensión; ver abajo)                                                          |
 
 Consumo según `.claude/integration/contratos/eventos.md`: `XREADGROUP` + `XACK`; si el proceso cae relee sus pendientes al arrancar; lo que lleva 60 s sin confirmar se reclama con `XAUTOCLAIM`. Un evento que falla por Postgres no se confirma y se reintenta; los siguientes del mismo servicio esperan detrás de él. Un payload ilegible o fuera del catálogo se confirma y se descarta.
 
@@ -32,10 +33,21 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 | velocidad o plan con el router en `arbol_pcq`              | —          | nada: sin cola por sesión, el dispatcher de RouterOS mueve sus direcciones entre las listas del plan                                               |
 | `sesion.desconexion_solicitada` (panel o API)              | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`                                               |
 
-- Suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` manda el CoA de la tabla; `disconnect` (por defecto desde v1.9.1) manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
+- Con el modo de suspensión `desconectar` (por defecto) toda suspensión va por Disconnect; la fila `→ suspendido` de la tabla aplica con el modo `coa` (ver «Modo de suspensión»).
+- Con el modo `coa`, suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` manda el CoA de la tabla; `disconnect` (por defecto desde v1.9.1) manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).
 - Sin sesión abierta en `network.sesiones` no manda nada (el próximo login ya sale de `aaa` con el perfil correcto).
 - Velocidades: la cadena completa de `Mikrotik-Rate-Limit` que calcula A1 con `apps/api/app/network/velocidad.ts` (`plan.rate_limit` en activo, `plan.rate_limit_limitado` en limitado), la misma que entrega `aaa`. Sale de Redis `aaa:user:<user_ppp>` y, si falta, no es de este servicio o no trae las cadenas, de `GET ${API_INTERNAL_URL}internal/aaa/servicio?user_ppp=` con `AAA_INTERNAL_TOKEN` (`src/registro.ts`; reintentos `COA_API_REINTENTOS` ante red, timeout o 5xx). `coa` nunca arma `subida/bajada` por su cuenta: si ninguna fuente responde, no envía nada, deja `resultado = sin_rate_limit` en `audit.red` y emite `coa.fallido`.
+
+### Modo de suspensión (configurable desde el panel)
+
+Pedido del PM (6 nov), `contratos/control-velocidad.md` §10.7. Si suspender va por **Disconnect** a toda sesión (`desconectar`, recomendado) o por el CoA de la tabla (`coa`) ya no sale de `COA_SUSPENDER` sino de «Configuración → Portal de corte» (A5). Código en `src/modo_suspension.ts`.
+
+- Al arrancar: `GET ${API_INTERNAL_URL}internal/corte/configuracion` con el mismo Bearer (`AAA_INTERNAL_TOKEN` o `INTERNAL_TOKEN`), timeout y reintentos que el registro (`COA_API_*`). `modo_suspension: desconectar` → `disconnect`, `coa` → `coa`. La línea `coa escuchando` muestra `modo_suspension` y su `modo_suspension_origen` (`api` o `entorno`).
+- Si la API no responde al arrancar: `COA_SUSPENDER` del entorno es el respaldo y se reintenta en segundo plano (5 s, 10 s… hasta 60 s) hasta leerla. Sin `API_INTERNAL_URL` solo vale el entorno.
+- `portal.config_cambiada` con `modo_suspension` en `campos` (o sin `campos`): relee el endpoint y reemplaza el valor en memoria. El payload nunca trae el valor; releer siempre da el vigente, así que un evento repetido no cambia nada. Con solo `portal_v4`, `portal_v6`, `portal_puerto` o `url_corte` no pide nada. Si la API falla al releer, conserva el último valor, lo deja en el log (`error`) y confirma el evento.
+- Aplica desde la siguiente suspensión: cambiar el modo no toca sesiones ya suspendidas.
+- `COA_SUSPENDER_CON_IPV6` sigue en el entorno (solo cuenta con el modo `coa`).
 
 ### Sincronizar plan y estrategia por capas (semana 4)
 

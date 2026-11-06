@@ -12,6 +12,7 @@ import {
 } from './decision.ts'
 import type { ClienteNas, Respuesta, TipoPaquete } from './nas.ts'
 import type { MetricasCoa } from './metricas.ts'
+import { cambiaModo, type ResultadoModo } from './modo_suspension.ts'
 
 /**
  * coa-dispatcher: por cada `servicio.estado_cambiado` / `servicio.config_cambiada` decide CoA o
@@ -24,7 +25,18 @@ import type { MetricasCoa } from './metricas.ts'
  * - Idempotente por `id` del evento: una sesión que ya terminó para ese evento no se vuelve a tocar
  *   (un evento duplicado no desconecta dos veces).
  * - Si falla Postgres, `procesar` lanza: el consumidor no hace XACK y el evento se reintenta.
+ * - `portal.config_cambiada` con `modo_suspension` (o sin `campos`): relee el modo de suspensión del
+ *   panel (`modo_suspension.ts`); aplica desde la siguiente suspensión.
  */
+
+/** Modo de suspensión que cambia en caliente (`ModoSuspensionVigente`). */
+export interface FuenteModoSuspension {
+    readonly valor: ModoSuspension
+    releer(): Promise<ResultadoModo>
+}
+
+/** Evento de configuración del portal de corte (A5, `ConfigurarPortalCorte`). */
+export const EVENTO_PORTAL = 'portal.config_cambiada'
 
 export interface EventoEntrante {
     id: number | string
@@ -46,8 +58,11 @@ export interface OpcionesDispatcher {
     suspendido: PerfilSuspendido
     /** `COA_SUSPENDER_CON_IPV6` (ver `config.ts`; el entorno da `disconnect` por defecto); sin valor, `coa` */
     suspenderConIpv6?: ModoSuspensionIpv6
-    /** `COA_SUSPENDER` (ver `config.ts`; el entorno da `disconnect` por defecto); sin valor, `coa` */
-    suspender?: ModoSuspension
+    /**
+     * Modo de suspensión: fijo (`COA_SUSPENDER`, pruebas) o el configurado en el panel
+     * (`ModoSuspensionVigente`, que relee con `portal.config_cambiada`); sin valor, `coa`.
+     */
+    suspender?: ModoSuspension | FuenteModoSuspension
     puertoNas: number
     timeoutMs: number
     reintentos: number
@@ -80,10 +95,18 @@ export class Dispatcher {
     }
 
     acepta(evento: string): boolean {
-        return (EVENTOS_COA as readonly string[]).includes(evento)
+        return evento === EVENTO_PORTAL || (EVENTOS_COA as readonly string[]).includes(evento)
+    }
+
+    /** Modo de suspensión vigente en este momento (se lee en cada decisión). */
+    get modoSuspension(): ModoSuspension {
+        const s = this.#op.suspender
+        if (s === undefined) return 'coa'
+        return typeof s === 'string' ? s : s.valor
     }
 
     async procesar(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        if (entrada.evento === EVENTO_PORTAL) return this.#portal(entrada)
         if (entrada.evento === 'sesion.desconexion_solicitada') return this.#desconectar(entrada)
         if (entrada.evento === 'sesion.velocidad_solicitada') return this.#velocidad(entrada)
         const evento = leerEvento(entrada.evento, entrada.payload)
@@ -146,7 +169,7 @@ export class Dispatcher {
         decision: Exclude<Decision, { accion: 'nada' }>,
         sesion: SesionActiva,
     ): Exclude<Decision, { accion: 'nada' }> {
-        if (decision.accion === 'coa' && decision.suspender && this.#op.suspender === 'disconnect') {
+        if (decision.accion === 'coa' && decision.suspender && this.modoSuspension === 'disconnect') {
             return {
                 accion: 'disconnect',
                 razon: `${decision.razon} (reconecta con el perfil suspendido y sin sus conexiones abiertas)`,
@@ -164,6 +187,26 @@ export class Dispatcher {
             }
         }
         return decision
+    }
+
+    /**
+     * `portal.config_cambiada`: el payload nunca trae el valor, así que se relee la API. Idempotente
+     * (releer da siempre el valor vigente). Si la API falla se conserva el último valor (lo registra
+     * `ModoSuspensionVigente`) y el evento se confirma igual: no hay sesiones que tocar.
+     */
+    async #portal(entrada: EventoEntrante): Promise<ResultadoProcesar> {
+        const s = this.#op.suspender
+        const releer = typeof s === 'object' && cambiaModo(entrada.payload)
+        if (releer) await s.releer()
+        const decision: Decision = {
+            accion: 'nada',
+            razon: releer ? `modo de suspensión: ${this.modoSuspension}` : 'no cambia el modo de suspensión',
+        }
+        this.#op.log.info(
+            { evento_id: String(entrada.id), request_id: entrada.requestId ?? null, razon: decision.razon },
+            'coa: configuración del portal de corte',
+        )
+        return { decision, sesiones: [] }
     }
 
     /**
