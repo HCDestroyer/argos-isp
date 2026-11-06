@@ -88,9 +88,12 @@
 :local walledGarden {"app.recurrente.com"}
 
 # --- DNS ---
-# Resolutores que el router usa y que los suspendidos pueden consultar
-:local dnsV4 {"192.0.2.53";"198.51.100.53"}
-:local dnsV6 {"2001:db8:ffff::53"}
+# Resolutores que el router usa y que los suspendidos pueden consultar, p. ej. {"1.1.1.1";"8.8.8.8"}.
+# Vacio (el valor por defecto) = no se tocan los "servers" del router: se usan los que ya tiene (y los
+# dinamicos de la WAN). Nunca pongas IPs de documentacion (192.0.2.x, 198.51.100.x, 2001:db8::):
+# el router no resolveria nada y la pagina de corte no cargaria.
+:local dnsV4 [:toarray ""]
+:local dnsV6 [:toarray ""]
 
 # --- WISP sin PPPoE (contratos/routeros.md): ip_estatica y dhcp_fija ---
 :local wispHabilitar true
@@ -242,11 +245,31 @@
 # ============================================================================
 # 3. DNS del router (los clientes PPP usan pppLocalV4 como DNS)
 # ============================================================================
-:local dnsServidores ""
-:foreach d in=($dnsV4, $dnsV6) do={
-    :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
+# Con dnsV4 vacio NO se tocan los resolutores del router (servers): se quedan los que ya tiene, mas los
+# dinamicos de la WAN (dynamic-servers). allow-remote-requests=yes siempre, porque clientes y corte
+# usan el router como DNS; la seccion 8 lo cierra desde la WAN (argosisp:top DNS del router ...).
+:put "argosisp: DNS del router"
+:if ([:len $dnsV4] > 0) do={
+    :local dnsServidores ""
+    :foreach d in=($dnsV4, $dnsV6) do={
+        :if ($dnsServidores = "") do={ :set dnsServidores $d } else={ :set dnsServidores ($dnsServidores . "," . $d) }
+    }
+    /ip dns set allow-remote-requests=yes servers=$dnsServidores
+} else={
+    /ip dns set allow-remote-requests=yes
 }
-/ip dns set allow-remote-requests=yes servers=$dnsServidores
+# Resolutores efectivos del router (servers + dynamic-servers): van a argos-dns en la seccion 7.
+:local dnsRouterV4 [:toarray ""]
+:local dnsRouterV6 [:toarray ""]
+:foreach d in=([/ip dns get servers], [/ip dns get dynamic-servers]) do={
+    :local s [:tostr $d]
+    :if ($s != "") do={
+        :if ([:typeof [:find $s ":"]] = "num") do={ :set dnsRouterV6 ($dnsRouterV6, $s) } else={ :set dnsRouterV4 ($dnsRouterV4, $s) }
+    }
+}
+:if (([:len $dnsRouterV4] + [:len $dnsRouterV6]) = 0) do={
+    :put "argosisp: AVISO el router no tiene DNS (servers ni dynamic-servers): ni clientes ni la pagina de corte resuelven. Corrige con /ip dns set servers=<tus resolutores> y vuelve a correr el script"
+}
 
 # ============================================================================
 # 4. Lista de interfaces y perfiles PPP
@@ -312,6 +335,8 @@
 /ip firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
 /ip firewall address-list add list=argos-dns address=$pppLocalV4 comment="argosisp: DNS del router"
 :foreach d in=$dnsV4 do={ /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
+# Los resolutores que el router ya usa (seccion 3); si coinciden con dnsV4 la entrada ya existe.
+:foreach d in=$dnsRouterV4 do={ :do { /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS resolutor del router" } on-error={} }
 :foreach d in=$walledGarden do={ /ip firewall address-list add list=argos-walled address=$d comment="argosisp: walled garden" }
 # Clientes con colas (PPPoE y WISP): NAT de salida del laboratorio y exclusión de FastTrack
 /ip firewall address-list add list=argos-clientes address=$clientesV4 comment="argosisp: clientes PPPoE"
@@ -321,6 +346,7 @@
 /ipv6 firewall address-list add list=argos-portal address=$portalV6 comment="argosisp: portal IP"
 /ipv6 firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
 :foreach d in=$dnsV6 do={ /ipv6 firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
+:foreach d in=$dnsRouterV6 do={ :do { /ipv6 firewall address-list add list=argos-dns address=$d comment="argosisp: DNS resolutor del router" } on-error={} }
 :foreach d in=$walledGarden do={ /ipv6 firewall address-list add list=argos-walled address=$d comment="argosisp: walled garden" }
 :foreach d in=$clientesV6 do={ /ipv6 firewall address-list add list=argos-clientes address=$d comment="argosisp: clientes IPv6" }
 :if ($wispHabilitar && $wispV6Red != "") do={ /ipv6 firewall address-list add list=argos-clientes address=$wispV6Red comment="argosisp: clientes WISP IPv6" }
@@ -340,9 +366,23 @@
 :if ($wgHabilitar) do={
     /ip firewall filter add chain=input protocol=udp dst-port=$wgPuertoLocal action=accept comment="argosisp:top WireGuard"
 }
+# DNS del router (allow-remote-requests=yes): solo desde dentro. Se descarta desde la WAN (wanIf y la
+# lista WAN si existe) y se acepta desde los clientes (argos-clientes) y la lista LAN si existe. Solo
+# agrega reglas "argosisp:top": las del operador quedan como estan, debajo.
 /ip firewall filter
 add chain=input in-interface=$wanIf protocol=udp dst-port=53 action=drop comment="argosisp:top DNS del router solo interno (udp)"
 add chain=input in-interface=$wanIf protocol=tcp dst-port=53 action=drop comment="argosisp:top DNS del router solo interno (tcp)"
+:if ([:len [/interface list find where name="WAN"]] > 0) do={
+    /ip firewall filter add chain=input in-interface-list=WAN protocol=udp dst-port=53 action=drop comment="argosisp:top DNS del router no desde lista WAN (udp)"
+    /ip firewall filter add chain=input in-interface-list=WAN protocol=tcp dst-port=53 action=drop comment="argosisp:top DNS del router no desde lista WAN (tcp)"
+}
+/ip firewall filter add chain=input src-address-list=argos-clientes protocol=udp dst-port=53 action=accept comment="argosisp:top DNS del router desde clientes (udp)"
+/ip firewall filter add chain=input src-address-list=argos-clientes protocol=tcp dst-port=53 action=accept comment="argosisp:top DNS del router desde clientes (tcp)"
+:if ([:len [/interface list find where name="LAN"]] > 0) do={
+    /ip firewall filter add chain=input in-interface-list=LAN protocol=udp dst-port=53 action=accept comment="argosisp:top DNS del router desde LAN (udp)"
+    /ip firewall filter add chain=input in-interface-list=LAN protocol=tcp dst-port=53 action=accept comment="argosisp:top DNS del router desde LAN (tcp)"
+}
+/ip firewall filter
 add chain=input src-address-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por address-list"
 add chain=input in-interface-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por interface-list"
 add chain=forward src-address-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por address-list"
@@ -406,6 +446,20 @@ add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=mas
 #    /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
 #    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
 #}
+# DNS del router por IPv6: el mismo cierre que en IPv4 (seccion 8).
+/ipv6 firewall filter
+add chain=input in-interface=$wanIf protocol=udp dst-port=53 action=drop comment="argosisp:top DNS del router solo interno (udp)"
+add chain=input in-interface=$wanIf protocol=tcp dst-port=53 action=drop comment="argosisp:top DNS del router solo interno (tcp)"
+:if ([:len [/interface list find where name="WAN"]] > 0) do={
+    /ipv6 firewall filter add chain=input in-interface-list=WAN protocol=udp dst-port=53 action=drop comment="argosisp:top DNS del router no desde lista WAN (udp)"
+    /ipv6 firewall filter add chain=input in-interface-list=WAN protocol=tcp dst-port=53 action=drop comment="argosisp:top DNS del router no desde lista WAN (tcp)"
+}
+/ipv6 firewall filter add chain=input src-address-list=argos-clientes protocol=udp dst-port=53 action=accept comment="argosisp:top DNS del router desde clientes (udp)"
+/ipv6 firewall filter add chain=input src-address-list=argos-clientes protocol=tcp dst-port=53 action=accept comment="argosisp:top DNS del router desde clientes (tcp)"
+:if ([:len [/interface list find where name="LAN"]] > 0) do={
+    /ipv6 firewall filter add chain=input in-interface-list=LAN protocol=udp dst-port=53 action=accept comment="argosisp:top DNS del router desde LAN (udp)"
+    /ipv6 firewall filter add chain=input in-interface-list=LAN protocol=tcp dst-port=53 action=accept comment="argosisp:top DNS del router desde LAN (tcp)"
+}
 /ipv6 firewall filter
 add chain=input src-address-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por address-list"
 add chain=input in-interface-list=suspendidos action=jump jump-target=argos-corte-in comment="argosisp:top corte input por interface-list"

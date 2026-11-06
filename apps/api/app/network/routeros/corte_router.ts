@@ -2,6 +2,7 @@ import { lookup } from 'node:dns/promises'
 import { isIPv4, isIPv6 } from 'node:net'
 import type { ObjetoRouterOS, Propiedades, RutaOrdenada, RutaRouterOS } from '#network/routeros/cliente'
 import { PERFIL_PPP_BASE, PROPIEDADES_PERFIL_BASE } from '#network/routeros/velocidad_router'
+import { esIpDocumentacion } from '#network/conexion/dns'
 
 /**
  * Objetos de nivel router que no dependen de la estrategia de velocidad (`contratos/control-velocidad.md`
@@ -489,6 +490,14 @@ export function estadoCorteRouter(
     } else if (!config.portal_v4) {
         avisos.push(
             'sin IPv4 del portal (ROUTERS_SERVICIO_PORTAL_V4, o PORTAL_URL_PUBLICA con IP o con un nombre que resuelva): no se escribe el NAT de HTTP a /corte',
+        )
+    }
+    const dnsDocumentacion = [...config.dns_v4, ...config.dns_v6].filter(esIpDocumentacion)
+    if (dnsDocumentacion.length > 0) {
+        avisos.push(
+            `ROUTERS_SERVICIO_DNS_V4/V6 trae IPs de documentación (${dnsDocumentacion.join(', ')}): no son ` +
+                'resolutores reales. Quítalas del .env (vacío = el DNS que ya tiene el router) y, si el router ' +
+                'las tiene en /ip dns servers, corrígelo con /ip dns set servers=<tus resolutores>',
         )
     }
     if (!config.portal_fqdn && !config.portal_v4) {
