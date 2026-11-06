@@ -2,14 +2,18 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
 import {
+    hijosDelPlan,
     leerVelocidad,
     rateLimitServicio,
+    SIN_HIJOS,
+    sumarHijos,
     velocidadEfectiva,
     type ControlVelocidad,
 } from '#network/velocidad'
 import {
-    conNivelPlan,
     familia,
+    NOMBRE_PADRE_ROUTER,
+    nombrePadrePlan,
     necesitaPerfil,
     padreCliente,
     velocidadConExtras,
@@ -307,6 +311,9 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
                 estrategia: e,
                 servicios: 0,
                 activos: 0,
+                limitados: 0,
+                dinamicos: { activos: 0, limitados: 0 },
+                al_router: { estaticos: SIN_HIJOS, dinamicos: SIN_HIJOS },
                 en_activo: 0,
                 en_limitado: 0,
                 hijas: [],
@@ -359,25 +366,47 @@ export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]
             }
         }
         g.servicios++
+        // Un suspendido no es hijo de ningún padre (su cola sale del padre o va al perfil de corte).
         if (s.estado === 'suspendido') continue
         const vel = velocidadConExtras(s.velocidad, vigente.extras)
+        const limitado = s.estado === 'limitado'
         if (g.familia === 'arbol') {
+            // Cuenta si su dirección está en la lista del plan (PPPoE: con sesión abierta).
+            if (targetsServicio(s).length === 0) continue
             g.activos++
-            if (s.estado === 'limitado') g.en_limitado++
+            if (limitado) g.en_limitado++
             else g.en_activo++
             continue
         }
-        if (conNivelPlan(vigente, vel.reuso)) g.activos++
+        const padre = padreCliente(vigente, s.plan_id, vel.reuso)
+        /** El servicio es hijo de `padre` con su velocidad efectiva (`dinamico` = sesión PPPoE). */
+        const contar = (dinamico: boolean) => {
+            if (padre === nombrePadrePlan(s.plan_id)) {
+                if (limitado) g.limitados++
+                else g.activos++
+                if (dinamico) g.dinamicos[limitado ? 'limitados' : 'activos']++
+            } else if (padre === NOMBRE_PADRE_ROUTER) {
+                const uno = hijosDelPlan(vel, limitado ? { activos: 0, limitados: 1 } : { activos: 1 })
+                const clave = dinamico ? 'dinamicos' : 'estaticos'
+                g.al_router[clave] = sumarHijos(g.al_router[clave], uno)
+            }
+        }
         if (vigente.aplicacion === 'pcq_plan') {
             const pcq = g.pcq ?? (g.pcq = { estrategia: vigente, activo: [], limitado: [] })
-            pcq[s.estado === 'limitado' ? 'limitado' : 'activo'].push(...targetsServicio(s))
+            const targets = targetsServicio(s)
+            pcq[limitado ? 'limitado' : 'activo'].push(...targets)
+            if (targets.length > 0) contar(false)
             continue
         }
-        if (vigente.aplicacion !== 'cola_simple') continue
+        if (vigente.aplicacion !== 'cola_simple') {
+            // PPPoE con la cola dinámica de su sesión (el perfil le pone el padre): sin sesión, sin cola.
+            if (s.tipo_conexion === 'pppoe' && s.sesion) contar(true)
+            continue
+        }
         const targets = targetsColaServicio(s)
         if (targets.length === 0) continue
-        const padre = padreCliente(vigente, s.plan_id, vel.reuso)
         if (padre === 'none') continue
+        contar(false)
         // `limit-at` de la cola WISP (el mismo que arma `estado_deseado.ts`), para la regla de oro.
         const limitAt = kbpsPar(propiedadesCola(rateLimitServicio(vel, s.estado))['limit-at']!)
         let hijas = g.hijas.find((h) => h.padre === padre)

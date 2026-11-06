@@ -18,7 +18,7 @@ import type { EstadoServicio } from '#shared/eventos'
  * Redondeos (siempre a kbps enteros):
  * - CIR (`limit-at`) y umbral de ráfaga: hacia abajo, para que nunca superen lo que el padre
  *   puede garantizar (`limit-at ≤ max-limit` y Σ hijos ≤ padre).
- * - `max-limit` del padre: hacia arriba (`MIR × activos / reuso`).
+ * - `max-limit` del padre: hacia arriba (`ceil(Σ MIR / reuso)`, acotado por `topePadre`).
  */
 
 export const CONTROLES_VELOCIDAD = ['simple', 'arbol_pcq'] as const
@@ -186,35 +186,163 @@ export function rateLimitServicio(plan: VelocidadPlan, estado: EstadoServicio): 
 }
 
 export interface LimitesPadre {
-    /** `max-limit` subida/bajada: `MIR × activos / reuso`, hacia arriba */
+    /** `max-limit` subida/bajada (`topePadre`) */
     max_limit: string
-    /** `limit-at` subida/bajada: `CIR × activos` */
+    /** `limit-at` subida/bajada: Σ CIR de los hijos */
     limit_at: string
     prioridad: number
     max_limit_kbps: { subida: number; bajada: number }
     limit_at_kbps: { subida: number; bajada: number }
 }
 
+export interface ParKbps {
+    subida: number
+    bajada: number
+}
+
+/**
+ * Hijos que una cola padre contiene de verdad, por velocidad efectiva: `activos` a la velocidad del
+ * plan (con su ráfaga) y `limitados` a la velocidad limitada (sin ráfaga). Un suspendido o un
+ * servicio sin cola (PPPoE sin sesión, WISP sin IPv4) no es hijo.
+ */
+export interface HijosPadre {
+    activos: number
+    limitados?: number
+}
+
+/** Agregado de los hijos de un padre: cuántos, Σ MIR, pico del hijo más rápido y Σ CIR. */
+export interface SumaHijos {
+    n: number
+    /** Σ MIR (`max-limit`) de los hijos */
+    mir: ParKbps
+    /** velocidad máxima que alcanza un solo hijo: su `burst-limit` si tiene ráfaga activa, si no su MIR */
+    pico: ParKbps
+    /** Σ CIR (`limit-at`) de los hijos */
+    cir: ParKbps
+}
+
+export const SIN_HIJOS: SumaHijos = {
+    n: 0,
+    mir: { subida: 0, bajada: 0 },
+    pico: { subida: 0, bajada: 0 },
+    cir: { subida: 0, bajada: 0 },
+}
+
+/** Une dos conjuntos disjuntos de hijos de un mismo padre (Σ MIR, Σ CIR, máximo de los picos). */
+export function sumarHijos(a: SumaHijos, b: SumaHijos): SumaHijos {
+    return {
+        n: a.n + b.n,
+        mir: { subida: a.mir.subida + b.mir.subida, bajada: a.mir.bajada + b.mir.bajada },
+        pico: {
+            subida: Math.max(a.pico.subida, b.pico.subida),
+            bajada: Math.max(a.pico.bajada, b.pico.bajada),
+        },
+        cir: { subida: a.cir.subida + b.cir.subida, bajada: a.cir.bajada + b.cir.bajada },
+    }
+}
+
+/**
+ * Cota por componente de dos lecturas del **mismo** conjunto de hijos (lo que dice la base y lo que
+ * el router tiene colgando de verdad): así el padre cubre a los dos mientras un accounting o un CoA
+ * está en camino, sin pasar nunca de lo que suma alguno de ellos.
+ */
+export function mayorHijos(a: SumaHijos, b: SumaHijos): SumaHijos {
+    const max = (x: ParKbps, y: ParKbps) => ({
+        subida: Math.max(x.subida, y.subida),
+        bajada: Math.max(x.bajada, y.bajada),
+    })
+    return {
+        n: Math.max(a.n, b.n),
+        mir: max(a.mir, b.mir),
+        pico: max(a.pico, b.pico),
+        cir: max(a.cir, b.cir),
+    }
+}
+
+/** Un hijo con esos `max-limit`, `burst-limit` y `limit-at` (kbps). */
+export function hijo(mir: ParKbps, rafaga: ParKbps | null, cir: ParKbps): SumaHijos {
+    return {
+        n: 1,
+        mir,
+        pico: {
+            subida: Math.max(mir.subida, rafaga?.subida ?? 0),
+            bajada: Math.max(mir.bajada, rafaga?.bajada ?? 0),
+        },
+        cir,
+    }
+}
+
+/** Hijos de un plan: `activos` con MIR, ráfaga y CIR del plan; `limitados` con los limitados, sin ráfaga. */
+export function hijosDelPlan(plan: VelocidadPlan, hijos: HijosPadre): SumaHijos {
+    const activos = hijos.activos
+    const limitados = hijos.limitados ?? 0
+    for (const [nombre, n] of [
+        ['activos', activos],
+        ['limitados', limitados],
+    ] as const) {
+        if (!Number.isInteger(n) || n < 0) throw new RangeError(`${nombre} inválido: ${n}`)
+    }
+    const veces = (h: SumaHijos, n: number): SumaHijos =>
+        n === 0
+            ? SIN_HIJOS
+            : {
+                  n,
+                  mir: { subida: h.mir.subida * n, bajada: h.mir.bajada * n },
+                  pico: h.pico,
+                  cir: { subida: h.cir.subida * n, bajada: h.cir.bajada * n },
+              }
+    const activo = hijo(
+        { subida: plan.subida_kbps, bajada: plan.bajada_kbps },
+        { subida: plan.rafaga_subida_kbps ?? 0, bajada: plan.rafaga_bajada_kbps ?? 0 },
+        { subida: garantizadoKbps(plan.subida_kbps, plan), bajada: garantizadoKbps(plan.bajada_kbps, plan) },
+    )
+    const limitado = hijo({ subida: plan.subida_limitada_kbps, bajada: plan.bajada_limitada_kbps }, null, {
+        subida: garantizadoKbps(plan.subida_limitada_kbps, plan),
+        bajada: garantizadoKbps(plan.bajada_limitada_kbps, plan),
+    })
+    return sumarHijos(veces(activo, activos), veces(limitado, limitados))
+}
+
+/**
+ * `max-limit` de un padre por sentido (`contratos/control-velocidad.md` §«Padres»):
+ * `clamp(ceil(Σ MIR / reuso), pico, max(Σ MIR, pico))`, con `pico` = la velocidad máxima de un solo
+ * hijo (su ráfaga si la tiene activa). Nunca baja del hijo más rápido (un hijo solo navega a su plan
+ * y completa su ráfaga) ni pasa de la suma de los hijos (salvo para no cortar esa ráfaga).
+ * Sin hijos devuelve 0: quien lo use decide qué escribir (0 en RouterOS es "sin límite").
+ */
+export function topePadre(hijos: SumaHijos, reuso: number): ParKbps {
+    const r = Math.max(reuso, 1)
+    const tope = (mir: number, pico: number) =>
+        Math.min(Math.max(Math.ceil(mir / r), pico), Math.max(mir, pico))
+    return {
+        subida: tope(hijos.mir.subida, hijos.pico.subida),
+        bajada: tope(hijos.mir.bajada, hijos.pico.bajada),
+    }
+}
+
 /**
  * Límites de la cola padre de un plan en un router (`argosisp:plan:<plan_id>` en modo `simple`,
- * hijo del árbol en `arbol_pcq`). `activos` = servicios del plan en el router que cuentan
- * (no suspendidos ni retirados). Con 0 activos se calcula como 1: un `max-limit` 0 en RouterOS
- * significa "sin límite".
+ * nodo del árbol en `arbol_pcq`), sobre los hijos que contiene de verdad (`HijosPadre`; un número
+ * son `activos` a velocidad del plan). `max-limit` = `topePadre`; `limit-at` = Σ CIR, que nunca pasa
+ * del `max-limit` (regla de oro: CIR ≤ MIR / reuso). Sin hijos el padre queda listo para el primero:
+ * `max-limit` = el pico de un hijo del plan (no 0, que en RouterOS es "sin límite") y `limit-at` 0.
  */
-export function limitesPadrePlan(plan: VelocidadPlan, activos: number): LimitesPadre {
-    if (!Number.isInteger(activos) || activos < 0) throw new RangeError(`activos inválido: ${activos}`)
-    const n = Math.max(activos, 1)
-    const reuso = Math.max(plan.reuso, 1)
-    const max = (mir: number) => Math.ceil((mir * n) / reuso)
-    const maxLimit = { subida: max(plan.subida_kbps), bajada: max(plan.bajada_kbps) }
-    const limitAt = {
-        subida: garantizadoKbps(plan.subida_kbps, plan) * n,
-        bajada: garantizadoKbps(plan.bajada_kbps, plan) * n,
-    }
+export function limitesPadrePlan(plan: VelocidadPlan, hijos: number | HijosPadre): LimitesPadre {
+    return limitesPadreSuma(plan, hijosDelPlan(plan, typeof hijos === 'number' ? { activos: hijos } : hijos))
+}
+
+/** `limitesPadrePlan` sobre hijos ya sumados (p. ej. lo de la base más lo que se leyó del router). */
+export function limitesPadreSuma(plan: VelocidadPlan, suma: SumaHijos): LimitesPadre {
+    const maxLimit = suma.n > 0 ? topePadre(suma, plan.reuso) : hijosDelPlan(plan, { activos: 1 }).pico
+    return limitesDe(maxLimit, suma.cir, plan.prioridad)
+}
+
+/** Arma `LimitesPadre` desde kbps. */
+export function limitesDe(maxLimit: ParKbps, limitAt: ParKbps, prioridad: number): LimitesPadre {
     return {
         max_limit: par(maxLimit.subida, maxLimit.bajada),
         limit_at: par(limitAt.subida, limitAt.bajada),
-        prioridad: plan.prioridad,
+        prioridad,
         max_limit_kbps: maxLimit,
         limit_at_kbps: limitAt,
     }
@@ -229,7 +357,7 @@ export interface VistaPreviaVelocidad {
     garantizado_pct_efectivo: number
     /** CIR (`limit-at`) de cada servicio en kbps */
     limit_at_servicio_kbps: { subida: number; bajada: number }
-    /** cola padre del plan con `activos` servicios (`limitesPadrePlan`) */
+    /** cola padre del plan con `activos` hijos en estado activo (`limitesPadrePlan`) */
     padre: LimitesPadre & { activos: number }
 }
 

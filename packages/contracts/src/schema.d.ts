@@ -20637,9 +20637,9 @@ export interface components {
                 bajada: number;
             };
             padre: {
-                /** @description max-limit subida/bajada: MIR × activos / reuso, hacia arriba */
+                /** @description max-limit subida/bajada: clamp(ceil(Σ MIR / reuso), pico de un hijo, max(Σ MIR, pico)); sin hijos, el pico de uno */
                 max_limit: string;
-                /** @description limit-at subida/bajada: CIR × activos */
+                /** @description limit-at subida/bajada: Σ CIR de los hijos */
                 limit_at: string;
                 prioridad: number;
                 max_limit_kbps: {
@@ -20650,7 +20650,7 @@ export interface components {
                     subida: number;
                     bajada: number;
                 };
-                /** @description Con 0 se calcula como 1 */
+                /** @description Hijos en estado activo; con 0 el padre queda en el pico de un hijo */
                 activos: number;
             };
         };

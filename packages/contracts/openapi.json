@@ -120664,11 +120664,11 @@
             "properties": {
               "max_limit": {
                 "type": "string",
-                "description": "max-limit subida/bajada: MIR × activos / reuso, hacia arriba"
+                "description": "max-limit subida/bajada: clamp(ceil(Σ MIR / reuso), pico de un hijo, max(Σ MIR, pico)); sin hijos, el pico de uno"
               },
               "limit_at": {
                 "type": "string",
-                "description": "limit-at subida/bajada: CIR × activos"
+                "description": "limit-at subida/bajada: Σ CIR de los hijos"
               },
               "prioridad": {
                 "type": "integer"
@@ -120706,7 +120706,7 @@
               "activos": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Con 0 se calcula como 1"
+                "description": "Hijos en estado activo; con 0 el padre queda en el pico de un hijo"
               }
             }
           }

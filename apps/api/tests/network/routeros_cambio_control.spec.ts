@@ -286,7 +286,10 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
         const plan = await crearPlanFila({ bajada_kbps: 20000, subida_kbps: 5000, reuso: 2 })
         await crear(client, plan)
         await cambiarModo('arbol_pcq')
-        await db.from('network.routers').where('id', routerId).update({ capacidad_bajada_kbps: 300000 })
+        // Con capacidad de sobra el global queda en lo que suman sus nodos (1 cliente de 20M, §13)
+        const antes = falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('bajada'))!
+        assert.equal(normalizarValor(antes['max-limit']), normalizarValor('20M'))
+        await db.from('network.routers').where('id', routerId).update({ capacidad_bajada_kbps: 15000 })
         ultimo = null
         await entregar([
             {
@@ -296,7 +299,7 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
                     router_id: routerId,
                     de: 'arbol_pcq',
                     a: 'arbol_pcq',
-                    capacidad_bajada_kbps: 300000,
+                    capacidad_bajada_kbps: 15000,
                     capacidad_subida_kbps: 50000,
                     campos: ['capacidad'],
                     motivo: null,
@@ -304,8 +307,9 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
             },
         ])
         assert.isNull(ultimo)
+        // Capacidad menor que la suma: el enlace manda
         const global = falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('bajada'))!
-        assert.equal(normalizarValor(global['max-limit']), normalizarValor('300M'))
+        assert.equal(normalizarValor(global['max-limit']), normalizarValor('15M'))
     })
 
     test('vista previa: qué crea y qué borra, sin tocar el router; permiso routers.cambiar_control_velocidad', async ({

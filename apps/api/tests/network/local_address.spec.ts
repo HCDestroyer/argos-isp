@@ -15,6 +15,7 @@ import {
     type RouterVelocidad,
 } from '#network/routeros/velocidad_router'
 import { estrategiasDeFila } from '#network/estrategia_velocidad'
+import { SIN_HIJOS } from '#network/velocidad'
 import type { ObjetoRouterOS } from '#network/routeros/cliente'
 
 /**
@@ -70,6 +71,9 @@ function planPerfil(redes: PlanRouter['redes']): PlanRouter {
         estrategia: e,
         servicios: 1,
         activos: 1,
+        limitados: 0,
+        dinamicos: { activos: 0, limitados: 0 },
+        al_router: { estaticos: SIN_HIJOS, dinamicos: SIN_HIJOS },
         en_activo: 1,
         en_limitado: 0,
         hijas: [],
