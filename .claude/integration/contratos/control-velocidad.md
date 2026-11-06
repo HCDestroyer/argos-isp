@@ -36,12 +36,12 @@ Una **estrategia** es un objeto con cuatro capas:
 | Valor | Familia colas simples (`radius_rate_limit`, `perfil_ppp`, `cola_simple`, `pcq_plan`) | Familia árbol (`arbol_pcq`) |
 | --- | --- | --- |
 | `ninguno` | Sin padre: cada cliente solo con su tope | Nodos del plan colgando de `global` con `max-limit=0` (el tope por cliente lo pone el PCQ) |
-| `por_plan` | Cola padre `argosisp-plan-<id>` (`max-limit = MIR × activos / reuso`). Solo para planes con reuso > 1 (con reuso 1 un padre nunca limita: es lo de hoy) | Nodos del plan con `max-limit = MIR × activos / reuso` y `limit-at = CIR × activos`, colgando de `global` |
-| `por_router` | Cola padre `argosisp-router` (`max-limit` = capacidad del enlace) y las colas de los clientes (o la `-pcq`) cuelgan de ella | Nodos globales `argosisp-global-<sentido>` con la capacidad; nodos del plan con `max-limit=0` |
+| `por_plan` | Cola padre `argosisp-plan-<id>` (`max-limit` y `limit-at` de §13). Solo para planes con reuso > 1 (con reuso 1 un padre nunca limita: es lo de hoy) | Nodos del plan con `max-limit` y `limit-at` de §13, colgando de `global` |
+| `por_router` | Cola padre `argosisp-router` (`max-limit` de §13: lo de sus hijos acotado por la capacidad del enlace) y las colas de los clientes (o la `-pcq`) cuelgan de ella | Nodos globales `argosisp-global-<sentido>` (§13); nodos del plan con `max-limit=0` |
 | `jerarquico` | router → plan → cliente: `argosisp-router`, debajo `argosisp-plan-<id>` (siempre, también con reuso 1), debajo el cliente | Lo de hoy: global → plan (con reuso) → PCQ |
 
 - **PPPoE con padre:** `Mikrotik-Rate-Limit` **no lleva** el padre (el atributo de RouterOS 7 es `rx/tx ráfaga umbral tiempo prioridad limit-at`, sin `parent`). El padre llega por el perfil: `aaa` manda `Mikrotik-Group = plan-<id>` y ese perfil tiene `parent-queue` = el padre que corresponda (`argosisp-plan-<id>` o `argosisp-router`). Así ya funciona el reuso de hoy.
-- Capacidad del router null = sin techo (`max-limit=0`): permitido, con advertencia.
+- Capacidad del router null = sin techo del enlace: permitido, con advertencia. El padre del router queda en lo que suman sus hijos (§13) o en 0 sin hijos.
 
 ### Capa 3 · `tipo_cola` (cola de las hojas)
 
@@ -343,3 +343,58 @@ El modo de control de velocidad se decide **por router**: todos sus servicios si
 
 - **Nunca `target=<pppoe-usuario>`**: RouterOS guarda el `target` de una cola estática por el id interno de la interfaz, y la interfaz dinámica de la sesión cambia de id en cada reconexión (la cola queda inválida). Por eso el dispatcher mantiene el `target` con `sesion.iniciada` / `sesion.terminada`, igual que el de los padres y el de `pcq_plan`. **Verificar en el laboratorio.**
 - `cola_simple` queda en la familia de colas simples: las reglas 5 a 7 no cambian.
+
+## 13. Padres: nunca bajo el hijo más rápido ni sobre la suma de los hijos (bug del PM, 2026-11-05)
+
+**Queja del PM.** «El padre tiene una velocidad mayor que la suma de todos los hijos, y si solo hay 1 hijo, ¿puede ese hijo navegar a la velocidad de su plan?». Con `max-limit = MIR × max(activos, 1) / reuso`: con reuso > 1 y pocos hijos el padre quedaba bajo un MIR (1 hijo en 1:4 → MIR/4, nunca llegaba a su plan); con 0 activos quedaba en MIR/reuso; contaba como hijos a servicios sin cola (PPPoE sin sesión) y a los limitados con la velocidad del plan, y el padre del router quedaba siempre en la capacidad del enlace.
+
+### Regla (por sentido, kbps enteros)
+
+Para cada hijo:
+- `MIR` = su `max-limit`: el del plan en `activo`, el limitado en `limitado`.
+- `pico` = la velocidad máxima que alcanza **solo**: su `burst-limit` si el plan tiene ráfaga (`rafaga_*_kbps` > MIR) y el estado la usa (`activo`; el limitado va sin ráfaga, como `rate_limit_limitado`); si no, su MIR.
+- `CIR` = su `limit-at` (`garantizadoKbps` de su MIR).
+
+```
+max-limit del padre del plan = clamp( ceil(Σ MIR / reuso),  max(pico),  max(Σ MIR, max(pico)) )
+limit-at del padre del plan  = Σ CIR
+```
+
+- **Piso `max(pico)`:** nunca baja de lo que alcanza el hijo más rápido. Un hijo solo navega a su plan y completa su ráfaga.
+- **Techo `max(Σ MIR, max(pico))`:** nunca pasa de la suma de los MIR; la ráfaga es temporal, así que el agregado sigue en Σ MIR, salvo para no cortar la ráfaga de un hijo solo.
+- **Regla de oro intacta:** `Σ limit-at ≤ max-limit` porque `CIR ≤ MIR / reuso` (`validarVelocidad`), así que `Σ CIR ≤ ceil(Σ MIR / reuso)`. Se sigue verificando contra lo que hay en el router (`limit_at_hijos`).
+- **El padre no tiene ráfaga propia:** en colas simples se escribe `burst-limit=0/0`, `burst-threshold=0/0`, `burst-time=0s/0s` (si un padre existente tiene `burst-*`, la reconciliación lo pone en 0); en el árbol los nodos no llevan `burst-*` (ArgosIsp nunca los escribe). La ráfaga es del hijo y el piso la respeta.
+- `rate_limit_override` del router no entra en la cuenta del padre (se usa el plan efectivo); las sesiones que lo traen sí cuentan como el router las tiene (abajo).
+
+### Quién es hijo
+
+Σ y `max` se hacen sobre los hijos que la cola padre **contiene de verdad**, cada uno con su velocidad efectiva:
+- `activo`: velocidad y ráfaga del plan; `limitado`: velocidad limitada, sin ráfaga.
+- `suspendido` no cuenta (su cola sale del padre o va al perfil de corte). Tampoco un servicio **sin cola**: PPPoE sin sesión abierta en `network.sesiones`, WISP sin IPv4.
+- Sesiones PPPoE (colas dinámicas): cuenta lo mayor, por componente, entre lo que dice la base (sesiones abiertas por estado) y lo que el router ya tiene colgando del padre (`max-limit`, `burst-limit` y `limit-at` de cada cola dinámica). Así un accounting o un CoA en camino no deja el padre por debajo de lo que el router ya tiene, ni dispara una regla de oro falsa.
+- Se recalcula por evento como hasta ahora: `servicio.estado_cambiado` (limitar, suspender, reactivar), `servicio.config_cambiada`, `sesion.iniciada` / `sesion.terminada`, `plan.velocidad_cambiada`, y en cada reconciliación.
+
+### Sin hijos
+
+`max-limit` = el pico de un hijo del plan (lo que tendría con el primero que llegue) y `limit-at = 0`. No se escribe 0 porque en RouterOS `max-limit=0` es «sin límite», y no se retira porque el perfil `plan-<id>` lo nombra en `parent-queue`; sale como hoy, cuando el plan ya no tiene servicios en el router y no le cuelgan sesiones.
+
+### Padre del router y árbol
+
+- **`argosisp-router`** (colas simples) y **`argosisp-global-<sentido>`** (árbol): la misma regla sin reuso, acotada por la capacidad del enlace: `min(capacidad, max(Σ MIR, max(pico)))` de sus hijos. Hijos del router: los padres de plan `jerarquico` (con su `max-limit` como MIR y pico y su `limit-at`), las colas WISP y PCQ de los clientes que cuelgan directo, y las sesiones PPPoE directas (base o router, lo mayor). Un padre de plan que no se reescribe (regla de oro) cuenta como está en el router. Sin hijos: la capacidad (0 = sin techo si el router no la tiene). Capacidad null: la suma de los hijos.
+- **Nodos de plan del árbol:** cada nodo (`activo` y `limitado` por separado) es homogéneo: `limitesPadrePlan` con los clientes de ese estado cuya dirección está en la lista del plan (PPPoE con sesión abierta). Sin clientes: el pico de uno, `limit-at` 0. Los nodos sin nivel de plan (`por_router`) siguen con `max-limit=0` (el tope lo pone el PCQ) y aportan sus clientes al global.
+- La regla de oro del router y del árbol sigue igual: `Σ limit-at` de los hijos ≤ capacidad del enlace (`limit_at_router`, `limit_at_global`).
+
+### Ejemplo: plan 20/10 Mbps (bajada/subida), reúso 1:4, CIR 25 %
+
+| Clientes | Antes | Sin ráfaga | Con ráfaga 30/15 | `limit-at` |
+| --- | --- | --- | --- | --- |
+| 0 | 5M / 2.5M (`limit-at` 0) | 20M / 10M | 30M / 15M | 0 |
+| 1 | 5M / 2.5M | 20M / 10M | 30M / 15M | 5M / 2.5M |
+| 2 | 10M / 5M | 20M / 10M | 30M / 15M | 10M / 5M |
+| 8 | 40M / 20M | 40M / 20M | 40M / 20M | 40M / 20M |
+
+### En un router existente
+
+La reconciliación (y el siguiente evento de cualquier servicio del router) reescribe los `max-limit` y `limit-at` de los padres que no cumplen; las colas de los clientes no se tocan y nadie se desconecta. Cambia: padres de plan con pocos hijos suben al pico del hijo más rápido; padres con servicios sin sesión o suspendidos bajan a lo que de verdad contienen; un limitado cuenta a su velocidad limitada; `argosisp-router` y los globales del árbol bajan de la capacidad a la suma de sus hijos cuando esta es menor.
+
+Implementación: `apps/api/app/network/velocidad.ts` (`hijosDelPlan`, `topePadre`, `limitesPadrePlan`, `limitesPadreSuma`), `routeros/consultas.ts` (`planesDeRouter`: quién es hijo) y `routeros/velocidad_router.ts` (`maxLimitRouter`, padres de plan, del router y del árbol).

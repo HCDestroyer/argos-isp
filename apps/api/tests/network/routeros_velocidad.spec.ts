@@ -182,18 +182,20 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
         })
         assert.notProperty(perfil(planId)[0]!, 'remote-address')
 
-        // Un suspendido no cuenta: 3 activos → 3750k/15M; su cola deja de colgar del padre.
+        // Un suspendido no cuenta: 3 activos → ceil(60M / 4) = 15M, pero nunca bajo un MIR (20M, §13);
+        // limit-at = Σ CIR de los 3; su cola deja de colgar del padre.
         await cambiarEstado(servicios[3]!.id, 'suspendido')
         const despues = padre(planId)[0]!
-        assert.isTrue(igual(despues['max-limit'], '3750k/15M'))
+        assert.isTrue(igual(despues['max-limit'], '5M/20M'))
         assert.isTrue(igual(despues['limit-at'], '3750k/15M'))
         assert.isTrue(igual(despues['max-limit'], await maxPadre(planId, 3)))
         assert.notInclude(despues.target!, `${servicios[3]!.ipv4}/32`)
         assert.equal(cola(servicios[3]!.id).parent, 'none')
 
-        // Limitado sigue contando (y colgando del padre)
+        // Limitado sigue colgando del padre, con su velocidad limitada (2M/1M, CIR 500k/250k)
         await cambiarEstado(servicios[2]!.id, 'limitado')
-        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '3750k/15M'))
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '5M/20M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '2750k/10500k'))
         assert.equal(cola(servicios[2]!.id).parent, nombrePadre(planId))
 
         // Las escrituras del padre quedan en audit.red sin servicio
@@ -203,6 +205,143 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
             .whereNull('servicio_id')
             .whereRaw(`comando->>'ruta' = '/queue/simple'`)
         assert.isAbove(red.length, 0)
+    })
+
+    test('padre §13: limitar y suspender un hijo reescriben el padre; nunca sobre Σ MIR ni bajo un MIR', async ({
+        client,
+        assert,
+    }) => {
+        // 20M/5M en 1:2, limitado 2M/1M: 4 hijos → ceil(80M / 2) = 40M
+        const planId = await crearPlanFila({
+            bajada_kbps: 20000,
+            subida_kbps: 5000,
+            bajada_limitada_kbps: 2000,
+            subida_limitada_kbps: 1000,
+            reuso: 2,
+        })
+        const servicios = []
+        for (let i = 0; i < 4; i++) servicios.push(await crear(client, planId))
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '10M/40M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '10M/40M'))
+        // Limitar uno: (3 × 20M + 2M) / 2 = 31M
+        await cambiarEstado(servicios[0]!.id, 'limitado')
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '8M/31M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '8M/31M'))
+        // Suspender otro: (2 × 20M + 2M) / 2 = 21M
+        await cambiarEstado(servicios[1]!.id, 'suspendido')
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '5500k/21M'))
+        // Suspender dos más: queda solo el limitado → su velocidad (2M/1M), no la del plan
+        await cambiarEstado(servicios[2]!.id, 'suspendido')
+        await cambiarEstado(servicios[3]!.id, 'suspendido')
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '1M/2M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '500k/1M'))
+        // Reactivar: vuelve a la velocidad del plan
+        await cambiarEstado(servicios[0]!.id, 'activo')
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '5M/20M'))
+        // Sin ráfaga propia
+        assert.containsSubset(padre(planId)[0], { 'burst-limit': '0/0', 'burst-threshold': '0/0' })
+    })
+
+    test('padre §13 con ráfaga: 20/10 Mbps, ráfaga 30/15, 1:4 con 1, 2 y 8 clientes', async ({
+        client,
+        assert,
+    }) => {
+        const planId = await crearPlanFila({
+            bajada_kbps: 20000,
+            subida_kbps: 10000,
+            bajada_limitada_kbps: 2000,
+            subida_limitada_kbps: 1000,
+            rafaga_bajada_kbps: 30000,
+            rafaga_subida_kbps: 15000,
+            reuso: 4,
+        })
+        const servicios = [await crear(client, planId)]
+        // 1: clamp(5M, 30M, 30M) = 30M: completa su ráfaga
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '15M/30M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '2500k/5M'))
+        servicios.push(await crear(client, planId))
+        // 2: clamp(10M, 30M, 40M) = 30M
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '15M/30M'))
+        for (let i = 0; i < 6; i++) servicios.push(await crear(client, planId))
+        // 8: clamp(40M, 30M, 160M) = 40M
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '20M/40M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '20M/40M'))
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], await maxPadre(planId, 8)))
+        // Limitado va sin ráfaga: 7 a 20M + 1 a 2M → ceil(142M / 4) = 35500k
+        await cambiarEstado(servicios[0]!.id, 'limitado')
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '17750k/35500k'))
+    })
+
+    test('padre §13: un PPPoE sin sesión no es hijo; con la cola dinámica en el router sí', async ({
+        client,
+        assert,
+    }) => {
+        const planId = await plan14()
+        await crear(client, planId)
+        for (let i = 0; i < 3; i++) {
+            await crear(client, planId, {
+                tipo_conexion: 'pppoe',
+                user_ppp: unico('ppp'),
+                pass_ppp: 'clave-larga-1',
+            })
+        }
+        // 1 WISP + 3 PPPoE sin sesión: 1 hijo → su plan, limit-at de 1
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '5M/20M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '1250k/5M'))
+        // El router ya tiene 4 sesiones colgando (accounting en camino): el padre las cubre
+        for (let i = 0; i < 4; i++) {
+            falso.tabla('/queue/simple').push({
+                '.id': `*D${i}`,
+                name: `<pppoe-${i}>`,
+                target: `10.10.9.${i + 1}/32`,
+                parent: nombrePadre(planId),
+                dynamic: 'true',
+                'max-limit': '5000000/20000000',
+                'limit-at': '1250000/5000000',
+            })
+        }
+        await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        // 1 WISP + 4 sesiones = 5 hijos: ceil(100M / 4) = 25M; limit-at = 5 × CIR
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '6250k/25M'))
+        assert.isTrue(igual(padre(planId)[0]!['limit-at'], '6250k/25M'))
+    })
+
+    test('padre §13: la reconciliación corrige un padre escrito con la fórmula vieja (MIR × activos / reuso)', async ({
+        client,
+        assert,
+    }) => {
+        const planId = await plan14()
+        await crear(client, planId)
+        // Como lo dejó la versión anterior con 1 hijo en 1:4 (y una ráfaga puesta a mano)
+        Object.assign(padre(planId)[0]!, {
+            'max-limit': '1250000/5000000',
+            'burst-limit': '9000000/9000000',
+        })
+        const r = await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.isNull(r.error)
+        assert.isTrue(igual(padre(planId)[0]!['max-limit'], '5M/20M'))
+        assert.isTrue(igual(padre(planId)[0]!['burst-limit'], '0/0'))
+        const red = await db
+            .from('audit.red')
+            .where('router_id', routerId)
+            .whereNull('servicio_id')
+            .whereRaw(`comando->>'ruta' = '/queue/simple'`)
+            .orderBy('id', 'desc')
+            .first()
+        assert.isNotNull(red)
+        // Una segunda pasada no escribe nada
+        const escrituras = falso.escrituras.length
+        await new ReconciliarRouterOS(OPCIONES).execute(
+            { router_id: routerId, motivo: 'manual' },
+            contextoPrueba(),
+        )
+        assert.equal(falso.escrituras.length, escrituras)
     })
 
     test('cambio de plan entre dos padres: los dos se recalculan y el viejo se borra al vaciarse', async ({
@@ -232,7 +371,8 @@ test.group('RouterOS · velocidad en modo simple con reuso', (group) => {
         assert.isTrue(igual(padre(planA)[0]!['max-limit'], await maxPadre(planA, 1)))
         assert.equal(padre(planA)[0]!.target, `${s2.ipv4}/32`)
         assert.lengthOf(padre(planB), 1)
-        assert.isTrue(igual(padre(planB)[0]!['max-limit'], '5M/25M'))
+        // 1 hijo de 50M/10M en 1:2: navega a su plan (antes 5M/25M)
+        assert.isTrue(igual(padre(planB)[0]!['max-limit'], '10M/50M'))
         assert.equal(padre(planB)[0]!.priority, '4/4')
         assert.equal(cola(s1.id).parent, nombrePadre(planB))
         assert.equal(cola(s2.id).parent, nombrePadre(planA))

@@ -1,9 +1,17 @@
 import {
     formatoKbps,
+    hijo,
+    hijosDelPlan,
     limitesPadrePlan,
+    limitesPadreSuma,
+    mayorHijos,
     rateLimitServicio,
+    SIN_HIJOS,
+    sumarHijos,
+    topePadre,
     type ControlVelocidad,
-    type LimitesPadre,
+    type ParKbps,
+    type SumaHijos,
     type VelocidadPlan,
 } from '#network/velocidad'
 import {
@@ -192,9 +200,18 @@ export interface PlanRouter {
     estrategia: Estrategia
     /** Servicios no retirados del plan en el grupo (de cualquier tipo) */
     servicios: number
-    /** Los que cuentan para el padre del plan (ni suspendidos ni retirados y bajo el padre) */
+    /**
+     * Hijos que la cola padre del plan contiene de verdad (`contratos/control-velocidad.md` §«Padres»):
+     * en estado `activo` (velocidad del plan) y `limitado` (velocidad limitada). Un suspendido o un
+     * servicio sin cola (PPPoE sin sesión abierta, WISP sin IPv4) no cuenta.
+     */
     activos: number
-    /** Árbol: en estado `activo` y en estado `limitado` */
+    limitados: number
+    /** De esos, los que son sesiones PPPoE (colas dinámicas): el router también se lee */
+    dinamicos: { activos: number; limitados: number }
+    /** Hijos de este plan colgados directo del padre del router: colas estáticas y sesiones PPPoE */
+    al_router: { estaticos: SumaHijos; dinamicos: SumaHijos }
+    /** Árbol: en estado `activo` y en estado `limitado`, con dirección en la lista del plan */
     en_activo: number
     en_limitado: number
     /** Colas WISP del plan con padre */
@@ -400,16 +417,20 @@ function hijasDinamicas(lectura: LecturaVelocidad): Map<string, string[]> {
     return salida
 }
 
-/** Σ `limit-at` (kbps) de las colas dinámicas de cada padre. */
-function limitAtDinamicas(lectura: LecturaVelocidad): Map<string, { subida: number; bajada: number }> {
-    const salida = new Map<string, { subida: number; bajada: number }>()
+/** Una cola leída del router como hijo: `max-limit`, `burst-limit` y `limit-at`. */
+function hijoLeido(cola: ObjetoRouterOS): SumaHijos {
+    return hijo(kbpsPar(cola['max-limit']), kbpsPar(cola['burst-limit']), kbpsPar(cola['limit-at']))
+}
+
+/**
+ * Colas dinámicas (sesiones PPPoE) que el router tiene colgando de cada padre, como hijos: lo que
+ * el padre contiene de verdad aunque el accounting de una sesión nueva todavía no haya llegado.
+ */
+function hijosLeidos(lectura: LecturaVelocidad): Map<string, SumaHijos> {
+    const salida = new Map<string, SumaHijos>()
     for (const cola of lectura.get('/queue/simple') ?? []) {
         if (cola.dynamic !== 'true' || !cola.parent || cola.parent === 'none') continue
-        const suma = salida.get(cola.parent) ?? { subida: 0, bajada: 0 }
-        const limitAt = kbpsPar(cola['limit-at'])
-        suma.subida += limitAt.subida
-        suma.bajada += limitAt.bajada
-        salida.set(cola.parent, suma)
+        salida.set(cola.parent, sumarHijos(salida.get(cola.parent) ?? SIN_HIJOS, hijoLeido(cola)))
     }
     return salida
 }
@@ -434,13 +455,21 @@ const sumar = (a: { subida: number; bajada: number }, b: { subida: number; bajad
 })
 
 /**
- * Sin servicios que cuenten, el padre no garantiza nada: `limit-at = CIR × 0 = 0` (el `max-limit`
- * se sigue calculando con 1, porque 0 en RouterOS es "sin límite"). Así un plan vacío o un nodo
- * limitado sin limitados no ocupa garantía del enlace.
+ * `max-limit` del padre del router (`argosisp-router`) o del global del árbol, por sentido: la regla
+ * de los padres sin reuso (`max(Σ MIR, pico)` de sus hijos) acotada por la capacidad del enlace.
+ * Sin hijos queda en la capacidad (0 = sin techo, si el router no la tiene).
  */
-function sinGarantiaVacio(limites: LimitesPadre, activos: number): LimitesPadre {
-    if (activos > 0) return limites
-    return { ...limites, limit_at: '0/0', limit_at_kbps: { subida: 0, bajada: 0 } }
+export function maxLimitRouter(
+    hijos: SumaHijos,
+    capacidad: { subida: number | null; bajada: number | null },
+): ParKbps {
+    const suma = topePadre(hijos, 1)
+    const uno = (d: Sentido) => {
+        const cap = capacidad[d]
+        if (hijos.n === 0) return cap ?? 0
+        return cap === null ? suma[d] : Math.min(cap, suma[d])
+    }
+    return { subida: uno('subida'), bajada: uno('bajada') }
 }
 
 /** Nombres de padres de ArgosIsp (`argosisp-plan-<id>`, `argosisp-router`) → clave de su cola. */
@@ -498,7 +527,8 @@ function estadoSimple(
     const conservar: string[] = []
     const errores: ErrorReglaOro[] = []
     const dinamicas = hijasDinamicas(lectura)
-    const limitAtDin = limitAtDinamicas(lectura)
+    const leidos = hijosLeidos(lectura)
+    const limitAtDin = new Map([...leidos].map(([padre, h]) => [padre, h.cir]))
     const base = perfilBase(lectura)
 
     // Tipos de cola de las hojas (sfq, fq_codel, cake).
@@ -511,11 +541,28 @@ function estadoSimple(
         }
     }
 
-    // Hijas del padre del router: { targets, limit-at }.
-    const delRouter = { targets: [] as string[], limitAt: { subida: 0, bajada: 0 }, hay: false }
+    // Hijas del padre del router: { targets, limit-at } y, para su max-limit, los hijos estáticos
+    // (colas WISP y PCQ, padres de plan) y las sesiones PPPoE que según la base cuelgan directo de él.
+    const delRouter = {
+        targets: [] as string[],
+        limitAt: { subida: 0, bajada: 0 },
+        hay: false,
+        estaticos: SIN_HIJOS,
+        dinamicos: SIN_HIJOS,
+    }
     const sumarAlRouter = (targets: string[], limitAt: { subida: number; bajada: number }) => {
         delRouter.targets.push(...targets)
         delRouter.limitAt = sumar(delRouter.limitAt, limitAt)
+    }
+    // Un padre de plan que no se reescribe (se conserva) y cuelga del router cuenta como está en él.
+    const simples = lectura.get('/queue/simple') ?? []
+    const conservarPadrePlan = (planId: number) => {
+        conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(planId) })}`)
+        conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(planId) })}`)
+        const cola = simples.find((o) => o.comment === commentPlan(planId) && o.dynamic !== 'true')
+        if (cola?.parent === NOMBRE_PADRE_ROUTER) {
+            delRouter.estaticos = sumarHijos(delRouter.estaticos, hijoLeido(cola))
+        }
     }
 
     // Planes con padre propio y planes que solo tienen sesiones viejas colgando.
@@ -539,6 +586,8 @@ function estadoSimple(
         ) {
             delRouter.hay = true
         }
+        delRouter.estaticos = sumarHijos(delRouter.estaticos, plan.al_router.estaticos)
+        delRouter.dinamicos = sumarHijos(delRouter.dinamicos, plan.al_router.dinamicos)
 
         // Cola PCQ del plan: hija del padre del plan, del router o suelta.
         const pcqTargets: { targets: string[]; padre: string } = { targets: [], padre: 'none' }
@@ -598,10 +647,19 @@ function estadoSimple(
             if (!nivelPlan) {
                 // Ya no lleva padre, pero hay sesiones viejas colgando: se conserva hasta que reconecten.
                 avisos.push(`plan ${id}: sin padre en la estrategia vigente pero con sesiones bajo ${nombre}`)
-                conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
-                conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+                conservarPadrePlan(id)
             } else {
-                const limites = sinGarantiaVacio(limitesPadrePlan(vel, plan.activos), plan.activos)
+                // Hijos de verdad (§«Padres»): colas estáticas según la base; sesiones PPPoE según la
+                // base o según lo que el router ya tiene colgando, lo que sea mayor.
+                const estaticos = {
+                    activos: plan.activos - plan.dinamicos.activos,
+                    limitados: plan.limitados - plan.dinamicos.limitados,
+                }
+                const suma = sumarHijos(
+                    hijosDelPlan(vel, estaticos),
+                    mayorHijos(hijosDelPlan(vel, plan.dinamicos), leidos.get(nombre) ?? SIN_HIJOS),
+                )
+                const limites = limitesPadreSuma(vel, suma)
                 const hijas = sumar(
                     hijasWisp.reduce((t, h) => sumar(t, h.limit_at_kbps), { subida: 0, bajada: 0 }),
                     limitAtDin.get(nombre) ?? { subida: 0, bajada: 0 },
@@ -627,12 +685,20 @@ function estadoSimple(
                             detalle: `plan ${id}: el target del padre no incluye ${faltanV6.join(', ')}`,
                         })
                     }
-                    conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
-                    conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+                    conservarPadrePlan(id)
                     continue
                 }
                 const parent = e.padre === 'jerarquico' ? NOMBRE_PADRE_ROUTER : 'none'
-                if (parent === NOMBRE_PADRE_ROUTER) sumarAlRouter(targets, limites.limit_at_kbps)
+                if (parent === NOMBRE_PADRE_ROUTER) {
+                    sumarAlRouter(targets, limites.limit_at_kbps)
+                    // Sin hijos no aporta al router (su max-limit es el de espera, §13).
+                    if (suma.n > 0) {
+                        delRouter.estaticos = sumarHijos(
+                            delRouter.estaticos,
+                            hijo(limites.max_limit_kbps, null, limites.limit_at_kbps),
+                        )
+                    }
+                }
                 colasPlan.push({
                     ruta: '/queue/simple',
                     clave: { comment: commentPlan(id) },
@@ -702,8 +768,7 @@ function estadoSimple(
     for (const id of conDinamicas) {
         if (porId.has(id)) continue
         avisos.push(`plan ${id}: sin servicios en el router pero con sesiones bajo ${nombrePadre(id)}`)
-        conservar.push(`/queue/simple|${claveTexto({ comment: commentPlan(id) })}`)
-        conservar.push(`/ppp/profile|${claveTexto({ comment: commentPlan(id) })}`)
+        conservarPadrePlan(id)
         delRouter.targets.push(...(dinamicas.get(nombrePadre(id)) ?? []))
     }
 
@@ -713,6 +778,11 @@ function estadoSimple(
     if (delRouter.hay || dinRouter.length > 0) {
         const targets = [...new Set([...delRouter.targets, ...dinRouter])]
         const techo = { subida: router.capacidad_subida_kbps, bajada: router.capacidad_bajada_kbps }
+        const hijosRouter = sumarHijos(
+            delRouter.estaticos,
+            mayorHijos(delRouter.dinamicos, leidos.get(NOMBRE_PADRE_ROUTER) ?? SIN_HIJOS),
+        )
+        const maxRouter = maxLimitRouter(hijosRouter, techo)
         const hijas = sumar(
             delRouter.limitAt,
             limitAtDin.get(NOMBRE_PADRE_ROUTER) ?? { subida: 0, bajada: 0 },
@@ -741,7 +811,7 @@ function estadoSimple(
                 propiedades: {
                     name: NOMBRE_PADRE_ROUTER,
                     target: targets.length > 0 ? targets.join(',') : TARGET_SIN_HIJAS,
-                    'max-limit': `${formatoKbps(techo.subida ?? 0)}/${formatoKbps(techo.bajada ?? 0)}`,
+                    'max-limit': `${formatoKbps(maxRouter.subida)}/${formatoKbps(maxRouter.bajada)}`,
                     'limit-at': '0/0',
                     priority: '8/8',
                     'burst-limit': '0/0',
@@ -797,11 +867,13 @@ function tipoPcq(vel: VelocidadPlan, sentido: Sentido): Propiedades {
  * 1. `/queue/type` por plan y sentido: `argosisp-plan-<id>[-limitado]-<sentido>`, `kind = pcq`,
  *    `pcq-rate` = MIR (o el limitado), clasificador `dst-address` (bajada) / `src-address` (subida),
  *    máscara /64 en IPv6, y ráfaga PCQ si el extra está encendido.
- * 2. `/queue/tree` globales `argosisp-global-bajada|subida` (`parent = global`, `max-limit` =
- *    capacidad del enlace; 0 = sin techo), solo con padre `por_router` o `jerarquico`.
+ * 2. `/queue/tree` globales `argosisp-global-bajada|subida` (`parent = global`), solo con padre
+ *    `por_router` o `jerarquico`: `max-limit` = `max(Σ MIR, pico)` de sus nodos, acotado por la
+ *    capacidad del enlace (`maxLimitRouter`; sin capacidad, sin ese techo).
  * 3. `/queue/tree` por plan y sentido: hijos del global (o de `global` sin nivel de router). Con nivel
- *    de plan (`por_plan`, `jerarquico`) `max-limit` = `MIR × activos / reuso`; si no, 0 (el tope por
- *    cliente lo pone el PCQ). `limit-at` = CIR × activos con garantizado y un padre.
+ *    de plan (`por_plan`, `jerarquico`) `max-limit` = `limitesPadrePlan` sobre los clientes del nodo
+ *    (`clamp(ceil(Σ MIR / reuso), pico, max(Σ MIR, pico))`); si no, 0 (el tope por cliente lo pone el
+ *    PCQ). `limit-at` = Σ CIR con un padre.
  * 4. Mangle IPv4 e IPv6 (`chain = forward`, `mark-packet`, `passthrough = no`).
  */
 function estadoArbol(
@@ -822,20 +894,8 @@ function estadoArbol(
     // El techo existe solo si algún plan del árbol con servicios en el router lo usa: una estrategia del
     // árbol para un tipo de conexión sin servicios no escribe nada (bug del PM, 5 nov).
     const conGlobal = planes.some((p) => conNivelRouter(p.estrategia))
-    if (conGlobal) {
-        for (const sentido of SENTIDOS) {
-            globales.push({
-                ruta: '/queue/tree',
-                clave: { comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` },
-                propiedades: {
-                    name: nombreGlobal(sentido),
-                    parent: 'global',
-                    'max-limit': formatoKbps(capacidad[sentido] ?? 0),
-                    disabled: 'no',
-                },
-            })
-        }
-    }
+    // Hijos del global (nodos de plan que cuelgan de él): su max-limit sale después del bucle.
+    let hijosGlobal: SumaHijos = SIN_HIJOS
     for (const plan of [...planes].sort((a, b) => a.plan_id - b.plan_id)) {
         const e = plan.estrategia
         const base = velocidadConExtras(plan.velocidad, e.extras)
@@ -853,7 +913,16 @@ function estadoArbol(
                   }
                 : base
             const cuenta = limitado ? plan.en_limitado : plan.en_activo
-            const limites = sinGarantiaVacio(limitesPadrePlan(vel, cuenta), cuenta)
+            const limites = limitesPadrePlan(vel, cuenta)
+            // Lo que el nodo aporta al global: con nivel de plan su max-limit; si no, sus clientes (PCQ).
+            // Un nodo sin clientes no aporta (su max-limit es el de espera, §13).
+            const aporte =
+                cuenta === 0
+                    ? SIN_HIJOS
+                    : agrega
+                      ? hijo(limites.max_limit_kbps, null, conPadre ? limites.limit_at_kbps : SIN_HIJOS.cir)
+                      : hijosDelPlan(vel, { activos: cuenta })
+            if (conNivelRouter(e)) hijosGlobal = sumarHijos(hijosGlobal, aporte)
             const lista = listaPlan(plan.plan_id, limitado)
             for (const sentido of SENTIDOS) {
                 const nombre = nombreNodo(plan.plan_id, limitado, sentido)
@@ -910,6 +979,21 @@ function estadoArbol(
                     })
                 }
             }
+        }
+    }
+    if (conGlobal) {
+        const maxGlobal = maxLimitRouter(hijosGlobal, capacidad)
+        for (const sentido of SENTIDOS) {
+            globales.push({
+                ruta: '/queue/tree',
+                clave: { comment: `${PREFIJO_COMMENT_GLOBAL}${sentido}` },
+                propiedades: {
+                    name: nombreGlobal(sentido),
+                    parent: 'global',
+                    'max-limit': formatoKbps(maxGlobal[sentido]),
+                    disabled: 'no',
+                },
+            })
         }
     }
     // Regla de oro: Σ limit-at de los nodos de plan ≤ max-limit del global (capacidad del enlace).

@@ -735,7 +735,7 @@ export function validarEstrategias(entrada: EntradaValidacion): ResultadoValidac
         if (conNivelRouter(e) && sinCapacidad) {
             avisar(
                 'sin_techo',
-                'el router no tiene capacidad del enlace: el padre del router no limita (max-limit 0)',
+                'el router no tiene capacidad del enlace: el padre del router solo limita a la suma de sus hijos',
             )
         }
         if (hayTecho && !conNivelRouter(e)) {

@@ -125,7 +125,8 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
         await crear(client, plan)
         const padre = () => falso.conComment('/queue/simple', commentPlan(plan))[0]!
         const antes = { ...padre() }
-        assert.equal(normalizarValor(antes['max-limit']), normalizarValor('2500k/10M'))
+        // 2 hijas en 1:4: ceil(40M / 4) = 10M, pero nunca bajo un MIR (§13)
+        assert.equal(normalizarValor(antes['max-limit']), normalizarValor('5M/20M'))
 
         // Excepción del router: limit-at = MIR (garantiza 5M/20M a cada hija con reuso 1:4)
         await db.table('network.planes_routers').insert({
@@ -150,7 +151,7 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
         })
         assert.match(
             eventos[1]!.payload.error,
-            /limit-at de las hijas en bajada \(40000 kbps\) supera el max-limit del padre argosisp-plan-\d+ \(10000 kbps\)/,
+            /limit-at de las hijas en bajada \(40000 kbps\) supera el max-limit del padre argosisp-plan-\d+ \(20000 kbps\)/,
         )
         // El padre quedó como estaba (no se escribió un árbol inválido) y sigue existiendo para sus hijas
         assert.deepEqual(padre(), antes)
@@ -240,10 +241,11 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
         ])
         const nodo = falso.tabla('/queue/tree').find((o) => o.comment === `${commentPlan(plan)}:bajada`)!
         assert.equal(kbpsPar(nodo['limit-at']).bajada, 15000)
+        // El global: lo que suman sus nodos (3 clientes de 20M en 1:4 → 20M), bajo la capacidad (100M)
         assert.equal(
             kbpsPar(falso.tabla('/queue/tree').find((o) => o.name === nombreGlobal('bajada'))!['max-limit'])
                 .bajada,
-            100000,
+            20000,
         )
     })
 
