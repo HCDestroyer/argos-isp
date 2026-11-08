@@ -171,6 +171,7 @@ describe('identificación del cliente cortado', () => {
             bd.codigosCorte.push({ servicio_id: servicio.id, creado_en: new Date(Date.now() - 86_400_000).toISOString(), cerrado_en: new Date(Date.now() - 5 * 60_000).toISOString() })
             const gracia = await mountSuspended(ServicioCodigoCorte, { props: { servicioId: servicio.id } })
             await esperar(() => expect(gracia.find('[data-prueba="codigo-corte-estado"]').text()).toBe('En gracia'))
+            expect(gracia.find('[data-prueba="codigo-corte-detalle"]').text()).toContain('Sigue abriendo la página de corte hasta')
             gracia.unmount()
 
             const porIp = servicioEn(1)
@@ -235,13 +236,15 @@ describe('identificación del cliente cortado', () => {
     })
 
     describe('presentarCodigoCorte', () => {
-        const base: Schema<'CodigoCorteServicio'> = { servicio_id: 1, corte_identificacion: 'codigo', activo: false, creado_en: null, cerrado_en: null }
+        const base: Schema<'CodigoCorteServicio'> = { servicio_id: 1, corte_identificacion: 'codigo', activo: false, creado_en: null, cerrado_en: null, resuelve_hasta: null }
 
         it('distingue activo, en gracia, cerrado y sin código', () => {
             const ahora = Date.parse('2026-11-08T18:00:00Z')
             expect(presentarCodigoCorte({ ...base, activo: true, creado_en: '2026-11-08T12:00:00Z' }, ahora).estado).toBe('activo')
-            expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:45:00Z' }, ahora).estado).toBe('gracia')
-            expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:15:00Z' }, ahora).estado).toBe('cerrado')
+            expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:45:00Z', resuelve_hasta: '2026-11-08T18:15:00Z' }, ahora).estado).toBe('gracia')
+            // La gracia la fija el servidor: con 10 min, a los 15 ya no resuelve.
+            expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:45:00Z', resuelve_hasta: '2026-11-08T17:55:00Z' }, ahora).estado).toBe('cerrado')
+            expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:15:00Z', resuelve_hasta: '2026-11-08T17:45:00Z' }, ahora).estado).toBe('cerrado')
             expect(presentarCodigoCorte(base, ahora).detalle).toBe('Nunca ha tenido código: se emite al suspenderse.')
             expect(presentarCodigoCorte({ ...base, corte_identificacion: 'ip' }, ahora).detalle).toBe('Sin código: el router identifica por IP.')
         })

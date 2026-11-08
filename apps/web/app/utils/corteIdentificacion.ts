@@ -74,12 +74,6 @@ export function esCorteCodigoSinApi(problema: { errors?: { field: string, rule?:
 
 export type CodigoCorteServicio = Schema<'CodigoCorteServicio'>
 
-/**
- * Minutos que un código cerrado sigue resolviendo (P5, `PORTAL_CODIGO_CORTE_GRACIA_MIN`, 30 por
- * defecto). La API no lo devuelve: si el servidor lo cambia, «en gracia» es aproximado (pedido en a4.md).
- */
-export const GRACIA_CODIGO_CORTE_MIN = 30
-
 export interface PresentacionCodigoCorte {
     estado: 'activo' | 'gracia' | 'cerrado' | 'sin_codigo'
     etiqueta: string
@@ -102,15 +96,14 @@ export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number 
         }
     }
     if (codigo.cerrado_en) {
-        const cerrado = new Date(codigo.cerrado_en).getTime()
-        const hasta = cerrado + GRACIA_CODIGO_CORTE_MIN * 60_000
-        if (ahora < hasta) {
+        // `resuelve_hasta` (A5): cierre + la gracia del servidor (`PORTAL_CODIGO_CORTE_GRACIA_MIN`).
+        if (codigo.resuelve_hasta && ahora < new Date(codigo.resuelve_hasta).getTime()) {
             return {
                 estado: 'gracia',
                 etiqueta: 'En gracia',
                 color: 'warning',
                 icono: 'i-lucide-hourglass',
-                detalle: `Cerrado el ${formatearFechaHora(codigo.cerrado_en)} al dejar de estar suspendido. Sigue abriendo la página de corte hasta ${formatearFechaHora(new Date(hasta).toISOString())} para mostrar «ya tienes servicio».`,
+                detalle: `Cerrado el ${formatearFechaHora(codigo.cerrado_en)} al dejar de estar suspendido. Sigue abriendo la página de corte hasta ${formatearFechaHora(codigo.resuelve_hasta)} para mostrar «ya tienes servicio».`,
             }
         }
         return {

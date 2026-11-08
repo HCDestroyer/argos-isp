@@ -3,6 +3,9 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, idDe, noEncontrado } from '../comun'
 
+/** `PORTAL_CODIGO_CORTE_GRACIA_MIN` por defecto de la API (P5). */
+const GRACIA_MIN = 30
+
 /**
  * Como `sincronizarCodigoCorte` (A5) al leer: un suspendido en un router en modo `codigo` tiene un código
  * abierto (reutiliza el que haya o abre uno); en cualquier otro estado, el abierto se cierra. En la API
@@ -40,6 +43,8 @@ export const rutasCodigoCorte: RutasFixture = {
             activo: Boolean(ultimo && ultimo.cerrado_en === null),
             creado_en: ultimo?.creado_en ?? null,
             cerrado_en: ultimo?.cerrado_en ?? null,
+            // Como la API: cierre + la gracia; null si sigue abierto o nunca hubo.
+            resuelve_hasta: ultimo?.cerrado_en ? new Date(Date.parse(ultimo.cerrado_en) + GRACIA_MIN * 60_000).toISOString() : null,
         }
         return { status: 200, cuerpo }
     }),
