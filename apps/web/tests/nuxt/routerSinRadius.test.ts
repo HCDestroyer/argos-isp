@@ -91,6 +91,7 @@ describe('router sin RADIUS', () => {
 
             escribir('[data-prueba="router-nombre"] input, input[data-prueba="router-nombre"]', 'RB-Norte')
             escribir('[data-prueba="router-host"] input, input[data-prueba="router-host"]', '10.40.0.1')
+            elegir('[data-prueba="router-corte-identificacion"]', 'ip')
             const antes = bd.routers.length
             document.body.querySelector<HTMLButtonElement>('[data-prueba="router-guardar"]')!.click()
             await esperar(() => expect(bd.routers).toHaveLength(antes + 1))

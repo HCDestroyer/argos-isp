@@ -23,6 +23,11 @@ import * as z from 'zod'
  * router tendría que cambiar; si no, la API responde 422 `tipo_conexion_con_servicios` y se listan
  * con su enlace y la indicación de usar «Cambiar tipo de conexión» en la ficha (vista previa y
  * servicio por servicio).
+ *
+ * «Identificación del cliente cortado» (`corte_identificacion`, `contratos/corte-identificacion.md` §5
+ * P1): obligatoria, muestra el valor actual. «Por código» necesita la API (usuario y una clave guardada o
+ * escrita, sin «Borrar la clave»); si no, queda deshabilitado, y la API responde 422
+ * `corte_codigo_sin_api` en el campo (también al borrar la clave de un router que ya está en código).
  */
 const props = defineProps<{
     router: RouterNas
@@ -61,6 +66,7 @@ const esquema = z.object({
     quitar_radius_secret: z.boolean(),
     capacidad_bajada_kbps: KBPS,
     capacidad_subida_kbps: KBPS,
+    corte_identificacion: z.enum(['codigo', 'ip'], { error: MENSAJE_CORTE_OBLIGATORIO }),
     activo: z.boolean(),
 }).superRefine((datos, ctx) => {
     const error = errorNas(datos.modo_seguridad, datos.nas_ip)
@@ -89,6 +95,7 @@ function entradaDe(router: RouterNas): Entrada {
         quitar_radius_secret: false,
         capacidad_bajada_kbps: router.capacidad_bajada_kbps,
         capacidad_subida_kbps: router.capacidad_subida_kbps,
+        corte_identificacion: router.corte_identificacion,
         activo: router.activo,
     }
 }
@@ -186,6 +193,15 @@ const itemsSeguridad: RadioGroupItem[] = (['radius', 'api'] as const).map(modo =
     description: MODOS_SEGURIDAD[modo].descripcion,
 }))
 
+/** La API queda con usuario y clave después de guardar (como `exigirApiSiCodigo` de A5). */
+const conApi = computed(() => Boolean(estado.api_usuario.trim())
+    && (Boolean(estado.api_password) || (actual.value.tiene_api_password && !estado.quitar_api_password)))
+const itemsCorte = computed<RadioGroupItem[]>(() => itemsCorteIdentificacion(conApi.value, estado.corte_identificacion))
+const ayudaCorte = computed(() => ayudaCorteIdentificacion(conApi.value, estado.corte_identificacion))
+/** Pasa a código en esta edición: Argos reconcilia el router (`portal.config_cambiada` con `router_id`). */
+const pasaACodigo = computed(() => actual.value.corte_identificacion !== 'codigo' && estado.corte_identificacion === 'codigo')
+const sinApiParaCodigo = computed(() => estado.corte_identificacion === 'codigo' && !conApi.value)
+
 const SIN_EMPRESA = 0
 const itemsEmpresa = computed<SelectItem[]>(() => [
     { label: 'Sin empresa sugerida', value: SIN_EMPRESA },
@@ -219,6 +235,7 @@ function cambios(datos: Salida): CambiosRouter {
     if (variasEmpresas.value && datos.empresa_sugerida_id !== anterior.empresa_sugerida_id) salida.empresa_sugerida_id = datos.empresa_sugerida_id
     if (datos.capacidad_bajada_kbps !== anterior.capacidad_bajada_kbps) salida.capacidad_bajada_kbps = datos.capacidad_bajada_kbps
     if (datos.capacidad_subida_kbps !== anterior.capacidad_subida_kbps) salida.capacidad_subida_kbps = datos.capacidad_subida_kbps
+    if (datos.corte_identificacion !== anterior.corte_identificacion) salida.corte_identificacion = datos.corte_identificacion
     if (datos.activo !== anterior.activo) salida.activo = datos.activo
     return salida
 }
@@ -540,6 +557,31 @@ async function guardar(evento: FormSubmitEvent<Salida>) {
                         data-prueba="quitar-radius-secret"
                     />
                 </UFormField>
+                <UFormField
+                    label="Identificación del cliente cortado"
+                    name="corte_identificacion"
+                    required
+                    :help="ayudaCorte"
+                    :error="sinApiParaCodigo ? MENSAJE_CORTE_CODIGO_SIN_API : undefined"
+                    data-prueba="router-editar-corte-identificacion"
+                >
+                    <URadioGroup
+                        v-model="estado.corte_identificacion"
+                        :items="itemsCorte"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2 sm:grid-cols-2' }"
+                    />
+                </UFormField>
+                <UAlert
+                    v-if="pasaACodigo && !sinApiParaCodigo"
+                    color="info"
+                    variant="subtle"
+                    icon="i-lucide-refresh-cw"
+                    title="Al guardar, Argos reconcilia este router"
+                    description="Activa el proxy de corte en el puerto 3346 y escribe la regla con el código de cada suspendido. Después revisa «Probar conexión» → corte."
+                    data-prueba="aviso-corte-codigo"
+                />
                 <UFormField
                     v-if="puede('zonas.ver')"
                     label="Zona"

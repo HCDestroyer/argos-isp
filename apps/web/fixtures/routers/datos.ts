@@ -55,7 +55,8 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.20.0.1',
         modo_seguridad: 'radius',
-        corte_identificacion: 'ip',
+        // Identificación del cliente cortado por código (A5, `contratos/corte-identificacion.md`): tiene API.
+        corte_identificacion: 'codigo',
         tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Migrado de «árbol PCQ»; RouterOS 6 (sin fq_codel ni CAKE).

@@ -243,6 +243,7 @@ describe('routers duplicados y unión', () => {
         escribir('router-nombre', 'RB-Centro otra vez')
         escribir('router-host', '10.10.0.1')
         escribir('router-nas', '10.10.0.3')
+        enBody('router-corte-identificacion')?.querySelector<HTMLElement>('[role="radio"][value="ip"]')?.click()
         clic('router-guardar')
         await esperar(() => expect(enBody('router-duplicado')).not.toBeNull())
         const texto = enBody('router-duplicado')?.textContent ?? ''

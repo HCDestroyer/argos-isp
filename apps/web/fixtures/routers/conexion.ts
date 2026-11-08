@@ -119,7 +119,9 @@ function prueba(router: Schema<'Router'>): Schema<'PruebaConexion'> {
                 : conexion.public_key === null ? 'El router todavía no registró su clave pública: ejecuta el script de conexión' : 'El servidor todavía no vio ningún handshake del router',
         })
     }
-    if (router.id === 1) {
+    // RB-Centro PCQ (4) es el mismo equipo que RB-Centro: su API responde igual y trae el chequeo `corte`
+    // (con «el portal ve otra IP», `contratos/corte-identificacion.md`).
+    if (router.id === 1 || router.id === 4) {
         chequeos.push(
             { clave: 'api', ok: true, ms: 42, motivo: null, detalle: `La API REST respondió en ${router.host}` },
             { clave: 'equipo', ok: true, ms: 0, datos: { version: '7.24.5 (stable)', modelo: 'RB5009UG+S+', uptime: '12d4h31m', cpu_pct: 7 }, detalle: 'RouterOS 7.24.5 (stable) · RB5009UG+S+ · encendido 12d4h31m · CPU 7 %' },

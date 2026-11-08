@@ -35,6 +35,15 @@ export function efectivo(plan: Schema<'Plan'>, routerId: number): Schema<'PlanEf
 }
 
 const API_URL = /^https?:\/\/[^\s/]+(:\d{1,5})?\/?$/
+/** Como `exigirApiSiCodigo` (A5): 422 `corte_codigo_sin_api` en `corte_identificacion`. */
+export const MENSAJE_CORTE_CODIGO_SIN_API = 'La identificación por código necesita la API del router (usuario y clave): Argos escribe en el router la regla de cada suspendido. Sin API, usa «ip»'
+
+function corteSinApi(modo: unknown, apiUsuario: unknown, tieneClave: boolean) {
+    return modo === 'codigo' && !(typeof apiUsuario === 'string' && apiUsuario && tieneClave)
+        ? [{ field: 'corte_identificacion', rule: 'corte_codigo_sin_api', message: MENSAJE_CORTE_CODIGO_SIN_API }]
+        : []
+}
+
 const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 /** `MENSAJE_NAS_IP_REQUERIDA` de A1 (`apps/api/app/network/validators.ts`). */
 const MENSAJE_NAS_IP_REQUERIDA = 'La IP del NAS es obligatoria en un router con RADIUS: es la IP con la que el router habla con RADIUS y a la '
@@ -204,6 +213,15 @@ export const rutasRouters: RutasFixture = {
         else if (modo === 'radius' && !nasDespues) {
             errores.push({ field: 'nas_ip', message: MENSAJE_NAS_IP_REQUERIDA, rule: 'required' })
         }
+        // Como `EditarRouter` + `exigirApiSiCodigo` (A5): el modo código necesita la API también después de
+        // la edición (borrar la clave de un router en `codigo` es 422).
+        if (cuerpo.corte_identificacion !== undefined && cuerpo.corte_identificacion !== 'ip' && cuerpo.corte_identificacion !== 'codigo') {
+            errores.push({ field: 'corte_identificacion', message: 'El valor de corte_identificacion no es válido', rule: 'enum' })
+        }
+        const corteDespues = cuerpo.corte_identificacion === 'ip' || cuerpo.corte_identificacion === 'codigo' ? cuerpo.corte_identificacion : router.corte_identificacion
+        const usuarioDespues = 'api_usuario' in cuerpo ? cuerpo.api_usuario : router.api_usuario
+        const claveDespues = cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password
+        errores.push(...corteSinApi(corteDespues, usuarioDespues, claveDespues))
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -256,6 +274,7 @@ export const rutasRouters: RutasFixture = {
             host: texto('host'),
             nas_ip: nasDespues,
             modo_seguridad: modo,
+            corte_identificacion: corteDespues,
             tipo_conexion: tipo,
             api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
             // Vacío o null no cambia; `quitar_*` la borra a propósito.
@@ -360,6 +379,8 @@ export const rutasRouters: RutasFixture = {
             ...(!host ? [{ field: 'host', message: 'El host es obligatorio', rule: 'required' }] : []),
             ...(nas !== null && !IPV4.test(nas) ? [{ field: 'nas_ip', message: 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1', rule: 'ipAddress' }] : []),
             ...(nas === null && modo === 'radius' ? [{ field: 'nas_ip', message: MENSAJE_NAS_IP_REQUERIDA, rule: 'required' }] : []),
+            ...(cuerpo.corte_identificacion !== undefined && cuerpo.corte_identificacion !== 'ip' && cuerpo.corte_identificacion !== 'codigo' ? [{ field: 'corte_identificacion', message: 'El valor de corte_identificacion no es válido', rule: 'enum' }] : []),
+            ...corteSinApi(cuerpo.corte_identificacion, cuerpo.api_usuario, typeof cuerpo.api_password === 'string' && cuerpo.api_password.length > 0),
         ]
         if (errores.length) {
             return datosInvalidos(errores)
