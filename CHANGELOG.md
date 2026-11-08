@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/HCDestroyer/argos-isp/compare/v1.13.0...v1.14.0) (2026-11-08)
+
+
+### Funcionalidades
+
+* **red:** identificar al cliente cortado por el túnel WireGuard (fase 2) ([#233](https://github.com/HCDestroyer/argos-isp/issues/233)) ([50cecdc](https://github.com/HCDestroyer/argos-isp/commit/50cecdc50db9506cc9e5f67810c367bc3746fed8))
+
 ## [1.13.0](https://github.com/HCDestroyer/argos-isp/compare/v1.12.0...v1.13.0) (2026-11-08)
 
 
