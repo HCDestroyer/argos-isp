@@ -15,8 +15,9 @@ import type { DiagnosticoCorte } from '~/types/controlVelocidad'
  *
  * Fase 2 (§5 ter.9): en modo IP `portal_ip_cliente` prueba el primer salto, el destino del NAT (la IP del
  * servidor en el túnel WireGuard, o `nat_url`). El `detalle` se muestra tal como llega. Si el router manda
- * el corte por el túnel, el rojo trae su propio texto y `reconciliar: true` (falta el `srcnat accept` o la
- * red no está en el peer): ahí la acción es «Reconciliar ahora» y revisar las redes, no pasar a código.
+ * el corte por el túnel, el rojo llega con su propio código, `portal_ve_otra_ip_tunel` (falta el `srcnat
+ * accept` o la red no está en el peer): ahí la acción es «Reconciliar ahora» y revisar las redes, no pasar
+ * a código. Los dos casos se distinguen por el código, nunca por `reconciliar`.
  */
 const props = defineProps<{
     corte: DiagnosticoCorte
@@ -72,27 +73,25 @@ interface Accion {
 }
 
 /**
- * Qué hacer en los chequeos cuyo arreglo no es solo «Reconciliar ahora». `portal_ve_otra_ip` tiene dos
- * casos con el mismo código: sin túnel (NAT o proxy en medio: pasar a código, el túnel o el `accept` en la
- * LAN) y por el túnel (`reconciliar: true`: falta la regla o la red en el peer).
+ * Qué hacer en los chequeos cuyo arreglo no es solo «Reconciliar ahora». `portal_ve_otra_ip` (sin túnel: NAT
+ * o proxy en medio) lleva a «Editar router → Por código», al túnel o al `accept` en la LAN;
+ * `portal_ve_otra_ip_tunel` (por el túnel) a «Reconciliar ahora» y a revisar las redes del router.
  */
-const ACCION_NAT: Accion = {
-    texto: 'Edita el router y elige «Identificación del cliente cortado: Por código» (necesita la API del router). Sin API: registra el router en el túnel WireGuard (pestaña Conexión) para que el corte vaya sin NAT; con el servidor en la LAN del ISP, agrega en el router un srcnat con action=accept hacia la IP del portal antes de tu masquerade.',
-    editar: true,
-    propia: false,
-}
-
-const ACCION_TUNEL: Accion = {
-    texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Pools e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
-    editar: false,
-    propia: true,
+const ACCIONES: Partial<Record<NonNullable<Chequeo['codigo']>, Accion>> = {
+    portal_ve_otra_ip: {
+        texto: 'Edita el router y elige «Identificación del cliente cortado: Por código» (necesita la API del router). Sin API: registra el router en el túnel WireGuard (pestaña Conexión) para que el corte vaya sin NAT; con el servidor en la LAN del ISP, agrega en el router un srcnat con action=accept hacia la IP del portal antes de tu masquerade.',
+        editar: true,
+        propia: false,
+    },
+    portal_ve_otra_ip_tunel: {
+        texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Pools e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
+        editar: false,
+        propia: true,
+    },
 }
 
 function accion(chequeo: Chequeo): Accion | null {
-    if (chequeo.ok !== false || chequeo.codigo !== 'portal_ve_otra_ip') {
-        return null
-    }
-    return chequeo.reconciliar ? ACCION_TUNEL : ACCION_NAT
+    return chequeo.ok === false && chequeo.codigo ? ACCIONES[chequeo.codigo] ?? null : null
 }
 
 /** `sin_api` y `router_no_responde` llegan solo en `problemas[]` (sin chequeo propio). */

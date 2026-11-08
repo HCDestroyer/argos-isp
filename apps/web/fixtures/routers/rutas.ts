@@ -168,7 +168,7 @@ export const rutasRouters: RutasFixture = {
             .filter(router => activo === null || String(router.activo) === activo)
             .filter(router => empresas === null || router.empresa_sugerida_id === null || empresas.includes(router.empresa_sugerida_id)
                 || bd.servicios.some(s => s.router_id === router.id && empresas.includes(s.empresa_id)))
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        return { status: 200, cuerpo: paginar(filas.map(conCorteTunel), solicitud) }
     }),
 
     'GET /api/v1/routers/:id': conPermiso('routers.ver', (solicitud) => {
@@ -338,7 +338,7 @@ export const rutasRouters: RutasFixture = {
             updated_at: ahora(),
         })
         registrarAccion(solicitud, 'routers.cambiar_control_velocidad', { tipo: 'router', id: router.id }, cuerpo)
-        return { status: 200, cuerpo: router }
+        return { status: 200, cuerpo: conCorteTunel(router) }
     }),
 
     'GET /api/v1/routers/:id/planes': conPermiso('planes.ver', (solicitud) => {
@@ -433,7 +433,7 @@ export const rutasRouters: RutasFixture = {
         bd.routers.push(router)
         bd.planesPorRouter[router.id] = bd.planes.filter(p => p.global && p.activo).map(p => p.id)
         registrarAccion(solicitud, 'routers.crear', { tipo: 'router', id: router.id }, { ...cuerpo, api_password: '***', radius_secret: '***' })
-        return { status: 201, cuerpo: router }
+        return { status: 201, cuerpo: conCorteTunel(router) }
     }),
 
     /** Como `CrearRedIpv4` (A1): CIDR válido y sin solaparse con otra red del sistema. */

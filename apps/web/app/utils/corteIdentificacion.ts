@@ -135,19 +135,15 @@ export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number 
     }
 }
 
-/**
- * «Corte por el túnel» en la ficha del router (§5 ter.3, `corteTunelDeRouter`): el dst-nat del corte va
- * a la IP del servidor en el túnel WireGuard, sin NAT, así que el portal ve la IP del cliente.
- *
- * TEMPORAL: A1 agrega `corte_por_tunel` y `corte_por_tunel_motivo` a `Router` en `a1/corte-fase2`, que
- * todavía no está en `packages/contracts`. Mientras tanto se leen como opcionales encima del schema; al
- * mezclar A1 y regenerar contracts, `RouterCorteTunel` pasa a ser `Schema<'Router'>` y esta intersección
- * se borra (anotado en `.claude/integration/a4.md`). Sin el campo no se muestra nada: nunca un «no»
- * inventado.
- */
-export type RouterCorteTunel = Schema<'Router'> & {
-    corte_por_tunel?: boolean
-    corte_por_tunel_motivo?: string | null
+/** Por qué el corte de un router no va por el túnel (`Router.corte_por_tunel_motivo`, A1). */
+export type MotivoSinCorteTunel = NonNullable<Schema<'Router'>['corte_por_tunel_motivo']>
+
+export const MOTIVOS_SIN_CORTE_TUNEL: Record<MotivoSinCorteTunel, string> = {
+    wireguard_apagado: 'El túnel WireGuard está apagado en el servidor. El corte va a la IP del portal de Configuración → Portal de corte.',
+    tunel_corte_apagado: 'El corte por el túnel está desactivado en el servidor (PORTAL_CORTE_TUNEL=0). El corte va a la IP del portal de Configuración → Portal de corte.',
+    router_inactivo: 'El router está desactivado.',
+    modo_codigo: 'El router identifica por código: el corte va al proxy del propio router y no necesita el túnel.',
+    sin_tunel: 'El router no está conectado al túnel WireGuard. Genera el script de conexión (pestaña Conexión) y pega su clave pública.',
 }
 
 export interface PresentacionCorteTunel {
@@ -157,17 +153,23 @@ export interface PresentacionCorteTunel {
     motivo: string | null
 }
 
-export function presentarCorteTunel(router: RouterCorteTunel): PresentacionCorteTunel | null {
+/**
+ * «Corte por el túnel» en la ficha del router (§5 ter.3, `corteTunelDeRouter`): el dst-nat del corte va a
+ * la IP del servidor en el túnel WireGuard, sin NAT, así que el portal ve la IP del cliente. La API siempre
+ * manda los dos campos (opcionales en el esquema); si faltaran, no se muestra nada: nunca un «no» inventado.
+ */
+export function presentarCorteTunel(router: Schema<'Router'>): PresentacionCorteTunel | null {
     if (router.corte_por_tunel === undefined) {
         return null
     }
     if (router.corte_por_tunel) {
         return { etiqueta: 'Corte por el túnel: sí', color: 'success', icono: 'i-lucide-shield-check', motivo: null }
     }
+    const motivo = router.corte_por_tunel_motivo
     return {
         etiqueta: 'Corte por el túnel: no',
         color: 'neutral',
         icono: 'i-lucide-shield-off',
-        motivo: router.corte_por_tunel_motivo?.trim() || 'La API no dijo por qué.',
+        motivo: motivo ? MOTIVOS_SIN_CORTE_TUNEL[motivo] : 'La API no dijo por qué.',
     }
 }

@@ -11,6 +11,7 @@ import RouterDiagnosticoCorte from '~/components/RouterDiagnosticoCorte.vue'
 import ServicioCodigoCorte from '~/components/ServicioCodigoCorte.vue'
 import PaginaRouter from '~/pages/routers/[id].vue'
 import { diagnosticoCorte } from '~~/fixtures/routers/estrategias'
+import { conCorteTunel } from '~~/fixtures/routers/corteTunel'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 
@@ -264,7 +265,7 @@ describe('identificación del cliente cortado', () => {
                 chequeos: [{
                     clave: 'portal_ip_cliente',
                     ok: false,
-                    codigo: 'portal_ve_otra_ip',
+                    codigo: 'portal_ve_otra_ip_tunel',
                     detalle,
                     comandos: ['/tool fetch url="http://10.255.0.1:8088/api/v1/portal/eco-ip" src-address=100.64.10.1 output=user'],
                     reconciliar: true,
@@ -274,7 +275,8 @@ describe('identificación del cliente cortado', () => {
             const diagnostico = await mountSuspended(RouterDiagnosticoCorte, { props: { corte: tunel } })
             const ip = diagnostico.find('[data-corte="portal_ip_cliente"]')
             expect(ip.text()).toContain(detalle)
-            const accion = ip.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').text()
+            expect(ip.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').exists()).toBe(false)
+            const accion = ip.find('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]').text()
             expect(accion).toContain('«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT»')
             expect(accion).toContain('pestaña Pools e IPs')
             expect(ip.text()).not.toContain('pega estos comandos')
@@ -283,10 +285,21 @@ describe('identificación del cliente cortado', () => {
             expect(diagnostico.find('[data-prueba="corte-reconciliar"]').exists()).toBe(true)
         })
 
+        it('el caso se decide por el código, no por `reconciliar`', async () => {
+            const chequeo = corte.chequeos[0]!
+            const nat = await mountSuspended(RouterDiagnosticoCorte, { props: { corte: { ...corte, chequeos: [{ ...chequeo, reconciliar: true }] } } })
+            expect(nat.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').text()).toContain('«Identificación del cliente cortado: Por código»')
+            expect(nat.find('[data-prueba="corte-editar-router"]').exists()).toBe(true)
+            nat.unmount()
+            const tunel = await mountSuspended(RouterDiagnosticoCorte, { props: { corte: { ...corte, chequeos: [{ ...chequeo, codigo: 'portal_ve_otra_ip_tunel', reconciliar: false }] } } })
+            expect(tunel.find('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]').text()).toContain('«Reconciliar ahora» pone la regla')
+            expect(tunel.find('[data-prueba="corte-editar-router"]').exists()).toBe(false)
+        })
+
         it('fixture: RB-Centro (en el túnel) prueba el primer salto en 10.255.0.1:8088 y queda en verde al reconciliar', () => {
             const router = bd.routers.find(r => r.id === 1)!
             const antes = diagnosticoCorte(router).chequeos.find(c => c.clave === 'portal_ip_cliente')!
-            expect(antes).toMatchObject({ ok: false, codigo: 'portal_ve_otra_ip', reconciliar: true })
+            expect(antes).toMatchObject({ ok: false, codigo: 'portal_ve_otra_ip_tunel', reconciliar: true })
             expect(antes.detalle).toContain('va por el túnel WireGuard')
             expect(antes.comandos[0]).toContain('http://10.255.0.1:8088/api/v1/portal/eco-ip')
             bd.routersReconciliados.push(1)
@@ -295,12 +308,29 @@ describe('identificación del cliente cortado', () => {
     })
 
     describe('corte por el túnel en la ficha del router', () => {
-        const base = (): RouterCorteTunel => structuredClone(bd.routers.find(r => r.id === 1)!)
+        const base = (): Schema<'Router'> => structuredClone(bd.routers.find(r => r.id === 1)!)
 
-        it('sí, no con su motivo, y nada si la API no manda el campo', () => {
+        it('sí, no con el texto de cada motivo, y nada si faltara el campo', () => {
             expect(presentarCorteTunel({ ...base(), corte_por_tunel: true, corte_por_tunel_motivo: null })).toMatchObject({ etiqueta: 'Corte por el túnel: sí', color: 'success', motivo: null })
-            expect(presentarCorteTunel({ ...base(), corte_por_tunel: false, corte_por_tunel_motivo: 'El router identifica por código' })).toMatchObject({ etiqueta: 'Corte por el túnel: no', motivo: 'El router identifica por código' })
-            expect(presentarCorteTunel(base())).toBeNull()
+            for (const motivo of ['wireguard_apagado', 'tunel_corte_apagado', 'router_inactivo', 'modo_codigo', 'sin_tunel'] as const) {
+                const vista = presentarCorteTunel({ ...base(), corte_por_tunel: false, corte_por_tunel_motivo: motivo })
+                expect(vista).toMatchObject({ etiqueta: 'Corte por el túnel: no', motivo: MOTIVOS_SIN_CORTE_TUNEL[motivo] })
+                expect(vista?.motivo).not.toContain(motivo)
+            }
+            const { corte_por_tunel: _a, corte_por_tunel_motivo: _b, ...sinCampos } = conCorteTunel(base())
+            expect(presentarCorteTunel(sinCampos)).toBeNull()
+        })
+
+        it('fixtures: los mismos valores que la API en GET /routers y GET /routers/:id', async () => {
+            const lista = await useRouters().listar()
+            expect(lista.ok).toBe(true)
+            const porId = new Map((lista.ok ? lista.data.data : []).map(r => [r.id, r]))
+            expect(porId.get(1)).toMatchObject({ corte_por_tunel: true, corte_por_tunel_motivo: null })
+            expect(porId.get(2)).toMatchObject({ corte_por_tunel: false, corte_por_tunel_motivo: 'modo_codigo' })
+            expect(porId.get(3)).toMatchObject({ corte_por_tunel: false, corte_por_tunel_motivo: 'router_inactivo' })
+            expect(porId.get(4)).toMatchObject({ corte_por_tunel: false, corte_por_tunel_motivo: 'sin_tunel' })
+            const uno = await useRouters().ver(4)
+            expect(uno.ok && uno.data.corte_por_tunel_motivo).toBe('sin_tunel')
         })
 
         it('la ficha muestra «sí» en RB-Centro (registrado en el túnel) y «no» con el motivo en RB-Centro PCQ', async () => {
@@ -313,7 +343,7 @@ describe('identificación del cliente cortado', () => {
             const pcq = await mountSuspended(enApp(PaginaRouter), { route: '/routers/4' })
             await esperar(() => expect(pcq.find('[data-prueba="router-corte-tunel"]').exists()).toBe(true))
             expect(pcq.find('[data-prueba="router-corte-tunel"]').text()).toBe('Corte por el túnel: no')
-            expect(pcq.find('[data-prueba="router-corte-tunel-motivo"]').text()).toContain('no está registrado en el túnel WireGuard')
+            expect(pcq.find('[data-prueba="router-corte-tunel-motivo"]').text()).toBe(`Por qué el corte no va por el túnel: ${MOTIVOS_SIN_CORTE_TUNEL.sin_tunel}`)
         })
 
         it('si GET /routers/:id falla, ni «sí» ni «no»: el error con «Reintentar»', async () => {

@@ -94,8 +94,8 @@ test('fase 2: el corte por el túnel sin la regla dice qué hacer y queda en ver
     const ip = prueba.locator('[data-corte="portal_ip_cliente"]')
     await expect(ip).toContainText('Falla', { timeout: 30_000 })
     await expect(ip).toContainText('El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT»')
-    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip"]')).toContainText('«Reconciliar ahora» pone la regla')
-    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip"]')).toContainText('pestaña Pools e IPs')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('«Reconciliar ahora» pone la regla')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Pools e IPs')
     await expect(ip.locator('[data-prueba="corte-editar-router"]')).toHaveCount(0)
     await expect(ip.locator('[data-prueba="comandos-routeros"]')).toContainText('http://10.255.0.1:8088/api/v1/portal/eco-ip')
 
@@ -124,7 +124,7 @@ test('fase 2: ficha del router con «Corte por el túnel» y código activo en u
         await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro PCQ', exact: true }).click({ timeout: 30_000 })
         await expect(page.locator('[data-prueba="router-corte-tunel"]')).toHaveText('Corte por el túnel: no', { timeout: 30_000 })
         const motivo = page.locator('[data-prueba="router-corte-tunel-motivo"]')
-        await expect(motivo).toContainText('no está registrado en el túnel WireGuard')
+        await expect(motivo).toContainText('no está conectado al túnel WireGuard')
         const caja = await motivo.boundingBox()
         expect(caja && caja.x >= 0 && caja.x + caja.width <= ancho() + 1).toBe(true)
 

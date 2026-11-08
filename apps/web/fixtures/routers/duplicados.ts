@@ -8,6 +8,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
+import { conCorteTunel } from './corteTunel'
 
 type Router = Schema<'Router'>
 type Grupo = Schema<'GrupoRoutersDuplicados'>
@@ -256,8 +257,8 @@ function unir(id: number, cuerpo: Record<string, unknown>): RespuestaFixture {
         avisos,
         bloqueos,
         reencadenados: encadenados,
-        router: despuesQueda,
-        absorbido: despuesAbsorbido,
+        router: conCorteTunel(despuesQueda),
+        absorbido: conCorteTunel(despuesAbsorbido),
     })
 
     if (simular) {

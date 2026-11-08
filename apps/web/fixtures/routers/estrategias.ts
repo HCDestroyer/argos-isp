@@ -5,7 +5,7 @@ import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } fr
 import { MATRIZ, QOS_MAX_HOJAS } from './estrategiasDatos'
 import { clasesActivasDeRouter } from '../qos/costo'
 import { bd } from '../bd'
-import { corteVaPorTunel } from './corteTunel'
+import { conCorteTunel, corteVaPorTunel } from './corteTunel'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 
 /**
@@ -602,7 +602,7 @@ type Chequeo = DiagnosticoCorte['chequeos'][number]
  *
  * Fase 2 (§5 ter.9): en modo IP se prueba el primer salto, el destino del NAT. Un router que manda el corte
  * por el túnel (RB-Centro, registrado en WireGuard) lo prueba en `http://10.255.0.1:8088` y, hasta
- * «Reconciliar ahora» (falta el `srcnat accept`), sale en rojo con el texto del túnel y `reconciliar: true`.
+ * «Reconciliar ahora» (falta el `srcnat accept`), sale en rojo con `portal_ve_otra_ip_tunel` y su texto.
  */
 function chequeosIdentificacion(router: Router, reconciliado: boolean, suspendidos: number): Chequeo[] {
     const gateway = bd.redesIpv4.find(r => r.router_id === router.id && r.gateway)?.gateway ?? '100.64.12.1'
@@ -615,7 +615,7 @@ function chequeosIdentificacion(router: Router, reconciliado: boolean, suspendid
     const ipCliente: Chequeo = !conNat
         ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `El portal ve la IP del cliente (${gateway}): sin NAT ni proxy en medio, la identificación por IP funciona`, comandos: [], reconciliar: false }
         : tunel
-            ? { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del servidor (redes del router en Argos; el wireguard-agente las aplica)`, comandos: [prueba], reconciliar: true }
+            ? { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip_tunel', detalle: `${visto}. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del servidor (redes del router en Argos; el wireguard-agente las aplica)`, comandos: [prueba], reconciliar: true }
             : router.corte_identificacion === 'codigo'
                 ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `${visto}. Este router identifica por código de corte: no depende de la IP`, comandos: [], reconciliar: false }
                 : { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. Pasa el router a «Identificación por código» (editar el router; necesita su API): el router manda a cada suspendido a /corte con su código. Sin API: túnel WireGuard sin masquerade hacia el portal`, comandos: [prueba], reconciliar: false }
@@ -667,7 +667,7 @@ export const rutasEstrategias: RutasFixture = {
             updated_at: ahora(),
         })
         registrarAccion(solicitud, 'routers.cambiar_control_velocidad', { tipo: 'router', id: router.id }, cuerpo)
-        return { status: 200, cuerpo: router }
+        return { status: 200, cuerpo: conCorteTunel(router) }
     }),
 
     /** Como `CambiarEstrategiaPlanRouter`: crea la implementación si no existe; con ella exige `version`. */
