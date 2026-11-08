@@ -13,6 +13,7 @@ import EditarServicio from '#core/actions/editar_servicio'
 import { redParaAuditoria, verRedIpv4, type RedIpv4Vista } from '#network/consultas/routers'
 import { bloqueParaAuditoria, verBloque, type BloqueVista } from '#network/consultas/ipv6'
 import { MAXIMO_LISTA } from '#network/reglas_pools'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 
 /**
  * Migración de pools a otro router (`contratos/pools.md` §3): una red IPv4 o un bloque IPv6 (con
@@ -239,6 +240,9 @@ export async function migrarPools(t: Transaccion, entrada: EntradaMigrarPools): 
             bloqueParaAuditoria(despues),
         )
     }
+
+    // los dos routers cambian de redes: AllowedIPs del corte por el túnel (`contratos/corte-identificacion.md` §5 ter.10)
+    await emitirRedesCambiadas(t, [origen, Number(destino.id)])
 
     const migrados: ServicioMigrado[] = []
     for (const servicio of servicios) {

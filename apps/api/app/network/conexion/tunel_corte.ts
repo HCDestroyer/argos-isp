@@ -59,6 +59,64 @@ const SQL_USA_TUNEL = `
     AND NOT (r.corte_identificacion = 'codigo' AND r.api_usuario IS NOT NULL AND r.api_password IS NOT NULL)
 `
 
+/**
+ * Por qué un router NO manda el corte por el túnel (`corte_por_tunel_motivo` de `GET /routers`):
+ * - `wireguard_apagado`: `ARGOSISP_WIREGUARD` ≠ 1 (o `ARGOSISP_WG_RED` inválida);
+ * - `tunel_corte_apagado`: `PORTAL_CORTE_TUNEL=0` (el dst-nat va a `portal_v4`);
+ * - `router_inactivo`: el router está desactivado (no está en los peers);
+ * - `modo_codigo`: el router identifica por código (el destino es su proxy, no hace falta el túnel);
+ * - `sin_tunel`: el router no está registrado en el túnel (sin clave pública).
+ */
+export type MotivoSinCorteTunel =
+    'wireguard_apagado' | 'tunel_corte_apagado' | 'router_inactivo' | 'modo_codigo' | 'sin_tunel'
+
+export const MOTIVOS_SIN_CORTE_TUNEL: readonly MotivoSinCorteTunel[] = [
+    'wireguard_apagado',
+    'tunel_corte_apagado',
+    'router_inactivo',
+    'modo_codigo',
+    'sin_tunel',
+]
+
+export interface RouterParaTunel {
+    activo: boolean
+    corte_identificacion: 'ip' | 'codigo'
+    api_usuario: string | null
+    tiene_api_password: boolean
+    /** tiene fila en `network.routers_conexion` con `public_key` (`sqlTunelRegistrado`) */
+    tunel_registrado: boolean
+}
+
+/** SQL booleano «el router tiene el túnel registrado» sobre la tabla o alias `tabla` de `network.routers`. */
+export function sqlTunelRegistrado(tabla = 'network.routers'): string {
+    return `EXISTS (SELECT 1 FROM network.routers_conexion c_tun
+                     WHERE c_tun.router_id = ${tabla}.id AND c_tun.public_key IS NOT NULL)`
+}
+
+/**
+ * La misma regla que `corteTunelDeRouter` (y `SQL_USA_TUNEL`) sobre una fila ya leída: null si el
+ * router manda el corte por el túnel, o el primer motivo por el que no. Pura; la prueba
+ * `corte_tunel_router.spec.ts` comprueba que coincide con `corteTunelDeRouter`.
+ */
+export function motivoSinCorteTunel(
+    router: RouterParaTunel,
+    entorno: NodeJS.ProcessEnv = process.env,
+): MotivoSinCorteTunel | null {
+    if (!wireguardActivo(entorno)) return 'wireguard_apagado'
+    if (!tunelCorteHabilitado(entorno)) return 'tunel_corte_apagado'
+    if (destinoTunel(entorno) === null) return 'wireguard_apagado'
+    if (!router.activo) return 'router_inactivo'
+    if (
+        router.corte_identificacion === 'codigo' &&
+        router.api_usuario !== null &&
+        router.tiene_api_password
+    ) {
+        return 'modo_codigo'
+    }
+    if (!router.tunel_registrado) return 'sin_tunel'
+    return null
+}
+
 /** Destino del corte por el túnel para este router, o null (va al `portal_v4` de siempre). */
 export async function corteTunelDeRouter(
     routerId: number,
@@ -242,7 +300,25 @@ export async function listarPeersConRedes(
  * Lo emiten las acciones que cambian las redes de un router (A1) y, de respaldo, el reconciliador.
  */
 export async function emitirRedesCambiadas(t: Transaccion, routerIds: number[]): Promise<void> {
-    for (const routerId of [...new Set(routerIds)].sort((a, b) => a - b)) {
+    for (const routerId of [...new Set(routerIds.map(Number))].sort((a, b) => a - b)) {
+        if (await yaEmitidoEnTransaccion(t, routerId)) continue
         await t.emit('router.redes_cambiadas', { router_id: routerId, empresa_id: null })
     }
+}
+
+/**
+ * Idempotencia dentro de la transacción: una acción que llama a otras (el importador crea varias
+ * redes del mismo router, `redes.migrar` con bloques IPv6) deja un solo evento por router. Las filas
+ * de `audit.outbox` de esta transacción comparten `created_at = now()` (inicio de la transacción) y
+ * `request_id`, y nadie más las ve hasta el COMMIT; si un savepoint se revierte, su fila se va con él.
+ */
+async function yaEmitidoEnTransaccion(t: Transaccion, routerId: number): Promise<boolean> {
+    const { rows } = (await t.trx.rawQuery(
+        `SELECT 1 FROM audit.outbox
+          WHERE evento = 'router.redes_cambiadas' AND created_at = now() AND publicado_en IS NULL
+            AND request_id IS NOT DISTINCT FROM ? AND (payload->>'router_id')::bigint = ?
+          LIMIT 1`,
+        [t.ctx.requestId ?? null, routerId],
+    )) as { rows: unknown[] }
+    return rows.length > 0
 }

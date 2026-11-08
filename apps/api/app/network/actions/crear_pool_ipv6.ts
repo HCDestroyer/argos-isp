@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { prefijoNormalizado } from '#network/ipam_v6'
 import { poolParaAuditoria, verBloque, verPool, type PoolVista } from '#network/consultas/ipv6'
@@ -40,6 +41,8 @@ export default class CrearPoolIpv6 extends DomainAction<EntradaCrearPoolIpv6, Po
         t.fijarEntidad('ipv6_pool', fila!.id)
         const pool = await verPool(fila!.id, t.trx)
         await t.registrarCambios({ tipo: 'ipv6_pool', id: pool.id }, null, poolParaAuditoria(pool))
+        // prefijos del router (`contratos/corte-identificacion.md` §5 ter.10)
+        await emitirRedesCambiadas(t, [pool.router_id])
         return pool
     }
 }

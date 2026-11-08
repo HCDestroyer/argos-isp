@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { poolParaAuditoria, verPool, type PoolVista } from '#network/consultas/ipv6'
@@ -109,6 +110,8 @@ export default class EditarPoolIpv6 extends DomainAction<EntradaEditarPoolIpv6, 
             poolParaAuditoria(antes),
             poolParaAuditoria(despues),
         )
+        // prefijos del router (`contratos/corte-identificacion.md` §5 ter.10)
+        if (despues.prefijo !== antes.prefijo) await emitirRedesCambiadas(t, [despues.router_id])
         return despues
     }
 }

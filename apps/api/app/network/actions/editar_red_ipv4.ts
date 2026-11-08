@@ -5,6 +5,7 @@ import { redParaAuditoria, verRedIpv4, type RedIpv4Vista } from '#network/consul
 import { exigirIpsAsignadasDentro, exigirRedSinTraslape, validarRedIpv4 } from '#network/reglas_pools'
 import { campo as errorCampo, emitirRedAcceso } from '#network/red_acceso/reglas'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 
 export interface EntradaEditarRedIpv4 {
     id: number
@@ -69,6 +70,8 @@ export default class EditarRedIpv4 extends DomainAction<EntradaEditarRedIpv4, Re
         if (despues.gateway_efectivo !== antes.gateway_efectivo) {
             await avisarLocalAddress(t, id, antes.router_id)
         }
+        // Solo el CIDR cambia los AllowedIPs del corte por el túnel (§5 ter.10)
+        if (despues.cidr !== antes.cidr) await emitirRedesCambiadas(t, [despues.router_id])
         return despues
     }
 }
