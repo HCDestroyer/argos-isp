@@ -16,6 +16,7 @@ import RechazarReferido from '#lealtad/actions/rechazar_referido'
 import { ejecutarCron } from '#billing/jobs'
 import {
     afirmarPasivoLealtad,
+    cicloDeHoy,
     entregar,
     entregarEvento,
     movimientosDe,
@@ -62,9 +63,14 @@ test.group('Lealtad · reglas para ganar', (group) => {
                 periodo_tope: 'mes',
             },
         ])
-        // facturas de noviembre a febrero: todas vencen después de hoy
-        const s = await servicioEn(e.B, { precio: '100.00', instalacion: '2026-11-01' })
-        await generar(s.servicioId, '2027-02-01')
+        // cuatro facturas desde el periodo actual: todas vencen después de hoy
+        const ciclo = cicloDeHoy()
+        const s = await servicioEn(e.B, {
+            precio: '100.00',
+            instalacion: ciclo.actual,
+            plantilla: ciclo.plantilla,
+        })
+        await generar(s.servicioId, ciclo.mas(3))
         const facturas = await facturasDelServicio(s.servicioId)
         assert.isAtLeast(facturas.length, 3)
         for (const factura of facturas.slice(0, 3)) await pagarFactura(e, s.clienteId, factura)
@@ -87,8 +93,13 @@ test.group('Lealtad · reglas para ganar', (group) => {
         await programaConReglas(e.B, e.ctx, { diferimiento: true }, [
             { tipo: 'pago_a_tiempo', puntos: 10, condiciones: { racha: { periodos: 2, puntos_extra: 50 } } },
         ])
-        const s = await servicioEn(e.B, { precio: '100.00', instalacion: '2026-11-01' })
-        await generar(s.servicioId, '2027-01-01')
+        const ciclo = cicloDeHoy()
+        const s = await servicioEn(e.B, {
+            precio: '100.00',
+            instalacion: ciclo.actual,
+            plantilla: ciclo.plantilla,
+        })
+        await generar(s.servicioId, ciclo.mas(2))
         const [nov, dic] = await facturasDelServicio(s.servicioId)
         await pagarFactura(e, s.clienteId, nov!)
         const pagoDic = await pagarFactura(e, s.clienteId, dic!)

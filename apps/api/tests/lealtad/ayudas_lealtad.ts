@@ -7,11 +7,36 @@ import CrearPrograma, { type EntradaCrearPrograma } from '#lealtad/actions/crear
 import ActivarPrograma from '#lealtad/actions/activar_programa'
 import CrearRegla, { type EntradaRegla } from '#lealtad/actions/crear_regla'
 import { reporteLealtad } from '#lealtad/reporte'
+import { hoyGuatemala } from '#ledger/fechas'
+import { inicioCicloQueContiene, siguienteInicio, sumarDias } from '#billing/periodos'
 
 /**
  * Ayudas de las pruebas de lealtad. Cada prueba arma su empresa (NIT nuevo, `prepararEmpresas`
  * del auditor) para que los invariantes se revisen solo sobre lo que hizo con las acciones.
  */
+
+/**
+ * Ciclo de facturación anclado a **hoy** (Guatemala), para que «pago a tiempo» no dependa del día en
+ * que corre la prueba. El pago se registra con `now()` y la factura vence `periodo + dias_gracia` (5
+ * en `crearPlantillaFila`): con un periodo fijo (`2026-11-01`) la factura «del mes» vencía el 6 y,
+ * desde el 7, el pago ya no era a tiempo.
+ *
+ * Plantilla `dia_fijo` con `dia = min(día de hoy, 28)`: el periodo `actual` empezó hace 0–3 días y
+ * vence dentro de 2–5 días (siempre después de hoy); el `anterior` empezó hace ~1 mes y ya venció.
+ * Sirve igual en fin de mes (29–31), en febrero y en fin de semana.
+ */
+export function cicloDeHoy(hoy: string = hoyGuatemala()) {
+    const dia = Math.min(Number(hoy.slice(8, 10)), 28)
+    const actual = inicioCicloQueContiene(hoy, dia)
+    const anterior = inicioCicloQueContiene(sumarDias(actual, -1), dia)
+    /** inicio del periodo `n` meses después del actual (`n` ≥ 0) */
+    const mas = (n: number) => {
+        let inicio = actual
+        for (let i = 0; i < n; i++) inicio = siguienteInicio(inicio, dia)
+        return inicio
+    }
+    return { hoy, plantilla: { dia }, anterior, actual, mas }
+}
 
 /** Programa activo con sus reglas en la empresa. */
 export async function programaConReglas(
