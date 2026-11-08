@@ -449,9 +449,27 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
         )
         assert.deepEqual(producto, publicados)
         assert.deepEqual(sorteo.resultado!.elegidos, publicados)
-        // el valor público entra al cálculo: con otro, el script ya no verifica lo publicado
-        const otros = await scriptVerificar({ ...datos, valor_publico: `${datos.valor_publico}1` })
+        // el valor público entra al cálculo: con otro, el script recalcula con ese valor y ya no verifica
+        // lo publicado. Con 6 participantes y 5 puestos hay 720 órdenes posibles, así que un valor
+        // cualquiera repite el orden publicado 1 de cada 720 veces (semilla y códigos son aleatorios):
+        // se toma el primer valor alternativo cuyo cálculo, según el algoritmo, da otro orden.
+        const calcular = (valor: string) =>
+            sortear(
+                Buffer.from(datos.semilla, 'hex'),
+                datos.lista_hash,
+                datos.bases_hash,
+                valor,
+                datos.lista,
+                datos.titulares + datos.suplentes,
+            )
+        const alternativos = Array.from({ length: 20 }, (_, i) => `${datos.valor_publico}${i + 1}`)
+        const otroValor = alternativos.find((v) => JSON.stringify(calcular(v)) !== JSON.stringify(publicados))
+        assert.exists(otroValor, 'algún valor público alternativo da otro orden')
+        const otros = await scriptVerificar({ ...datos, valor_publico: otroValor })
+        assert.deepEqual(otros.elegidos, calcular(otroValor!))
+        assert.notDeepEqual(otros.elegidos, publicados)
         assert.isFalse(otros.ok)
+        assert.isTrue(otros.fallas.some((f) => f.startsWith('el cálculo da ')))
         // la lista reordenada se ordena igual (orden binario de los códigos S + hex en mayúsculas)
         const invertida = await scriptVerificar({ ...datos, lista: [...datos.lista].reverse() })
         assert.isTrue(invertida.ok)
