@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
-import { bloqueV6Unico, crearEscenarioRouter, crearRouterFila, redUnica } from '#tests/core/fabricas'
+import { bloqueV6Unico, crearEscenarioRouter, crearRouterFila, ipUnica, redUnica } from '#tests/core/fabricas'
 import type { ContextoAccion } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
@@ -370,6 +370,57 @@ test.group('Router · corte_por_tunel', (group) => {
         assert.equal(await motivo(), 'tunel_corte_apagado')
         process.env.ARGOSISP_WIREGUARD = '0'
         assert.equal(await motivo(), 'wireguard_apagado')
+    })
+
+    test('POST, PUT y las acciones que responden con el router traen corte_por_tunel y su motivo', async ({
+        client,
+        assert,
+    }) => {
+        const respuestaAlta = await estado(
+            client
+                .post('/api/v1/routers')
+                .bearerToken(admin)
+                .json({ nombre: unico('MK'), host: `${unico('mk')}.lab`, nas_ip: ipUnica() }),
+            201,
+        )
+        const creado = respuestaAlta.body() as {
+            id: number
+            version: number
+            corte_por_tunel: boolean
+            corte_por_tunel_motivo: string
+        }
+        assert.isFalse(creado.corte_por_tunel)
+        assert.equal(creado.corte_por_tunel_motivo, 'sin_tunel')
+
+        await registrarEnTunel(creado.id)
+        const respuestaEdicion = await estado(
+            client
+                .put(`/api/v1/routers/${creado.id}`)
+                .bearerToken(admin)
+                .json({ version: creado.version, nombre: unico('MK') }),
+            200,
+        )
+        const editado = respuestaEdicion.body() as {
+            version: number
+            corte_por_tunel: boolean
+            corte_por_tunel_motivo: string | null
+        }
+        assert.isTrue(editado.corte_por_tunel)
+        assert.isNull(editado.corte_por_tunel_motivo)
+
+        const respuestaControl = await estado(
+            client
+                .post(`/api/v1/routers/${creado.id}/cambiar-control-velocidad`)
+                .bearerToken(admin)
+                .json({ version: editado.version, control_velocidad: 'arbol_pcq' }),
+            200,
+        )
+        const control = respuestaControl.body() as {
+            corte_por_tunel: boolean
+            corte_por_tunel_motivo: string | null
+        }
+        assert.isTrue(control.corte_por_tunel)
+        assert.isNull(control.corte_por_tunel_motivo)
     })
 
     test('motivoSinCorteTunel coincide con corteTunelDeRouter en todas las combinaciones', async ({

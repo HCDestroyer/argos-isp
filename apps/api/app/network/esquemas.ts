@@ -203,8 +203,7 @@ export const Router = definirEsquema(
                     'Solo lectura: el dst-nat de los suspendidos de este router va al portal por el túnel WireGuard ' +
                     '(10.255.0.1:PORTAL_CORTE_PUERTO), sin NAT, y el portal ve la IP del cliente ' +
                     '(contratos/corte-identificacion.md §5 ter.3). Misma regla que el script de conexión, el ' +
-                    'reconciliador y el diagnóstico. La API siempre lo envía; opcional en el esquema hasta que las ' +
-                    'fixtures del panel lo traigan',
+                    'reconciliador y el diagnóstico',
             },
             corte_por_tunel_motivo: {
                 ...enumNulable(MOTIVOS_SIN_CORTE_TUNEL),
@@ -213,8 +212,7 @@ export const Router = definirEsquema(
                     'Por qué el corte no va por el túnel; null si corte_por_tunel. wireguard_apagado: ' +
                     'ARGOSISP_WIREGUARD distinto de 1. tunel_corte_apagado: PORTAL_CORTE_TUNEL=0 (el dst-nat va a ' +
                     'portal_v4). router_inactivo: el router está desactivado. modo_codigo: corte_identificacion codigo ' +
-                    '(el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel. La API ' +
-                    'siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan',
+                    '(el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel',
             },
             serial: {
                 ...nulable(texto),
@@ -253,15 +251,7 @@ export const Router = definirEsquema(
             },
             ...auditable,
         },
-        [
-            'serial',
-            'unido_a_id',
-            'zona_id',
-            'coordenadas',
-            'qos_perfil_id',
-            'corte_por_tunel',
-            'corte_por_tunel_motivo',
-        ],
+        ['serial', 'unido_a_id', 'zona_id', 'coordenadas', 'qos_perfil_id'],
     ),
 )
 

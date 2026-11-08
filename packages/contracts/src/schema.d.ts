@@ -19555,13 +19555,13 @@ export interface components {
              * @description Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca
              */
             ultimo_contacto: string | null;
-            /** @description Solo lectura: el dst-nat de los suspendidos de este router va al portal por el túnel WireGuard (10.255.0.1:PORTAL_CORTE_PUERTO), sin NAT, y el portal ve la IP del cliente (contratos/corte-identificacion.md §5 ter.3). Misma regla que el script de conexión, el reconciliador y el diagnóstico. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan */
-            readonly corte_por_tunel?: boolean;
+            /** @description Solo lectura: el dst-nat de los suspendidos de este router va al portal por el túnel WireGuard (10.255.0.1:PORTAL_CORTE_PUERTO), sin NAT, y el portal ve la IP del cliente (contratos/corte-identificacion.md §5 ter.3). Misma regla que el script de conexión, el reconciliador y el diagnóstico */
+            readonly corte_por_tunel: boolean;
             /**
-             * @description Por qué el corte no va por el túnel; null si corte_por_tunel. wireguard_apagado: ARGOSISP_WIREGUARD distinto de 1. tunel_corte_apagado: PORTAL_CORTE_TUNEL=0 (el dst-nat va a portal_v4). router_inactivo: el router está desactivado. modo_codigo: corte_identificacion codigo (el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan
+             * @description Por qué el corte no va por el túnel; null si corte_por_tunel. wireguard_apagado: ARGOSISP_WIREGUARD distinto de 1. tunel_corte_apagado: PORTAL_CORTE_TUNEL=0 (el dst-nat va a portal_v4). router_inactivo: el router está desactivado. modo_codigo: corte_identificacion codigo (el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel
              * @enum {string|null}
              */
-            readonly corte_por_tunel_motivo?: "wireguard_apagado" | "tunel_corte_apagado" | "router_inactivo" | "modo_codigo" | "sin_tunel" | null;
+            readonly corte_por_tunel_motivo: "wireguard_apagado" | "tunel_corte_apagado" | "router_inactivo" | "modo_codigo" | "sin_tunel" | null;
             /** @description Número de serie del equipo (`/system/routerboard` serial-number) o software-id (`/system/license`, CHR), leído por el sondeo; null = no se conoce. Sirve para detectar el mismo MikroTik registrado dos veces (GET /routers/duplicados). La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan */
             serial?: string | null;
             /** @description Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan */
