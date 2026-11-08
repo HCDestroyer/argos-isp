@@ -31,6 +31,8 @@ const PASOS: Record<Chequeo['clave'], string> = {
     dns_router: 'El router resuelve nombres (DNS reales)',
     portal_host: 'La página de corte responde con cualquier dominio',
     portal_en_router: 'La página de corte no está en el propio router',
+    portal_ip_cliente: 'La página de corte ve la IP del cliente',
+    proxy_corte: 'Proxy de corte con el código de cada suspendido',
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {
