@@ -537,12 +537,16 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 # ============================================================================
 # 9 bis. Web proxy del corte (modo código, contratos/corte-identificacion.md §5 bis)
 # ============================================================================
-# Lo mismo que el reconciliador de ArgosIsp (ajusteProxy en corte_router.ts):
-# - codigo: si /ip proxy estaba apagado es solo del corte (enabled=yes port=3346 max-cache-size=none);
-#   si el operador ya lo usa, solo se agrega el puerto 3346 y no se toca nada más.
+# Lo mismo que el reconciliador de ArgosIsp (ajusteProxy y reglasProxy en corte_router.ts):
+# - codigo: la regla final de /ip proxy access (local-port=3346) existe SIEMPRE: redirect a /corte sin
+#   código, o deny si no hay URL del portal (corteUrl ni portalV4). Sin regla final el proxy reenviaría
+#   a internet el HTTP del suspendido (sale por output, sin pasar por argos-corte). Las reglas del corte
+#   (las de servicio, argosisp:servicio:<id>, que escribe ArgosIsp por la API, y la final) van antes que
+#   las del operador: un allow suyo sin local-port ganaría en el 3346.
+#   El proxy se enciende (o se le agrega el 3346) solo DESPUÉS de la regla final y del drop de input
+#   (sección 8): si estaba apagado es solo del corte (enabled=yes port=3346 max-cache-size=none); si el
+#   operador ya lo usa, solo se agrega el puerto 3346 y no se toca nada más.
 # - ip: se quita el 3346; si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica.
-# La regla final de /ip proxy access manda a /corte sin código lo que no tiene regla por servicio; las
-# reglas por servicio (argosisp:servicio:<id>, /corte?c=<código>) las escribe ArgosIsp por la API.
 :put "argosisp: web proxy del corte"
 :local proxyCon false
 :local proxyResto ""
@@ -556,23 +560,32 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 }
 :local proxyEncendido [/ip proxy get enabled]
 :if ($corteIdentificacion = "codigo") do={
+    # 1. Regla final: redirect a /corte (la URL pública o el destino del NAT) o deny.
+    :local urlCorte $corteUrl
+    :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    :local finalProxy
+    :if ($urlCorte = "") do={
+        :put "argosisp: AVISO modo codigo sin URL de /corte (PORTAL_URL_PUBLICA o IPv4 del portal): el proxy de corte niega (deny) en vez de redirigir"
+        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+    } else={
+        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+    }
+    # 2. Las del corte al inicio: las de servicio y luego la final, antes de la primera del operador.
+    :local destinoProxy
+    :foreach id in=[/ip proxy access find] do={
+        :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
+    }
+    :if ([:typeof $destinoProxy] != "nothing") do={
+        :foreach id in=[/ip proxy access find where comment~"^argosisp:servicio:"] do={ /ip proxy access move $id destination=$destinoProxy }
+        /ip proxy access move $finalProxy destination=$destinoProxy
+    }
+    # 3. Recién ahora el proxy (la regla final y el drop de input ya existen).
     :if (!$proxyEncendido) do={
         /ip proxy set enabled=yes port=$proxyCortePuerto max-cache-size=none
     } else={
         :if (!$proxyCon) do={
             :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
         }
-    }
-    :if ($corteUrl = "") do={
-        :put "argosisp: AVISO modo codigo sin URL de /corte: ArgosIsp escribe la regla final del proxy al reconciliar"
-    } else={
-        # Primero las reglas por servicio, luego esta y al final las del operador.
-        :local finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$corteUrl comment="argosisp: corte proxy sin codigo"]
-        :local destinoProxy
-        :foreach id in=[/ip proxy access find] do={
-            :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
-        }
-        :if ([:typeof $destinoProxy] != "nothing") do={ /ip proxy access move $finalProxy destination=$destinoProxy }
     }
 } else={
     :if ($proxyCon) do={

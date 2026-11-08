@@ -444,22 +444,29 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 }
 :local proxyEncendido [/ip proxy get enabled]
 :if ($corteIdentificacion = "codigo") do={
+    :local urlCorte $corteUrl
+    :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    :local finalProxy
+    :if ($urlCorte = "") do={
+        :put "argosisp: AVISO modo codigo sin URL de /corte (PORTAL_URL_PUBLICA o IPv4 del portal): el proxy de corte niega (deny) en vez de redirigir"
+        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+    } else={
+        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+    }
+    :local destinoProxy
+    :foreach id in=[/ip proxy access find] do={
+        :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
+    }
+    :if ([:typeof $destinoProxy] != "nothing") do={
+        :foreach id in=[/ip proxy access find where comment~"^argosisp:servicio:"] do={ /ip proxy access move $id destination=$destinoProxy }
+        /ip proxy access move $finalProxy destination=$destinoProxy
+    }
     :if (!$proxyEncendido) do={
         /ip proxy set enabled=yes port=$proxyCortePuerto max-cache-size=none
     } else={
         :if (!$proxyCon) do={
             :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
         }
-    }
-    :if ($corteUrl = "") do={
-        :put "argosisp: AVISO modo codigo sin URL de /corte: ArgosIsp escribe la regla final del proxy al reconciliar"
-    } else={
-        :local finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$corteUrl comment="argosisp: corte proxy sin codigo"]
-        :local destinoProxy
-        :foreach id in=[/ip proxy access find] do={
-            :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
-        }
-        :if ([:typeof $destinoProxy] != "nothing") do={ /ip proxy access move $finalProxy destination=$destinoProxy }
     }
 } else={
     :if ($proxyCon) do={

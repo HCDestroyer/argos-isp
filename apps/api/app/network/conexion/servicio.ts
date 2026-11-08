@@ -28,8 +28,8 @@ import type { RouterVista } from '#network/consultas/routers'
  * - `corte_identificacion` y `corte_url` (`contratos/corte-identificacion.md` §5 bis): el modo del router
  *   (`network.routers.corte_identificacion`, `ip` por defecto) y la URL de `/corte` de la regla final de
  *   `/ip proxy access` (`corteUrlVigente`: `PORTAL_URL_PUBLICA` o el destino del NAT). Nunca del entorno.
- *   En modo `codigo` sin URL, 422 `servicio_incompleto` (sin la regla final el proxy del router quedaría
- *   abierto para los suspendidos sin regla propia).
+ *   Sin URL va vacía, como en el reconciliador: el script arma la de `portal_v4` y, si tampoco hay, la
+ *   regla final niega (`action=deny`); nunca queda el 3346 sin regla final.
  *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
@@ -95,9 +95,7 @@ export function valoresServicio(
             continue
         }
         if (nombre === 'corte_url') {
-            if (corte.identificacion === 'codigo' && !corte.url) {
-                faltan.push('la URL pública del portal (PORTAL_URL_PUBLICA) o su IPv4, para el modo código')
-            } else valores[nombre] = corte.url ?? ''
+            valores[nombre] = corte.url ?? ''
             continue
         }
         let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))

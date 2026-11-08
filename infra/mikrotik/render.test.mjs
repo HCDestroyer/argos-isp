@@ -429,9 +429,22 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
         // regla final de /ip proxy access y su limpieza
         assert.match(
             t,
-            /\/ip proxy access add local-port=\$proxyCortePuerto action=redirect action-data=\$corteUrl comment="argosisp: corte proxy sin codigo"/,
+            /\/ip proxy access add local-port=\$proxyCortePuerto action=redirect action-data=\$urlCorte comment="argosisp: corte proxy sin codigo"/,
             p,
         )
+        // sin URL ni IPv4 del portal, la final niega: nunca un 3346 sin regla final
+        assert.match(
+            t,
+            /\/ip proxy access add local-port=\$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"/,
+            p,
+        )
+        // las del corte (servicio y final) antes de la primera del operador
+        assert.match(t, /\/ip proxy access move \$id destination=\$destinoProxy/, p)
+        assert.match(t, /\/ip proxy access move \$finalProxy destination=\$destinoProxy/, p)
+        // el proxy se enciende después de la regla final y del drop de input
+        const encender = t.indexOf('/ip proxy set enabled=yes')
+        assert.ok(encender > t.lastIndexOf('comment="argosisp: corte proxy sin codigo"'), p)
+        assert.ok(encender > t.lastIndexOf('comment="argosisp:top proxy de corte solo redirigido"'), p)
         assert.match(t, /\/ip proxy access remove \[find where comment~\$propio\]/, p)
         // el NAT IPv6 en modo código no depende de la IPv6 del portal
         assert.match(t, /:if \(\$portalV6 != "" \|\| \$corteIdentificacion = "codigo"\) do=\{/, p)
