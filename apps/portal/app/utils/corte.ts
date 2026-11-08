@@ -19,13 +19,25 @@ export function hayMonto(monto: string | null | undefined): boolean {
     }
 }
 
-/** Título y explicación de la página de corte según lo que la API identificó por la IP. */
+/**
+ * Por qué no se identificó el servicio (`motivo` de `quien-soy`, `contratos/corte-identificacion.md`),
+ * en palabras del cliente: nunca detalles de la red del ISP.
+ */
+const SIN_IDENTIFICAR: Record<NonNullable<Schema<'QuienSoy'>['motivo']>, string> = {
+    codigo_vencido: 'El enlace que abriste ya venció. Abre cualquier página http:// otra vez o entra con tu NIT o usuario.',
+    ip_de_router: 'Desde esta conexión no podemos saber cuál es tu servicio. Entra con tu NIT o usuario y te mandamos un código.',
+    ip_de_servidor: 'Desde esta conexión no podemos saber cuál es tu servicio. Entra con tu NIT o usuario y te mandamos un código.',
+    ip_de_proxy: 'Desde esta conexión no podemos saber cuál es tu servicio. Entra con tu NIT o usuario y te mandamos un código.',
+    ip_desconocida: 'Conéctate desde la red de tu servicio de internet o entra con tu NIT o usuario.',
+}
+
+/** Título y explicación de la página de corte según lo que la API identificó (código o IP). */
 export function mensajeCorte(corte: Schema<'QuienSoy'>): MensajeCorte {
     if (!corte.identificado || !corte.estado) {
+        const motivo = corte.motivo ? SIN_IDENTIFICAR[corte.motivo] : SIN_IDENTIFICAR.ip_desconocida
         return {
             titulo: 'No pudimos identificar tu servicio',
-            descripcion: 'Conéctate desde la red de tu servicio de internet o comunícate con nosotros. '
-                + 'También puedes pagar por depósito.',
+            descripcion: `${motivo} También puedes pagar por depósito o comunicarte con nosotros.`,
         }
     }
     switch (corte.estado) {

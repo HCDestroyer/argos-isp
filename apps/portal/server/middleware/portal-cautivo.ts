@@ -10,7 +10,7 @@ let hostsCache: { clave: string, hosts: Set<string> } | undefined
  * URL de corte del operador para el suspendido de esta petición (por su IP), o null. Si la API no
  * responde a tiempo o falla, null: la sonda recibe igual el 302 a la `/corte` del portal, nunca un 204.
  */
-async function urlDelOperador(event: H3Event): Promise<string | null> {
+async function urlDelOperador(event: H3Event, codigo: string | null = null): Promise<string | null> {
     const { apiBaseInternal, nodoPortalToken, portal } = useRuntimeConfig(event)
     const token = String(nodoPortalToken ?? '').trim()
     if (!apiBaseInternal || (token && !apiAdmiteToken(apiBaseInternal))) {
@@ -25,6 +25,9 @@ async function urlDelOperador(event: H3Event): Promise<string | null> {
         xfProto: token ? undefined : getRequestHeader(event, 'x-forwarded-proto'),
         host: getRequestHost(event, { xForwardedHost: false }),
     })
+    if (codigo) {
+        headers['x-argos-corte'] = codigo
+    }
     try {
         const respuesta = await $fetch<{ url?: unknown }>(`${apiBaseInternal.replace(/\/$/, '')}${RUTA_DESTINO_CORTE}`, {
             headers,
@@ -44,13 +47,26 @@ export default defineEventHandler(async (event) => {
         hostsCache = { clave, hosts: hostsDelPortal(portal) }
     }
 
+    const ruta = event.path.split('?')[0] ?? '/'
     const destino = redireccionPortalCautivo(
-        { host: getRequestHost(event, { xForwardedHost: false }), ruta: event.path.split('?')[0] ?? '/' },
+        { host: getRequestHost(event, { xForwardedHost: false }), ruta },
         portal,
         hostsCache.hosts,
     )
     if (!destino) {
-        return
+        // `/corte?c=<código>` (el proxy del router en modo código, `contratos/corte-identificacion.md`):
+        // Argos identifica por el código y, si la empresa del servicio tiene su URL de corte, va allí
+        // (decisión del PM P3). Sin URL de la empresa, la página sigue con el código.
+        const codigo = codigoCorteDeLaRuta(ruta, getQuery(event).c)
+        if (!codigo) {
+            return
+        }
+        const operador = await urlDelOperador(event, codigo)
+        if (!operador) {
+            return
+        }
+        setResponseHeaders(event, { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' })
+        return sendRedirect(event, operador, 302)
     }
 
     // Nunca en caché: la misma URL debe volver a responder normal cuando el servicio se reactive.
