@@ -14,6 +14,8 @@
 /ipv6 firewall mangle remove [find where comment~$propio]
 /ipv6 firewall address-list remove [find where dynamic=no comment~$propio]
 /radius remove [find where comment~$propio]
+# Regla final del proxy de corte ("argosisp: corte proxy sin codigo"); las de servicio quedan.
+/ip proxy access remove [find where comment~$propio]
 /queue tree remove [find where comment~$propio]
 # /queue type no tiene comentario: se borran por nombre solo los del ejemplo
 /queue type remove [find where name~("^argosisp-plan-" . $arbolPlanId . "-")]

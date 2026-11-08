@@ -25,6 +25,12 @@ import type { RouterVista } from '#network/consultas/routers'
  * - `portal_v4`, `portal_v6` y `portal_puerto` (el `to-ports` del NAT de corte): con `portal` (la configuración «Portal de corte», `core.portal_corte`) salen
  *   de ahí y no del entorno; el entorno solo siembra esa configuración mientras nadie la guarda.
  *
+ * - `corte_identificacion` y `corte_url` (`contratos/corte-identificacion.md` §5 bis): el modo del router
+ *   (`network.routers.corte_identificacion`, `ip` por defecto) y la URL de `/corte` de la regla final de
+ *   `/ip proxy access` (`corteUrlVigente`: `PORTAL_URL_PUBLICA` o el destino del NAT). Nunca del entorno.
+ *   En modo `codigo` sin URL, 422 `servicio_incompleto` (sin la regla final el proxy del router quedaría
+ *   abierto para los suspendidos sin regla propia).
+ *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
  */
@@ -46,6 +52,8 @@ export const VARIABLES_SERVICIO = [
     'walled_garden',
     'dns_v4',
     'dns_v6',
+    'corte_identificacion',
+    'corte_url',
 ] as const
 
 const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v4', 'dns_v6'])
@@ -58,6 +66,8 @@ export function valoresServicio(
     gateways: string[],
     entorno: NodeJS.ProcessEnv = process.env,
     portal?: { portal_v4: string | null; portal_v6: string | null; portal_puerto: number },
+    /** modo de identificación del cortado del router y URL de `/corte` (`corteUrlVigente`) */
+    corte: { identificacion: 'ip' | 'codigo'; url: string | null } = { identificacion: 'ip', url: null },
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
     const documentacion: ErrorCampo[] = (['dns_v4', 'dns_v6'] as const).flatMap((nombre) =>
@@ -80,6 +90,16 @@ export function valoresServicio(
     const valores: Record<string, string> = {}
     const faltan: string[] = []
     for (const nombre of VARIABLES_SERVICIO) {
+        if (nombre === 'corte_identificacion') {
+            valores[nombre] = corte.identificacion
+            continue
+        }
+        if (nombre === 'corte_url') {
+            if (corte.identificacion === 'codigo' && !corte.url) {
+                faltan.push('la URL pública del portal (PORTAL_URL_PUBLICA) o su IPv4, para el modo código')
+            } else valores[nombre] = corte.url ?? ''
+            continue
+        }
         let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))
         if (portal && (nombre === 'portal_v4' || nombre === 'portal_v6')) valor = portal[nombre]
         if (nombre === 'portal_puerto') valor = portal ? String(portal.portal_puerto) : (valor ?? '80')

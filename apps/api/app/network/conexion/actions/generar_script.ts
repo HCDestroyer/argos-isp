@@ -1,5 +1,5 @@
 import { isIP } from 'node:net'
-import { portalCorteRed } from '#network/routeros/corte_vigente'
+import { corteUrlVigente, portalCorteRed } from '#network/routeros/corte_vigente'
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrar, descifrar } from '#shared/cifrado'
@@ -112,6 +112,7 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
                   await gatewaysDeRouter(t, routerId),
                   process.env,
                   await portalCorteRed(t.trx),
+                  { identificacion: router.corte_identificacion, url: await corteUrlVigente(t.trx) },
               )
             : {}
 

@@ -113,8 +113,25 @@ Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, 
 | `portal_fqdn`                         | `ROUTERS_SERVICIO_PORTAL_FQDN` (en producción, `DOMINIO_PORTAL` por defecto)                   | `portal.argosisp.example`             | derivada         |
 | `walled_garden` (puede ir vacía)      | `ROUTERS_SERVICIO_WALLED_GARDEN`                                                               | `app.recurrente.com`                  | `.env`           |
 | `dns_v4`, `dns_v6` (pueden ir vacías) | `ROUTERS_SERVICIO_DNS_V4`, `ROUTERS_SERVICIO_DNS_V6`                                           | vacías (ver «DNS del router»)         | `.env`           |
+| `corte_identificacion` (`corteIdentificacion`) | `corte_identificacion` del router (`ip` \| `codigo`; nunca del entorno)                   | `ip`                                  | ficha del router |
+| `corte_url` (`corteUrl`; vacía en modo `ip`) | `/corte` de `PORTAL_URL_PUBLICA` o, sin ella, `http://<IPv4 del portal>:<puerto>/corte` (422 en modo `codigo` si no hay ninguna) | `http://portal.argosisp.example/corte` | derivada |
 
 En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio), **salvo los DNS**, que no tienen valor por defecto en ningún compose. En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+
+### Identificación del cortado: modo `ip` o `codigo`
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 bis. Según `corteIdentificacion` (en `lab.rsc`, la variable de la cabecera; en el script de conexión, el modo del router en el panel):
+
+- **`ip`** (por defecto): `argos-corte-nat` hace `dst-nat` del TCP/80 al portal (`portalV4:portalCortePuerto`, y en IPv6 a `portalV6` si existe) y el portal identifica por la IP de origen. Si el router tenía el puerto 3346 en `/ip proxy` (de un modo `codigo` anterior), el script lo quita y, si era el único, apaga el proxy (`port=8080`).
+- **`codigo`** (necesita la API del router; sin API la API responde 422 `corte_codigo_sin_api`):
+  - `/ip proxy`: si estaba apagado, `enabled=yes port=3346 max-cache-size=none` (solo del corte, sin caché); si el operador ya lo usa, **solo** agrega `3346` a `port` y no toca nada más.
+  - NAT (IPv4 e IPv6): `argosisp: corte-nat HTTP al proxy de corte` = `protocol=tcp dst-port=80 action=redirect to-ports=3346` en lugar del `dst-nat`. En IPv6 va aunque no haya IPv6 del portal (el proxy escucha en las dos familias).
+  - `input` (IPv4 e IPv6, `argosisp:top`): `argosisp:top proxy de corte solo redirigido` = `tcp dst-port=3346 connection-nat-state=!dstnat action=drop`: solo entra al proxy lo que trajo el redirect de un suspendido; desde la WAN o desde un cliente activo, nada (el router nunca es un proxy abierto).
+  - `argos-corte-in`: `argosisp: corte-in proxy de corte` (`tcp dst-port=3346 accept`) antes del `tcp-reset`.
+  - `/ip proxy access`: `argosisp: corte proxy sin codigo` = `local-port=3346 action=redirect action-data=<corteUrl>`, después de las reglas por servicio y antes de las del operador. Las reglas por servicio (`argosisp:servicio:<id>`, `src-address=<IP o prefijo>`, `action-data=…/corte?c=<código>`) **solo** las escribe ArgosIsp por la API: el código no sale nunca en el script.
+  - El proxy responde **307** a `/corte?c=<código>`, que va al portal por `argos-portal` (sin NAT).
+
+Son los mismos comentarios y propiedades que escribe el reconciliador (`apps/api/app/network/routeros/corte_router.ts`); `apps/api/tests/network/conexion_render.spec.ts` compara el script con su estado deseado. Cambiar de modo: en el panel (el reconciliador corrige el router en el acto); para `lab.rsc`, editar `corteIdentificacion` y `corteUrl` y reimportar. Pruebas pendientes en el equipo físico: `docs/laboratorio/portal-cautivo.md` §9.
 
 ### DNS del router
 
@@ -535,7 +552,7 @@ Notas de RouterOS 7 (verificar en el laboratorio, `docs/laboratorio/validacion-f
 
 ### Corte que mantiene ArgosIsp (igual que este script)
 
-El reconciliador deja en cada router con API, sea cual sea la estrategia, lo mismo que las secciones 4, 7, 8 y 9 de `lab.rsc` para el corte, **con los mismos comentarios**: la lista de interfaces y el perfil `suspendido`, las address-lists `suspendidos`, `argos-portal`, `argos-dns`, `argos-walled` y `argos-clientes`, los saltos `argosisp:top corte …` y `Filter-Id de RADIUS/CoA`, la excepción de FastTrack (si la estrategia la pide), las cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y el NAT `argos-corte-nat`. Si `lab.rsc` ya corrió, la reconciliación no cambia nada; si la reconciliación corrió antes, reaplicar `lab.rsc` deja lo mismo. Los saltos se mueven al inicio de su tabla con `move` (antes de FastTrack). Lo que solo pone este script (CoA desde aaa, DNS solo interno, WireGuard, NAT de salida) no lo toca.
+El reconciliador deja en cada router con API, sea cual sea la estrategia, lo mismo que las secciones 4, 7, 8 y 9 de `lab.rsc` para el corte, **con los mismos comentarios**: la lista de interfaces y el perfil `suspendido`, las address-lists `suspendidos`, `argos-portal`, `argos-dns`, `argos-walled` y `argos-clientes`, los saltos `argosisp:top corte …` y `Filter-Id de RADIUS/CoA`, la excepción de FastTrack (si la estrategia la pide), las cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y el NAT `argos-corte-nat`; en modo `codigo`, además el web proxy en el 3346, su NAT `redirect`, el `drop` del 3346 en `input`, el `accept` en `argos-corte-in` y la regla final de `/ip proxy access` («Identificación del cortado», arriba). Si `lab.rsc` ya corrió, la reconciliación no cambia nada; si la reconciliación corrió antes, reaplicar `lab.rsc` deja lo mismo. Los saltos se mueven al inicio de su tabla con `move` (antes de FastTrack). Lo que solo pone este script (CoA desde aaa, DNS solo interno, WireGuard, NAT de salida) no lo toca.
 
 El destino del NAT de corte (IPv4, IPv6 y puerto del portal) y el modo de suspensión se editan en el panel, **Configuración → Portal de corte** (`core.portal_corte`, `contratos/control-velocidad.md` §10.7); al guardar, ArgosIsp reconcilia todos los routers. `ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO` y `COA_SUSPENDER` solo son el valor inicial mientras nadie guarda esa pantalla. El FQDN del portal y el walled garden siguen saliendo del servidor (`ROUTERS_SERVICIO_PORTAL_FQDN`, `_WALLED_GARDEN`, … o `PORTAL_URL_PUBLICA`). El chequeo `corte` de «Probar conexión» (`GET /api/v1/routers/:id/diagnostico-corte`) dice qué falta y si el router llega al portal (`/tool fetch`); «Reconciliar ahora» (`POST /api/v1/routers/:id/reconciliar`) lo crea.
 

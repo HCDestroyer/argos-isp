@@ -20,6 +20,12 @@
 :local portalCortePuerto [:tonum "{{portal_puerto}}"]
 :local portalV6 "{{portal_v6}}"
 :local portalFqdn "{{portal_fqdn}}"
+# Identificación del cortado (network.routers.corte_identificacion): "ip" (dst-nat al portal) o
+# "codigo" (redirect al web proxy del router, que manda a /corte?c=<código>). corteUrl = la /corte
+# pública del portal (PORTAL_URL_PUBLICA o el destino del NAT) para la regla final del proxy.
+:local corteIdentificacion "{{corte_identificacion}}"
+:local corteUrl "{{corte_url}}"
+:local proxyCortePuerto "3346"
 :local walledGarden [:toarray "{{walled_garden}}"]
 :local dnsV4 [:toarray "{{dns_v4}}"]
 :local dnsV6 [:toarray "{{dns_v6}}"]

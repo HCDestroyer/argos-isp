@@ -55,6 +55,8 @@ const VALORES = {
     walled_garden: 'app.recurrente.com',
     dns_v4: '192.0.2.53,198.51.100.53',
     dns_v6: '2001:db8:ffff::53',
+    corte_identificacion: 'ip',
+    corte_url: 'http://portal.miisp.example/corte',
 }
 
 /** Llaves, corchetes y paréntesis balanceados fuera de cadenas y comentarios (sintaxis de RouterOS). */
@@ -372,4 +374,86 @@ test('DNS: ningún script del laboratorio ni plantilla trae resolutores de docum
     const lab = leer('lab.rsc')
     assert.match(lab, /^:local dnsV4 \[:toarray ""\]$/m)
     assert.match(lab, /^:local dnsV6 \[:toarray ""\]$/m)
+})
+
+test('identificación por código (contratos/corte-identificacion.md §5 bis): mismas piezas que corte_router.ts', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    const linea = (t, re) => t.split('\n').filter((l) => re.test(l))
+    for (const p of CON_SERVICIO) {
+        const t = leer(p)
+        // NAT: redirect al 3346 en modo código, dst-nat al portal en modo ip (IPv4 e IPv6)
+        for (const fam of ['/ip', '/ipv6']) {
+            const proxy = linea(
+                t,
+                new RegExp(`^\\s*${fam} firewall nat add[^\\n]*corte-nat HTTP al proxy de corte`),
+            )
+            assert.equal(proxy.length, 1, `${p} ${fam}: NAT al proxy`)
+            assert.match(
+                proxy[0],
+                /chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=\$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"$/,
+            )
+            // drop del 3346 en input si no llegó por el dst-nat, argosisp:top
+            const drop = linea(
+                t,
+                new RegExp(`^\\s*${fam} firewall filter add[^\\n]*proxy de corte solo redirigido`),
+            )
+            assert.equal(drop.length, 1, `${p} ${fam}: drop del 3346`)
+            assert.match(
+                drop[0],
+                /chain=input protocol=tcp dst-port=\$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"$/,
+            )
+            // accept en argos-corte-in, antes del tcp-reset
+            const acc = linea(
+                t,
+                new RegExp(`^\\s*${fam} firewall filter add chain=argos-corte-in[^\\n]*proxy de corte`),
+            )
+            assert.equal(acc.length, 1, `${p} ${fam}: accept en argos-corte-in`)
+            assert.match(
+                acc[0],
+                /protocol=tcp dst-port=\$proxyCortePuerto action=accept comment="argosisp: corte-in proxy de corte"$/,
+            )
+        }
+        assert.ok(
+            t.indexOf('argosisp: corte-in proxy de corte') <
+                t.indexOf('comment="argosisp: corte-in TCP reset"'),
+            p,
+        )
+        // todo lo del modo código va dentro de :if ($corteIdentificacion = "codigo")
+        for (const l of linea(t, /\$proxyCortePuerto/).filter((l) => !/^\s*#/.test(l))) {
+            assert.match(l, /^\s{4,}/, `${p}: ${l.trim()} fuera de un :if`)
+        }
+        // /ip proxy: apagado -> solo del corte sin caché; encendido -> solo se agrega el puerto; ip -> se quita
+        assert.match(t, /\/ip proxy set enabled=yes port=\$proxyCortePuerto max-cache-size=none/, p)
+        assert.match(t, /\/ip proxy set port=\(\$proxyResto \. "," \. \$proxyCortePuerto\)/, p)
+        assert.match(t, /\/ip proxy set enabled=no port=8080/, p)
+        // regla final de /ip proxy access y su limpieza
+        assert.match(
+            t,
+            /\/ip proxy access add local-port=\$proxyCortePuerto action=redirect action-data=\$corteUrl comment="argosisp: corte proxy sin codigo"/,
+            p,
+        )
+        assert.match(t, /\/ip proxy access remove \[find where comment~\$propio\]/, p)
+        // el NAT IPv6 en modo código no depende de la IPv6 del portal
+        assert.match(t, /:if \(\$portalV6 != "" \|\| \$corteIdentificacion = "codigo"\) do=\{/, p)
+    }
+    // el laboratorio arranca en modo ip con el 3346
+    for (const p of ['lab.rsc', 'lab-sin-radius.rsc']) {
+        assert.match(leer(p), /^:local corteIdentificacion "ip"$/m, p)
+        assert.match(leer(p), /^:local proxyCortePuerto "3346"$/m, p)
+    }
+    // render: modo y URL validados por patrón
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        const r = renderizar(leer(p), { ...VALORES, corte_identificacion: 'codigo' })
+        assert.match(r, /:local corteIdentificacion "codigo"/)
+        assert.match(r, /:local corteUrl "http:\/\/portal.miisp.example\/corte"/)
+        assert.match(renderizar(leer(p), { ...VALORES, corte_url: '' }), /:local corteUrl ""/)
+        assert.throws(
+            () => renderizar(leer(p), { ...VALORES, corte_identificacion: 'hotspot' }),
+            /corte_identificacion: no cumple/,
+        )
+        assert.throws(
+            () => renderizar(leer(p), { ...VALORES, corte_url: 'http://x/corte" ; /system reset' }),
+            /corte_url: no cumple/,
+        )
+    }
 })

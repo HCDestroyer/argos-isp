@@ -114,6 +114,14 @@
     "dns_v6": {
       "patron": "^([0-9A-Fa-f:]+(,[0-9A-Fa-f:]+)*)?$",
       "descripcion": "Resolutores IPv6 del router (solo con dns_v4; vacía = ninguno)"
+    },
+    "corte_identificacion": {
+      "patron": "^(ip|codigo)$",
+      "descripcion": "Identificación del cortado del router (network.routers.corte_identificacion): ip = dst-nat de TCP/80 al portal; codigo = redirect al web proxy del router en el 3346, que responde 307 a /corte?c=<código> (contratos/corte-identificacion.md §5 bis)"
+    },
+    "corte_url": {
+      "patron": "^(https?://[A-Za-z0-9.:/_%\\[\\]-]+)?$",
+      "descripcion": "URL de /corte de la regla final de /ip proxy access en modo codigo: la de PORTAL_URL_PUBLICA o el destino del NAT (corte_url de ConfigCorte). Vacía = la escribe el reconciliador"
     }
   }
 }

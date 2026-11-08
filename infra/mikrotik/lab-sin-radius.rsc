@@ -77,6 +77,14 @@
 # la alternativa comentada en la sección 9.
 :local portalV6 "2001:db8:ffff::20"
 :local portalFqdn "portal.argosisp.example"
+# Identificación del cortado (contratos/corte-identificacion.md): "ip" = dst-nat de TCP/80 al portal
+# (el portal identifica por la IP de origen; necesita que el portal vea la IP real del cliente).
+# "codigo" = redirect al web proxy del router en el puerto 3346, que responde 307 a /corte?c=<código>
+# (las reglas por servicio las escribe ArgosIsp por la API). Debe coincidir con el router en el panel.
+:local corteIdentificacion "ip"
+# /corte pública del portal para la regla final del proxy (modo codigo), p. ej. "http://portal.argosisp.example/corte"
+:local corteUrl "http://portal.argosisp.example/corte"
+:local proxyCortePuerto "3346"
 # Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.),
 # por FQDN (el router los resuelve, IPv4 e IPv6). El portal no carga nada externo.
 # - app.recurrente.com: página de pago de Recurrente (`/checkout-session/<ch_…>`) y su API
@@ -200,6 +208,8 @@
 /ipv6 firewall mangle remove [find where comment~$propio]
 /ipv6 firewall address-list remove [find where dynamic=no comment~$propio]
 /radius remove [find where comment~$propio]
+# Regla final del proxy de corte ("argosisp: corte proxy sin codigo"); las de servicio quedan.
+/ip proxy access remove [find where comment~$propio]
 /queue tree remove [find where comment~$propio]
 # /queue type no tiene comentario: se borran por nombre solo los del ejemplo
 /queue type remove [find where name~("^argosisp-plan-" . $arbolPlanId . "-")]
@@ -401,6 +411,13 @@ add chain=forward src-address-list=suspendidos action=jump jump-target=argos-cor
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 # Reglas dinámicas que RouterOS crea por Filter-Id (RADIUS o CoA) en la cadena "ppp"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
+# Modo código (corte_identificacion = codigo, contratos/corte-identificacion.md §5 bis): el puerto del
+# proxy de corte solo acepta lo que llegó por el redirect de un suspendido. Una conexión directa (desde
+# la WAN o de un cliente activo) se descarta: el router nunca es un proxy abierto.
+:if ($corteIdentificacion = "codigo") do={
+    /ip firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+}
+/ip firewall filter
 # FastTrack excluido para clientes con colas (contratos/velocidad.md): con FastTrack los paquetes
 # saltan colas simples, queue tree y mangle. Aceptar aquí lo establecido de los clientes, DESPUÉS
 # de los saltos de corte y ANTES de "defconf: fasttrack", deja esas conexiones fuera de FastTrack.
@@ -424,6 +441,11 @@ add chain=argos-corte action=reject reject-with=icmp-admin-prohibited comment="a
 # Hacia el router: DNS e ICMP; nada más.
 add chain=argos-corte-in protocol=udp dst-port=53 action=accept comment="argosisp: corte-in DNS udp"
 add chain=argos-corte-in protocol=tcp dst-port=53 action=accept comment="argosisp: corte-in DNS tcp"
+# Modo código: el suspendido redirigido sí llega al proxy de corte (antes del tcp-reset).
+:if ($corteIdentificacion = "codigo") do={
+    /ip firewall filter add chain=argos-corte-in protocol=tcp dst-port=$proxyCortePuerto action=accept comment="argosisp: corte-in proxy de corte"
+}
+/ip firewall filter
 add chain=argos-corte-in protocol=icmp action=accept comment="argosisp: corte-in ICMP"
 add chain=argos-corte-in protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte-in TCP reset"
 add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment="argosisp: corte-in rechazo del resto"
@@ -432,12 +454,20 @@ add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment
 add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro)"
 
 # NAT: HTTP de los suspendidos → página de corte del portal. Walled garden y portal sin NAT.
+# Modo ip: dst-nat al portal (el portal identifica por la IP de origen). Modo código: redirect al proxy
+# del propio router (puerto proxyCortePuerto), que responde 307 a /corte?c=<código> según la IP del
+# suspendido (/ip proxy access, sección 9 bis); no depende de que el portal vea la IP real.
 /ip firewall nat
 add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
 add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
 add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
 add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
-add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+:if ($corteIdentificacion = "codigo") do={
+    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+} else={
+    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+}
+/ip firewall nat
 add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"
 
 # ============================================================================
@@ -450,12 +480,18 @@ add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=mas
 # reconecta al suspendido, y WISP por su entrada IPv6 en suspendidos. Sin portalV6 no hay NAT IPv6:
 # el HTTP por IPv6 recibe reset y el equipo cae a IPv4. infra/mikrotik/README.md, "Corte por IPv6".
 :put "argosisp: firewall IPv6"
-:if ($portalV6 != "") do={
+# Modo código: el NAT IPv6 va siempre (redirect al proxy del router, que escucha en IPv4 e IPv6) y no
+# necesita la IPv6 del portal.
+:if ($portalV6 != "" || $corteIdentificacion = "codigo") do={
     /ipv6 firewall nat add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
     /ipv6 firewall nat add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
-    /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+    :if ($corteIdentificacion = "codigo") do={
+        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+    } else={
+        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+    }
 }
 # DNS del router por IPv6: el mismo cierre que en IPv4 (seccion 8).
 /ipv6 firewall filter
@@ -477,6 +513,10 @@ add chain=input in-interface-list=suspendidos action=jump jump-target=argos-cort
 add chain=forward src-address-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por address-list"
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
+:if ($corteIdentificacion = "codigo") do={
+    /ipv6 firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+}
+/ipv6 firewall filter
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
 add chain=forward connection-state=established,related dst-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (bajada)"
 
@@ -496,10 +536,64 @@ add chain=argos-corte-in protocol=icmpv6 action=accept comment="argosisp: corte-
 add chain=argos-corte-in protocol=udp dst-port=547 action=accept comment="argosisp: corte-in DHCPv6"
 add chain=argos-corte-in protocol=udp dst-port=53 action=accept comment="argosisp: corte-in DNS udp"
 add chain=argos-corte-in protocol=tcp dst-port=53 action=accept comment="argosisp: corte-in DNS tcp"
+:if ($corteIdentificacion = "codigo") do={
+    /ipv6 firewall filter add chain=argos-corte-in protocol=tcp dst-port=$proxyCortePuerto action=accept comment="argosisp: corte-in proxy de corte"
+}
+/ipv6 firewall filter
 add chain=argos-corte-in protocol=tcp action=reject reject-with=tcp-reset comment="argosisp: corte-in TCP reset"
 add chain=argos-corte-in action=reject reject-with=icmp-admin-prohibited comment="argosisp: corte-in rechazo del resto"
 
 add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro)"
+
+# ============================================================================
+# 9 bis. Web proxy del corte (modo código, contratos/corte-identificacion.md §5 bis)
+# ============================================================================
+# Lo mismo que el reconciliador de ArgosIsp (ajusteProxy en corte_router.ts):
+# - codigo: si /ip proxy estaba apagado es solo del corte (enabled=yes port=3346 max-cache-size=none);
+#   si el operador ya lo usa, solo se agrega el puerto 3346 y no se toca nada más.
+# - ip: se quita el 3346; si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica.
+# La regla final de /ip proxy access manda a /corte sin código lo que no tiene regla por servicio; las
+# reglas por servicio (argosisp:servicio:<id>, /corte?c=<código>) las escribe ArgosIsp por la API.
+:put "argosisp: web proxy del corte"
+:local proxyCon false
+:local proxyResto ""
+:foreach p in=[:toarray [/ip proxy get port]] do={
+    :if ([:tostr $p] = $proxyCortePuerto) do={
+        :set proxyCon true
+    } else={
+        :if ($proxyResto != "") do={ :set proxyResto ($proxyResto . ",") }
+        :set proxyResto ($proxyResto . [:tostr $p])
+    }
+}
+:local proxyEncendido [/ip proxy get enabled]
+:if ($corteIdentificacion = "codigo") do={
+    :if (!$proxyEncendido) do={
+        /ip proxy set enabled=yes port=$proxyCortePuerto max-cache-size=none
+    } else={
+        :if (!$proxyCon) do={
+            :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
+        }
+    }
+    :if ($corteUrl = "") do={
+        :put "argosisp: AVISO modo codigo sin URL de /corte: ArgosIsp escribe la regla final del proxy al reconciliar"
+    } else={
+        # Primero las reglas por servicio, luego esta y al final las del operador.
+        :local finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$corteUrl comment="argosisp: corte proxy sin codigo"]
+        :local destinoProxy
+        :foreach id in=[/ip proxy access find] do={
+            :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
+        }
+        :if ([:typeof $destinoProxy] != "nothing") do={ /ip proxy access move $finalProxy destination=$destinoProxy }
+    }
+} else={
+    :if ($proxyCon) do={
+        :if ($proxyResto = "") do={
+            :if ($proxyEncendido) do={ /ip proxy set enabled=no port=8080 } else={ /ip proxy set port=8080 }
+        } else={
+            /ip proxy set port=$proxyResto
+        }
+    }
+}
 
 # ============================================================================
 # 10. WISP sin PPPoE: gateway, DHCP de dhcp_fija y amarre IP-MAC (contratos/routeros.md)
