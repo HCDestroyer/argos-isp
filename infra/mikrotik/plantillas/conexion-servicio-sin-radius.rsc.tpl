@@ -98,16 +98,18 @@
 /radius remove [find where comment~"^argosisp: aaa nodo"]
 :put "argosisp: limpiando configuracion anterior"
 :local propio "^argosisp(: |:top )"
-/ip firewall filter remove [find where comment~$propio]
+:local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"
+:local reglaProxyFinal "argosisp: corte proxy sin codigo"
+/ip firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ip firewall nat remove [find where comment~$propio]
 /ip firewall mangle remove [find where comment~$propio]
 /ip firewall address-list remove [find where dynamic=no comment~$propio]
-/ipv6 firewall filter remove [find where comment~$propio]
+/ipv6 firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ipv6 firewall nat remove [find where comment~$propio]
 /ipv6 firewall mangle remove [find where comment~$propio]
 /ipv6 firewall address-list remove [find where dynamic=no comment~$propio]
 /radius remove [find where comment~$propio]
-/ip proxy access remove [find where comment~$propio]
+/ip proxy access remove [find where comment~$propio and comment!=$reglaProxyFinal]
 /queue tree remove [find where comment~$propio]
 /queue type remove [find where name~("^argosisp-plan-" . $arbolPlanId . "-")]
 /system script remove [find where name~"^argosisp-"]
@@ -344,7 +346,12 @@ add chain=forward src-address-list=suspendidos action=jump jump-target=argos-cor
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
 :if ($corteIdentificacion = "codigo") do={
-    /ip firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    :local dropProxy [/ip firewall filter find where comment=$reglaProxyDrop]
+    :if ([:len $dropProxy] = 0) do={
+        /ip firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    } else={
+        /ip firewall filter set $dropProxy chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop disabled=no
+    }
 }
 /ip firewall filter
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
@@ -409,7 +416,12 @@ add chain=forward src-address-list=suspendidos action=jump jump-target=argos-cor
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
 :if ($corteIdentificacion = "codigo") do={
-    /ipv6 firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    :local dropProxy [/ipv6 firewall filter find where comment=$reglaProxyDrop]
+    :if ([:len $dropProxy] = 0) do={
+        /ipv6 firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    } else={
+        /ipv6 firewall filter set $dropProxy chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop disabled=no
+    }
 }
 /ipv6 firewall filter
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
@@ -446,12 +458,25 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 :if ($corteIdentificacion = "codigo") do={
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    :local finales [/ip proxy access find where comment=$reglaProxyFinal]
     :local finalProxy
+    :if ([:len $finales] > 0) do={
+        :set finalProxy [:pick $finales 0]
+        :foreach id in=$finales do={ :if ($id != $finalProxy) do={ /ip proxy access remove $id } }
+    }
     :if ($urlCorte = "") do={
         :put "argosisp: AVISO modo codigo sin URL de /corte (PORTAL_URL_PUBLICA o IPv4 del portal): el proxy de corte niega (deny) en vez de redirigir"
-        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+        :if ([:typeof $finalProxy] = "nothing") do={
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+        } else={
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=deny disabled=no
+        }
     } else={
-        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+        :if ([:typeof $finalProxy] = "nothing") do={
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+        } else={
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no
+        }
     }
     :local destinoProxy
     :foreach id in=[/ip proxy access find] do={
@@ -476,6 +501,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
             /ip proxy set port=$proxyResto
         }
     }
+    /ip firewall filter remove [find where comment=$reglaProxyDrop]
+    /ipv6 firewall filter remove [find where comment=$reglaProxyDrop]
+    /ip proxy access remove [find where comment=$reglaProxyFinal]
 }
 :if ($wispHabilitar) do={
     :put "argosisp: WISP"

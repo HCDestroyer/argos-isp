@@ -199,17 +199,23 @@
 # Solo lo de este script ("argosisp: " con espacio y "argosisp:top "): las entradas de ArgosIsp
 # ("argosisp:servicio:<id>" en suspendidos o argosisp-plan-<id>, colas "argosisp:plan:<id>") quedan.
 :local propio "^argosisp(: |:top )"
-/ip firewall filter remove [find where comment~$propio]
+# El drop del 3346 en input y la regla final del proxy de corte NO se borran aquí: si el proxy ya está
+# encendido con el 3346 (router en modo codigo), borrarlos dejaría el 3346 abierto sin regla final
+# hasta la sección 9 bis. Las secciones 8, 9 y 9 bis los actualizan en su lugar; en modo ip, la 9 bis
+# primero quita el 3346 del proxy y recién después los borra.
+:local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"
+:local reglaProxyFinal "argosisp: corte proxy sin codigo"
+/ip firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ip firewall nat remove [find where comment~$propio]
 /ip firewall mangle remove [find where comment~$propio]
 /ip firewall address-list remove [find where dynamic=no comment~$propio]
-/ipv6 firewall filter remove [find where comment~$propio]
+/ipv6 firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ipv6 firewall nat remove [find where comment~$propio]
 /ipv6 firewall mangle remove [find where comment~$propio]
 /ipv6 firewall address-list remove [find where dynamic=no comment~$propio]
 /radius remove [find where comment~$propio]
-# Regla final del proxy de corte ("argosisp: corte proxy sin codigo"); las de servicio quedan.
-/ip proxy access remove [find where comment~$propio]
+# Lo nuestro de /ip proxy access salvo la regla final; las de servicio (argosisp:servicio:<id>) quedan.
+/ip proxy access remove [find where comment~$propio and comment!=$reglaProxyFinal]
 /queue tree remove [find where comment~$propio]
 # /queue type no tiene comentario: se borran por nombre solo los del ejemplo
 /queue type remove [find where name~("^argosisp-plan-" . $arbolPlanId . "-")]
@@ -415,7 +421,13 @@ add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de
 # proxy de corte solo acepta lo que llegó por el redirect de un suspendido. Una conexión directa (desde
 # la WAN o de un cliente activo) se descarta: el router nunca es un proxy abierto.
 :if ($corteIdentificacion = "codigo") do={
-    /ip firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    # Se actualiza en su lugar si ya existe (la limpieza no lo borra: el 3346 nunca queda abierto).
+    :local dropProxy [/ip firewall filter find where comment=$reglaProxyDrop]
+    :if ([:len $dropProxy] = 0) do={
+        /ip firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    } else={
+        /ip firewall filter set $dropProxy chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop disabled=no
+    }
 }
 /ip firewall filter
 # FastTrack excluido para clientes con colas (contratos/velocidad.md): con FastTrack los paquetes
@@ -514,7 +526,13 @@ add chain=forward src-address-list=suspendidos action=jump jump-target=argos-cor
 add chain=forward in-interface-list=suspendidos action=jump jump-target=argos-corte comment="argosisp:top corte por interface-list"
 add chain=forward action=jump jump-target=ppp comment="argosisp:top Filter-Id de RADIUS/CoA"
 :if ($corteIdentificacion = "codigo") do={
-    /ipv6 firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    # Se actualiza en su lugar si ya existe (la limpieza no lo borra: el 3346 nunca queda abierto).
+    :local dropProxy [/ipv6 firewall filter find where comment=$reglaProxyDrop]
+    :if ([:len $dropProxy] = 0) do={
+        /ipv6 firewall filter add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
+    } else={
+        /ipv6 firewall filter set $dropProxy chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop disabled=no
+    }
 }
 /ipv6 firewall filter
 add chain=forward connection-state=established,related src-address-list=argos-clientes action=accept comment="argosisp:top sin fasttrack: clientes con colas (subida)"
@@ -557,7 +575,8 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 #   El proxy se enciende (o se le agrega el 3346) solo DESPUÉS de la regla final y del drop de input
 #   (sección 8): si estaba apagado es solo del corte (enabled=yes port=3346 max-cache-size=none); si el
 #   operador ya lo usa, solo se agrega el puerto 3346 y no se toca nada más.
-# - ip: se quita el 3346; si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica.
+# - ip: se quita el 3346; si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica. Solo
+#   después se borran el drop del 3346 y la regla final (la limpieza de la sección 0 no los toca).
 :put "argosisp: web proxy del corte"
 :local proxyCon false
 :local proxyResto ""
@@ -574,12 +593,27 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     # 1. Regla final: redirect a /corte (la URL pública o el destino del NAT) o deny.
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    # La de una corrida anterior se actualiza en su lugar (la limpieza no la borra); si hay repetidas,
+    # queda una.
+    :local finales [/ip proxy access find where comment=$reglaProxyFinal]
     :local finalProxy
+    :if ([:len $finales] > 0) do={
+        :set finalProxy [:pick $finales 0]
+        :foreach id in=$finales do={ :if ($id != $finalProxy) do={ /ip proxy access remove $id } }
+    }
     :if ($urlCorte = "") do={
         :put "argosisp: AVISO modo codigo sin URL de /corte (PORTAL_URL_PUBLICA o IPv4 del portal): el proxy de corte niega (deny) en vez de redirigir"
-        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+        :if ([:typeof $finalProxy] = "nothing") do={
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=deny comment="argosisp: corte proxy sin codigo"]
+        } else={
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=deny disabled=no
+        }
     } else={
-        :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+        :if ([:typeof $finalProxy] = "nothing") do={
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+        } else={
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no
+        }
     }
     # 2. Las del corte al inicio: las de servicio y luego la final, antes de la primera del operador.
     :local destinoProxy
@@ -599,6 +633,7 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
         }
     }
 } else={
+    # Modo ip: primero se cierra el 3346 del proxy y recién después se borran su drop y su regla final.
     :if ($proxyCon) do={
         :if ($proxyResto = "") do={
             :if ($proxyEncendido) do={ /ip proxy set enabled=no port=8080 } else={ /ip proxy set port=8080 }
@@ -606,6 +641,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
             /ip proxy set port=$proxyResto
         }
     }
+    /ip firewall filter remove [find where comment=$reglaProxyDrop]
+    /ipv6 firewall filter remove [find where comment=$reglaProxyDrop]
+    /ip proxy access remove [find where comment=$reglaProxyFinal]
 }
 
 # ============================================================================

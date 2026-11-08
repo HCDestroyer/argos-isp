@@ -445,7 +445,11 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
         const encender = t.indexOf('/ip proxy set enabled=yes')
         assert.ok(encender > t.lastIndexOf('comment="argosisp: corte proxy sin codigo"'), p)
         assert.ok(encender > t.lastIndexOf('comment="argosisp:top proxy de corte solo redirigido"'), p)
-        assert.match(t, /\/ip proxy access remove \[find where comment~\$propio\]/, p)
+        assert.match(
+            t,
+            /\/ip proxy access remove \[find where comment~\$propio and comment!=\$reglaProxyFinal\]/,
+            p,
+        )
         // el NAT IPv6 en modo código no depende de la IPv6 del portal
         assert.match(t, /:if \(\$portalV6 != "" \|\| \$corteIdentificacion = "codigo"\) do=\{/, p)
     }
@@ -468,5 +472,72 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
             () => renderizar(leer(p), { ...VALORES, corte_url: 'http://x/corte" ; /system reset' }),
             /corte_url: no cumple/,
         )
+    }
+})
+
+test('reimportar en modo código: el 3346 nunca queda abierto sin regla final ni drop', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    for (const p of CON_SERVICIO) {
+        const t = leer(p)
+        const lineas = t.split('\n').map((l) => l.trim())
+        // la limpieza inicial no borra el drop del 3346 ni la regla final del proxy
+        for (const l of lineas.filter((l) => / remove \[find where comment~\$propio/.test(l))) {
+            if (/firewall filter /.test(l)) assert.match(l, /and comment!=\$reglaProxyDrop\]$/, `${p}: ${l}`)
+            if (/proxy access /.test(l)) assert.match(l, /and comment!=\$reglaProxyFinal\]$/, `${p}: ${l}`)
+        }
+        assert.ok(lineas.includes(':local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"'), p)
+        assert.ok(lineas.includes(':local reglaProxyFinal "argosisp: corte proxy sin codigo"'), p)
+        const limpieza = t.indexOf(':local reglaProxyDrop')
+        // ningún remove de esas reglas antes de cerrar el 3346 del proxy (modo ip)
+        const cierre = t.indexOf('/ip proxy set enabled=no port=8080')
+        assert.ok(cierre > limpieza, p)
+        for (const quitar of [
+            '/ip firewall filter remove [find where comment=$reglaProxyDrop]',
+            '/ipv6 firewall filter remove [find where comment=$reglaProxyDrop]',
+            '/ip proxy access remove [find where comment=$reglaProxyFinal]',
+        ]) {
+            const i = t.indexOf(quitar)
+            assert.ok(i > cierre, `${p}: ${quitar} antes de quitar el 3346 del proxy`)
+            assert.equal(t.indexOf(quitar, i + 1), -1, `${p}: ${quitar} repetido`)
+        }
+        // en modo código se actualizan en su lugar: add solo si no existen, si no set
+        for (const fam of ['/ip', '/ipv6']) {
+            assert.ok(
+                t.includes(`:local dropProxy [${fam} firewall filter find where comment=$reglaProxyDrop]`),
+                p,
+            )
+            assert.ok(
+                t.includes(
+                    `${fam} firewall filter set $dropProxy chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=!dstnat action=drop disabled=no`,
+                ),
+                p,
+            )
+        }
+        assert.ok(t.includes(':local finales [/ip proxy access find where comment=$reglaProxyFinal]'), p)
+        assert.ok(
+            t.includes(
+                '/ip proxy access set $finalProxy local-port=$proxyCortePuerto action=deny disabled=no',
+            ),
+            p,
+        )
+        assert.ok(
+            t.includes(
+                '/ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no',
+            ),
+            p,
+        )
+        // cada add de la final o del drop va dentro de su :if de "no existe"
+        for (const l of t
+            .split('\n')
+            .filter(
+                (l) =>
+                    /(proxy de corte solo redirigido|corte proxy sin codigo)"\]?$/.test(l) && / add /.test(l),
+            )) {
+            assert.match(l, /^\s{8,}/, `${p}: ${l.trim()} fuera de su :if`)
+        }
+        // y el proxy se enciende después de la final y del drop
+        const encender = t.indexOf('/ip proxy set enabled=yes')
+        assert.ok(encender > t.lastIndexOf('/ip proxy access set $finalProxy'), p)
+        assert.ok(encender > t.lastIndexOf('firewall filter set $dropProxy'), p)
     }
 })
