@@ -130,6 +130,7 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalQuienSoy: () => undefined,
     portalEstado: () => undefined,
     portalDestinoCorte: () => undefined,
+    portalEcoIp: () => undefined,
     portalSolicitarCodigo: () => ({ identificador: 'nadie-123' }),
     portalVerificarCodigo: () => ({ solicitud: randomUUID(), codigo: '000000' }),
     portalSalir: () => undefined,

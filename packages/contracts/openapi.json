@@ -56646,7 +56646,7 @@
       "get": {
         "operationId": "portalDestinoCorte",
         "summary": "A dónde redirige el portal cautivo al suspendido de la IP de origen",
-        "description": "Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -56657,6 +56657,39 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DestinoCorte"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/eco-ip": {
+      "get": {
+        "operationId": "portalEcoIp",
+        "summary": "Qué IP de origen ve el portal (diagnóstico de corte del router)",
+        "description": "Sin login y sin datos de clientes: solo la IP con la que llegó la petición y si es de infraestructura (router, servidor, proxy). El diagnóstico de corte la pide desde el router (`/tool/fetch` con `src-address` = el gateway de los clientes) para saber si hay NAT o un proxy entre el router y el portal (`contratos/corte-identificacion.md`). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "IP vista",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalEcoIp"
                 }
               }
             }
@@ -56804,7 +56837,7 @@
       "get": {
         "operationId": "portalEstado",
         "summary": "Estado del servicio de la IP de origen (estado en vivo de la página de corte)",
-        "description": "Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver `activo`. Solo devuelve estado y monto adeudado, sin datos personales. Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -58002,8 +58035,8 @@
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
-        "summary": "Identifica al cliente por la IP de origen (página de corte)",
-        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "summary": "Identifica al cliente por el código de corte o la IP de origen (página de corte)",
+        "description": "Sin login. Solo devuelve nombre parcial, estado y montos. Sin identificar, `motivo` dice por qué (la IP es de un router, del servidor o de un proxy: hay NAT o un proxy en medio). Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -66686,6 +66719,14 @@
                     ],
                     "description": "Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)"
                   },
+                  "corte_identificacion": {
+                    "type": "string",
+                    "enum": [
+                      "ip",
+                      "codigo"
+                    ],
+                    "description": "Cómo identifica el portal al suspendido de este router: ip (por la IP de origen; solo sirve sin NAT ni proxy entre el router y el portal) o codigo (el web proxy del router redirige su HTTP a /corte?c=<código>; necesita la API del router, 422 corte_codigo_sin_api). Alta sin el campo: ip"
+                  },
                   "empresa_sugerida_id": {
                     "type": [
                       "integer",
@@ -67009,6 +67050,14 @@
                       "dhcp_fija"
                     ],
                     "description": "Tipo de conexión de los servicios del router: pppoe (por defecto), ip_estatica o dhcp_fija. Los servicios nuevos lo toman de aquí. En la edición, si algún servicio no retirado cambiaría: 422 tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)"
+                  },
+                  "corte_identificacion": {
+                    "type": "string",
+                    "enum": [
+                      "ip",
+                      "codigo"
+                    ],
+                    "description": "Cómo identifica el portal al suspendido de este router: ip (por la IP de origen; solo sirve sin NAT ni proxy entre el router y el portal) o codigo (el web proxy del router redirige su HTTP a /corte?c=<código>; necesita la API del router, 422 corte_codigo_sin_api). Alta sin el campo: ip"
                   },
                   "empresa_sugerida_id": {
                     "type": [
@@ -74475,6 +74524,79 @@
           }
         },
         "x-permiso": "servicios.cambiar_empresa",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/codigo-corte": {
+      "get": {
+        "operationId": "servicioCodigoCorte",
+        "summary": "Estado del código de corte del servicio (ficha del servicio)",
+        "description": "Si el servicio tiene un código de corte abierto (suspendido en un router con `corte_identificacion = codigo`) y cuándo se emitió o cerró. El código nunca sale por la API: da acceso a la página de corte de ese servicio y solo lo lleva la regla `/ip proxy access` del router (`contratos/corte-identificacion.md`). 404 si el servicio no existe; alcance por router y zona.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado del código",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodigoCorteServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -87100,6 +87222,59 @@
           }
         }
       },
+      "CodigoCorteServicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "corte_identificacion",
+          "activo",
+          "creado_en",
+          "cerrado_en",
+          "resuelve_hasta"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "description": "Servicio"
+          },
+          "corte_identificacion": {
+            "type": "string",
+            "enum": [
+              "ip",
+              "codigo"
+            ],
+            "description": "Modo del router del servicio (contratos/corte-identificacion.md)"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Hay un código de corte abierto (el servicio está suspendido en un router en modo código). El código nunca sale por la API: lo lleva solo la regla del router"
+          },
+          "creado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se emitió el último código; null si nunca"
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cuándo se cerró (el servicio dejó de estar suspendido); null si sigue abierto o nunca hubo"
+          },
+          "resuelve_hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hasta cuándo el código cerrado sigue sirviendo en /corte («ya tienes servicio»): cierre + PORTAL_CODIGO_CORTE_GRACIA_MIN. null si sigue abierto (resuelve mientras esté suspendido) o si nunca hubo"
+          }
+        }
+      },
       "ColumnaReporte": {
         "type": "object",
         "required": [
@@ -92486,9 +92661,11 @@
                     "walled_garden",
                     "dns_router",
                     "portal_host",
-                    "portal_en_router"
+                    "portal_en_router",
+                    "portal_ip_cliente",
+                    "proxy_corte"
                   ],
-                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router)"
+                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente (qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: el web proxy en el puerto 3346, la regla final y una por suspendido)"
                 },
                 "ok": {
                   "type": [
@@ -92522,7 +92699,9 @@
                     "dns_router_documentacion",
                     "dns_router_sin_remotas",
                     "portal_no_acepta_host",
-                    "portal_en_router"
+                    "portal_en_router",
+                    "portal_ve_otra_ip",
+                    "proxy_corte"
                   ],
                   "description": "null si salió bien"
                 },
@@ -92577,7 +92756,9 @@
                     "dns_router_documentacion",
                     "dns_router_sin_remotas",
                     "portal_no_acepta_host",
-                    "portal_en_router"
+                    "portal_en_router",
+                    "portal_ve_otra_ip",
+                    "proxy_corte"
                   ]
                 },
                 "mensaje": {
@@ -105798,6 +105979,31 @@
           }
         }
       },
+      "PortalEcoIp": {
+        "type": "object",
+        "required": [
+          "ip",
+          "infraestructura"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "IP de origen con la que la API ve la petición (ya resuelta tras los proxies)"
+          },
+          "infraestructura": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ip_de_router",
+              "ip_de_servidor",
+              "ip_de_proxy"
+            ],
+            "description": "La IP es de un router, del servidor o de un proxy (nunca identifica a un cliente); null = puede ser de un cliente"
+          }
+        }
+      },
       "PortalFactura": {
         "type": "object",
         "required": [
@@ -108692,7 +108898,9 @@
           "promesa_activa",
           "monto_adeudado",
           "facturas_vencidas",
-          "empresa"
+          "empresa",
+          "identificado_por",
+          "motivo"
         ],
         "properties": {
           "identificado": {
@@ -108758,6 +108966,31 @@
               }
             ],
             "description": "Empresa del servicio de esa IP (su marca y su soporte); null sin identificar"
+          },
+          "identificado_por": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "codigo",
+              "ip"
+            ],
+            "description": "Cómo se identificó: codigo (el código de corte de la URL, `?c=` o `X-Argos-Corte`) o ip; null sin identificar (contratos/corte-identificacion.md)"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "codigo_vencido",
+              "ip_de_router",
+              "ip_de_servidor",
+              "ip_de_proxy",
+              "ip_desconocida"
+            ],
+            "description": "Por qué no se identificó; null si se identificó. codigo_vencido: el código no existe o ya venció. ip_de_router: la IP es de un router (hace NAT hacia el portal). ip_de_servidor: es del propio servidor. ip_de_proxy: es de un proxy o de la red de Docker. ip_desconocida: ningún servicio la tiene"
           }
         }
       },
@@ -115932,6 +116165,7 @@
           "nas_ip",
           "modo_seguridad",
           "tipo_conexion",
+          "corte_identificacion",
           "control_velocidad",
           "estrategia_velocidad",
           "routeros_version",
@@ -115997,6 +116231,14 @@
               "dhcp_fija"
             ],
             "description": "Tipo de conexión de los servicios del router (contratos/tipo-conexion-router.md): los nuevos lo toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)"
+          },
+          "corte_identificacion": {
+            "type": "string",
+            "enum": [
+              "ip",
+              "codigo"
+            ],
+            "description": "Cómo identifica el portal al suspendido (contratos/corte-identificacion.md): ip (por la IP de origen, sin NAT ni proxy en medio) o codigo (el web proxy del router, puerto 3346, redirige su HTTP a /corte?c=<código>; necesita la API del router)"
           },
           "control_velocidad": {
             "type": "string",

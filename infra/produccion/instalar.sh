@@ -29,6 +29,8 @@
 # ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
 # ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PORTAL_CORTE_PUERTO (corte, 8088), ARGOSISP_PROXIES_CONFIABLES (IP o
 # CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md),
+# ARGOSISP_IPS_SERVIDOR (IPs del servidor que nunca identifican a un cliente en /corte; por defecto las
+# de sus interfaces, la de ARGOSISP_WG_ENDPOINT si es una IP y las de ARGOSISP_PROXIES_CONFIABLES),
 # ARGOSISP_WG_RED, ARGOSISP_WG_PUERTO y ARGOSISP_WG_ENDPOINT (túnel WireGuard: red, puerto UDP y
 # nombre o IP pública para los routers; infra/wireguard/README.md), y para un nodo portal de prueba
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
@@ -296,6 +298,35 @@ if [ "$WIREGUARD" = 1 ]; then
     fi
 fi
 
+# IPs de este servidor para PORTAL_IPS_SERVIDOR (contratos/corte-identificacion.md §5 bis): si la página
+# de corte ve una de ellas no identifica a nadie (motivo ip_de_servidor) en vez de mostrar los datos de
+# otro cliente. Las de sus interfaces (sin Docker ni WireGuard), la IP de ARGOSISP_WG_ENDPOINT y las
+# del proxy de delante. La IP pública detrás de un NAT del ISP no está en ninguna interfaz: pásala en
+# ARGOSISP_IPS_SERVIDOR (o agrégala después al .env). Separadas por coma, como las lee la API.
+es_ip_o_cidr() {
+    [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$ ||
+        "$1" =~ ^[0-9A-Fa-f]*:[0-9A-Fa-f:.]*(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?$ ]]
+}
+IPS_SERVIDOR=""
+agregar_ip_servidor() {
+    es_ip_o_cidr "$1" || return 0
+    case ",$IPS_SERVIDOR," in *",$1,"*) return 0 ;; esac
+    IPS_SERVIDOR="${IPS_SERVIDOR:+$IPS_SERVIDOR,}$1"
+}
+if [ -n "${ARGOSISP_IPS_SERVIDOR:-}" ]; then
+    for ip in ${ARGOSISP_IPS_SERVIDOR//,/ }; do
+        es_ip_o_cidr "$ip" || morir "ARGOSISP_IPS_SERVIDOR: '$ip' no es una IP ni un CIDR (separa con espacios o comas)"
+        agregar_ip_servidor "$ip"
+    done
+else
+    while read -r _ ifaz _ dir _; do
+        case "$ifaz" in docker* | br-* | veth* | wg* | argosisp*) continue ;; esac
+        agregar_ip_servidor "${dir%/*}"
+    done < <(ip -o addr show scope global 2> /dev/null || true)
+fi
+agregar_ip_servidor "$WG_ENDPOINT"
+for ip in $PROXIES; do agregar_ip_servidor "$ip"; done
+
 # ---------------------------------------------------------------------------
 # 4. Paquete de la versión
 # ---------------------------------------------------------------------------
@@ -482,6 +513,10 @@ cat >> "$DIR/.env.nuevo" << EOF
 # Proxy de delante (Nginx Proxy Manager…): IP o CIDR separados por espacio de los que Caddy acepta
 # X-Forwarded-For / X-Real-IP. Vacía = no hay proxy delante. docs/runbooks/detras-de-proxy.md
 ARGOSISP_PROXIES_CONFIABLES="$PROXIES"
+
+# IPs de ESTE servidor (pública, LAN, proxy de delante), separadas por coma: nunca identifican a un
+# cliente en la página de corte. Si el servidor sale a internet por un NAT, agrega su IP pública.
+PORTAL_IPS_SERVIDOR=$IPS_SERVIDOR
 EOF
 fi
 if [ -n "$SUBNET_V4$SUBNET_V6" ]; then

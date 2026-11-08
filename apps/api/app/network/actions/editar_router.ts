@@ -6,6 +6,7 @@ import {
     avisarRadius,
     CAMPOS_RADIUS_EDICION,
     columnasRouter,
+    exigirApiSiCodigo,
     exigirCaValida,
     exigirNasIpSiRadius,
     exigirZona,
@@ -177,6 +178,8 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         // un router `api` necesita las credenciales de la API para PPPoE (las de esta misma edición cuentan)
         if (cambiaTipo) await exigirPppoeAdmitido(t.trx, id, datos.tipo_conexion!)
         const despues = await verRouter(id, t.trx)
+        // El modo `codigo` necesita la API también después de la edición (quitar la clave con `codigo` es 422).
+        exigirApiSiCodigo(despues.corte_identificacion, despues.api_usuario, despues.tiene_api_password)
 
         const a = auditableRouter(antes)
         const d = auditableRouter(despues)
@@ -209,6 +212,14 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
                 a: despues.tipo_conexion,
                 servicios: [],
                 motivo: 'edicion',
+            })
+        }
+        // Modo de identificación del corte: `routeros` reconcilia este router (proxy y reglas por servicio).
+        if (antes.corte_identificacion !== despues.corte_identificacion) {
+            await t.emit('portal.config_cambiada', {
+                empresa_id: null,
+                campos: ['corte_identificacion'],
+                router_id: id,
             })
         }
         const camposCatalogo: CampoCatalogoCambiado[] = []

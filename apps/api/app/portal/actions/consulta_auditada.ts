@@ -6,6 +6,10 @@ import { ventanaAuditoria, type VentanaAuditoria } from '#portal/auditoria_unica
 export interface EntradaConsultaPortal {
     /** IP de origen ya resuelta (`ipOrigenDeLaPeticion`), IPv4 o IPv6. */
     ip: string
+    /** Código de corte normalizado (`?c=` / `X-Argos-Corte`); se audita como `***` */
+    codigo?: string | null
+    /** La petición trajo un código sin formato válido */
+    codigoInvalido?: boolean
 }
 
 /**
@@ -24,7 +28,7 @@ export abstract class ConsultaPortalAuditada<Salida> {
     /** Nombre de la acción en `audit.acciones` (`portal.quien_soy`, `portal.estado`). */
     abstract readonly nombre: string
 
-    protected abstract leer(ip: string): Promise<Lectura<Salida>>
+    protected abstract leer(origen: EntradaConsultaPortal): Promise<Lectura<Salida>>
 
     async execute(
         input: EntradaConsultaPortal,
@@ -33,7 +37,7 @@ export abstract class ConsultaPortalAuditada<Salida> {
     ): Promise<Salida> {
         let lectura: Lectura<Salida>
         try {
-            lectura = await this.leer(input.ip)
+            lectura = await this.leer(input)
         } catch (error) {
             await new RegistrarConsultaPortal(this.nombre, null, error).execute(input, ctx)
             throw error
@@ -57,6 +61,9 @@ export abstract class ConsultaPortalAuditada<Salida> {
  * Con `error`, lo relanza para que quede auditado como `resultado = 'error'`.
  */
 export class RegistrarConsultaPortal extends DomainAction<EntradaConsultaPortal, void> {
+    /** El código de corte da acceso a la página de ese servicio: nunca en claro en `audit.acciones`. */
+    protected readonly camposEntradaOcultos = ['codigo']
+
     constructor(
         readonly nombre: string,
         private readonly servicioId: number | null,

@@ -1,3 +1,4 @@
+import type { OrigenPortal } from '#portal/identificacion'
 import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
@@ -85,7 +86,7 @@ export interface TitularPeticion {
  */
 export async function titularDeLaPeticion(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     servicioId: number | undefined,
 ): Promise<TitularPeticion> {
     if (servicioId !== undefined) {

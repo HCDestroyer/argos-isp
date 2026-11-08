@@ -1,7 +1,13 @@
 import { Decimal } from 'decimal.js'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { resolverIp } from '#network/consultas/ip'
+import {
+    comoOrigen,
+    identificarOrigen,
+    type IdentificadoPor,
+    type MotivoNoIdentificado,
+    type OrigenPortal,
+} from '#portal/identificacion'
 import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
 import { ESTADOS_PENDIENTES, type EstadoFactura } from '#billing/facturas'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
@@ -32,6 +38,10 @@ export interface QuienSoy {
     facturas_vencidas: { cantidad: number; total: string } | null
     /** Empresa del servicio de esa IP (marca y soporte de `/corte`) */
     empresa: MarcaEmpresa | null
+    /** Cómo se identificó: por el código de corte o por la IP; null sin identificar */
+    identificado_por: IdentificadoPor | null
+    /** Por qué no se identificó (`contratos/corte-identificacion.md` §4.1); null si se identificó */
+    motivo: MotivoNoIdentificado | null
 }
 
 /** Espejo del schema `EstadoPortal` (`app/portal/esquemas.ts`). */
@@ -72,10 +82,12 @@ const ZONA = 'America/Guatemala'
  * `monto_adeudado` = saldo (`total - pagado`) de las facturas en `emitida`, `parcial` o `vencida`.
  */
 export async function leerQuienSoy(
-    ip: string,
+    origen: string | OrigenPortal,
     cliente: QueryClientContract = db.connection(),
 ): Promise<Lectura<QuienSoy>> {
-    const servicioId = await resolverServicio(cliente, ip)
+    const { ip } = comoOrigen(origen)
+    const identificacion = await identificarOrigen(origen, cliente)
+    const servicioId = identificacion.servicioId
     const servicio = servicioId
         ? ((await cliente
               .from('core.servicios as s')
@@ -107,6 +119,8 @@ export async function leerQuienSoy(
                 monto_adeudado: null,
                 facturas_vencidas: null,
                 empresa: null,
+                identificado_por: null,
+                motivo: identificacion.motivo ?? 'ip_desconocida',
             },
         }
     }
@@ -123,16 +137,18 @@ export async function leerQuienSoy(
             monto_adeudado: adeudado.toFixed(2),
             facturas_vencidas: { cantidad: vencidas, total: vencidoTotal.toFixed(2) },
             empresa: await marcaDeEmpresa(Number(servicio.empresa_id), cliente),
+            identificado_por: identificacion.por,
+            motivo: null,
         },
     }
 }
 
 /** `GET /portal/estado`: solo estado y monto adeudado, sin nombre ni IP. */
 export async function leerEstado(
-    ip: string,
+    origen: string | OrigenPortal,
     cliente: QueryClientContract = db.connection(),
 ): Promise<Lectura<EstadoPortal>> {
-    const servicioId = await resolverServicio(cliente, ip)
+    const servicioId = await resolverServicio(cliente, origen)
     const servicio = servicioId
         ? ((await cliente.from('core.servicios').where('id', servicioId).select('id', 'estado').first()) as {
               id: number
@@ -150,13 +166,16 @@ export async function leerEstado(
 }
 
 /**
- * Servicio de una IP con `resolverIp` de A1 (`GET /ip/{ip}`, tarea 13), sin pasar por HTTP porque
- * este endpoint es público: sesiones activas y asignaciones vigentes, gana el prefijo más largo
- * y, a igual longitud, la sesión activa y la más reciente.
+ * Servicio de la petición (`identificarOrigen`, `#portal/identificacion`): el código de corte si trae
+ * uno vigente; si no, la IP con `resolverIp` de A1 (`GET /ip/{ip}`, tarea 13) salvo que sea de un
+ * router, del servidor o de un proxy (esas nunca identifican a nadie).
  */
-export async function resolverServicio(cliente: QueryClientContract, ip: string): Promise<number | null> {
-    const resolucion = await resolverIp(ip, cliente)
-    return resolucion?.servicio_id ?? null
+export async function resolverServicio(
+    cliente: QueryClientContract,
+    origen: string | OrigenPortal,
+): Promise<number | null> {
+    const identificacion = await identificarOrigen(origen, cliente)
+    return identificacion.servicioId
 }
 
 export interface SaldoServicio {
@@ -216,10 +235,10 @@ export function nombreParcial(nombre: string): string | null {
  * URL que configuró el operador: ningún dato del cliente.
  */
 export async function leerDestinoCorte(
-    ip: string,
+    origen: string | OrigenPortal,
     cliente: QueryClientContract = db.connection(),
 ): Promise<{ url: string | null }> {
-    const servicioId = await resolverServicio(cliente, ip)
+    const servicioId = await resolverServicio(cliente, origen)
     if (!servicioId) return { url: null }
     const fila = (await cliente
         .from('core.servicios as s')

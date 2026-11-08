@@ -21,6 +21,8 @@ const CAMPOS = [
     'monto_adeudado',
     'facturas_vencidas',
     'empresa',
+    'identificado_por',
+    'motivo',
 ]
 
 /** Marca de la empresa principal sin guardar (`version = 0`): valores por defecto del entorno. */
@@ -75,6 +77,8 @@ test.group('Portal: quien-soy por IP', (group) => {
             monto_adeudado: '399.75',
             facturas_vencidas: { cantidad: 2, total: '299.75' },
             empresa: marcaPrincipalPorDefecto(),
+            identificado_por: 'ip',
+            motivo: null,
         })
         assert.equal(respuesta.header('cache-control'), 'no-store')
     })
@@ -169,6 +173,8 @@ test.group('Portal: quien-soy por IP', (group) => {
             monto_adeudado: null,
             facturas_vencidas: null,
             empresa: null,
+            identificado_por: null,
+            motivo: 'ip_desconocida',
         })
 
         const nuevo = await crearServicio({ estado: 'activo', nombre: 'Pedro' })

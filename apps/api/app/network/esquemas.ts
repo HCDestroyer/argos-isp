@@ -124,6 +124,13 @@ export const Router = definirEsquema(
                     'toman de aquí y un tipo distinto en el alta es 422 tipo_conexion_del_router. Se cambia con ' +
                     'POST /routers/:id/cambiar-tipo-conexion (o PUT si ningún servicio cambia)',
             },
+            corte_identificacion: {
+                ...enumerado(['ip', 'codigo']),
+                description:
+                    'Cómo identifica el portal al suspendido (contratos/corte-identificacion.md): ip (por la IP de ' +
+                    'origen, sin NAT ni proxy en medio) o codigo (el web proxy del router, puerto 3346, redirige su ' +
+                    'HTTP a /corte?c=<código>; necesita la API del router)',
+            },
             control_velocidad: {
                 ...enumerado(['simple', 'arbol_pcq']),
                 description:
@@ -978,6 +985,8 @@ const CODIGOS_CORTE = [
     'dns_router_sin_remotas',
     'portal_no_acepta_host',
     'portal_en_router',
+    'portal_ve_otra_ip',
+    'proxy_corte',
 ]
 
 const problemaEstrategia = objeto({
@@ -1191,6 +1200,8 @@ export const DiagnosticoCorte = definirEsquema(
                         'dns_router',
                         'portal_host',
                         'portal_en_router',
+                        'portal_ip_cliente',
+                        'proxy_corte',
                     ]),
                     description:
                         'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
@@ -1198,7 +1209,10 @@ export const DiagnosticoCorte = definirEsquema(
                         'lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, ' +
                         'dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los ' +
                         'clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), ' +
-                        'portal_en_router (el destino del NAT no es una IP del propio router)',
+                        'portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente ' +
+                        '(qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la ' +
+                        'identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: ' +
+                        'el web proxy en el puerto 3346, la regla final y una por suspendido)',
                 },
                 ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
                 codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },

@@ -20,8 +20,11 @@ import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/
 import type { RutaRouterOS } from '#network/routeros/cliente'
 import { RUTAS_ORDENADAS, type Propiedades } from '#network/routeros/cliente'
 import {
+    ajusteProxy,
+    esAccesoDeServicio,
     movimientos,
     normalizarDireccion,
+    ordenAccesoProxy,
     ordenDeseado,
     type EstadoCorte,
     type ResolverIPv4,
@@ -182,7 +185,7 @@ export async function enTransicion(routerId: number): Promise<boolean> {
 
 export interface Cambio {
     /** `/ppp/active`: una sesión quitada para que tome el secret o el perfil nuevo (PPPoE sin RADIUS) */
-    ruta: RutaRouterOS | '/ppp/active'
+    ruta: RutaRouterOS | '/ppp/active' | '/ip/proxy'
     comment: string
     /** `conexiones_cortadas`: conntrack del servicio quitado al suspender (WISP) */
     accion: 'creado' | 'actualizado' | 'borrado' | 'movido' | 'desconectado' | 'conexiones_cortadas'
@@ -553,6 +556,70 @@ export async function aplicarCorte(
         cambio(c, 'borrado')
     }
     return hechos
+}
+
+/*
+|--------------------------------------------------------------------------
+| Corte por código: web proxy del router (`contratos/corte-identificacion.md`)
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Deja `/ip proxy` como pide el modo del router (`ajusteProxy`): con `codigo`, habilitado y con el puerto
+ * del corte; con `ip`, sin ese puerto (y apagado si solo era del corte). Lo demás del operador no se toca.
+ */
+export async function asegurarProxyCorte(
+    cliente: ClienteRouterOS,
+    codigo: boolean,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const ajuste = ajusteProxy(await cliente.leerProxy(), codigo)
+    if (!ajuste) return []
+    await cliente.ajustarProxy(ajuste, ctx)
+    return [{ ruta: '/ip/proxy', comment: Object.keys(ajuste).join(','), accion: 'actualizado' }]
+}
+
+/**
+ * Pone las reglas por servicio de `/ip proxy access` antes de la final sin código, y las del corte antes
+ * de las del operador (`ordenAccesoProxy`). Una regla nueva queda al final: sin esto nunca se usaría.
+ */
+export async function ordenarAccesoProxy(cliente: ClienteRouterOS, ctx: ContextoRed): Promise<Cambio[]> {
+    const leida = await cliente.listar('/ip/proxy/access')
+    const tabla = leida.filter((o) => o.dynamic !== 'true')
+    const cambios: Cambio[] = []
+    for (const m of movimientos(tabla, ordenAccesoProxy(tabla))) {
+        await cliente.mover('/ip/proxy/access', m.id, m.destino, ctx)
+        cambios.push({
+            ruta: '/ip/proxy/access',
+            comment: tabla.find((o) => o['.id'] === m.id)?.comment ?? m.id,
+            accion: 'movido',
+        })
+    }
+    return cambios
+}
+
+/**
+ * Una IP o prefijo es de un solo servicio: al escribir la regla de un suspendido se borran las reglas de
+ * **otro** servicio con la misma `src-address` (la de un servicio retirado o reactivado con el router
+ * caído, cuya IP tomó este). Sin esto, la regla vieja ganaría y mandaría al cliente con el código ajeno.
+ */
+export async function liberarAccesoProxy(
+    cliente: ClienteRouterOS,
+    estado: EstadoDeseado,
+    ctx: ContextoRed,
+): Promise<Cambio[]> {
+    const propias = estado.presentes.filter((o) => o.ruta === '/ip/proxy/access')
+    if (propias.length === 0) return []
+    const comentarios = new Set(propias.map((o) => o.comment))
+    const direcciones = new Set(propias.map((o) => normalizarDireccion(o.propiedades['src-address'] ?? '')))
+    const cambios: Cambio[] = []
+    for (const o of await cliente.listar('/ip/proxy/access')) {
+        if (!esAccesoDeServicio(o) || comentarios.has(o.comment!)) continue
+        if (!direcciones.has(normalizarDireccion(o['src-address'] ?? ''))) continue
+        await cliente.borrarPorId('/ip/proxy/access', o['.id'], { ...ctx, motivo: 'liberar src-address' })
+        cambios.push({ ruta: '/ip/proxy/access', comment: o.comment!, accion: 'borrado' })
+    }
+    return cambios
 }
 
 /** ¿Alguna estrategia del router (o de un plan en él) pide excluir de FastTrack a los clientes? */

@@ -140,6 +140,21 @@ function descartarPago() {
     void router.replace({ query })
 }
 
+/**
+ * Código de corte de `?c=` (modo código del router): ya lo tomó el cliente HTTP al cargar
+ * (`plugins/api.ts`); se quita de la barra de direcciones para que no quede en el historial ni en una
+ * captura de pantalla. Sigue en la pestaña y viaja en `X-Argos-Corte`.
+ */
+const codigoCorte = useCodigoCorte()
+onMounted(() => {
+    codigoCorte.tomarDeLaRuta(route.query.c)
+    if (route.query.c !== undefined) {
+        const query = { ...route.query }
+        delete query.c
+        void router.replace({ query })
+    }
+})
+
 function alCambiarVisibilidad() {
     if (document.visibilityState === 'visible') {
         vigilarEstado()

@@ -196,3 +196,15 @@ export const RUTA_DESTINO_CORTE = '/api/v1/portal/destino-corte'
 
 /** Espera máxima de esa consulta: si la API tarda, se usa la `/corte` del portal. */
 export const ESPERA_DESTINO_MS = 1500
+
+/**
+ * Código de corte de `/corte?c=<código>` (lo pone el proxy del router en modo código), o null en otra
+ * ruta o sin código con formato (13 símbolos base32; la API decide si existe).
+ */
+export function codigoCorteDeLaRuta(ruta: string, valor: unknown): string | null {
+    if (ruta !== RUTA_CORTE || typeof valor !== 'string') {
+        return null
+    }
+    const codigo = valor.trim().toUpperCase()
+    return /^[0-9A-HJKMNP-TV-Z]{13}$/.test(codigo) ? codigo : null
+}

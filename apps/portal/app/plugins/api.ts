@@ -10,10 +10,16 @@ import { rutasFixture } from '~~/fixtures'
 export default defineNuxtPlugin(() => {
     const config = useRuntimeConfig()
     const usarFixtures = config.public.useFixtures === true
+    // Código de corte de `/corte?c=` (modo código del router): va en cada llamada (`X-Argos-Corte`).
+    const { codigo, tomarDeLaRuta } = useCodigoCorte()
+    if (import.meta.client) {
+        tomarDeLaRuta(new URLSearchParams(window.location.search).get('c'))
+    }
 
     const api = crearClientePortal({
         baseUrl: usarFixtures ? ORIGEN_FIXTURES : baseUrlApi(config.public.apiBase, config.apiBaseInternal),
         fetch: usarFixtures ? crearFetchFixtures(rutasFixture, { demoraMs: import.meta.test ? 0 : 150 }) : undefined,
+        codigoCorte: () => codigo.value,
     })
 
     return {

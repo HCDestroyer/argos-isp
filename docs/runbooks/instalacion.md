@@ -58,8 +58,9 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`).
 4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone en `infra/README.md`, "Respaldos". Después de editar el `.env`: `sudo argosisp levantar`.
 5. RADIUS: con WireGuard no hay nada que hacer (RADIUS queda en la IP del túnel, abajo). Sin WireGuard, en `.env`, `RADIUS_BIND_IP` = la IP por la que llegan los MikroTik (la de la LAN). `COA_ORIGEN_IP` se deja **vacía**: `coa` corre en la red bridge del compose y su socket solo puede usar la IP del contenedor (con la IP del servidor, el `bind` falla); el NAT de Docker cambia el origen por la IP del servidor en la interfaz hacia el router, y esa es la que cada MikroTik debe tener en `/radius` (`radiusAddr`, `infra/mikrotik/README.md`). Da de alta los routers en el panel y genera los clientes de FreeRADIUS con `sudo argosisp radius-clientes`. Configuración del router: `infra/mikrotik/README.md`.
-6. HSTS del portal: empieza en 300 s (`PORTAL_HSTS_MAX_AGE`); súbelo a `31536000` cuando el certificado del portal funcione.
-7. Opcional: parches automáticos con `sudo argosisp auto activar` (`docs/runbooks/actualizacion.md`).
+6. **IPs del servidor en `/corte`**: `PORTAL_IPS_SERVIDOR` en el `.env` lista las IPs de este servidor (las de sus interfaces, la de `ARGOSISP_WG_ENDPOINT` si es una IP y las del proxy de delante; las pone el instalador, o las que pases en `ARGOSISP_IPS_SERVIDOR`). Si la página de corte ve una de ellas, dice «no pudimos identificar tu servicio» en vez de mostrar los datos de otro cliente. Si el servidor sale a internet por un NAT, su IP pública no está en ninguna interfaz: agrégala (separadas por coma) y `sudo argosisp levantar`. `sudo argosisp estado` avisa si falta. Cuando el router hace NAT hacia el portal, pásalo a **Identificación por código** (`docs/runbooks/actualizacion.md`, «Identificación del cortado»).
+7. HSTS del portal: empieza en 300 s (`PORTAL_HSTS_MAX_AGE`); súbelo a `31536000` cuando el certificado del portal funcione.
+8. Opcional: parches automáticos con `sudo argosisp auto activar` (`docs/runbooks/actualizacion.md`).
 
 ## Qué queda en el servidor
 

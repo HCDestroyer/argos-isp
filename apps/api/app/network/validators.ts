@@ -126,6 +126,23 @@ const tipoConexionRouter = () =>
                 'tipo_conexion_con_servicios (usar POST /routers/:id/cambiar-tipo-conexion)',
         })
 
+/**
+ * Cómo identifica el portal al suspendido del router (`contratos/corte-identificacion.md`, decisión del PM
+ * P1): `ip` (por la IP de origen) o `codigo` (el proxy del router redirige a `/corte?c=`; exige la API).
+ */
+export const CORTE_IDENTIFICACION = ['ip', 'codigo'] as const
+
+const corteIdentificacion = () =>
+    vine
+        .enum(CORTE_IDENTIFICACION)
+        .optional()
+        .meta({
+            description:
+                'Cómo identifica el portal al suspendido de este router: ip (por la IP de origen; solo sirve sin NAT ' +
+                'ni proxy entre el router y el portal) o codigo (el web proxy del router redirige su HTTP a ' +
+                '/corte?c=<código>; necesita la API del router, 422 corte_codigo_sin_api). Alta sin el campo: ip',
+        })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -149,6 +166,7 @@ const camposRouter = {
         }),
     modo_seguridad: modoSeguridad(),
     tipo_conexion: tipoConexionRouter(),
+    corte_identificacion: corteIdentificacion(),
     empresa_sugerida_id: empresaSugerida(),
     zona_id: zonaRouter(),
     coordenadas: coordenadasRouter(),
@@ -209,6 +227,7 @@ export const editarRouterValidator = conMensajes(
             }),
             modo_seguridad: modoSeguridad(),
             tipo_conexion: tipoConexionRouter(),
+            corte_identificacion: corteIdentificacion(),
             empresa_sugerida_id: empresaSugerida(),
             zona_id: zonaRouter(),
             coordenadas: coordenadasRouter(),

@@ -4,7 +4,7 @@ import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Problema, ReglaNegocio } from '#shared/errores'
 import { normalizarNitCui } from '#core/nit_cui'
-import { resolverIp } from '#network/consultas/ip'
+import { identificarOrigen } from '#portal/identificacion'
 import { DemasiadasPeticiones } from '#portal/limite_peticiones'
 import { configAcceso, describirDestino, generarCodigo, hashCodigo } from '#portal/acceso/codigos'
 import { leerEmpresa } from '#portal/empresa'
@@ -32,6 +32,11 @@ export interface EntradaSolicitarCodigo {
     identificador?: string
     /** Identificar por la IP de origen (desde `/corte`). */
     por_ip?: boolean
+    /**
+     * Código de corte vigente de `/corte?c=` (modo `codigo` del router): con `por_ip`, identifica por él
+     * antes que por la IP. Se audita como `***`.
+     */
+    codigo?: string | null
 }
 
 /** Espejo del schema `PortalSolicitudCodigo`. */
@@ -69,6 +74,7 @@ interface ClienteDestino {
  */
 export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitarCodigo, SolicitudCodigo> {
     readonly nombre = 'portal.solicitar_codigo'
+    protected readonly camposEntradaOcultos = ['codigo']
 
     protected async handle(input: EntradaSolicitarCodigo, t: Transaccion): Promise<SolicitudCodigo> {
         const config = configAcceso()
@@ -77,9 +83,24 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
         const ciega: SolicitudCodigo = { solicitud, expira_en: expira.toISO()!, destino: null }
         const porIp = input.por_ip === true
 
-        const resolucion = porIp ? await resolverIp(input.ip, t.trx) : null
+        const identificado = porIp
+            ? await identificarOrigen({ ip: input.ip, codigo: input.codigo ?? null }, t.trx)
+            : null
+        const servicioId = identificado?.servicioId ?? null
+        const delServicio =
+            servicioId === null
+                ? null
+                : ((await t.trx
+                      .from('core.servicios')
+                      .where('id', servicioId)
+                      .select('cliente_id')
+                      .first()) as {
+                      cliente_id: number | string
+                  } | null)
         const clienteId = porIp
-            ? (resolucion?.cliente_id ?? null)
+            ? delServicio
+                ? Number(delServicio.cliente_id)
+                : null
             : await clientePorIdentificador(t.trx, input.identificador ?? '')
         if (clienteId === null) {
             if (porIp) {
@@ -115,7 +136,7 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
         // cliente (la del servicio de la IP o su principal) y, por Telegram, por un bot que el
         // cliente inició (`contratos/telegram.md`, "Varios bots").
         const preferida =
-            (resolucion ? await empresaDelServicio(resolucion.servicio_id, t.trx) : null) ??
+            (servicioId !== null ? await empresaDelServicio(servicioId, t.trx) : null) ??
             (await empresaPrincipalDelCliente(clienteId, t.trx))
         const telegram = cliente.telegram_chat_id
             ? await botParaElCodigo(t.trx, clienteId, preferida, cliente.telegram_chat_id)

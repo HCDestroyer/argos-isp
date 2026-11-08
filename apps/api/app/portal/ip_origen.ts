@@ -46,8 +46,11 @@ export function normalizarIp(valor: string | undefined | null): string | null {
 
 const cacheListas = new Map<string, BlockList>()
 
-/** Lista de proxies confiables. Lanza si una entrada no es IP ni CIDR válido (error de configuración). */
-export function listaConfiables(texto: string): BlockList {
+/**
+ * Lista de IPs o CIDR (proxies confiables, IPs del servidor). Lanza si una entrada no es IP ni CIDR
+ * válido (error de configuración); `variable` nombra la variable en el mensaje.
+ */
+export function listaConfiables(texto: string, variable = 'PORTAL_PROXIES_CONFIABLES'): BlockList {
     const previa = cacheListas.get(texto)
     if (previa) return previa
 
@@ -62,7 +65,7 @@ export function listaConfiables(texto: string): BlockList {
         const largo = prefijo === undefined ? (familia === 'ipv4' ? 32 : 128) : Number(prefijo)
         const maximo = familia === 'ipv4' ? 32 : 128
         if (!ip || !familia || !Number.isInteger(largo) || largo < 0 || largo > maximo) {
-            throw new Error(`PORTAL_PROXIES_CONFIABLES: entrada inválida "${entrada}"`)
+            throw new Error(`${variable}: entrada inválida "${entrada}"`)
         }
         lista.addSubnet(ip, largo, familia)
     }

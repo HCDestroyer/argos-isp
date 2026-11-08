@@ -1,5 +1,6 @@
 import { request as httpRequest } from 'node:http'
-import { configCorteVigente } from '#network/routeros/corte_vigente'
+import { configCorteVigente, corteUrlVigente } from '#network/routeros/corte_vigente'
+import { codigosAbiertos } from '#portal/codigos_corte'
 import env from '#start/env'
 import {
     RUTAS_ORDENADAS,
@@ -18,7 +19,12 @@ import {
     estadoCorteRouter,
     normalizarDireccion,
     REGLA_NAT_HTTP,
+    REGLA_PROXY_SIN_CODIGO,
+    PUERTO_PROXY_CORTE,
+    ajusteProxy,
+    ordenAccesoProxy,
     revisarDnsRouter,
+    urlCorteConCodigo,
     urlNat,
     type ConfigCorte,
     type EstadoCorte,
@@ -44,6 +50,7 @@ import { familia } from '#network/estrategia_velocidad'
 import {
     estadoDeseado,
     estadoVacio,
+    reglasAccesoProxy,
     RUTAS_SERVICIO,
     servicioDeComment,
     type ServicioRed,
@@ -113,6 +120,7 @@ export async function vistaPreviaReconciliar(
         error: null,
     }
     const todos = await serviciosVigentesDeRouter(routerId)
+    const modoCodigo = await conCodigosAbiertos(router, todos)
     const planes = planesDeRouter(router.velocidad, todos)
     try {
         const cliente = (opciones.clientes ?? fabricaPorDefecto)(router.api)
@@ -126,6 +134,7 @@ export async function vistaPreviaReconciliar(
                     redes_v4: await redesV4DeRouter(routerId),
                     local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
                     gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    identificacion: modoCodigo ? 'codigo' : 'ip',
                 },
                 lecturaCorte.get('/ppp/profile') ?? [],
             )
@@ -267,6 +276,8 @@ export type ClaveChequeoCorte =
     | 'dns_router'
     | 'portal_host'
     | 'portal_en_router'
+    | 'portal_ip_cliente'
+    | 'proxy_corte'
 
 export type CodigoProblemaCorte =
     | 'sin_api'
@@ -289,6 +300,8 @@ export type CodigoProblemaCorte =
     | 'dns_router_sin_remotas'
     | 'portal_no_acepta_host'
     | 'portal_en_router'
+    | 'portal_ve_otra_ip'
+    | 'proxy_corte'
 
 export interface ChequeoCorte {
     clave: ClaveChequeoCorte
@@ -365,7 +378,8 @@ export const LIMITES_CORTE = [
         '«DNS privado» en modo estricto (un nombre fijo): ahí el teléfono dice «sin internet» hasta que el cliente ' +
         'lo pone en «Automático».',
     'El portal debe responder /corte con cualquier encabezado Host (llega el del sitio que el cliente quiso ' +
-        'abrir) y ver la IP real del cliente, sin NAT de origen, para saber quién es.',
+        'abrir). Para saber quién es, en modo «ip» necesita ver la IP real del cliente (sin NAT ni proxy en medio); ' +
+        'en modo «código» el router lo manda con su código y la IP no importa.',
 ]
 
 const FILTRO_V4 = '/ip/firewall/filter'
@@ -940,6 +954,187 @@ function suspendidosConIp(servicios: ServicioRed[]): SuspendidoFueraDeLista[] {
         .filter((s) => s.ipv4 !== '')
 }
 
+/**
+ * Modo de identificación del router y, en modo `codigo`, la URL de la regla de cada suspendido con su
+ * código abierto (sin crear códigos: la vista previa y el diagnóstico solo leen).
+ */
+async function conCodigosAbiertos(
+    router: { con_credenciales: boolean; red: { corte_identificacion?: 'ip' | 'codigo' } },
+    todos: ServicioRed[],
+): Promise<boolean> {
+    const modoCodigo = router.con_credenciales && router.red.corte_identificacion === 'codigo'
+    if (!modoCodigo) return false
+    const base = await corteUrlVigente()
+    const codigos = await codigosAbiertos(
+        todos.filter((s) => s.estado === 'suspendido').map((s) => s.servicio_id),
+    )
+    for (const s of todos) {
+        const codigo = codigos.get(s.servicio_id)
+        if (codigo && base && s.estado === 'suspendido') s.url_corte_codigo = urlCorteConCodigo(base, codigo)
+    }
+    return true
+}
+
+/** Suspendidos con regla de proxy esperada (código abierto y alguna dirección). */
+function suspendidosConCodigo(todos: ServicioRed[]): number[] {
+    return todos.filter((s) => reglasAccesoProxy(s).length > 0).map((s) => s.servicio_id)
+}
+
+/**
+ * ¿Qué IP ve el portal cuando le habla un cliente de este router? `/tool/fetch` desde el router con
+ * `src-address` = el gateway de sus clientes (la dirección del router en la red de clientes: el masquerade
+ * hacia la WAN la trata como a un cliente) a `/api/v1/portal/eco-ip` de la URL pública del portal (por donde
+ * van la página y `quien-soy`). Si el portal ve otra IP, hay NAT o un proxy en medio: la identificación
+ * por IP no reconoce a los suspendidos (bug del PM, v1.12.0; `contratos/corte-identificacion.md`).
+ */
+async function chequeoIpCliente(
+    cliente: ClienteRouterOS,
+    config: ConfigCorte,
+    gateways: string[],
+    modoCodigo: boolean,
+    requestId: string | null,
+): Promise<ChequeoCorte> {
+    const gateway = gateways[0]
+    const base = config.corte_url ?? config.nat_url
+    if (!gateway || !base) {
+        return {
+            clave: 'portal_ip_cliente',
+            ok: null,
+            codigo: null,
+            detalle: !gateway
+                ? 'El router no tiene redes de clientes en Argos: no se puede probar qué IP ve el portal'
+                : 'Argos no sabe la dirección del portal: no se puede probar qué IP ve',
+            comandos: [],
+            reconciliar: false,
+        }
+    }
+    const url = new URL('/api/v1/portal/eco-ip', base).toString()
+    const prueba = `/tool fetch url="${url}" src-address=${gateway} output=user`
+    let vista = null as { ip?: unknown; infraestructura?: unknown } | null
+    try {
+        const resultado = await cliente.ejecutar(
+            '/tool/fetch',
+            { url, 'src-address': gateway, output: 'user' },
+            { motivo: 'diagnóstico de corte: ¿qué IP ve el portal?', request_id: requestId },
+        )
+        const datos = resultado.find((r) => typeof r.data === 'string')?.data
+        vista = datos ? (JSON.parse(datos) as { ip?: unknown; infraestructura?: unknown }) : null
+    } catch (error) {
+        if (!(error instanceof ErrorRouterOS) && !(error instanceof SyntaxError)) throw error
+        return {
+            clave: 'portal_ip_cliente',
+            ok: null,
+            codigo: null,
+            detalle: `No se pudo preguntar al portal qué IP ve desde ${gateway}: ${error.message}`,
+            comandos: [prueba],
+            reconciliar: false,
+        }
+    }
+    const ip = typeof vista?.ip === 'string' ? vista.ip : null
+    if (!ip) {
+        return {
+            clave: 'portal_ip_cliente',
+            ok: null,
+            codigo: null,
+            detalle: `El portal no dijo qué IP ve (${url}); revisa que el portal sea de esta versión`,
+            comandos: [prueba],
+            reconciliar: false,
+        }
+    }
+    if (ip === gateway) {
+        return bien(
+            'portal_ip_cliente',
+            `El portal ve la IP del cliente (${gateway}): sin NAT ni proxy en medio, la identificación por IP funciona`,
+        )
+    }
+    const quien =
+        vista?.infraestructura === 'ip_de_proxy'
+            ? ' (un proxy o la red de Docker del servidor)'
+            : vista?.infraestructura === 'ip_de_servidor'
+              ? ' (el propio servidor)'
+              : vista?.infraestructura === 'ip_de_router'
+                ? ' (un router)'
+                : ''
+    const visto =
+        `El portal ve la IP ${ip}${quien} en vez de la del cliente (${gateway}): hay NAT (masquerade del router ` +
+        'hacia el portal) o un proxy en medio, así que la IP no sirve para saber quién es el suspendido'
+    if (modoCodigo) {
+        return bien(
+            'portal_ip_cliente',
+            `${visto}. Este router identifica por código de corte: no depende de la IP`,
+        )
+    }
+    return mal(
+        'portal_ip_cliente',
+        'portal_ve_otra_ip',
+        `${visto}. Pasa el router a «Identificación por código» (editar el router; necesita su API): el router ` +
+            'manda a cada suspendido a /corte con su código. Sin API: túnel WireGuard sin masquerade hacia el portal',
+        [prueba],
+        false,
+    )
+}
+
+/**
+ * Modo código: el web proxy del router con el puerto del corte, la regla final y una regla por suspendido
+ * con código. «Reconciliar ahora» lo deja bien.
+ */
+async function chequeoProxyCorte(
+    cliente: ClienteRouterOS,
+    lectura: LecturaCorte,
+    conCodigo: number[],
+    corteUrl: string | null,
+): Promise<ChequeoCorte> {
+    let proxy: Record<string, string> | null = null
+    try {
+        proxy = await cliente.leerProxy()
+    } catch (error) {
+        if (!(error instanceof ErrorRouterOS)) throw error
+    }
+    const problemas: string[] = []
+    if (!proxy || ajusteProxy(proxy, true) !== null) {
+        problemas.push(`el web proxy del router no está activo en el puerto ${PUERTO_PROXY_CORTE}`)
+    }
+    const acceso = (lectura.get('/ip/proxy/access') ?? []).filter((o) => o.dynamic !== 'true')
+    const final = acceso.find((o) => o.comment === REGLA_PROXY_SIN_CODIGO && o.disabled !== 'true')
+    if (!final) {
+        // Sin regla final, el proxy reenvía a internet lo que no tiene regla (sale por `output`, sin corte).
+        problemas.push(
+            'falta la regla final del proxy de corte: un suspendido sin su regla navegaría por HTTP a través del proxy',
+        )
+    } else if (final.action !== (corteUrl ? 'redirect' : 'deny')) {
+        problemas.push(`la regla final del proxy de corte tiene action=${final.action ?? '?'}`)
+    }
+    // Las reglas del operador (sin `local-port`) no deben ganarle a las del corte en el puerto 3346.
+    const actual = acceso.map((o) => o['.id'])
+    if (ordenAccesoProxy(acceso).some((id, i) => actual[i] !== id)) {
+        problemas.push(
+            'hay reglas de /ip proxy access antes de las del corte (podrían dejar pasar el puerto 3346)',
+        )
+    }
+    const conRegla = new Set(acceso.map((o) => servicioDeComment(o.comment)).filter((x) => x !== null))
+    const sinRegla = conCodigo.filter((id) => !conRegla.has(id))
+    if (sinRegla.length > 0) {
+        problemas.push(
+            `${sinRegla.length} ${sinRegla.length === 1 ? 'suspendido no tiene' : 'suspendidos no tienen'} su regla ` +
+                `con código (servicios ${sinRegla.slice(0, 10).join(', ')})`,
+        )
+    }
+    if (problemas.length === 0) {
+        return bien(
+            'proxy_corte',
+            `El proxy de corte está activo (puerto ${PUERTO_PROXY_CORTE}) y los ${conCodigo.length} suspendidos tienen su ` +
+                'regla con código',
+        )
+    }
+    return mal(
+        'proxy_corte',
+        'proxy_corte',
+        `Identificación por código: ${problemas.join('; ')}. «Reconciliar ahora» lo corrige`,
+        ['/ip proxy print', '/ip proxy access print'],
+        true,
+    )
+}
+
 export async function diagnosticoCorte(
     routerId: number,
     opciones: OpcionesDispatcher = {},
@@ -978,6 +1173,7 @@ export async function diagnosticoCorte(
         return salida
     }
     const todos = await serviciosVigentesDeRouter(routerId)
+    const modoCodigo = await conCodigosAbiertos(router, todos)
     try {
         const cliente = (opciones.clientes ?? fabricaPorDefecto)(router.api)
         try {
@@ -990,6 +1186,7 @@ export async function diagnosticoCorte(
                     redes_v4: await redesV4DeRouter(routerId),
                     local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
                     gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    identificacion: modoCodigo ? 'codigo' : 'ip',
                 },
                 lectura.get('/ppp/profile') ?? [],
             )
@@ -1023,7 +1220,19 @@ export async function diagnosticoCorte(
                         throw error
                     }),
                 ),
+                await chequeoIpCliente(
+                    cliente,
+                    config,
+                    gatewaysDeRedes(router.velocidad.redes_ipv4),
+                    modoCodigo,
+                    requestId,
+                ),
             )
+            if (modoCodigo) {
+                salida.chequeos.push(
+                    await chequeoProxyCorte(cliente, lectura, suspendidosConCodigo(todos), config.corte_url),
+                )
+            }
         } finally {
             cliente.cerrar()
         }

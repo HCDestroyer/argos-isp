@@ -197,6 +197,16 @@ export class ConsumidorRouterOS implements ConsumidorEventos {
             // Solo `modo_suspension` no toca los routers (lo lee `coa`).
             const campos = Array.isArray(evento.payload.campos) ? evento.payload.campos : null
             if (campos && !campos.some((c) => typeof c === 'string' && CAMPOS_RED_PORTAL.has(c))) return
+            // Modo de identificación de un router (`routers.editar`, `contratos/corte-identificacion.md`):
+            // solo ese router.
+            const soloRouter = Number(evento.payload.router_id)
+            if (Number.isInteger(soloRouter) && soloRouter > 0) {
+                await new ReconciliarRouterOS(opciones).execute(
+                    { router_id: soloRouter, motivo: 'corte_identificacion', evento_id: String(evento.id) },
+                    ctx,
+                )
+                return
+            }
             for (const routerId of await routersConApi()) {
                 await new ReconciliarRouterOS(opciones).execute(
                     { router_id: routerId, motivo: 'portal', evento_id: String(evento.id) },

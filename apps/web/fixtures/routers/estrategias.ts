@@ -570,6 +570,7 @@ export function diagnosticoCorte(router: Router): DiagnosticoCorte {
         { clave: 'fasttrack', ok: true, codigo: null, detalle: 'Los saltos de corte van antes de FastTrack.', comandos: [], reconciliar: false },
         { clave: 'perfil_suspendido', ok: true, codigo: null, detalle: 'El perfil suspendido pone sus sesiones en la lista suspendidos.', comandos: [], reconciliar: false },
         { clave: 'walled_garden', ok: true, codigo: null, detalle: 'argos-portal y argos-walled tienen el portal y la pasarela.', comandos: [], reconciliar: false },
+        ...chequeosIdentificacion(router, reconciliado, suspendidos.length),
     ]
     const problemas: DiagnosticoCorte['problemas'] = chequeos
         .filter((c): c is Chequeo & { codigo: NonNullable<Chequeo['codigo']> } => c.ok === false && c.codigo !== null)
@@ -587,6 +588,31 @@ export function diagnosticoCorte(router: Router): DiagnosticoCorte {
 }
 
 type Chequeo = DiagnosticoCorte['chequeos'][number]
+
+/**
+ * Identificación del cliente cortado (A5, `contratos/corte-identificacion.md` §5 bis): `portal_ip_cliente`
+ * (qué IP ve el portal desde la red de clientes) y, solo en modo código, `proxy_corte`. RB-Centro PCQ (4)
+ * está detrás de un masquerade y en modo IP: rojo `portal_ve_otra_ip`, el caso del PM. En modo código el
+ * chequeo es informativo (verde) y el proxy queda bien tras «Reconciliar ahora»; CCR-Mixco (2) ya lo tiene.
+ */
+function chequeosIdentificacion(router: Router, reconciliado: boolean, suspendidos: number): Chequeo[] {
+    const gateway = bd.redesIpv4.find(r => r.router_id === router.id && r.gateway)?.gateway ?? '100.64.12.1'
+    const prueba = `/tool fetch url="${PORTAL}/api/v1/portal/eco-ip" src-address=${gateway} output=user`
+    const conNat = router.id === 4 || router.id === 2
+    const visto = `El portal ve la IP 203.0.113.${20 + router.id} (el propio servidor) en vez de la del cliente (${gateway}): hay NAT (masquerade del router hacia el portal) o un proxy en medio, así que la IP no sirve para saber quién es el suspendido`
+    const ipCliente: Chequeo = !conNat
+        ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `El portal ve la IP del cliente (${gateway}): sin NAT ni proxy en medio, la identificación por IP funciona`, comandos: [], reconciliar: false }
+        : router.corte_identificacion === 'codigo'
+            ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `${visto}. Este router identifica por código de corte: no depende de la IP`, comandos: [], reconciliar: false }
+            : { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. Pasa el router a «Identificación por código» (editar el router; necesita su API): el router manda a cada suspendido a /corte con su código. Sin API: túnel WireGuard sin masquerade hacia el portal`, comandos: [prueba], reconciliar: false }
+    if (router.corte_identificacion !== 'codigo') {
+        return [ipCliente]
+    }
+    const proxy: Chequeo = reconciliado || router.id === 2
+        ? { clave: 'proxy_corte', ok: true, codigo: null, detalle: `El proxy de corte está activo (puerto 3346) y los ${suspendidos} suspendidos tienen su regla con código`, comandos: [], reconciliar: false }
+        : { clave: 'proxy_corte', ok: false, codigo: 'proxy_corte', detalle: 'Identificación por código: el web proxy del router no está activo en el puerto 3346; falta la regla final del proxy (sin código). «Reconciliar ahora» lo corrige', comandos: ['/ip proxy print', '/ip proxy access print'], reconciliar: true }
+    return [ipCliente, proxy]
+}
 
 function routerDe(solicitud: SolicitudFixture): Router | undefined {
     return bd.routers.find(r => r.id === idDe(solicitud))

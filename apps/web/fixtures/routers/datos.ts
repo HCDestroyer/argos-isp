@@ -27,6 +27,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.10.0.1',
         modo_seguridad: 'radius',
+        corte_identificacion: 'ip',
         tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Control por capas (A2): migrado de «simple», RouterOS 7 leído por la reconciliación.
@@ -54,6 +55,8 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.20.0.1',
         modo_seguridad: 'radius',
+        // Identificación del cliente cortado por código (A5, `contratos/corte-identificacion.md`): tiene API.
+        corte_identificacion: 'codigo',
         tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Migrado de «árbol PCQ»; RouterOS 6 (sin fq_codel ni CAKE).
@@ -82,6 +85,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.30.0.1',
         modo_seguridad: 'radius',
+        corte_identificacion: 'ip',
         tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Nunca respondió a la API: sin versión conocida (`routeros_version` null, el valor por defecto).
@@ -111,6 +115,7 @@ export const routers: Schema<'Router'>[] = [
         tiene_radius_secret: true,
         nas_ip: '10.10.0.2',
         modo_seguridad: 'radius',
+        corte_identificacion: 'ip',
         tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Control por capas (A2): el atajo «árbol PCQ»; es el mismo equipo que el RB-Centro (RouterOS 7).

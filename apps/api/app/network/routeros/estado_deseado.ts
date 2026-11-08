@@ -9,6 +9,7 @@ import {
 } from '#network/estrategia_velocidad'
 import { listaPlan } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
+import { PUERTO_PROXY_CORTE } from '#network/routeros/corte_router'
 
 /**
  * Estado deseado en el router de un servicio sin PPPoE (`contratos/routeros.md`). Función pura:
@@ -23,6 +24,7 @@ import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
  * | Address-list `argosisp-plan-<id>[-limitado]` (IPv4 e IPv6) | `arbol_pcq`, activo o limitado: IPv4 y prefijo delegado (WISP) o las direcciones de la sesión abierta (PPPoE: IPv4, /64, /56) |
  * | Lease DHCP | Solo en `dhcp_fija` (también suspendido: necesita su IP para llegar a `/corte`) |
  * | ARP estático | Solo con `amarre_ip_mac` y `mac` |
+ * | Regla `/ip proxy access` (IPv4 y cada prefijo IPv6) | Solo suspendido en un router con `corte_identificacion = 'codigo'` (también PPPoE): redirige su HTTP a `/corte?c=<código>` (`contratos/corte-identificacion.md`) |
  *
  * Un servicio `retirado`, `pendiente_instalacion` (`contratos/instalacion.md` §3: nada hasta que se
  * activa, con `servicio.estado_cambiado` y `motivo: instalacion`), inexistente o sin IPv4 no tiene
@@ -36,6 +38,7 @@ export const RUTAS_SERVICIO = [
     '/ipv6/firewall/address-list',
     '/ip/dhcp-server/lease',
     '/ip/arp',
+    '/ip/proxy/access',
 ] as const satisfies readonly RutaRouterOS[]
 
 /**
@@ -54,7 +57,12 @@ function clavesServicio(servicioId: number): Array<{ ruta: RutaServicio; comment
     return RUTAS_SERVICIO.flatMap((ruta): Array<{ ruta: RutaServicio; comment: string }> =>
         ruta === '/ipv6/firewall/address-list'
             ? SUFIJOS_V6.map((sufijo) => ({ ruta, comment: commentServicioV6(servicioId, sufijo) }))
-            : [{ ruta, comment: commentServicio(servicioId) }],
+            : ruta === '/ip/proxy/access'
+              ? [
+                    { ruta, comment: commentServicio(servicioId) },
+                    ...SUFIJOS_V6.map((sufijo) => ({ ruta, comment: commentServicioV6(servicioId, sufijo) })),
+                ]
+              : [{ ruta, comment: commentServicio(servicioId) }],
     )
 }
 export type RutaServicio = (typeof RUTAS_SERVICIO)[number]
@@ -117,6 +125,11 @@ export interface ServicioRed {
     local_address?: string | null
     /** Servidor PPPoE del servicio (`core.servicios.servidor_pppoe_id`) */
     servidor_pppoe_id?: number | null
+    /**
+     * `/corte?c=<código>` del servicio suspendido en un router con `corte_identificacion = 'codigo'`
+     * (`#portal/codigos_corte`); null o ausente = sin reglas de `/ip proxy access`.
+     */
+    url_corte_codigo?: string | null
 }
 
 /** Datos del router que entran en los objetos. */
@@ -130,6 +143,8 @@ export interface RouterRed {
     control_velocidad: ControlVelocidad
     /** `network.routers.modo_seguridad` (ausente = `radius`): `api` = PPPoE con secrets locales */
     modo_seguridad?: 'radius' | 'api'
+    /** `network.routers.corte_identificacion` (ausente = `ip`; `contratos/corte-identificacion.md`) */
+    corte_identificacion?: 'ip' | 'codigo'
 }
 
 export interface PerfilSuspendidoRed {
@@ -243,7 +258,54 @@ export function targetsColaServicio(
     return s.ipv4 ? [`${s.ipv4}/32`, ...s.prefijos_v6] : []
 }
 
+/**
+ * Reglas de `/ip proxy access` de un suspendido en modo código: su IPv4 y sus prefijos IPv6 van a
+ * `/corte?c=<código>` (HTTP 307 del proxy del router). PPPoE: las direcciones de su sesión abierta (o las
+ * fijas); WISP: su IPv4 y sus prefijos delegados.
+ */
+export function reglasAccesoProxy(servicio: ServicioRed): ObjetoDeseado[] {
+    const url = servicio.url_corte_codigo
+    if (!url || servicio.estado !== 'suspendido') return []
+    const id = servicio.servicio_id
+    const sesion = servicio.tipo_conexion === 'pppoe' ? servicio.sesion : null
+    const ipv4 = sesion?.ipv4 ?? servicio.ipv4
+    const v6: Array<[SufijoV6, string]> = sesion
+        ? ([
+              ['enlace', sesion.enlace],
+              ['delegado', sesion.delegado],
+          ].filter((p): p is [SufijoV6, string] => p[1] !== null) as Array<[SufijoV6, string]>)
+        : servicio.prefijos_v6
+              .slice(0, 2)
+              .map((p, i): [SufijoV6, string] => [i === 0 ? 'delegado' : 'delegado-2', p])
+    const regla = (comment: string, origen: string): ObjetoDeseado => ({
+        ruta: '/ip/proxy/access',
+        comment,
+        propiedades: {
+            'local-port': PUERTO_PROXY_CORTE,
+            'src-address': origen,
+            action: 'redirect',
+            'action-data': url,
+            disabled: 'no',
+        },
+    })
+    return [
+        ...(ipv4 ? [regla(commentServicio(id), ipv4)] : []),
+        ...v6.map(([sufijo, prefijo]) => regla(commentServicioV6(id, sufijo), prefijo)),
+    ]
+}
+
 export function estadoDeseado(
+    servicio: ServicioRed,
+    router: RouterRed,
+    suspendido: PerfilSuspendidoRed,
+): EstadoDeseado {
+    const base = estadoDeseadoBase(servicio, router, suspendido)
+    const proxy = reglasAccesoProxy(servicio)
+    if (proxy.length === 0) return base
+    return completar(servicio.servicio_id, [...base.presentes, ...proxy], base.avisos)
+}
+
+function estadoDeseadoBase(
     servicio: ServicioRed,
     router: RouterRed,
     suspendido: PerfilSuspendidoRed,

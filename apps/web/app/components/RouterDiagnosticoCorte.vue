@@ -7,6 +7,11 @@ import type { DiagnosticoCorte } from '~/types/controlVelocidad'
  * de corte?». Cada paso con su estado, lo que se vio y qué hacer, los comandos de RouterOS en un
  * bloque para copiar y, si «Reconciliar ahora» lo arregla, el botón (lo abre el padre). Además el
  * destino del portal, los suspendidos fuera de la lista y los límites del corte, que se ven siempre.
+ *
+ * Identificación del cliente cortado (`contratos/corte-identificacion.md` §5 bis): `portal_ip_cliente`
+ * en rojo (`portal_ve_otra_ip`) explica que hay NAT o un proxy en medio y ofrece «Editar router» para
+ * pasarlo a «Por código» (lo abre el padre); `proxy_corte` (solo en modo código) se arregla con
+ * «Reconciliar ahora».
  */
 const props = defineProps<{
     corte: DiagnosticoCorte
@@ -14,6 +19,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     reconciliar: []
+    /** Abrir «Editar router» (cambiar la identificación del cliente cortado). */
+    editar: []
 }>()
 
 const { puede } = usePermisos()
@@ -31,6 +38,8 @@ const PASOS: Record<Chequeo['clave'], string> = {
     dns_router: 'El router resuelve nombres (DNS reales)',
     portal_host: 'La página de corte responde con cualquier dominio',
     portal_en_router: 'La página de corte no está en el propio router',
+    portal_ip_cliente: 'Qué IP ve la página de corte desde la red de clientes',
+    proxy_corte: 'Proxy de corte del router (puerto 3346) con el código de cada suspendido',
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {
@@ -48,6 +57,21 @@ function estado(chequeo: Chequeo): { etiqueta: string, color: 'success' | 'error
         return { etiqueta: 'Falla', color: 'error', icono: 'i-lucide-circle-x' }
     }
     return { etiqueta: 'No se pudo comprobar', color: 'neutral', icono: 'i-lucide-circle-minus' }
+}
+
+/**
+ * Qué hacer en los chequeos cuyo arreglo no es «Reconciliar ahora». `portal_ve_otra_ip`: el detalle de la
+ * API ya lo dice; aquí va corto y con el botón para editar el router.
+ */
+const ACCIONES: Partial<Record<NonNullable<Chequeo['codigo']>, { texto: string, editar: boolean }>> = {
+    portal_ve_otra_ip: {
+        texto: 'Edita el router y elige «Identificación del cliente cortado: Por código» (necesita la API del router). Sin API, la identificación por IP solo funciona sin NAT entre el router y Argos.',
+        editar: true,
+    },
+}
+
+function accion(chequeo: Chequeo) {
+    return chequeo.ok === false && chequeo.codigo ? ACCIONES[chequeo.codigo] ?? null : null
 }
 
 /** `sin_api` y `router_no_responde` llegan solo en `problemas[]` (sin chequeo propio). */
@@ -115,6 +139,35 @@ const fuera = computed(() => props.corte.suspendidos.fuera_de_lista)
                     />
                     <span>Qué hacer: «Reconciliar ahora» lo deja como debe estar{{ chequeo.comandos.length ? ', o pega estos comandos en el router' : '' }}.</span>
                 </p>
+                <div
+                    v-if="accion(chequeo)"
+                    class="flex flex-col items-start gap-2"
+                    :data-prueba="`corte-accion-${chequeo.codigo}`"
+                >
+                    <p class="flex items-start gap-1.5 text-xs text-error">
+                        <UIcon
+                            name="i-lucide-lightbulb"
+                            class="mt-0.5 size-3.5 shrink-0"
+                        />
+                        <span>Qué hacer: {{ accion(chequeo)?.texto }}</span>
+                    </p>
+                    <UButton
+                        v-if="accion(chequeo)?.editar && puede('routers.editar')"
+                        label="Editar router"
+                        icon="i-lucide-pencil"
+                        color="neutral"
+                        variant="outline"
+                        size="sm"
+                        data-prueba="corte-editar-router"
+                        @click="emit('editar')"
+                    />
+                    <p
+                        v-else-if="accion(chequeo)?.editar"
+                        class="text-xs text-muted"
+                    >
+                        Pide a un administrador que cambie la identificación del cliente cortado en este router.
+                    </p>
+                </div>
                 <ComandosRouterOs
                     v-if="chequeo.ok !== true"
                     :comandos="chequeo.comandos"

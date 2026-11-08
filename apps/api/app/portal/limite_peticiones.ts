@@ -107,7 +107,15 @@ export class LimitePeticiones {
      * Lanza si Redis falla; `limitarPorIp` decide dejar pasar.
      */
     async contar(nombre: string, ip: string, config: ConfigLimite): Promise<ResultadoLimite> {
-        const clave = claveDeIp(ip)
+        return this.contarClave(nombre, claveDeIp(ip), config)
+    }
+
+    /**
+     * Como `contar`, con una clave ya armada: `codigo:<código>` cuando la petición trae un código de corte
+     * vigente (`contratos/corte-identificacion.md`): detrás de un NAT todos los suspendidos de un router
+     * comparten la IP pública y no deben compartir el cupo.
+     */
+    async contarClave(nombre: string, clave: string | null, config: ConfigLimite): Promise<ResultadoLimite> {
         if (config.peticiones === 0 || !clave) {
             return { permitido: true, cuenta: 0, limite: config.peticiones, reiniciaEnS: 0 }
         }
@@ -144,12 +152,51 @@ export async function limitarPorIp(
     ip: string,
     limite: LimitePeticiones = limitador(),
 ): Promise<void> {
-    const config = configLimite()
+    await limitarPor(ctx, nombre, claveDeIp(ip), configLimite(), limite)
+}
+
+/**
+ * Límite por código de corte vigente (en lugar de la IP). Mismo cupo por endpoint que por IP.
+ */
+export async function limitarPorCodigo(
+    ctx: HttpContext,
+    nombre: string,
+    codigo: string,
+    limite: LimitePeticiones = limitador(),
+): Promise<void> {
+    await limitarPor(ctx, nombre, `codigo:${codigo}`, configLimite(), limite)
+}
+
+/**
+ * Códigos de corte que no existen o vencieron, por IP (`PORTAL_LIMITE_CODIGOS_FALLIDOS` por ventana, 10
+ * por defecto; `0` lo apaga): quien prueba códigos al azar se queda sin cupo rápido, aunque cada código
+ * nuevo sea otra clave del límite normal.
+ */
+export async function limitarCodigoFallido(
+    ctx: HttpContext,
+    ip: string,
+    limite: LimitePeticiones = limitador(),
+): Promise<void> {
+    const base = configLimite()
+    const config = {
+        ...base,
+        peticiones: enteroDeEntorno(process.env, 'PORTAL_LIMITE_CODIGOS_FALLIDOS', 10, 0),
+    }
+    await limitarPor(ctx, 'codigo-fallido', claveDeIp(ip), config, limite)
+}
+
+async function limitarPor(
+    ctx: HttpContext,
+    nombre: string,
+    clave: string | null,
+    config: ConfigLimite,
+    limite: LimitePeticiones,
+): Promise<void> {
     if (config.peticiones === 0) return
 
     let resultado: ResultadoLimite
     try {
-        resultado = await limite.contar(nombre, ip, config)
+        resultado = await limite.contarClave(nombre, clave, config)
     } catch (error) {
         logger.warn({ err: error, nombre }, 'No se pudo aplicar el límite del portal; la petición pasa')
         return

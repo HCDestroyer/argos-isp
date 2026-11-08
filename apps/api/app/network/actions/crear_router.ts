@@ -58,6 +58,8 @@ export interface DatosRouter {
      * En la edición solo si ningún servicio cambia; si no, `routers.cambiar_tipo_conexion`.
      */
     tipo_conexion?: 'pppoe' | 'ip_estatica' | 'dhcp_fija'
+    /** `ip` (por defecto) o `codigo` (exige la API; `contratos/corte-identificacion.md`) */
+    corte_identificacion?: 'ip' | 'codigo'
     capacidad_bajada_kbps?: number | null
     capacidad_subida_kbps?: number | null
     api_url?: string | null
@@ -148,6 +150,27 @@ export function exigirNasIpSiRadius(modo: 'radius' | 'api', nasIp: string | null
     }
 }
 
+/**
+ * El modo `codigo` escribe reglas por servicio en el router: necesita su API (usuario y clave). 422
+ * `corte_codigo_sin_api` en `corte_identificacion` (decisión del PM P1).
+ */
+export function exigirApiSiCodigo(
+    modo: 'ip' | 'codigo',
+    apiUsuario: string | null | undefined,
+    tieneClave: boolean,
+) {
+    if (modo !== 'codigo' || (apiUsuario && tieneClave)) return
+    throw new ValidacionFallida([
+        {
+            field: 'corte_identificacion',
+            rule: 'corte_codigo_sin_api',
+            message:
+                'La identificación por código necesita la API del router (usuario y clave): Argos escribe en el router ' +
+                'la regla de cada suspendido. Sin API, usa «ip»',
+        },
+    ])
+}
+
 /** Campos del router que FreeRADIUS necesita (dirección del NAS y secreto). */
 const CAMPOS_RADIUS = ['nas_ip', 'radius_secret'] as const
 
@@ -195,6 +218,7 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
         await exigirZona(t.trx, datos.zona_id)
         exigirCaValida(datos.api_ca)
         exigirNasIpSiRadius(datos.modo_seguridad ?? 'radius', datos.nas_ip)
+        exigirApiSiCodigo(datos.corte_identificacion ?? 'ip', datos.api_usuario, Boolean(datos.api_password))
         // 409 `router_duplicado` si ese MikroTik ya está registrado (`contratos/routers.md`)
         await exigirRouterUnico(
             t.trx,
@@ -212,6 +236,13 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
         const router = await verRouter(id, t.trx)
         const cambiados = await t.registrarCambios({ tipo: 'router', id }, null, auditableRouter(router))
         await avisarRadius(t, router, cambiados)
+        if (router.corte_identificacion === 'codigo') {
+            await t.emit('portal.config_cambiada', {
+                empresa_id: null,
+                campos: ['corte_identificacion'],
+                router_id: id,
+            })
+        }
         return router
     }
 }

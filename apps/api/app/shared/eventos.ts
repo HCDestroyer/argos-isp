@@ -814,6 +814,24 @@ export interface CatalogoEventos {
     'portal.config_cambiada': {
         empresa_id: number | null
         campos: string[]
+        /**
+         * Solo con `campos: ['corte_identificacion']` (`routers.editar`): el router cuyo modo de
+         * identificación cambió. `routeros` reconcilia solo ese router (`contratos/corte-identificacion.md`).
+         */
+        router_id?: number
+    }
+
+    /**
+     * portal (A5, `contratos/corte-identificacion.md`): se emitió el código de corte de una suspensión
+     * en un router en modo `codigo` (la regla `/ip proxy access` del suspendido lo lleva). **Nunca el
+     * código**: es lo que da acceso a la página de corte de ese servicio.
+     */
+    'portal.codigo_corte_emitido': {
+        codigo_corte_id: number
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
     }
 
     // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
@@ -1388,6 +1406,7 @@ export const EVENTOS = [
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'portal.config_cambiada',
+    'portal.codigo_corte_emitido',
     'fiscal.localizacion_instalada',
     'fiscal.parametros_cambiados',
     'fiscal.config_cambiada',

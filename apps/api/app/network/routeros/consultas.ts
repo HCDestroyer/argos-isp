@@ -556,6 +556,7 @@ interface FilaRouterDispatcher {
     capacidad_subida_kbps: number | null
     qos_perfil_id: number | string | null
     modo_seguridad: 'radius' | 'api'
+    corte_identificacion: string
 }
 
 /**
@@ -591,6 +592,7 @@ export async function routerDispatcher(
             'r.capacidad_subida_kbps',
             'r.qos_perfil_id',
             'r.modo_seguridad',
+            'r.corte_identificacion',
         )
         .first()) as FilaRouterDispatcher | null
     if (!r) return null
@@ -627,6 +629,7 @@ export async function routerDispatcher(
                 null,
             control_velocidad: control,
             modo_seguridad: r.modo_seguridad,
+            corte_identificacion: r.corte_identificacion === 'codigo' ? 'codigo' : 'ip',
         },
         velocidad: {
             router_id: Number(r.id),

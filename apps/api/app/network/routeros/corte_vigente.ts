@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import {
+    configCorte,
     conUrlsCorte,
     configCorteResuelta,
     resolverIPv4,
@@ -35,4 +36,14 @@ export async function configCorteVigente(
 ): Promise<ConfigCorte> {
     const portal = await portalCorteRed(cliente)
     return conUrlsCorte(await configCorteResuelta(process.env, resolver, portal), await urlsCorte(cliente))
+}
+
+/**
+ * URL de `/corte` para las reglas por servicio del proxy (modo código): la pública del portal o, sin
+ * ella, el destino del NAT. Sin resolver el FQDN (no hace falta para una URL con nombre).
+ */
+export async function corteUrlVigente(
+    cliente: QueryClientContract = db.connection(),
+): Promise<string | null> {
+    return configCorte(process.env, await portalCorteRed(cliente)).corte_url
 }

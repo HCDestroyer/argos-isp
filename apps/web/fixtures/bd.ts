@@ -98,6 +98,9 @@ export interface SesionSimulada {
     expiraMaxEn: string | null
 }
 
+/** Fila de `core.codigos_corte` sin el código (lo que el panel puede saber). */
+export type CodigoCorteFixture = Pick<Schema<'CodigoCorteServicio'>, 'servicio_id' | 'creado_en' | 'cerrado_en'>
+
 interface BaseFixtures {
     clientes: Schema<'Cliente'>[]
     servicios: Schema<'Servicio'>[]
@@ -109,6 +112,11 @@ interface BaseFixtures {
     routersReconciliados: number[]
     /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
     routersSinRespuesta: number[]
+    /**
+     * Códigos de corte (`core.codigos_corte`, A5): uno por suspensión en un router en modo código. El
+     * código no se guarda aquí porque el panel nunca lo ve.
+     */
+    codigosCorte: CodigoCorteFixture[]
     /** Conexión WireGuard de cada router (`contratos/conexion-routers.md`). */
     conexionesRouter: Schema<'ConexionRouter'>[]
     redesIpv4: Schema<'RedIpv4'>[]
@@ -317,6 +325,7 @@ function inicial(): BaseFixtures {
         secretosRadius,
         routersReconciliados: [],
         routersSinRespuesta: [],
+        codigosCorte: [],
         conexionesRouter,
         qosPerfiles: perfilesQos,
         qosClases: clasesQos,

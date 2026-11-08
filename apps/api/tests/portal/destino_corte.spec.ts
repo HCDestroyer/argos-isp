@@ -128,7 +128,7 @@ test.group('Portal: URL de corte por empresa', (group) => {
         assert,
     }) => {
         const s = await crearServicio()
-        await crearSesion(s, { ipv4: '198.51.100.77' })
+        await crearSesion(s, { ipv4: '198.51.100.177' })
         const pedir = async (ip: string) => {
             const r = await estado(
                 client.get('/api/v1/portal/destino-corte').header('X-Forwarded-For', ip),
@@ -136,9 +136,9 @@ test.group('Portal: URL de corte por empresa', (group) => {
             )
             return r.body()
         }
-        assert.deepEqual(await pedir('198.51.100.77'), { url: null })
+        assert.deepEqual(await pedir('198.51.100.177'), { url: null })
         await db.from('core.empresas').where('id', 1).update({ url_corte: URL_OPERADOR })
-        assert.deepEqual(await pedir('198.51.100.77'), { url: URL_OPERADOR })
+        assert.deepEqual(await pedir('198.51.100.177'), { url: URL_OPERADOR })
         // IP que no es de ningún servicio: null (la /corte del portal)
         assert.deepEqual(await pedir('203.0.113.250'), { url: null })
     })

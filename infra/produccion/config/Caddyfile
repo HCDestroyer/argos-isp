@@ -52,6 +52,19 @@
 	}
 }
 
+# Sitio del corte (80 con cualquier Host y PORTAL_CORTE_PUERTO): aquí llega el dst-nat de los
+# suspendidos, nunca un proxy de confianza. `trusted_proxies` es global en Caddy y también valdría aquí:
+# si la conexión llega desde la puerta de enlace de Docker (puerto publicado por docker-proxy, IPv6,
+# hairpin) y esa red está en ARGOSISP_PROXIES_CONFIABLES, {client_ip} saldría del X-Forwarded-For que
+# escribió el cliente y podría hacerse pasar por otro. Por eso aquí va la IP del socket ({remote_host}),
+# sin leer encabezados (contratos/corte-identificacion.md §1.4).
+(portal_corte) {
+	reverse_proxy portal:3001 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
 {$DOMINIO_API} {
 	# Webhook de la pasarela: la firma HMAC va sobre el cuerpo CRUDO (sin encode, sin buffer).
 	@webhook path /api/v1/pasarela/webhook/*
@@ -107,5 +120,5 @@ http://, :{$PORTAL_CORTE_PUERTO:8088} {
 	}
 	redir @portalSeguro https://{host}{uri} 308
 
-	import portal
+	import portal_corte
 }

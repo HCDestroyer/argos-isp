@@ -11,6 +11,16 @@ import {
 } from '#network/conexion/render'
 import { VARIABLES_SERVICIO, valoresServicio } from '#network/conexion/servicio'
 import { leerRedTunel, parsearAdmin } from '#network/conexion/config'
+import {
+    PUERTO_PROXY_CORTE,
+    REGLA_CORTE_IN_PROXY,
+    REGLA_INPUT_PROXY,
+    REGLA_NAT_PROXY,
+    REGLA_PROXY_SIN_CODIGO,
+    ajusteProxy,
+    configCorte,
+    estadoCorteRouter,
+} from '#network/routeros/corte_router'
 
 /**
  * Espejo de `infra/mikrotik/render.test.mjs` (A6) para el port de `render.ts`: mismos valores y mismas
@@ -48,6 +58,8 @@ const VALORES: Record<string, string> = {
     walled_garden: 'app.recurrente.com',
     dns_v4: '192.0.2.53,198.51.100.53',
     dns_v6: '2001:db8:ffff::53',
+    corte_identificacion: 'ip',
+    corte_url: 'http://portal.miisp.example/corte',
 }
 
 test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
@@ -150,6 +162,152 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
         assert.throws(() => escapar('linea\nsiguiente'), /control/)
         assert.throws(() => renderizar('{{desconocida}}', {}), PlantillaInvalida as any)
         assert.match(renderizar(plantilla, { ...VALORES, admin_ips: '' }), /:local adminIps \[:toarray ""\]/)
+    })
+
+    test('modo código: el script trae las mismas reglas que escribe el reconciliador (corte_router.ts)', ({
+        assert,
+    }) => {
+        const corteUrl = 'http://portal.miisp.example/corte'
+        const config = configCorte({
+            ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
+            PORTAL_URL_PUBLICA: 'http://portal.miisp.example',
+        })
+        assert.equal(config.corte_url, corteUrl)
+        const estado = estadoCorteRouter(
+            config,
+            { fasttrack: true, redes_v4: [], identificacion: 'codigo' },
+            [],
+        )
+        const comentarios = [REGLA_NAT_PROXY, REGLA_INPUT_PROXY, REGLA_CORTE_IN_PROXY, REGLA_PROXY_SIN_CODIGO]
+        const reglas = estado.reglas.filter((r) => comentarios.includes(r.comment))
+        // NAT, drop y accept en IPv4 e IPv6, más la regla final del proxy
+        assert.lengthOf(reglas, 7)
+        const prefijo: Record<string, string> = {
+            '/ip/firewall/filter': '/ip firewall filter add ',
+            '/ipv6/firewall/filter': '/ipv6 firewall filter add ',
+            '/ip/firewall/nat': '/ip firewall nat add ',
+            '/ipv6/firewall/nat': '/ipv6 firewall nat add ',
+            '/ip/proxy/access': '/ip proxy access add ',
+        }
+        for (const ruta of [PLANTILLAS.servicio, PLANTILLAS.servicio_sin_radius]) {
+            const script = renderizar(leerMikrotik(ruta), {
+                ...VALORES,
+                corte_identificacion: 'codigo',
+                corte_url: corteUrl,
+            })
+            assert.include(script, ':local corteIdentificacion "codigo"')
+            assert.include(script, `:local proxyCortePuerto "${PUERTO_PROXY_CORTE}"`)
+            const lineas = script.split('\n').map((l) => l.trim())
+            for (const regla of reglas) {
+                const linea = lineas.find(
+                    (l) =>
+                        l.includes(prefijo[regla.ruta]!) &&
+                        l.includes(`comment="${regla.comment}"`) &&
+                        l.includes(`action=${regla.propiedades.action}`),
+                )
+                assert.isDefined(linea, `${ruta}: falta ${regla.ruta} ${regla.comment}`)
+                const valores = linea!
+                    .replaceAll('$proxyCortePuerto', PUERTO_PROXY_CORTE)
+                    .replace(/action-data=\$urlCorte/, `action-data=${corteUrl}`)
+                for (const [clave, valor] of Object.entries(regla.propiedades)) {
+                    if (clave === 'disabled') continue
+                    assert.include(
+                        ` ${valores.replace(/[\[\]]/g, ' ')} `,
+                        ` ${clave}=${valor} `,
+                        `${ruta}: ${regla.comment} ${clave}`,
+                    )
+                }
+            }
+            // /ip proxy: lo mismo que ajusteProxy con el proxy apagado (solo del corte, sin caché)
+            const apagado = ajusteProxy({ enabled: 'false', port: '8080' }, true)!
+            assert.include(
+                script,
+                `/ip proxy set ${Object.entries(apagado)
+                    .map(([k, v]) => `${k}=${k === 'port' ? '$proxyCortePuerto' : v}`)
+                    .join(' ')}`,
+            )
+            // el proxy se enciende solo después de la regla final y del drop de input
+            const encender = script.indexOf('/ip proxy set enabled=yes')
+            assert.isAbove(encender, script.indexOf(`comment="${REGLA_PROXY_SIN_CODIGO}"`))
+            assert.isAbove(encender, script.lastIndexOf(`comment="${REGLA_PROXY_SIN_CODIGO}"`))
+            assert.isAbove(encender, script.lastIndexOf(`comment="${REGLA_INPUT_PROXY}"`))
+            // las del corte se mueven antes de la primera regla del operador
+            assert.include(script, '/ip proxy access move $finalProxy destination=$destinoProxy')
+        }
+    })
+
+    test('modo código sin URL del portal: la regla final niega (deny), como el reconciliador', ({
+        assert,
+    }) => {
+        const config = configCorte({})
+        assert.isNull(config.corte_url)
+        const final = estadoCorteRouter(
+            config,
+            { fasttrack: false, redes_v4: [], identificacion: 'codigo' },
+            [],
+        ).reglas.find((r) => r.comment === REGLA_PROXY_SIN_CODIGO)!
+        assert.equal(final.propiedades.action, 'deny')
+        for (const ruta of [PLANTILLAS.servicio, PLANTILLAS.servicio_sin_radius]) {
+            const script = renderizar(leerMikrotik(ruta), {
+                ...VALORES,
+                corte_identificacion: 'codigo',
+                corte_url: '',
+            })
+            assert.include(script, ':local corteUrl ""')
+            const deny = script
+                .split('\n')
+                .map((l) => l.trim())
+                .find((l) => l.includes('/ip proxy access add') && l.includes('action=deny'))
+            assert.isDefined(deny)
+            const valores = ` ${deny!.replaceAll('$proxyCortePuerto', PUERTO_PROXY_CORTE).replace(/[\[\]]/g, ' ')} `
+            for (const [clave, valor] of Object.entries(final.propiedades)) {
+                if (clave !== 'disabled') assert.include(valores, ` ${clave}=${valor} `)
+            }
+            assert.include(valores, ` comment="${REGLA_PROXY_SIN_CODIGO}" `)
+            // deny solo si tampoco hay IPv4 del portal; con ella, la URL del NAT (igual que configCorte)
+            assert.include(script, ':if ($urlCorte = "" && $portalV4 != "")')
+            assert.include(script, '("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte")')
+        }
+        assert.equal(
+            configCorte({ ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20', ROUTERS_SERVICIO_PORTAL_PUERTO: '8088' })
+                .corte_url,
+            'http://192.0.2.20:8088/corte',
+        )
+    })
+
+    test('valoresServicio: corte_identificacion y corte_url (sin URL, vacía)', ({ assert }) => {
+        const entorno: NodeJS.ProcessEnv = {
+            ROUTERS_SERVICIO_WAN_INTERFAZ: 'ether1',
+            ROUTERS_SERVICIO_POOL_V4_RANGOS: '10.10.0.10-10.10.0.250',
+            ROUTERS_SERVICIO_CLIENTES_V4: '10.10.0.0/16',
+            ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: '2001:db8:100::/48',
+            ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: '2001:db8:200::/40',
+            ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
+            ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
+            ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
+        }
+        const router = { interfaz_clientes: 'ether2' }
+        const ip = valoresServicio(router, ['10.10.0.1'], entorno)
+        assert.equal(ip.corte_identificacion, 'ip')
+        assert.equal(ip.corte_url, '')
+        const codigo = valoresServicio(router, ['10.10.0.1'], entorno, undefined, {
+            identificacion: 'codigo',
+            url: 'http://portal.argosisp.example/corte',
+        })
+        assert.equal(codigo.corte_identificacion, 'codigo')
+        assert.equal(codigo.corte_url, 'http://portal.argosisp.example/corte')
+        assert.include(
+            renderizar(leerMikrotik(PLANTILLAS.servicio), { ...VALORES, ...codigo }),
+            ':local corteUrl "http://portal.argosisp.example/corte"',
+        )
+        // sin URL no hay 422: el script arma la del NAT con portal_v4 o, sin ella, niega (deny)
+        assert.equal(
+            valoresServicio(router, ['10.10.0.1'], entorno, undefined, {
+                identificacion: 'codigo',
+                url: null,
+            }).corte_url,
+            '',
+        )
     })
 
     test('red del túnel y lista de administración', ({ assert }) => {

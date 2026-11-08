@@ -43,6 +43,8 @@ export const RUTAS = [
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
     '/interface/list',
+    // Corte por código (contratos/corte-identificacion.md): la regla final y una por servicio suspendido
+    '/ip/proxy/access',
     // Red de acceso (contratos/red-acceso.md §6): solo lo administrado, `comment = argosisp:vlan|pppoe:<id>`
     '/interface/vlan',
     '/interface/pppoe-server/server',
@@ -55,6 +57,7 @@ export const RUTAS_ORDENADAS = [
     '/ip/firewall/nat',
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
+    '/ip/proxy/access',
 ] as const satisfies readonly RutaRouterOS[]
 export type RutaOrdenada = (typeof RUTAS_ORDENADAS)[number]
 
@@ -235,6 +238,27 @@ export class ClienteRouterOS {
             const r = await this.#http('GET', 'ip/dns')
             return this.#objeto(r.cuerpo, r.status) as Record<string, string>
         })
+    }
+
+    /** `GET /rest/ip/proxy`: el web proxy del router (`enabled`, `port`…; corte por código). */
+    async leerProxy(): Promise<Record<string, string>> {
+        return this.#conReintentos(async () => {
+            const r = await this.#http('GET', 'ip/proxy')
+            return this.#objeto(r.cuerpo, r.status) as Record<string, string>
+        })
+    }
+
+    /**
+     * `POST /rest/ip/proxy/set` (`/ip proxy set`): solo lo que pide el corte por código (habilitar y el
+     * puerto propio; `ajusteProxy`). Queda en `audit.red` como cualquier escritura.
+     */
+    async ajustarProxy(propiedades: Propiedades, ctx: ContextoRed = {}): Promise<void> {
+        await this.#conReintentos((intento) =>
+            this.#escribir('POST', '/ip/proxy' as never, null, propiedades, ctx, intento, {
+                comando: 'set',
+                ajuste: true,
+            }),
+        )
     }
 
     /** `GET /rest/system/resource`: prueba de vida y de credenciales. */
@@ -545,9 +569,19 @@ export class ClienteRouterOS {
         propiedades: Propiedades | null,
         ctx: ContextoRed,
         intento: number,
-        extra: { antes?: unknown; comando?: string; diagnostico?: boolean; desconexion?: boolean } = {},
+        extra: {
+            antes?: unknown
+            comando?: string
+            diagnostico?: boolean
+            desconexion?: boolean
+            ajuste?: boolean
+        } = {},
     ): Promise<ObjetoRouterOS> {
-        if (extra.desconexion) {
+        if (extra.ajuste) {
+            if (ruta !== ('/ip/proxy' as string) || metodo !== 'POST' || extra.comando !== 'set') {
+                throw new Error(`ajuste no permitido: ${metodo} ${ruta}`)
+            }
+        } else if (extra.desconexion) {
             if (ruta !== ('/ppp/active' as string) || metodo !== 'DELETE') {
                 throw new Error(`desconexión no permitida: ${metodo} ${ruta}`)
             }

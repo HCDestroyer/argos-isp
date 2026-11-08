@@ -31,6 +31,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(alta.getByText('Sin RADIUS, PPPoE se crea como secret con este usuario')).toBeVisible()
     await alta.getByLabel('Usuario de la API').fill('argos')
     await alta.getByLabel('Contraseña de la API').fill('clave-api-segura')
+    await alta.getByRole('radio', { name: /^Por código/ }).click()
     await alta.locator('[data-prueba="router-guardar"]').click()
     await expect(page).toHaveURL(/\/routers\/\d+$/)
     const routerId = page.url().split('/').pop()

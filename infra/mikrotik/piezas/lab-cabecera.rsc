@@ -77,6 +77,14 @@
 # la alternativa comentada en la sección 9.
 :local portalV6 "2001:db8:ffff::20"
 :local portalFqdn "portal.argosisp.example"
+# Identificación del cortado (contratos/corte-identificacion.md): "ip" = dst-nat de TCP/80 al portal
+# (el portal identifica por la IP de origen; necesita que el portal vea la IP real del cliente).
+# "codigo" = redirect al web proxy del router en el puerto 3346, que responde 307 a /corte?c=<código>
+# (las reglas por servicio las escribe ArgosIsp por la API). Debe coincidir con el router en el panel.
+:local corteIdentificacion "ip"
+# /corte pública del portal para la regla final del proxy (modo codigo), p. ej. "http://portal.argosisp.example/corte"
+:local corteUrl "http://portal.argosisp.example/corte"
+:local proxyCortePuerto "3346"
 # Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.),
 # por FQDN (el router los resuelve, IPv4 e IPv6). El portal no carga nada externo.
 # - app.recurrente.com: página de pago de Recurrente (`/checkout-session/<ch_…>`) y su API

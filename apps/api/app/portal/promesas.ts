@@ -1,3 +1,4 @@
+import type { OrigenPortal } from '#portal/identificacion'
 import { DateTime } from 'luxon'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
@@ -33,7 +34,7 @@ import { exigirSesionPortal } from '#portal/acceso/sesion'
  */
 export async function servicioDeLaPeticion(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     servicioId: number | undefined,
 ): Promise<number> {
     if (servicioId !== undefined) {

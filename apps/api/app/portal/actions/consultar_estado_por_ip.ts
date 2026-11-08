@@ -1,5 +1,5 @@
 import { leerEstado, type EstadoPortal, type Lectura } from '#portal/consultas'
-import { ConsultaPortalAuditada } from '#portal/actions/consulta_auditada'
+import { ConsultaPortalAuditada, type EntradaConsultaPortal } from '#portal/actions/consulta_auditada'
 
 export type { EstadoPortal } from '#portal/consultas'
 
@@ -14,7 +14,7 @@ export type { EstadoPortal } from '#portal/consultas'
 export default class ConsultarEstadoPorIp extends ConsultaPortalAuditada<EstadoPortal> {
     readonly nombre = 'portal.estado'
 
-    protected leer(ip: string): Promise<Lectura<EstadoPortal>> {
-        return leerEstado(ip)
+    protected leer(origen: EntradaConsultaPortal): Promise<Lectura<EstadoPortal>> {
+        return leerEstado(origen)
     }
 }

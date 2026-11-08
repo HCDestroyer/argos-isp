@@ -67,6 +67,7 @@ test('router nuevo con red IPv4, bloque y pool IPv6; plan implementado en él', 
     await campo(alta, 'router-nombre').fill('RB-Norte')
     await campo(alta, 'router-host').fill('10.40.0.1')
     await campo(alta, 'router-nas').fill('10.40.0.1')
+    await alta.getByRole('radio', { name: /^Por IP/ }).click()
     await alta.locator('[data-prueba="router-guardar"]').click()
     await expect(page).toHaveURL(/\/routers\/\d+$/)
     const routerId = page.url().split('/').pop()

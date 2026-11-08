@@ -222,7 +222,9 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RouterClaveModal.vue': { permisos: ['routers.conexion_clave'], desde: ['components/RouterConexionSeccion.vue'] },
     // Con `modo="rotar"` usa `routers.rotar_conexion`; el menú de acciones solo lo abre para generar.
     'RouterScriptModal.vue': { permisos: ['routers.generar_script', 'routers.rotar_conexion'], desde: ['components/RouterConexionSeccion.vue', 'components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.rotar_conexion'] } },
-    'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
+    // También desde «Probar conexión» (el diagnóstico de corte ofrece «Editar router» si el portal ve otra IP);
+    // las dos se abren solo desde la lista y la ficha de routers, que exigen `routers.ver`.
+    'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue', 'components/RouterPruebaConexionModal.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'], 'components/RouterPruebaConexionModal.vue': ['routers.ver'] } },
     'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
     // Solo se monta con `puedeActivarInstalacion` (servicios.activar_instalacion); recarga con el servicios.ver de la página.
     'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
@@ -266,6 +268,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterRedAcceso.vue', 'components/RouterPruebaConexionModal.vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    // Código de corte (`contratos/corte-identificacion.md`): lee con el `servicios.ver` de la ficha.
+    'ServicioCodigoCorte.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },
     'CertificarLoteModal.vue': { permisos: ['fel.certificar'], desde: ['pages/dte/index.vue'] },
     'PremioLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/premios.vue'] },

@@ -22,8 +22,13 @@ import {
     type SecretDeseado,
 } from '#network/routeros/pppoe_local'
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
+import { sincronizarCodigoCorte } from '#portal/codigos_corte'
+import { corteUrlVigente } from '#network/routeros/corte_vigente'
+import { urlCorteConCodigo } from '#network/routeros/corte_router'
 import {
     aplicarEstado,
+    liberarAccesoProxy,
+    ordenarAccesoProxy,
     cortarConexionesSiSuspendio,
     asegurarVelocidad,
     enTransicion,
@@ -149,6 +154,25 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
             // Secret PPPoE (router sin RADIUS, `contratos/pppoe-local.md`): en un router `api`, o donde
             // ArgosIsp escribió antes (cambio de router, de tipo, de modo; retiro, eliminación).
             const conSecret = router !== null && (modo === 'api' || historial.includes(routerId))
+            // Corte por código (`contratos/corte-identificacion.md`): el código de la suspensión y la URL
+            // de su regla `/ip proxy access`; al dejar de estar suspendido se cierra y la regla se borra.
+            const modoCodigo =
+                router !== null && router.con_credenciales && router.red.corte_identificacion === 'codigo'
+            let codigoCerrado = false
+            const avisosCodigo: string[] = []
+            if (deseado && router) {
+                const c = await sincronizarCodigoCorte(
+                    t,
+                    { servicio_id: servicio.servicio_id, estado: servicio.estado, router_id: routerId },
+                    modoCodigo,
+                )
+                codigoCerrado = c.cerrado
+                if (modoCodigo && c.codigo) {
+                    const base = await corteUrlVigente(t.trx)
+                    if (base) servicio.url_corte_codigo = urlCorteConCodigo(base, c.codigo)
+                    else avisosCodigo.push('modo código sin URL del portal: no se escribe la regla del proxy')
+                }
+            }
             // Objetos propios del servicio: WISP en su router, o limpieza donde escribió antes.
             // (PPPoE en `arbol_pcq`: sus direcciones en la lista del plan; en `cola_simple`: su cola).
             const conObjetos = (a: string | undefined) => a === 'arbol_pcq' || a === 'cola_simple'
@@ -159,9 +183,11 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 historial.includes(routerId) ||
                 router?.red.control_velocidad === 'arbol_pcq' ||
                 conObjetos(servicio.estrategia.aplicacion) ||
-                conObjetos(servicio.estrategia_sesion?.aplicacion)
+                conObjetos(servicio.estrategia_sesion?.aplicacion) ||
+                (modoCodigo && (servicio.estado === 'suspendido' || codigoCerrado))
             let estado: EstadoDeseado = estadoVacio(input.servicio_id)
             if (deseado && router) estado = estadoDeseado(servicio, router.red, perfilSuspendido())
+            if (avisosCodigo.length > 0) estado = { ...estado, avisos: [...estado.avisos, ...avisosCodigo] }
 
             // Control de velocidad del router (padres por plan, perfiles PPP): se recalcula con cada
             // evento que cambia quién cuenta en un plan. Un router que no lo necesita solo se revisa
@@ -199,6 +225,18 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 }
                 // Los objetos del plan no son del servicio: van a `audit.red` sin servicio_id.
                 const ctxPlan = { ...ctx, servicio_id: null }
+                // Objetos del servicio; en modo código, antes se liberan sus IPs de reglas ajenas y después
+                // su regla nueva se pone antes de la final sin código.
+                const aplicarServicio = async () => {
+                    const hechos = [
+                        ...(modoCodigo ? await liberarAccesoProxy(cliente, estado, ctx) : []),
+                        ...(await aplicarEstado(cliente, estado, ctx)),
+                    ]
+                    if (hechos.some((c) => c.ruta === '/ip/proxy/access' && c.accion === 'creado')) {
+                        hechos.push(...(await ordenarAccesoProxy(cliente, ctx)))
+                    }
+                    return hechos
+                }
                 // Suspensión de un WISP: sus conexiones abiertas (FastTrack) se cortan una vez.
                 const cortar = async () => {
                     if (!porServicio) return
@@ -283,7 +321,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                             velocidad,
                         )
                         fila.cambios.push(...(await asegurarVelocidad(cliente, velocidad, lectura, ctxPlan)))
-                        if (porServicio) fila.cambios.push(...(await aplicarEstado(cliente, estado, ctx)))
+                        if (porServicio) fila.cambios.push(...(await aplicarServicio()))
                         await cortar()
                         // El secret después de los perfiles a los que apunta y antes de borrar los que sobran.
                         await secret()
@@ -295,7 +333,7 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                             )
                         }
                     } else {
-                        fila.cambios = await aplicarEstado(cliente, estado, ctx)
+                        fila.cambios = await aplicarServicio()
                         await cortar()
                         await secret()
                     }

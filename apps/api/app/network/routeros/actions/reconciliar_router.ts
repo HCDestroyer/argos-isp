@@ -1,5 +1,6 @@
 import logger from '@adonisjs/core/services/logger'
-import { configCorteVigente } from '#network/routeros/corte_vigente'
+import { configCorteVigente, corteUrlVigente } from '#network/routeros/corte_vigente'
+import { cerrarCodigosCorte, sincronizarCodigoCorte } from '#portal/codigos_corte'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import type { ObjetoRouterOS } from '#network/routeros/cliente'
 import { ErrorRouterOS } from '#network/routeros/errores'
@@ -19,7 +20,12 @@ import {
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
-import { clientesUsanDnsRouter, estadoCorteRouter, revisarDnsRouter } from '#network/routeros/corte_router'
+import {
+    clientesUsanDnsRouter,
+    estadoCorteRouter,
+    revisarDnsRouter,
+    urlCorteConCodigo,
+} from '#network/routeros/corte_router'
 import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
@@ -29,6 +35,8 @@ import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
     aplicarCorte,
     aplicarEstado,
+    asegurarProxyCorte,
+    ordenarAccesoProxy,
     asegurarVelocidad,
     leerCorteRouter,
     pideFasttrack,
@@ -63,6 +71,7 @@ export interface EntradaReconciliar {
         | 'qos'
         | 'red_acceso'
         | 'portal'
+        | 'corte_identificacion'
     evento_id?: string | null
 }
 
@@ -149,6 +158,24 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
             return salida
         }
         const todos = await serviciosVigentesDeRouter(input.router_id, t.trx)
+        // Corte por código (`contratos/corte-identificacion.md`): código de cada suspendido (los que se
+        // suspendieron antes de pasar el router a `codigo` reciben el suyo aquí) y la URL de su regla.
+        const modoCodigo = router.con_credenciales && router.red.corte_identificacion === 'codigo'
+        const baseCorte = modoCodigo ? await corteUrlVigente(t.trx) : null
+        await cerrarCodigosCorte(
+            t,
+            todos.filter((s) => s.estado !== 'suspendido').map((s) => s.servicio_id),
+        )
+        for (const servicio of todos.filter((s) => s.estado === 'suspendido')) {
+            const c = await sincronizarCodigoCorte(
+                t,
+                { servicio_id: servicio.servicio_id, estado: servicio.estado, router_id: input.router_id },
+                modoCodigo,
+            )
+            if (modoCodigo && c.codigo && baseCorte) {
+                servicio.url_corte_codigo = urlCorteConCodigo(baseCorte, c.codigo)
+            }
+        }
         const servicios = todos.filter((s) => s.tipo_conexion !== 'pppoe')
         const planes = planesDeRouter(router.velocidad, todos)
         const conVelocidad = router.con_credenciales || necesitaVelocidad(router.velocidad, planes)
@@ -220,11 +247,18 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                             redes_v4: await redesV4DeRouter(input.router_id, t.trx),
                             local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
                             gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
+                            identificacion: modoCodigo ? 'codigo' : 'ip',
                         },
                         lecturaCorte.get('/ppp/profile') ?? [],
                     )
                     salida.avisos.push(...corte.avisos)
+                    // El proxy se enciende después de que existen su regla final (nunca un 3346 que reenvíe a
+                    // internet) y el `drop` de input (no es un proxy abierto); mientras tanto el NAT al 3346 solo
+                    // recibe un rechazo. Al volver a `ip` se apaga después de quitar el NAT.
                     salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
+                    // Las reglas del corte antes que las del operador (una suya sin `local-port` ganaría en el 3346).
+                    if (modoCodigo) salida.correcciones.push(...(await ordenarAccesoProxy(cliente, ctxPlan)))
+                    salida.correcciones.push(...(await asegurarProxyCorte(cliente, modoCodigo, ctxPlan)))
                     // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
                     let dnsRouter: Record<string, string> | null = null
                     try {
@@ -298,6 +332,8 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                         ...(await aplicarEstado(cliente, estado, ctx(servicio.servicio_id), actuales)),
                     )
                 }
+                // Reglas por servicio del proxy de corte antes de la final sin código y de las del operador.
+                if (modoCodigo) salida.correcciones.push(...(await ordenarAccesoProxy(cliente, ctxPlan)))
                 // Secrets PPPoE (`contratos/pppoe-local.md` §7): después de los perfiles a los que
                 // apuntan y antes de borrar los que sobran.
                 if (router.con_credenciales) {

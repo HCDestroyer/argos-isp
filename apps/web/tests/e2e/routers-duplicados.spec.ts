@@ -84,6 +84,7 @@ test('dar de alta el mismo MikroTik otra vez explica el 409', async ({ page }) =
     await campo(alta, 'router-nombre').fill('RB-Centro otra vez')
     await campo(alta, 'router-host').fill('10.10.0.1')
     await campo(alta, 'router-nas').fill('10.10.0.9')
+    await alta.getByRole('radio', { name: /^Por IP/ }).click()
     await alta.locator('[data-prueba="router-guardar"]').click()
     const error = alta.locator('[data-prueba="router-duplicado"]')
     await expect(error).toContainText('Ese MikroTik ya está registrado')

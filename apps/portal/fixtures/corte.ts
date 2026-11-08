@@ -14,6 +14,8 @@ export const QUIEN_SOY_SUSPENDIDO: Schema<'QuienSoy'> = {
     monto_adeudado: '525.00',
     facturas_vencidas: { cantidad: 2, total: '350.00' },
     empresa: MARCA_FIXTURE,
+    identificado_por: 'ip',
+    motivo: null,
 }
 
 export const QUIEN_SOY_ACTIVO: Schema<'QuienSoy'> = {
@@ -25,6 +27,8 @@ export const QUIEN_SOY_ACTIVO: Schema<'QuienSoy'> = {
     monto_adeudado: '175.00',
     facturas_vencidas: { cantidad: 0, total: '0.00' },
     empresa: MARCA_FIXTURE,
+    identificado_por: 'ip',
+    motivo: null,
 }
 
 export const QUIEN_SOY_DESCONOCIDO: Schema<'QuienSoy'> = {
@@ -36,6 +40,22 @@ export const QUIEN_SOY_DESCONOCIDO: Schema<'QuienSoy'> = {
     monto_adeudado: null,
     facturas_vencidas: null,
     empresa: null,
+    identificado_por: null,
+    motivo: 'ip_desconocida',
+}
+
+/** Llegó por el código de corte del router (modo código, `contratos/corte-identificacion.md`). */
+export const QUIEN_SOY_POR_CODIGO: Schema<'QuienSoy'> = {
+    ...QUIEN_SOY_SUSPENDIDO,
+    ip: '203.0.113.50',
+    identificado_por: 'codigo',
+}
+
+/** El portal ve la IP de un router (masquerade): sin código no sabe quién es. */
+export const QUIEN_SOY_IP_DE_ROUTER: Schema<'QuienSoy'> = {
+    ...QUIEN_SOY_DESCONOCIDO,
+    ip: '203.0.113.1',
+    motivo: 'ip_de_router',
 }
 
 /**
@@ -51,6 +71,8 @@ export const QUIEN_SOY_PENDIENTE: Schema<'QuienSoy'> = {
     monto_adeudado: '250.00',
     facturas_vencidas: { cantidad: 1, total: '250.00' },
     empresa: MARCA_FIXTURE,
+    identificado_por: 'ip',
+    motivo: null,
 }
 
 /** Suspendido con promesa aprobada: `/portal/estado` pasa a `activo` (escenario `reactivacion`). */

@@ -170,7 +170,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` / `promesa.cancelada` | billing | promesa_id, empresa_id, cliente_id, servicio_id, tipo (`promesa` \| `reconexion_temporal`), canal, comprobante_id, vence, monto, origen; cancelada además estado (`cancelada` \| `rechazada`), motivo, detalle |
 | `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
-| `portal.config_cambiada` | núcleo (empresas) y portal (portal de corte) | empresa_id (null = configuración global del portal de corte), campos[] (`url_corte`, `portal_v4`, `portal_v6`, `portal_puerto`, `modo_suspension`; nunca valores). Lo consumen `routeros` (reconcilia el corte si cambió algo de red) y `coa` (relee el modo de suspensión) |
+| `portal.config_cambiada` | núcleo (empresas) y portal (portal de corte) | empresa_id (null = configuración global del portal de corte), campos[] (`url_corte`, `portal_v4`, `portal_v6`, `portal_puerto`, `modo_suspension`, `corte_identificacion`; nunca valores), router_id (solo con `corte_identificacion`: reconcilia ese router). Lo consumen `routeros` (reconcilia el corte si cambió algo de red) y `coa` (relee el modo de suspensión) |
+| `portal.codigo_corte_emitido` | portal (routeros) | codigo_corte_id, servicio_id, empresa_id, cliente_id, router_id; nunca el código (`contratos/corte-identificacion.md`) |
 | `notificacion.enviada` | notify | cliente_id, canal, evento_origen, estado |
 | `notificaciones.config_cambiada` | notify | configuracion_id, empresa_id (null = global), campos[] |
 | `sesion.desconexion_solicitada` | network | sesion_id, servicio_id, nas_ip, acct_session_id, user_ppp, motivo |
