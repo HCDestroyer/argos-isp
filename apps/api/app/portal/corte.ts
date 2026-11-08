@@ -26,7 +26,14 @@ export const CAMPOS_PORTAL_CORTE = ['portal_v4', 'portal_v6', 'portal_puerto', '
 export type CampoPortalCorte = (typeof CAMPOS_PORTAL_CORTE)[number]
 
 /** Campos que cambian las reglas de los routers (los demás, como `modo_suspension`, no). */
-export const CAMPOS_RED_PORTAL = new Set<string>(['url_corte', 'portal_v4', 'portal_v6', 'portal_puerto'])
+export const CAMPOS_RED_PORTAL = new Set<string>([
+    'url_corte',
+    'portal_v4',
+    'portal_v6',
+    'portal_puerto',
+    // modo de identificación de un router (`routers.editar`, con `router_id`)
+    'corte_identificacion',
+])
 
 export interface DatosPortalCorte {
     /** IPv4 del `to-addresses` del dst-nat; null = se deduce de `PORTAL_URL_PUBLICA` (IP o FQDN) */

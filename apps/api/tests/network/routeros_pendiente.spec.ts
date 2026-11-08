@@ -137,6 +137,7 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
             '/ipv6/firewall/address-list': 0,
             '/ip/dhcp-server/lease': 0,
             '/ip/arp': 0,
+            '/ip/proxy/access': 0,
         })
         // Sin cambios no deja fila (regla 9: estado deseado sin cambios)
         const sinFila = await db
@@ -196,7 +197,7 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
                 .map((c) => `${c.accion} ${c.ruta} ${c.comment}`),
             [`borrado /ip/firewall/address-list ${commentServicio(servicio.id)}`],
         )
-        assert.deepEqual(Object.values(objetos(servicio.id)), [0, 0, 0, 0, 0])
+        assert.deepEqual(Object.values(objetos(servicio.id)), [0, 0, 0, 0, 0, 0])
 
         await activar(client, servicio)
         // Sin entregar el evento (se perdió): el reconciliador repone la cola del ya activo.

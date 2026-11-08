@@ -1,3 +1,4 @@
+import type { OrigenPortal } from '#portal/identificacion'
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
@@ -85,7 +86,7 @@ export interface EntradaIniciarPago {
  */
 export async function pagadorDeLaPeticion(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     entrada: EntradaIniciarPago,
 ): Promise<{ clienteId: number; servicioId: number | null; porSesion: boolean }> {
     if (entrada.facturas && entrada.facturas.length > 0 && entrada.servicio_id === undefined) {
@@ -220,7 +221,7 @@ export function errorPagoParaCliente(error: unknown): unknown {
  */
 export async function cobroDeLaPeticion(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     id: number,
 ): Promise<PagoEnLineaPortal> {
     const noEncontrado = new NoEncontrado('No encontramos ese pago en línea')

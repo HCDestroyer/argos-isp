@@ -48,6 +48,12 @@ export interface ConfigCorte {
     portal_url: string | null
     /** Destino real del dst-nat: `http://<portal_v4>:<puerto>/corte`; null sin IPv4 del portal */
     nat_url: string | null
+    /**
+     * URL de `/corte` a la que el proxy del router redirige al suspendido en modo `codigo`
+     * (`contratos/corte-identificacion.md`): la de `PORTAL_URL_PUBLICA` o, sin ella, `nat_url`. null = no
+     * se puede escribir la redirección.
+     */
+    corte_url: string | null
     walled_garden: string[]
     /** Hosts de las URL de corte de las empresas (`conUrlsCorte`): grupo propio, siempre administrado */
     walled_url_corte: string[]
@@ -131,6 +137,8 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env, portal?: P
         portal_puerto: puerto,
         portal_url: entorno.PORTAL_URL_PUBLICA?.trim() || null,
         nat_url: portalV4 ? urlNat(portalV4, puerto) : null,
+        corte_url:
+            urlCortePublica(entorno.PORTAL_URL_PUBLICA) ?? (portalV4 ? urlNat(portalV4, puerto) : null),
         walled_garden: [...new Set(walled)],
         walled_url_corte: [],
         dns_v4: separar(leer('DNS_V4')),
@@ -142,6 +150,18 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env, portal?: P
             leer('SUSP_RATE_LIMIT') ?? entorno.ROUTEROS_SUSPENDIDO_RATE_LIMIT?.trim() ?? '256k/256k',
         address_list: entorno.ROUTEROS_SUSPENDIDO_ADDRESS_LIST?.trim() || 'suspendidos',
         perfil: entorno.AAA_SUSPENDIDO_GRUPO?.trim() || 'suspendido',
+    }
+}
+
+/** `/corte` en la URL pública del portal (`PORTAL_URL_PUBLICA`, con o sin ruta); null si no hay o no es http(s). */
+export function urlCortePublica(url: string | undefined): string | null {
+    if (!url?.trim()) return null
+    try {
+        const base = new URL(url.trim())
+        if (base.protocol !== 'http:' && base.protocol !== 'https:') return null
+        return new URL('/corte', base).toString()
+    } catch {
+        return null
     }
 }
 
@@ -207,7 +227,14 @@ export async function configCorteResuelta(
         }
     }
     const ip = ips[0]!
-    return { ...config, portal_v4: ip, portal_v4_origen: 'dns', nat_url: urlNat(ip, config.portal_puerto) }
+    const nat = urlNat(ip, config.portal_puerto)
+    return {
+        ...config,
+        portal_v4: ip,
+        portal_v4_origen: 'dns',
+        nat_url: nat,
+        corte_url: config.corte_url ?? nat,
+    }
 }
 
 /** Una regla de filtro o NAT (clave `comment`). */
@@ -262,6 +289,11 @@ export interface OpcionesCorte {
     local_address?: string | null
     /** Gateways efectivos de las redes del router (sin repetir): van a `argos-dns` (DNS del router) */
     gateways_v4?: string[]
+    /**
+     * `network.routers.corte_identificacion` (ausente = `ip`): con `codigo`, el HTTP del suspendido va al
+     * proxy del router y `/ip proxy access` lo manda a `/corte?c=` (`contratos/corte-identificacion.md`)
+     */
+    identificacion?: 'ip' | 'codigo'
 }
 
 /** Dirección de documentación (RFC 5737) que deja creada la lista de suspendidos. */
@@ -269,6 +301,28 @@ export const ENTRADA_SUSPENDIDOS = '192.0.2.255'
 
 /** Comentario del dst-nat HTTP → `/corte` (el mismo de `lab.rsc` y del script de conexión). */
 export const REGLA_NAT_HTTP = 'argosisp: corte-nat HTTP a /corte'
+
+/*
+ * Identificación por código (`contratos/corte-identificacion.md`, router con `corte_identificacion =
+ * 'codigo'`): el HTTP del suspendido va al web proxy del propio router (puerto propio, solo para lo que
+ * llega por el dst-nat) y `/ip proxy access` lo redirige (HTTP 307) a `/corte?c=<código>` según su IP de
+ * origen; lo que no tiene regla cae en la regla final, sin código.
+ */
+
+/** Puerto del web proxy del router reservado para el corte (se agrega a los del operador, si usa el proxy). */
+export const PUERTO_PROXY_CORTE = '3346'
+
+/** NAT del HTTP del suspendido al proxy del router (en lugar del dst-nat al portal). */
+export const REGLA_NAT_PROXY = 'argosisp: corte-nat HTTP al proxy de corte'
+
+/** Regla final de `/ip proxy access`: lo que no tiene regla por servicio va a `/corte` sin código. */
+export const REGLA_PROXY_SIN_CODIGO = 'argosisp: corte proxy sin codigo'
+
+/** Nadie llega al puerto del proxy de corte si no lo mandó el dst-nat (no es un proxy abierto). */
+export const REGLA_INPUT_PROXY = 'argosisp:top proxy de corte solo redirigido'
+
+/** El suspendido redirigido sí llega al proxy (en `argos-corte-in`, antes del `tcp-reset`). */
+export const REGLA_CORTE_IN_PROXY = 'argosisp: corte-in proxy de corte'
 
 /** DNS del suspendido hacia cualquier resolver (IPv4 e IPv6). */
 export const REGLA_DNS_UDP = 'argosisp: corte DNS udp a cualquier resolver'
@@ -284,8 +338,14 @@ const FILTRO = '/ip/firewall/filter'
 const FILTRO6 = '/ipv6/firewall/filter'
 const NAT = '/ip/firewall/nat'
 const NAT6 = '/ipv6/firewall/nat'
+const PROXY_ACCESS = '/ip/proxy/access'
 
-function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fasttrack: boolean): ReglaCorte[] {
+function reglasFiltro(
+    ruta: typeof FILTRO | typeof FILTRO6,
+    lista: string,
+    fasttrack: boolean,
+    codigo = false,
+): ReglaCorte[] {
     const r = (comment: string, propiedades: Propiedades, arriba = false): ReglaCorte => ({
         ruta,
         comment,
@@ -320,6 +380,23 @@ function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fastt
             true,
         ),
     ]
+    if (codigo) {
+        // El puerto del proxy de corte solo acepta lo que llegó por el dst-nat (`redirect`) de un
+        // suspendido: una conexión directa (de la WAN o de un cliente activo) se descarta.
+        salida.push(
+            r(
+                REGLA_INPUT_PROXY,
+                {
+                    chain: 'input',
+                    protocol: 'tcp',
+                    'dst-port': PUERTO_PROXY_CORTE,
+                    'connection-nat-state': '!dstnat',
+                    action: 'drop',
+                },
+                true,
+            ),
+        )
+    }
     if (fasttrack) {
         for (const [sentido, campo] of [
             ['subida', 'src-address-list'],
@@ -368,6 +445,15 @@ function reglasFiltro(ruta: typeof FILTRO | typeof FILTRO6, lista: string, fastt
         entrada('argosisp: corte-in DNS udp', { protocol: 'udp', 'dst-port': '53', action: 'accept' }),
         entrada('argosisp: corte-in DNS tcp', { protocol: 'tcp', 'dst-port': '53', action: 'accept' }),
     )
+    if (codigo) {
+        salida.push(
+            entrada(REGLA_CORTE_IN_PROXY, {
+                protocol: 'tcp',
+                'dst-port': PUERTO_PROXY_CORTE,
+                action: 'accept',
+            }),
+        )
+    }
     if (!v6) salida.push(entrada('argosisp: corte-in ICMP', { protocol: 'icmp', action: 'accept' }))
     salida.push(
         entrada('argosisp: corte-in TCP reset', {
@@ -395,6 +481,7 @@ function reglasNat(
     lista: string,
     config: ConfigCorte,
     v6 = false,
+    codigo = false,
 ): { reglas: ReglaCorte[]; conservar: string[] } {
     const r = (comment: string, propiedades: Propiedades, arriba = false): ReglaCorte => ({
         ruta: v6 ? NAT6 : NAT,
@@ -425,6 +512,20 @@ function reglasNat(
         }),
     ]
     const http = REGLA_NAT_HTTP
+    if (codigo) {
+        // Modo código: el HTTP va al proxy del propio router (IPv4 e IPv6, el proxy escucha en las dos);
+        // no depende de la IP del portal. La redirección a `/corte?c=` la hace `/ip proxy access`.
+        reglas.push(
+            r(REGLA_NAT_PROXY, {
+                chain: 'argos-corte-nat',
+                protocol: 'tcp',
+                'dst-port': '80',
+                action: 'redirect',
+                'to-ports': PUERTO_PROXY_CORTE,
+            }),
+        )
+        return { reglas, conservar: [] }
+    }
     if (v6) {
         // Sin IPv6 del portal no hay NAT IPv6: el HTTP por IPv6 recibe `tcp-reset` y el equipo cae a IPv4.
         if (!config.portal_v6) return { reglas: [], conservar: [] }
@@ -454,13 +555,48 @@ function reglasNat(
     return { reglas, conservar: [] }
 }
 
+/**
+ * Regla final de `/ip proxy access` (modo código): lo que llega al proxy de corte sin regla por servicio
+ * se redirige a `/corte` sin código (el portal cae a la identificación por IP y, si no puede, lo dice).
+ * Las reglas por servicio (`argosisp:servicio:<id>`) van antes (`ordenarAccesoProxy`).
+ */
+function reglasProxy(config: ConfigCorte): { reglas: ReglaCorte[]; conservar: string[] } {
+    if (!config.corte_url) return { reglas: [], conservar: [REGLA_PROXY_SIN_CODIGO] }
+    return {
+        reglas: [
+            {
+                ruta: PROXY_ACCESS,
+                comment: REGLA_PROXY_SIN_CODIGO,
+                propiedades: {
+                    'local-port': PUERTO_PROXY_CORTE,
+                    action: 'redirect',
+                    'action-data': config.corte_url,
+                    disabled: 'no',
+                },
+                arriba: false,
+            },
+        ],
+        conservar: [],
+    }
+}
+
+/** URL de `/corte` con el código del servicio (lo que pone su regla de `/ip proxy access`). */
+export function urlCorteConCodigo(corteUrl: string, codigo: string): string {
+    const url = new URL(corteUrl)
+    url.searchParams.set('c', codigo)
+    return url.toString()
+}
+
 /** Comentarios de reglas de corte que ArgosIsp administra (también las que hoy no hacen falta). */
 function comentariosPropios(config: ConfigCorte): Map<RutaOrdenada, Set<string>> {
     const todas = [
-        ...reglasFiltro(FILTRO, config.address_list, true),
-        ...reglasFiltro(FILTRO6, config.address_list, true),
+        ...reglasFiltro(FILTRO, config.address_list, true, true),
+        ...reglasFiltro(FILTRO6, config.address_list, true, true),
         ...reglasNat(config.address_list, { ...config, portal_v4: config.portal_v4 ?? '0.0.0.0' }).reglas,
         ...reglasNat(config.address_list, { ...config, portal_v6: config.portal_v6 ?? '::' }, true).reglas,
+        ...reglasNat(config.address_list, config, false, true).reglas,
+        ...reglasNat(config.address_list, config, true, true).reglas,
+        ...reglasProxy({ ...config, corte_url: config.corte_url ?? 'http://0.0.0.0/corte' }).reglas,
     ]
     const salida = new Map<RutaOrdenada, Set<string>>()
     for (const regla of todas) {
@@ -562,8 +698,18 @@ export function estadoCorteRouter(
     urlCorte(v6)
     agregar(v6, 'argos-clientes', 'argosisp: clientes IPv6', config.clientes_v6)
 
-    const nat = reglasNat(lista, config)
-    if (config.portal_v4_error) {
+    const codigo = opciones.identificacion === 'codigo'
+    const nat = reglasNat(lista, config, false, codigo)
+    const proxy = codigo ? reglasProxy(config) : { reglas: [], conservar: [] }
+    if (codigo && !config.corte_url) {
+        avisos.push(
+            'modo código sin URL del portal (PORTAL_URL_PUBLICA o la IPv4 del portal): no se escribe la regla ' +
+                'final del proxy de corte',
+        )
+    }
+    if (codigo) {
+        // El destino del HTTP es el proxy del router: la IPv4 del portal solo hace falta para la URL.
+    } else if (config.portal_v4_error) {
         avisos.push(config.portal_v4_error)
     } else if (!config.portal_v4) {
         avisos.push(
@@ -578,8 +724,8 @@ export function estadoCorteRouter(
                 'las tiene en /ip dns servers, corrígelo con /ip dns set servers=<tus resolutores>',
         )
     }
-    const nat6 = reglasNat(lista, config, true)
-    if (!config.portal_v6) {
+    const nat6 = reglasNat(lista, config, true, codigo)
+    if (!config.portal_v6 && !codigo) {
         avisos.push(
             'sin IPv6 del portal (Configuración → Portal de corte): el HTTP por IPv6 de un suspendido recibe tcp-reset y el equipo cae a IPv4 para llegar a /corte',
         )
@@ -597,13 +743,14 @@ export function estadoCorteRouter(
         entradas,
         grupos,
         reglas: [
-            ...reglasFiltro(FILTRO, lista, opciones.fasttrack),
-            ...reglasFiltro(FILTRO6, lista, opciones.fasttrack),
+            ...reglasFiltro(FILTRO, lista, opciones.fasttrack, codigo),
+            ...reglasFiltro(FILTRO6, lista, opciones.fasttrack, codigo),
             ...nat.reglas,
             ...nat6.reglas,
+            ...proxy.reglas,
         ],
         propias: comentariosPropios(config),
-        conservar: new Set(nat.conservar),
+        conservar: new Set([...nat.conservar, ...proxy.conservar]),
         avisos,
     }
 }
@@ -677,7 +824,56 @@ export function esCambioDeCorte(c: { ruta: string; comment: string }): boolean {
         return true
     }
     if (c.ruta === '/ppp/profile') return !c.comment.startsWith('argosisp:plan:')
+    if (c.ruta === '/ip/proxy') return true
+    if (c.ruta === PROXY_ACCESS) return !c.comment.startsWith('argosisp:servicio:')
     return c.ruta.endsWith('/address-list') && !c.comment.startsWith('argosisp:servicio:')
+}
+
+/*
+|--------------------------------------------------------------------------
+| Web proxy del router (modo código)
+|--------------------------------------------------------------------------
+*/
+
+/** Lo que hay que cambiar en `/ip proxy` (`set`), o null si ya está como debe. */
+export function ajusteProxy(
+    actual: Record<string, string | undefined>,
+    codigo: boolean,
+): Record<string, string> | null {
+    const habilitado = actual.enabled === 'true' || actual.enabled === 'yes'
+    const puertos = (actual.port ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+    const conCorte = puertos.includes(PUERTO_PROXY_CORTE)
+    if (codigo) {
+        // Proxy apagado: es solo del corte (sin caché). Encendido: es del operador; se agrega el puerto.
+        if (!habilitado) return { enabled: 'yes', port: PUERTO_PROXY_CORTE, 'max-cache-size': 'none' }
+        if (!conCorte) return { port: [...puertos, PUERTO_PROXY_CORTE].join(',') }
+        return null
+    }
+    if (!conCorte) return null
+    const resto = puertos.filter((p) => p !== PUERTO_PROXY_CORTE)
+    // Solo era del corte: se apaga y vuelve al puerto de fábrica. Si el operador lo usa, se quita el puerto.
+    if (resto.length === 0) return habilitado ? { enabled: 'no', port: '8080' } : { port: '8080' }
+    return { port: resto.join(',') }
+}
+
+/** Reglas de `/ip proxy access` de un servicio (`argosisp:servicio:<id>…`). */
+export function esAccesoDeServicio(o: { comment?: string }): boolean {
+    return (o.comment ?? '').startsWith('argosisp:servicio:')
+}
+
+/**
+ * Orden de `/ip proxy access`: primero las reglas por servicio, luego la final sin código y después lo
+ * del operador (una regla suya sin `local-port` no debe ganarle a las del corte). Ids en el orden deseado.
+ */
+export function ordenAccesoProxy(tabla: ObjetoRouterOS[]): string[] {
+    const estaticas = tabla.filter((o) => o.dynamic !== 'true')
+    const servicio = estaticas.filter(esAccesoDeServicio)
+    const final = estaticas.filter((o) => o.comment === REGLA_PROXY_SIN_CODIGO)
+    const resto = estaticas.filter((o) => !esAccesoDeServicio(o) && o.comment !== REGLA_PROXY_SIN_CODIGO)
+    return [...servicio, ...final, ...resto].map((o) => o['.id'])
 }
 
 /*

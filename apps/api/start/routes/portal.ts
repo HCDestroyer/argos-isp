@@ -38,8 +38,11 @@ import {
     PortalTelegram,
     PortalVinculoTelegram,
     PortalWhatsapp,
+    PortalEcoIp,
+    CodigoCorteServicio,
     QuienSoy,
 } from '#portal/esquemas'
+import { exigirServicio } from '#core/acceso_empresa'
 import {
     condicionesPromesaValidator,
     configurarPortalCorteValidator,
@@ -59,7 +62,14 @@ import {
     registrarWhatsappValidator,
 } from '#portal/validators'
 import { ipOrigenDelCliente } from '#portal/ip_origen'
-import { DemasiadasPeticiones, limitarPorIp } from '#portal/limite_peticiones'
+import {
+    DemasiadasPeticiones,
+    limitarCodigoFallido,
+    limitarPorCodigo,
+    limitarPorIp,
+} from '#portal/limite_peticiones'
+import { estadoCodigoCorte, normalizarCodigoCorte, servicioDelCodigoCorte } from '#portal/codigos_corte'
+import { clasificarIp, type OrigenPortal } from '#portal/identificacion'
 import {
     borrarCookieSesion,
     clienteDeLaSesion,
@@ -210,25 +220,55 @@ const SOBRE_LA_SESION =
     '(sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de ' +
     'peticiones por IP como las rutas sin sesión (429).'
 
+const SOBRE_EL_CODIGO =
+    'Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, ' +
+    '`contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por ' +
+    'código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP.'
+
+/** Código de corte de la petición: cabecera `X-Argos-Corte` o `?c=` (la cabecera manda). */
+function codigoDeLaPeticion(ctx: HttpContext): { codigo: string | null; trajo: boolean } {
+    const crudo = ctx.request.header('x-argos-corte') ?? ctx.request.qs().c
+    const trajo = typeof crudo === 'string' && crudo.trim() !== ''
+    return { codigo: trajo ? normalizarCodigoCorte(crudo) : null, trajo }
+}
+
 /**
- * IP de origen ya resuelta y con el límite de peticiones aplicado. Todas las rutas `/portal/*` la
- * llaman (también las de la sesión): son públicas en el walled garden. Cada endpoint tiene su contador.
+ * Origen de la petición (IP ya resuelta y código de corte vigente, si trae) con el límite de peticiones
+ * aplicado: por código si es vigente (detrás de un NAT todos comparten la IP pública), si no por IP. Todas
+ * las rutas `/portal/*` lo llaman (también las de la sesión): son públicas en el walled garden. Cada
+ * endpoint tiene su contador.
  */
-async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string> {
+async function origenDelCliente(ctx: HttpContext, endpoint: string): Promise<OrigenPortal> {
     ctx.response.header('Cache-Control', 'no-store')
-    const aplicados = limitesAplicados.get(ctx) ?? new Map<string, string>()
-    const yaContada = aplicados.get(endpoint)
-    if (yaContada) return yaContada
+    const aplicados = limitesAplicados.get(ctx) ?? new Map<string, OrigenPortal>()
+    const yaContado = aplicados.get(endpoint)
+    if (yaContado) return yaContado
     const ip = await ipOrigenDelCliente(ctx)
     if (!ip) throw new Error('La conexión no trae una IP de origen válida')
-    await limitarPorIp(ctx, endpoint, ip)
-    aplicados.set(endpoint, ip)
+    const { codigo, trajo } = codigoDeLaPeticion(ctx)
+    let origen: OrigenPortal
+    if (codigo && (await servicioDelCodigoCorte(codigo)) !== null) {
+        await limitarPorCodigo(ctx, endpoint, codigo)
+        origen = { ip, codigo }
+    } else {
+        if (trajo) await limitarCodigoFallido(ctx, ip)
+        await limitarPorIp(ctx, endpoint, ip)
+        // Sin código, el origen es solo la IP (así queda en la auditoría, como siempre).
+        origen = trajo ? { ip, codigoInvalido: true } : { ip }
+    }
+    aplicados.set(endpoint, origen)
     limitesAplicados.set(ctx, aplicados)
-    return ip
+    return origen
+}
+
+/** Solo la IP (rutas que no identifican al servicio por código). */
+async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string> {
+    const origen = await origenDelCliente(ctx, endpoint)
+    return origen.ip
 }
 
 /** Endpoints cuyo límite ya se contó en esta petición (el gancho `antes` y el handler cuentan una vez). */
-const limitesAplicados = new WeakMap<HttpContext, Map<string, string>>()
+const limitesAplicados = new WeakMap<HttpContext, Map<string, OrigenPortal>>()
 
 /**
  * Gancho `antes` de las rutas con cuerpo o query (`a5.md` fila 27): el límite corre **antes** de
@@ -261,16 +301,38 @@ const publicas: Ruta[] = [
         metodo: 'get',
         ruta: '/portal/quien-soy',
         operacion: 'portalQuienSoy',
-        resumen: 'Identifica al cliente por la IP de origen (página de corte)',
-        descripcion: `Sin login. Solo devuelve nombre parcial, estado y montos. ${SOBRE_LA_IP}`,
+        resumen: 'Identifica al cliente por el código de corte o la IP de origen (página de corte)',
+        descripcion:
+            'Sin login. Solo devuelve nombre parcial, estado y montos. Sin identificar, `motivo` dice por qué (la ' +
+            `IP es de un router, del servidor o de un proxy: hay NAT o un proxy en medio). ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
         permiso: null,
         respuesta: { status: 200, descripcion: 'Identificación mínima', esquema: QuienSoy },
         handler: async (ctx) => {
-            const ip = await ipDelCliente(ctx, 'quien-soy')
-            return new IdentificarPorIp().execute({ ip }, ctx.contextoAccion('portal'))
+            const origen = await origenDelCliente(ctx, 'quien-soy')
+            return new IdentificarPorIp().execute(origen, ctx.contextoAccion('portal'))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/eco-ip',
+        operacion: 'portalEcoIp',
+        resumen: 'Qué IP de origen ve el portal (diagnóstico de corte del router)',
+        descripcion:
+            'Sin login y sin datos de clientes: solo la IP con la que llegó la petición y si es de infraestructura ' +
+            '(router, servidor, proxy). El diagnóstico de corte la pide desde el router (`/tool/fetch` con ' +
+            '`src-address` = el gateway de los clientes) para saber si hay NAT o un proxy entre el router y el ' +
+            `portal (\`contratos/corte-identificacion.md\`). ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'IP vista', esquema: PortalEcoIp },
+        handler: async (ctx) => {
+            const ip = await ipDelCliente(ctx, 'eco-ip')
+            return { ip, infraestructura: await clasificarIp(ip) }
         },
     }),
     definirRuta({
@@ -281,15 +343,15 @@ const publicas: Ruta[] = [
         descripcion:
             'Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de ' +
             'cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos ' +
-            `del cliente. ${SOBRE_LA_IP}`,
+            `del cliente. ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
         permiso: null,
         respuesta: { status: 200, descripcion: 'Destino del 302', esquema: DestinoCorte },
         handler: async (ctx) => {
-            const ip = await ipDelCliente(ctx, 'destino-corte')
-            return leerDestinoCorte(ip)
+            const origen = await origenDelCliente(ctx, 'destino-corte')
+            return leerDestinoCorte(origen)
         },
     }),
     definirRuta({
@@ -299,15 +361,15 @@ const publicas: Ruta[] = [
         resumen: 'Estado del servicio de la IP de origen (estado en vivo de la página de corte)',
         descripcion:
             'Sin login. La página de corte lo consulta cada 5 s tras un pago o una promesa hasta ver ' +
-            `\`activo\`. Solo devuelve estado y monto adeudado, sin datos personales. ${SOBRE_LA_IP}`,
+            `\`activo\`. Solo devuelve estado y monto adeudado, sin datos personales. ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
         permiso: null,
         respuesta: { status: 200, descripcion: 'Estado y monto', esquema: EstadoPortal },
         handler: async (ctx) => {
-            const ip = await ipDelCliente(ctx, 'estado')
-            return new ConsultarEstadoPorIp().execute({ ip }, ctx.contextoAccion('portal'))
+            const origen = await origenDelCliente(ctx, 'estado')
+            return new ConsultarEstadoPorIp().execute(origen, ctx.contextoAccion('portal'))
         },
     }),
     definirRuta({
@@ -333,7 +395,7 @@ const publicas: Ruta[] = [
             esquema: PortalSolicitudCodigo,
         },
         handler: async (ctx, { cuerpo }) => {
-            const ip = await ipDelCliente(ctx, 'codigo')
+            const { ip, codigo } = await origenDelCliente(ctx, 'codigo')
             if (!cuerpo.identificador && cuerpo.por_ip !== true) {
                 throw new ValidacionFallida([
                     {
@@ -345,7 +407,7 @@ const publicas: Ruta[] = [
             }
             try {
                 return await new SolicitarCodigoPortal().execute(
-                    { ip, identificador: cuerpo.identificador, por_ip: cuerpo.por_ip },
+                    { ip, identificador: cuerpo.identificador, por_ip: cuerpo.por_ip, codigo },
                     ctx.contextoAccion('portal'),
                 )
             } catch (error) {
@@ -894,7 +956,7 @@ const promesas: Ruta[] = [
         query: condicionesPromesaValidator,
         respuesta: { status: 200, descripcion: 'Condiciones', esquema: PortalCondicionesPromesa },
         handler: async (ctx, { query }) => {
-            const ip = await ipDelCliente(ctx, 'promesas-condiciones')
+            const ip = await origenDelCliente(ctx, 'promesas-condiciones')
             return condicionesPromesa(await servicioDeLaPeticion(ctx, ip, query.servicio_id))
         },
     }),
@@ -921,7 +983,7 @@ const promesas: Ruta[] = [
         cuerpo: solicitarPromesaValidator,
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: PortalPromesaSolicitada },
         handler: async (ctx, { cuerpo }) => {
-            const ip = await ipDelCliente(ctx, 'promesas')
+            const ip = await origenDelCliente(ctx, 'promesas')
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             try {
                 // Pendiente de instalación: sin corte no hay promesa (`contratos/instalacion.md` §3).
@@ -973,7 +1035,7 @@ const pagosEnLinea: Ruta[] = [
         cuerpo: iniciarPagoValidator,
         respuesta: { status: 201, descripcion: 'Cobro creado', esquema: PortalPagoEnLinea },
         handler: async (ctx, { cuerpo }) => {
-            const ip = await ipDelCliente(ctx, 'pagos-iniciar')
+            const ip = await origenDelCliente(ctx, 'pagos-iniciar')
             const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
             const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
             try {
@@ -1008,7 +1070,7 @@ const pagosEnLinea: Ruta[] = [
         permiso: null,
         respuesta: { status: 200, descripcion: 'Pago en línea', esquema: PortalPagoEnLinea },
         handler: async (ctx, { params }) => {
-            const ip = await ipDelCliente(ctx, 'pagos-en-linea')
+            const ip = await origenDelCliente(ctx, 'pagos-en-linea')
             const id = Number(params.id)
             if (!Number.isSafeInteger(id) || id < 1) {
                 throw new NoEncontrado('No encontramos ese pago en línea')
@@ -1025,7 +1087,7 @@ const pagosEnLinea: Ruta[] = [
  */
 async function empresaDeLaPeticion(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     query: { empresa_id?: number; de?: 'cliente' },
 ): Promise<number> {
     if (query.empresa_id !== undefined) {
@@ -1060,7 +1122,7 @@ const empresa: Ruta[] = [
         query: empresaPortalValidator,
         respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaPublica },
         handler: async (ctx, { query }) => {
-            const ip = await ipDelCliente(ctx, 'empresa')
+            const ip = await origenDelCliente(ctx, 'empresa')
             const empresaId = await empresaDeLaPeticion(ctx, ip, query)
             const datos = await leerEmpresa(undefined, empresaId)
             const { logo_etag: etag } = await filaEmpresa(empresaId)
@@ -1184,7 +1246,7 @@ const comprobantes: Ruta[] = [
         },
         respuesta: { status: 201, descripcion: 'Comprobante recibido', esquema: PortalComprobante },
         handler: async (ctx, { cuerpo }) => {
-            const ip = await ipDelCliente(ctx, 'comprobantes')
+            const ip = await origenDelCliente(ctx, 'comprobantes')
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             const archivo = await archivoDeLaPeticion(ctx)
             try {
@@ -1437,7 +1499,7 @@ const anuncios: Ruta[] = [
  */
 async function clienteDeLosAnuncios(
     ctx: HttpContext,
-    ip: string,
+    ip: string | OrigenPortal,
     lugar: 'portal_inicio' | 'pagina_corte',
 ): Promise<{ clienteId: number | null; empresaId?: number }> {
     if (lugar === 'pagina_corte') {
@@ -1476,7 +1538,7 @@ const anunciosPortal: Ruta[] = [
             await ipDelCliente(ctx, 'anuncios')
         },
         handler: async (ctx, { query }) => {
-            const ip = (await ipOrigenDelCliente(ctx))!
+            const ip = await origenDelCliente(ctx, 'anuncios')
             const { clienteId, empresaId } = await clienteDeLosAnuncios(ctx, ip, query.lugar)
             return { data: await anunciosParaCliente(clienteId, query.lugar, empresaId) }
         },
@@ -1758,7 +1820,7 @@ const sorteosPortalRutas: Ruta[] = [
             await ipDelCliente(ctx, 'avisos-sorteo')
         },
         handler: async (ctx, { query }) => {
-            const ip = (await ipOrigenDelCliente(ctx))!
+            const ip = await origenDelCliente(ctx, 'anuncios')
             const { clienteId, empresaId } = await clienteDeLosAnuncios(ctx, ip, query.lugar)
             return { data: await avisosDeSorteo(clienteId, empresaId) }
         },
@@ -1810,6 +1872,39 @@ const SOBRE_PORTAL_CORTE =
     'nunca se guardó: los valores salen de las variables de antes (`ROUTERS_SERVICIO_PORTAL_V4/_V6/_PUERTO`, ' +
     '`COA_SUSPENDER`), que desde la primera edición ya no se leen.'
 const portalCorte: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/codigo-corte',
+        operacion: 'servicioCodigoCorte',
+        resumen: 'Estado del código de corte del servicio (ficha del servicio)',
+        descripcion:
+            'Si el servicio tiene un código de corte abierto (suspendido en un router con ' +
+            '`corte_identificacion = codigo`) y cuándo se emitió o cerró. El código nunca sale por la API: da acceso ' +
+            'a la página de corte de ese servicio y solo lo lleva la regla `/ip proxy access` del router ' +
+            '(`contratos/corte-identificacion.md`). 404 si el servicio no existe; alcance por router y zona.',
+        etiqueta: 'portal',
+        permiso: 'servicios.ver',
+        respuesta: { status: 200, descripcion: 'Estado del código', esquema: CodigoCorteServicio },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            if (!Number.isSafeInteger(id) || id < 1) throw new NoEncontrado('El servicio no existe')
+            await exigirServicio(ctx, id)
+            const router = (await db
+                .from('core.servicios as s')
+                .join('network.routers as r', 'r.id', 's.router_id')
+                .where('s.id', id)
+                .select('r.corte_identificacion')
+                .first()) as { corte_identificacion: 'ip' | 'codigo' } | null
+            const estado = await estadoCodigoCorte(id)
+            return {
+                servicio_id: id,
+                corte_identificacion: router?.corte_identificacion ?? 'ip',
+                activo: estado.activo,
+                creado_en: estado.creado_en ? estado.creado_en.toISOString() : null,
+                cerrado_en: estado.cerrado_en ? estado.cerrado_en.toISOString() : null,
+            }
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/corte/configuracion',

@@ -69,6 +69,7 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/ipv6/firewall/filter': { requeridas: ['chain'], unicas: [] },
     '/ipv6/firewall/nat': { requeridas: ['chain'], unicas: [] },
     '/interface/list': { requeridas: ['name'], unicas: [['name']] },
+    '/ip/proxy/access': { requeridas: [], unicas: [] },
     '/interface/vlan': {
         requeridas: ['name', 'vlan-id', 'interface'],
         unicas: [['name'], ['interface', 'vlan-id']],
@@ -138,6 +139,7 @@ const VALORES_POR_DEFECTO: Partial<Record<RutaRouterOS, Record<string, string>>>
     '/ip/firewall/nat': { action: 'accept', log: 'false' },
     '/ipv6/firewall/filter': { action: 'accept', log: 'false' },
     '/ipv6/firewall/nat': { action: 'accept', log: 'false' },
+    '/ip/proxy/access': { action: 'allow', hits: '0' },
 }
 
 /** Interface-lists que trae RouterOS. */
@@ -149,6 +151,7 @@ const ORDENADOS = new Set<RutaRouterOS>([
     '/ip/firewall/nat',
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
+    '/ip/proxy/access',
 ])
 
 /** Tipos de cola que trae RouterOS (`/queue/type print`); los demás deben existir en la tabla. */
@@ -194,6 +197,19 @@ export class RouterOSFalso {
         'dynamic-servers': '',
         'allow-remote-requests': 'true',
     }
+    /** `/ip proxy` (lo que devuelve `GET /rest/ip/proxy`; `POST /rest/ip/proxy/set` lo cambia) */
+    proxy: Record<string, string> = {
+        enabled: 'false',
+        port: '8080',
+        'max-cache-size': 'unlimited',
+        'cache-on-disk': 'false',
+    }
+    /**
+     * Lo que ve el portal como IP de origen cuando el router hace `/tool/fetch output=user` con
+     * `src-address` (diagnóstico `portal_ip_cliente`): recibe el `src-address` y la URL y devuelve el
+     * cuerpo. null = responde `{"ip": "<src-address>"}` (sin NAT en medio).
+     */
+    eco: ((srcAddress: string | undefined, url: string) => string) | null = null
     /** Conexiones de `/ip firewall connection` (`src-address` y `dst-address` con puerto) */
     conexiones: Array<{ 'src-address': string; 'dst-address': string }> = []
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
@@ -362,6 +378,13 @@ export class RouterOSFalso {
         if (camino === '/ip/dns' && metodo === 'GET') {
             return this.#json(res, 200, this.dns)
         }
+        if (camino === '/ip/proxy' && metodo === 'GET') {
+            return this.#json(res, 200, this.proxy)
+        }
+        if (camino === '/ip/proxy/set' && metodo === 'POST') {
+            this.proxy = { ...this.proxy, ...normalizar('/ip/proxy/access', cuerpo ?? {}) }
+            return this.#json(res, 200, [])
+        }
         // `/execute` (solo el `connection remove` que manda ArgosIsp al suspender): quita de
         // `conexiones` las que coinciden con cada `src-address~"^<ip>:"` / `dst-address~"^<ip>:"`.
         if (camino === '/execute' && metodo === 'POST') {
@@ -427,6 +450,14 @@ export class RouterOSFalso {
                 camino === '/tool/fetch' ? this.respuestasFetch.get(hostPuerto(cuerpo?.url ?? '')) : undefined
             if (status) {
                 return this.#error(res, 400, 'Bad Request', `failure: Status ${status}`)
+            }
+            if (cuerpo?.output === 'user') {
+                const datos = this.eco
+                    ? this.eco(cuerpo['src-address'], cuerpo.url ?? '')
+                    : JSON.stringify({ ip: cuerpo['src-address'] ?? null })
+                return this.#json(res, 200, [
+                    { status: 'finished', downloaded: '1', total: '1', duration: '1s', data: datos },
+                ])
             }
             return this.#json(res, 200, [{ status: 'finished', downloaded: '1', total: '1', duration: '1s' }])
         }

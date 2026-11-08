@@ -32,6 +32,11 @@ export interface RouterVista {
      * se cambia con `routers.cambiar_tipo_conexion` (`contratos/tipo-conexion-router.md`)
      */
     tipo_conexion: TipoConexion
+    /**
+     * Cómo identifica el portal al suspendido (`contratos/corte-identificacion.md`): `ip` o `codigo`
+     * (el proxy del router redirige a `/corte?c=`)
+     */
+    corte_identificacion: 'ip' | 'codigo'
     /** cola simple por servicio o árbol con PCQ por plan (`contratos/velocidad.md`) */
     control_velocidad: ControlVelocidad
     /** estrategia de control de velocidad por tipo de conexión (`contratos/control-velocidad.md`) */
@@ -117,6 +122,7 @@ const COLUMNAS_ROUTER = [
     db.raw('host(nas_ip) AS nas_ip'),
     'modo_seguridad',
     'tipo_conexion',
+    'corte_identificacion',
     'control_velocidad',
     'estrategia_velocidad',
     'routeros_version',

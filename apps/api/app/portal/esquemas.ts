@@ -78,6 +78,66 @@ export const QuienSoy = definirEsquema(
             ...nulable(PortalMarcaEmpresa),
             description: 'Empresa del servicio de esa IP (su marca y su soporte); null sin identificar',
         },
+        identificado_por: {
+            ...nulable(enumerado(['codigo', 'ip'])),
+            description:
+                'Cómo se identificó: codigo (el código de corte de la URL, `?c=` o `X-Argos-Corte`) o ip; null sin ' +
+                'identificar (contratos/corte-identificacion.md)',
+        },
+        motivo: {
+            ...nulable(
+                enumerado([
+                    'codigo_vencido',
+                    'ip_de_router',
+                    'ip_de_servidor',
+                    'ip_de_proxy',
+                    'ip_desconocida',
+                ]),
+            ),
+            description:
+                'Por qué no se identificó; null si se identificó. codigo_vencido: el código no existe o ya venció. ' +
+                'ip_de_router: la IP es de un router (hace NAT hacia el portal). ip_de_servidor: es del propio ' +
+                'servidor. ip_de_proxy: es de un proxy o de la red de Docker. ip_desconocida: ningún servicio la tiene',
+        },
+    }),
+)
+
+export const CodigoCorteServicio = definirEsquema(
+    'CodigoCorteServicio',
+    objeto({
+        servicio_id: { ...entero, description: 'Servicio' },
+        corte_identificacion: {
+            ...enumerado(['ip', 'codigo']),
+            description: 'Modo del router del servicio (contratos/corte-identificacion.md)',
+        },
+        activo: {
+            ...booleano,
+            description:
+                'Hay un código de corte abierto (el servicio está suspendido en un router en modo código). El código ' +
+                'nunca sale por la API: lo lleva solo la regla del router',
+        },
+        creado_en: { ...nulable(instante), description: 'Cuándo se emitió el último código; null si nunca' },
+        cerrado_en: {
+            ...nulable(instante),
+            description:
+                'Cuándo se cerró (el servicio dejó de estar suspendido); null si sigue abierto o nunca hubo',
+        },
+    }),
+)
+
+export const PortalEcoIp = definirEsquema(
+    'PortalEcoIp',
+    objeto({
+        ip: {
+            ...texto,
+            description: 'IP de origen con la que la API ve la petición (ya resuelta tras los proxies)',
+        },
+        infraestructura: {
+            ...nulable(enumerado(['ip_de_router', 'ip_de_servidor', 'ip_de_proxy'])),
+            description:
+                'La IP es de un router, del servidor o de un proxy (nunca identifica a un cliente); null = puede ser ' +
+                'de un cliente',
+        },
     }),
 )
 

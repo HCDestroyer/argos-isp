@@ -1,5 +1,5 @@
 import { leerQuienSoy, type Lectura, type QuienSoy } from '#portal/consultas'
-import { ConsultaPortalAuditada } from '#portal/actions/consulta_auditada'
+import { ConsultaPortalAuditada, type EntradaConsultaPortal } from '#portal/actions/consulta_auditada'
 
 export type { EstadoServicio, QuienSoy } from '#portal/consultas'
 export { nombreParcial } from '#portal/consultas'
@@ -17,7 +17,7 @@ export { nombreParcial } from '#portal/consultas'
 export default class IdentificarPorIp extends ConsultaPortalAuditada<QuienSoy> {
     readonly nombre = 'portal.quien_soy'
 
-    protected leer(ip: string): Promise<Lectura<QuienSoy>> {
-        return leerQuienSoy(ip)
+    protected leer(origen: EntradaConsultaPortal): Promise<Lectura<QuienSoy>> {
+        return leerQuienSoy(origen)
     }
 }

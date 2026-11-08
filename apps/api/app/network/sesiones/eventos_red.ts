@@ -50,8 +50,16 @@ export function esClaveSensibleRed(clave: string): boolean {
     return esCampoSensible(normal) || SENSIBLE_RED.test(normal.toLowerCase())
 }
 
+/**
+ * Código de corte en una URL (`?c=<código>` de la regla `/ip proxy access` de un suspendido,
+ * `contratos/corte-identificacion.md`): da acceso a la página de corte de ese servicio, así que nunca
+ * llega a `audit.red` en claro.
+ */
+const CODIGO_CORTE_EN_URL = /([?&]c=)[0-9A-Za-z]+/g
+
 /** Copia de un JSON con cada clave sensible (a cualquier profundidad) como `***`. */
 export function limpiarCredenciales(valor: unknown): unknown {
+    if (typeof valor === 'string') return valor.replace(CODIGO_CORTE_EN_URL, `$1${MASCARA}`)
     if (Array.isArray(valor)) return valor.map(limpiarCredenciales)
     if (valor !== null && typeof valor === 'object') {
         const salida: Record<string, unknown> = {}

@@ -9,6 +9,21 @@ Endpoints públicos y del cliente para `apps/portal`. Rutas en `start/routes/por
 | `GET /api/v1/portal/quien-soy` (público) | `actions/identificar_por_ip.ts` (`portal.quien_soy`)   | `QuienSoy`: identificado, ip, nombre parcial ("Juan P."), estado, promesa activa, monto adeudado y facturas vencidas (cantidad y total)     |
 | `GET /api/v1/portal/estado` (público)    | `actions/consultar_estado_por_ip.ts` (`portal.estado`) | `EstadoPortal`: identificado, estado y monto adeudado. Sin nombre ni IP: la página de corte lo consulta cada 5 s tras un pago o una promesa |
 
+### Identificación en la página de corte: código de corte o IP
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md`. Bug del PM (v1.12.0): el router hace
+masquerade hacia el portal y la API veía la IP pública del router (o la de Docker detrás de NPM).
+
+- **Precedencia** (`identificacion.ts`, `identificarOrigen`):
+    1. el **código de corte** vigente (`X-Argos-Corte` o `?c=`), que pone el proxy del router en modo `codigo`;
+    2. la **IP**, salvo que sea de un router, del servidor (`PORTAL_IPS_SERVIDOR`) o de un proxy (`PORTAL_PROXIES_CONFIABLES`);
+    3. si no, `identificado: false` con `motivo`.
+- **Códigos** (`codigos_corte.ts`, `core.codigos_corte`): uno por suspensión, de 13 caracteres base32 (65 bits). Los crea o cierra `sincronizarCodigoCorte` dentro de `routeros.aplicar_servicio` / `routeros.reconciliar`, y al crear uno se emite `portal.codigo_corte_emitido` (nunca con el código). Resuelve hasta `PORTAL_CODIGO_CORTE_GRACIA_MIN` (30) minutos después de cerrado.
+- **Qué permite:** el código da lo mismo que la IP (nombre parcial, estado, montos, promesa y comprobante). En la auditoría queda `***`, y en `audit.red` el `?c=` también va enmascarado.
+- **Límite:** con código vigente se cuenta por código, no por IP; los códigos que fallan cuentan en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP.
+- `GET /portal/eco-ip` (público): la IP que ve la API y si es de infraestructura. Lo usa el diagnóstico `portal_ip_cliente`.
+- `GET /servicios/:id/codigo-corte` (`servicios.ver`): estado del código en la ficha, sin el código.
+
 ### Acceso por código y portal autenticado (tarea 7)
 
 | Endpoint                                                 | Acción / lectura                                                                  | Qué hace                                                                                                                                                                     |
@@ -472,7 +487,9 @@ en cada pasada (`configCorteVigente` de `#network/routeros/corte_vigente`). Cont
 
 Emite `portal.config_cambiada` (`empresa_id: null`, `campos` de `portal_v4`, `portal_v6`, `portal_puerto`,
 `modo_suspension`) al cambiar el portal de corte: `routeros` reconcilia todos los routers con API (si
-cambió algo de red) y `coa` relee el modo de suspensión. Fuera de eso no emite ni consume eventos propios (`portal.registrar_whatsapp` tampoco: el permiso de WhatsApp no
+cambió algo de red) y `coa` relee el modo de suspensión. Emite `portal.codigo_corte_emitido` (`codigo_corte_id`,
+`servicio_id`, `empresa_id`, `cliente_id`, `router_id`; nunca el código) cuando un suspendido de un router en modo
+`codigo` recibe su código (`codigos_corte.ts`, dentro de las acciones de `routeros`). Fuera de eso no emite ni consume eventos propios (`portal.registrar_whatsapp` tampoco: el permiso de WhatsApp no
 cambia estado de negocio de Argos). Las acciones de A3 que llama emiten los suyos
 (`promesa.creada`, `comprobante.recibido`; el webhook de la pasarela emite `pago.registrado` y
 `servicio.estado_cambiado`).

@@ -94,7 +94,10 @@ test.group('RouterOS · corte con el portal por FQDN y diagnóstico de corte', (
     const chequeo = (d: DiagnosticoCorte, clave: string) => d.chequeos.find((c) => c.clave === clave)!
     const natHttp = () => falso.tabla('/ip/firewall/nat').find((o) => o.comment === REGLA_NAT_HTTP)
     const fetches = () =>
-        falso.peticiones.filter((p) => p.ruta === '/rest/tool/fetch').map((p) => p.cuerpo?.url as string)
+        falso.peticiones
+            // Sin la sonda de `portal_ip_cliente` (`output=user`): solo las pruebas del destino del NAT.
+            .filter((p) => p.ruta === '/rest/tool/fetch' && p.cuerpo?.output !== 'user')
+            .map((p) => p.cuerpo?.url as string)
 
     async function suspendidoPppoe(ipv4: string) {
         const clienteId = await crearClienteFila()
