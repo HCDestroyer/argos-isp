@@ -156,6 +156,14 @@ export const DestinoCorte = definirEsquema(
                 'URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la ' +
                 'página /corte del portal (IP sin servicio o empresa sin URL)',
         },
+        codigo: {
+            ...nulable(texto),
+            description:
+                'Código de corte de la suspensión, solo si la petición se identificó por una IP de cliente (túnel ' +
+                'WireGuard, LAN del ISP o IPv6, sin NAT), el servicio está suspendido y su empresa no tiene `url`. ' +
+                'El portal redirige a `/corte?c=<código>` para que el segundo salto no dependa de la IP ' +
+                '(`contratos/corte-identificacion.md` §5 ter.1). null en cualquier otro caso',
+        },
     }),
 )
 

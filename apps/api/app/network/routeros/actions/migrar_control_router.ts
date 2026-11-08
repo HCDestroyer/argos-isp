@@ -1,20 +1,19 @@
 import logger from '@adonisjs/core/services/logger'
 import { configCorteVigente } from '#network/routeros/corte_vigente'
+import { opcionesCorteRouter } from '#network/routeros/opciones_corte'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ErrorRouterOS } from '#network/routeros/errores'
 import { RouterSinCredenciales } from '#network/routeros/router'
 import { estadoDeseado, estadoVacio } from '#network/routeros/estado_deseado'
 import {
-    estrategiasEnUso,
     firmaEstrategia,
     planesDeRouter,
-    redesV4DeRouter,
     routerDispatcher,
     servicioRed,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import { estadoCorteRouter } from '#network/routeros/corte_router'
-import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
+import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
 import { solicitarVelocidad } from '#network/sesiones/velocidad'
@@ -24,7 +23,6 @@ import {
     aplicarEstado,
     asegurarVelocidad,
     leerCorteRouter,
-    pideFasttrack,
     bitacoraRed,
     fabricaPorDefecto,
     leerVelocidadRouter,
@@ -175,12 +173,15 @@ export default class MigrarControlRouterOS extends DomainAction<
                             const lecturaCorte = await leerCorteRouter(cliente)
                             const corte = estadoCorteRouter(
                                 await configCorteVigente(this.#resolver, t.trx),
-                                {
-                                    fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
-                                    redes_v4: await redesV4DeRouter(input.router_id, t.trx),
-                                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
-                                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
-                                },
+                                // Mismo modo de identificación y túnel que el reconciliador: sin esto, un
+                                // router en `codigo` volvía al dst-nat hasta la siguiente pasada.
+                                await opcionesCorteRouter(
+                                    input.router_id,
+                                    router,
+                                    todos,
+                                    router.red.corte_identificacion === 'codigo',
+                                    t.trx,
+                                ),
                                 lecturaCorte.get('/ppp/profile') ?? [],
                             )
                             salida.cambios.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctx)))

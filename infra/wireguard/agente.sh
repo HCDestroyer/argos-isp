@@ -30,7 +30,9 @@ RED="${ARGOSISP_WG_RED:-10.255.0.0/16}"
 ESTADO_DIR="${WG_ESTADO_DIR:-/estado}"
 ESTADO_CADA_S="${ARGOSISP_WG_ESTADO_CADA_S:-60}"
 BLOQUEO_MS="${WG_BLOQUEO_MS:-30000}"
-EVENTOS_RE='^router\.(conexion_(registrada|rotada|eliminada)|eliminado)$'
+# portal.config_cambiada (modo de identificación de un router o configuración global) y
+# router.redes_cambiadas (redes de clientes): cambian los AllowedIPs del corte por el túnel
+EVENTOS_RE='^(router\.(conexion_(registrada|rotada|eliminada)|eliminado|redes_cambiadas)|portal\.config_cambiada)$'
 
 log() { printf '%s wireguard-agente: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 morir() {
@@ -62,6 +64,24 @@ ip_en_red() {
     [ $((n & RED_MASCARA)) -eq "$RED_BASE" ]
 }
 
+# Red de clientes válida para AllowedIPs (corte por el túnel, contratos/corte-identificacion.md §5 ter.4):
+# a.b.c.d/n con n entre 8 y 32 y sin traslaparse con la red del túnel (la API ya descarta lo demás:
+# traslapes entre routers y ARGOSISP_WG_REDES_EXCLUIDAS; esto es la última defensa).
+red_de_clientes() {
+    [[ "$1" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/([0-9]{1,2})$ ]] || return 1
+    local ip="${BASH_REMATCH[1]}" n="${BASH_REMATCH[2]}" o
+    for o in ${ip//./ }; do [ "$o" -le 255 ] || return 1; done
+    { [ "$n" -ge 8 ] && [ "$n" -le 32 ]; } || return 1
+    local base mascara desde hasta red_hasta
+    base="$(ip_a_entero "$ip")"
+    mascara=$(((0xFFFFFFFF << (32 - n)) & 0xFFFFFFFF))
+    desde=$((base & mascara))
+    hasta=$((desde + (1 << (32 - n)) - 1))
+    red_hasta=$((RED_BASE + (1 << (32 - RED_PREFIJO)) - 1))
+    # Se traslapa con la red del túnel → no
+    [ "$desde" -gt "$red_hasta" ] || [ "$hasta" -lt "$RED_BASE" ]
+}
+
 api_get() { curl -fsS -m 15 -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' "$API/$1"; }
 api_post() {
     curl -fsS -m 15 -o /dev/null -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -69,10 +89,12 @@ api_post() {
 }
 
 # --- 1. Peers ---------------------------------------------------------------------------------------
-# { data: [{ router_id, public_key, ip_tunel }] } → peers.conf. Lo inválido se descarta y se avisa
-# (nunca rompe la configuración de los demás routers).
+# { data: [{ router_id, public_key, ip_tunel, allowed_ips, avisos }] } → peers.conf. AllowedIPs = la /32
+# del túnel y, si el router manda el corte por el túnel, sus redes de clientes (la API sin allowed_ips,
+# de una versión anterior, = solo la /32). Lo inválido se descarta y se avisa (nunca rompe la
+# configuración de los demás routers).
 reconciliar() {
-    local json tmp n=0 router clave ip
+    local json tmp n=0 router clave ip redes avisos permitidas r
     json="$(api_get internal/wireguard/peers)" || {
         log "no pude leer los peers de la API ($API/internal/wireguard/peers)"
         return 1
@@ -80,7 +102,7 @@ reconciliar() {
     mkdir -p "$ESTADO_DIR/peers"
     tmp="$(mktemp "$ESTADO_DIR/peers/.peers.XXXXXX")"
     printf '# Generado por wireguard-agente desde network.routers_conexion. No editar.\n' > "$tmp"
-    while IFS=$'\t' read -r router clave ip; do
+    while IFS=$'\t' read -r router clave ip redes avisos; do
         [ -n "$router" ] || continue
         if ! [[ "$clave" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$ ]]; then
             log "router $router: public_key inválida, se omite"
@@ -90,10 +112,24 @@ reconciliar() {
             log "router $router: ip_tunel '$ip' fuera de $RED, se omite"
             continue
         fi
-        printf '\n# router %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\n' "$router" "$clave" "$ip" >> "$tmp"
+        [ -z "$avisos" ] || log "router $router: $avisos"
+        permitidas="$ip/32"
+        for r in ${redes//,/ }; do
+            [ "$r" != "$ip/32" ] || continue
+            if red_de_clientes "$r"; then
+                permitidas="$permitidas, $r"
+            else
+                log "router $router: red '$r' inválida o dentro de $RED, se omite"
+            fi
+        done
+        printf '\n# router %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s\n' "$router" "$clave" "$permitidas" >> "$tmp"
         n=$((n + 1))
     done < <(jq -r '.data // [] | unique_by(.public_key) | unique_by(.ip_tunel) | .[] |
-        [(.router_id | tostring), (.public_key // ""), (.ip_tunel // "")] | @tsv' <<< "$json")
+        [(.router_id | tostring), (.public_key // ""), (.ip_tunel // ""),
+         # nunca vacío (IFS de tabulador junta campos vacíos): sin allowed_ips, la /32 del túnel
+         ((.ip_tunel // "") as $ip | (.allowed_ips // []) | map(select(type == "string")) |
+            if length == 0 then [$ip + "/32"] else . end | join(",")),
+         ((.avisos // []) | map(tostring) | join(" | "))] | @tsv' <<< "$json")
     chmod 644 "$tmp"
     if cmp -s "$tmp" "$ESTADO_DIR/peers/peers.conf"; then
         rm -f "$tmp"

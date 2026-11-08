@@ -1,7 +1,7 @@
 import { isIP } from 'node:net'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { resolverIp } from '#network/consultas/ip'
+import { resolverIps } from '#network/consultas/ip'
 import { configIpOrigen, listaConfiables, normalizarIp } from '#portal/ip_origen'
 import { servicioDelCodigoCorte } from '#portal/codigos_corte'
 
@@ -99,7 +99,75 @@ export async function identificarOrigen(
     const conCodigoFallido = Boolean(o.codigo) || o.codigoInvalido === true
     const infra = await clasificarIp(o.ip, cliente)
     if (infra) return { servicioId: null, por: null, motivo: conCodigoFallido ? 'codigo_vencido' : infra }
-    const resolucion = await resolverIp(o.ip, cliente)
-    if (resolucion) return { servicioId: resolucion.servicio_id, por: 'ip', motivo: null }
+    const servicioId = await servicioDeLaIp(o.ip, cliente)
+    if (servicioId) return { servicioId, por: 'ip', motivo: null }
     return { servicioId: null, por: null, motivo: conCodigoFallido ? 'codigo_vencido' : 'ip_desconocida' }
+}
+
+/**
+ * Candidatos de una IP restringidos a los servicios de un router (misma precedencia que `resolverIp` de A1:
+ * prefijo más largo, sesión sobre asignación, la más reciente).
+ */
+const CANDIDATO_DEL_ROUTER = `
+    SELECT c.servicio_id
+    FROM (
+        SELECT se.servicio_id, set_masklen(se.ipv4, 32)::cidr AS prefijo, 0 AS fuente, se.inicio
+        FROM network.sesiones se
+        WHERE se.fin IS NULL AND se.servicio_id IS NOT NULL AND family(?::inet) = 4 AND se.ipv4 = ?::inet
+        UNION ALL
+        SELECT se.servicio_id, se.prefijo_enlace_v6, 0, se.inicio
+        FROM network.sesiones se
+        WHERE se.fin IS NULL AND se.servicio_id IS NOT NULL AND se.prefijo_enlace_v6 >>= ?::inet
+        UNION ALL
+        SELECT se.servicio_id, se.prefijo_delegado_v6, 0, se.inicio
+        FROM network.sesiones se
+        WHERE se.fin IS NULL AND se.servicio_id IS NOT NULL AND se.prefijo_delegado_v6 >>= ?::inet
+        UNION ALL
+        SELECT a.servicio_id, set_masklen(a.ip, 32)::cidr, 1, a.inicio
+        FROM network.ipv4_asignaciones a
+        WHERE a.fin IS NULL AND family(?::inet) = 4 AND a.ip = ?::inet
+        UNION ALL
+        SELECT a.servicio_id, a.prefijo, 1, a.inicio
+        FROM network.ipv6_asignaciones a
+        WHERE a.fin IS NULL AND a.prefijo >>= ?::inet
+    ) c
+    JOIN core.servicios sv ON sv.id = c.servicio_id
+    WHERE sv.router_id = ?
+    ORDER BY masklen(c.prefijo) DESC, c.fuente ASC, c.inicio DESC
+    LIMIT 1
+`
+
+/**
+ * Servicio de una IP de cliente con la desambiguación (router, IP) de `contratos/corte-identificacion.md`
+ * §5 ter.4: si una IPv4 cae en una red registrada de un router (`network.redes_ipv4`), solo cuentan los
+ * servicios de ese router. Así, una sesión de otro router con la misma IP (un pool privado que ese router
+ * entrega sin estar registrado en Argos) nunca muestra datos ajenos. IPv6 (prefijos globales, no se
+ * repiten entre routers) y las IPv4 sin red registrada: la resolución de siempre (`resolverIps` de A1).
+ */
+export async function servicioDeLaIp(
+    ip: string,
+    cliente: QueryClientContract = db.connection(),
+): Promise<number | null> {
+    const [resolucion] = await resolverIps([ip], cliente)
+    if (isIP(ip) !== 4) return resolucion?.servicio_id ?? null
+    const red = await cliente.rawQuery(
+        `SELECT router_id FROM network.redes_ipv4 WHERE cidr >>= ?::inet LIMIT 1`,
+        [ip],
+    )
+    const routerRed = (red.rows[0] as { router_id: number | string } | undefined)?.router_id
+    if (routerRed === undefined) return resolucion?.servicio_id ?? null
+    if (resolucion && resolucion.router_id === Number(routerRed)) return resolucion.servicio_id
+    const { rows } = (await cliente.rawQuery(CANDIDATO_DEL_ROUTER, [
+        ip,
+        ip,
+        ip,
+        ip,
+        ip,
+        ip,
+        ip,
+        routerRed,
+    ])) as {
+        rows: Array<{ servicio_id: number | string }>
+    }
+    return rows[0] ? Number(rows[0].servicio_id) : null
 }

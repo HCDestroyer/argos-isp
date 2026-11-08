@@ -237,7 +237,13 @@ test.group('integraciones · eliminados · peer WireGuard', () => {
                 client.get('/api/v1/internal/wireguard/peers').bearerToken(env.get('INTERNAL_TOKEN')),
                 200,
             )
-            return respuesta.body().data as Array<{ router_id: number; public_key: string; ip_tunel: string }>
+            // Solo lo que compara esta prueba (`allowed_ips` y `avisos`: corte por el túnel, corte_tunel.spec.ts)
+            const datos = respuesta.body().data as Array<{
+                router_id: number
+                public_key: string
+                ip_tunel: string
+            }>
+            return datos.map(({ router_id, public_key, ip_tunel }) => ({ router_id, public_key, ip_tunel }))
         }
         assert.deepInclude(await peers(), { router_id: seVa, public_key: clave(n + 1), ip_tunel: ipSeVa })
 

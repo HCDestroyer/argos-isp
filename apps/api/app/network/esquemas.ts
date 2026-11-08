@@ -1338,7 +1338,21 @@ export const RegistroConexion = definirEsquema(
 
 export const PeerWireguard = definirEsquema(
     'PeerWireguard',
-    objeto({ router_id: id, public_key: texto, ip_tunel: texto }),
+    objeto({
+        router_id: id,
+        public_key: texto,
+        ip_tunel: texto,
+        allowed_ips: {
+            ...lista(texto),
+            description:
+                'AllowedIPs del peer: `<ip_tunel>/32` y, si el router manda el corte por el túnel (modo `ip`), sus ' +
+                'redes IPv4 de clientes (`contratos/corte-identificacion.md` §5 ter.4)',
+        },
+        avisos: {
+            ...lista(texto),
+            description: 'Redes descartadas y por qué (traslape, red del túnel, excluidas)',
+        },
+    }),
 )
 
 export const PeersWireguard = definirEsquema('PeersWireguard', objeto({ data: lista(PeerWireguard) }))

@@ -547,9 +547,15 @@ fi
 if [ "$WIREGUARD" = 1 ]; then
     # RADIUS se publica en la .1 del túnel: al reiniciar el servidor, Docker puede levantar
     # FreeRADIUS antes de que exista wg-argos. ip_nonlocal_bind deja publicar el puerto igual.
-    printf '# ArgosIsp (instalar.sh): RADIUS en la IP del túnel WireGuard antes de que exista la interfaz\nnet.ipv4.ip_nonlocal_bind = 1\n' \
+    # Corte por el túnel (contratos/corte-identificacion.md §5 ter.5): las respuestas a los clientes de los
+    # routers vuelven por wg-argos por marca de conexión; con rp_filter estricto la entrada solo pasa si la
+    # comprobación de la ruta de vuelta usa esa marca (src_valid_mark).
+    printf '%s\n' '# ArgosIsp (instalar.sh): RADIUS en la IP del túnel WireGuard antes de que exista la interfaz' \
+        'net.ipv4.ip_nonlocal_bind = 1' \
+        '# Corte por el túnel: la marca de conexión cuenta en la comprobación de la ruta de vuelta (rp_filter)' \
+        'net.ipv4.conf.all.src_valid_mark = 1' \
         > /etc/sysctl.d/90-argosisp-wireguard.conf
-    sysctl -q -p /etc/sysctl.d/90-argosisp-wireguard.conf < /dev/null || aviso "no pude aplicar net.ipv4.ip_nonlocal_bind (sysctl)"
+    sysctl -q -p /etc/sysctl.d/90-argosisp-wireguard.conf < /dev/null || aviso "no pude aplicar net.ipv4.ip_nonlocal_bind y src_valid_mark (sysctl)"
     if ! modprobe wireguard < /dev/null 2> /dev/null && [ ! -c /dev/net/tun ]; then
         morir "este kernel no tiene WireGuard ni /dev/net/tun: no se puede crear el túnel (instala con --wireguard no)"
     fi

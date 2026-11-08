@@ -136,11 +136,94 @@ test.group('Portal: URL de corte por empresa', (group) => {
             )
             return r.body()
         }
-        assert.deepEqual(await pedir('198.51.100.177'), { url: null })
+        // Suspendido identificado por su IP: sin URL de la empresa, el código de su suspensión (§5 ter.1)
+        const sinUrl = await pedir('198.51.100.177')
+        assert.isNull(sinUrl.url)
+        assert.match(sinUrl.codigo, /^[0-9A-HJKMNP-TV-Z]{13}$/)
         await db.from('core.empresas').where('id', 1).update({ url_corte: URL_OPERADOR })
-        assert.deepEqual(await pedir('198.51.100.177'), { url: URL_OPERADOR })
+        assert.deepEqual(await pedir('198.51.100.177'), { url: URL_OPERADOR, codigo: null })
         // IP que no es de ningún servicio: null (la /corte del portal)
-        assert.deepEqual(await pedir('203.0.113.250'), { url: null })
+        assert.deepEqual(await pedir('203.0.113.250'), { url: null, codigo: null })
+    })
+
+    test('primer salto por IP (contratos/corte-identificacion.md §5 ter.1): código de la suspensión, idempotente y solo suspendido', async ({
+        client,
+        assert,
+    }) => {
+        const s = await crearServicio()
+        await crearSesion(s, { ipv4: '198.51.100.178' })
+        const pedir = async (headers: Record<string, string>) => {
+            let peticion = client
+                .get('/api/v1/portal/destino-corte')
+                .header('X-Forwarded-For', '198.51.100.178')
+            for (const [k, v] of Object.entries(headers)) peticion = peticion.header(k, v)
+            const r = await estado(peticion, 200)
+            return r.body() as { url: string | null; codigo: string | null }
+        }
+        const emitidos = () =>
+            db
+                .from('audit.outbox')
+                .where('evento', 'portal.codigo_corte_emitido')
+                .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [s.servicioId])
+        const auditadas = () =>
+            db
+                .from('audit.acciones')
+                .where('accion', 'portal.codigo_corte.emitir')
+                .where('entidad_id', String(s.servicioId))
+
+        const primero = await pedir({})
+        assert.match(primero.codigo!, /^[0-9A-HJKMNP-TV-Z]{13}$/)
+        // Repetida (cada sonda del sistema): el mismo código, sin otro evento ni otra fila de auditoría
+        const repetida = await pedir({})
+        assert.equal(repetida.codigo, primero.codigo)
+        assert.lengthOf(await emitidos(), 1)
+        const filas = await auditadas()
+        assert.lengthOf(filas, 1)
+        // La auditoría nunca lleva el código
+        assert.notInclude(JSON.stringify(filas[0]), primero.codigo!)
+        const [evento] = await emitidos()
+        assert.notInclude(JSON.stringify(evento.payload), primero.codigo!)
+        const fila = await db
+            .from('core.codigos_corte')
+            .where('servicio_id', s.servicioId)
+            .whereNull('cerrado_en')
+        assert.lengthOf(fila, 1)
+        assert.equal(fila[0].codigo, primero.codigo)
+
+        // Con el código en la petición identifica por código: no hace falta otro
+        assert.deepEqual(await pedir({ 'X-Argos-Corte': primero.codigo! }), { url: null, codigo: null })
+
+        // Reactivado: ya no se emite (la sesión sigue con la IP)
+        await db.from('core.servicios').where('id', s.servicioId).update({ estado: 'activo' })
+        await db
+            .from('core.codigos_corte')
+            .where('servicio_id', s.servicioId)
+            .update({ cerrado_en: new Date() })
+        assert.deepEqual(await pedir({}), { url: null, codigo: null })
+        assert.lengthOf(
+            await db.from('core.codigos_corte').where('servicio_id', s.servicioId).whereNull('cerrado_en'),
+            0,
+        )
+    })
+
+    test('IP de infraestructura (router o proxy): sin código aunque caiga en una sesión', async ({
+        client,
+        assert,
+    }) => {
+        const s = await crearServicio()
+        // La IP del NAS del router del servicio: nunca identifica (ip_de_router), nunca recibe código
+        const router = await db
+            .from('network.routers')
+            .where('id', s.routerId)
+            .select(db.raw('host(nas_ip) AS ip'))
+            .first()
+        await crearSesion(s, { ipv4: router.ip })
+        const r = await estado(
+            client.get('/api/v1/portal/destino-corte').header('X-Forwarded-For', router.ip),
+            200,
+        )
+        assert.deepEqual(r.body(), { url: null, codigo: null })
+        assert.lengthOf(await db.from('core.codigos_corte').where('servicio_id', s.servicioId), 0)
     })
 
     test('el host de la URL entra en argos-walled del router; portal.config_cambiada reconcilia', async ({

@@ -482,6 +482,16 @@ export interface CatalogoEventos {
         empresa_id: number | null
     }
     /**
+     * Cambiaron las redes de clientes de un router (`contratos/corte-identificacion.md` §5 ter.10): el
+     * `wireguard-agente` vuelve a pedir los peers, porque un router que manda el corte por el túnel
+     * lleva sus redes IPv4 en AllowedIPs. Lo emiten las acciones de redes (A1, pedido en `a6.md`) y, de
+     * respaldo, `routeros.reconciliar` cuando corrige `argos-clientes` en un router con túnel.
+     */
+    'router.redes_cambiadas': {
+        router_id: number
+        empresa_id: number | null
+    }
+    /**
      * Cambió la dirección del NAS o el secreto RADIUS de un router (`routers.crear`, `routers.editar`,
      * registro por el túnel) o, en la edición, su `modo_seguridad` (`api` lo saca de FreeRADIUS). A2 regenera
      * los clientes de FreeRADIUS. Nunca lleva el valor del secreto.
@@ -1366,6 +1376,7 @@ export const EVENTOS = [
     'router.conexion_registrada',
     'router.conexion_rotada',
     'router.conexion_eliminada',
+    'router.redes_cambiadas',
     'router.radius_cambiado',
     'cliente.actualizado',
     'catalogo.cambiado',

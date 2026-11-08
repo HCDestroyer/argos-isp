@@ -15,7 +15,7 @@ Los dos usan la imagen `argosisp/wireguard` (`Dockerfile`, Alpine, unos 45 MB). 
 
 Con `Authorization: Bearer <AAA_INTERNAL_TOKEN>` (el `INTERNAL_TOKEN` de la API), como `internal/aaa/*`:
 
-- `GET /api/v1/internal/wireguard/peers` → `{ data: [{ router_id, public_key, ip_tunel }] }`: todos los routers con clave registrada y no rotada, sin paginar.
+- `GET /api/v1/internal/wireguard/peers` → `{ data: [{ router_id, public_key, ip_tunel, allowed_ips, avisos }] }`: todos los routers con clave registrada y no rotada, sin paginar. `allowed_ips` es la `/32` del túnel y, si el router manda el corte por el túnel, sus redes IPv4 de clientes (§«Corte por el túnel»). `avisos` trae las redes que la API descartó; el agente los copia a su log. Una API sin `allowed_ips` equivale a la `/32` sola.
 - `POST /api/v1/internal/wireguard/estado` → `204`. Cuerpo:
 
 ```json
@@ -38,12 +38,31 @@ Con `Authorization: Bearer <AAA_INTERNAL_TOKEN>` (el `INTERNAL_TOKEN` de la API)
 
 Probado en el laboratorio con un CHR 7.24.5 por el túnel: `wg show` con handshake, REST con el usuario `argosisp-api` verificando el certificado del router por IP desde el host y desde un contenedor de compose, `Disconnect-Request` con `radclient` desde un contenedor (el router responde `Disconnect-NAK`: aceptó el origen `.1` y el secreto) y `Access-Request` del router llegando a la `.1:1812`.
 
+## Corte por el túnel (fase 2 de la identificación del cortado)
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 ter. Un router en modo de identificación `ip` registrado en el túnel manda el HTTP de sus suspendidos a `10.255.0.1:PORTAL_CORTE_PUERTO` (8088) **sin masquerade**. Así el portal ve la IP del cliente. Con `PORTAL_CORTE_TUNEL=0` se apaga y el dst-nat vuelve a la IPv4 del portal.
+
+1. **AllowedIPs.** Para esos routers, la API suma sus redes de clientes (`network.redes_ipv4`). Descarta las que se traslapan con la red del túnel, con `ARGOSISP_WG_REDES_EXCLUIDAS` (la red de compose) o con las de otro router, porque WireGuard no admite traslapes. El agente reconcilia también con `portal.config_cambiada` y `router.redes_cambiadas`, y revalida cada CIDR.
+2. **Entrada.** El paquete llega a la `.1:8088` y el DNAT de Docker lo lleva al Caddy del corte (servicio `proxy`) conservando el origen, el mismo camino de RADIUS. El sitio del corte no lee encabezados (`{remote_host}`), así que la IP llega intacta a la API.
+3. **Vuelta, por marca de conexión, sin rutas globales.** `servidor.sh` marca en `mangle` (`ARGOSISP-MARCA-wg-argos`, marca `0x4172`) las conexiones que entran por `wg-argos` y copia la marca a sus paquetes. Hay dos reglas de ruteo:
+    - `ip rule fwmark 0x4172 lookup 4172`, con `default dev wg-argos` en esa tabla: WireGuard elige el peer por AllowedIPs;
+    - `ip rule iif wg-argos lookup main`, que va antes: el paquete de entrada sigue hacia el contenedor.
+
+   Un cliente con IP pública que entra por Internet sigue volviendo por Internet. Una ruta global hacia su red lo mandaría al túnel, y el router lo tiraría.
+4. **`rp_filter`.** Si es estricto (1), hace falta `net.ipv4.conf.all.src_valid_mark=1` (lo escribe `instalar.sh` en `/etc/sysctl.d/90-argosisp-wireguard.conf`). El contenedor no puede escribir `/proc/sys`: `servidor.sh` y `argosisp estado` solo avisan.
+5. **`ARGOSISP_BIND_IP`.** Si está fijada a una IP concreta, el `:8088` no escucha en la `.1`, y `argosisp estado` lo avisa.
+
+Con los clientes en AllowedIPs, el firewall cierra lo que antes cerraba el propio WireGuard (siguiente sección): RADIUS y ping solo desde la red del túnel.
+
 ## Firewall del túnel (`ARGOSISP_WG_FIREWALL=1`)
 
 `servidor.sh` instala cadenas propias con el mismo backend que Docker (`iptables-nft` o `iptables-legacy`):
 
-- `ARGOSISP-IN-wg-argos` (salto desde `INPUT`): desde el túnel al propio host solo respuestas (`ESTABLISHED,RELATED`) y ping a la `.1`; lo demás se descarta. Un router no llega al SSH del servidor ni a nada que escuche en `0.0.0.0`.
-- `ARGOSISP-FWD-wg-argos` (salto desde `DOCKER-USER`, o `FORWARD` sin Docker): de router a router nada; respuestas sí; nuevas solo UDP 1812/1813 hacia la `.1` (el DNAT de RADIUS).
+- `ARGOSISP-IN-wg-argos` (salto desde `INPUT`): desde el túnel al propio host solo respuestas (`ESTABLISHED,RELATED`) y ping a la `.1` desde la red del túnel; lo demás se descarta. Un router o un cliente suyo no llega al SSH del servidor ni a nada que escuche en `0.0.0.0`.
+- `ARGOSISP-FWD-wg-argos` (salto desde `DOCKER-USER`, o `FORWARD` sin Docker):
+    - de router a router, nada; las respuestas sí;
+    - nuevas: UDP 1812/1813 hacia la `.1` (el DNAT de RADIUS) **solo desde la red del túnel**;
+    - con el corte por el túnel, TCP `PORTAL_CORTE_PUERTO` hacia la `.1` (el DNAT del Caddy del corte) desde cualquier origen del túnel. WireGuard ya limita el origen a los AllowedIPs del peer.
 
 Docker reordena sus cadenas al reiniciarse: el servidor revisa en cada vuelta que su salto siga primero. Al detenerse borra la interfaz y sus reglas.
 
@@ -59,7 +78,11 @@ Docker reordena sus cadenas al reiniciarse: el servidor revisa en cada vuelta qu
 | `ARGOSISP_WG_MODO` | `auto` | `kernel`, `userspace` (`wireguard-go`) o `auto` |
 | `ARGOSISP_WG_FIREWALL` | `1` | `0` deja el túnel sin filtrar (no recomendado) |
 | `ARGOSISP_WG_ESTADO_CADA_S` | `60` | Mínimo entre envíos del estado a la API |
+| `PORTAL_CORTE_TUNEL` | `1` | Corte por el túnel (api y `wireguard`). `0` = dst-nat a la IPv4 del portal, sin redes de clientes en AllowedIPs ni puerto del corte |
+| `PORTAL_CORTE_PUERTO` | `8088` | Puerto del Caddy del corte (api, `wireguard` y `proxy`) |
+| `ARGOSISP_WG_REDES_EXCLUIDAS` | red de compose | CIDR que nunca entran en AllowedIPs (api) |
+| `ARGOSISP_WG_MARCA` / `ARGOSISP_WG_TABLA` | `0x4172` / `4172` | Marca y tabla de la vuelta del corte (`wireguard`; la prueba usa otras) |
 
 ## Pruebas
 
-`infra/wireguard/probar.sh` (CI, job `infra`; local con `WG_IMAGEN=argosisp/wireguard:dev` para no reconstruir): Redis, API falsa (`prueba/api_falsa.py`), servidor en la red del host, agente y un «router» en un contenedor con su propio WireGuard. Comprueba el peer aplicado por evento sin reiniciar, el descarte de peers inválidos, el handshake y el estado en la API (sin clave privada), contenedor de compose → router con origen `.1`, RADIUS por la `.1` sí y otros puertos del host no, rotación (el peer desaparece) y limpieza al detener. Tarda unos 25 s.
+`infra/wireguard/probar.sh` (CI, job `infra`; local con `WG_IMAGEN=argosisp/wireguard:dev` para no reconstruir): Redis, API falsa (`prueba/api_falsa.py`), servidor en la red del host, agente y un «router» en un contenedor con su propio WireGuard. Comprueba el peer aplicado por evento sin reiniciar, el corte por el túnel (paso 4b: con las redes de clientes en AllowedIPs, un cliente detrás del «router» llega al puerto del corte publicado por Docker y el servidor ve **su** IP; el mismo cliente no llega a RADIUS ni a otros puertos), el descarte de peers inválidos, el handshake y el estado en la API (sin clave privada), contenedor de compose → router con origen `.1`, RADIUS por la `.1` sí y otros puertos del host no, rotación (el peer desaparece) y limpieza al detener. Tarda unos 35 s.

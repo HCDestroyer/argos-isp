@@ -83,6 +83,8 @@
 :local corteIdentificacion "{{corte_identificacion}}"
 :local corteUrl "{{corte_url}}"
 :local proxyCortePuerto "3346"
+:local corteTunelIp "{{corte_tunel_ip}}"
+:local corteTunelPuerto [:tonum "{{corte_tunel_puerto}}"]
 :local walledGarden [:toarray "{{walled_garden}}"]
 :local dnsV4 [:toarray "{{dns_v4}}"]
 :local dnsV6 [:toarray "{{dns_v6}}"]
@@ -304,6 +306,9 @@
 :put "argosisp: address-lists"
 /ip firewall address-list add list=argos-portal address=$portalV4 comment="argosisp: portal IP"
 /ip firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
+:if ($corteTunelIp != "" && $corteIdentificacion != "codigo") do={
+    /ip firewall address-list add list=argos-portal address=$corteTunelIp comment="argosisp: portal tunel"
+}
 /ip firewall address-list add list=argos-dns address=$pppLocalV4 comment="argosisp: DNS del router"
 :foreach d in=$dnsV4 do={ /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
 :foreach d in=$dnsRouterV4 do={ :do { /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS resolutor del router" } on-error={} }
@@ -382,7 +387,13 @@ add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="a
 :if ($corteIdentificacion = "codigo") do={
     /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
 } else={
-    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+    :if ($corteTunelIp != "") do={
+        /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$corteTunelIp to-ports=$corteTunelPuerto comment="argosisp: corte-nat HTTP a /corte"
+        /ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=$corteTunelIp action=accept comment="argosisp:top corte por tunel sin NAT"
+        /ip firewall nat add chain=srcnat connection-nat-state=dstnat dst-address=$corteTunelIp action=masquerade comment="argosisp: corte por tunel NAT de lo demas"
+    } else={
+        /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
+    }
 }
 /ip firewall nat
 add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=masquerade comment="argosisp: NAT de clientes del laboratorio"

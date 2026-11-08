@@ -343,6 +343,19 @@ avisos_portal_ips() {
             *) echo "AVISO: PORTAL_PROXIES_CONFIABLES está fijada y no incluye la red de compose ($subred): la API no verá la IP real de los clientes que llegan por Caddy y el portal. Bórrala del .env (vale la red de compose) y ejecuta argosisp levantar" ;;
         esac
     fi
+    # Corte por el túnel (contratos/corte-identificacion.md §5 ter): el Caddy del corte debe escuchar también
+    # en la IP del túnel. Con ARGOSISP_BIND_IP fijada a otra IP, el dst-nat de los routers no llega.
+    local bind
+    bind="$(leer_env ARGOSISP_BIND_IP)"
+    if [ "$(leer_env ARGOSISP_WIREGUARD)" = 1 ] && [ "$(leer_env PORTAL_CORTE_TUNEL)" != 0 ] &&
+        [ -n "$bind" ] && [ "$bind" != 0.0.0.0 ]; then
+        echo "AVISO: ARGOSISP_BIND_IP=$bind y el corte por el túnel activo: el puerto del corte no escucha en la IP del túnel y los suspendidos de los routers en modo ip no ven la página. Quita ARGOSISP_BIND_IP o pon PORTAL_CORTE_TUNEL=0, y ejecuta argosisp levantar"
+    fi
+    if [ "$(leer_env ARGOSISP_WIREGUARD)" = 1 ] && [ "$(leer_env PORTAL_CORTE_TUNEL)" != 0 ] &&
+        [ "$(cat /proc/sys/net/ipv4/conf/all/rp_filter 2> /dev/null || echo 0)" = 1 ] &&
+        [ "$(cat /proc/sys/net/ipv4/conf/all/src_valid_mark 2> /dev/null || echo 0)" != 1 ]; then
+        echo "AVISO: rp_filter estricto sin net.ipv4.conf.all.src_valid_mark=1: el corte por el túnel no llega al portal. Ejecuta sudo sysctl --system (instalar.sh lo deja en /etc/sysctl.d/90-argosisp-wireguard.conf)"
+    fi
 }
 
 # api-portal está activo y el compose de <versión> lo trae

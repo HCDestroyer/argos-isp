@@ -133,3 +133,22 @@ Resultados:
 | Prueba | Fecha | RouterOS | Resultado | Quién |
 | --- | --- | --- | --- | --- |
 | 9.1 – 9.13 | | | pendiente | |
+
+## 10. Corte por el túnel, servidor en la LAN y nodo de portal (fase 2, pendiente de laboratorio)
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 ter. Lo cubierto sin equipo: `apps/api/tests/network/corte_tunel.spec.ts` (RouterOS falso), `infra/mikrotik/render.test.mjs` e `infra/wireguard/probar.sh`, donde un cliente detrás de un «router» de prueba llega al puerto del corte con su IP. Falta verlo con un MikroTik.
+
+Preparar: un router en modo **Por IP**, conectado por el túnel, con un PPPoE suspendido.
+
+| # | Prueba | Cómo | Esperado |
+| --- | --- | --- | --- |
+| 10.1 | Primer salto por el túnel | Desde el suspendido: `curl -sI http://neverssl.com` | `302` a `<PORTAL_URL_PUBLICA>/corte?c=<13 caracteres>`, y la página con su nombre parcial. Sin `PORTAL_URL_PUBLICA`: `302` a `/corte?c=…` en `10.255.0.1:8088` (A′) |
+| 10.2 | `connection-nat-state=dstnat` en `srcnat` | `/ip firewall nat print where comment~"tunel"` y sus contadores tras 10.1 | El `accept` cuenta los paquetes de `argos-clientes`; el masquerade de respaldo, 0 |
+| 10.3 | Masquerade del operador sin `out-interface` | Agrega `chain=srcnat action=masquerade` al final y repite 10.1 | Sigue identificado: el `accept` de arriba gana |
+| 10.4 | Cliente fuera de `argos-clientes` | Un pool del router sin registrar en Argos | Ve la página sin identificar (`ip_de_router`), nunca un timeout |
+| 10.5 | `rp_filter` | En el servidor, `net.ipv4.conf.all.rp_filter=1` con `src_valid_mark` en 0 y en 1 | Con 0, 10.1 agota el tiempo y `argosisp estado` lo avisa. Con 1, funciona |
+| 10.6 | Túnel caído | `docker stop` del servicio `wireguard` | El suspendido no ve la página (igual que RADIUS: el vigía `aaa.caido` avisa) |
+| 10.7 | Servidor en la LAN | Sin túnel: `portal_v4` = IP LAN del servidor, con y sin el masquerade del operador hacia ella | Sin NAT: identificado y `portal_ip_cliente` en verde. Con NAT: rojo, con la regla `accept` que hay que agregar |
+| 10.8 | Nodo de portal | `DOMINIO_PORTAL` en un nodo aparte, routers por el túnel del central | El central responde el primer salto y redirige al nodo con `?c=`; el nodo muestra la página identificada |
+| 10.9 | Android, iPhone, Windows | Como §6 y §7 | «Iniciar sesión en la red» y la página identificada (el 302 lleva el código) |
+

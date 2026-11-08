@@ -208,3 +208,27 @@ export function codigoCorteDeLaRuta(ruta: string, valor: unknown): string | null
     const codigo = valor.trim().toUpperCase()
     return /^[0-9A-HJKMNP-TV-Z]{13}$/.test(codigo) ? codigo : null
 }
+
+/**
+ * Destino del 302 con el código de la suspensión (`?c=`), que la API emite cuando identificó al suspendido
+ * por su IP en el primer salto (túnel WireGuard, LAN del ISP o IPv6; `contratos/corte-identificacion.md`
+ * §5 ter.1). Absoluto (`https://<portal>/corte?c=`) o relativo (`/corte?c=`, sin URL pública: A′). Sin código,
+ * el destino tal cual.
+ */
+export function conCodigoCorte(destino: string, codigo: string | null): string {
+    if (!codigo) {
+        return destino
+    }
+    const c = encodeURIComponent(codigo)
+    if (destino.startsWith('/')) {
+        return `${destino}${destino.includes('?') ? '&' : '?'}c=${c}`
+    }
+    try {
+        const url = new URL(destino)
+        url.searchParams.set('c', codigo)
+        return url.toString()
+    }
+    catch {
+        return destino
+    }
+}

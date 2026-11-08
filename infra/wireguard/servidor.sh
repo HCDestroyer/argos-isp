@@ -9,8 +9,12 @@
 # - Publica en /estado/servidor.json su clave pública y en /estado/handshakes.tsv el último
 #   handshake de cada peer; el agente los manda a la API.
 # - Firewall del túnel (ARGOSISP_WG_FIREWALL=1): desde wg-argos solo entra RADIUS (1812/1813 UDP
-#   a la .1) y las respuestas de lo que el servidor inició (REST, CoA); los routers no se ven
-#   entre sí ni llegan a otros puertos del host.
+#   a la .1, solo desde la red del túnel), el puerto del corte (PORTAL_CORTE_PUERTO TCP a la .1, desde
+#   los clientes de los routers que mandan el corte por el túnel) y las respuestas de lo que el servidor
+#   inició (REST, CoA); los routers no se ven entre sí ni llegan a otros puertos del host.
+# - Corte por el túnel (PORTAL_CORTE_TUNEL=1, contratos/corte-identificacion.md §5 ter.5): las
+#   conexiones que entran por wg-argos llevan una marca y sus respuestas vuelven por wg-argos (tabla
+#   propia), sin rutas globales hacia las redes de clientes.
 #
 # Contrato: .claude/integration/contratos/conexion-routers.md. Detalle: infra/wireguard/README.md
 set -Eeuo pipefail
@@ -24,6 +28,12 @@ FIREWALL="${ARGOSISP_WG_FIREWALL:-1}"
 CLAVE_DIR="${WG_CLAVE_DIR:-/clave}"
 ESTADO_DIR="${WG_ESTADO_DIR:-/estado}"
 HANDSHAKES_CADA_S="${ARGOSISP_WG_HANDSHAKES_CADA_S:-30}"
+CORTE_TUNEL="${PORTAL_CORTE_TUNEL:-1}"
+CORTE_PUERTO="${PORTAL_CORTE_PUERTO:-8088}"
+# Marca de las conexiones que entran por el túnel y tabla de ruteo de sus respuestas
+MARCA="${ARGOSISP_WG_MARCA:-0x4172}"
+MASCARA_MARCA=0xffff
+TABLA="${ARGOSISP_WG_TABLA:-4172}"
 
 log() { printf '%s wireguard: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 morir() {
@@ -42,6 +52,10 @@ IP_SERVIDOR="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.1"
 if ! [[ "$PUERTO" =~ ^[0-9]+$ ]] || [ "$PUERTO" -lt 1 ] || [ "$PUERTO" -gt 65535 ]; then
     morir "ARGOSISP_WG_PUERTO='$PUERTO' no es un puerto"
 fi
+if ! [[ "$CORTE_PUERTO" =~ ^[0-9]+$ ]] || [ "$CORTE_PUERTO" -lt 1 ] || [ "$CORTE_PUERTO" -gt 65535 ]; then
+    morir "PORTAL_CORTE_PUERTO='$CORTE_PUERTO' no es un puerto"
+fi
+[[ "$TABLA" =~ ^[0-9]+$ ]] || morir "ARGOSISP_WG_TABLA='$TABLA' no es un número de tabla"
 
 # peers/ en su propia carpeta: inotify solo ve lo que escribe el agente ahí (no los .ok ni los
 # handshakes, que lo despertarían a cada rato)
@@ -142,17 +156,78 @@ firewall() {
     elegir_iptables
     $IPT -N "$CADENA_IN" 2> /dev/null || $IPT -F "$CADENA_IN"
     $IPT -A "$CADENA_IN" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-    $IPT -A "$CADENA_IN" -p icmp --icmp-type echo-request -d "$IP_SERVIDOR" -j RETURN
+    # Ping a la .1 solo desde los routers (los clientes del corte por el túnel también llegan a la .1)
+    $IPT -A "$CADENA_IN" -p icmp --icmp-type echo-request -s "$RED" -d "$IP_SERVIDOR" -j RETURN
     $IPT -A "$CADENA_IN" -j DROP
     $IPT -N "$CADENA_FWD" 2> /dev/null || $IPT -F "$CADENA_FWD"
     $IPT -A "$CADENA_FWD" -o "$IFACE" -j DROP
     $IPT -A "$CADENA_FWD" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-    # RADIUS publicado en la .1 (RADIUS_BIND_IP): Docker lo traduce (DNAT) al contenedor
-    $IPT -A "$CADENA_FWD" -p udp -m conntrack --ctstate DNAT --ctorigdst "$IP_SERVIDOR" \
+    # RADIUS publicado en la .1 (RADIUS_BIND_IP): Docker lo traduce (DNAT) al contenedor. Solo desde
+    # la red del túnel: con el corte por el túnel también llegan los clientes de los routers.
+    $IPT -A "$CADENA_FWD" -p udp -s "$RED" -m conntrack --ctstate DNAT --ctorigdst "$IP_SERVIDOR" \
         --ctorigdstport 1812:1813 -j RETURN
+    # Corte por el túnel: HTTP del suspendido al Caddy del corte, publicado en la .1 (Docker hace DNAT
+    # y conserva el origen). WireGuard ya garantiza que el origen está en los AllowedIPs del peer.
+    if [ "$CORTE_TUNEL" != 0 ]; then
+        $IPT -A "$CADENA_FWD" -p tcp -m conntrack --ctstate DNAT --ctorigdst "$IP_SERVIDOR" \
+            --ctorigdstport "$CORTE_PUERTO" -j RETURN
+    fi
     $IPT -A "$CADENA_FWD" -j DROP
     revisar_saltos
     log "firewall del túnel aplicado ($IPT)"
+}
+
+# --- Vuelta del corte por el túnel (marca de conexión) -----------------------------------------------
+# Lo que entra por wg-argos (un cliente con su IP, sin masquerade) vuelve por wg-argos: la conexión
+# lleva la marca MARCA, que se copia a cada paquete; `ip rule fwmark` manda esos paquetes a la tabla
+# TABLA, con `default dev wg-argos` (WireGuard elige el peer por AllowedIPs). Sin rutas en la tabla
+# principal: un cliente con IP pública que entra por Internet sigue volviendo por Internet.
+CADENA_MARCA="ARGOSISP-MARCA-$IFACE"
+ruteo_corte() {
+    [ "$CORTE_TUNEL" != 0 ] || return 0
+    $IPT -t mangle -N "$CADENA_MARCA" 2> /dev/null || $IPT -t mangle -F "$CADENA_MARCA"
+    $IPT -t mangle -A "$CADENA_MARCA" -i "$IFACE" -m conntrack --ctstate NEW \
+        -j CONNMARK --set-xmark "$MARCA/$MASCARA_MARCA"
+    $IPT -t mangle -A "$CADENA_MARCA" -m connmark --mark "$MARCA/$MASCARA_MARCA" \
+        -j CONNMARK --restore-mark --nfmask "$MASCARA_MARCA" --ctmask "$MASCARA_MARCA"
+    revisar_salto_marca
+    # El paquete que ENTRA por wg-argos también lleva la marca (la comprobación de rp_filter con
+    # src_valid_mark la necesita): su ruta hacia el contenedor sale de la tabla principal (iif antes que
+    # fwmark). rp_filter busca con iif = lo, así que esa regla no le aplica y ve la tabla del túnel.
+    if ! ip rule show | grep -q "iif $IFACE lookup main"; then
+        ip rule add iif "$IFACE" lookup main priority "$((TABLA - 1))"
+    fi
+    if ! ip rule show | grep -q "lookup $TABLA\b"; then
+        ip rule add fwmark "$MARCA/$MASCARA_MARCA" lookup "$TABLA" priority "$TABLA"
+    fi
+    ip route replace default dev "$IFACE" table "$TABLA"
+    # rp_filter estricto (1) tira la entrada (la ruta de vuelta en la tabla principal no es wg-argos)
+    # salvo con src_valid_mark=1 (lo pone instalar.sh): solo se avisa, /proc/sys es de solo lectura aquí
+    local rp_all rp_if svm
+    rp_all="$(cat /proc/sys/net/ipv4/conf/all/rp_filter 2> /dev/null || echo 0)"
+    rp_if="$(cat "/proc/sys/net/ipv4/conf/$IFACE/rp_filter" 2> /dev/null || echo 0)"
+    svm="$(cat /proc/sys/net/ipv4/conf/all/src_valid_mark 2> /dev/null || echo 0)"
+    if { [ "$rp_all" = 1 ] || [ "$rp_if" = 1 ]; } && [ "$rp_all" != 2 ] && [ "$rp_if" != 2 ] && [ "$svm" != 1 ]; then
+        log "AVISO: rp_filter estricto sin src_valid_mark: el corte por el túnel no llega al portal." \
+            "Pon net.ipv4.conf.all.src_valid_mark=1 (sudo argosisp instalar lo hace) o rp_filter=2"
+    fi
+    log "corte por el túnel: puerto $CORTE_PUERTO, marca $MARCA, tabla $TABLA"
+}
+
+revisar_salto_marca() {
+    [ "$CORTE_TUNEL" != 0 ] || return 0
+    if ! $IPT -t mangle -S PREROUTING 2> /dev/null | grep -m1 -- '^-A' | grep -q -- "-j $CADENA_MARCA"; then
+        while $IPT -t mangle -D PREROUTING -j "$CADENA_MARCA" 2> /dev/null; do :; done
+        $IPT -t mangle -I PREROUTING 1 -j "$CADENA_MARCA"
+    fi
+}
+
+limpiar_ruteo_corte() {
+    while $IPT -t mangle -D PREROUTING -j "$CADENA_MARCA" 2> /dev/null; do :; done
+    if $IPT -t mangle -F "$CADENA_MARCA" 2> /dev/null; then $IPT -t mangle -X "$CADENA_MARCA" 2> /dev/null || true; fi
+    while ip rule del fwmark "$MARCA/$MASCARA_MARCA" lookup "$TABLA" 2> /dev/null; do :; done
+    while ip rule del iif "$IFACE" lookup main priority "$((TABLA - 1))" 2> /dev/null; do :; done
+    ip route flush table "$TABLA" 2> /dev/null || true
 }
 
 # Primera regla de una cadena (sin la política ni los avisos de iptables-nft)
@@ -203,6 +278,7 @@ publicar_handshakes() {
 terminar() {
     log "deteniendo: la interfaz queda sin peers hasta el próximo arranque"
     limpiar_firewall
+    limpiar_ruteo_corte
     [ -z "$WG_GO_PID" ] || kill "$WG_GO_PID" 2> /dev/null || true
     ip link del "$IFACE" 2> /dev/null || true
     exit 0
@@ -210,6 +286,10 @@ terminar() {
 trap terminar TERM INT
 
 firewall
+# La marca usa el mismo backend de iptables que el firewall (elegir_iptables)
+[ "$FIREWALL" = 1 ] || elegir_iptables
+limpiar_ruteo_corte
+ruteo_corte
 aplicar || true
 publicar_servidor
 publicar_handshakes
@@ -226,6 +306,7 @@ while true; do
     ip link show "$IFACE" > /dev/null 2>&1 || morir "la interfaz $IFACE desapareció"
     if [ -n "$WG_GO_PID" ] && ! kill -0 "$WG_GO_PID" 2> /dev/null; then morir "wireguard-go terminó"; fi
     revisar_saltos
+    revisar_salto_marca
     publicar_handshakes
 done &
 wait $!

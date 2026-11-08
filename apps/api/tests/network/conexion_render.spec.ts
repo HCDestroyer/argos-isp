@@ -20,6 +20,9 @@ import {
     ajusteProxy,
     configCorte,
     estadoCorteRouter,
+    REGLA_NAT_HTTP,
+    REGLA_SRCNAT_TUNEL,
+    REGLA_SRCNAT_TUNEL_RESTO,
 } from '#network/routeros/corte_router'
 
 /**
@@ -60,6 +63,8 @@ const VALORES: Record<string, string> = {
     dns_v6: '2001:db8:ffff::53',
     corte_identificacion: 'ip',
     corte_url: 'http://portal.miisp.example/corte',
+    corte_tunel_ip: '',
+    corte_tunel_puerto: '',
 }
 
 test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
@@ -233,6 +238,53 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
             assert.isAbove(encender, script.lastIndexOf(`comment="${REGLA_INPUT_PROXY}"`))
             // las del corte se mueven antes de la primera regla del operador
             assert.include(script, '/ip proxy access move $finalProxy destination=$destinoProxy')
+        }
+    })
+
+    test('corte por el túnel: el script trae las mismas reglas que escribe el reconciliador (§5 ter.6)', ({
+        assert,
+    }) => {
+        const config = configCorte({ ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20' })
+        const tunel = { ip: '10.255.0.1', puerto: 8088 }
+        const estado = estadoCorteRouter(config, { fasttrack: true, redes_v4: [], tunel }, [])
+        const comentarios = [REGLA_NAT_HTTP, REGLA_SRCNAT_TUNEL, REGLA_SRCNAT_TUNEL_RESTO]
+        const reglas = estado.reglas.filter(
+            (r) => r.ruta === '/ip/firewall/nat' && comentarios.includes(r.comment),
+        )
+        assert.lengthOf(reglas, 3)
+        for (const ruta of [PLANTILLAS.servicio, PLANTILLAS.servicio_sin_radius]) {
+            const script = renderizar(leerMikrotik(ruta), {
+                ...VALORES,
+                corte_tunel_ip: tunel.ip,
+                corte_tunel_puerto: String(tunel.puerto),
+            })
+            assert.include(script, ':local corteTunelIp "10.255.0.1"')
+            const lineas = script.split('\n').map((l) => l.trim())
+            for (const regla of reglas) {
+                const linea = lineas.find(
+                    (l) =>
+                        l.includes('/ip firewall nat add ') &&
+                        l.includes(`comment="${regla.comment}"`) &&
+                        l.includes('$corteTunelIp'),
+                )
+                assert.isDefined(linea, `${ruta}: falta ${regla.comment}`)
+                const valores = linea!
+                    .replaceAll('$corteTunelIp', tunel.ip)
+                    .replaceAll('$corteTunelPuerto', String(tunel.puerto))
+                for (const [clave, valor] of Object.entries(regla.propiedades)) {
+                    if (clave === 'disabled') continue
+                    assert.include(
+                        ` ${valores} `,
+                        ` ${clave}=${valor} `,
+                        `${ruta}: ${regla.comment} ${clave}`,
+                    )
+                }
+            }
+            const entrada = estado.entradas.find((e) => e.comment === 'argosisp: portal tunel')!
+            assert.include(
+                script,
+                `/ip firewall address-list add list=${entrada.list} address=$corteTunelIp comment="${entrada.comment}"`,
+            )
         }
     })
 

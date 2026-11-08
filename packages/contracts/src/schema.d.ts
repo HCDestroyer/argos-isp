@@ -4096,7 +4096,7 @@ export interface paths {
         };
         /**
          * Peers WireGuard vigentes (wireguard-agente)
-         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista).
+         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista). `allowed_ips` suma las redes de clientes de los routers que mandan el corte por el túnel (`contratos/corte-identificacion.md` §5 ter.4); también reconcilia con `portal.config_cambiada` y `router.redes_cambiadas`.
          */
         get: operations["internoWireguardPeers"];
         put?: never;
@@ -7595,7 +7595,7 @@ export interface paths {
         };
         /**
          * A dónde redirige el portal cautivo al suspendido de la IP de origen
-         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. Si identificó por una IP de cliente a un suspendido, devuelve además el `codigo` de su suspensión (lo crea si falta, `portal.codigo_corte.emitir`) para que el portal redirija a `/corte?c=` (`contratos/corte-identificacion.md` §5 ter.1). Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalDestinoCorte"];
         put?: never;
@@ -13885,6 +13885,8 @@ export interface components {
         DestinoCorte: {
             /** @description URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL) */
             url: string | null;
+            /** @description Código de corte de la suspensión, solo si la petición se identificó por una IP de cliente (túnel WireGuard, LAN del ISP o IPv6, sin NAT), el servicio está suspendido y su empresa no tiene `url`. El portal redirige a `/corte?c=<código>` para que el segundo salto no dependa de la IP (`contratos/corte-identificacion.md` §5 ter.1). null en cualquier otro caso */
+            codigo: string | null;
         };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
@@ -16651,6 +16653,10 @@ export interface components {
             router_id: number;
             public_key: string;
             ip_tunel: string;
+            /** @description AllowedIPs del peer: `<ip_tunel>/32` y, si el router manda el corte por el túnel (modo `ip`), sus redes IPv4 de clientes (`contratos/corte-identificacion.md` §5 ter.4) */
+            allowed_ips: string[];
+            /** @description Redes descartadas y por qué (traslape, red del túnel, excluidas) */
+            avisos: string[];
         };
         PerfilQos: {
             id: number;

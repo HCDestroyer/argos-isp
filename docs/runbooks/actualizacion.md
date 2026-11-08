@@ -74,6 +74,28 @@ Contrato: `.claude/integration/contratos/corte-identificacion.md`. Cada router e
 
 Para volver a `ip`: editar el router → **Por IP**. Argos quita el 3346 del proxy (y lo apaga si era solo suyo), borra sus reglas y vuelve a poner el dst-nat al portal.
 
+### Corte por el túnel y servidor en la LAN (fase 2)
+
+Contrato: `corte-identificacion.md` §5 ter. Con WireGuard activo (`ARGOSISP_WIREGUARD=1`), un router en modo **Por IP** registrado en el túnel ya no manda al suspendido a la IPv4 pública del portal. Lo manda a la IP del servidor en el túnel (`10.255.0.1:8088`, `PORTAL_CORTE_PUERTO`) sin masquerade. Así el portal ve la IP del cliente, lo identifica y lo redirige a `https://<portal>/corte?c=<código>` con el código de su suspensión. El resto de la visita ya no depende de la IP.
+
+1. `sudo argosisp actualizar`. El instalador vuelve a escribir `/etc/sysctl.d/90-argosisp-wireguard.conf`, ahora con `net.ipv4.conf.all.src_valid_mark = 1`. Si tu servidor tiene `rp_filter=1` (RHEL y derivados), aplica con `sudo sysctl --system` o reinicia.
+2. `sudo argosisp estado`: si avisa de `ARGOSISP_BIND_IP`, quítala del `.env` (el puerto del corte debe escuchar también en la IP del túnel) o pon `PORTAL_CORTE_TUNEL=0`, y luego `sudo argosisp levantar`.
+3. **Routers con API en modo Por IP:** «Reconciliar ahora». En el router:
+   ```routeros
+   /ip firewall nat print where comment~"corte"   # dst-nat to-addresses=10.255.0.1 to-ports=8088; arriba "argosisp:top corte por tunel sin NAT"
+   /ip firewall address-list print where comment="argosisp: portal tunel"
+   ```
+   **Probar conexión → Corte**: `portal_ip_cliente` debe salir en verde.
+4. **Routers sin API:** «Generar script» con «incluir configuración de servicio» y córrelo otra vez. Si no lo haces, siguen como antes («no identificado», con su motivo).
+5. **Routers en modo código:** no cambia nada.
+6. **Servidor dentro de la LAN del ISP** (sin túnel): no hay nada que cambiar en Argos. En el router, tu masquerade no debe aplicar hacia la IPv4 del portal; el de Argos solo sale por la WAN. Si el diagnóstico dice que el portal ve la IP del router, agrega antes de tu masquerade:
+   ```routeros
+   /ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=<IPv4 del portal> action=accept place-before=0 comment="sin NAT hacia el portal"
+   ```
+   El servidor necesita ruta de vuelta a las redes de clientes: el router es su puerta de enlace, o tiene rutas estáticas.
+
+Para volver atrás: `PORTAL_CORTE_TUNEL=0` en el `.env` y `sudo argosisp levantar`. El reconciliador devuelve el dst-nat a la IPv4 del portal y el agente deja en cada peer solo su `/32`.
+
 ## Parches automáticos (opcional, apagado por defecto)
 
 ```sh

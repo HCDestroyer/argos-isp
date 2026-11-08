@@ -117,6 +117,8 @@ El reconciliador (y el último paso de un cambio de estrategia) deja el corte en
 
 **Portal por FQDN**: el `to-addresses` del dst-nat HTTP → `/corte` es la IPv4 de «Portal de corte», la IP de `PORTAL_URL_PUBLICA` o, si es un nombre, el FQDN resuelto a IPv4 desde la API **en cada reconciliación** (`configCorteResuelta`; solo en el estado deseado, sin caché). Si no resuelve: `routeros.fallido` (`operacion: "resolver portal"`), la regla que haya se conserva y el diagnóstico sale en rojo (`portal_sin_ipv4`).
 
+**Corte por el túnel** (`contratos/corte-identificacion.md` §5 ter): en un router en modo `ip` registrado en el túnel WireGuard (`corteTunelDeRouter`, `app/network/conexion/tunel_corte.ts`), el dst-nat va a `10.255.0.1:PORTAL_CORTE_PUERTO` y se agregan `argosisp:top corte por tunel sin NAT` (`srcnat` accept de `argos-clientes`), `argosisp: corte por tunel NAT de lo demas` (masquerade de lo que llegó por el dst-nat) y `argos-portal` `argosisp: portal tunel`. Las opciones del corte las arma `opcionesCorteRouter` (`opciones_corte.ts`) para el reconciliador, el diagnóstico y `migrar_control_router`.
+
 **Diagnóstico de corte** (`diagnosticoCorte`, chequeo `corte` de «Probar conexión» y `GET /routers/:id/diagnostico-corte`): lista `suspendidos` (o que no hace falta), reglas activas y en orden, `/tool/fetch` al destino real del NAT, suspendidos con su IP fuera de la lista y FastTrack; cada paso con comandos de RouterOS. Límites: HTTPS e IPv6 no se redirigen (`contratos/control-velocidad.md` §10).
 
 ## local-address (`local_address.ts`, pedido del PM del 5 nov)
@@ -208,6 +210,7 @@ En un router `modo_seguridad = 'api'`:
 | Emite (outbox)                                                  | Cuándo                                                                                                                                                                                                                              |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sesion.velocidad_solicitada`                                   | Sincronizar plan o cambio de estrategia: CoA de velocidad (lo manda `coa`) a sesiones `radius_rate_limit` / `perfil_ppp` vivas                                                                                                      |
+| `router.redes_cambiadas { router_id, empresa_id }`              | Respaldo: el reconciliador corrigió `argos-clientes` en un router con corte por el túnel (el `wireguard-agente` relee los AllowedIPs)                                                                                               |
 | `routeros.fallido { servicio_id, router_id, operacion, error }` | El router no respondió tras 1 + 3 intentos (backoff 0,5 · 1 · 2 s), rechazó las credenciales, respondió 400 o no tiene credenciales. El router queda pendiente y la acción **no lanza** (reintentar el evento no arregla el router) |
 
 ## Garantías

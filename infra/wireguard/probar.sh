@@ -15,7 +15,11 @@
 #   4. el router llega a RADIUS en la .1 y a nada más del host (firewall del túnel);
 #   5. eliminar otro router (router.eliminado, dos veces) quita solo su peer: el túnel del primero
 #      sigue arriba con su handshake (wg syncconf no lo recrea);
-#   6. rotar (lista vacía + router.conexion_rotada) quita el peer.
+#   6. rotar (lista vacía + router.conexion_rotada) quita el peer;
+#   4b. corte por el túnel (contratos/corte-identificacion.md §5 ter): con las redes de clientes en
+#      AllowedIPs (router.redes_cambiadas), un cliente detrás del router llega al puerto del corte
+#      publicado por Docker con SU IP (sin masquerade) y la respuesta vuelve por el túnel (marca de
+#      conexión); el mismo cliente no llega a RADIUS ni a otros puertos.
 set -Eeuo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -30,6 +34,12 @@ PUERTO_API="${WG_PRUEBA_API:-34690}"
 SUBRED=172.31.254.0/24
 GW=172.31.254.1
 TOKEN=prueba-token-interno
+PUERTO_CORTE="${WG_PRUEBA_CORTE:-18088}"
+RED_CLIENTES=10.253.7.0/24
+IP_CLIENTE=10.253.7.5
+# Marca y tabla propias de la prueba (no se cruzan con un wg-argos real en la misma máquina)
+MARCA=0x4173
+TABLA=4173
 TMP="$(mktemp -d)"
 inicio=$SECONDS
 
@@ -48,7 +58,7 @@ fallar() {
 }
 
 limpiar() {
-    docker rm -f "$P-servidor" "$P-agente" "$P-router" "$P-redis" "$P-radius" "$P-cliente" > /dev/null 2>&1 || true
+    docker rm -f "$P-servidor" "$P-agente" "$P-router" "$P-redis" "$P-radius" "$P-cliente" "$P-portal" > /dev/null 2>&1 || true
     docker network rm "$P" > /dev/null 2>&1 || true
     docker volume rm "$P-clave" "$P-estado" > /dev/null 2>&1 || true
     [ -z "${API_PID:-}" ] || kill "$API_PID" 2> /dev/null || true
@@ -82,7 +92,8 @@ python3 "$RAIZ/infra/wireguard/prueba/api_falsa.py" "$PUERTO_API" "$TMP" "$TOKEN
 API_PID=$!
 
 paso "Servidor (red del host) y agente"
-WG_ENV=(-e ARGOSISP_WG_INTERFAZ="$IFACE" -e ARGOSISP_WG_RED="$RED" -e ARGOSISP_WG_PUERTO="$PUERTO_WG")
+WG_ENV=(-e ARGOSISP_WG_INTERFAZ="$IFACE" -e ARGOSISP_WG_RED="$RED" -e ARGOSISP_WG_PUERTO="$PUERTO_WG"
+    -e PORTAL_CORTE_PUERTO="$PUERTO_CORTE" -e ARGOSISP_WG_MARCA="$MARCA" -e ARGOSISP_WG_TABLA="$TABLA")
 docker run -d --name "$P-servidor" --network host --cap-add NET_ADMIN --device /dev/net/tun \
     -v "$P-clave:/clave" -v "$P-estado:/estado" "${WG_ENV[@]}" -e ARGOSISP_WG_HANDSHAKES_CADA_S=2 \
     "$IMAGEN" servidor.sh > /dev/null
@@ -112,6 +123,8 @@ docker exec "$P-router" sh -c '
     ip address add '"$IP_ROUTER"'/32 dev wg0
     ip link set wg0 up
     ip route add '"$IP_SRV"'/32 dev wg0
+    # Un cliente del router (red de clientes): su IP en lo, como origen de curl/nc
+    ip address add '"$IP_CLIENTE"'/32 dev lo
     wg set wg0 peer '"$SRV_PUB"' endpoint '"$GW:$PUERTO_WG"' allowed-ips '"$IP_SRV"'/32 persistent-keepalive 2
     # Como el MikroTik: CoA (3799) solo desde la .1 del servidor
     iptables -A INPUT -i wg0 -s '"$IP_SRV"' -p udp --dport 3799 -j ACCEPT
@@ -154,6 +167,34 @@ if docker exec "$P-router" sh -c "curl -s -m 3 -o /dev/null http://$IP_SRV:$PUER
     fallar "el router llegó a otro puerto del host por el túnel"
 fi
 
+paso "4b. Corte por el túnel: el cliente llega al puerto del corte con su IP"
+# El «Caddy del corte»: responde la IP de origen que ve (Docker publica el puerto y hace DNAT)
+docker run -d --name "$P-portal" -p "$PUERTO_CORTE:8080" node:22-alpine \
+    node -e "require('http').createServer((q, r) => r.end(q.socket.remoteAddress.replace(/^::ffff:/, ''))).listen(8080)" > /dev/null
+# Sin las redes en AllowedIPs, WireGuard descarta el paquete del cliente
+if docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" "http://$IP_SRV:$PUERTO_CORTE/" > /dev/null; then
+    fallar "el cliente llegó sin estar en AllowedIPs"
+fi
+printf '{"data":[{"router_id":7,"public_key":"%s","ip_tunel":"%s","allowed_ips":["%s/32","%s","%s"],"avisos":["red 10.254.0.0/25: prueba"]}]}' \
+    "$ROUTER_PUB" "$IP_ROUTER" "$IP_ROUTER" "$RED_CLIENTES" "10.254.0.128/25" > "$TMP/peers.json"
+docker exec "$P-redis" redis-cli XADD argos:eventos '*' id 6 evento router.redes_cambiadas \
+    payload '{"router_id":7,"empresa_id":null}' request_id '' > /dev/null
+esperar 20 "red de clientes en AllowedIPs" sh -c "docker exec $P-servidor wg show $IFACE allowed-ips | grep -q '$RED_CLIENTES'"
+docker exec "$P-servidor" wg show "$IFACE" allowed-ips | grep -q '10.254.0.128/25' &&
+    fallar "el agente aceptó una red dentro de la red del túnel"
+grep -q 'router 7: red 10.254.0.0/25: prueba' <<< "$(docker logs "$P-agente" 2>&1)" || fallar "no escribió los avisos de la API"
+esperar 15 "el portal responde al cliente" docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" "http://$IP_SRV:$PUERTO_CORTE/"
+VISTA="$(docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" "http://$IP_SRV:$PUERTO_CORTE/")"
+[ "$VISTA" = "$IP_CLIENTE" ] || fallar "el portal vio $VISTA en vez de la IP del cliente $IP_CLIENTE"
+docker exec "$P-servidor" ip rule show | grep -q "lookup $TABLA" || fallar "sin la regla de la marca"
+# El mismo cliente no llega a RADIUS (solo desde la red del túnel) ni a otros puertos del host
+docker exec "$P-router" sh -c "echo radius-cliente | nc -u -s $IP_CLIENTE -w1 $IP_SRV 1812" || true
+sleep 2
+docker logs "$P-radius" 2>&1 | grep -q radius-cliente && fallar "un cliente del router llegó a RADIUS"
+if docker exec "$P-router" curl -s -m 3 --interface "$IP_CLIENTE" -o /dev/null "http://$IP_SRV:$PUERTO_API/"; then
+    fallar "un cliente del router llegó a otro puerto del host"
+fi
+
 paso "5. router.eliminado (repetido) quita solo el peer del router eliminado"
 OTRO_PUB="$(docker exec "$P-router" sh -c 'wg genkey | wg pubkey')"
 printf '{"data":[{"router_id":7,"public_key":"%s","ip_tunel":"%s"},{"router_id":11,"public_key":"%s","ip_tunel":"10.254.0.4"}]}' \
@@ -181,7 +222,7 @@ esperar 20 "peer quitado" sh -c "! docker exec $P-servidor wg show $IFACE peers 
 
 paso "Detener el servidor borra la interfaz y el firewall"
 docker stop -t 10 "$P-servidor" > /dev/null
-docker run --rm --network host --cap-add NET_ADMIN "$IMAGEN" sh -c "! ip link show $IFACE 2>/dev/null && ! iptables -S 2>/dev/null | grep -q -- -$IFACE" ||
-    fallar "quedó la interfaz o reglas del túnel"
+docker run --rm --network host --cap-add NET_ADMIN "$IMAGEN" sh -c "! ip link show $IFACE 2>/dev/null && ! iptables -S 2>/dev/null | grep -q -- -$IFACE && ! iptables -t mangle -S 2>/dev/null | grep -q -- -$IFACE && ! ip rule show | grep -q 'lookup $TABLA'" ||
+    fallar "quedó la interfaz, reglas del túnel o la marca del corte"
 
 printf '\n\033[32mOK\033[0m servidor WireGuard (%ss)\n' "$((SECONDS - inicio))"

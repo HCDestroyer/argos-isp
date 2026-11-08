@@ -237,14 +237,15 @@ export function nombreParcial(nombre: string): string | null {
 export async function leerDestinoCorte(
     origen: string | OrigenPortal,
     cliente: QueryClientContract = db.connection(),
-): Promise<{ url: string | null }> {
-    const servicioId = await resolverServicio(cliente, origen)
-    if (!servicioId) return { url: null }
+): Promise<{ url: string | null; servicioId: number | null; por: IdentificadoPor | null }> {
+    const identificacion = await identificarOrigen(origen, cliente)
+    const servicioId = identificacion.servicioId
+    if (!servicioId) return { url: null, servicioId: null, por: null }
     const fila = (await cliente
         .from('core.servicios as s')
         .join('core.empresas as e', 'e.id', 's.empresa_id')
         .where('s.id', servicioId)
         .select('e.url_corte')
         .first()) as { url_corte: string | null } | null
-    return { url: fila?.url_corte ?? null }
+    return { url: fila?.url_corte ?? null, servicioId, por: identificacion.por }
 }

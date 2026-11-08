@@ -559,7 +559,7 @@ Poner los bloques IPv6 en AllowedIPs sin dirección IPv6 en el túnel no sirve d
 - Las redes registradas no pueden repetirse (restricción de arriba), así que en el túnel la IP de origen basta para saber de qué router viene: solo un peer puede mandarla (cryptokey routing).
 - Lo que sí puede repetirse son IPs de pools que el router entrega sin estar registrados en Argos (§2.5). Esas IPs no están en AllowedIPs: el router no las excluye del masquerade de respaldo (§5 ter.6), así que llegan con la IP del router en el túnel → `ip_de_router` («no identificado» con su motivo, nunca otro cliente).
 - **Desambiguación (router, IP) en la API** (`app/portal/identificacion.ts`):
-    - si la IP cae en una red registrada (`network.redes_ipv4`, o un bloque `network.ipv6_bloques` en IPv6), solo cuentan las sesiones y asignaciones de servicios **de ese router**;
+    - si una IPv4 cae en una red registrada (`network.redes_ipv4`), solo cuentan las sesiones y asignaciones de servicios **de ese router**. En IPv6 no hace falta: los prefijos son globales y no se repiten entre routers (`servicioDeLaIp`);
     - si el ganador de `resolverIp` es de otro router, se busca el candidato del router de la red;
     - si no hay ninguno: `ip_desconocida`.
 

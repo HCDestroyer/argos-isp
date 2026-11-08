@@ -57,6 +57,8 @@ const VALORES = {
     dns_v6: '2001:db8:ffff::53',
     corte_identificacion: 'ip',
     corte_url: 'http://portal.miisp.example/corte',
+    corte_tunel_ip: '',
+    corte_tunel_puerto: '',
 }
 
 /** Llaves, corchetes y paréntesis balanceados fuera de cadenas y comentarios (sintaxis de RouterOS). */
@@ -539,5 +541,55 @@ test('reimportar en modo código: el 3346 nunca queda abierto sin regla final ni
         const encender = t.indexOf('/ip proxy set enabled=yes')
         assert.ok(encender > t.lastIndexOf('/ip proxy access set $finalProxy'), p)
         assert.ok(encender > t.lastIndexOf('firewall filter set $dropProxy'), p)
+    }
+})
+
+test('corte por el túnel WireGuard (contratos/corte-identificacion.md §5 ter.6): mismas piezas que corte_router.ts', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    for (const p of CON_SERVICIO) {
+        const t = leer(p)
+        // dst-nat al túnel, srcnat accept arriba (sección 13 lo mueve) y masquerade de respaldo
+        assert.ok(
+            t.includes(
+                '/ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$corteTunelIp to-ports=$corteTunelPuerto comment="argosisp: corte-nat HTTP a /corte"',
+            ),
+            p,
+        )
+        assert.ok(
+            t.includes(
+                '/ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=$corteTunelIp action=accept comment="argosisp:top corte por tunel sin NAT"',
+            ),
+            p,
+        )
+        assert.ok(
+            t.includes(
+                '/ip firewall nat add chain=srcnat connection-nat-state=dstnat dst-address=$corteTunelIp action=masquerade comment="argosisp: corte por tunel NAT de lo demas"',
+            ),
+            p,
+        )
+        assert.ok(
+            t.includes(
+                '/ip firewall address-list add list=argos-portal address=$corteTunelIp comment="argosisp: portal tunel"',
+            ),
+            p,
+        )
+        // el túnel solo en modo ip: en código manda el proxy del router
+        const codigo = t.indexOf(':if ($corteIdentificacion = "codigo") do={\n    /ip firewall nat add chain=argos-corte-nat')
+        assert.ok(codigo >= 0 && codigo < t.indexOf('to-addresses=$corteTunelIp'), p)
+        // el accept de clientes queda antes de cualquier masquerade (argosisp:top al inicio de la tabla NAT)
+        assert.match(t, /:foreach id in=\[\/ip firewall nat find where comment~"\^argosisp:top"\]/, p)
+    }
+    // el laboratorio arranca sin túnel de corte
+    for (const p of ['lab.rsc', 'lab-sin-radius.rsc']) assert.match(leer(p), /^:local corteTunelIp ""$/m, p)
+    // render: IP y puerto validados por patrón; vacíos = dst-nat a portal_v4
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        const r = renderizar(leer(p), { ...VALORES, corte_tunel_ip: '10.255.0.1', corte_tunel_puerto: '8088' })
+        assert.match(r, /:local corteTunelIp "10.255.0.1"/)
+        assert.match(r, /:local corteTunelPuerto \[:tonum "8088"\]/)
+        assert.match(renderizar(leer(p), VALORES), /:local corteTunelIp ""/)
+        assert.throws(
+            () => renderizar(leer(p), { ...VALORES, corte_tunel_ip: '10.255.0.1" ; /system reset' }),
+            /corte_tunel_ip: no cumple/,
+        )
     }
 })
