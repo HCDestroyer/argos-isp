@@ -986,6 +986,7 @@ const CODIGOS_CORTE = [
     'portal_no_acepta_host',
     'portal_en_router',
     'portal_ve_otra_ip',
+    'portal_ve_otra_ip_tunel',
     'proxy_corte',
 ]
 
