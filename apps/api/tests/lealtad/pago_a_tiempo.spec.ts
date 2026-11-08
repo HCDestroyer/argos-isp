@@ -18,6 +18,7 @@ import {
     asientoLealtad,
     asientosLealtad,
     entregarEvento,
+    cicloDeHoy,
     movimientosDe,
     programaConReglas,
 } from '#tests/lealtad/ayudas_lealtad'
@@ -27,17 +28,25 @@ import {
  * con diferimiento, `2.1.10` = valor de los lotes vivos en cada paso.
  */
 
-/** Servicio con la factura de noviembre (vence en el futuro) y la de octubre (ya vencida). */
+/**
+ * Servicio con la factura del periodo actual («noviembre»: vence después de hoy) y la del anterior
+ * («octubre»: ya vencida), con el ciclo anclado a hoy (`cicloDeHoy`).
+ */
 async function servicioConFacturas(empresaId: number) {
-    const s = await servicioEn(empresaId, { precio: '200.00', instalacion: '2026-10-01' })
-    await generar(s.servicioId, '2026-11-01')
+    const ciclo = cicloDeHoy()
+    const s = await servicioEn(empresaId, {
+        precio: '200.00',
+        instalacion: ciclo.anterior,
+        plantilla: ciclo.plantilla,
+    })
+    await generar(s.servicioId, ciclo.actual)
     const facturas = await facturasDelServicio(s.servicioId)
     const vencimientos = await db
         .from('billing.facturas')
         .where('servicio_id', s.servicioId)
         .orderBy('id', 'asc')
         .select('id', db.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`))
-    return { ...s, facturas, vencimientos }
+    return { ...s, facturas, vencimientos, hoy: ciclo.hoy }
 }
 
 test.group('Lealtad · pago a tiempo', (group) => {
@@ -53,7 +62,7 @@ test.group('Lealtad · pago a tiempo', (group) => {
         const s = await servicioConFacturas(e.B)
         const noviembre = s.facturas.at(-1)!
         assert.isAbove(
-            String(s.vencimientos.at(-1)!.vence_en).localeCompare('2026-10-18'),
+            String(s.vencimientos.at(-1)!.vence_en).localeCompare(s.hoy),
             0,
             'la factura de noviembre vence después de hoy',
         )
@@ -93,7 +102,7 @@ test.group('Lealtad · pago a tiempo', (group) => {
         await programaConReglas(e.B, e.ctx, { diferimiento: true }, [{ tipo: 'pago_a_tiempo', puntos: 10 }])
         const s = await servicioConFacturas(e.B)
         const octubre = s.facturas[0]!
-        assert.isBelow(String(s.vencimientos[0]!.vence_en).localeCompare('2026-10-18'), 0)
+        assert.isBelow(String(s.vencimientos[0]!.vence_en).localeCompare(s.hoy), 0)
         const pago = await new RegistrarPago().execute(
             {
                 cliente_id: s.clienteId,
