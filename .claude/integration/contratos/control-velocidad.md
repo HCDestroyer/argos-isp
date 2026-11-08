@@ -340,6 +340,10 @@ Causa del bug: `argos-corte` solo aceptaba DNS hacia `argos-dns` (el router y `R
 - `coa` (A2): lee `GET /internal/corte/configuracion` al arrancar y otra vez con cada `portal.config_cambiada` cuyo `campos` traiga `modo_suspension` (o sin `campos`); `desconectar` = su `disconnect`, `coa` = `coa`. Aplica desde la siguiente suspensión (las sesiones ya suspendidas no se tocan). Si la API no responde, conserva el último valor leído (o `COA_SUSPENDER` al arrancar) y reintenta.
 - Panel (A4): pantalla «Configuración → Portal de corte» con los cuatro campos, `origen` y `portal_url` como ayuda.
 
+### 10.8 · Identificación del suspendido (bug del PM v1.12.0)
+
+Cómo sabe el portal quién es el suspendido: por **código** (router con `corte_identificacion = codigo`: su web proxy, puerto 3346, redirige el HTTP del suspendido a `/corte?c=<código>` con una regla `/ip proxy access` por servicio) o por **IP** (solo sin NAT ni proxy en medio). En modo `codigo` el NAT de HTTP va al proxy del router (`argosisp: corte-nat HTTP al proxy de corte`) en lugar del dst-nat al portal. Contrato completo: `contratos/corte-identificacion.md`.
+
 ## 11. Modo de velocidad único por router (decisión del PM, 2026-11-05)
 
 El modo de control de velocidad se decide **por router**: todos sus servicios siguen la misma lógica. Se quitan las excepciones por plan. Manda sobre §2, §4 y §9 donde choquen.

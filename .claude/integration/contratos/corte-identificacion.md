@@ -1,6 +1,6 @@
 # Contrato (borrador): identificar al cliente cortado en la página de corte
 
-> **Estado:** borrador para que el PM decida. No hay código en esta rama todavía. Dueño: A5 (portal). Afecta a A1 (núcleo/IPAM, script de conexión), A2 (aaa/coa), A4 (panel), A6 (infra: WireGuard, Caddy, instalador) y routeros (reconciliador).
+> **Estado:** fase 1 implementada (rama `a5/identificar-cortado`), con las decisiones del PM del 8 nov (§5). Las fases 2 y 3 siguen abiertas. Dueño: A5 (portal). Afecta a A1 (núcleo/IPAM, script de conexión), A2 (aaa/coa), A4 (panel), A6 (infra: WireGuard, Caddy, instalador) y routeros (reconciliador).
 >
 > **Origen:** bug del PM en producción, v1.12.0: «Ya redirige a la pantalla de corte, pero existe un problema para identificar el servicio que está cortado, ya que toma la IP del server o IP privada y no del servicio asignado».
 >
@@ -163,10 +163,10 @@ Leyenda de mecanismos:
 | Promesa activa | Se reactiva: sale de `suspendidos` y la regla COD se borra con `servicio.estado_cambiado` | — |
 | Reactivado mientras mira la página | Hoy `/portal/estado` sondea cada 5 s **por IP**, y con NAT nunca se entera. Con COD el sondeo usa el código | El código debe seguir resolviendo un rato después de reactivar (para mostrar «ya tienes servicio») |
 | Reactivado, pero con la regla vieja en el router | Inofensivo mientras su IP no esté en `suspendidos`: el proxy solo recibe lo que manda el dst-nat. La reconciliación la borra | — |
-| Retirado, o su IP reasignada a otro servicio | **Peligro:** si el nuevo dueño de la IP es suspendido y la regla vieja sigue, el router lo manda con el código **del cliente anterior** | Al escribir la regla de una IP se borra cualquier otra `argosisp:corte:*` con la misma `src-address`. El código solo resuelve mientras el servicio está suspendido o en la ventana de gracia. La regla se reescribe con `asignacion.cambiada` y `sesion.iniciada` |
+| Retirado, o su IP reasignada a otro servicio | **Peligro:** si el nuevo dueño de la IP es suspendido y la regla vieja sigue, el router lo manda con el código **del cliente anterior** | Al escribir la regla de una IP se borra cualquier otra `argosisp:servicio:*` (regla de proxy) con la misma `src-address`. El código solo resuelve mientras el servicio está suspendido o en la ventana de gracia. La regla se reescribe con `asignacion.cambiada` y `sesion.iniciada` |
 | Router reiniciado | Las reglas de `/ip proxy access` son configuración persistente: sobreviven al reinicio | — |
 | Router sin contacto al suspender | RADIUS suspende igual, pero la regla COD no se escribe. El cliente cae en la regla final sin código → IP → «no identificado» con la salida manual | Reintentos (BullMQ) y reconciliación al volver el router (`reconciliar_router.ts`). `routeros.fallido` |
-| Huérfanos | Reglas `argosisp:corte:<id>` de servicios no suspendidos, o con otra IP | Las borra el reconciliador (como `argosisp:servicio:*`) |
+| Huérfanos | Reglas de proxy `argosisp:servicio:<id>` de servicios no suspendidos, o con otra IP | Las borra el reconciliador (como `argosisp:servicio:*`) |
 
 ### 2.9 Seguridad
 
@@ -225,14 +225,14 @@ Leyenda de mecanismos:
 ```
 /ip proxy set enabled=yes port=<puertos del operador>,3346 max-cache-size=none   # solo agrega 3346 si el operador ya usa el proxy
 /ip firewall nat  (en argos-corte-nat, en lugar del dst-nat al portal)
-  add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=3346 comment="argosisp: corte-nat HTTP al proxy del router"
+  add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=3346 comment="argosisp: corte-nat HTTP al proxy de corte"
 /ip firewall filter (argos-corte-in, antes del tcp-reset)
   add chain=argos-corte-in protocol=tcp dst-port=3346 action=accept comment="argosisp: corte-in proxy de corte"
 /ip firewall filter (input, arriba)
-  add chain=input protocol=tcp dst-port=3346 src-address-list=!suspendidos action=drop comment="argosisp:top proxy de corte solo suspendidos"
+  add chain=input protocol=tcp dst-port=3346 connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
 /ip proxy access (por servicio suspendido, en orden, antes de la final)
-  add local-port=3346 src-address=10.66.1.3 action=redirect action-data="https://portal.isp.gt/corte?c=K7M2QX9TB4RZA" comment="argosisp:corte:1234"
-  add local-port=3346 src-address=2803:xxxx:10:300::/56 action=redirect action-data="…?c=K7M2QX9TB4RZA" comment="argosisp:corte:1234"
+  add local-port=3346 src-address=10.66.1.3 action=redirect action-data="https://portal.isp.gt/corte?c=K7M2QX9TB4RZA" comment="argosisp:servicio:1234"
+  add local-port=3346 src-address=2803:xxxx:10:300::/56 action=redirect action-data="…?c=K7M2QX9TB4RZA" comment="argosisp:servicio:1234:delegado"
 /ip proxy access (final, sin código)
   add local-port=3346 action=redirect action-data="https://portal.isp.gt/corte" comment="argosisp: corte proxy sin codigo"
 ```
@@ -330,7 +330,7 @@ Leyenda de mecanismos:
 **routeros (A1/A5, `apps/api/app/network/routeros/`).**
 
 - En `corte_router.ts`, objetos nuevos de nivel router: `/ip/proxy` (sin pisar los puertos del operador), el NAT `redirect` al proxy, `argos-corte-in` accept y el `input` drop.
-- Reglas `/ip/proxy/access` por servicio en el estado deseado del servicio: `argosisp:corte:<id>`, IPv4 de la asignación o sesión y prefijos IPv6.
+- Reglas `/ip/proxy/access` por servicio en el estado deseado del servicio: `argosisp:servicio:<id>` (como los demás objetos por servicio), IPv4 de la asignación o sesión y prefijos IPv6.
 - Se escriben y borran con `servicio.estado_cambiado`, `asignacion.cambiada` y `sesion.iniciada` del suspendido.
 - Antes de escribir, se borra cualquier regla con la misma `src-address`.
 - El reconciliador limpia huérfanos. `audit.red` registra cada comando.
@@ -394,20 +394,93 @@ Leyenda de mecanismos:
 
 ---
 
-## 5. Preguntas abiertas (decisión del PM)
+## 5. Decisiones del PM (8 nov, cerradas)
 
-- **P1. Modo por defecto.** ¿Código (B) por defecto en todos los routers con API, o elegible por router en «Portal de corte» (`codigo` | `ip`)? Propuesta: B por defecto en routers con API; `ip` solo si el operador garantiza que no hay NAT.
-- **P2. Web proxy del router.** ¿Aceptas que Argos active `/ip proxy` (sin caché, puerto propio 3346, bloqueado desde fuera)? Si algún router ya usa el proxy, ¿Argos agrega su puerto o se excluye ese router?
-- **P3. `url_corte` externa.** Opciones:
-    - a) la regla del router lleva a la `/corte` de Argos y la `url_corte` se usa solo sin código (como hoy);
-    - b) la regla lleva a la `url_corte` con `?c=`, y la página externa consulta `GET /portal/quien-soy?c=`, que es público;
-    - c) la `url_corte` admite `{codigo}` en la plantilla.
+| # | Decisión |
+| --- | --- |
+| P1 | **Elegible por router**: `network.routers.corte_identificacion` = `ip` \| `codigo`, sin modo global. Obligatorio en el formulario de alta y edición del panel, que sugiere `codigo` si el router tiene API. En la API es opcional y en el alta vale `ip` por defecto. Los routers existentes quedan en `ip` y el diagnóstico sugiere pasarlos a `codigo` cuando detecta NAT. Sin API solo se admite `ip` (422 `corte_codigo_sin_api`, también al quitar la clave de la API a un router en `codigo`) |
+| P2 | **Sí**: Argos activa `/ip proxy` sin caché, en el puerto 3346 y bloqueado desde fuera. Si el router ya usa el proxy, Argos solo agrega su puerto y sus reglas y no toca lo demás |
+| P3 | **a)**: el router siempre lleva a la `/corte` de Argos. Argos identifica por el código y después redirige a la `url_corte` de la empresa si la tiene: Nitro, `/corte?c=` → `GET /portal/destino-corte` con `X-Argos-Corte` → `302` |
+| P4 | El código permite **lo mismo que hoy la IP**: nombre parcial, estado y montos, pedir promesa y subir comprobante. Facturas, pagos y datos siguen detrás de la verificación por teléfono o correo |
+| P5 | **Uno por suspensión**. Se cierra al dejar de estar suspendido y resuelve 30 min más (`PORTAL_CODIGO_CORTE_GRACIA_MIN`) |
+| P6 | **Sí, fase 2**: túnel WireGuard con las redes de clientes para los routers sin API |
+| P7 | **Existen los dos escenarios** (servidor en la LAN del ISP y nodo de portal aparte): entran en la fase 2 junto con A′ |
 
-   Propuesta: a) ahora y c) después.
-- **P4. Qué permite el código sin verificación.** Hoy la IP permite ver nombre parcial, estado y montos, pedir promesa y subir comprobante. ¿El código da lo mismo (propuesta) o menos (solo ver, y la promesa con verificación)?
-- **P5. Vigencia del código.** ¿Uno por suspensión, que caduca al reactivar más 30 min (propuesta), o fijo por servicio y rotable a mano desde el panel?
-- **P6. Routers sin API.** ¿Vale la pena la fase 2 (túnel con redes de clientes) o basta con la salida manual (código por teléfono o correo) para esos routers?
-- **P7. Servidor en la LAN del ISP o nodo de portal.** ¿Hay instalaciones así? Si sí, A′ (mantener los dos saltos por HTTP en el destino del NAT) entra en la fase 2.
+## 5 bis. Fase 1: lo implementado (contrato)
+
+### Router (`apps/api/app/network/routeros/`)
+
+| Objeto | Clave (`comment`) | Cuándo |
+| --- | --- | --- |
+| `/ip proxy` (`set`) | — | `codigo`: si estaba apagado, `enabled=yes port=3346 max-cache-size=none`; si estaba encendido, solo agrega `3346` a `port`. `ip`: quita `3346`, y si era el único puerto lo apaga (`enabled=no port=8080`). Función `ajusteProxy` |
+| NAT `argos-corte-nat` (IPv4 e IPv6) | `argosisp: corte-nat HTTP al proxy de corte` | `codigo`: `tcp dst-port=80 action=redirect to-ports=3346`. Reemplaza al `dst-nat` (`argosisp: corte-nat HTTP a /corte`). En IPv6 no hace falta la IPv6 del portal |
+| filter `input` (arriba) | `argosisp:top proxy de corte solo redirigido` | `codigo`: `tcp dst-port=3346 connection-nat-state=!dstnat action=drop` (no es un proxy abierto: solo entra lo que trajo el dst-nat de un suspendido) |
+| filter `argos-corte-in` | `argosisp: corte-in proxy de corte` | `codigo`: `tcp dst-port=3346 accept`, antes del `tcp-reset` |
+| `/ip proxy access` (final) | `argosisp: corte proxy sin codigo` | `codigo`: `local-port=3346 action=redirect action-data=<URL de /corte>` (sin código: el portal cae a la IP) |
+| `/ip proxy access` (por servicio) | `argosisp:servicio:<id>` (IPv4) y `argosisp:servicio:<id>:enlace\|delegado\|delegado-2` (IPv6) | Solo un suspendido en un router `codigo` (también PPPoE: las direcciones de su sesión abierta, o las fijas): `local-port=3346 src-address=<ip o prefijo> action=redirect action-data=<URL de /corte>?c=<código>` |
+
+- **URL de `/corte`**: la de `PORTAL_URL_PUBLICA` (`urlCortePublica`) o, sin ella, el destino del NAT (`corte_url` en `ConfigCorte`).
+- **Orden** (`ordenAccesoProxy`): primero las reglas por servicio, luego la final y al final lo del operador. Una regla nueva se mueve en el acto (`ordenarAccesoProxy`), y el reconciliador revisa el orden en cada pasada.
+- **IP reasignada** (`liberarAccesoProxy`): al escribir la regla de un suspendido se borra la regla de **otro** servicio con la misma `src-address`.
+- **Huérfanos**: el reconciliador borra las reglas `argosisp:servicio:*` de servicios que ya no deben tenerlas, como los demás objetos por servicio.
+- **Quién escribe**: `routeros.aplicar_servicio` (por `servicio.estado_cambiado`, `asignacion.cambiada`, `sesion.iniciada`/`terminada`…) y `routeros.reconciliar` (periódico, al volver un router, y con `portal.config_cambiada` con `router_id` al cambiar el modo).
+- **Auditoría**: cada comando en `audit.red`, con el `?c=` enmascarado (`limpiarCredenciales`).
+- El script de conexión (`.rsc`, A6) todavía no trae estas piezas: el reconciliador las pone en la primera pasada de un router con API.
+
+### Códigos (`apps/api/app/portal/codigos_corte.ts`, tabla `core.codigos_corte`)
+
+- 13 caracteres base32 Crockford (65 bits aleatorios). Un código abierto por servicio (índice único parcial).
+- `sincronizarCodigoCorte` corre en la misma transacción que escribe la regla:
+    - suspendido en un router `codigo`: reutiliza el abierto o crea uno y emite `portal.codigo_corte_emitido`;
+    - en cualquier otro estado: cierra el abierto (`cerrado_en`).
+- Resuelve si está abierto o se cerró hace menos de la gracia.
+
+### Evento nuevo
+
+`portal.codigo_corte_emitido`: `codigo_corte_id`, `servicio_id`, `empresa_id`, `cliente_id`, `router_id`. **Nunca el código.** Emite A5 (`sincronizarCodigoCorte`, dentro de `routeros.aplicar_servicio` o `routeros.reconciliar`). Hoy no lo consume nadie.
+
+`portal.config_cambiada` agrega `router_id` (opcional) con `campos: ['corte_identificacion']`, y `routeros` reconcilia solo ese router.
+
+### Portal (API)
+
+- **Precedencia** (`app/portal/identificacion.ts`, `identificarOrigen`):
+    1. el código vigente (`X-Argos-Corte` o `?c=`);
+    2. la IP, salvo que sea de infraestructura;
+    3. no identificado, con `motivo`.
+- **IP de infraestructura** (`clasificarIp`):
+    - `ip_de_router`: `nas_ip`, `host` o IP del túnel;
+    - `ip_de_servidor`: `PORTAL_IPS_SERVIDOR`;
+    - `ip_de_proxy`: `PORTAL_PROXIES_CONFIABLES`, por ejemplo la red de compose cuando Caddy no confía en NPM.
+- **`QuienSoy`** agrega:
+    - `identificado_por`: `codigo` \| `ip` \| null;
+    - `motivo`: `codigo_vencido` \| `ip_de_router` \| `ip_de_servidor` \| `ip_de_proxy` \| `ip_desconocida` \| null.
+- **Mismo código en todas las rutas por IP**: `estado`, `destino-corte`, `promesas` y `promesas/condiciones` sin sesión, `comprobantes`, `pagos/iniciar`, `pagos/en-linea/:id`, `empresa`, `anuncios` y `codigo` con `por_ip`.
+- **Límite**:
+    - con código vigente, por código (`codigo:<código>`), no por IP;
+    - un código inexistente o vencido cuenta en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP (10 por ventana).
+- **Auditoría**: `audit.acciones` guarda `codigo: "***"`.
+- **`GET /portal/eco-ip`** (público, sin datos de clientes): `{ ip, infraestructura }`, para el diagnóstico.
+- **`GET /servicios/:id/codigo-corte`** (`servicios.ver`, con alcance): `{ servicio_id, corte_identificacion, activo, creado_en, cerrado_en }`. Nunca el código.
+
+### Portal (Nuxt)
+
+- `plugins/api.ts` toma `?c=` al cargar y lo guarda en memoria y en `sessionStorage` de la pestaña. Lo manda en `X-Argos-Corte` en cada llamada.
+- `/corte` quita `?c=` de la barra de direcciones.
+- El mensaje de «no identificado» depende del `motivo` y nunca habla de la red del ISP.
+- `server/middleware/portal-cautivo.ts`: `/corte?c=` en el host del portal consulta `destino-corte` con el código y hace `302` a la `url_corte` de la empresa si la tiene (P3).
+
+### Caddy (`infra/produccion/config/Caddyfile`)
+
+El sitio del corte (`http://, :{$PORTAL_CORTE_PUERTO}`) usa `header_up X-Forwarded-For {remote_host}` (snippet `portal_corte`) y no lee los encabezados de nadie, ni de un proxy de `ARGOSISP_PROXIES_CONFIABLES`. Prueba: `infra/ci/probar-detras-de-proxy.sh`.
+
+### Diagnóstico (`diagnostico.ts`)
+
+- **`portal_ip_cliente`**:
+    - `/tool/fetch url=<portal>/api/v1/portal/eco-ip src-address=<gateway de clientes> output=user` y compara.
+    - En modo `ip`, si el portal ve otra IP: rojo `portal_ve_otra_ip` («el portal ve la IP X en vez de la del cliente: hay NAT o un proxy en medio»), con la acción «pasa el router a Identificación por código».
+    - En modo `codigo` es informativo (verde).
+- **`proxy_corte`** (solo en modo `codigo`): el proxy en el 3346, la regla final y una regla por suspendido con código. Si falla, `reconciliar: true`.
+- **Por probar en el laboratorio**: que `src-address` en `/tool/fetch` pase por el masquerade como un cliente.
 
 ## 6. Evidencia y fuentes
 
