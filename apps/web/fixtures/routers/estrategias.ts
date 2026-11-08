@@ -5,6 +5,7 @@ import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } fr
 import { MATRIZ, QOS_MAX_HOJAS } from './estrategiasDatos'
 import { clasesActivasDeRouter } from '../qos/costo'
 import { bd } from '../bd'
+import { corteVaPorTunel } from './corteTunel'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 
 /**
@@ -469,6 +470,10 @@ function sincronizar(solicitud: SolicitudFixture, planId: number): RespuestaFixt
 const SIN_API = 'El router no tiene usuario y clave de la API REST: complétalos en «Conexión» o genera el script de conexión'
 const NO_RESPONDE = 'El router no respondió a la API REST (timeout de 10 s): revisa el túnel o la dirección de la API'
 const PORTAL = 'https://portal.argos.test'
+/** `nat_url`: el destino del dst-nat sin túnel (`portal_v4:portal_puerto`). */
+const NAT_URL = 'http://203.0.113.10:80'
+/** `<IP del servidor en el túnel>:<PORTAL_CORTE_PUERTO>`, los valores por defecto (§5 ter.3). */
+const TUNEL_CORTE = 'http://10.255.0.1:8088'
 
 /** Lo que «Reconciliar ahora» encontraría en el router, mientras no se haya reconciliado. */
 function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'] {
@@ -594,17 +599,26 @@ type Chequeo = DiagnosticoCorte['chequeos'][number]
  * (qué IP ve el portal desde la red de clientes) y, solo en modo código, `proxy_corte`. RB-Centro PCQ (4)
  * está detrás de un masquerade y en modo IP: rojo `portal_ve_otra_ip`, el caso del PM. En modo código el
  * chequeo es informativo (verde) y el proxy queda bien tras «Reconciliar ahora»; CCR-Mixco (2) ya lo tiene.
+ *
+ * Fase 2 (§5 ter.9): en modo IP se prueba el primer salto, el destino del NAT. Un router que manda el corte
+ * por el túnel (RB-Centro, registrado en WireGuard) lo prueba en `http://10.255.0.1:8088` y, hasta
+ * «Reconciliar ahora» (falta el `srcnat accept`), sale en rojo con el texto del túnel y `reconciliar: true`.
  */
 function chequeosIdentificacion(router: Router, reconciliado: boolean, suspendidos: number): Chequeo[] {
     const gateway = bd.redesIpv4.find(r => r.router_id === router.id && r.gateway)?.gateway ?? '100.64.12.1'
-    const prueba = `/tool fetch url="${PORTAL}/api/v1/portal/eco-ip" src-address=${gateway} output=user`
-    const conNat = router.id === 4 || router.id === 2
-    const visto = `El portal ve la IP 203.0.113.${20 + router.id} (el propio servidor) en vez de la del cliente (${gateway}): hay NAT (masquerade del router hacia el portal) o un proxy en medio, así que la IP no sirve para saber quién es el suspendido`
+    const tunel = corteVaPorTunel(router)
+    // Como `chequeoIpCliente`: modo código, la URL pública; modo IP, el destino del NAT (túnel o `nat_url`).
+    const base = router.corte_identificacion === 'codigo' ? PORTAL : tunel ? TUNEL_CORTE : NAT_URL
+    const prueba = `/tool fetch url="${base}/api/v1/portal/eco-ip" src-address=${gateway} output=user`
+    const conNat = router.id === 4 || router.id === 2 || (tunel && !reconciliado)
+    const visto = `El portal ve la IP ${tunel ? '10.255.0.2 (un router)' : `203.0.113.${20 + router.id} (el propio servidor)`} en vez de la del cliente (${gateway}): hay NAT (masquerade del router hacia el portal) o un proxy en medio, así que la IP no sirve para saber quién es el suspendido`
     const ipCliente: Chequeo = !conNat
         ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `El portal ve la IP del cliente (${gateway}): sin NAT ni proxy en medio, la identificación por IP funciona`, comandos: [], reconciliar: false }
-        : router.corte_identificacion === 'codigo'
-            ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `${visto}. Este router identifica por código de corte: no depende de la IP`, comandos: [], reconciliar: false }
-            : { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. Pasa el router a «Identificación por código» (editar el router; necesita su API): el router manda a cada suspendido a /corte con su código. Sin API: túnel WireGuard sin masquerade hacia el portal`, comandos: [prueba], reconciliar: false }
+        : tunel
+            ? { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del servidor (redes del router en Argos; el wireguard-agente las aplica)`, comandos: [prueba], reconciliar: true }
+            : router.corte_identificacion === 'codigo'
+                ? { clave: 'portal_ip_cliente', ok: true, codigo: null, detalle: `${visto}. Este router identifica por código de corte: no depende de la IP`, comandos: [], reconciliar: false }
+                : { clave: 'portal_ip_cliente', ok: false, codigo: 'portal_ve_otra_ip', detalle: `${visto}. Pasa el router a «Identificación por código» (editar el router; necesita su API): el router manda a cada suspendido a /corte con su código. Sin API: túnel WireGuard sin masquerade hacia el portal`, comandos: [prueba], reconciliar: false }
     if (router.corte_identificacion !== 'codigo') {
         return [ipCliente]
     }

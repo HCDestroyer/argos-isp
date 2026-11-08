@@ -9,6 +9,8 @@ import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import RouterEditarModal from '~/components/RouterEditarModal.vue'
 import RouterDiagnosticoCorte from '~/components/RouterDiagnosticoCorte.vue'
 import ServicioCodigoCorte from '~/components/ServicioCodigoCorte.vue'
+import PaginaRouter from '~/pages/routers/[id].vue'
+import { diagnosticoCorte } from '~~/fixtures/routers/estrategias'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 
@@ -60,7 +62,7 @@ describe('identificación del cliente cortado', () => {
             const campo = enBody('router-corte-identificacion')!
             expect(campo.textContent).toContain('Identificación del cliente cortado')
             expect(campo.textContent).toContain('Por código (recomendado si el router tiene API)')
-            expect(campo.textContent).toContain('Por IP (solo si no hay NAT ni proxy entre el router y Argos)')
+            expect(campo.textContent).toContain('Por IP (por el túnel WireGuard o sin NAT entre el router y Argos)')
             expect(opcion('router-corte-identificacion', 'codigo').getAttribute('aria-checked')).toBe('false')
             expect(opcion('router-corte-identificacion', 'ip').getAttribute('aria-checked')).toBe('false')
             expect(opcion('router-corte-identificacion', 'codigo').hasAttribute('disabled') || opcion('router-corte-identificacion', 'codigo').getAttribute('data-disabled') !== null).toBe(true)
@@ -176,7 +178,21 @@ describe('identificación del cliente cortado', () => {
 
             const porIp = servicioEn(1)
             const sinCodigo = await mountSuspended(ServicioCodigoCorte, { props: { servicioId: porIp.id } })
-            await esperar(() => expect(sinCodigo.find('[data-prueba="codigo-corte-detalle"]').text()).toBe('Sin código: el router identifica por IP.'))
+            await esperar(() => expect(sinCodigo.find('[data-prueba="codigo-corte-detalle"]').text()).toContain('lo emite el portal la primera vez que identifica al suspendido por su IP'))
+            expect(sinCodigo.text()).not.toContain('Por código»')
+        })
+
+        it('fase 2: en un router por IP el primer salto emitió el código, así que sale activo', async () => {
+            const servicio = servicioEn(1)
+            servicio.estado = 'suspendido'
+            bd.codigosCorte.push({ servicio_id: servicio.id, creado_en: new Date(Date.now() - 3_600_000).toISOString(), cerrado_en: null })
+            const tarjeta = await mountSuspended(ServicioCodigoCorte, { props: { servicioId: servicio.id } })
+            await esperar(() => expect(tarjeta.find('[data-prueba="codigo-corte-estado"]').text()).toBe('Activo'))
+            const detalle = tarjeta.find('[data-prueba="codigo-corte-detalle"]').text()
+            expect(detalle).toContain('Activo desde')
+            expect(detalle).toContain('El portal identificó a este suspendido por su IP')
+            expect(tarjeta.text()).toContain('Router: por ip')
+            expect(tarjeta.text()).not.toMatch(/solo en modo c[oó]digo/i)
         })
 
         it('si la API falla muestra el error con «Reintentar» y ningún estado', async () => {
@@ -233,6 +249,79 @@ describe('identificación del cliente cortado', () => {
             expect(proxy.text()).toContain('«Reconciliar ahora» lo deja como debe estar')
             expect(diagnostico.find('[data-prueba="corte-reconciliar"]').exists()).toBe(true)
         })
+
+        it('sin túnel, el «qué hacer» también ofrece el túnel y el accept en la LAN', async () => {
+            const diagnostico = await mountSuspended(RouterDiagnosticoCorte, { props: { corte } })
+            const accion = diagnostico.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').text()
+            expect(accion).toContain('registra el router en el túnel WireGuard')
+            expect(accion).toContain('srcnat con action=accept')
+        })
+
+        it('fase 2, por el túnel: el detalle tal cual, «Reconciliar ahora» y revisar redes, sin «Editar router»', async () => {
+            const detalle = 'El portal ve la IP 10.255.0.2 (un router) en vez de la del cliente (100.64.10.1): hay NAT (masquerade del router hacia el portal) o un proxy en medio, así que la IP no sirve para saber quién es el suspendido. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del servidor (redes del router en Argos; el wireguard-agente las aplica)'
+            const tunel: Schema<'DiagnosticoCorte'> = {
+                ...corte,
+                chequeos: [{
+                    clave: 'portal_ip_cliente',
+                    ok: false,
+                    codigo: 'portal_ve_otra_ip',
+                    detalle,
+                    comandos: ['/tool fetch url="http://10.255.0.1:8088/api/v1/portal/eco-ip" src-address=100.64.10.1 output=user'],
+                    reconciliar: true,
+                }],
+                portal: { ...corte.portal, destino_nat: 'http://10.255.0.1:8088' },
+            }
+            const diagnostico = await mountSuspended(RouterDiagnosticoCorte, { props: { corte: tunel } })
+            const ip = diagnostico.find('[data-corte="portal_ip_cliente"]')
+            expect(ip.text()).toContain(detalle)
+            const accion = ip.find('[data-prueba="corte-accion-portal_ve_otra_ip"]').text()
+            expect(accion).toContain('«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT»')
+            expect(accion).toContain('pestaña Pools e IPs')
+            expect(ip.text()).not.toContain('pega estos comandos')
+            expect(ip.find('[data-prueba="corte-editar-router"]').exists()).toBe(false)
+            expect(ip.find('[data-prueba="comandos-routeros"]').text()).toContain('http://10.255.0.1:8088/api/v1/portal/eco-ip')
+            expect(diagnostico.find('[data-prueba="corte-reconciliar"]').exists()).toBe(true)
+        })
+
+        it('fixture: RB-Centro (en el túnel) prueba el primer salto en 10.255.0.1:8088 y queda en verde al reconciliar', () => {
+            const router = bd.routers.find(r => r.id === 1)!
+            const antes = diagnosticoCorte(router).chequeos.find(c => c.clave === 'portal_ip_cliente')!
+            expect(antes).toMatchObject({ ok: false, codigo: 'portal_ve_otra_ip', reconciliar: true })
+            expect(antes.detalle).toContain('va por el túnel WireGuard')
+            expect(antes.comandos[0]).toContain('http://10.255.0.1:8088/api/v1/portal/eco-ip')
+            bd.routersReconciliados.push(1)
+            expect(diagnosticoCorte(router).chequeos.find(c => c.clave === 'portal_ip_cliente')!.ok).toBe(true)
+        })
+    })
+
+    describe('corte por el túnel en la ficha del router', () => {
+        const base = (): RouterCorteTunel => structuredClone(bd.routers.find(r => r.id === 1)!)
+
+        it('sí, no con su motivo, y nada si la API no manda el campo', () => {
+            expect(presentarCorteTunel({ ...base(), corte_por_tunel: true, corte_por_tunel_motivo: null })).toMatchObject({ etiqueta: 'Corte por el túnel: sí', color: 'success', motivo: null })
+            expect(presentarCorteTunel({ ...base(), corte_por_tunel: false, corte_por_tunel_motivo: 'El router identifica por código' })).toMatchObject({ etiqueta: 'Corte por el túnel: no', motivo: 'El router identifica por código' })
+            expect(presentarCorteTunel(base())).toBeNull()
+        })
+
+        it('la ficha muestra «sí» en RB-Centro (registrado en el túnel) y «no» con el motivo en RB-Centro PCQ', async () => {
+            const sinPagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
+            await esperar(() => expect(sinPagina.find('[data-prueba="router-corte-tunel"]').exists()).toBe(true))
+            expect(sinPagina.find('[data-prueba="router-corte-tunel"]').text()).toBe('Corte por el túnel: sí')
+            expect(sinPagina.find('[data-prueba="router-corte-tunel-motivo"]').exists()).toBe(false)
+            sinPagina.unmount()
+
+            const pcq = await mountSuspended(enApp(PaginaRouter), { route: '/routers/4' })
+            await esperar(() => expect(pcq.find('[data-prueba="router-corte-tunel"]').exists()).toBe(true))
+            expect(pcq.find('[data-prueba="router-corte-tunel"]').text()).toBe('Corte por el túnel: no')
+            expect(pcq.find('[data-prueba="router-corte-tunel-motivo"]').text()).toContain('no está registrado en el túnel WireGuard')
+        })
+
+        it('si GET /routers/:id falla, ni «sí» ni «no»: el error con «Reintentar»', async () => {
+            simularFalla('GET /api/v1/routers/:id', 500)
+            const pagina = await mountSuspended(enApp(PaginaRouter), { route: '/routers/1' })
+            await esperar(() => expect(pagina.text()).toContain('Reintentar'))
+            expect(pagina.find('[data-prueba="router-corte-tunel"]').exists()).toBe(false)
+        })
     })
 
     describe('presentarCodigoCorte', () => {
@@ -246,7 +335,12 @@ describe('identificación del cliente cortado', () => {
             expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:45:00Z', resuelve_hasta: '2026-11-08T17:55:00Z' }, ahora).estado).toBe('cerrado')
             expect(presentarCodigoCorte({ ...base, creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:15:00Z', resuelve_hasta: '2026-11-08T17:45:00Z' }, ahora).estado).toBe('cerrado')
             expect(presentarCodigoCorte(base, ahora).detalle).toBe('Nunca ha tenido código: se emite al suspenderse.')
-            expect(presentarCodigoCorte({ ...base, corte_identificacion: 'ip' }, ahora).detalle).toBe('Sin código: el router identifica por IP.')
+            expect(presentarCodigoCorte({ ...base, corte_identificacion: 'ip' }, ahora).detalle).toContain('lo emite el portal')
+            // Fase 2: en modo IP también puede estar activo (lo emitió el primer salto), y nada dice «solo en modo código».
+            const activoIp = presentarCodigoCorte({ ...base, corte_identificacion: 'ip', activo: true, creado_en: '2026-11-08T12:00:00Z' }, ahora)
+            expect(activoIp.estado).toBe('activo')
+            expect(activoIp.detalle).toContain('El portal identificó a este suspendido por su IP')
+            expect(presentarCodigoCorte({ ...base, corte_identificacion: 'ip', creado_en: '2026-11-07T12:00:00Z', cerrado_en: '2026-11-08T17:15:00Z', resuelve_hasta: '2026-11-08T17:45:00Z' }, ahora).detalle).not.toContain('pasa a «Por código»')
         })
     })
 })

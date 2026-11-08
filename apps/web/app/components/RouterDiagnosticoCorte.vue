@@ -12,6 +12,11 @@ import type { DiagnosticoCorte } from '~/types/controlVelocidad'
  * en rojo (`portal_ve_otra_ip`) explica que hay NAT o un proxy en medio y ofrece «Editar router» para
  * pasarlo a «Por código» (lo abre el padre); `proxy_corte` (solo en modo código) se arregla con
  * «Reconciliar ahora».
+ *
+ * Fase 2 (§5 ter.9): en modo IP `portal_ip_cliente` prueba el primer salto, el destino del NAT (la IP del
+ * servidor en el túnel WireGuard, o `nat_url`). El `detalle` se muestra tal como llega. Si el router manda
+ * el corte por el túnel, el rojo trae su propio texto y `reconciliar: true` (falta el `srcnat accept` o la
+ * red no está en el peer): ahí la acción es «Reconciliar ahora» y revisar las redes, no pasar a código.
  */
 const props = defineProps<{
     corte: DiagnosticoCorte
@@ -59,19 +64,35 @@ function estado(chequeo: Chequeo): { etiqueta: string, color: 'success' | 'error
     return { etiqueta: 'No se pudo comprobar', color: 'neutral', icono: 'i-lucide-circle-minus' }
 }
 
-/**
- * Qué hacer en los chequeos cuyo arreglo no es «Reconciliar ahora». `portal_ve_otra_ip`: el detalle de la
- * API ya lo dice; aquí va corto y con el botón para editar el router.
- */
-const ACCIONES: Partial<Record<NonNullable<Chequeo['codigo']>, { texto: string, editar: boolean }>> = {
-    portal_ve_otra_ip: {
-        texto: 'Edita el router y elige «Identificación del cliente cortado: Por código» (necesita la API del router). Sin API, la identificación por IP solo funciona sin NAT entre el router y Argos.',
-        editar: true,
-    },
+interface Accion {
+    texto: string
+    editar: boolean
+    /** Sustituye a la línea genérica de «Reconciliar ahora». */
+    propia: boolean
 }
 
-function accion(chequeo: Chequeo) {
-    return chequeo.ok === false && chequeo.codigo ? ACCIONES[chequeo.codigo] ?? null : null
+/**
+ * Qué hacer en los chequeos cuyo arreglo no es solo «Reconciliar ahora». `portal_ve_otra_ip` tiene dos
+ * casos con el mismo código: sin túnel (NAT o proxy en medio: pasar a código, el túnel o el `accept` en la
+ * LAN) y por el túnel (`reconciliar: true`: falta la regla o la red en el peer).
+ */
+const ACCION_NAT: Accion = {
+    texto: 'Edita el router y elige «Identificación del cliente cortado: Por código» (necesita la API del router). Sin API: registra el router en el túnel WireGuard (pestaña Conexión) para que el corte vaya sin NAT; con el servidor en la LAN del ISP, agrega en el router un srcnat con action=accept hacia la IP del portal antes de tu masquerade.',
+    editar: true,
+    propia: false,
+}
+
+const ACCION_TUNEL: Accion = {
+    texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Pools e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
+    editar: false,
+    propia: true,
+}
+
+function accion(chequeo: Chequeo): Accion | null {
+    if (chequeo.ok !== false || chequeo.codigo !== 'portal_ve_otra_ip') {
+        return null
+    }
+    return chequeo.reconciliar ? ACCION_TUNEL : ACCION_NAT
 }
 
 /** `sin_api` y `router_no_responde` llegan solo en `problemas[]` (sin chequeo propio). */
@@ -130,7 +151,7 @@ const fuera = computed(() => props.corte.suspendidos.fuera_de_lista)
                     {{ chequeo.detalle }}
                 </p>
                 <p
-                    v-if="chequeo.ok === false && chequeo.reconciliar"
+                    v-if="chequeo.ok === false && chequeo.reconciliar && !accion(chequeo)?.propia"
                     class="flex items-start gap-1.5 text-xs text-error"
                 >
                     <UIcon
