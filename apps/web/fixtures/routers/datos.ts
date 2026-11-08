@@ -28,6 +28,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.10.0.1',
         modo_seguridad: 'radius',
         corte_identificacion: 'ip',
+        // Corte por el túnel (A1, `motivoSinCorteTunel`): registrado en el túnel (conexión 1 con clave pública). Lo recalcula `conCorteTunel` al responder.
+        corte_por_tunel: true,
+        corte_por_tunel_motivo: null,
         tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Control por capas (A2): migrado de «simple», RouterOS 7 leído por la reconciliación.
@@ -57,6 +60,9 @@ export const routers: Schema<'Router'>[] = [
         modo_seguridad: 'radius',
         // Identificación del cliente cortado por código (A5, `contratos/corte-identificacion.md`): tiene API.
         corte_identificacion: 'codigo',
+        // Corte por el túnel (A1, `motivoSinCorteTunel`): identifica por código y tiene API. Lo recalcula `conCorteTunel` al responder.
+        corte_por_tunel: false,
+        corte_por_tunel_motivo: 'modo_codigo',
         tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Migrado de «árbol PCQ»; RouterOS 6 (sin fq_codel ni CAKE).
@@ -86,6 +92,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.30.0.1',
         modo_seguridad: 'radius',
         corte_identificacion: 'ip',
+        // Corte por el túnel (A1, `motivoSinCorteTunel`): inactivo. Lo recalcula `conCorteTunel` al responder.
+        corte_por_tunel: false,
+        corte_por_tunel_motivo: 'router_inactivo',
         tipo_conexion: 'pppoe',
         control_velocidad: 'simple',
         // Nunca respondió a la API: sin versión conocida (`routeros_version` null, el valor por defecto).
@@ -116,6 +125,9 @@ export const routers: Schema<'Router'>[] = [
         nas_ip: '10.10.0.2',
         modo_seguridad: 'radius',
         corte_identificacion: 'ip',
+        // Corte por el túnel (A1, `motivoSinCorteTunel`): sin fila de conexión en el túnel. Lo recalcula `conCorteTunel` al responder.
+        corte_por_tunel: false,
+        corte_por_tunel_motivo: 'sin_tunel',
         tipo_conexion: 'pppoe',
         control_velocidad: 'arbol_pcq',
         // Control por capas (A2): el atajo «árbol PCQ»; es el mismo equipo que el RB-Centro (RouterOS 7).

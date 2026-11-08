@@ -97,7 +97,8 @@ import SincronizarRouterServicio from '#network/actions/sincronizar_router_servi
 import { exigirServicio } from '#core/acceso_empresa'
 import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
 import { parsearAdmin } from '#network/conexion/config'
-import { listarPeers, verConexion } from '#network/conexion/consultas'
+import { verConexion } from '#network/conexion/consultas'
+import { listarPeersConRedes } from '#network/conexion/tunel_corte'
 import { limitarRegistro } from '#network/conexion/limite_registro'
 import GenerarScript, { type ScriptConexion } from '#network/conexion/actions/generar_script'
 import RotarConexion from '#network/conexion/actions/rotar_conexion'
@@ -1131,12 +1132,14 @@ const conexion: Ruta[] = [
             'Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel ' +
             '(`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con ' +
             '`router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` ' +
-            '(un router eliminado ya no tiene fila de conexión: su peer sale de la lista).',
+            '(un router eliminado ya no tiene fila de conexión: su peer sale de la lista). `allowed_ips` suma las ' +
+            'redes de clientes de los routers que mandan el corte por el túnel (`contratos/corte-identificacion.md` ' +
+            '§5 ter.4); también reconcilia con `portal.config_cambiada` y `router.redes_cambiadas`.',
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
         respuesta: { status: 200, descripcion: 'Peers', esquema: PeersWireguard },
-        handler: async () => ({ data: await listarPeers() }),
+        handler: async () => ({ data: await listarPeersConRedes() }),
     }),
     definirRuta({
         metodo: 'post',

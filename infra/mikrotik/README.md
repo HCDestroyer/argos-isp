@@ -133,6 +133,15 @@ Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 bis. Segú
   - **Reimportar** el script no abre el 3346 ni un segundo: la limpieza inicial no borra el `drop` ni la regla final, y el script los actualiza en su lugar (`set` si existen, `add` si no). Al pasar a `ip`, primero quita el 3346 del proxy y después borra esas reglas. Las reglas por servicio (`argosisp:servicio:<id>`, `src-address=<IP o prefijo>`, `action-data=…/corte?c=<código>`) **solo** las escribe ArgosIsp por la API: el código no sale nunca en el script.
   - El proxy responde **307** a `/corte?c=<código>`, que va al portal por `argos-portal` (sin NAT).
 
+**Corte por el túnel WireGuard** (modo `ip`, `corteTunelIp` no vacía; contrato §5 ter.6). Lo llena Argos si el túnel de corte está habilitado (`PORTAL_CORTE_TUNEL=1`, por defecto). El HTTP del suspendido va a la IP del servidor en el túnel sin masquerade, y el portal ve la IP del cliente. El script agrega:
+
+- `argos-portal`: `argosisp: portal tunel` = la IP del túnel. El filtro `argos-corte` ve el destino ya traducido.
+- NAT: `argosisp: corte-nat HTTP a /corte` = `dst-nat to-addresses=$corteTunelIp to-ports=$corteTunelPuerto`.
+- NAT `srcnat` arriba (`argosisp:top`, sección 13): `argosisp:top corte por tunel sin NAT` = `src-address-list=argos-clientes dst-address=$corteTunelIp action=accept`. Va antes de cualquier masquerade, el de Argos o uno tuyo sin `out-interface`.
+- NAT `srcnat`: `argosisp: corte por tunel NAT de lo demas` = `connection-nat-state=dstnat dst-address=$corteTunelIp action=masquerade`. Un cliente fuera de `argos-clientes` (un pool que Argos no conoce) sale con la IP del router en el túnel: ve la página sin identificar, en lugar de un timeout.
+
+Del lado del servidor, el peer del router acepta las mismas redes (`infra/wireguard/README.md`, «Corte por el túnel»).
+
 Son los mismos comentarios y propiedades que escribe el reconciliador (`apps/api/app/network/routeros/corte_router.ts`); `apps/api/tests/network/conexion_render.spec.ts` compara el script con su estado deseado. Cambiar de modo: en el panel (el reconciliador corrige el router en el acto); para `lab.rsc`, editar `corteIdentificacion` y `corteUrl` y reimportar. Pruebas pendientes en el equipo físico: `docs/laboratorio/portal-cautivo.md` §9.
 
 ### DNS del router

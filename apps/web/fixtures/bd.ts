@@ -55,7 +55,7 @@ import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDa
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
-import { servicios } from './servicios/datos'
+import { codigosCorte, servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { clasesQos, perfilesQos, type ClaseQosFixture, type PerfilQosFila } from './qos/datos'
 import { sesiones } from './sesiones/datos'
@@ -325,7 +325,7 @@ function inicial(): BaseFixtures {
         secretosRadius,
         routersReconciliados: [],
         routersSinRespuesta: [],
-        codigosCorte: [],
+        codigosCorte,
         conexionesRouter,
         qosPerfiles: perfilesQos,
         qosClases: clasesQos,

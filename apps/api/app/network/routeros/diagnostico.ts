@@ -1,6 +1,7 @@
 import { request as httpRequest } from 'node:http'
 import { configCorteVigente, corteUrlVigente } from '#network/routeros/corte_vigente'
 import { codigosAbiertos } from '#portal/codigos_corte'
+import { opcionesCorteRouter } from '#network/routeros/opciones_corte'
 import env from '#start/env'
 import {
     RUTAS_ORDENADAS,
@@ -26,20 +27,19 @@ import {
     revisarDnsRouter,
     urlCorteConCodigo,
     urlNat,
+    type CorteTunelRouter,
     type ConfigCorte,
     type EstadoCorte,
 } from '#network/routeros/corte_router'
 import {
     estrategiasEnUso,
     planesDeRouter,
-    redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
 import {
     estadoVelocidadRouter,
     gatewaysDeRedes,
-    localAddressCorte,
     objetoAlDia,
     sobrantesVelocidad,
 } from '#network/routeros/velocidad_router'
@@ -60,7 +60,6 @@ import {
     leerCorteRouter,
     leerVelocidadRouter,
     perfilSuspendido,
-    pideFasttrack,
     planCorte,
     type CambioCorte,
     type LecturaCorte,
@@ -129,13 +128,7 @@ export async function vistaPreviaReconciliar(
             const lecturaCorte = await leerCorteRouter(cliente)
             const corte = estadoCorteRouter(
                 await configCorteVigente(opciones.resolver),
-                {
-                    fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
-                    redes_v4: await redesV4DeRouter(routerId),
-                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
-                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
-                    identificacion: modoCodigo ? 'codigo' : 'ip',
-                },
+                await opcionesCorteRouter(routerId, router, todos, modoCodigo),
                 lecturaCorte.get('/ppp/profile') ?? [],
             )
             salida.avisos.push(...corte.avisos)
@@ -301,6 +294,8 @@ export type CodigoProblemaCorte =
     | 'portal_no_acepta_host'
     | 'portal_en_router'
     | 'portal_ve_otra_ip'
+    /** Corte por el túnel WireGuard: el portal no ve la IP del cliente (falta el `srcnat accept` o la red en el peer) */
+    | 'portal_ve_otra_ip_tunel'
     | 'proxy_corte'
 
 export interface ChequeoCorte {
@@ -993,9 +988,17 @@ async function chequeoIpCliente(
     gateways: string[],
     modoCodigo: boolean,
     requestId: string | null,
+    tunel: CorteTunelRouter | null = null,
 ): Promise<ChequeoCorte> {
     const gateway = gateways[0]
-    const base = config.corte_url ?? config.nat_url
+    // Modo `ip`: lo que identifica es el primer salto, el destino del dst-nat (el túnel o `nat_url`); el
+    // segundo lleva el código que emite ese primer salto (`contratos/corte-identificacion.md` §5 ter.9).
+    // Modo `codigo`: la URL pública, informativo.
+    const base = modoCodigo
+        ? (config.corte_url ?? config.nat_url)
+        : tunel
+          ? urlNat(tunel.ip, tunel.puerto)
+          : (config.nat_url ?? config.corte_url)
     if (!gateway || !base) {
         return {
             clave: 'portal_ip_cliente',
@@ -1062,6 +1065,17 @@ async function chequeoIpCliente(
         return bien(
             'portal_ip_cliente',
             `${visto}. Este router identifica por código de corte: no depende de la IP`,
+        )
+    }
+    if (tunel) {
+        return mal(
+            'portal_ip_cliente',
+            'portal_ve_otra_ip_tunel',
+            `${visto}. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por ` +
+                'tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del ' +
+                'servidor (redes del router en Argos; el wireguard-agente las aplica)',
+            [prueba],
+            true,
         )
     }
     return mal(
@@ -1178,18 +1192,9 @@ export async function diagnosticoCorte(
         const cliente = (opciones.clientes ?? fabricaPorDefecto)(router.api)
         try {
             const lectura = await leerCorteRouter(cliente)
-            const fasttrack = pideFasttrack(estrategiasEnUso(router.velocidad, todos))
-            const corte = estadoCorteRouter(
-                config,
-                {
-                    fasttrack,
-                    redes_v4: await redesV4DeRouter(routerId),
-                    local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
-                    gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
-                    identificacion: modoCodigo ? 'codigo' : 'ip',
-                },
-                lectura.get('/ppp/profile') ?? [],
-            )
+            const opcionesCorte = await opcionesCorteRouter(routerId, router, todos, modoCodigo)
+            const fasttrack = opcionesCorte.fasttrack
+            const corte = estadoCorteRouter(config, opcionesCorte, lectura.get('/ppp/profile') ?? [])
             const plan = planCorte(corte, lectura).filter((c) => c.accion !== 'borrar')
             salida.faltan = plan.map(({ ruta, clave, accion }) => ({ ruta, clave, accion }))
             const lista4 = lectura.get('/ip/firewall/address-list') ?? []
@@ -1226,6 +1231,7 @@ export async function diagnosticoCorte(
                     gatewaysDeRedes(router.velocidad.redes_ipv4),
                     modoCodigo,
                     requestId,
+                    opcionesCorte.tunel ?? null,
                 ),
             )
             if (modoCodigo) {

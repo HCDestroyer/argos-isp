@@ -26,6 +26,10 @@
 :local corteIdentificacion "{{corte_identificacion}}"
 :local corteUrl "{{corte_url}}"
 :local proxyCortePuerto "3346"
+# Corte por el túnel WireGuard (modo ip, contratos/corte-identificacion.md §5 ter.6): la IP del servidor en
+# el túnel y el puerto del corte. Vacías = dst-nat a portalV4. Las llena ArgosIsp (corteTunelDeRouter).
+:local corteTunelIp "{{corte_tunel_ip}}"
+:local corteTunelPuerto [:tonum "{{corte_tunel_puerto}}"]
 :local walledGarden [:toarray "{{walled_garden}}"]
 :local dnsV4 [:toarray "{{dns_v4}}"]
 :local dnsV6 [:toarray "{{dns_v6}}"]

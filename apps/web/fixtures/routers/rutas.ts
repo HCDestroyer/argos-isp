@@ -10,6 +10,7 @@ import { vistaPreviaControl } from './vistaPrevia'
 import { estrategiaDeControl } from './estrategiasDatos'
 import { MENSAJE_API_PPPOE_LOCAL } from '../servicios/rutas'
 import { esTipoFixture, rutasTipoConexion, tipoConServicios } from './tipoConexion'
+import { conCorteTunel, corteTunelFixture } from './corteTunel'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -167,12 +168,12 @@ export const rutasRouters: RutasFixture = {
             .filter(router => activo === null || String(router.activo) === activo)
             .filter(router => empresas === null || router.empresa_sugerida_id === null || empresas.includes(router.empresa_sugerida_id)
                 || bd.servicios.some(s => s.router_id === router.id && empresas.includes(s.empresa_id)))
-        return { status: 200, cuerpo: paginar(filas, solicitud) }
+        return { status: 200, cuerpo: paginar(filas.map(conCorteTunel), solicitud) }
     }),
 
     'GET /api/v1/routers/:id': conPermiso('routers.ver', (solicitud) => {
         const router = bd.routers.find(r => r.id === idDe(solicitud))
-        return router ? { status: 200, cuerpo: router } : noEncontrado('el router')
+        return router ? { status: 200, cuerpo: conCorteTunel(router) } : noEncontrado('el router')
     }),
 
     /** Como `EditarRouter` (A1): ya no cambia el modo de colas; sí la capacidad y la conexión. 409 por versión. */
@@ -299,7 +300,7 @@ export const rutasRouters: RutasFixture = {
         // Como la API: la CA se audita como `***`.
         const auditado = { ...cuerpo, ...(typeof cuerpo.api_ca === 'string' ? { api_ca: '***' } : {}), ...('api_password' in cuerpo ? { api_password: '***' } : {}), ...('radius_secret' in cuerpo ? { radius_secret: '***' } : {}) }
         registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, auditado)
-        return { status: 200, cuerpo: router }
+        return { status: 200, cuerpo: conCorteTunel(router) }
     }),
 
     /** Como `vistaPreviaControl` (A2): mismo permiso que la acción, 422 si `a` no es válido, 404 sin router. */
@@ -337,7 +338,7 @@ export const rutasRouters: RutasFixture = {
             updated_at: ahora(),
         })
         registrarAccion(solicitud, 'routers.cambiar_control_velocidad', { tipo: 'router', id: router.id }, cuerpo)
-        return { status: 200, cuerpo: router }
+        return { status: 200, cuerpo: conCorteTunel(router) }
     }),
 
     'GET /api/v1/routers/:id/planes': conPermiso('planes.ver', (solicitud) => {
@@ -428,11 +429,15 @@ export const rutasRouters: RutasFixture = {
             version: 1,
             created_at: creado,
             updated_at: creado,
+            // Se calculan abajo, con la misma regla que la API (`motivoSinCorteTunel`).
+            corte_por_tunel: false,
+            corte_por_tunel_motivo: null,
         }
+        Object.assign(router, corteTunelFixture(router))
         bd.routers.push(router)
         bd.planesPorRouter[router.id] = bd.planes.filter(p => p.global && p.activo).map(p => p.id)
         registrarAccion(solicitud, 'routers.crear', { tipo: 'router', id: router.id }, { ...cuerpo, api_password: '***', radius_secret: '***' })
-        return { status: 201, cuerpo: router }
+        return { status: 201, cuerpo: conCorteTunel(router) }
     }),
 
     /** Como `CrearRedIpv4` (A1): CIDR válido y sin solaparse con otra red del sistema. */

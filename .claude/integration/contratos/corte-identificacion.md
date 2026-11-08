@@ -1,6 +1,6 @@
 # Contrato (borrador): identificar al cliente cortado en la página de corte
 
-> **Estado:** fase 1 implementada (rama `a5/identificar-cortado`), con las decisiones del PM del 8 nov (§5). Las fases 2 y 3 siguen abiertas. Dueño: A5 (portal). Afecta a A1 (núcleo/IPAM, script de conexión), A2 (aaa/coa), A4 (panel), A6 (infra: WireGuard, Caddy, instalador) y routeros (reconciliador).
+> **Estado:** fase 1 implementada (rama `a5/identificar-cortado`), con las decisiones del PM del 8 nov (§5). Fase 2 (túnel, servidor en la LAN y nodo de portal, P6 y P7) diseñada e implementada en `a6/corte-fase2` (§5 ter). La fase 3 (pools repetidos con alias por router, IPv6 por el túnel) sigue abierta. Dueño: A5 (portal). Afecta a A1 (núcleo/IPAM, script de conexión), A2 (aaa/coa), A4 (panel), A6 (infra: WireGuard, Caddy, instalador) y routeros (reconciliador).
 >
 > **Origen:** bug del PM en producción, v1.12.0: «Ya redirige a la pantalla de corte, pero existe un problema para identificar el servicio que está cortado, ya que toma la IP del server o IP privada y no del servicio asignado».
 >
@@ -389,7 +389,7 @@ Leyenda de mecanismos:
     - límite por código;
     - Caddy `:8088` sin confianza en encabezados;
     - diagnóstico `portal_ip_cliente`.
-2. **Fase 2:** A (túnel con AllowedIPs de clientes y A′) para routers sin API.
+2. **Fase 2:** A (túnel con AllowedIPs de clientes y A′) para routers sin API. Diseño final en §5 ter: el primer salto identifica por IP sin NAT (túnel, LAN o IPv6) y redirige con el código de la suspensión; A′ queda para cuando no hay URL pública.
 3. **Fase 3:** `url_corte` con código (según P3) y desambiguación (router, IP) para pools repetidos.
 
 ---
@@ -481,6 +481,260 @@ El sitio del corte (`http://, :{$PORTAL_CORTE_PUERTO}`) usa `header_up X-Forward
     - En modo `codigo` es informativo (verde).
 - **`proxy_corte`** (solo en modo `codigo`): el proxy en el 3346, la regla final y una regla por suspendido con código. Si falla, `reconciliar: true`.
 - **Por probar en el laboratorio**: que `src-address` en `/tool/fetch` pase por el masquerade como un cliente.
+
+## 5 ter. Fase 2: túnel WireGuard, servidor en la LAN y nodo de portal
+
+> Diseño de A6 (8 nov, rama `a6/corte-fase2` sobre `main` v1.13.0), con las decisiones P6 y P7. Todo sale del código de `main`; cada punto cita el archivo. Implementado en la misma rama (§5 ter.11).
+
+### 5 ter.1 Idea central: el primer salto identifica y el segundo lleva el código
+
+El problema del §1.3 tiene dos partes: la IP se pierde en el masquerade (primer salto) y, aunque llegue bien, la página y `quien-soy` van por Internet (segundo salto). La fase 2 resuelve las dos así:
+
+1. **Primer salto por un camino sin NAT** hasta el destino del dst-nat:
+    - **túnel WireGuard** (routers en modo `ip` registrados en el túnel);
+    - **ruta directa en la LAN del ISP** (servidor o nodo de portal en la LAN);
+    - **IPv6 nativo**, que no tiene NAT.
+
+   El portal (`server/middleware/portal-cautivo.ts`) ya consulta `GET /portal/destino-corte` antes del 302, con la IP real.
+2. **El primer salto emite el código de corte de la suspensión y redirige con él**: `302 https://DOMINIO_PORTAL/corte?c=<código>`. A partir de ahí manda el código (fase 1, §5 bis): `quien-soy`, `estado`, `promesas`, `comprobantes` y los pagos ya lo aceptan. El segundo salto puede volver a salir por Internet, con masquerade, NPM o un nodo de portal, y da igual.
+
+### 5 ter.2 Segundo salto: A′ contra código emitido en el primer salto
+
+| | A′: el portal entero en el destino del NAT | Código emitido en el primer salto (recomendada) |
+| --- | --- | --- |
+| Qué cambia | `destinoCorte` relativo (`/corte`) para el suspendido que llegó por el dst-nat. La página, `quien-soy`, `estado`, promesa y comprobante siguen en `http://<destino>:<puerto>` | `destino-corte` devuelve además el código (lo crea si falta, uno por suspensión, P5) y Nitro redirige a `…/corte?c=` |
+| Transporte | HTTP plano todo el tiempo, también al subir el comprobante (foto de un depósito) | HTTP solo en el primer salto, como hoy. La página va por HTTPS |
+| Pago en línea y `/entrar` | Salen a `https://DOMINIO_PORTAL` y pierden la identificación: otro origen, otro `sessionStorage` | Siguen en el mismo origen HTTPS que guardó el código |
+| Mini-navegador de iOS (CNA) | Funciona mientras no salga del destino | Funciona: el código va en la URL, como en la fase 1 |
+| Túnel caído a mitad de la visita | La página deja de cargar | Solo afecta a la primera petición. La página sigue por Internet con el código |
+| Nodo de portal aparte | El destino del túnel es el servidor central: la página la sirve el central, no el nodo | El central identifica y redirige al nodo (`DOMINIO_PORTAL`) con el código |
+| Código nuevo | Reglas de Nitro para decidir cuándo ser relativo, cookies `Secure` desactivadas y CSP por HTTP | Un campo en `DestinoCorte` y una acción. Reutiliza la tabla, el límite, la auditoría y el ciclo de vida de la fase 1 |
+| Seguridad | Igual que la IP: dura lo que dura la visita | El código vale lo mismo que la IP (P4) y dura lo que la suspensión más la gracia (P5). Solo se entrega a quien el portal identificó por una IP que no es de infraestructura (§5 ter.8) |
+
+**Recomendación: el código.** A′ no se descarta: queda como comportamiento automático cuando no hay URL pública (`PORTAL_URL_PUBLICA` vacía). En ese caso `destinoCorte` ya es relativo (`apps/portal/server/utils/portalCautivo.ts`, `destinoCorte`), y ahora además lleva `?c=`. Es el caso del laboratorio y de un servidor solo en la LAN. Así, P7 («A′ entra en la fase 2») se cumple sin perder HTTPS donde existe.
+
+Un token de un solo uso aparte del código no aporta nada. Tendría que canjearse por algo que dure la visita (el sondeo de 5 s, la promesa y el comprobante), y ese algo ya existe: el código de la suspensión.
+
+### 5 ter.3 Cuándo un router manda el corte por el túnel
+
+El destino del dst-nat pasa a ser `<IP del servidor en el túnel>:<PORTAL_CORTE_PUERTO>` (`10.255.0.1:8088` por defecto) cuando se cumplen **todas** estas condiciones (función única `corteTunelDeRouter`, en `app/network/conexion/tunel_corte.ts`):
+
+- WireGuard activo (`ARGOSISP_WIREGUARD=1`) y `PORTAL_CORTE_TUNEL` distinto de `0` (por defecto `1`);
+- el router está en modo `ip` (P1). En modo `codigo` el destino es el proxy del router y no hace falta el túnel;
+- el router está registrado en el túnel: tiene fila en `network.routers_conexion` con `public_key` y está activo, lo mismo que `listarPeers` (`app/network/conexion/consultas.ts`).
+
+`PORTAL_CORTE_TUNEL=0` es para quien apunta el dst-nat a un servidor suyo que no es Argos. Entonces se respeta `portal_v4`, como en la fase 1.
+
+La misma función alimenta a cuatro consumidores, que así nunca discrepan:
+
+- los peers del agente (§5 ter.4);
+- el estado deseado del router (`estadoCorteRouter`, §5 ter.6);
+- el script de conexión (§5 ter.6);
+- el diagnóstico (§5 ter.9).
+
+### 5 ter.4 AllowedIPs del peer de cada router
+
+**API (`GET /internal/wireguard/peers`).** Cada peer suma `allowed_ips`: su `/32` del túnel y, si el router manda el corte por el túnel, sus redes de clientes IPv4 (`network.redes_ipv4`, `estatico` y `pool`, las mismas de `argos-clientes`: `redesV4DeRouter` en `app/network/routeros/consultas.ts`). También suma `avisos[]` con lo que se descartó. La API arma la lista entera (`peersConRedes`, en `app/network/conexion/tunel_corte.ts`) y descarta, con aviso:
+
+- redes que se traslapan con la red del túnel (`ARGOSISP_WG_RED`) o con `ARGOSISP_WG_REDES_EXCLUIDAS`. Esta variable trae por defecto la red de compose (`COMPOSE_SUBNET_V4`, 172.30.0.0/24): un paquete del túnel con origen 172.30.x se confundiría con un contenedor;
+- `0.0.0.0/0` y redes más anchas que `/8`;
+- redes que se traslapan con las de **otro** peer. WireGuard no admite AllowedIPs traslapados: `wg syncconf` le da el prefijo al último peer sin avisar. Hoy no pueden traslaparse, porque `network.redes_ipv4` tiene `EXCLUDE USING gist (cidr inet_ops WITH &&)` (`1760900000003_crear_network.ts`). La comprobación es la última defensa. Gana el router de menor id, el orden que ya usa `listarPeers`.
+
+**IPv6, fuera de la fase 2.** Por el túnel no viaja IPv6: el túnel es IPv4 (`10.255.0.0/16`) y el router solo tiene la ruta `/32` al servidor (`conexion-tunel.rsc`). Además, el IPv6 de los clientes casi siempre es público y sin NAT: con `portal_v6` (dst-nat IPv6 a la IPv6 pública del servidor) la IP llega tal cual (§2.2).
+
+Poner los bloques IPv6 en AllowedIPs sin dirección IPv6 en el túnel no sirve de nada. Con rutas de vuelta haría daño: las respuestas del servidor a esos clientes entrarían al túnel con origen público y el router las tiraría (su peer del servidor solo admite `10.255.0.1/32`). Queda descrito como fase 2b (§5 ter.12).
+
+**Agente (`infra/wireguard/agente.sh`).**
+
+- Escribe `AllowedIPs = <allowed_ips>` (antes `AllowedIPs = <ip_tunel>/32`).
+- Revalida el formato de cada CIDR y descarta, con aviso en el log, lo que se traslape con la red del túnel.
+- Reconcilia la lista **completa**, como siempre, al arrancar y con estos eventos:
+    - los de antes: `router.conexion_*` y `router.eliminado`;
+    - `portal.config_cambiada`: cambia el modo de un router (`router_id`) o la configuración global;
+    - `router.redes_cambiadas` (nuevo, §5 ter.10).
+- Idempotente: escribe solo si el archivo cambió (`cmp`), y el servidor aplica con `wg syncconf`, que no corta los túneles vivos.
+
+**IPs repetidas entre routers.**
+
+- Las redes registradas no pueden repetirse (restricción de arriba), así que en el túnel la IP de origen basta para saber de qué router viene: solo un peer puede mandarla (cryptokey routing).
+- Lo que sí puede repetirse son IPs de pools que el router entrega sin estar registrados en Argos (§2.5). Esas IPs no están en AllowedIPs: el router no las excluye del masquerade de respaldo (§5 ter.6), así que llegan con la IP del router en el túnel → `ip_de_router` («no identificado» con su motivo, nunca otro cliente).
+- **Desambiguación (router, IP) en la API** (`app/portal/identificacion.ts`):
+    - si una IPv4 cae en una red registrada (`network.redes_ipv4`), solo cuentan las sesiones y asignaciones de servicios **de ese router**. En IPv6 no hace falta: los prefijos son globales y no se repiten entre routers (`servicioDeLaIp`);
+    - si el ganador de `resolverIp` es de otro router, se busca el candidato del router de la red;
+    - si no hay ninguno: `ip_desconocida`.
+
+   Así, una sesión de otro router con la misma IP (pool sin registrar) nunca muestra datos ajenos.
+- **Pools privados repetidos de verdad**, el mismo `10.66.0.0/16` en dos routers, siguen sin poder registrarse (A1, restricción `EXCLUDE`). Para soportarlos, el router tendría que traducir 1:1 su pool a un rango alias único por router antes de entrar al túnel (`srcnat action=netmap`), con un IPAM de alias. Es la fase 3 (§4.5). Hasta entonces, esos routers usan el modo `codigo`, que no depende de la IP.
+
+### 5 ter.5 Vuelta en el servidor: sin rutas globales, por marca de conexión
+
+**Cómo llega el paquete al contenedor sin perder la IP.** El `proxy` (Caddy) publica `${ARGOSISP_BIND_IP:-0.0.0.0}:${PORTAL_CORTE_PUERTO}` (`infra/produccion/docker-compose.produccion.yml`, servicio `proxy`). Un paquete que entra por `wg-argos` a `10.255.0.1:8088`:
+
+- pasa por el DNAT de Docker (iptables), que conserva el origen. Es el mismo camino que ya usa RADIUS (`infra/wireguard/README.md`, «Ruteo»);
+- en Caddy, el sitio del corte usa `{remote_host}` y no lee encabezados (fase 1, snippet `portal_corte`), así que la IP del cliente llega a Nitro y a la API sin cambios. No hace falta red host, ni otro DNAT, ni otro puerto.
+- Si `ARGOSISP_BIND_IP` es una IP concreta, el puerto no escucha en la IP del túnel: `argosisp estado` lo avisa y el diagnóstico lo muestra como «el destino no responde».
+
+**Ruta de vuelta.** `wg syncconf` no crea rutas. La respuesta del contenedor a `10.66.1.3` sale por el bridge hacia el host, y el host la mandaría por su ruta por defecto (Internet). Hay dos formas de traerla de vuelta:
+
+| | Rutas de las redes de clientes en la tabla principal | Marca de conexión (elegida) |
+| --- | --- | --- |
+| Qué es | `ip route replace 10.66.0.0/16 dev wg-argos` por red | En `mangle`: las conexiones que entran por `wg-argos` llevan la marca `0x4172`, que se restaura en sus respuestas. `ip rule fwmark 0x4172/0xffff lookup 4172`, y en esa tabla `default dev wg-argos`. WireGuard elige el peer por AllowedIPs |
+| Redes públicas de clientes | **Rompe**: un cliente con IP pública que entra al servidor por Internet (el portal HTTPS) recibiría la respuesta por el túnel, y el router la tiraría (el peer del servidor solo admite `10.255.0.1/32`) | Solo vuelve por el túnel lo que entró por el túnel |
+| Red de clientes igual a la LAN del servidor | Secuestra la LAN del servidor | Sin efecto sobre el tráfico del servidor |
+| Altas y bajas de redes | Hay que sincronizar rutas y quitar las viejas | Nada: una sola regla y una ruta fijas |
+| `rp_filter` estricto (RHEL) | Pasa | Necesita `net.ipv4.conf.all.src_valid_mark=1`: el paquete de entrada también lleva la marca y la comprobación de la ruta de vuelta usa la tabla `4172`. Con `rp_filter` 0 o 2 (Debian, Ubuntu) no hace falta |
+
+**Elegida: la marca de conexión.** `servidor.sh` la instala con el firewall (mismo backend que Docker) y la quita al detenerse. `instalar.sh` agrega `net.ipv4.conf.all.src_valid_mark = 1` a `/etc/sysctl.d/90-argosisp-wireguard.conf`, el archivo que ya escribe para `ip_nonlocal_bind`. Docker monta `/proc/sys` de solo lectura, así que el contenedor no puede ponerlo él. `servidor.sh` lee `rp_filter` y `src_valid_mark` y avisa en el log si la combinación tira los paquetes.
+
+**Firewall del servidor** (`servidor.sh`, cadenas `ARGOSISP-IN/FWD-wg-argos`). Al abrir las redes de clientes en AllowedIPs, los clientes llegan a la `.1`, así que se cierra lo que antes cerraba el propio WireGuard:
+
+- `FWD`: TCP nuevo con DNAT a `10.255.0.1:PORTAL_CORTE_PUERTO` → `RETURN`, desde cualquier origen del túnel. WireGuard ya garantiza que el origen está en los AllowedIPs del peer: un cliente de su router, o la IP del router en el túnel, que es el respaldo con masquerade y el diagnóstico.
+- `FWD`: RADIUS (UDP 1812/1813 con DNAT a la `.1`) **solo desde la red del túnel** (`-s ARGOSISP_WG_RED`). Antes bastaba con «desde el túnel», porque solo entraban IPs del túnel.
+- `IN`: ping a la `.1` solo desde la red del túnel.
+- Todo lo demás se sigue descartando: un cliente no llega al SSH, a RADIUS ni a otro router.
+
+### 5 ter.6 En el router
+
+**Script (`infra/mikrotik/piezas/servicio-firewall.rsc`).** Variables nuevas `corte_tunel_ip` y `corte_tunel_puerto` (`variables.json`, grupo `servicio`). Las llena `valoresServicio` (`app/network/conexion/servicio.ts`) con `corteTunelDeRouter`, y van vacías si el router no usa el túnel. Con `corteTunelIp` (solo en modo `ip`):
+
+```
+/ip firewall address-list add list=argos-portal address=$corteTunelIp comment="argosisp: portal tunel"
+/ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat \
+    to-addresses=$corteTunelIp to-ports=$corteTunelPuerto comment="argosisp: corte-nat HTTP a /corte"
+/ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=$corteTunelIp \
+    action=accept place-before=0 comment="argosisp:top corte por tunel sin NAT"
+/ip firewall nat add chain=srcnat connection-nat-state=dstnat dst-address=$corteTunelIp \
+    action=masquerade comment="argosisp: corte por tunel NAT de lo demas"
+```
+
+- **`argos-portal`**: el filtro `argos-corte` ve el destino ya traducido (`10.255.0.1`), y sin esta entrada respondería `tcp-reset`. El segundo salto relativo (A′, sin URL pública) también va a esa IP sin NAT.
+- **`srcnat accept` arriba** (antes del masquerade de Argos y de cualquiera del operador): los clientes de `argos-clientes` llegan al servidor con su IP. `argos-clientes` sale de las mismas redes que los AllowedIPs (§5 ter.4), así que lo que no se enmascara siempre está permitido del otro lado.
+- **Masquerade de respaldo** (después del accept): lo que llegó por el dst-nat desde una IP fuera de `argos-clientes` sale con la IP del router en el túnel, que siempre está en AllowedIPs. Así ve la página (sin identificar, `ip_de_router`) en lugar de un timeout. `connection-nat-state=dstnat` hace que no toque el RADIUS ni el REST del propio router.
+- El masquerade «del laboratorio» (`out-interface=$wanIf`) no aplica al túnel, porque la salida es `wg-argos`, y queda igual.
+- IPv6: nada nuevo (§5 ter.4).
+
+**Reconciliador (`app/network/routeros/corte_router.ts`).** `OpcionesCorte.tunel = { ip, puerto } | null`. Con túnel y modo `ip`:
+
+- `reglasNat` escribe el dst-nat al túnel en lugar de `portal_v4`, más las dos reglas `srcnat` de arriba (comentarios administrados, en `comentariosPropios`: el reconciliador las borra al salir del túnel);
+- `estadoCorteRouter` agrega `argosisp: portal tunel` a `argos-portal`.
+
+Las opciones las arma una sola función, `opcionesCorteRouter` (`app/network/routeros/consultas.ts`). Así el reconciliador, el diagnóstico y `migrar_control_router` (que hoy no pasaba el modo `codigo` y lo deshacía hasta la siguiente pasada) piden lo mismo.
+
+Un router sin API solo recibe esto con el script: «Generar script» lo trae, y el reconciliador no lo toca.
+
+### 5 ter.7 Servidor en la LAN del ISP (P7) y nodo de portal (P7)
+
+**Servidor en la LAN, sin túnel.** El dst-nat va a `portal_v4`, la IP del servidor en la LAN (Configuración → Portal de corte). El paquete llega con la IP del cliente si se cumplen tres cosas:
+
+- el masquerade del router no aplica a esa salida (el de Argos es `out-interface=$wanIf`; el del operador puede ser más amplio);
+- el servidor tiene ruta de vuelta a los pools: el router es su puerta de enlace, o tiene rutas estáticas;
+- nada en medio hace NAT.
+
+El primer salto identifica y emite el código, y el segundo va por `https://DOMINIO_PORTAL` con `?c=`. Es lo mismo que en el túnel, sin piezas nuevas en el router.
+
+Lo que el diagnóstico debe detectar (`portal_ip_cliente`, §5 ter.9):
+
+| Ve | Causa | Qué dice |
+| --- | --- | --- |
+| El gateway de la red de clientes | Sin NAT | Verde: la identificación por IP funciona en el primer salto |
+| La IP del router en la LAN o la WAN | El masquerade del operador también aplica hacia el servidor | Rojo `portal_ve_otra_ip`: «agrega `srcnat … dst-address=<portal_v4> action=accept` antes de tu masquerade, o pasa el router a código» |
+| `ip_de_proxy` / `ip_de_servidor` | Docker con userland-proxy, o un proxy delante del `:8088` | Rojo, con el runbook `detras-de-proxy.md` |
+| Sin respuesta | No hay ruta, o el firewall del servidor no deja pasar | Sin dato (`ok: null`), con el comando para repetirlo |
+
+**Nodo de portal aparte (`docker-compose.nodo-portal.yml`, `Caddyfile.nodo-portal`, `contratos/nodo-portal.md`).**
+
+- **Nodo en la LAN, sin túnel.** `portal_v4` = la IP del nodo. Su Caddy `:8088` ve la IP del cliente (`{remote_host}`, el mismo snippet). Nitro la manda en `X-Argos-Cliente-Ip` con el token del nodo (contrato §2, regla 2), y la API identifica, emite el código y responde a `destino-corte`. Sin cambios en el nodo.
+- **Routers por el túnel.** El túnel termina en el servidor central, que siempre corre `proxy` y `portal`: el primer salto lo atiende el central por `10.255.0.1:8088`, identifica, emite el código y redirige a `https://DOMINIO_PORTAL/corte?c=`, que es el nodo. El nodo no necesita WireGuard.
+- **Nodo con su propio túnel** (que el central no tenga portal): fuera de alcance. Haría falta un segundo peer en cada router.
+
+### 5 ter.8 Seguridad
+
+- **Suplantar una IP desde fuera del túnel o de la LAN:**
+    - por TCP, el origen no se falsifica;
+    - por el túnel, cryptokey routing: solo el peer cuyos AllowedIPs contienen el origen puede mandarlo, y cada red está en un solo peer;
+    - por encabezados: el sitio del corte nunca los lee (fase 1), y el sitio HTTPS solo cree a `ARGOSISP_PROXIES_CONFIABLES`;
+    - un nodo de portal solo con su token (contrato del nodo, §2).
+- **El código solo se entrega por IP de cliente.**
+    - `destino-corte` lo emite si la identificación fue `por: 'ip'`: la IP no es de infraestructura (`clasificarIp`) y pasó la desambiguación (router, IP).
+    - El servicio debe estar `suspendido`: el resto no recibe dst-nat, así que no hay primer salto.
+    - Se usa el mismo código abierto de la suspensión, o uno nuevo con `portal.codigo_corte_emitido`, con auditoría solo cuando se crea.
+    - La acción toma el candado del servicio que usa `routeros.aplicar_servicio` y relee el estado: un código no puede quedar abierto en un servicio reactivado. Si gana la carrera, el `servicio.estado_cambiado` siguiente lo cierra (`sincronizarCodigoCorte`).
+    - El mismo flujo existe en la fase 1 para el modo `codigo` (P4 y P5): el router entrega el código a la misma IP.
+- **Límite:** `destino-corte` ya cuenta por IP (`PORTAL_LIMITE_PETICIONES`). Con el túnel, la IP es la del cliente, no la del router: el día de corte masivo no se bloquean unos a otros (era el problema de §2.9).
+- **Clientes que no están suspendidos** también llegan a la `.1` (el router enruta la `/32`): solo al puerto del corte, y se identifican por su propia IP.
+- **IPs repetidas entre routers:** §5 ter.4.
+
+### 5 ter.9 Diagnóstico
+
+`portal_ip_cliente` (`app/network/routeros/diagnostico.ts`, `chequeoIpCliente`):
+
+- En modo `ip` prueba **el primer salto**: `http://<destino del NAT>/api/v1/portal/eco-ip`. El destino es `<IP del túnel>:<PORTAL_CORTE_PUERTO>` con túnel, o `nat_url` sin él. Antes probaba `corte_url`, que es el segundo salto (por Internet) y salía rojo aunque el primero identificara.
+- Con túnel, si la IP vista no es el gateway: rojo **`portal_ve_otra_ip_tunel`** (código propio, `reconciliar: true`), con el texto «falta el `srcnat accept` o la red no está en el peer». Sin túnel sigue `portal_ve_otra_ip` (`reconciliar: false`): el panel distingue los dos por el código, nunca por `reconciliar`.
+- En modo `codigo` no cambia.
+
+### 5 ter.10 Evento nuevo y cambios por módulo
+
+**`router.redes_cambiadas`** (`router_id`, `empresa_id` null). Significa: cambiaron las redes de clientes del router y hay que regenerar sus AllowedIPs.
+
+- **A1 (hecho, `a1/corte-fase2`):** lo emite en la transacción de `redes.crear`, `redes.editar` (si cambia el CIDR), `redes.migrar`, `ipv6.crear` e `ipv6.editar` (bloques y pools; editar si cambia el prefijo), `ipv6.migrar` y `routers.unir` (los dos routers). `emitirRedesCambiadas(t, routerIds)` deja un evento por router y transacción. `Router.corte_por_tunel` y `corte_por_tunel_motivo` exponen `corteTunelDeRouter` en `GET /routers` y `GET /routers/:id`.
+- **Respaldo mientras A1 no lo emite:** `routeros.reconciliar` lo emite cuando corrige entradas de `argos-clientes` en un router con túnel. El servidor y el router convergen en la misma pasada.
+- **Por qué este orden:** si las dos cosas llegan juntas, primero se amplían los AllowedIPs y después el router deja de enmascarar. Con A1 emitiendo el evento, el servidor siempre va adelante.
+
+| Módulo | Cambio |
+| --- | --- |
+| `app/network/conexion` (A1, con permiso) | `tunel_corte.ts`: `corteTunelDeRouter`, `peersConRedes` (AllowedIPs con descarte de traslapes) y `emitirRedesCambiadas`. `consultas.ts`: `listarPeers` suma `allowed_ips` y `avisos`. `servicio.ts` y `actions/generar_script.ts`: `corte_tunel_ip` y `corte_tunel_puerto` |
+| `app/network/routeros` (con permiso) | `corte_router.ts`: `OpcionesCorte.tunel`, NAT y `srcnat` del túnel, entrada en `argos-portal`. `consultas.ts`: `opcionesCorteRouter`. `reconciliar_router.ts`, `migrar_control_router.ts` y `diagnostico.ts` la usan. El reconciliador emite `router.redes_cambiadas` (respaldo). Diagnóstico del primer salto |
+| `app/portal` (A5, con permiso) | `actions/emitir_codigo_corte_ip.ts` (`portal.codigo_corte.emitir`). `consultas.ts`/`leerDestinoCorte` devuelve `codigo`. `identificacion.ts`: desambiguación (router, IP). `esquemas.ts`: `DestinoCorte.codigo` (contracts regenerados) |
+| `apps/portal` (A5) | `server/middleware/portal-cautivo.ts`: con `codigo`, el 302 va a `destino?c=<código>`. Con `url_corte` de la empresa, a esa URL, como hoy (P3) |
+| `app/shared/eventos.ts` (líder) | `router.redes_cambiadas` en el catálogo. Contrato en `contratos/eventos.md` |
+| `infra/wireguard` (A6) | Agente: `allowed_ips` y eventos nuevos. Servidor: marca de conexión, tabla 4172, firewall del puerto del corte, RADIUS y ping solo desde la red del túnel. `probar.sh`: cliente detrás del router que llega al `:8088` con su IP |
+| `infra/mikrotik` (A6) | `servicio-firewall.rsc`, `servicio-limpieza.rsc`, `variables.json`, armados y `render.test.mjs` |
+| `infra/produccion` (A6) | `PORTAL_CORTE_TUNEL`, `PORTAL_CORTE_PUERTO` (api) y `ARGOSISP_WG_REDES_EXCLUIDAS` (api). `wireguard` recibe `PORTAL_CORTE_PUERTO`. `instalar.sh` agrega `src_valid_mark`. `argosisp estado` avisa si `ARGOSISP_BIND_IP` es una IP concreta con el túnel de corte activo |
+| A4 (panel) | Nada obligatorio. En el diagnóstico, mostrar el texto nuevo de `portal_ip_cliente`. En la ficha del router, «Corte por el túnel: sí/no» con `Router.corte_por_tunel` y `corte_por_tunel_motivo` (`GET /routers/:id`) |
+| A2 | Nada |
+
+### 5 ter.11 Migración y qué hace el PM
+
+1. **Actualizar** (`argosisp actualizar`): imágenes nuevas de `api`, `portal`, `wireguard` y `proxy`, y `instalar.sh` vuelve a escribir el sysctl. El agente reconcilia al arrancar. Los routers en modo `ip` registrados en el túnel reciben sus redes en AllowedIPs, y el servidor instala la marca y la tabla.
+2. **Routers con API en modo `ip` y túnel:** el reconciliador cambia solo el dst-nat a `10.255.0.1:8088` y pone el `srcnat accept` en la siguiente pasada. «Reconciliar ahora» lo adelanta. Comprobar con **Diagnóstico de corte** que `portal_ip_cliente` sale en verde.
+3. **Routers sin API:** «Generar script» y correrlo otra vez (la sección de servicio). Si no se corre, siguen como en la fase 1: dst-nat a `portal_v4`, «no identificado» con su motivo.
+4. **Routers en modo `codigo`:** nada cambia. Pueden quedarse así.
+5. **Servidor:**
+    - si `ARGOSISP_BIND_IP` está fijada a una IP, quitarla (que el `:8088` escuche también en la IP del túnel) o poner `PORTAL_CORTE_TUNEL=0`. `argosisp estado` lo avisa;
+    - con RHEL o `rp_filter=1`: `sudo sysctl --system` después de actualizar, o reiniciar.
+6. **Servidor en la LAN:** nada en Argos. En el router, que el masquerade del operador no aplique hacia `portal_v4` (el diagnóstico lo dice).
+7. **Volver atrás:** `PORTAL_CORTE_TUNEL=0` y `argosisp levantar`. El reconciliador vuelve al dst-nat de `portal_v4` y quita las reglas del túnel; el agente deja solo las `/32`.
+
+### 5 ter.12 Pruebas, y lo que queda para el laboratorio
+
+| Qué | Dónde |
+| --- | --- |
+| `corteTunelDeRouter`, `peersConRedes` (traslapes, red del túnel, excluidas, otro peer) | Japa `tests/network/corte_tunel.spec.ts` |
+| `GET /internal/wireguard/peers` con `allowed_ips` | El mismo archivo |
+| Estado deseado con túnel: dst-nat, `srcnat` accept y masquerade, `argos-portal`. Reconciliar con `RouterOSFalso` (crea y, al salir del túnel, borra). `migrar_control_router` conserva el modo | El mismo archivo |
+| `router.redes_cambiadas` desde el reconciliador | El mismo archivo |
+| Script con túnel y sin túnel, igual al estado deseado | `tests/network/conexion_render.spec.ts` y `infra/mikrotik/render.test.mjs` |
+| `destino-corte` emite el código por IP (suspendido sí; activo no; idempotente; auditoría y evento solo al crear). Desambiguación (router, IP) | Japa `tests/portal/destino_corte.spec.ts` y `identificacion_corte.spec.ts` |
+| Middleware con `codigo`: 302 a `destino?c=` | Vitest `apps/portal/tests/servidor/portal.test.ts` |
+| Diagnóstico `portal_ip_cliente` del primer salto | Japa `tests/network/routeros_corte_diagnostico.spec.ts` |
+| Agente con `allowed_ips`. Servidor: marca y tabla, cliente detrás de un «router» que llega al `:8088` con su IP, RADIUS desde una red de clientes rechazado, limpieza | `infra/wireguard/probar.sh` (CI, job `infra`) |
+
+**Solo en el laboratorio físico** (`docs/laboratorio/portal-cautivo.md` §10):
+
+1. CHR o RB con el script nuevo: un PPPoE suspendido abre `http://neverssl.com`, llega a `https://<portal>/corte?c=…` con su nombre parcial (con y sin `PORTAL_URL_PUBLICA`).
+2. `connection-nat-state=dstnat` en `srcnat` (RouterOS 7.x).
+3. Un masquerade del operador sin `out-interface` (el `accept` de arriba debe ganarle).
+4. Servidor con `rp_filter=1` y `src_valid_mark` en 0 y en 1.
+5. Túnel caído: el suspendido no ve la página. Comparte la falla con RADIUS (el vigía `aaa.caido` avisa).
+6. Servidor en la LAN con y sin el masquerade del operador hacia `portal_v4`: lo que dice el diagnóstico.
+7. Nodo de portal con routers por el túnel: el 302 del central al nodo con `?c=`.
+8. Android, iOS (CNA) y Windows con el 302 con código.
+
+**Fase 2b (IPv6 por el túnel), descrita y no implementada:**
+
+- red ULA del túnel (`ARGOSISP_WG_RED6`, la `::1` para el servidor), `/128` por router en el IPAM del túnel y `allowed-address` del router con la ULA del servidor;
+- dst-nat IPv6 del suspendido a esa ULA, y bloques IPv6 en AllowedIPs con la misma marca de conexión;
+- solo hace falta si el servidor no tiene IPv6 nativo. Si lo tiene, `portal_v6` ya identifica sin NAT (§2.2).
 
 ## 6. Evidencia y fuentes
 

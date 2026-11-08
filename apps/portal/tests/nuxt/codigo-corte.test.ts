@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { QUIEN_SOY_IP_DE_ROUTER, QUIEN_SOY_POR_CODIGO } from '~~/fixtures/corte'
-import { codigoCorteDeLaRuta } from '~~/server/utils/portalCautivo'
+import { codigoCorteDeLaRuta, conCodigoCorte } from '~~/server/utils/portalCautivo'
 
 /**
  * Código de corte (`contratos/corte-identificacion.md`): el proxy del router manda al suspendido a
@@ -59,5 +59,14 @@ describe('código de corte', () => {
         expect(ipRouter.descripcion).not.toMatch(/router|NAT|proxy/i)
         expect(mensajeCorte({ ...QUIEN_SOY_IP_DE_ROUTER, motivo: 'codigo_vencido' }).descripcion).toContain('venció')
         expect(mensajeCorte(QUIEN_SOY_POR_CODIGO).titulo).toBe('Tu servicio está suspendido')
+    })
+})
+
+describe('conCodigoCorte (primer salto identificado por IP, contratos/corte-identificacion.md §5 ter.1)', () => {
+    it('agrega ?c= a un destino absoluto o relativo (A′), y sin código lo deja igual', () => {
+        expect(conCodigoCorte('https://portal.isp.example/corte', CODIGO)).toBe(`https://portal.isp.example/corte?c=${CODIGO}`)
+        expect(conCodigoCorte('/corte', CODIGO)).toBe(`/corte?c=${CODIGO}`)
+        expect(conCodigoCorte('/corte?x=1', CODIGO)).toBe(`/corte?x=1&c=${CODIGO}`)
+        expect(conCodigoCorte('https://portal.isp.example/corte', null)).toBe('https://portal.isp.example/corte')
     })
 })

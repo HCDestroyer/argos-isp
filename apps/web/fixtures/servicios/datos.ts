@@ -104,3 +104,13 @@ export const servicios: Servicio[] = clientes
     .filter(cliente => !sinServicio.has(cliente.id))
     .flatMap(cliente => (conSegundo.has(cliente.id) ? [cliente, { ...cliente, sucursal: true }] : [cliente]))
     .map((cliente, indice) => crearServicio(indice + 1, cliente, 'sucursal' in cliente))
+
+/**
+ * Códigos de corte abiertos al arrancar (`core.codigos_corte`). Fase 2 (`contratos/corte-identificacion.md`
+ * §5 ter.1): Juan Carlos Ramírez (servicio 2) está suspendido en RB-Centro, que identifica por IP y manda el
+ * corte por el túnel; ya abrió la página y el primer salto le emitió su código. Los routers por código lo
+ * abren al consultar (`fixtures/servicios/codigoCorte.ts`).
+ */
+export const codigosCorte = servicios
+    .filter(s => s.cliente_id === 2 && s.router_id === 1 && s.estado === 'suspendido')
+    .map(s => ({ servicio_id: s.id, creado_en: '2026-11-08T14:00:00.000Z', cerrado_en: null }))

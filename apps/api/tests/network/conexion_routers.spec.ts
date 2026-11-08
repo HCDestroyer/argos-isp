@@ -557,11 +557,14 @@ test.group('Conexión de routers · API', (group) => {
             client.get('/api/v1/internal/wireguard/peers').bearerToken(TOKEN_INTERNO()),
             200,
         )
-        assert.deepInclude(peers.body().data, {
+        const peer = peers.body().data.find((p: { router_id: number }) => p.router_id === routerId)
+        assert.containsSubset(peer, {
             router_id: routerId,
             public_key: publica,
             ip_tunel: extraer(script, 'wgIp'),
         })
+        // AllowedIPs: su /32 primero (las redes de clientes, si manda el corte por el túnel; §5 ter.4)
+        assert.equal(peer.allowed_ips[0], `${extraer(script, 'wgIp')}/32`)
         await estado(client.get('/api/v1/internal/wireguard/peers').bearerToken(token), 401)
 
         const nuevaClave = clave()

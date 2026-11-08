@@ -13,10 +13,8 @@ import {
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
 import {
-    estrategiasEnUso,
     necesitaVelocidad,
     planesDeRouter,
-    redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
@@ -26,10 +24,12 @@ import {
     revisarDnsRouter,
     urlCorteConCodigo,
 } from '#network/routeros/corte_router'
-import { estadoVelocidadRouter, gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
+import { estadoVelocidadRouter, gatewaysDeRedes } from '#network/routeros/velocidad_router'
 import { aplicarRedAcceso } from '#network/routeros/aplicar_red_acceso'
 import { redAccesoDeRouter } from '#network/routeros/consultas_red_acceso'
 import { guardarLecturaColas } from '#network/routeros/metricas'
+import { opcionesCorteRouter } from '#network/routeros/opciones_corte'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 import { reconciliarSecrets, sesionesQuitadas } from '#network/routeros/pppoe_local'
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
@@ -39,7 +39,6 @@ import {
     ordenarAccesoProxy,
     asegurarVelocidad,
     leerCorteRouter,
-    pideFasttrack,
     enTransicion,
     esObjetoQos,
     registrarVerificacionQos,
@@ -240,22 +239,37 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                             error: config.portal_v4_error,
                         })
                     }
+                    const opcionesCorte = await opcionesCorteRouter(
+                        input.router_id,
+                        router,
+                        todos,
+                        modoCodigo,
+                        t.trx,
+                    )
                     const corte = estadoCorteRouter(
                         config,
-                        {
-                            fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
-                            redes_v4: await redesV4DeRouter(input.router_id, t.trx),
-                            local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
-                            gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
-                            identificacion: modoCodigo ? 'codigo' : 'ip',
-                        },
+                        opcionesCorte,
                         lecturaCorte.get('/ppp/profile') ?? [],
                     )
                     salida.avisos.push(...corte.avisos)
                     // El proxy se enciende después de que existen su regla final (nunca un 3346 que reenvíe a
                     // internet) y el `drop` de input (no es un proxy abierto); mientras tanto el NAT al 3346 solo
                     // recibe un rechazo. Al volver a `ip` se apaga después de quitar el NAT.
-                    salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
+                    const hechosCorte = await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)
+                    salida.correcciones.push(...hechosCorte)
+                    // Respaldo de `router.redes_cambiadas` (§5 ter.10 de contratos/corte-identificacion.md):
+                    // con el corte por el túnel, las redes de `argos-clientes` van también en AllowedIPs. Si
+                    // cambiaron aquí, el `wireguard-agente` vuelve a pedir los peers en la misma pasada.
+                    if (
+                        opcionesCorte.tunel &&
+                        hechosCorte.some(
+                            (h) =>
+                                h.ruta === '/ip/firewall/address-list' &&
+                                h.comment.startsWith('argos-clientes '),
+                        )
+                    ) {
+                        await emitirRedesCambiadas(t, [input.router_id])
+                    }
                     // Las reglas del corte antes que las del operador (una suya sin `local-port` ganaría en el 3346).
                     if (modoCodigo) salida.correcciones.push(...(await ordenarAccesoProxy(cliente, ctxPlan)))
                     salida.correcciones.push(...(await asegurarProxyCorte(cliente, modoCodigo, ctxPlan)))

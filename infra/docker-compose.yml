@@ -84,6 +84,13 @@ x-api-env: &api-env
   # las /32), el puerto UDP y el nombre o IP pública que el script de conexión pone como endpoint.
   ARGOSISP_WIREGUARD: ${ARGOSISP_WIREGUARD:-0}
   ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+  # Corte por el túnel (contratos/corte-identificacion.md §5 ter): un router en modo ip registrado en el
+  # túnel manda el HTTP del suspendido a la .1:PORTAL_CORTE_PUERTO sin masquerade y su peer acepta sus
+  # redes de clientes. 0 = dst-nat a la IPv4 del portal de siempre (destino del NAT que no es Argos).
+  PORTAL_CORTE_TUNEL: ${PORTAL_CORTE_TUNEL:-1}
+  PORTAL_CORTE_PUERTO: ${PORTAL_CORTE_PUERTO:-8088}
+  # Redes que nunca entran en los AllowedIPs de un router (la red de compose por defecto)
+  ARGOSISP_WG_REDES_EXCLUIDAS: ${ARGOSISP_WG_REDES_EXCLUIDAS:-${COMPOSE_SUBNET_V4:-172.30.0.0/24}}
   ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
   ARGOSISP_WG_ENDPOINT: ${ARGOSISP_WG_ENDPOINT:-}
   # ?incluir=servicio del script de conexión (PPPoE, perfiles y corte; app/network/conexion/servicio.ts):
@@ -765,6 +772,9 @@ services:
       ARGOSISP_WG_MODO: ${ARGOSISP_WG_MODO:-auto}
       # 1 = por el túnel solo entran RADIUS (1812/1813 a la .1) y respuestas
       ARGOSISP_WG_FIREWALL: ${ARGOSISP_WG_FIREWALL:-1}
+      # Corte por el túnel: puerto del Caddy del corte abierto a la .1 y vuelta por marca de conexión
+      PORTAL_CORTE_TUNEL: ${PORTAL_CORTE_TUNEL:-1}
+      PORTAL_CORTE_PUERTO: ${PORTAL_CORTE_PUERTO:-8088}
     volumes:
       - wireguard-clave:/clave
       - wireguard-estado:/estado

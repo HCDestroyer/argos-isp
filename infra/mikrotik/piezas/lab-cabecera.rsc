@@ -85,6 +85,11 @@
 # /corte pública del portal para la regla final del proxy (modo codigo), p. ej. "http://portal.argosisp.example/corte"
 :local corteUrl "http://portal.argosisp.example/corte"
 :local proxyCortePuerto "3346"
+# Corte por el túnel WireGuard (modo ip, contratos/corte-identificacion.md §5 ter.6): IP del servidor
+# ArgosIsp en el túnel y puerto del Caddy del corte (PORTAL_CORTE_PUERTO). Con ella el dst-nat va ahí sin
+# masquerade y el portal ve la IP del cliente. Vacía = dst-nat a portalV4 (el laboratorio por defecto).
+:local corteTunelIp ""
+:local corteTunelPuerto 8088
 # Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.),
 # por FQDN (el router los resuelve, IPv4 e IPv6). El portal no carga nada externo.
 # - app.recurrente.com: página de pago de Recurrente (`/checkout-session/<ch_…>`) y su API

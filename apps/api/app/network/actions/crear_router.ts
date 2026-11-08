@@ -127,9 +127,12 @@ export function auditableRouter(router: RouterVista) {
         modo_velocidad: derivado,
         en_linea: enLinea,
         ultimo_contacto: contacto,
+        corte_por_tunel: porTunel,
+        corte_por_tunel_motivo: motivoTunel,
         ...resto
     } = router
-    void [derivado, enLinea, contacto]
+    // derivados (contacto, configuración del servidor): no son cambios del router
+    void [derivado, enLinea, contacto, porTunel, motivoTunel]
     return {
         ...resto,
         api_password: api ? 'definida' : null,

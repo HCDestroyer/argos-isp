@@ -16,6 +16,7 @@ import {
 } from '#network/conexion/consultas'
 import { leerMikrotik, plantillaConexion, renderizar, variablesMikrotik } from '#network/conexion/render'
 import { valoresServicio } from '#network/conexion/servicio'
+import { destinoTunel } from '#network/conexion/tunel_corte'
 import { sqlHostGatewayEfectivo } from '#network/red_acceso/local_address'
 
 export interface EntradaGenerarScript {
@@ -112,7 +113,12 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
                   await gatewaysDeRouter(t, routerId),
                   process.env,
                   await portalCorteRed(t.trx),
-                  { identificacion: router.corte_identificacion, url: await corteUrlVigente(t.trx) },
+                  {
+                      identificacion: router.corte_identificacion,
+                      url: await corteUrlVigente(t.trx),
+                      // El script crea el túnel y registra el router: el corte por el túnel aplica desde ya
+                      tunel: destinoTunel(),
+                  },
               )
             : {}
 

@@ -4096,7 +4096,7 @@ export interface paths {
         };
         /**
          * Peers WireGuard vigentes (wireguard-agente)
-         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista).
+         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` (un router eliminado ya no tiene fila de conexión: su peer sale de la lista). `allowed_ips` suma las redes de clientes de los routers que mandan el corte por el túnel (`contratos/corte-identificacion.md` §5 ter.4); también reconcilia con `portal.config_cambiada` y `router.redes_cambiadas`.
          */
         get: operations["internoWireguardPeers"];
         put?: never;
@@ -7595,7 +7595,7 @@ export interface paths {
         };
         /**
          * A dónde redirige el portal cautivo al suspendido de la IP de origen
-         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos del cliente. Si identificó por una IP de cliente a un suspendido, devuelve además el `codigo` de su suspensión (lo crea si falta, `portal.codigo_corte.emitir`) para que el portal redirija a `/corte?c=` (`contratos/corte-identificacion.md` §5 ter.1). Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalDestinoCorte"];
         put?: never;
@@ -13885,6 +13885,8 @@ export interface components {
         DestinoCorte: {
             /** @description URL de corte de la empresa del servicio de la IP de origen (`empresas.url_corte`); null = la página /corte del portal (IP sin servicio o empresa sin URL) */
             url: string | null;
+            /** @description Código de corte de la suspensión, solo si la petición se identificó por una IP de cliente (túnel WireGuard, LAN del ISP o IPv6, sin NAT), el servicio está suspendido y su empresa no tiene `url`. El portal redirige a `/corte?c=<código>` para que el segundo salto no dependa de la IP (`contratos/corte-identificacion.md` §5 ter.1). null en cualquier otro caso */
+            codigo: string | null;
         };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
@@ -13908,7 +13910,7 @@ export interface components {
                  * @description null si salió bien
                  * @enum {string|null}
                  */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "proxy_corte" | null;
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte" | null;
                 /** @description Qué se vio y qué hacer, en lenguaje simple */
                 detalle: string;
                 /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
@@ -13918,7 +13920,7 @@ export interface components {
             }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "proxy_corte";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */
@@ -16651,6 +16653,10 @@ export interface components {
             router_id: number;
             public_key: string;
             ip_tunel: string;
+            /** @description AllowedIPs del peer: `<ip_tunel>/32` y, si el router manda el corte por el túnel (modo `ip`), sus redes IPv4 de clientes (`contratos/corte-identificacion.md` §5 ter.4) */
+            allowed_ips: string[];
+            /** @description Redes descartadas y por qué (traslape, red del túnel, excluidas) */
+            avisos: string[];
         };
         PerfilQos: {
             id: number;
@@ -19549,6 +19555,13 @@ export interface components {
              * @description Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca
              */
             ultimo_contacto: string | null;
+            /** @description Solo lectura: el dst-nat de los suspendidos de este router va al portal por el túnel WireGuard (10.255.0.1:PORTAL_CORTE_PUERTO), sin NAT, y el portal ve la IP del cliente (contratos/corte-identificacion.md §5 ter.3). Misma regla que el script de conexión, el reconciliador y el diagnóstico */
+            readonly corte_por_tunel: boolean;
+            /**
+             * @description Por qué el corte no va por el túnel; null si corte_por_tunel. wireguard_apagado: ARGOSISP_WIREGUARD distinto de 1. tunel_corte_apagado: PORTAL_CORTE_TUNEL=0 (el dst-nat va a portal_v4). router_inactivo: el router está desactivado. modo_codigo: corte_identificacion codigo (el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel
+             * @enum {string|null}
+             */
+            readonly corte_por_tunel_motivo: "wireguard_apagado" | "tunel_corte_apagado" | "router_inactivo" | "modo_codigo" | "sin_tunel" | null;
             /** @description Número de serie del equipo (`/system/routerboard` serial-number) o software-id (`/system/license`, CHR), leído por el sondeo; null = no se conoce. Sirve para detectar el mismo MikroTik registrado dos veces (GET /routers/duplicados). La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan */
             serial?: string | null;
             /** @description Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan */

@@ -4,6 +4,7 @@ import { ipEnCidr, ipv4ANumero } from '~/utils/red'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { claveGenerada, MENSAJE_API_PPPOE_LOCAL } from '../servicios/rutas'
+import { conCorteTunel } from './corteTunel'
 
 /**
  * Tipo de conexión por router (`contratos/tipo-conexion-router.md`, A1): la vista previa y el cambio
@@ -239,7 +240,7 @@ export const rutasTipoConexion: RutasFixture = {
             }
         }
         registrarAccion(solicitud, 'routers.cambiar_tipo_conexion', { tipo: 'router', id: router.id }, cuerpo)
-        const resultado: Schema<'ResultadoCambiarTipoConexion'> = { router, de, a: tipo, servicios: cambian.map(s => s.servicio_id) }
+        const resultado: Schema<'ResultadoCambiarTipoConexion'> = { router: conCorteTunel(router), de, a: tipo, servicios: cambian.map(s => s.servicio_id) }
         return { status: 200, cuerpo: resultado }
     })),
 }

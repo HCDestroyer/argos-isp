@@ -6,7 +6,10 @@ import type { Schema } from '@argosisp/contracts'
  * - `codigo`: el router manda a cada suspendido a `/corte?c=<código>` con su web proxy (puerto 3346,
  *   cerrado desde afuera). Necesita la API del router (usuario y clave): sin ella la API responde 422
  *   `corte_codigo_sin_api` en `corte_identificacion`, también al borrar la clave de un router en `codigo`.
- * - `ip`: el portal identifica por la IP de origen; solo funciona sin NAT ni proxy entre el router y Argos.
+ * - `ip`: el portal identifica por la IP de origen en el primer salto (el destino del dst-nat). Fase 2
+ *   (§5 ter): si el router está registrado en el túnel WireGuard, el corte va por el túnel sin NAT; también
+ *   funciona con el servidor en la LAN del ISP o por IPv6. Ese primer salto emite el código de la suspensión
+ *   y redirige con `?c=`, así que el resto de la visita no depende de la IP.
  *
  * Decisión del PM: el formulario del panel obliga a elegirlo (sin valor preseleccionado en el alta) y
  * sugiere `codigo` cuando el router tiene API. La API, sin el campo, deja `ip`.
@@ -22,8 +25,8 @@ export const CORTE_IDENTIFICACION: Record<CorteIdentificacion, { etiqueta: strin
     },
     ip: {
         etiqueta: 'Por IP',
-        opcion: 'Por IP (solo si no hay NAT ni proxy entre el router y Argos)',
-        descripcion: 'La página de corte reconoce al cliente por la IP con la que llega. Con masquerade, NPM u otro proxy en medio no lo reconoce.',
+        opcion: 'Por IP (por el túnel WireGuard o sin NAT entre el router y Argos)',
+        descripcion: 'La página de corte reconoce al cliente por la IP con la que llega: por el túnel WireGuard, la LAN del ISP o IPv6. Con masquerade, NPM u otro proxy en medio no lo reconoce.',
         icono: 'i-lucide-map-pin',
     },
 }
@@ -82,17 +85,24 @@ export interface PresentacionCodigoCorte {
     detalle: string
 }
 
-/** Estado del código de corte para la ficha del servicio. Nunca hay código que mostrar: la API no lo da. */
+/**
+ * Estado del código de corte para la ficha del servicio. Nunca hay código que mostrar: la API no lo da.
+ * Lo emite el router (modo `codigo`) o, desde la fase 2 (§5 ter.1), el primer salto del portal cuando
+ * identifica al suspendido por su IP (modo `ip`: túnel WireGuard, LAN del ISP o IPv6). Por eso `activo`
+ * puede venir en los dos modos.
+ */
 export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number = Date.now()): PresentacionCodigoCorte {
+    const porCodigo = codigo.corte_identificacion === 'codigo'
     if (codigo.activo) {
+        const quien = porCodigo
+            ? 'El router manda a este suspendido a la página de corte con su código.'
+            : 'El portal identificó a este suspendido por su IP y le dio su código: la página de corte lo sigue reconociendo aunque el resto del camino tenga NAT.'
         return {
             estado: 'activo',
             etiqueta: 'Activo',
             color: 'success',
             icono: 'i-lucide-ticket-check',
-            detalle: codigo.creado_en
-                ? `Activo desde ${formatearFechaHora(codigo.creado_en)}. El router manda a este suspendido a la página de corte con su código.`
-                : 'El router manda a este suspendido a la página de corte con su código.',
+            detalle: codigo.creado_en ? `Activo desde ${formatearFechaHora(codigo.creado_en)}. ${quien}` : quien,
         }
     }
     if (codigo.cerrado_en) {
@@ -111,7 +121,7 @@ export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number 
             etiqueta: 'Sin código',
             color: 'neutral',
             icono: 'i-lucide-ticket-x',
-            detalle: `El último se cerró el ${formatearFechaHora(codigo.cerrado_en)}. Se emite uno nuevo en la próxima suspensión${codigo.corte_identificacion === 'codigo' ? '' : ' si el router pasa a «Por código»'}.`,
+            detalle: `El último se cerró el ${formatearFechaHora(codigo.cerrado_en)}. ${porCodigo ? 'Se emite uno nuevo en la próxima suspensión.' : 'En la próxima suspensión se emite uno nuevo cuando el portal lo identifique por su IP.'}`,
         }
     }
     return {
@@ -119,8 +129,45 @@ export function presentarCodigoCorte(codigo: CodigoCorteServicio, ahora: number 
         etiqueta: 'Sin código',
         color: 'neutral',
         icono: 'i-lucide-ticket-x',
-        detalle: codigo.corte_identificacion === 'codigo'
+        detalle: porCodigo
             ? 'Nunca ha tenido código: se emite al suspenderse.'
-            : 'Sin código: el router identifica por IP.',
+            : 'Nunca ha tenido código: en este router lo emite el portal la primera vez que identifica al suspendido por su IP (túnel WireGuard, LAN del ISP o IPv6).',
+    }
+}
+
+/** Por qué el corte de un router no va por el túnel (`Router.corte_por_tunel_motivo`, A1). */
+export type MotivoSinCorteTunel = NonNullable<Schema<'Router'>['corte_por_tunel_motivo']>
+
+export const MOTIVOS_SIN_CORTE_TUNEL: Record<MotivoSinCorteTunel, string> = {
+    wireguard_apagado: 'El túnel WireGuard está apagado en el servidor. El corte va a la IP del portal de Configuración → Portal de corte.',
+    tunel_corte_apagado: 'El corte por el túnel está desactivado en el servidor (PORTAL_CORTE_TUNEL=0). El corte va a la IP del portal de Configuración → Portal de corte.',
+    router_inactivo: 'El router está desactivado.',
+    modo_codigo: 'El router identifica por código: el corte va al proxy del propio router y no necesita el túnel.',
+    sin_tunel: 'El router no está conectado al túnel WireGuard. Genera el script de conexión (pestaña Conexión) y pega su clave pública.',
+}
+
+export interface PresentacionCorteTunel {
+    etiqueta: string
+    color: 'success' | 'neutral'
+    icono: string
+    motivo: string | null
+}
+
+/**
+ * «Corte por el túnel» en la ficha del router (§5 ter.3, `corteTunelDeRouter`): el dst-nat del corte va a
+ * la IP del servidor en el túnel WireGuard, sin NAT, así que el portal ve la IP del cliente. Los dos campos
+ * son requeridos en `Router` (A1). Un «no» sin motivo (el esquema lo permite, la API no lo manda) lo dice
+ * así en vez de inventar uno.
+ */
+export function presentarCorteTunel(router: Schema<'Router'>): PresentacionCorteTunel {
+    if (router.corte_por_tunel) {
+        return { etiqueta: 'Corte por el túnel: sí', color: 'success', icono: 'i-lucide-shield-check', motivo: null }
+    }
+    const motivo = router.corte_por_tunel_motivo
+    return {
+        etiqueta: 'Corte por el túnel: no',
+        color: 'neutral',
+        icono: 'i-lucide-shield-off',
+        motivo: motivo ? MOTIVOS_SIN_CORTE_TUNEL[motivo] : 'La API no dijo por qué.',
     }
 }

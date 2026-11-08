@@ -78,3 +78,63 @@ test('ficha del servicio: estado del código de corte sin el código, en claro y
     }
     await page.emulateMedia({ colorScheme: 'light' })
 })
+
+/**
+ * Fase 2 (`contratos/corte-identificacion.md` §5 ter): RB-Centro identifica por IP y está registrado en el
+ * túnel WireGuard, así que el corte va por el túnel. El diagnóstico prueba el primer salto
+ * (`10.255.0.1:8088`), muestra el texto del túnel tal cual y lo arregla «Reconciliar ahora», no «Editar
+ * router». La ficha dice «Corte por el túnel: sí»; RB-Centro PCQ, «no» con el motivo.
+ */
+test('fase 2: el corte por el túnel sin la regla dice qué hacer y queda en verde al reconciliar', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/routers')
+    await page.locator('[data-prueba="acciones-router-1"]').click({ timeout: 30_000 })
+    await page.getByRole('menuitem', { name: /Probar conexión/ }).click()
+    const prueba = page.getByRole('dialog', { name: /Probar conexión · RB-Centro$/ })
+    const ip = prueba.locator('[data-corte="portal_ip_cliente"]')
+    await expect(ip).toContainText('Falla', { timeout: 30_000 })
+    await expect(ip).toContainText('El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por tunel sin NAT»')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('«Reconciliar ahora» pone la regla')
+    await expect(ip.locator('[data-prueba="corte-accion-portal_ve_otra_ip_tunel"]')).toContainText('pestaña Pools e IPs')
+    await expect(ip.locator('[data-prueba="corte-editar-router"]')).toHaveCount(0)
+    await expect(ip.locator('[data-prueba="comandos-routeros"]')).toContainText('http://10.255.0.1:8088/api/v1/portal/eco-ip')
+
+    await prueba.locator('[data-prueba="corte-reconciliar"]').click()
+    const modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
+    await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
+    await expect(modal.locator('[data-prueba="reconciliar-encolado"]')).toContainText('Reconciliando RB-Centro')
+    await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
+    await prueba.locator('[data-prueba="probar-de-nuevo"]').click()
+    await expect(ip).toContainText('Bien')
+    await expect(ip).toContainText('El portal ve la IP del cliente')
+})
+
+test('fase 2: ficha del router con «Corte por el túnel» y código activo en un router por IP', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    const ancho = () => page.viewportSize()?.width ?? 0
+    for (const tema of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme: tema })
+        await page.goto('/routers')
+        await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click({ timeout: 30_000 })
+        const si = page.locator('[data-prueba="router-corte-tunel"]')
+        await expect(si).toHaveText('Corte por el túnel: sí', { timeout: 30_000 })
+        await expect(page.locator('[data-prueba="router-corte-tunel-motivo"]')).toHaveCount(0)
+
+        await page.goto('/routers')
+        await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro PCQ', exact: true }).click({ timeout: 30_000 })
+        await expect(page.locator('[data-prueba="router-corte-tunel"]')).toHaveText('Corte por el túnel: no', { timeout: 30_000 })
+        const motivo = page.locator('[data-prueba="router-corte-tunel-motivo"]')
+        await expect(motivo).toContainText('no está conectado al túnel WireGuard')
+        const caja = await motivo.boundingBox()
+        expect(caja && caja.x >= 0 && caja.x + caja.width <= ancho() + 1).toBe(true)
+
+        // Juan Carlos Ramírez: suspendido en RB-Centro (por IP, por el túnel); el primer salto le dio su código.
+        await page.goto('/servicios/2')
+        const tarjeta = page.locator('[data-prueba="codigo-corte-servicio"]')
+        await expect(tarjeta.locator('[data-prueba="codigo-corte-estado"]')).toHaveText('Activo', { timeout: 30_000 })
+        await expect(tarjeta).toContainText('Router: por ip')
+        await expect(tarjeta).toContainText('El portal identificó a este suspendido por su IP')
+        await expect(tarjeta).not.toContainText(/solo en modo c[oó]digo/i)
+    }
+    await page.emulateMedia({ colorScheme: 'light' })
+})

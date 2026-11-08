@@ -6,15 +6,26 @@ import type { H3Event } from 'h3'
 
 let hostsCache: { clave: string, hosts: Set<string> } | undefined
 
+interface DestinoApi {
+    /** URL de corte del operador (`url_corte` de la empresa), o null */
+    url: string | null
+    /** código de la suspensión que emitió la API al identificar por una IP de cliente, o null */
+    codigo: string | null
+}
+
+const SIN_DESTINO: DestinoApi = { url: null, codigo: null }
+
 /**
- * URL de corte del operador para el suspendido de esta petición (por su IP), o null. Si la API no
- * responde a tiempo o falla, null: la sonda recibe igual el 302 a la `/corte` del portal, nunca un 204.
+ * Destino del suspendido de esta petición según la API (`GET /portal/destino-corte`): la URL de corte del
+ * operador y, si la API lo identificó por una IP de cliente (túnel, LAN o IPv6, sin NAT), el código de su
+ * suspensión (`contratos/corte-identificacion.md` §5 ter.1). Si la API no responde a tiempo o falla, nada:
+ * la sonda recibe igual el 302 a la `/corte` del portal, nunca un 204.
  */
-async function urlDelOperador(event: H3Event, codigo: string | null = null): Promise<string | null> {
+async function destinoDeLaApi(event: H3Event, codigo: string | null = null): Promise<DestinoApi> {
     const { apiBaseInternal, nodoPortalToken, portal } = useRuntimeConfig(event)
     const token = String(nodoPortalToken ?? '').trim()
     if (!apiBaseInternal || (token && !apiAdmiteToken(apiBaseInternal))) {
-        return null
+        return SIN_DESTINO
     }
     const headers = cabecerasReenvio({
         token,
@@ -29,14 +40,14 @@ async function urlDelOperador(event: H3Event, codigo: string | null = null): Pro
         headers['x-argos-corte'] = codigo
     }
     try {
-        const respuesta = await $fetch<{ url?: unknown }>(`${apiBaseInternal.replace(/\/$/, '')}${RUTA_DESTINO_CORTE}`, {
+        const respuesta = await $fetch<{ url?: unknown, codigo?: unknown }>(`${apiBaseInternal.replace(/\/$/, '')}${RUTA_DESTINO_CORTE}`, {
             headers,
             signal: AbortSignal.timeout(ESPERA_DESTINO_MS),
         })
-        return destinoDelOperador(respuesta?.url)
+        return { url: destinoDelOperador(respuesta?.url), codigo: codigoCorteDeLaRuta(RUTA_CORTE, respuesta?.codigo) }
     }
     catch {
-        return null
+        return SIN_DESTINO
     }
 }
 
@@ -61,7 +72,7 @@ export default defineEventHandler(async (event) => {
         if (!codigo) {
             return
         }
-        const operador = await urlDelOperador(event, codigo)
+        const operador = (await destinoDeLaApi(event, codigo)).url
         if (!operador) {
             return
         }
@@ -75,6 +86,8 @@ export default defineEventHandler(async (event) => {
         'Pragma': 'no-cache',
         'Expires': '0',
     })
-    // La URL de corte del operador (si su empresa la configuró) o la `/corte` del portal.
-    return sendRedirect(event, (await urlDelOperador(event)) ?? destino, 302)
+    // La URL de corte del operador (si su empresa la configuró) o la `/corte` del portal; con el código de la
+    // suspensión si la API identificó al cliente por su IP en este primer salto (túnel, LAN o IPv6).
+    const api = await destinoDeLaApi(event)
+    return sendRedirect(event, api.url ?? conCodigoCorte(destino, api.codigo), 302)
 })

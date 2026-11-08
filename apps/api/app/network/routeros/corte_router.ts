@@ -294,6 +294,17 @@ export interface OpcionesCorte {
      * proxy del router y `/ip proxy access` lo manda a `/corte?c=` (`contratos/corte-identificacion.md`)
      */
     identificacion?: 'ip' | 'codigo'
+    /**
+     * Corte por el túnel WireGuard (`corteTunelDeRouter`, solo en modo `ip`): el dst-nat va a la IP del
+     * servidor en el túnel sin masquerade (`contratos/corte-identificacion.md` §5 ter.6). null = `portal_v4`
+     */
+    tunel?: CorteTunelRouter | null
+}
+
+/** Destino del corte en el túnel (`CorteTunel` de `#network/conexion/tunel_corte`). */
+export interface CorteTunelRouter {
+    ip: string
+    puerto: number
 }
 
 /** Dirección de documentación (RFC 5737) que deja creada la lista de suspendidos. */
@@ -301,6 +312,10 @@ export const ENTRADA_SUSPENDIDOS = '192.0.2.255'
 
 /** Comentario del dst-nat HTTP → `/corte` (el mismo de `lab.rsc` y del script de conexión). */
 export const REGLA_NAT_HTTP = 'argosisp: corte-nat HTTP a /corte'
+/** Corte por el túnel: los clientes de `argos-clientes` llegan al servidor con su IP (antes de todo masquerade) */
+export const REGLA_SRCNAT_TUNEL = 'argosisp:top corte por tunel sin NAT'
+/** Corte por el túnel: lo demás que llegó por el dst-nat sale con la IP del router en el túnel */
+export const REGLA_SRCNAT_TUNEL_RESTO = 'argosisp: corte por tunel NAT de lo demas'
 
 /*
  * Identificación por código (`contratos/corte-identificacion.md`, router con `corte_identificacion =
@@ -485,6 +500,7 @@ function reglasNat(
     config: ConfigCorte,
     v6 = false,
     codigo = false,
+    tunel: CorteTunelRouter | null = null,
 ): { reglas: ReglaCorte[]; conservar: string[] } {
     const r = (comment: string, propiedades: Propiedades, arriba = false): ReglaCorte => ({
         ruta: v6 ? NAT6 : NAT,
@@ -544,6 +560,39 @@ function reglasNat(
         )
         return { reglas, conservar: [] }
     }
+    if (tunel) {
+        // Corte por el túnel WireGuard (`contratos/corte-identificacion.md` §5 ter.6): el HTTP del suspendido
+        // va a la IP del servidor en el túnel sin masquerade (el portal ve la IP del cliente). Los clientes de
+        // `argos-clientes` (las redes que el peer acepta del otro lado) salen con su IP; lo demás que llegó
+        // por el dst-nat sale con la IP del router en el túnel (página sin identificar, nunca un timeout).
+        reglas.push(
+            r(http, {
+                chain: 'argos-corte-nat',
+                protocol: 'tcp',
+                'dst-port': '80',
+                action: 'dst-nat',
+                'to-addresses': tunel.ip,
+                'to-ports': String(tunel.puerto),
+            }),
+            r(
+                REGLA_SRCNAT_TUNEL,
+                {
+                    chain: 'srcnat',
+                    'src-address-list': 'argos-clientes',
+                    'dst-address': tunel.ip,
+                    action: 'accept',
+                },
+                true,
+            ),
+            r(REGLA_SRCNAT_TUNEL_RESTO, {
+                chain: 'srcnat',
+                'connection-nat-state': 'dstnat',
+                'dst-address': tunel.ip,
+                action: 'masquerade',
+            }),
+        )
+        return { reglas, conservar: [] }
+    }
     if (!config.portal_v4) return { reglas, conservar: [http] }
     reglas.push(
         r(http, {
@@ -597,6 +646,7 @@ function comentariosPropios(config: ConfigCorte): Map<RutaOrdenada, Set<string>>
         ...reglasNat(config.address_list, { ...config, portal_v6: config.portal_v6 ?? '::' }, true).reglas,
         ...reglasNat(config.address_list, config, false, true).reglas,
         ...reglasNat(config.address_list, config, true, true).reglas,
+        ...reglasNat(config.address_list, config, false, false, { ip: '0.0.0.0', puerto: 1 }).reglas,
         ...reglasProxy({ ...config, corte_url: config.corte_url ?? 'http://0.0.0.0/corte' }).reglas,
     ]
     const salida = new Map<RutaOrdenada, Set<string>>()
@@ -674,6 +724,18 @@ export function estadoCorteRouter(
     agregar(v4, lista, 'argosisp: corte lista suspendidos', [ENTRADA_SUSPENDIDOS])
     agregar(v4, 'argos-portal', 'argosisp: portal IP', [config.portal_v4])
     agregar(v4, 'argos-portal', 'argosisp: portal FQDN', [config.portal_fqdn])
+    // Corte por el túnel: el filtro `argos-corte` ve el destino ya traducido (la IP del túnel)
+    const tunel = opciones.identificacion === 'codigo' ? null : (opciones.tunel ?? null)
+    // Grupo siempre administrado: al salir del túnel la entrada se borra.
+    grupos.push({ ruta: v4, list: 'argos-portal', comment: 'argosisp: portal tunel' })
+    if (tunel) {
+        entradas.push({
+            ruta: v4,
+            list: 'argos-portal',
+            address: tunel.ip,
+            comment: 'argosisp: portal tunel',
+        })
+    }
     // DNS del router = el `local-address` que ve cada cliente: el gateway efectivo de cada red del router
     // (contratos/red-acceso.md §2). `ROUTERS_SERVICIO_PPP_LOCAL_V4` solo si el router no tiene redes.
     const dnsRouter =
@@ -700,7 +762,7 @@ export function estadoCorteRouter(
     agregar(v6, 'argos-clientes', 'argosisp: clientes IPv6', config.clientes_v6)
 
     const codigo = opciones.identificacion === 'codigo'
-    const nat = reglasNat(lista, config, false, codigo)
+    const nat = reglasNat(lista, config, false, codigo, tunel)
     const proxy = codigo ? reglasProxy(config) : { reglas: [], conservar: [] }
     if (codigo && !config.corte_url) {
         avisos.push(
@@ -708,8 +770,8 @@ export function estadoCorteRouter(
                 'corte niega (deny) en vez de redirigir a /corte; el suspendido ve un error del proxy y nunca sale a internet',
         )
     }
-    if (codigo) {
-        // El destino del HTTP es el proxy del router: la IPv4 del portal solo hace falta para la URL.
+    if (codigo || tunel) {
+        // El destino del HTTP es el proxy del router o la IP del servidor en el túnel.
     } else if (config.portal_v4_error) {
         avisos.push(config.portal_v4_error)
     } else if (!config.portal_v4) {

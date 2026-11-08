@@ -22,6 +22,7 @@ masquerade hacia el portal y la API veía la IP pública del router (o la de Doc
 - **Qué permite:** el código da lo mismo que la IP (nombre parcial, estado, montos, promesa y comprobante). En la auditoría queda `***`, y en `audit.red` el `?c=` también va enmascarado.
 - **Límite:** con código vigente se cuenta por código, no por IP; los códigos que fallan cuentan en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP.
 - `GET /portal/eco-ip` (público): la IP que ve la API y si es de infraestructura. Lo usa el diagnóstico `portal_ip_cliente`.
+- **Primer salto por IP (fase 2, `contratos/corte-identificacion.md` §5 ter):** si `GET /portal/destino-corte` identifica a un suspendido por una IP de cliente (túnel WireGuard, LAN del ISP o IPv6, sin NAT) y su empresa no tiene `url_corte`, devuelve también el `codigo` de su suspensión (`portal.codigo_corte.emitir`, `actions/emitir_codigo_corte_ip.ts`: lo reutiliza o lo crea con `portal.codigo_corte_emitido`, y audita solo al crearlo). El portal redirige a `/corte?c=`, así el segundo salto puede salir por Internet. La IP de una red registrada solo identifica servicios del router de esa red (`servicioDeLaIp`, desambiguación de IPs repetidas entre routers).
 - `GET /servicios/:id/codigo-corte` (`servicios.ver`): estado del código en la ficha, sin el código.
 
 ### Acceso por código y portal autenticado (tarea 7)

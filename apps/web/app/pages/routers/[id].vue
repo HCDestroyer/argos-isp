@@ -17,6 +17,9 @@ const route = useRoute()
 const routerId = computed(() => Number(route.params.id))
 
 const nas = shallowRef<RouterNas | null>(null)
+
+/** «Corte por el túnel: sí/no» con el motivo (§5 ter.3, `Router.corte_por_tunel` de A1). */
+const corteTunel = computed(() => (nas.value ? presentarCorteTunel(nas.value) : null))
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
@@ -270,6 +273,15 @@ async function alProbar() {
                                     data-prueba="router-corte-identificacion"
                                 />
                                 <UBadge
+                                    v-if="corteTunel"
+                                    :label="corteTunel.etiqueta"
+                                    :icon="corteTunel.icono"
+                                    :color="corteTunel.color"
+                                    variant="subtle"
+                                    size="sm"
+                                    data-prueba="router-corte-tunel"
+                                />
+                                <UBadge
                                     :label="nas.routeros_version ? `RouterOS ${nas.routeros_version}` : 'RouterOS ?'"
                                     icon="i-lucide-cpu"
                                     color="neutral"
@@ -283,6 +295,13 @@ async function alProbar() {
                                     :class="nas.nas_ip ? 'font-mono text-default' : 'text-default'"
                                     data-prueba="router-nas-ip"
                                 >{{ textoNas(nas) }}</span></span>
+                            </p>
+                            <p
+                                v-if="corteTunel?.motivo"
+                                class="text-xs text-muted"
+                                data-prueba="router-corte-tunel-motivo"
+                            >
+                                Por qué el corte no va por el túnel: {{ corteTunel.motivo }}
                             </p>
                             <p
                                 v-if="esSinRadius(nas)"

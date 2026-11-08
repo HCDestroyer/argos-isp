@@ -86,6 +86,7 @@ import { cuentaPortal, facturaPortal, facturasPortal, pagosPortal, promesasPorta
 import { notasCreditoPortal, xmlDeFacturaCliente, xmlDeNotaCliente, type XmlDte } from '#portal/fel'
 import IdentificarPorIp from '#portal/actions/identificar_por_ip'
 import ConsultarEstadoPorIp from '#portal/actions/consultar_estado_por_ip'
+import EmitirCodigoCortePorIp from '#portal/actions/emitir_codigo_corte_ip'
 import SolicitarCodigoPortal from '#portal/actions/solicitar_codigo'
 import VerificarCodigoPortal from '#portal/actions/verificar_codigo'
 import CerrarSesionPortal from '#portal/actions/cerrar_sesion'
@@ -348,7 +349,9 @@ const publicas: Ruta[] = [
         descripcion:
             'Sin login. Lo consulta el servidor del portal antes del 302 de las sondas de portal cautivo y de ' +
             'cualquier HTTP de un suspendido: la `url_corte` de su empresa, o null (la página /corte). Sin datos ' +
-            `del cliente. ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
+            'del cliente. Si identificó por una IP de cliente a un suspendido, devuelve además el `codigo` de su ' +
+            'suspensión (lo crea si falta, `portal.codigo_corte.emitir`) para que el portal redirija a ' +
+            `\`/corte?c=\` (\`contratos/corte-identificacion.md\` §5 ter.1). ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
@@ -356,7 +359,18 @@ const publicas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Destino del 302', esquema: DestinoCorte },
         handler: async (ctx) => {
             const origen = await origenDelCliente(ctx, 'destino-corte')
-            return leerDestinoCorte(origen)
+            const destino = await leerDestinoCorte(origen)
+            // Primer salto identificado por una IP de cliente (túnel, LAN o IPv6, sin NAT): el código de la
+            // suspensión para el segundo salto (`contratos/corte-identificacion.md` §5 ter.1). Con la URL de
+            // corte de la empresa (P3) no hace falta: el portal redirige allí.
+            if (destino.servicioId === null || destino.por !== 'ip' || destino.url !== null) {
+                return { url: destino.url, codigo: null }
+            }
+            const emitido = await new EmitirCodigoCortePorIp().execute(
+                { servicio_id: destino.servicioId, ip: origen.ip },
+                ctx.contextoAccion('portal'),
+            )
+            return { url: destino.url, codigo: emitido.codigo }
         },
     }),
     definirRuta({

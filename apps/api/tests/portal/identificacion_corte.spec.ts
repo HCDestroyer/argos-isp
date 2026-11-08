@@ -240,7 +240,7 @@ test.group('Portal: identificación por código o IP (corte)', (group) => {
                     .header('X-Argos-Corte', codigo),
                 200,
             )
-            assert.deepEqual(r.body(), { url: 'https://pagos.isp.example/corte' })
+            assert.deepEqual(r.body(), { url: 'https://pagos.isp.example/corte', codigo: null })
         } finally {
             await db
                 .from('core.empresas')
@@ -294,6 +294,49 @@ test.group('Portal: identificación por código o IP (corte)', (group) => {
             cerrado_en: null,
             resuelve_hasta: null,
         })
+    })
+
+    test('IP repetida entre routers (§5 ter.4): la red registrada decide de qué router es', async ({
+        assert,
+    }) => {
+        const a = await crearServicio()
+        const b = await crearServicio()
+        const tercero = 1 + Math.floor(Math.random() * 250)
+        const cidr = `10.231.${tercero}.0/24`
+        const ip = `10.231.${tercero}.5`
+        await db.from('network.redes_ipv4').where('cidr', cidr).delete()
+        const [red] = await db
+            .table('network.redes_ipv4')
+            .insert({ router_id: a.routerId, cidr })
+            .returning('id')
+        try {
+            // A tiene la IP de su red; B (otro router) la entrega desde un pool sin registrar, más reciente
+            await crearSesion(a, { ipv4: ip })
+            await db.table('network.sesiones').insert({
+                servicio_id: b.servicioId,
+                router_id: b.routerId,
+                nas_ip: '192.0.2.2',
+                acct_session_id: unico('acct'),
+                user_ppp: `ppp-${b.sufijo}`,
+                ipv4: ip,
+                inicio: db.raw(`now() + interval '1 minute'`),
+            })
+            const r = await identificarOrigen(ip)
+            assert.deepEqual(r, { servicioId: a.servicioId, por: 'ip', motivo: null })
+            // Sin candidato del router de la red: no identifica (nunca los datos del otro router)
+            await db.from('network.sesiones').where('servicio_id', a.servicioId).delete()
+            assert.deepEqual(await identificarOrigen(ip), {
+                servicioId: null,
+                por: null,
+                motivo: 'ip_desconocida',
+            })
+        } finally {
+            await db.from('network.sesiones').whereIn('servicio_id', [a.servicioId, b.servicioId]).delete()
+            await db
+                .from('network.redes_ipv4')
+                .where('id', (red as { id: number }).id)
+                .delete()
+        }
     })
 
     test('funciones: normalizar el código y clasificar IPs', async ({ assert }) => {

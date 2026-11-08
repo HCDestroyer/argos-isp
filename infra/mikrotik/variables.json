@@ -122,6 +122,14 @@
     "corte_url": {
       "patron": "^(https?://[A-Za-z0-9.:/_%\\[\\]-]+)?$",
       "descripcion": "URL de /corte de la regla final de /ip proxy access en modo codigo: la de PORTAL_URL_PUBLICA o el destino del NAT (corte_url de ConfigCorte). Vacía = la escribe el reconciliador"
+    },
+    "corte_tunel_ip": {
+      "patron": "^(([0-9]{1,3}\\.){3}[0-9]{1,3})?$",
+      "descripcion": "Corte por el túnel WireGuard (modo ip, contratos/corte-identificacion.md §5 ter.6): IP del servidor en el túnel (la .1 de ARGOSISP_WG_RED). Con ella el dst-nat del suspendido va ahí sin masquerade (srcnat accept de argos-clientes). Vacía = dst-nat a portal_v4"
+    },
+    "corte_tunel_puerto": {
+      "patron": "^([0-9]{1,5})?$",
+      "descripcion": "Puerto del corte en el servidor por el túnel (PORTAL_CORTE_PUERTO, 8088). Vacío sin corte_tunel_ip"
     }
   }
 }

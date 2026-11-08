@@ -98,6 +98,28 @@ describe('sondas de portal cautivo (con URL pública)', () => {
         }
     })
 
+    it('primer salto identificado por IP (túnel, LAN o IPv6): 302 a /corte?c=<código> (§5 ter.1)', async () => {
+        const CODIGO = 'K7M2QX9TB4RZA'
+        api.respuestas.set('/api/v1/portal/destino-corte', JSON.stringify({ url: null, codigo: CODIGO }))
+        try {
+            for (const sonda of SONDAS) {
+                const respuesta = await pedir(sonda.ruta, { host: sonda.host })
+                esperarRedireccionACorte(respuesta, `${URL_PUBLICA}/corte?c=${CODIGO}`)
+                esperarSinExito(respuesta, sonda)
+            }
+            esperarRedireccionACorte(await pedir('/noticias', { host: 'example.com' }), `${URL_PUBLICA}/corte?c=${CODIGO}`)
+            // Un código sin formato se ignora (nunca se copia a la URL lo que diga la API sin validar)
+            api.respuestas.set('/api/v1/portal/destino-corte', JSON.stringify({ url: null, codigo: 'x"><script>' }))
+            esperarRedireccionACorte(await pedir('/generate_204', { host: 'connectivitycheck.gstatic.com' }), `${URL_PUBLICA}/corte`)
+            // Con la URL de corte de la empresa manda esa URL (P3), sin código
+            api.respuestas.set('/api/v1/portal/destino-corte', JSON.stringify({ url: 'https://pagos.isp.example/corte', codigo: CODIGO }))
+            esperarRedireccionACorte(await pedir('/generate_204', { host: 'connectivitycheck.gstatic.com' }), 'https://pagos.isp.example/corte')
+        }
+        finally {
+            api.respuestas.delete('/api/v1/portal/destino-corte')
+        }
+    })
+
     it('las sondas que piden la raíz de su host también reciben 302 a /corte', async () => {
         for (const host of ['captive.apple.com', 'networkcheck.kde.org', 'connectivity-check.ubuntu.com', 'neverssl.com']) {
             esperarRedireccionACorte(await pedir('/', { host }), `${URL_PUBLICA}/corte`)

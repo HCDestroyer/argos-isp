@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { redParaAuditoria, verRedIpv4, type RedIpv4Vista } from '#network/consultas/routers'
 import { exigirRedSinTraslape, validarRedIpv4 } from '#network/reglas_pools'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 
 export interface EntradaCrearRedIpv4 {
     router_id: number
@@ -55,6 +56,8 @@ export default class CrearRedIpv4 extends DomainAction<EntradaCrearRedIpv4, RedI
         t.fijarEntidad('red_ipv4', fila!.id)
         const red = await verRedIpv4(fila!.id, t.trx)
         await t.registrarCambios({ tipo: 'red_ipv4', id: red.id }, null, redParaAuditoria(red))
+        // AllowedIPs del corte por el túnel (`contratos/corte-identificacion.md` §5 ter.10)
+        await emitirRedesCambiadas(t, [red.router_id])
         return red
     }
 }

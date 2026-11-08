@@ -10,6 +10,11 @@ import { estrategiasDeFila, type EstrategiasRouter } from '#network/estrategia_v
 import { sqlContactoRouter } from '#network/contacto_router'
 import { sqlGatewayEfectivo, sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
 import { sinCampos } from '#network/consultas/ipv6'
+import {
+    motivoSinCorteTunel,
+    sqlTunelRegistrado,
+    type MotivoSinCorteTunel,
+} from '#network/conexion/tunel_corte'
 
 /**
  * Lecturas de routers y redes IPv4. Las credenciales nunca salen: solo `tiene_api_password` y
@@ -75,6 +80,13 @@ export interface RouterVista {
     en_linea: boolean | null
     /** última vez que respondió o mandó accounting; null = nunca */
     ultimo_contacto: string | null
+    /**
+     * El dst-nat de sus suspendidos va al portal por el túnel WireGuard, sin NAT (`corteTunelDeRouter`,
+     * `contratos/corte-identificacion.md` §5 ter.3). Solo lectura, derivado de la configuración.
+     */
+    corte_por_tunel: boolean
+    /** por qué no va por el túnel; null si `corte_por_tunel` */
+    corte_por_tunel_motivo: MotivoSinCorteTunel | null
     version: number
     created_at: string
     updated_at: string
@@ -109,6 +121,7 @@ function columnasRouter() {
         ...COLUMNAS_ROUTER,
         db.raw(`${contacto.enLinea} AS en_linea`),
         db.raw(`${contacto.ultimoContacto} AS ultimo_contacto`),
+        db.raw(`${sqlTunelRegistrado()} AS tunel_registrado`),
     ]
 }
 
@@ -172,15 +185,26 @@ export async function listarRouters(
                 ),
         ),
     )
-    const pagina = await paginar<RouterVista>(consulta, filtros)
+    const pagina = await paginar<FilaRouter>(consulta, filtros)
     return { ...pagina, data: pagina.data.map(conEstrategia) }
 }
 
-/** La estrategia de la vista con la misma regla que el dispatcher (`estrategiasDeFila`). */
-function conEstrategia(fila: RouterVista): RouterVista {
+type FilaRouter = Omit<RouterVista, 'corte_por_tunel' | 'corte_por_tunel_motivo'> & {
+    tunel_registrado: boolean
+}
+
+/**
+ * La estrategia de la vista con la misma regla que el dispatcher (`estrategiasDeFila`) y el corte por
+ * el túnel con la misma regla que `corteTunelDeRouter` (`motivoSinCorteTunel`).
+ */
+function conEstrategia(fila: FilaRouter): RouterVista {
+    const { tunel_registrado: tunelRegistrado, ...resto } = fila
+    const motivo = motivoSinCorteTunel({ ...resto, tunel_registrado: tunelRegistrado })
     return {
-        ...fila,
+        ...resto,
         estrategia_velocidad: estrategiasDeFila(fila.estrategia_velocidad, fila.control_velocidad),
+        corte_por_tunel: motivo === null,
+        corte_por_tunel_motivo: motivo,
     }
 }
 
@@ -192,7 +216,7 @@ export async function verRouter(
         .from('network.routers')
         .where('id', id)
         .select(columnasRouter())
-        .first()) as RouterVista | null
+        .first()) as FilaRouter | null
     if (!fila) throw new NoEncontrado(`El router ${id} no existe`)
     return conEstrategia(fila)
 }

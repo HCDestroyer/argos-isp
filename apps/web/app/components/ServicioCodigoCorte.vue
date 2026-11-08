@@ -3,8 +3,9 @@ import type { Problem } from '@argosisp/contracts'
 
 /**
  * «Código de corte» en la ficha del servicio (`GET /servicios/:id/codigo-corte`, `servicios.ver`;
- * `contratos/corte-identificacion.md` §5 bis): si el router manda a este suspendido a la página de
- * corte con su código, desde cuándo, o si está en gracia tras reactivarse. El código nunca se muestra
+ * `contratos/corte-identificacion.md` §5 bis y §5 ter.1): si este suspendido tiene código, desde cuándo, o
+ * si está en gracia tras reactivarse. El código lo emite el router en modo código o el primer salto del
+ * portal en modo IP (túnel WireGuard, LAN o IPv6), así que `activo` puede venir en los dos modos. El código nunca se muestra
  * (la API no lo devuelve: da acceso a la página de corte del servicio). Si la lectura falla, el error con
  * «Reintentar» y ningún estado inventado.
  */
@@ -80,7 +81,7 @@ defineExpose({ recargar: cargar })
                 {{ vista.detalle }}
             </p>
             <p class="text-xs text-dimmed">
-                El código no se muestra: da acceso a la página de corte de este servicio y solo lo lleva la regla del router.
+                El código no se muestra: da acceso a la página de corte de este servicio y solo viaja en la regla del router o en la redirección del portal.
             </p>
         </div>
     </UPageCard>

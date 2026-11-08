@@ -13,6 +13,7 @@ import { verBloque } from '#network/consultas/ipv6'
 import { verImplementacion } from '#network/consultas/planes'
 import { CAMPOS_EXCEPCION_VELOCIDAD } from '#network/velocidad'
 import { clavesCompartidas, type MotivoDuplicado } from '#network/routers_duplicados'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 
 /**
  * Unir dos registros del mismo MikroTik (`routers.unir`, `contratos/routers.md` §3): el router
@@ -278,6 +279,11 @@ export async function unirRouters(
             antes,
             await verBloque(Number(id), t.trx),
         )
+    }
+
+    // las redes y prefijos de los dos routers cambiaron: AllowedIPs del corte por el túnel (§5 ter.10)
+    if (redes.length > 0 || bloques.length > 0) {
+        await emitirRedesCambiadas(t, [Number(absorbido.id), Number(queda.id)])
     }
 
     // 2b. red de acceso: VLAN y servidores PPPoE (antes que los servicios, que conservan su servidor)

@@ -30,6 +30,9 @@ import type { RouterVista } from '#network/consultas/routers'
  *   `/ip proxy access` (`corteUrlVigente`: `PORTAL_URL_PUBLICA` o el destino del NAT). Nunca del entorno.
  *   Sin URL va vacía, como en el reconciliador: el script arma la de `portal_v4` y, si tampoco hay, la
  *   regla final niega (`action=deny`); nunca queda el 3346 sin regla final.
+ * - `corte_tunel_ip` y `corte_tunel_puerto` (`contratos/corte-identificacion.md` §5 ter.6): en modo `ip`
+ *   con el túnel de corte habilitado (`destinoTunel`), el dst-nat del suspendido va a la IP del servidor en
+ *   el túnel sin masquerade. Vacías = el dst-nat a `portal_v4` de siempre. Nunca del entorno del router.
  *
  * Nunca se inventan rangos ni direcciones: si falta alguno, 422 `servicio_incompleto` con la lista de
  * variables a definir. Los patrones los valida el render.
@@ -54,6 +57,8 @@ export const VARIABLES_SERVICIO = [
     'dns_v6',
     'corte_identificacion',
     'corte_url',
+    'corte_tunel_ip',
+    'corte_tunel_puerto',
 ] as const
 
 const PUEDEN_QUEDAR_VACIAS = new Set(['clientes_v6', 'walled_garden', 'dns_v4', 'dns_v6'])
@@ -67,7 +72,12 @@ export function valoresServicio(
     entorno: NodeJS.ProcessEnv = process.env,
     portal?: { portal_v4: string | null; portal_v6: string | null; portal_puerto: number },
     /** modo de identificación del cortado del router y URL de `/corte` (`corteUrlVigente`) */
-    corte: { identificacion: 'ip' | 'codigo'; url: string | null } = { identificacion: 'ip', url: null },
+    corte: {
+        identificacion: 'ip' | 'codigo'
+        url: string | null
+        /** corte por el túnel WireGuard (`destinoTunel`, solo en modo `ip`); null/ausente = `portal_v4` */
+        tunel?: { ip: string; puerto: number } | null
+    } = { identificacion: 'ip', url: null },
 ): Record<string, string> {
     const leer = (clave: string) => entorno[clave]?.trim() || null
     const documentacion: ErrorCampo[] = (['dns_v4', 'dns_v6'] as const).flatMap((nombre) =>
@@ -96,6 +106,11 @@ export function valoresServicio(
         }
         if (nombre === 'corte_url') {
             valores[nombre] = corte.url ?? ''
+            continue
+        }
+        if (nombre === 'corte_tunel_ip' || nombre === 'corte_tunel_puerto') {
+            const tunel = corte.identificacion === 'ip' ? (corte.tunel ?? null) : null
+            valores[nombre] = !tunel ? '' : nombre === 'corte_tunel_ip' ? tunel.ip : String(tunel.puerto)
             continue
         }
         let valor = nombre === 'ppp_local_v4' ? null : leer(variableEntorno(nombre))
