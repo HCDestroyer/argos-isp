@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/HCDestroyer/argos-isp/compare/v1.12.0...v1.13.0) (2026-11-08)
+
+
+### Funcionalidades
+
+* **portal:** identificar al cliente cortado por código del router (fase 1) ([#230](https://github.com/HCDestroyer/argos-isp/issues/230)) ([ff9ee28](https://github.com/HCDestroyer/argos-isp/commit/ff9ee28617e5673fc88bcfa71dc5ebce9dca0c80))
+
 ## [1.12.0](https://github.com/HCDestroyer/argos-isp/compare/v1.11.0...v1.12.0) (2026-11-06)
 
 
