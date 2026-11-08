@@ -368,6 +368,65 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
         )
     })
 
+    test('sin URL del portal: la regla final niega (nunca un 3346 que reenvíe a internet)', async ({
+        assert,
+    }) => {
+        delete process.env.PORTAL_URL_PUBLICA
+        delete process.env.ROUTERS_SERVICIO_PORTAL_V4
+        delete process.env.ROUTERS_SERVICIO_PORTAL_FQDN
+        const r = await reconciliar()
+        assert.isNull(r.error)
+        assert.deepEqual(
+            acceso().map((o) => [o.comment, o['local-port'], o.action]),
+            [[REGLA_PROXY_SIN_CODIGO, PUERTO_PROXY_CORTE, 'deny']],
+        )
+        assert.isTrue(r.avisos.some((a) => a.includes('deny')))
+        assert.equal(falso.proxy.enabled, 'true')
+
+        // Si alguien la borra, el diagnóstico lo marca en rojo y «Reconciliar» la repone
+        falso.borrarAMano('/ip/proxy/access', (o) => o.comment === REGLA_PROXY_SIN_CODIGO)
+        const d = await diagnosticoCorte(routerId, OPCIONES)
+        const chequeo = d.chequeos.find((c) => c.clave === 'proxy_corte')!
+        assert.isFalse(chequeo.ok)
+        assert.include(chequeo.detalle, 'falta la regla final')
+        await reconciliar()
+        assert.equal(acceso()[0]?.action, 'deny')
+
+        // Con URL otra vez, la misma regla pasa a redirigir
+        process.env.PORTAL_URL_PUBLICA = ENTORNO.PORTAL_URL_PUBLICA
+        await reconciliar()
+        assert.containsSubset(acceso()[0], { action: 'redirect', 'action-data': URL_CORTE })
+    })
+
+    test('regla del operador antes de las del corte: se mueve detrás y el diagnóstico lo detecta', async ({
+        client,
+        assert,
+    }) => {
+        await reconciliar()
+        const servicio = await crearWisp(client)
+        await entregar(await cambiarEstado(servicio.id, 'suspendido'))
+        // El operador pone arriba un `allow` sin `local-port`: ganaría en el 3346 (primera que coincide)
+        falso.tabla('/ip/proxy/access').unshift({
+            '.id': '*CC',
+            action: 'allow',
+            'dst-host': '*',
+            comment: 'permitir todo (operador)',
+            dynamic: 'false',
+            disabled: 'false',
+        })
+        let d = await diagnosticoCorte(routerId, OPCIONES)
+        const chequeo = d.chequeos.find((c) => c.clave === 'proxy_corte')!
+        assert.isFalse(chequeo.ok)
+        assert.include(chequeo.detalle, 'antes de las del corte')
+        await reconciliar()
+        assert.deepEqual(
+            acceso().map((o) => o.comment),
+            [commentServicio(servicio.id), REGLA_PROXY_SIN_CODIGO, 'permitir todo (operador)'],
+        )
+        d = await diagnosticoCorte(routerId, OPCIONES)
+        assert.isTrue(d.chequeos.find((c) => c.clave === 'proxy_corte')!.ok)
+    })
+
     test('ajusteProxy: encender, agregar puerto, quitar y apagar', ({ assert }) => {
         assert.deepEqual(ajusteProxy({ enabled: 'false', port: '8080' }, true), {
             enabled: 'yes',

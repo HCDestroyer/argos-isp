@@ -252,14 +252,13 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                         lecturaCorte.get('/ppp/profile') ?? [],
                     )
                     salida.avisos.push(...corte.avisos)
-                    // El proxy antes que la regla de NAT que le manda el HTTP (y apagado después de quitarla).
-                    if (modoCodigo) {
-                        salida.correcciones.push(...(await asegurarProxyCorte(cliente, true, ctxPlan)))
-                    }
+                    // El proxy se enciende después de que existen su regla final (nunca un 3346 que reenvíe a
+                    // internet) y el `drop` de input (no es un proxy abierto); mientras tanto el NAT al 3346 solo
+                    // recibe un rechazo. Al volver a `ip` se apaga después de quitar el NAT.
                     salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
-                    if (!modoCodigo) {
-                        salida.correcciones.push(...(await asegurarProxyCorte(cliente, false, ctxPlan)))
-                    }
+                    // Las reglas del corte antes que las del operador (una suya sin `local-port` ganaría en el 3346).
+                    if (modoCodigo) salida.correcciones.push(...(await ordenarAccesoProxy(cliente, ctxPlan)))
+                    salida.correcciones.push(...(await asegurarProxyCorte(cliente, modoCodigo, ctxPlan)))
                     // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
                     let dnsRouter: Record<string, string> | null = null
                     try {
