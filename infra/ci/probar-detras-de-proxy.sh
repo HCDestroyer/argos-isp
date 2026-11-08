@@ -224,7 +224,9 @@ r="$(cliente otra http "$CADDY_OTRA" 80 www.example.com /corte no 'X-Forwarded-F
 comprobar '/corte por HTTP con cualquier Host llega al portal' "$r" servicio portal
 comprobar '/corte de un suspendido (fuera de la lista): XFF ignorado' "$r" xff "$IP_OTRA"
 r="$(cliente npm http "$CADDY_NPM" 80 www.example.com /corte no 'X-Forwarded-For: 198.51.100.7')"
-comprobar '/corte por HTTP desde NPM también toma la IP real' "$r" xff 198.51.100.7
+# El sitio del corte nunca lee X-Forwarded-For, ni de un proxy de la lista: ahí solo llega el dst-nat de
+# los suspendidos y un docker-proxy en medio permitiría falsificar la IP (contratos/corte-identificacion.md).
+comprobar '/corte por HTTP: XFF ignorado aunque venga de un proxy de la lista' "$r" xff "$IP_NPM"
 
 # ---------------------------------------------------------------------------
 echo "== sin ARGOSISP_PROXIES_CONFIABLES (comportamiento de siempre)"
