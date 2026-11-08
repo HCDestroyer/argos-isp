@@ -12,6 +12,11 @@ import * as z from 'zod'
  * «Velocidad»; el modo de colas después del alta solo cambia con su acción. Si ese MikroTik ya
  * está registrado (misma API o misma IP del NAS), la API responde 409 `router_duplicado`: se marca
  * el campo y se explica qué router es y qué hacer (`contratos/routers.md` §2).
+ *
+ * «Identificación del cliente cortado» (`corte_identificacion`, `contratos/corte-identificacion.md` §5
+ * P1): obligatorio y sin valor preseleccionado (decisión del PM); sugiere «Por código» si se escribieron
+ * usuario y clave de la API, y sin ellos «Por código» queda deshabilitado (la API respondería 422
+ * `corte_codigo_sin_api`, que se marca en el campo).
  */
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ creado: [router: RouterNas] }>()
@@ -30,15 +35,25 @@ const esquema = z.object({
     api_usuario: z.string().trim().max(100, 'Máximo 100 caracteres'),
     api_password: z.string().max(200, 'Máximo 200 caracteres'),
     control_velocidad: z.enum(['simple', 'arbol_pcq']),
+    // Opcional en el tipo para que los demás errores salgan aunque falte; obligatorio en el refinamiento.
+    corte_identificacion: z.enum(['codigo', 'ip']).optional(),
     activo: z.boolean(),
 }).superRefine((datos, ctx) => {
     const error = errorNas(datos.modo_seguridad, datos.nas_ip)
     if (error) {
         ctx.addIssue({ code: 'custom', path: ['nas_ip'], message: error })
     }
+    if (!datos.corte_identificacion) {
+        ctx.addIssue({ code: 'custom', path: ['corte_identificacion'], message: MENSAJE_CORTE_OBLIGATORIO })
+    }
+    // Como `exigirApiSiCodigo`: el modo código necesita usuario y clave de la API.
+    if (datos.corte_identificacion === 'codigo' && !(datos.api_usuario && datos.api_password)) {
+        ctx.addIssue({ code: 'custom', path: ['corte_identificacion'], message: MENSAJE_CORTE_CODIGO_SIN_API })
+    }
 })
+/** `corte_identificacion` sin valor preseleccionado: el operador lo elige. */
 type Entrada = z.input<typeof esquema>
-const vacio = (): Entrada => ({ nombre: '', host: '', nas_ip: '', radius_secret: '', api_usuario: '', api_password: '', modo_seguridad: 'radius', tipo_conexion: 'pppoe', control_velocidad: 'simple', activo: true })
+const vacio = (): Entrada => ({ nombre: '', host: '', nas_ip: '', radius_secret: '', api_usuario: '', api_password: '', modo_seguridad: 'radius', tipo_conexion: 'pppoe', control_velocidad: 'simple', corte_identificacion: undefined, activo: true })
 
 const formulario = useTemplateRef('formulario')
 const estado = reactive<Entrada>(vacio())
@@ -60,6 +75,10 @@ const itemsSeguridad: RadioGroupItem[] = (['radius', 'api'] as const).map(modo =
 }))
 const conRadius = computed(() => estado.modo_seguridad === 'radius')
 const itemsTipo = computed<RadioGroupItem[]>(() => itemsTipoConexionRouter(estado.modo_seguridad === 'api'))
+/** Usuario y clave de la API escritos: el modo código es posible (y es el sugerido). */
+const conApi = computed(() => Boolean(estado.api_usuario.trim() && estado.api_password))
+const itemsCorte = computed<RadioGroupItem[]>(() => itemsCorteIdentificacion(conApi.value, estado.corte_identificacion))
+const ayudaCorte = computed(() => ayudaCorteIdentificacion(conApi.value, estado.corte_identificacion))
 const itemsControl: SelectItem[] = (Object.keys(CONTROLES_VELOCIDAD) as ControlVelocidad[]).map(c => ({ label: CONTROLES_VELOCIDAD[c].etiqueta, value: c, icon: CONTROLES_VELOCIDAD[c].icono }))
 
 async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
@@ -77,6 +96,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
         modo_seguridad: d.modo_seguridad,
         tipo_conexion: d.tipo_conexion,
         control_velocidad: d.control_velocidad,
+        corte_identificacion: d.corte_identificacion,
         activo: d.activo,
     })
     enviando.value = false
@@ -227,6 +247,21 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                         class="w-full sm:max-w-xs"
                     />
                 </UFormField>
+                <UFormField
+                    label="Identificación del cliente cortado"
+                    name="corte_identificacion"
+                    required
+                    :help="ayudaCorte"
+                    data-prueba="router-corte-identificacion"
+                >
+                    <URadioGroup
+                        v-model="estado.corte_identificacion"
+                        :items="itemsCorte"
+                        variant="card"
+                        class="w-full"
+                        :ui="{ fieldset: 'grid gap-2' }"
+                    />
+                </UFormField>
                 <USwitch
                     v-model="estado.activo"
                     label="Activo"
@@ -257,7 +292,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     </template>
                 </UAlert>
                 <ProblemaAlerta
-                    v-else-if="problema"
+                    v-else-if="problema && !esCorteCodigoSinApi(problema)"
                     :problema="problema"
                 />
             </UForm>

@@ -114,6 +114,11 @@ export function useServicios() {
      * `GET /servicios/:id/configuracion-efectiva` (`servicios.ver`): el plan como queda en su router
      * (rate-limit, profile, pools) y la plantilla con las excepciones del servicio aplicadas.
      */
+    /** Estado del código de corte (`servicios.ver`); el código nunca sale de la API. */
+    function codigoCorte(id: number): Promise<Resultado<CodigoCorteServicio>> {
+        return resolver(api.GET('/api/v1/servicios/{id}/codigo-corte', { params: { path: { id } } }))
+    }
+
     function configuracionEfectiva(id: number): Promise<Resultado<ConfiguracionEfectivaServicio>> {
         return resolver(api.GET('/api/v1/servicios/{id}/configuracion-efectiva', { params: { path: { id } } }))
     }
@@ -158,5 +163,5 @@ export function useServicios() {
         }))
     }
 
-    return { eliminable, eliminar, listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion, sincronizarRouter }
+    return { eliminable, eliminar, listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, codigoCorte, activarInstalacion, sincronizarRouter }
 }

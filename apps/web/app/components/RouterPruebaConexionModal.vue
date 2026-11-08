@@ -16,11 +16,14 @@ const abierto = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
     probado: [prueba: PruebaConexion]
+    /** Se editó el router desde el diagnóstico de corte (identificación del cliente cortado). */
+    actualizado: [router: RouterNas]
 }>()
 
 const { puede } = usePermisos()
 const prueba = shallowRef<PruebaConexion | null>(null)
 const reconciliarAbierto = ref(false)
+const editarAbierto = ref(false)
 const problema = ref<Problem | null>(null)
 const probando = ref(false)
 
@@ -170,6 +173,7 @@ const resumen = computed(() => {
                                 :corte="chequeo.corte"
                                 class="mt-2"
                                 @reconciliar="reconciliarAbierto = true"
+                                @editar="editarAbierto = true"
                             />
                         </li>
                     </ul>
@@ -198,5 +202,11 @@ const resumen = computed(() => {
         v-if="puede('routers.reconciliar')"
         v-model:open="reconciliarAbierto"
         :router="router"
+    />
+    <RouterEditarModal
+        v-if="puede('routers.editar')"
+        v-model:open="editarAbierto"
+        :router="router"
+        @actualizado="emit('actualizado', $event)"
     />
 </template>

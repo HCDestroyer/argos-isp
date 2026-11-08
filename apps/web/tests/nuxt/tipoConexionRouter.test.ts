@@ -100,6 +100,7 @@ describe('tipo de conexión por router', () => {
         escribir('nombre', 'Nodo WISP')
         escribir('host', '10.50.0.1')
         escribir('nas_ip', '10.50.0.1')
+        opcion('[data-prueba="router-corte-identificacion"]', 'ip').click()
         enBody('router-guardar')!.click()
         await esperar(() => expect(bd.routers.find(r => r.nombre === 'Nodo WISP')).toBeDefined())
         expect(bd.routers.find(r => r.nombre === 'Nodo WISP')!.tipo_conexion).toBe('dhcp_fija')

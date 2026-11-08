@@ -261,6 +261,15 @@ async function alProbar() {
                                     data-prueba="router-modo-seguridad"
                                 />
                                 <UBadge
+                                    :label="`Corte ${CORTE_IDENTIFICACION[nas.corte_identificacion].etiqueta.toLowerCase()}`"
+                                    :icon="CORTE_IDENTIFICACION[nas.corte_identificacion].icono"
+                                    :title="CORTE_IDENTIFICACION[nas.corte_identificacion].descripcion"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                    data-prueba="router-corte-identificacion"
+                                />
+                                <UBadge
                                     :label="nas.routeros_version ? `RouterOS ${nas.routeros_version}` : 'RouterOS ?'"
                                     icon="i-lucide-cpu"
                                     color="neutral"
@@ -490,6 +499,7 @@ async function alProbar() {
             v-model:open="pruebaAbierta"
             :router="nas"
             @probado="alProbar"
+            @actualizado="alActualizar"
         />
         <EliminarRegistroModal
             v-if="nas && puedeEliminar && eliminable?.eliminable"

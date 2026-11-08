@@ -33,6 +33,7 @@ const accionElegida = shallowRef<PresentacionAccionServicio | null>(null)
 const lineaTiempo = useTemplateRef<{ recargar: () => Promise<void> }>('linea')
 const historialAsignaciones = useTemplateRef<{ recargar: () => Promise<void> }>('asignaciones')
 const historialSesiones = useTemplateRef<{ recargar: () => Promise<void> }>('historialSesiones')
+const codigoCorte = useTemplateRef<{ recargar: () => Promise<void> }>('codigoCorte')
 
 useHead(() => ({ title: `${servicio.value ? etiquetaServicio(servicio.value) : 'Servicio'} · ArgosIsp` }))
 
@@ -254,6 +255,8 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
     void lineaTiempo.value?.recargar()
     // Retirar libera IPv4 y prefijos: cierra el tramo vigente.
     void historialAsignaciones.value?.recargar()
+    // Suspender abre el código de corte y reactivar lo cierra (lo hace routeros en la misma pasada).
+    void codigoCorte.value?.recargar()
 }
 
 const configuracionEfectiva = useTemplateRef<{ recargar: () => Promise<void> }>('configuracionEfectiva')
@@ -784,6 +787,11 @@ onMounted(cargar)
                         </dl>
                     </div>
                 </UPageCard>
+
+                <ServicioCodigoCorte
+                    ref="codigoCorte"
+                    :servicio-id="servicio.id"
+                />
 
                 <UPageCard
                     title="Ubicación y contacto en sitio"

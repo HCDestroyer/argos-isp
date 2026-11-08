@@ -104,6 +104,7 @@ function alActualizar(router: RouterNas) {
             v-model:open="pruebaAbierta"
             :router="props.router"
             @probado="emit('probado')"
+            @actualizado="alActualizar"
         />
         <RouterReconciliarModal
             v-if="puede('routers.reconciliar')"
