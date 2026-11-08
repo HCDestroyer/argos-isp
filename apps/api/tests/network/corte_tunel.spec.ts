@@ -394,7 +394,10 @@ test.group('Corte por el túnel: routers, peers y reconciliador', (group) => {
         d = await diagnosticoCorte(routerId, OPCIONES)
         chequeo = d.chequeos.find((c) => c.clave === 'portal_ip_cliente')!
         assert.isFalse(chequeo.ok)
-        assert.equal(chequeo.codigo, 'portal_ve_otra_ip')
+        assert.equal(chequeo.codigo, 'portal_ve_otra_ip_tunel')
+        assert.isTrue(chequeo.reconciliar)
         assert.include(chequeo.detalle, 'túnel WireGuard')
+        assert.isTrue(d.problemas.some((p) => p.codigo === 'portal_ve_otra_ip_tunel'))
+        assert.isFalse(d.problemas.some((p) => p.codigo === 'portal_ve_otra_ip'))
     })
 })

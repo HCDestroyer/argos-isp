@@ -13910,7 +13910,7 @@ export interface components {
                  * @description null si salió bien
                  * @enum {string|null}
                  */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "proxy_corte" | null;
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte" | null;
                 /** @description Qué se vio y qué hacer, en lenguaje simple */
                 detalle: string;
                 /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
@@ -13920,7 +13920,7 @@ export interface components {
             }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "proxy_corte";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */

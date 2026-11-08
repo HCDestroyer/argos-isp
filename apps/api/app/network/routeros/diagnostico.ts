@@ -294,6 +294,8 @@ export type CodigoProblemaCorte =
     | 'portal_no_acepta_host'
     | 'portal_en_router'
     | 'portal_ve_otra_ip'
+    /** Corte por el túnel WireGuard: el portal no ve la IP del cliente (falta el `srcnat accept` o la red en el peer) */
+    | 'portal_ve_otra_ip_tunel'
     | 'proxy_corte'
 
 export interface ChequeoCorte {
@@ -1068,7 +1070,7 @@ async function chequeoIpCliente(
     if (tunel) {
         return mal(
             'portal_ip_cliente',
-            'portal_ve_otra_ip',
+            'portal_ve_otra_ip_tunel',
             `${visto}. El corte de este router va por el túnel WireGuard: falta la regla «argosisp:top corte por ` +
                 'tunel sin NAT» antes del masquerade (Reconciliar) o la red de clientes no está en el peer del ' +
                 'servidor (redes del router en Argos; el wireguard-agente las aplica)',

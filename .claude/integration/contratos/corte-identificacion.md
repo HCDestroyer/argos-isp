@@ -669,7 +669,7 @@ Lo que el diagnóstico debe detectar (`portal_ip_cliente`, §5 ter.9):
 `portal_ip_cliente` (`app/network/routeros/diagnostico.ts`, `chequeoIpCliente`):
 
 - En modo `ip` prueba **el primer salto**: `http://<destino del NAT>/api/v1/portal/eco-ip`. El destino es `<IP del túnel>:<PORTAL_CORTE_PUERTO>` con túnel, o `nat_url` sin él. Antes probaba `corte_url`, que es el segundo salto (por Internet) y salía rojo aunque el primero identificara.
-- Con túnel, si la IP vista no es el gateway, el texto lo atribuye al túnel: «falta el `srcnat accept` o la red no está en el peer».
+- Con túnel, si la IP vista no es el gateway: rojo **`portal_ve_otra_ip_tunel`** (código propio, `reconciliar: true`), con el texto «falta el `srcnat accept` o la red no está en el peer». Sin túnel sigue `portal_ve_otra_ip` (`reconciliar: false`): el panel distingue los dos por el código, nunca por `reconciliar`.
 - En modo `codigo` no cambia.
 
 ### 5 ter.10 Evento nuevo y cambios por módulo
