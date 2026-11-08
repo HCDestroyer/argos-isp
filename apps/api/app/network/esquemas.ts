@@ -18,6 +18,7 @@ import { TIPOS_PLAN } from '#network/tipos_plan'
 import { APLICACIONES, PADRES, TIPOS_CONEXION, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { MOTIVOS_API } from '#network/diagnostico_routeros'
 import { PROTOCOLOS_QOS } from '#network/qos'
+import { MOTIVOS_SIN_CORTE_TUNEL } from '#network/conexion/tunel_corte'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -195,6 +196,26 @@ export const Router = definirEsquema(
                     'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
                     'comando de RouterOS (`audit.red` con ok); null si nunca',
             },
+            corte_por_tunel: {
+                ...booleano,
+                readOnly: true,
+                description:
+                    'Solo lectura: el dst-nat de los suspendidos de este router va al portal por el túnel WireGuard ' +
+                    '(10.255.0.1:PORTAL_CORTE_PUERTO), sin NAT, y el portal ve la IP del cliente ' +
+                    '(contratos/corte-identificacion.md §5 ter.3). Misma regla que el script de conexión, el ' +
+                    'reconciliador y el diagnóstico. La API siempre lo envía; opcional en el esquema hasta que las ' +
+                    'fixtures del panel lo traigan',
+            },
+            corte_por_tunel_motivo: {
+                ...enumNulable(MOTIVOS_SIN_CORTE_TUNEL),
+                readOnly: true,
+                description:
+                    'Por qué el corte no va por el túnel; null si corte_por_tunel. wireguard_apagado: ' +
+                    'ARGOSISP_WIREGUARD distinto de 1. tunel_corte_apagado: PORTAL_CORTE_TUNEL=0 (el dst-nat va a ' +
+                    'portal_v4). router_inactivo: el router está desactivado. modo_codigo: corte_identificacion codigo ' +
+                    '(el destino es el proxy del router). sin_tunel: el router no está registrado en el túnel. La API ' +
+                    'siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan',
+            },
             serial: {
                 ...nulable(texto),
                 description:
@@ -232,7 +253,15 @@ export const Router = definirEsquema(
             },
             ...auditable,
         },
-        ['serial', 'unido_a_id', 'zona_id', 'coordenadas', 'qos_perfil_id'],
+        [
+            'serial',
+            'unido_a_id',
+            'zona_id',
+            'coordenadas',
+            'qos_perfil_id',
+            'corte_por_tunel',
+            'corte_por_tunel_motivo',
+        ],
     ),
 )
 

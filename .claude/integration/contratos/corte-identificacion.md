@@ -676,7 +676,7 @@ Lo que el diagnóstico debe detectar (`portal_ip_cliente`, §5 ter.9):
 
 **`router.redes_cambiadas`** (`router_id`, `empresa_id` null). Significa: cambiaron las redes de clientes del router y hay que regenerar sus AllowedIPs.
 
-- **A1:** emitirlo en `redes.crear`, `redes.editar`, `redes.migrar`, `ipv6.crear`, `ipv6.editar`, `ipv6.migrar` y `routers.unir` (pedido en `a6.md`; carpeta de A1). Ayuda lista: `emitirRedesCambiadas(t, routerIds)` en `app/network/conexion/tunel_corte.ts`.
+- **A1 (hecho, `a1/corte-fase2`):** lo emite en la transacción de `redes.crear`, `redes.editar` (si cambia el CIDR), `redes.migrar`, `ipv6.crear` e `ipv6.editar` (bloques y pools; editar si cambia el prefijo), `ipv6.migrar` y `routers.unir` (los dos routers). `emitirRedesCambiadas(t, routerIds)` deja un evento por router y transacción. `Router.corte_por_tunel` y `corte_por_tunel_motivo` exponen `corteTunelDeRouter` en `GET /routers` y `GET /routers/:id`.
 - **Respaldo mientras A1 no lo emite:** `routeros.reconciliar` lo emite cuando corrige entradas de `argos-clientes` en un router con túnel. El servidor y el router convergen en la misma pasada.
 - **Por qué este orden:** si las dos cosas llegan juntas, primero se amplían los AllowedIPs y después el router deja de enmascarar. Con A1 emitiendo el evento, el servidor siempre va adelante.
 
@@ -690,7 +690,7 @@ Lo que el diagnóstico debe detectar (`portal_ip_cliente`, §5 ter.9):
 | `infra/wireguard` (A6) | Agente: `allowed_ips` y eventos nuevos. Servidor: marca de conexión, tabla 4172, firewall del puerto del corte, RADIUS y ping solo desde la red del túnel. `probar.sh`: cliente detrás del router que llega al `:8088` con su IP |
 | `infra/mikrotik` (A6) | `servicio-firewall.rsc`, `servicio-limpieza.rsc`, `variables.json`, armados y `render.test.mjs` |
 | `infra/produccion` (A6) | `PORTAL_CORTE_TUNEL`, `PORTAL_CORTE_PUERTO` (api) y `ARGOSISP_WG_REDES_EXCLUIDAS` (api). `wireguard` recibe `PORTAL_CORTE_PUERTO`. `instalar.sh` agrega `src_valid_mark`. `argosisp estado` avisa si `ARGOSISP_BIND_IP` es una IP concreta con el túnel de corte activo |
-| A4 (panel) | Nada obligatorio. En el diagnóstico, mostrar el texto nuevo de `portal_ip_cliente`. En la ficha del router, «Corte por el túnel: sí/no» (si se expone; hoy no hay endpoint, ver `a6.md`) |
+| A4 (panel) | Nada obligatorio. En el diagnóstico, mostrar el texto nuevo de `portal_ip_cliente`. En la ficha del router, «Corte por el túnel: sí/no» con `Router.corte_por_tunel` y `corte_por_tunel_motivo` (`GET /routers/:id`) |
 | A2 | Nada |
 
 ### 5 ter.11 Migración y qué hace el PM

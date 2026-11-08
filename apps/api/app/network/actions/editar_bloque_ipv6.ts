@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { prefijoNormalizado } from '#network/ipam_v6'
@@ -66,6 +67,7 @@ export default class EditarBloqueIpv6 extends DomainAction<EntradaEditarBloqueIp
             bloqueParaAuditoria(antes),
             bloqueParaAuditoria(despues),
         )
+        if (despues.prefijo !== antes.prefijo) await emitirRedesCambiadas(t, [Number(fila.router_id)])
         return despues
     }
 }

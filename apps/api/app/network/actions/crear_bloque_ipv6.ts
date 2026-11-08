@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { emitirRedesCambiadas } from '#network/conexion/tunel_corte'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { prefijoNormalizado } from '#network/ipam_v6'
 import { bloqueParaAuditoria, verBloque, type BloqueVista } from '#network/consultas/ipv6'
@@ -36,6 +37,8 @@ export default class CrearBloqueIpv6 extends DomainAction<EntradaCrearBloqueIpv6
         t.fijarEntidad('ipv6_bloque', fila!.id)
         const bloque = await verBloque(fila!.id, t.trx)
         await t.registrarCambios({ tipo: 'ipv6_bloque', id: bloque.id }, null, bloqueParaAuditoria(bloque))
+        // prefijos del router (`contratos/corte-identificacion.md` §5 ter.10)
+        await emitirRedesCambiadas(t, [input.router_id])
         return bloque
     }
 }
