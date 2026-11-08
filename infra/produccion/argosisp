@@ -319,6 +319,32 @@ avisos_dns() {
     echo "AVISO: DNS de documentación en el .env (${malas[*]}): no son resolutores reales. Déjalas vacías (el script no toca el DNS del router) o pon los de tu red y ejecuta argosisp levantar. En cada router que ya los tenga: /ip dns set servers=<tus resolutores> (infra/mikrotik/README.md, «DNS del router»)"
 }
 
+# Identificación del cortado (contratos/corte-identificacion.md §5 bis): la API necesita saber qué IPs
+# son del propio servidor y de los proxies para no identificar a un cliente con ellas en /corte.
+avisos_portal_ips() {
+    local ips proxies_api proxies_caddy subred p faltan=()
+    ips="$(leer_env PORTAL_IPS_SERVIDOR)"
+    proxies_api="$(leer_env PORTAL_PROXIES_CONFIABLES)"
+    proxies_caddy="$(leer_env ARGOSISP_PROXIES_CONFIABLES)"
+    if [ -z "$ips" ]; then
+        echo "AVISO: falta PORTAL_IPS_SERVIDOR en el .env (las IPs de este servidor: pública, LAN y proxy de delante, separadas por coma). Sin ella, si la página de corte ve la IP del servidor la trata como la de un cliente. Agrégala y ejecuta argosisp levantar (docs/runbooks/actualizacion.md)"
+    fi
+    for p in ${proxies_caddy//,/ }; do
+        case ",$ips,$proxies_api," in *",$p,"*) ;; *) faltan+=("$p") ;; esac
+    done
+    if [ "${#faltan[@]}" -gt 0 ]; then
+        echo "AVISO: el proxy de delante (ARGOSISP_PROXIES_CONFIABLES: ${faltan[*]}) no está en PORTAL_IPS_SERVIDOR: agrégalo para que /corte no identifique a nadie con su IP (docs/runbooks/detras-de-proxy.md)"
+    fi
+    if [ -n "$proxies_api" ]; then
+        subred="$(leer_env COMPOSE_SUBNET_V4)"
+        subred="${subred:-172.30.0.0/24}"
+        case ",$proxies_api," in
+            *",$subred,"*) ;;
+            *) echo "AVISO: PORTAL_PROXIES_CONFIABLES está fijada y no incluye la red de compose ($subred): la API no verá la IP real de los clientes que llegan por Caddy y el portal. Bórrala del .env (vale la red de compose) y ejecuta argosisp levantar" ;;
+        esac
+    fi
+}
+
 # api-portal está activo y el compose de <versión> lo trae
 con_api_portal() {
     api_portal_activo && grep -q '^  api-portal:' "$(compose_de "$1")" 2> /dev/null
@@ -835,6 +861,7 @@ cmd_estado() {
     if ! es_nodo_portal; then
         estado_wireguard
         avisos_dns
+        avisos_portal_ips
     fi
     local red
     red="$(diagnostico_red "$v" 2> /dev/null || true)"

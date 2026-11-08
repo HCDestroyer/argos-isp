@@ -90,6 +90,11 @@ Si la regla ya existe en el router, cámbiala:
 /ip firewall nat set [find comment="argosisp: corte-nat HTTP a /corte"] to-addresses=<IP del servidor de Argos> to-ports=8080
 ```
 
+Con un proxy delante, la página de corte **no puede** identificar a nadie por la IP de una petición que pasó por NPM (el sitio del corte nunca lee `X-Forwarded-For`, ver «Cómo se prueba»). Por eso:
+
+- Pon la IP de NPM también en `PORTAL_IPS_SERVIDOR` (el instalador lo hace con las de `ARGOSISP_PROXIES_CONFIABLES`; `sudo argosisp estado` avisa si falta). Así `/corte` dice «no pudimos identificar tu servicio» en vez de tratar la IP de NPM como la de un cliente.
+- Si el router hace NAT hacia el servidor (o el dst-nat tiene que pasar por NPM), usa **Identificación por código** en ese router (`docs/runbooks/actualizacion.md`, «Identificación del cortado»): el router manda al suspendido a `/corte?c=<código>` y la IP deja de importar.
+
 En el walled garden (`argos-portal`) quedan la IP del servidor y `portal.<dominio>` (`portalFqdn`). Si el cliente suspendido abre `https://portal.<dominio>`, entra por NPM, y Caddy ve su IP real gracias a `ARGOSISP_PROXIES_CONFIABLES`. El resto de la configuración del router está en `infra/mikrotik/README.md`.
 
 ## 5. Lo que no cambia
@@ -123,6 +128,7 @@ curl -s https://portal.<dominio>/api/v1/portal/quien-soy     # lo mismo, pasando
 | Bucle de redirecciones en el panel o la API | El Proxy Host va en `http` al 8080: cámbialo a `https` y 8443 |
 | El suspendido no ve `/corte` | El dst-nat apunta a NPM o al 80. Debe ir a `<IP de Argos>:8080` (o al 8088): Configuración → Portal de corte (paso 4) |
 | `/corte` dice «No pudimos identificar tu servicio» y el diagnóstico de corte del router marca «La página de corte ve la IP del cliente» en rojo («el portal ve la IP X en vez de la del cliente») | El router hace masquerade hacia el portal (sale a internet con su IP pública) y el portal no puede saber qué cliente es por la IP. Edita el router y elige **Identificación por código** (necesita la API del router): el router manda a cada suspendido a `/corte?c=<código>`. Contrato: `.claude/integration/contratos/corte-identificacion.md` |
+| `/corte` dice «no pudimos identificar tu servicio» y `quien-soy` responde `motivo: ip_de_servidor` o `ip_de_proxy` | La petición llegó con la IP del servidor, de NPM o de la red de compose: hay NAT o un proxy en medio y Argos no adivina. Pasa el router a **Identificación por código**. Si la IP es de un cliente de verdad, sácala de `PORTAL_IPS_SERVIDOR` / `PORTAL_PROXIES_CONFIABLES` |
 | "el puerto TCP 80 ya está en uso" al instalar | Faltan `ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443` en el comando |
 
 ## Cómo se prueba
@@ -130,7 +136,7 @@ curl -s https://portal.<dominio>/api/v1/portal/quien-soy     # lo mismo, pasando
 `infra/ci/probar-detras-de-proxy.sh` (en CI, junto a las pruebas del proxy) levanta el Caddyfile de producción con una pata en una red de "NPM" de confianza y otra en una red cualquiera, delante de un eco que aplica la misma regla que la API (`apps/api/app/portal/ip_origen.ts`). La prueba comprueba lo siguiente:
 
 - Desde NPM la API ve la IP de `X-Forwarded-For`, de `X-Real-IP` o una IPv6, en los tres dominios y en el webhook, y por TLS sin SNI.
-- El sitio del corte (el 80 con cualquier Host y `PORTAL_CORTE_PUERTO`) nunca lee `X-Forwarded-For`, ni de un proxy de la lista: ahí solo llega el dst-nat de los suspendidos, y con un `docker-proxy` en medio (IPv6, hairpin) la conexión vendría de la puerta de enlace de Docker y el cliente podría hacerse pasar por otra IP. Desde la 1.13.0.
+- El sitio del corte (el 80 con cualquier Host y `PORTAL_CORTE_PUERTO`, 8088) nunca lee `X-Forwarded-For` ni `X-Real-IP`, ni de un proxy de la lista: ahí solo llega el dst-nat de los suspendidos, y con un `docker-proxy` en medio (IPv6, hairpin) la conexión vendría de la puerta de enlace de Docker y el cliente podría hacerse pasar por otra IP. Desde la 1.13.0.
 - TLS sin SNI de verdad (node manda el `Host` como SNI si no se le quita; hasta la 1.4.0 la prueba lo mandaba y por eso no vio el fallo), a la IP del contenedor y al puerto publicado en `127.0.0.1`, como entra NPM en producción: Caddy entrega el certificado de `DOMINIO_API` y cada dominio llega a su servicio por el `Host`.
 - Un `X-Forwarded-For` falso que el cliente le mandó a NPM se ignora.
 - Desde otra red, la API ve el socket aunque la petición traiga encabezados.

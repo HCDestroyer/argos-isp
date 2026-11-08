@@ -39,7 +39,7 @@ Ver:
 1. `:resolve` devuelve una IP (si no: el DNS del router está mal, punto 1).
 2. En `argos-corte`, **`corte DNS udp a cualquier resolver`** y **`corte DNS tcp a cualquier resolver`** sin `dst-address-list`, antes de `corte portal`. No debe quedar ninguna `argosisp: corte DNS udp` con `dst-address-list=argos-dns` (la versión vieja; el reconciliador la borra sola).
 3. `argosisp: corte TCP reset` con `reject-with=tcp-reset`; ninguna regla `argosisp` con `action=drop`.
-4. En NAT, los dos `argosisp:top corte NAT …` al inicio de `dstnat` y `argosisp: corte-nat HTTP a /corte` con `to-addresses=<IP del portal>` y `to-ports` = 80 o 8088. En IPv6 lo mismo con `to-address=<IPv6 del portal>/128` (solo si `ROUTERS_SERVICIO_PORTAL_V6` está definida).
+4. En NAT, los dos `argosisp:top corte NAT …` al inicio de `dstnat` y `argosisp: corte-nat HTTP a /corte` con `to-addresses=<IP del portal>` y `to-ports` = 80 o 8088. En IPv6 lo mismo con `to-address=<IPv6 del portal>/128` (solo si `ROUTERS_SERVICIO_PORTAL_V6` está definida). Con el router en **Identificación por código**, en lugar del dst-nat va `corte-nat HTTP al proxy de corte` (`redirect` al 3346): ver §9.
 5. `/ip firewall filter print where comment~"argosisp:top"`: los saltos de corte **antes** de `defconf: fasttrack`.
 
 ## 3. Suspender y mirar el router
@@ -92,3 +92,44 @@ curl -sI http://<IP del portal>:<puerto>/ -H 'Host: example.com'   # 302 a /cort
 ## 8. Reactivar
 
 Pagar o aprobar promesa. `coa` manda Disconnect; la sesión reconecta con el perfil del plan; la IP sale de `suspendidos`; el teléfono revalida y queda con internet sin tocar nada.
+
+## 9. Identificación por código (modo `codigo`, pendiente de laboratorio)
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 y §5 bis. Lo que sigue **no está probado en un equipo físico**: el manual de RouterOS 7 lo documenta, pero falta verlo. Anota cada resultado en la tabla del final (fecha, RouterOS, quién) y, si algo falla, en `.claude/integration/a6.md`.
+
+Preparar (en un CHR 7.24.5 o el MikroTik del laboratorio, conectado por API):
+
+1. Panel → Routers → editar → **Identificación del cortado: Por código** (o `corte_identificacion: "codigo"` por la API). «Reconciliar ahora».
+2. Suspender un servicio PPPoE con IPv4 y /56 delegado, y uno WISP con IP fija.
+3. En el router:
+   ```routeros
+   /ip proxy print
+   /ip proxy access print detail
+   /ip firewall nat print where comment~"argosisp"
+   /ipv6 firewall nat print where comment~"argosisp"
+   /ip firewall filter print where comment~"proxy de corte"
+   /ipv6 firewall filter print where comment~"proxy de corte"
+   ```
+   Ver: `enabled=yes port=3346 max-cache-size=none` (o el puerto del operador más `3346`); una regla `argosisp:servicio:<id>` por suspendido (`local-port=3346 src-address=<IPv4>` y, en IPv6, `…:enlace` y `…:delegado` con el prefijo) **antes** de `argosisp: corte proxy sin codigo`; `argosisp: corte-nat HTTP al proxy de corte` con `action=redirect to-ports=3346` en IPv4 e IPv6 (y ya no `corte-nat HTTP a /corte`); `argosisp:top proxy de corte solo redirigido` (`connection-nat-state=!dstnat action=drop`) arriba de `input` y `argosisp: corte-in proxy de corte` antes de `corte-in TCP reset`.
+
+| # | Prueba | Cómo | Esperado |
+| --- | --- | --- | --- |
+| 9.1 | 307 por IPv4 con `local-port` y `src-address` | Desde la laptop del suspendido: `curl -sI http://example.com/` | `HTTP/1.0 307` (o 1.1) y `Location: <PORTAL_URL_PUBLICA>/corte?c=<13 caracteres>`. El código es del servicio (comparar con `GET /servicios/:id/codigo-corte`: `activo: true`) |
+| 9.2 | Regla final sin código | Desde un segundo suspendido cuya regla borraste a mano (`/ip proxy access remove [find comment~"argosisp:servicio:<id>"]`) | `307` a `/corte` **sin** `?c=`; la página identifica por IP o dice el motivo. El reconciliador vuelve a poner la regla en la siguiente pasada |
+| 9.3 | 307 por IPv6 | `curl -6 -sI http://ipv6.msftconnecttest.com/connecttest.txt` (y `http://[2001:db8::1]/` a cualquier IPv6) | `307` con `?c=` del mismo servicio: `src-address` IPv6 con prefijo funciona en `/ip proxy access` y el `/ipv6 firewall nat action=redirect` lleva al proxy (que escucha en IPv6). Si no: anotar la respuesta exacta (reset, 403, timeout) |
+| 9.4 | HTTPS sigue con reset | `curl -sI https://www.google.com` | Falla al instante (no pasa por el proxy) |
+| 9.5 | El 3346 no es un proxy abierto | Desde la WAN: `nc -vz <IP WAN> 3346`. Desde un cliente **activo**: `curl -x http://<gateway>:3346 http://example.com` | Ninguno conecta (drop por `connection-nat-state=!dstnat`); el contador de la regla `proxy de corte solo redirigido` sube |
+| 9.6 | Proxy del operador | Antes de pasar a código: `/ip proxy set enabled=yes port=8080` y una regla propia en `/ip proxy access`. Pasar a código y volver a IP | En código: `port=8080,3346`, la regla del operador queda al final y sin cambios. De vuelta en IP: `port=8080`, `enabled=yes`, sin reglas `argosisp` |
+| 9.7 | IP reasignada | Reactivar el servicio A y suspender B con la misma IP (o liberar y reasignar) | Solo queda la regla de B para esa `src-address`; la de A desaparece |
+| 9.8 | `/tool fetch src-address` con masquerade | En el router: `/tool fetch url="<PORTAL_URL_PUBLICA>/api/v1/portal/eco-ip" src-address=<gateway de clientes> output=user` | El `ip` que responde es la que ve el portal para un cliente (la IP WAN del router si hay masquerade). Debe coincidir con lo que ve un cliente real abriendo la misma URL (`curl -s …/eco-ip` desde la laptop **activa**). Si no coincide, el diagnóstico `portal_ip_cliente` no es fiable: anotarlo para A5 |
+| 9.9 | Android | Olvidar la Wi-Fi del CPE, conectar | «Iniciar sesión en la red» en 2–5 s; al tocarla, `/corte` con el nombre parcial y la barra **sin** `?c=` |
+| 9.10 | iPhone | Igual que §6 | La hoja del portal abre `/corte` identificada (sigue el 307) |
+| 9.11 | Windows 10/11 | Conectar | «Acción necesaria» y el navegador en `/corte` identificada (`www.msftconnecttest.com/redirect` sigue el 307) |
+| 9.12 | `url_corte` de la empresa (P3) | Empresa con `url_corte` | `/corte?c=` del portal hace `302` a esa URL; su host está en `argos-walled` |
+| 9.13 | Script de conexión | Router de prueba limpio en `codigo`, «incluir configuración de servicio», importar el `.rsc` | Las piezas de arriba quedan creadas sin esperar al reconciliador (excepto las reglas por servicio); la primera reconciliación no cambia nada del corte (`audit.red` sin comandos del corte) |
+
+Resultados:
+
+| Prueba | Fecha | RouterOS | Resultado | Quién |
+| --- | --- | --- | --- | --- |
+| 9.1 – 9.13 | | | pendiente | |
