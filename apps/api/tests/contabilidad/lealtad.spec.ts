@@ -18,6 +18,7 @@ import {
 } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import {
+    cicloDeHoy,
     contextoPrueba,
     entregarEvento,
     movimientosDe,
@@ -30,10 +31,20 @@ import {
  * completo, que ya conoce el origen `lealtad`) y en el `cuadra` del reporte.
  */
 
-/** Servicio con su factura de noviembre (vence en el futuro: el pago es a tiempo). */
+/**
+ * Servicio con la factura del periodo actual («noviembre»: vence después de hoy, así que el pago es a
+ * tiempo) y la del anterior (ya vencida), con el ciclo anclado a hoy (`cicloDeHoy`): la prueba no
+ * depende del día en que corre.
+ */
 async function servicioConNoviembre(empresaId: number, clienteId?: number) {
-    const s = await servicioEn(empresaId, { precio: '200.00', instalacion: '2026-10-01', clienteId })
-    await generar(s.servicioId, '2026-11-01')
+    const ciclo = cicloDeHoy()
+    const s = await servicioEn(empresaId, {
+        precio: '200.00',
+        instalacion: ciclo.anterior,
+        plantilla: ciclo.plantilla,
+        clienteId,
+    })
+    await generar(s.servicioId, ciclo.actual)
     const facturas = await facturasDelServicio(s.servicioId)
     return { ...s, noviembre: facturas.at(-1)! }
 }
