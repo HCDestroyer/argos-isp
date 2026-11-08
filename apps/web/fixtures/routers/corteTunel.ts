@@ -17,7 +17,7 @@ export interface CorteTunelRouter {
  * `tunel_corte_apagado` no salen; luego router inactivo, modo código (solo con la API completa: sin ella
  * el router cae en la regla del túnel) y registrado en el túnel (fila de conexión con clave pública).
  */
-export function corteTunelFixture(router: Router): CorteTunelRouter {
+export function corteTunelFixture(router: Pick<Router, 'id' | 'activo' | 'corte_identificacion' | 'api_usuario' | 'tiene_api_password'>): CorteTunelRouter {
     const motivo: MotivoSinCorteTunel | null = !router.activo
         ? 'router_inactivo'
         : router.corte_identificacion === 'codigo' && router.api_usuario !== null && router.tiene_api_password

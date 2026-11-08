@@ -10,7 +10,7 @@ import { vistaPreviaControl } from './vistaPrevia'
 import { estrategiaDeControl } from './estrategiasDatos'
 import { MENSAJE_API_PPPOE_LOCAL } from '../servicios/rutas'
 import { esTipoFixture, rutasTipoConexion, tipoConServicios } from './tipoConexion'
-import { conCorteTunel } from './corteTunel'
+import { conCorteTunel, corteTunelFixture } from './corteTunel'
 
 function existeRouter(id: number | null): boolean {
     return bd.routers.some(router => router.id === id)
@@ -429,7 +429,11 @@ export const rutasRouters: RutasFixture = {
             version: 1,
             created_at: creado,
             updated_at: creado,
+            // Se calculan abajo, con la misma regla que la API (`motivoSinCorteTunel`).
+            corte_por_tunel: false,
+            corte_por_tunel_motivo: null,
         }
+        Object.assign(router, corteTunelFixture(router))
         bd.routers.push(router)
         bd.planesPorRouter[router.id] = bd.planes.filter(p => p.global && p.activo).map(p => p.id)
         registrarAccion(solicitud, 'routers.crear', { tipo: 'router', id: router.id }, { ...cuerpo, api_password: '***', radius_secret: '***' })

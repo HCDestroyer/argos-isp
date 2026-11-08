@@ -155,13 +155,11 @@ export interface PresentacionCorteTunel {
 
 /**
  * «Corte por el túnel» en la ficha del router (§5 ter.3, `corteTunelDeRouter`): el dst-nat del corte va a
- * la IP del servidor en el túnel WireGuard, sin NAT, así que el portal ve la IP del cliente. La API siempre
- * manda los dos campos (opcionales en el esquema); si faltaran, no se muestra nada: nunca un «no» inventado.
+ * la IP del servidor en el túnel WireGuard, sin NAT, así que el portal ve la IP del cliente. Los dos campos
+ * son requeridos en `Router` (A1). Un «no» sin motivo (el esquema lo permite, la API no lo manda) lo dice
+ * así en vez de inventar uno.
  */
-export function presentarCorteTunel(router: Schema<'Router'>): PresentacionCorteTunel | null {
-    if (router.corte_por_tunel === undefined) {
-        return null
-    }
+export function presentarCorteTunel(router: Schema<'Router'>): PresentacionCorteTunel {
     if (router.corte_por_tunel) {
         return { etiqueta: 'Corte por el túnel: sí', color: 'success', icono: 'i-lucide-shield-check', motivo: null }
     }

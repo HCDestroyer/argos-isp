@@ -18,7 +18,7 @@ const routerId = computed(() => Number(route.params.id))
 
 const nas = shallowRef<RouterNas | null>(null)
 
-/** «Corte por el túnel: sí/no» con el motivo (§5 ter.3); null mientras la API no mande el campo (A1). */
+/** «Corte por el túnel: sí/no» con el motivo (§5 ter.3, `Router.corte_por_tunel` de A1). */
 const corteTunel = computed(() => (nas.value ? presentarCorteTunel(nas.value) : null))
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)

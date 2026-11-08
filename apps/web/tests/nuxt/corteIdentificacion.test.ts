@@ -310,15 +310,21 @@ describe('identificación del cliente cortado', () => {
     describe('corte por el túnel en la ficha del router', () => {
         const base = (): Schema<'Router'> => structuredClone(bd.routers.find(r => r.id === 1)!)
 
-        it('sí, no con el texto de cada motivo, y nada si faltara el campo', () => {
+        it('sí, no con el texto de cada motivo, y «no» sin motivo sin inventar uno', () => {
             expect(presentarCorteTunel({ ...base(), corte_por_tunel: true, corte_por_tunel_motivo: null })).toMatchObject({ etiqueta: 'Corte por el túnel: sí', color: 'success', motivo: null })
             for (const motivo of ['wireguard_apagado', 'tunel_corte_apagado', 'router_inactivo', 'modo_codigo', 'sin_tunel'] as const) {
                 const vista = presentarCorteTunel({ ...base(), corte_por_tunel: false, corte_por_tunel_motivo: motivo })
                 expect(vista).toMatchObject({ etiqueta: 'Corte por el túnel: no', motivo: MOTIVOS_SIN_CORTE_TUNEL[motivo] })
                 expect(vista?.motivo).not.toContain(motivo)
             }
-            const { corte_por_tunel: _a, corte_por_tunel_motivo: _b, ...sinCampos } = conCorteTunel(base())
-            expect(presentarCorteTunel(sinCampos)).toBeNull()
+            // El esquema permite `false` con motivo null (la API no lo manda): se dice, no se inventa un motivo.
+            expect(presentarCorteTunel({ ...base(), corte_por_tunel: false, corte_por_tunel_motivo: null })).toMatchObject({ etiqueta: 'Corte por el túnel: no', motivo: 'La API no dijo por qué.' })
+        })
+
+        it('fixtures: los valores guardados en `datos.ts` son los que calcula `conCorteTunel`', () => {
+            for (const router of bd.routers) {
+                expect(conCorteTunel(router), router.nombre).toMatchObject({ corte_por_tunel: router.corte_por_tunel, corte_por_tunel_motivo: router.corte_por_tunel_motivo })
+            }
         })
 
         it('fixtures: los mismos valores que la API en GET /routers y GET /routers/:id', async () => {
