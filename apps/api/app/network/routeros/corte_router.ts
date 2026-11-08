@@ -315,7 +315,10 @@ export const PUERTO_PROXY_CORTE = '3346'
 /** NAT del HTTP del suspendido al proxy del router (en lugar del dst-nat al portal). */
 export const REGLA_NAT_PROXY = 'argosisp: corte-nat HTTP al proxy de corte'
 
-/** Regla final de `/ip proxy access`: lo que no tiene regla por servicio va a `/corte` sin código. */
+/**
+ * Regla final de `/ip proxy access` (puerto 3346): lo que no tiene regla por servicio va a `/corte` sin
+ * código, o se niega si no hay URL del portal. Siempre existe: sin ella el proxy reenviaría a internet.
+ */
 export const REGLA_PROXY_SIN_CODIGO = 'argosisp: corte proxy sin codigo'
 
 /** Nadie llega al puerto del proxy de corte si no lo mandó el dst-nat (no es un proxy abierto). */
@@ -561,21 +564,19 @@ function reglasNat(
  * Las reglas por servicio (`argosisp:servicio:<id>`) van antes (`ordenarAccesoProxy`).
  */
 function reglasProxy(config: ConfigCorte): { reglas: ReglaCorte[]; conservar: string[] } {
-    if (!config.corte_url) return { reglas: [], conservar: [REGLA_PROXY_SIN_CODIGO] }
+    // Nunca un 3346 sin regla final: lo que no tiene regla en `/ip proxy access` el proxy lo **reenvía a
+    // internet**, y ese tráfico sale por `output` del router, sin pasar por `argos-corte` (hallazgo de A6).
+    // Sin URL del portal, la final niega (`deny`, 403 del proxy) en vez de redirigir.
+    const propiedades: Propiedades = config.corte_url
+        ? {
+              'local-port': PUERTO_PROXY_CORTE,
+              action: 'redirect',
+              'action-data': config.corte_url,
+              disabled: 'no',
+          }
+        : { 'local-port': PUERTO_PROXY_CORTE, action: 'deny', disabled: 'no' }
     return {
-        reglas: [
-            {
-                ruta: PROXY_ACCESS,
-                comment: REGLA_PROXY_SIN_CODIGO,
-                propiedades: {
-                    'local-port': PUERTO_PROXY_CORTE,
-                    action: 'redirect',
-                    'action-data': config.corte_url,
-                    disabled: 'no',
-                },
-                arriba: false,
-            },
-        ],
+        reglas: [{ ruta: PROXY_ACCESS, comment: REGLA_PROXY_SIN_CODIGO, propiedades, arriba: false }],
         conservar: [],
     }
 }
@@ -703,8 +704,8 @@ export function estadoCorteRouter(
     const proxy = codigo ? reglasProxy(config) : { reglas: [], conservar: [] }
     if (codigo && !config.corte_url) {
         avisos.push(
-            'modo código sin URL del portal (PORTAL_URL_PUBLICA o la IPv4 del portal): no se escribe la regla ' +
-                'final del proxy de corte',
+            'modo código sin URL del portal (PORTAL_URL_PUBLICA o la IPv4 del portal): la regla final del proxy de ' +
+                'corte niega (deny) en vez de redirigir a /corte; el suspendido ve un error del proxy y nunca sale a internet',
         )
     }
     if (codigo) {

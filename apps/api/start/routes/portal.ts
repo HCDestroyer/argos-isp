@@ -68,7 +68,12 @@ import {
     limitarPorCodigo,
     limitarPorIp,
 } from '#portal/limite_peticiones'
-import { estadoCodigoCorte, normalizarCodigoCorte, servicioDelCodigoCorte } from '#portal/codigos_corte'
+import {
+    estadoCodigoCorte,
+    graciaCodigoCorteMin,
+    normalizarCodigoCorte,
+    servicioDelCodigoCorte,
+} from '#portal/codigos_corte'
 import { clasificarIp, type OrigenPortal } from '#portal/identificacion'
 import {
     borrarCookieSesion,
@@ -1902,6 +1907,9 @@ const portalCorte: Ruta[] = [
                 activo: estado.activo,
                 creado_en: estado.creado_en ? estado.creado_en.toISOString() : null,
                 cerrado_en: estado.cerrado_en ? estado.cerrado_en.toISOString() : null,
+                resuelve_hasta: estado.cerrado_en
+                    ? new Date(estado.cerrado_en.getTime() + graciaCodigoCorteMin() * 60_000).toISOString()
+                    : null,
             }
         },
     }),

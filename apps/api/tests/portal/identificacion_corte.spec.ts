@@ -49,6 +49,7 @@ test.group('Portal: identificación por código o IP (corte)', (group) => {
                 'PORTAL_REDIS_PREFIJO',
                 'PORTAL_LIMITE_PETICIONES',
                 'PORTAL_LIMITE_CODIGOS_FALLIDOS',
+                'PORTAL_CODIGO_CORTE_GRACIA_MIN',
             ]) {
                 if (previo[k] === undefined) delete process.env[k]
                 else process.env[k] = previo[k]
@@ -262,8 +263,37 @@ test.group('Portal: identificación por código o IP (corte)', (group) => {
             corte_identificacion: 'ip',
             activo: true,
             cerrado_en: null,
+            resuelve_hasta: null,
         })
         assert.notInclude(JSON.stringify(r.body()), codigo)
+
+        // Cerrado: resuelve hasta el cierre + la gracia configurada (no 30 min fijos)
+        process.env.PORTAL_CODIGO_CORTE_GRACIA_MIN = '45'
+        const cerrado = await crearServicio({ estado: 'activo' })
+        await conCodigo(cerrado.servicioId, { cerrado_hace_min: 10 })
+        const c = await estado(
+            client.get(`/api/v1/servicios/${cerrado.servicioId}/codigo-corte`).bearerToken(token),
+            200,
+        )
+        assert.isFalse(c.body().activo)
+        assert.isString(c.body().cerrado_en)
+        assert.equal(
+            new Date(c.body().resuelve_hasta).getTime() - new Date(c.body().cerrado_en).getTime(),
+            45 * 60_000,
+        )
+
+        // Sin código nunca: todo null
+        const nunca = await crearServicio()
+        const n = await estado(
+            client.get(`/api/v1/servicios/${nunca.servicioId}/codigo-corte`).bearerToken(token),
+            200,
+        )
+        assert.containsSubset(n.body(), {
+            activo: false,
+            creado_en: null,
+            cerrado_en: null,
+            resuelve_hasta: null,
+        })
     })
 
     test('funciones: normalizar el código y clasificar IPs', async ({ assert }) => {
