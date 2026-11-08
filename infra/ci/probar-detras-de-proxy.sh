@@ -227,6 +227,12 @@ r="$(cliente npm http "$CADDY_NPM" 80 www.example.com /corte no 'X-Forwarded-For
 # El sitio del corte nunca lee X-Forwarded-For, ni de un proxy de la lista: ahí solo llega el dst-nat de
 # los suspendidos y un docker-proxy en medio permitiría falsificar la IP (contratos/corte-identificacion.md).
 comprobar '/corte por HTTP: XFF ignorado aunque venga de un proxy de la lista' "$r" xff "$IP_NPM"
+r="$(cliente npm http "$CADDY_NPM" 80 www.example.com /corte no 'X-Real-IP: 198.51.100.7')"
+comprobar '/corte por HTTP: X-Real-IP ignorado aunque venga de un proxy de la lista' "$r" xff "$IP_NPM"
+# Puerto dedicado del corte (PORTAL_CORTE_PUERTO, 8088 por defecto): el destino del dst-nat en modo ip
+r="$(cliente npm http "$CADDY_NPM" 8088 portal.localhost /corte no 'X-Forwarded-For: 198.51.100.7')"
+comprobar '/corte por el puerto dedicado llega al portal' "$r" servicio portal
+comprobar '/corte por el puerto dedicado: XFF ignorado aunque venga de un proxy de la lista' "$r" xff "$IP_NPM"
 
 # ---------------------------------------------------------------------------
 echo "== sin ARGOSISP_PROXIES_CONFIABLES (comportamiento de siempre)"
