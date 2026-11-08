@@ -12491,6 +12491,11 @@ export interface components {
              * @description Cuándo se cerró (el servicio dejó de estar suspendido); null si sigue abierto o nunca hubo
              */
             cerrado_en: string | null;
+            /**
+             * Format: date-time
+             * @description Hasta cuándo el código cerrado sigue sirviendo en /corte («ya tienes servicio»): cierre + PORTAL_CODIGO_CORTE_GRACIA_MIN. null si sigue abierto (resuelve mientras esté suspendido) o si nunca hubo
+             */
+            resuelve_hasta: string | null;
         };
         ColumnaReporte: {
             clave: string;

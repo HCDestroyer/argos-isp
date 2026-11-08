@@ -87229,7 +87229,8 @@
           "corte_identificacion",
           "activo",
           "creado_en",
-          "cerrado_en"
+          "cerrado_en",
+          "resuelve_hasta"
         ],
         "properties": {
           "servicio_id": {
@@ -87263,6 +87264,14 @@
             ],
             "format": "date-time",
             "description": "Cuándo se cerró (el servicio dejó de estar suspendido); null si sigue abierto o nunca hubo"
+          },
+          "resuelve_hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hasta cuándo el código cerrado sigue sirviendo en /corte («ya tienes servicio»): cierre + PORTAL_CODIGO_CORTE_GRACIA_MIN. null si sigue abierto (resuelve mientras esté suspendido) o si nunca hubo"
           }
         }
       },

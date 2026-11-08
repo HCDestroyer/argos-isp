@@ -460,7 +460,7 @@ Leyenda de mecanismos:
     - un código inexistente o vencido cuenta en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP (10 por ventana).
 - **Auditoría**: `audit.acciones` guarda `codigo: "***"`.
 - **`GET /portal/eco-ip`** (público, sin datos de clientes): `{ ip, infraestructura }`, para el diagnóstico.
-- **`GET /servicios/:id/codigo-corte`** (`servicios.ver`, con alcance): `{ servicio_id, corte_identificacion, activo, creado_en, cerrado_en }`. Nunca el código.
+- **`GET /servicios/:id/codigo-corte`** (`servicios.ver`, con alcance): `{ servicio_id, corte_identificacion, activo, creado_en, cerrado_en, resuelve_hasta }` (`resuelve_hasta`: cierre + `PORTAL_CODIGO_CORTE_GRACIA_MIN`; null si sigue abierto o si nunca hubo). Nunca el código.
 
 ### Portal (Nuxt)
 
