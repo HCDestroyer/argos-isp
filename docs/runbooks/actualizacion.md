@@ -43,6 +43,37 @@ Cada corrida deja su registro en `/opt/argosisp/registros/actualizar-<fecha>.log
 - Desde la primera vez que se guarda, esas variables ya no se leen para el corte: cambiarlas en el `.env` no hace nada. Se cambia en el panel; ArgosIsp reconcilia todos los routers y `coa` lee el modo de la API (`GET /api/v1/internal/corte/configuracion`).
 - `PORTAL_CORTE_PUERTO` sigue siendo, además, el puerto en que escucha Caddy para `/corte` (8088 por defecto): eso es del servidor y se cambia en el `.env` con `sudo argosisp levantar`. Si lo cambias, pon el mismo puerto en el panel.
 
+## Identificación del cortado (desde la 1.13.0)
+
+Contrato: `.claude/integration/contratos/corte-identificacion.md`. Cada router elige cómo sabe la página de corte qué cliente es:
+
+- **Por IP** (`ip`, lo de siempre y el valor de los routers existentes): el router hace dst-nat del HTTP del suspendido al portal y el portal lo identifica por la IP de origen. Solo sirve si el portal ve la IP real del cliente (sin NAT ni proxy en medio).
+- **Por código** (`codigo`, necesita la API del router): el HTTP del suspendido va al web proxy del propio router (puerto 3346, sin caché, cerrado desde la WAN) y `/ip proxy access` le responde **307** a `/corte?c=<código>`. El portal lo identifica por el código aunque haya NAT o proxies en medio.
+
+### Después de actualizar
+
+1. Agrega al `.env` `PORTAL_IPS_SERVIDOR=<IP pública>,<IP LAN>[,<IP del proxy de delante>]` (separadas por coma; una instalación nueva ya la trae) y `sudo argosisp levantar`. `sudo argosisp estado` avisa si falta, si el proxy de `ARGOSISP_PROXIES_CONFIABLES` no está en ella o si `PORTAL_PROXIES_CONFIABLES` quedó fijada sin la red de compose.
+2. No hace falta tocar `PORTAL_PROXIES_CONFIABLES`: sin valor sigue a la red de compose.
+3. Los routers siguen en `ip`. En cada router, **Probar conexión → Corte**: si `portal_ip_cliente` sale en rojo («el portal ve la IP X en vez de la del cliente»), ese router necesita el modo código.
+
+### Pasar un router a modo código
+
+1. Requisitos: el router conectado por API (la ficha muestra «API: conectada») y RouterOS 7. Sin API el panel responde «corte_codigo_sin_api»: primero conecta el router (`infra/mikrotik/README.md`, «Conectar un router»).
+2. Si el operador ya usa `/ip proxy` en ese router (caché, filtros), no pasa nada: Argos solo agrega el puerto 3346 y sus reglas, y no toca lo demás. Anota igual lo que tiene: `/ip proxy print` y `/ip proxy access print`.
+3. Panel → Routers → editar → **Identificación del cortado: Por código** → Guardar (por la API: `PUT /api/v1/routers/:id` con `corte_identificacion: "codigo"` y la `version` del router). Argos reconcilia ese router en el acto (`portal.config_cambiada` con `router_id`); «Reconciliar ahora» lo repite.
+4. Verifica en el router:
+   ```routeros
+   /ip proxy print                                        # enabled=yes, port incluye 3346, max-cache-size=none si era solo de Argos
+   /ip proxy access print                                 # primero argosisp:servicio:<id> de cada suspendido, luego "argosisp: corte proxy sin codigo"
+   /ip firewall nat print where comment~"proxy de corte"  # redirect to-ports=3346 (IPv4); igual en /ipv6 firewall nat
+   /ip firewall filter print where comment~"proxy de corte" # drop del 3346 con connection-nat-state=!dstnat y accept en argos-corte-in
+   ```
+5. **Probar conexión → Corte**: `proxy_corte` en verde. Desde un suspendido, `curl -sI http://example.com` responde `307` con `Location: …/corte?c=…`.
+6. Desde fuera (la WAN del router): el 3346 no responde (`nc -vz <IP WAN> 3346` agota el tiempo).
+7. Un router que se conecta de cero con «incluir configuración de servicio» ya sale con estas piezas si está en `codigo` (el script trae las mismas reglas que el reconciliador).
+
+Para volver a `ip`: editar el router → **Por IP**. Argos quita el 3346 del proxy (y lo apaga si era solo suyo), borra sus reglas y vuelve a poner el dst-nat al portal.
+
 ## Parches automáticos (opcional, apagado por defecto)
 
 ```sh
