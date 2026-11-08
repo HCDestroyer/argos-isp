@@ -22,6 +22,7 @@ import {
     REGLA_PROXY_SIN_CODIGO,
     PUERTO_PROXY_CORTE,
     ajusteProxy,
+    ordenAccesoProxy,
     revisarDnsRouter,
     urlCorteConCodigo,
     urlNat,
@@ -1081,6 +1082,7 @@ async function chequeoProxyCorte(
     cliente: ClienteRouterOS,
     lectura: LecturaCorte,
     conCodigo: number[],
+    corteUrl: string | null,
 ): Promise<ChequeoCorte> {
     let proxy: Record<string, string> | null = null
     try {
@@ -1092,9 +1094,22 @@ async function chequeoProxyCorte(
     if (!proxy || ajusteProxy(proxy, true) !== null) {
         problemas.push(`el web proxy del router no está activo en el puerto ${PUERTO_PROXY_CORTE}`)
     }
-    const acceso = lectura.get('/ip/proxy/access') ?? []
-    if (!acceso.some((o) => o.comment === REGLA_PROXY_SIN_CODIGO && o.disabled !== 'true')) {
-        problemas.push('falta la regla final del proxy (sin código)')
+    const acceso = (lectura.get('/ip/proxy/access') ?? []).filter((o) => o.dynamic !== 'true')
+    const final = acceso.find((o) => o.comment === REGLA_PROXY_SIN_CODIGO && o.disabled !== 'true')
+    if (!final) {
+        // Sin regla final, el proxy reenvía a internet lo que no tiene regla (sale por `output`, sin corte).
+        problemas.push(
+            'falta la regla final del proxy de corte: un suspendido sin su regla navegaría por HTTP a través del proxy',
+        )
+    } else if (final.action !== (corteUrl ? 'redirect' : 'deny')) {
+        problemas.push(`la regla final del proxy de corte tiene action=${final.action ?? '?'}`)
+    }
+    // Las reglas del operador (sin `local-port`) no deben ganarle a las del corte en el puerto 3346.
+    const actual = acceso.map((o) => o['.id'])
+    if (ordenAccesoProxy(acceso).some((id, i) => actual[i] !== id)) {
+        problemas.push(
+            'hay reglas de /ip proxy access antes de las del corte (podrían dejar pasar el puerto 3346)',
+        )
     }
     const conRegla = new Set(acceso.map((o) => servicioDeComment(o.comment)).filter((x) => x !== null))
     const sinRegla = conCodigo.filter((id) => !conRegla.has(id))
@@ -1214,7 +1229,9 @@ export async function diagnosticoCorte(
                 ),
             )
             if (modoCodigo) {
-                salida.chequeos.push(await chequeoProxyCorte(cliente, lectura, suspendidosConCodigo(todos)))
+                salida.chequeos.push(
+                    await chequeoProxyCorte(cliente, lectura, suspendidosConCodigo(todos), config.corte_url),
+                )
             }
         } finally {
             cliente.cerrar()
