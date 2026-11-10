@@ -90,7 +90,7 @@ y el admin aprueba en Argos.
   `GET /integraciones/iris/estado` responden `version_argos` (la versión instalada,
   `ARGOSISP_VERSION` de la imagen vía `versionInstalada()` de `#monitoreo/version`, la misma de
   `GET /version`; `desarrollo` fuera de una imagen publicada) y `contrato` (`CONTRATO_IRIS`, hoy
-  `"0.6.4"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
+  `"0.7.0"`: la versión del contrato que habla este Argos). Una repetición del canje sale con los
   valores actuales.
 - **Contrato del conector.** El canje acepta `contrato` opcional (semver, `FORMATO_SEMVER`; 422 si no
   lo es) y lo guarda en `integraciones.iris_conector.contrato` (diff en `audit.cambios`). Sin él queda
@@ -217,6 +217,35 @@ el nuevo. Reglas:
   Ver `app/core/README.md`.
 - **`GET /clientes?telefono=`** (A20): filtro exacto con `coincide_en[]`; con el `atk_` de Iris exige
   las cabeceras. Ver `app/core/README.md`.
+
+## Aprobar y rechazar desde la conversación (contrato 0.7.0 §7.7, A23)
+
+`CONTRATO_IRIS = '0.7.0'`. Una persona que atiende la conversación en Iris aprueba o rechaza una
+boleta de Iris como su usuario de Argos vinculado, por las rutas de caja:
+`POST /comprobantes/:id/aprobar` (`{ facturas?, nota? }`) y `POST /comprobantes/:id/rechazar`
+(`{ motivo, causa? }`). Las dos declaran `actuarComoVinculado` (el mismo permiso), `cabecerasIris` e
+`antes: exigirIdempotenciaIris` en `start/routes/billing.ts`.
+
+- **Quién decide** (A1, `#core/actuacion_vinculada`): el usuario de Argos vinculado a
+  `X-Iris-Actor: usuario:<id>` (vínculo creado solo por el autologin Iris → Argos), activo, con el
+  permiso y con la empresa del comprobante entre las suyas ∩ las del token. 403 `actor_ia_no_permitido`,
+  `actor_sin_vinculo`, `actor_inactivo`, `actor_sin_permiso`, `actor_sin_empresa`; 409 `iris_apagado`.
+- **Cabeceras e idempotencia:** con el token de Iris, `X-Iris-Actor`, `X-Iris-Conversacion` (400
+  `cabecera_iris_requerida`) e `Idempotency-Key` (400 `idempotency_key_requerida`; Iris usa
+  `iris:aprobar:<id>` / `iris:rechazar:<id>`). La huella incluye `X-Iris-Actor`: la misma clave con otro
+  actor es 422 `idempotency_key_reutilizada`, nunca un replay. Desde el panel la clave sigue opcional.
+- **Solo comprobantes de Iris** (billing, `exigirComprobanteParaIris` en `app/billing/iris.ts`, desde
+  `bloquearComprobante`): con la fila bloqueada (`FOR UPDATE`) y antes de mirar su estado, 403
+  `actor_sin_empresa` si la empresa no es del vinculado y 409 `comprobante_no_es_de_iris` si
+  `canal ≠ iris`; después, el 409 `comprobante_revisado` de siempre. Por eso, de dos operadores sobre el
+  mismo comprobante, uno gana y el otro recibe `comprobante_revisado`.
+- **Qué queda:** auditoría con el vinculado como actor (canal `api`), `via_token_id` = token Iris,
+  `iris_actor` e `iris_conversacion` (también en las acciones anidadas); `verificado_por` del
+  comprobante y `registrado_por` del pago = el vinculado. Pago, asiento, reactivación,
+  `CumplirPromesa` y la reconexión temporal (cumplida o cancelada) van en la misma transacción.
+- **Webhooks:** `comprobante.aprobado` / `comprobante.rechazado` sin cambios de forma.
+- Pruebas: `tests/billing/iris_aprobar_070.spec.ts` (billing) y `tests/core/iris_actuacion_070.spec.ts`
+  (mecanismo de A1).
 
 ## Eventos
 
