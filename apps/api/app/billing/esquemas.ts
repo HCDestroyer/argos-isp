@@ -60,7 +60,7 @@ export const ReglasPromesa = definirEsquema(
             mismas_reglas_ia_operador: {
                 ...booleano,
                 description:
-                    'Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta (opcional en el schema hasta que los fixtures de A4 lo lleven)',
+                    'Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta',
             },
             canales: objeto({
                 portal: limitesCanal,
@@ -85,7 +85,7 @@ export const ReglasPromesa = definirEsquema(
                     'Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta',
             },
         },
-        ['reconexion_temporal', 'mismas_reglas_ia_operador'],
+        ['reconexion_temporal'],
     ),
 )
 

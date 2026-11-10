@@ -70,6 +70,8 @@ export const esquemaPlantilla = z.object({
         antiguedad_minima_dias: entero(0, 3650, 'Antigüedad mínima'),
         cumplimiento_minimo_pct: enteroNulable(0, 100, 'Cumplimiento mínimo'),
         bloqueo_tras_incumplida_dias: entero(0, 365, 'Bloqueo tras incumplir'),
+        /** «Mismas reglas para IA y operador» (A3): con true, `canales.ia` se conserva pero no se aplica. */
+        mismas_reglas_ia_operador: z.boolean(),
         canales: z.object({
             portal: esquemaCanal,
             ia: esquemaCanal,
@@ -153,6 +155,7 @@ export function entradaPlantillaVacia(): EntradaPlantilla {
             antiguedad_minima_dias: 0,
             cumplimiento_minimo_pct: null,
             bloqueo_tras_incumplida_dias: 30,
+            mismas_reglas_ia_operador: false,
             canales: {
                 portal: { ...sinLimites(), plazo_max_dias: 3 },
                 ia: { ...sinLimites(), plazo_max_dias: 3 },
@@ -189,6 +192,7 @@ export function entradaDesdePlantilla(plantilla: Plantilla): EntradaPlantilla {
         reglas_promesa: {
             ...reglas,
             deuda_maxima: reglas.deuda_maxima ?? '',
+            mismas_reglas_ia_operador: reglas.mismas_reglas_ia_operador,
             canales: { portal: canal('portal'), ia: canal('ia'), operador: canal('operador'), supervisor: canal('supervisor') },
             // La API siempre la manda (normalizada); si faltara, los valores por defecto de la API.
             reconexion_temporal: { ...(reglas.reconexion_temporal ?? reconexionTemporalPorDefecto()) },
@@ -261,6 +265,19 @@ export function resumenMora(plantilla: Pick<Plantilla, 'mora_tipo' | 'mora_valor
     }
     const valor = plantilla.mora_tipo === 'fija' ? formatearQuetzales(plantilla.mora_valor) : `${plantilla.mora_valor} %`
     return plantilla.mora_recurrente ? `${valor} por periodo vencido` : `${valor} una vez`
+}
+
+/**
+ * Canal cuyos límites usa `canal` de verdad: con `mismas_reglas_ia_operador`, `ia` evalúa con los
+ * de `operador` (`limitesDeCanal` de A3, `apps/api/app/billing/reglas_promesa.ts`).
+ */
+export function canalDeLimites(reglas: Pick<ReglasPromesa, 'mismas_reglas_ia_operador'>, canal: CanalReglasPromesa): CanalReglasPromesa {
+    return canal === 'ia' && reglas.mismas_reglas_ia_operador ? 'operador' : canal
+}
+
+/** Límites efectivos del canal (los de `operador` para `ia` con la opción encendida). */
+export function limitesEfectivosCanal(reglas: ReglasPromesa, canal: CanalReglasPromesa): ReglasPromesa['canales'][CanalReglasPromesa] {
+    return reglas.canales[canalDeLimites(reglas, canal)]
 }
 
 /** `Reconexión temporal: hasta 1 por periodo · 24 h`, o `apagada`. */

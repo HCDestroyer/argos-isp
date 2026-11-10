@@ -110059,6 +110059,7 @@
           "antiguedad_minima_dias",
           "cumplimiento_minimo_pct",
           "bloqueo_tras_incumplida_dias",
+          "mismas_reglas_ia_operador",
           "canales"
         ],
         "properties": {
@@ -110114,7 +110115,7 @@
           },
           "mismas_reglas_ia_operador": {
             "type": "boolean",
-            "description": "Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta (opcional en el schema hasta que los fixtures de A4 lo lleven)"
+            "description": "Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta"
           },
           "canales": {
             "type": "object",

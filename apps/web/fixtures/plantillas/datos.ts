@@ -34,6 +34,8 @@ const reglasPromesa: Schema<'PlantillaFacturacion'>['reglas_promesa'] = {
     antiguedad_minima_dias: 0,
     cumplimiento_minimo_pct: null,
     bloqueo_tras_incumplida_dias: 30,
+    // «Mismas reglas para IA y operador»: apagada por defecto (A3).
+    mismas_reglas_ia_operador: false,
     canales: {
         portal: { ...sinLimitesCanal, plazo_max_dias: 3 },
         ia: { ...sinLimitesCanal, plazo_max_dias: 3 },
