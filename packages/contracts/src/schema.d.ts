@@ -3876,7 +3876,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir un ticket de autologin para un usuario de Iris (servidor a servidor)
-         * @description Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).
+         * @description Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos; **opcional** (contrato 0.7.0, «Vincular mi usuario de Argos»): sin destino el canje lleva al inicio del panel, también después de `POST /auth/sso/vincular`. `usuario.id_externo` es el id de `X-Iris-Actor: usuario:<id>` (1 a 64 caracteres A-Z a-z 0-9 _ -; si no, 422). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).
          */
         post: operations["irisSsoTicket"];
         delete?: never;
@@ -10722,6 +10722,8 @@ export interface components {
             iris_actor?: string | null;
             /** @description `X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás */
             iris_conversacion?: string | null;
+            /** @description Actuación vinculada (contrato Iris 0.7.0): token del usuario técnico Iris por el que llegó una acción que corrió como el usuario de Argos vinculado al operador de Iris (`actor_id`); null en lo demás */
+            via_token_id?: number | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -36516,18 +36518,19 @@ export interface operations {
             content: {
                 "application/json": {
                     usuario: {
-                        /** @description Id del usuario en Horus; con el conector forma la vinculación */
+                        /** @description Id del usuario en Iris (1 a 64 caracteres A-Z a-z 0-9 _ -), el mismo de `X-Iris-Actor: usuario:<id>`; con el conector forma la vinculación */
                         id_externo: string;
                         /** @description Solo informativo: nunca se vincula por correo */
                         correo?: string | null;
                         nombre?: string | null;
                     };
-                    destino: {
+                    /** @description Opcional: sin destino el canje lleva al inicio del panel */
+                    destino?: {
                         /** @enum {string} */
                         tipo: "cliente" | "servicio";
                         /** @description Id del cliente o del servicio en ArgosIsp */
                         id_externo: string;
-                    };
+                    } | null;
                 };
             };
         };

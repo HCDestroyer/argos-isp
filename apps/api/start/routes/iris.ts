@@ -283,11 +283,14 @@ const iris: Ruta[] = [
         descripcion:
             'Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier ' +
             'otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 ' +
-            '`iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos. ' +
+            '`iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos; ' +
+            '**opcional** (contrato 0.7.0, «Vincular mi usuario de Argos»): sin destino el canje lleva al ' +
+            'inicio del panel, también después de `POST /auth/sso/vincular`. `usuario.id_externo` es el id ' +
+            'de `X-Iris-Actor: usuario:<id>` (1 a 64 caracteres A-Z a-z 0-9 _ -; si no, 422). ' +
             'Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).',
         etiqueta: 'integraciones',
         permiso: 'sso.emitir',
-        cuerpo: v.emitirTicketSsoValidator,
+        cuerpo: v.emitirTicketSsoIrisValidator,
         respuesta: { status: 201, descripcion: 'Ticket emitido', esquema: TicketSsoEmitido },
         handler: (ctx, { cuerpo }) => {
             const tokenId =

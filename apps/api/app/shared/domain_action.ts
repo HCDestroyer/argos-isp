@@ -1,7 +1,7 @@
 import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import type { Actor, ContextoAccion } from '#shared/contexto'
+import type { Actor, ContextoAccion, ViaActuacion } from '#shared/contexto'
 import { MASCARA, enmascarar, esCampoSensible } from '#shared/enmascarar'
 import { nombreCampo } from '#shared/nombres_campo'
 import { insertarEvento } from '#shared/outbox'
@@ -32,6 +32,9 @@ import type { NombreEvento, PayloadEvento } from '#shared/eventos'
  * - Si falla, la transacción se revierte y la auditoría del error se escribe en una transacción
  *   aparte; el error se relanza.
  * - `nombre` es el mismo nombre del permiso del ACL (`servicios.suspender`).
+ * - Actuación vinculada (`ctx.via`, Iris 0.7.0 A23): el actor es el usuario de Argos vinculado al
+ *   operador de Iris y `audit.acciones.via_token_id` guarda el token Iris. Solo la acción de nivel
+ *   superior llamada como `ctx.via.permiso` puede correr con ella; otra lanza un error.
  * - `t.alConfirmar(fn)` registra trabajo que solo debe correr si el COMMIT se confirmó (invalidar
  *   cachés de Redis, despertar workers). En acciones anidadas se acumula en la transacción externa
  *   y se descarta si el savepoint o la transacción externa se revierten.
@@ -63,6 +66,13 @@ export abstract class DomainAction<Entrada, Salida> {
         ctx: ContextoAccion,
         opciones: { trx?: TransactionClientContract } = {},
     ): Promise<Salida> {
+        // Iris 0.7.0 (A23): la actuación vinculada solo vale para la acción que la ruta declaró;
+        // las anidadas (`{ trx }`) heredan el contexto de esa acción
+        if (ctx.via && !opciones.trx && ctx.via.permiso !== this.nombre) {
+            throw new Error(
+                `${this.nombre}: la actuación vinculada de esta petición solo sirve para ${ctx.via.permiso}`,
+            )
+        }
         const entrada = ocultarCampos(enmascarar(input), this.camposEntradaOcultos)
         let t: Transaccion | undefined
 
@@ -235,6 +245,14 @@ export class Transaccion {
         this.#ctx = { ...this.#ctx, actor }
     }
 
+    /**
+     * Vía de una actuación vinculada (Iris 0.7.0, A23): el token Iris por el que llegó la acción
+     * que corre como el usuario vinculado (`ctx.actor`). null en todo lo demás.
+     */
+    get via(): ViaActuacion | null {
+        return this.#ctx.via ?? null
+    }
+
     get entidadActual(): EntidadRef | undefined {
         return this.#entidad
     }
@@ -383,6 +401,7 @@ async function registrarAccion(
             request_id: ctx.requestId,
             iris_actor: ctx.iris?.actor ?? null,
             iris_conversacion: ctx.iris?.conversacion ?? null,
+            via_token_id: ctx.via?.tokenApiId ?? null,
         })
 }
 

@@ -60,7 +60,17 @@ export const PERMISOS_IRIS_CONTRATO = [
     'promesas.ver',
     'promesas.crear',
     'clientes.verificar_identidad',
+    // actuación vinculada (contrato 0.7.0, A23): solo como el usuario de Argos vinculado al
+    // operador de Iris (`X-Iris-Actor: usuario:<id>`), que también necesita el permiso
+    'comprobantes.aprobar',
+    'comprobantes.rechazar',
 ] as const
+
+/** Permisos que el contrato 0.7.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_070 = [
+    'comprobantes.aprobar',
+    'comprobantes.rechazar',
+] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
 
 /** Permisos que el contrato 0.6.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_060 = [
@@ -81,7 +91,7 @@ export const USUARIO_TECNICO_IRIS: DefinicionUsuarioTecnico = {
     email: EMAIL_USUARIO_IRIS,
     rol: ROL_IRIS,
     descripcionRol:
-        'Integración Iris: leer clientes, servicios y red; activar instalaciones, retiros, comodatos, consumos y cargos únicos; comprobantes, promesas y verificación de identidad',
+        'Integración Iris: leer clientes, servicios y red; activar instalaciones, retiros, comodatos, consumos y cargos únicos; comprobantes (aprobar y rechazar solo como el usuario vinculado), promesas y verificación de identidad',
     permisos: PERMISOS_IRIS,
 }
 

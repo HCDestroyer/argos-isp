@@ -6,6 +6,7 @@ import db from '@adonisjs/lucid/services/db'
 import { Conflicto, Problema } from '#shared/errores'
 import { COOKIE_PORTAL } from '#shared/rutas'
 import { ipOrigenDelCliente } from '#portal/ip_origen'
+import { CABECERA_IRIS_ACTOR, esTokenIris } from '#integraciones/iris/atencion'
 
 interface RespuestaGuardada {
     status: number
@@ -34,13 +35,18 @@ const CLAVE_VALIDA = /^[\x21-\x7E]{1,255}$/
  *   multipart, el cuerpo incluye los archivos: campo, nombre, tamaño y sha256 del contenido
  *   (`huellaArchivos`), así que otro archivo con la misma clave también es 422.
  *
+ * Rutas de atención de Iris (`cabecerasIris` o `actuarComoVinculado`, Iris 0.7.0 A23): la huella
+ * incluye `X-Iris-Actor` (`huellaActorIris`). El replay corre antes de validar las cabeceras, así
+ * que la misma clave con otro actor de Iris (otro operador, o el asistente de IA) es 422 y nunca
+ * recibe la respuesta guardada del primero.
+ *
  * Espacio de claves (semana 3): con usuario autenticado, por `actor_id`. Sin usuario (rutas
  * públicas del portal) se acota por `alcance` (`alcanceAnonimo`): la sesión del portal si trae la
  * cookie, si no la IP de origen; así dos clientes con la misma clave nunca reciben la respuesta
  * guardada del otro.
  */
 export default class IdempotenciaMiddleware {
-    async handle(ctx: HttpContext, next: NextFn) {
+    async handle(ctx: HttpContext, next: NextFn, opciones: { actorIris?: boolean } = {}) {
         const clave = ctx.request.header('idempotency-key')
         if (clave === undefined) return next()
         if (!CLAVE_VALIDA.test(clave)) {
@@ -59,6 +65,7 @@ export default class IdempotenciaMiddleware {
         const huella = createHash('sha256')
             .update(`${metodo} ${ruta}\n${JSON.stringify(ctx.request.body() ?? {})}`)
             .update(await huellaArchivos(ctx))
+            .update(opciones.actorIris ? huellaActorIris(ctx) : '')
             .digest('hex')
 
         const insertadas = (await db
@@ -127,6 +134,17 @@ export default class IdempotenciaMiddleware {
             await db.from('core.idempotency_keys').where('id', reserva.id).delete()
         }
     }
+}
+
+/**
+ * `X-Iris-Actor` en la huella (solo con el token del usuario técnico Iris). Sin la cabecera no
+ * agrega nada, así que la huella de las demás peticiones no cambia.
+ */
+export function huellaActorIris(ctx: HttpContext): string {
+    if (!esTokenIris(ctx)) return ''
+    const actor = ctx.request.header(CABECERA_IRIS_ACTOR)
+    if (actor === undefined) return ''
+    return `\niris-actor\n${actor.trim()}`
 }
 
 const hash = (texto: string) => createHash('sha256').update(texto).digest('hex').slice(0, 40)

@@ -55,6 +55,24 @@ export interface ContextoAccion {
      * es `ia`; con `usuario:<id>`, `api`. Ausente fuera de esas rutas o con otro actor.
      */
     iris?: OrigenIris | null
+    /**
+     * Actuación vinculada (Iris 0.7.0, A23; `#core/actuacion_vinculada`): `actor` es el usuario de
+     * Argos vinculado al operador de Iris y esto es la vía por la que llegó (el token del usuario
+     * técnico Iris). Se guarda en `audit.acciones.via_token_id`. Solo lo pone el middleware
+     * `actuarComoVinculado` en las rutas que lo declaran; ausente en todo lo demás.
+     */
+    via?: ViaActuacion | null
+}
+
+/** Vía de una actuación vinculada: con qué token y para qué permiso (= acción de nivel superior). */
+export interface ViaActuacion {
+    conector: 'iris'
+    /** `core.tokens_api.id` del token Iris de la petición */
+    tokenApiId: number
+    /** `core.usuarios.id` del usuario técnico Iris (dueño del token) */
+    usuarioTecnicoId: number
+    /** única acción de nivel superior que puede correr con esta vía */
+    permiso: string
 }
 
 /** Actor de Iris de `X-Iris-Actor` y conversación de `X-Iris-Conversacion` (contrato Iris 0.6.0 §7.1). */

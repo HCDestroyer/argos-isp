@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import IniciarSesion, { type SalidaIniciarSesion } from '#core/actions/iniciar_sesion'
 import { conectorVigente, type TicketSso } from '#core/actions/canjear_ticket_sso'
-import { VinculacionInvalida, hashSecretoSso, rutaDestino } from '#core/sso'
+import { VinculacionInvalida, hashSecretoSso, nombreConectorSso, rutaDestino } from '#core/sso'
 
 export interface EntradaVincularCuentaSso {
     /** el token de `vinculacion_requerida` del canje (se audita como `***`) */
@@ -48,7 +48,7 @@ export default class VincularCuentaSso extends DomainAction<
         if (ticket.vinculacion_usada_en) throw new VinculacionInvalida('El token de vinculación ya se usó')
         if (!ticket.vinculacion_expira_en || new Date(ticket.vinculacion_expira_en).getTime() <= Date.now()) {
             throw new VinculacionInvalida(
-                'El token de vinculación venció; vuelve a abrir el enlace desde Horus',
+                `El token de vinculación venció; vuelve a abrir el enlace desde ${nombreConectorSso(ticket.conector)}`,
             )
         }
         if (!(await conectorVigente(t, ticket))) {

@@ -75,6 +75,7 @@ export async function listarAcciones(
             'e_a.nombre_comercial as empresa_nombre',
             'a.iris_actor',
             'a.iris_conversacion',
+            'a.via_token_id',
             'a.created_at',
         )
         .if(filtros.actor_id, (q) => q.where('a.actor_id', filtros.actor_id!))
