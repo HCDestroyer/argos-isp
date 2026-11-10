@@ -91,7 +91,10 @@ function plural(n: number, uno: string, varios: string): string {
 export function simularPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence: Date): Simulacion {
     const plantilla = bd.plantillas.find(p => p.id === servicio.plantilla_facturacion_id)
     const reglas = plantilla?.reglas_promesa
-    const delCanal = reglas?.canales[canal]
+    // Como `limitesDeCanal` (A3): con `mismas_reglas_ia_operador`, `ia` usa los límites de `operador`.
+    const canalLimites: Canal = canal === 'ia' && reglas?.mismas_reglas_ia_operador ? 'operador' : canal
+    const espejo = canalLimites === canal ? '' : ` (mismas reglas que ${canalLimites})`
+    const delCanal = reglas?.canales[canalLimites]
     const hoy = fechaGuatemala(new Date().toISOString())
     const dia = fechaGuatemala(vence.toISOString())
     const pendientes = bd.facturas.filter(f => f.servicio_id === servicio.id && (f.estado === 'emitida' || f.estado === 'vencida' || f.estado === 'parcial'))
@@ -113,11 +116,11 @@ export function simularPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence
     const base = cobertura.monto.plus(abonado)
     const requerido = base.times(abonoPct).div(100).toDecimalPlaces(2)
     const conDeuda = cobertura.monto.gt(0)
-    const origen = (deCanal: unknown) => (deCanal !== null && deCanal !== undefined ? canal : 'general')
+    const origen = (deCanal: unknown) => (deCanal !== null && deCanal !== undefined ? canalLimites : 'general')
 
     const lista: ReglaSimulada[] = [
         { regla: 'habilitadas', ok: reglas?.habilitadas ?? false, aplica: true, valor: null, limite: true, origen: 'general', detalle: reglas?.habilitadas ? 'La plantilla admite promesas' : 'La plantilla no admite promesas' },
-        { regla: 'canal_permitido', ok: delCanal?.permitido ?? false, aplica: true, valor: canal, limite: true, origen: canal, detalle: delCanal?.permitido ? `El canal ${canal} puede crear promesas` : `El canal ${canal} no puede crear promesas` },
+        { regla: 'canal_permitido', ok: delCanal?.permitido ?? false, aplica: true, valor: canal, limite: true, origen: canalLimites, detalle: delCanal?.permitido ? `El canal ${canal}${espejo} puede crear promesas` : `El canal ${canal}${espejo} no puede crear promesas` },
         { regla: 'sin_deuda', ok: conDeuda, aplica: true, valor: cobertura.monto.toFixed(2), limite: null, origen: 'general', detalle: conDeuda ? `La promesa cubre ${q(cobertura.monto)} vencidos en ${plural(cobertura.facturas.length, 'factura', 'facturas')}` : 'El servicio no tiene facturas vencidas: no hace falta promesa' },
         { regla: 'plazo_max_dias', ok: dias <= plazoMax, aplica: true, valor: dias, limite: plazoMax, origen: origen(delCanal?.plazo_max_dias), detalle: `Vence en ${plural(dias, 'día', 'días')} (máximo ${plazoMax})` },
         { regla: 'no_exceder_siguiente_facturacion', ok: !reglas?.no_exceder_siguiente_facturacion || dia < siguiente, aplica: reglas?.no_exceder_siguiente_facturacion ?? false, valor: dia, limite: siguiente, origen: 'general', detalle: `Vence (${dia}) antes de la siguiente facturación (${siguiente})` },
@@ -131,13 +134,13 @@ export function simularPromesa(servicio: Schema<'Servicio'>, canal: Canal, vence
         { regla: 'max_por_periodo', ok: enPeriodo < maximo, aplica: true, valor: enPeriodo, limite: maximo, origen: origen(delCanal?.max_por_periodo), detalle: `Lleva ${plural(enPeriodo, 'promesa', 'promesas')} en el periodo (máximo ${maximo})` },
     ]
     if (delCanal?.requiere_aprobacion) {
-        lista.push({ regla: 'requiere_aprobacion', ok: true, aplica: true, valor: canal, limite: true, origen: canal, detalle: `Las promesas del canal ${canal} requieren aprobación de un supervisor` })
+        lista.push({ regla: 'requiere_aprobacion', ok: true, aplica: true, valor: canal, limite: true, origen: canalLimites, detalle: `Las promesas del canal ${canal}${espejo} requieren aprobación de un supervisor` })
     }
     const falla = lista.find(r => r.aplica && !r.ok)
     const pendienteAprobacion = !falla && delCanal?.requiere_aprobacion
     const resultado: Simulacion['resultado'] = falla ? 'rechazada' : pendienteAprobacion ? 'pendiente_aprobacion' : 'aprobada'
     const regla = falla?.regla ?? (pendienteAprobacion ? 'requiere_aprobacion' : null)
-    const motivo = falla?.detalle ?? (pendienteAprobacion ? `Las promesas del canal ${canal} requieren aprobación de un supervisor` : 'Cumple todas las reglas de promesa de la plantilla')
+    const motivo = falla?.detalle ?? (pendienteAprobacion ? `Las promesas del canal ${canal}${espejo} requieren aprobación de un supervisor` : 'Cumple todas las reglas de promesa de la plantilla')
     const abierta = bd.promesas.find(p => p.servicio_id === servicio.id && (p.estado === 'activa' || p.estado === 'pendiente_aprobacion'))
     // Desde el 29 oct no hay validaciones de `monto` (nadie lo escribe).
     const validaciones: Simulacion['validaciones'] = [

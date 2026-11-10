@@ -30,6 +30,7 @@ function reglasPorDefecto(): ReglasPromesa {
         antiguedad_minima_dias: 0,
         cumplimiento_minimo_pct: null,
         bloqueo_tras_incumplida_dias: 30,
+        mismas_reglas_ia_operador: false,
         canales: {
             portal: { ...sinLimites, plazo_max_dias: 3 },
             ia: { ...sinLimites, plazo_max_dias: 3 },
@@ -78,6 +79,9 @@ function erroresReglas(reglas: ReglasPromesa): Errores {
         if (!enRango(reglas[campo], min, max)) {
             errores.push({ field: `reglas_promesa.${campo}`, message: `El campo debe estar entre ${min} y ${max}`, rule: 'range' })
         }
+    }
+    if (typeof reglas.mismas_reglas_ia_operador !== 'boolean') {
+        errores.push({ field: 'reglas_promesa.mismas_reglas_ia_operador', message: 'El campo debe ser verdadero o falso', rule: 'boolean' })
     }
     if (reglas.deuda_maxima !== null && !MONTO.test(String(reglas.deuda_maxima))) {
         errores.push({ field: 'reglas_promesa.deuda_maxima', message: 'Monto inválido', rule: 'regex' })

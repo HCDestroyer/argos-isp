@@ -124,6 +124,11 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                             class="text-xs text-muted md:hidden"
                             data-prueba="resumen-reconexion"
                         >{{ resumenReconexionTemporal(row.original.reglas_promesa) }}</span>
+                        <span
+                            v-if="row.original.reglas_promesa.mismas_reglas_ia_operador"
+                            class="text-xs text-muted md:hidden"
+                            data-prueba="plantilla-mismas-reglas"
+                        >IA: mismas reglas que operador</span>
                     </div>
                 </template>
                 <template #corte-cell="{ row }">
@@ -144,12 +149,20 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                             class="flex flex-wrap gap-1"
                         >
                             <UBadge
-                                v-for="canal in CANALES_REGLAS.filter(c => row.original.reglas_promesa.canales[c].permitido && row.original.reglas_promesa.canales[c].requiere_aprobacion)"
+                                v-for="canal in CANALES_REGLAS.filter(c => limitesEfectivosCanal(row.original.reglas_promesa, c).permitido && limitesEfectivosCanal(row.original.reglas_promesa, c).requiere_aprobacion)"
                                 :key="canal"
                                 :label="`${CANALES_PROMESA[canal]}: con aprobación`"
                                 color="warning"
                                 variant="subtle"
                                 size="sm"
+                            />
+                            <UBadge
+                                v-if="row.original.reglas_promesa.mismas_reglas_ia_operador"
+                                label="IA: mismas reglas que operador"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                data-prueba="plantilla-mismas-reglas"
                             />
                         </div>
                     </div>
