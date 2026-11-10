@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/HCDestroyer/argos-isp/compare/v1.14.0...v1.15.0) (2026-11-10)
+
+
+### Funcionalidades
+
+* **iris:** aprobar y rechazar comprobantes desde Iris como usuario vinculado (A23, contrato 0.7.0) ([#237](https://github.com/HCDestroyer/argos-isp/issues/237)) ([ce3ec1e](https://github.com/HCDestroyer/argos-isp/commit/ce3ec1e398e7c28c719b9c2d66bd3b3117472d33))
+
 ## [1.14.0](https://github.com/HCDestroyer/argos-isp/compare/v1.13.0...v1.14.0) (2026-11-08)
 
 
