@@ -20,6 +20,11 @@ import { dinero } from '#shared/validadores'
  * - `bloqueo_tras_incumplida_dias`: días sin promesas después de una incumplida.
  * - `canales.<canal>`: límites por canal. `permitido: false` rechaza; `requiere_aprobacion: true`
  *   deja la promesa en `pendiente_aprobacion`; los valores no nulos **reemplazan** al general.
+ * - `mismas_reglas_ia_operador` («Mismas reglas para IA y operador», pedido A23 de Iris, decisión
+ *   del PM): si está activa, el canal `ia` usa exactamente los límites efectivos de `operador`
+ *   (`permitido`, `requiere_aprobacion`, `plazo_max_dias`, `max_por_periodo`, `deuda_maxima`) y
+ *   se ignora `canales.ia`. Apagada por defecto: las plantillas existentes no cambian. No toca la
+ *   reconexión temporal, que no usa límites por canal. Ver `limitesDeCanal`.
  * - `reconexion_temporal` (contrato Iris 0.6.0 §7.3, valores del PM del 5 nov 2026): promesa de
  *   tipo `reconexion_temporal` ligada a un comprobante pendiente. `permitida` (apagada por
  *   defecto), `max_por_periodo` (por periodo de facturación y servicio, aparte del cupo de las
@@ -58,6 +63,8 @@ export interface ReglasPromesa {
     antiguedad_minima_dias: number
     cumplimiento_minimo_pct: number | null
     bloqueo_tras_incumplida_dias: number
+    /** true: el canal `ia` usa los límites efectivos de `operador` (ver `limitesDeCanal`) */
+    mismas_reglas_ia_operador: boolean
     canales: Record<CanalPromesa, LimitesCanal>
     reconexion_temporal: ReglasReconexionTemporal
 }
@@ -83,6 +90,7 @@ export const REGLAS_PROMESA_POR_DEFECTO: ReglasPromesa = {
     antiguedad_minima_dias: 0,
     cumplimiento_minimo_pct: null,
     bloqueo_tras_incumplida_dias: 30,
+    mismas_reglas_ia_operador: false,
     canales: {
         portal: { ...SIN_LIMITES_CANAL, plazo_max_dias: 3 },
         ia: { ...SIN_LIMITES_CANAL, plazo_max_dias: 3 },
@@ -126,6 +134,7 @@ export const reglasPromesaSchema = () =>
         antiguedad_minima_dias: entero(0, 3650).optional(),
         cumplimiento_minimo_pct: entero(0, 100).nullable().optional(),
         bloqueo_tras_incumplida_dias: entero(0, 365).optional(),
+        mismas_reglas_ia_operador: vine.boolean().optional(),
         canales: vine
             .object({
                 portal: limitesCanal(),
@@ -163,6 +172,19 @@ export function normalizarReglasPromesa(
     const reconexionBase = base.reconexion_temporal ?? REGLAS_PROMESA_POR_DEFECTO.reconexion_temporal
     const reconexion = { ...reconexionBase, ...sinIndefinidos(reconexionEntrada ?? {}) }
     return { ...base, ...sinIndefinidos(generales), canales, reconexion_temporal: reconexion }
+}
+
+/**
+ * Límites que se aplican a un canal y de qué canal salen (`origen`). Con
+ * `mismas_reglas_ia_operador`, el canal `ia` toma los de `operador`; los valores null siguen
+ * cayendo al general igual que para `operador`, así los dos canales quedan idénticos.
+ */
+export function limitesDeCanal(
+    reglas: ReglasPromesa,
+    canal: CanalPromesa,
+): { limites: LimitesCanal; origen: CanalPromesa } {
+    const origen: CanalPromesa = canal === 'ia' && reglas.mismas_reglas_ia_operador ? 'operador' : canal
+    return { limites: reglas.canales[origen], origen }
 }
 
 function sinIndefinidos<T extends object>(objeto: T): Partial<T> {

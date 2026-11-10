@@ -2,9 +2,10 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { CredencialesInvalidas } from '#shared/errores'
 import Usuario from '#core/models/usuario'
 import { emitirSesion, type SalidaIniciarSesion } from '#core/actions/iniciar_sesion'
+import { conectorVigente as conectorTokenVigente, usuarioVinculado } from '#core/vinculo_externo'
 import {
-    CONECTORES_SSO,
     TicketInvalido,
+    type ConectorSso,
     VIGENCIA_VINCULACION_S,
     generarSecretoSso,
     hashSecretoSso,
@@ -39,8 +40,9 @@ export interface TicketSso {
     usuario_id_externo: string
     usuario_correo: string | null
     usuario_nombre: string | null
-    destino_tipo: TipoDestinoSso
-    destino_id_externo: string
+    /** null: ticket de Iris sin destino (lleva al inicio del panel) */
+    destino_tipo: TipoDestinoSso | null
+    destino_id_externo: string | null
     expira_en: Date
     usado_en: Date | null
     vinculacion_expira_en: Date | null
@@ -48,15 +50,8 @@ export interface TicketSso {
 }
 
 /** El conector del ticket sigue conectado: conocido y con su token de integración vigente. */
-export async function conectorVigente(t: Transaccion, ticket: TicketSso): Promise<boolean> {
-    if (!(CONECTORES_SSO as readonly string[]).includes(ticket.conector)) return false
-    const token = await t.trx
-        .from('core.tokens_api')
-        .where('id', ticket.token_api_id)
-        .whereNull('revocado_en')
-        .select('id')
-        .first()
-    return Boolean(token)
+export function conectorVigente(t: Transaccion, ticket: TicketSso): Promise<boolean> {
+    return conectorTokenVigente(ticket.conector, ticket.token_api_id, t.trx)
 }
 
 /**
@@ -90,15 +85,15 @@ export default class CanjearTicketSso extends DomainAction<EntradaCanjearTicketS
         }
 
         const ruta = rutaDestino(ticket.destino_tipo, ticket.destino_id_externo)
-        const vinculo = (await t.trx
-            .from('core.vinculaciones_externas')
-            .where({ conector: ticket.conector, id_externo: ticket.usuario_id_externo })
-            .whereNull('revocada_en')
-            .select('usuario_id')
-            .first()) as { usuario_id: number } | null
+        // el conector ya se validó en `conectorVigente`
+        const vinculo = await usuarioVinculado(
+            ticket.conector as ConectorSso,
+            ticket.usuario_id_externo,
+            t.trx,
+        )
 
         if (vinculo) {
-            const usuario = await Usuario.find(vinculo.usuario_id, { client: t.trx })
+            const usuario = await Usuario.find(vinculo.usuarioId, { client: t.trx })
             if (!usuario || !usuario.activo) throw new CredencialesInvalidas()
             await t.trx
                 .from('core.sso_tickets')

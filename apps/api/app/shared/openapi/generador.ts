@@ -226,7 +226,9 @@ function operacion(ruta: Ruta): EsquemaJson {
                 name: 'X-Iris-Actor',
                 in: 'header',
                 required: false,
-                description: `Obligatoria con el token del usuario técnico Iris${condicion}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
+                description: ruta.actuarComoVinculado
+                    ? `Obligatoria con el token del usuario técnico Iris: \`usuario:<id en Iris>\` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). \`asistente_ia\` responde 403 \`actor_ia_no_permitido\`. Con \`Idempotency-Key\`, la misma clave con otro actor es 422`
+                    : `Obligatoria con el token del usuario técnico Iris${condicion}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
                 schema: { type: 'string', pattern: '^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$' },
             },
             {
@@ -266,7 +268,11 @@ function operacion(ruta: Ruta): EsquemaJson {
     if (seguridad === 'sesion') {
         const csrf = ruta.metodo === 'get' ? null : 'CSRF inválido con la cookie del panel (`csrf_invalido`)'
         const permiso = ruta.permiso ? `Sin el permiso ${ruta.permiso}` : null
-        const motivos = [permiso, csrf].filter((m): m is string => m !== null)
+        const vinculado = ruta.actuarComoVinculado
+            ? 'Con el token de Iris (actuación vinculada, contrato 0.7.0): `actor_ia_no_permitido` con `asistente_ia`, ' +
+              '`actor_sin_vinculo`, `actor_inactivo`, `actor_sin_permiso` o `actor_sin_empresa`'
+            : null
+        const motivos = [permiso, csrf, vinculado].filter((m): m is string => m !== null)
         if (motivos.length > 0) respuestas['403'] = problema(motivos.join('; o '))
     }
     const faltas400 = [
@@ -281,7 +287,14 @@ function operacion(ruta: Ruta): EsquemaJson {
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')
     if (ruta.versionada || ruta.idempotente) {
         respuestas['409'] = problema(
-            ruta.versionada ? 'Conflicto de versión' : 'Petición idempotente en curso',
+            [
+                ruta.versionada ? 'Conflicto de versión' : 'Petición idempotente en curso',
+                ruta.actuarComoVinculado
+                    ? 'Con el token de Iris: conector Iris apagado (`iris_apagado`)'
+                    : null,
+            ]
+                .filter((m): m is string => m !== null)
+                .join('; o '),
         )
     }
     if (ruta.cuerpo || ruta.query || ruta.idempotente) respuestas['422'] = problema('Datos inválidos')

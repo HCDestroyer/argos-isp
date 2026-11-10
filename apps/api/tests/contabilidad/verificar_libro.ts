@@ -4603,6 +4603,55 @@ async function verificarLibroCon(
               GROUP BY p.id
              HAVING count(pf.factura_id) = 0 OR p.monto <> coalesce(sum(pf.monto), 0)`,
         )
+        await revisar(
+            '26.comprobante_aprobado_por_otro_que_su_pago (quien verifica el comprobante registra su pago: verificado_por = registrado_por, también desde Iris con el usuario vinculado)',
+            `SELECT k.id AS comprobante_id, k.verificado_por, p.id AS pago_id, p.registrado_por
+               FROM billing.comprobantes k JOIN billing.pagos p ON p.id = k.pago_id
+              WHERE k.estado = 'aprobado' AND ${E('k.empresa_id')} AND ${C('k.cliente_id')}
+                AND k.verificado_por IS DISTINCT FROM p.registrado_por`,
+        )
+    }
+
+    /*
+    | 26.via · Actuación vinculada (contrato Iris 0.7.0 §7.7, A23). Un operador de Iris aprueba o
+    | rechaza **como su usuario de Argos vinculado**: `audit.acciones.via_token_id` guarda el token
+    | Iris. Solo `comprobantes.aprobar|rechazar` corren con vía, solo sobre comprobantes de
+    | `canal = iris`, con un usuario como actor; las anidadas (pago, evaluación, promesa) llevan la
+    | misma vía y el mismo actor que su acción raíz en el mismo request, y el pago queda a nombre de
+    | ese usuario.
+    */
+    const [conVia] = await filas(
+        `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema = 'audit' AND table_name = 'acciones' AND column_name = 'via_token_id') AS existe`,
+    )
+    if (conVia?.existe) {
+        await revisar(
+            '26.via_revision_fuera_de_iris (con vía solo se resuelven comprobantes de canal iris, y el actor es un usuario)',
+            `SELECT a.id AS accion_id, a.accion, a.entidad_id AS comprobante_id, k.canal, a.actor_tipo, a.actor_id
+               FROM audit.acciones a JOIN billing.comprobantes k ON k.id = a.entidad_id
+              WHERE a.via_token_id IS NOT NULL AND a.entidad_tipo = 'comprobante' AND a.resultado = 'ok'
+                AND a.accion IN ('comprobantes.aprobar', 'comprobantes.rechazar')
+                AND ${E('k.empresa_id')} AND ${C('k.cliente_id')}
+                AND (k.canal <> 'iris' OR a.actor_tipo <> 'usuario' OR a.actor_id IS NULL)`,
+        )
+        await revisar(
+            '26.via_sin_su_accion_raiz (toda fila con vía comparte request, vía y actor con un comprobantes.aprobar|rechazar)',
+            `SELECT a.id AS accion_id, a.accion, a.request_id, a.actor_id, a.via_token_id
+               FROM audit.acciones a
+              WHERE a.via_token_id IS NOT NULL AND a.resultado = 'ok' AND ${E('a.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM audit.acciones r
+                                 WHERE r.request_id = a.request_id AND r.via_token_id = a.via_token_id
+                                   AND r.actor_id IS NOT DISTINCT FROM a.actor_id
+                                   AND r.accion IN ('comprobantes.aprobar', 'comprobantes.rechazar'))`,
+        )
+        await revisar(
+            '26.via_pago_de_otro_usuario (el pago registrado con vía es del mismo usuario que la acción auditada)',
+            `SELECT a.id AS accion_id, a.entidad_id AS pago_id, a.actor_id, p.registrado_por
+               FROM audit.acciones a JOIN billing.pagos p ON p.id = a.entidad_id
+              WHERE a.via_token_id IS NOT NULL AND a.accion = 'pagos.registrar' AND a.resultado = 'ok'
+                AND a.entidad_tipo = 'pago' AND ${E('p.empresa_id')} AND ${C('p.cliente_id')}
+                AND p.registrado_por IS DISTINCT FROM a.actor_id`,
+        )
     }
 
     /*

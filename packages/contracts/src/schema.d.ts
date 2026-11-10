@@ -1657,7 +1657,7 @@ export interface paths {
         put?: never;
         /**
          * Aprobar comprobante: registra el pago con sus datos y reactiva
-         * @description Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.
+         * @description Contrato Iris 0.7.0 §7.7: también con el token de Iris, a nombre del usuario de Argos vinculado a X-Iris-Actor: usuario:<id> (auditoría con via_token_id; el pago y el comprobante quedan con ese usuario). Con ese token exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida; la huella incluye X-Iris-Actor: otra clave igual con otro actor es 422 idempotency_key_reutilizada). 403 actor_ia_no_permitido, actor_sin_vinculo, actor_inactivo, actor_sin_permiso o actor_sin_empresa; 409 iris_apagado; 409 comprobante_no_es_de_iris si el comprobante no llegó por Iris (canal ≠ iris). Desde el panel no cambia nada. Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.
          */
         post: operations["comprobantesAprobar"];
         delete?: never;
@@ -1697,7 +1697,7 @@ export interface paths {
         put?: never;
         /**
          * Rechazar comprobante con motivo (se notifica al cliente)
-         * @description Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.
+         * @description Contrato Iris 0.7.0 §7.7: también con el token de Iris, a nombre del usuario de Argos vinculado a X-Iris-Actor: usuario:<id> (auditoría con via_token_id; el pago y el comprobante quedan con ese usuario). Con ese token exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida; la huella incluye X-Iris-Actor: otra clave igual con otro actor es 422 idempotency_key_reutilizada). 403 actor_ia_no_permitido, actor_sin_vinculo, actor_inactivo, actor_sin_permiso o actor_sin_empresa; 409 iris_apagado; 409 comprobante_no_es_de_iris si el comprobante no llegó por Iris (canal ≠ iris). Desde el panel no cambia nada. Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.
          */
         post: operations["comprobantesRechazar"];
         delete?: never;
@@ -3876,7 +3876,7 @@ export interface paths {
         put?: never;
         /**
          * Pedir un ticket de autologin para un usuario de Iris (servidor a servidor)
-         * @description Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).
+         * @description Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos; **opcional** (contrato 0.7.0, «Vincular mi usuario de Argos»): sin destino el canje lleva al inicio del panel, también después de `POST /auth/sso/vincular`. `usuario.id_externo` es el id de `X-Iris-Actor: usuario:<id>` (1 a 64 caracteres A-Z a-z 0-9 _ -; si no, 422). Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).
          */
         post: operations["irisSsoTicket"];
         delete?: never;
@@ -10722,6 +10722,8 @@ export interface components {
             iris_actor?: string | null;
             /** @description `X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás */
             iris_conversacion?: string | null;
+            /** @description Actuación vinculada (contrato Iris 0.7.0): token del usuario técnico Iris por el que llegó una acción que corrió como el usuario de Argos vinculado al operador de Iris (`actor_id`); null en lo demás */
+            via_token_id?: number | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -18276,6 +18278,8 @@ export interface components {
             antiguedad_minima_dias: number;
             cumplimiento_minimo_pct: number | null;
             bloqueo_tras_incumplida_dias: number;
+            /** @description Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta */
+            mismas_reglas_ia_operador: boolean;
             canales: {
                 portal: {
                     permitido: boolean;
@@ -28430,6 +28434,10 @@ export interface operations {
             header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: `usuario:<id en Iris>` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). `asistente_ia` responde 403 `actor_ia_no_permitido`. Con `Idempotency-Key`, la misma clave con otro actor es 422 */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
             };
             path: {
                 id: number;
@@ -28455,6 +28463,15 @@ export interface operations {
                     "application/json": components["schemas"]["Comprobante"];
                 };
             };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -28464,7 +28481,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso comprobantes.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            /** @description Sin el permiso comprobantes.aprobar; o CSRF inválido con la cookie del panel (`csrf_invalido`); o Con el token de Iris (actuación vinculada, contrato 0.7.0): `actor_ia_no_permitido` con `asistente_ia`, `actor_sin_vinculo`, `actor_inactivo`, `actor_sin_permiso` o `actor_sin_empresa` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -28482,7 +28499,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Petición idempotente en curso */
+            /** @description Petición idempotente en curso; o Con el token de Iris: conector Iris apagado (`iris_apagado`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -28557,6 +28574,10 @@ export interface operations {
             header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
                 "Idempotency-Key"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: `usuario:<id en Iris>` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). `asistente_ia` responde 403 `actor_ia_no_permitido`. Con `Idempotency-Key`, la misma clave con otro actor es 422 */
+                "X-Iris-Actor"?: string;
+                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                "X-Iris-Conversacion"?: string;
             };
             path: {
                 id: number;
@@ -28585,6 +28606,15 @@ export interface operations {
                     "application/json": components["schemas"]["Comprobante"];
                 };
             };
+            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -28594,7 +28624,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso comprobantes.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            /** @description Sin el permiso comprobantes.rechazar; o CSRF inválido con la cookie del panel (`csrf_invalido`); o Con el token de Iris (actuación vinculada, contrato 0.7.0): `actor_ia_no_permitido` con `asistente_ia`, `actor_sin_vinculo`, `actor_inactivo`, `actor_sin_permiso` o `actor_sin_empresa` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -28612,7 +28642,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Petición idempotente en curso */
+            /** @description Petición idempotente en curso; o Con el token de Iris: conector Iris apagado (`iris_apagado`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -36516,18 +36546,19 @@ export interface operations {
             content: {
                 "application/json": {
                     usuario: {
-                        /** @description Id del usuario en Horus; con el conector forma la vinculación */
+                        /** @description Id del usuario en Iris (1 a 64 caracteres A-Z a-z 0-9 _ -), el mismo de `X-Iris-Actor: usuario:<id>`; con el conector forma la vinculación */
                         id_externo: string;
                         /** @description Solo informativo: nunca se vincula por correo */
                         correo?: string | null;
                         nombre?: string | null;
                     };
-                    destino: {
+                    /** @description Opcional: sin destino el canje lleva al inicio del panel */
+                    destino?: {
                         /** @enum {string} */
                         tipo: "cliente" | "servicio";
                         /** @description Id del cliente o del servicio en ArgosIsp */
                         id_externo: string;
-                    };
+                    } | null;
                 };
             };
         };
@@ -50371,6 +50402,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;
@@ -50567,6 +50599,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;
@@ -53846,6 +53879,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;

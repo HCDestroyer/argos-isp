@@ -810,9 +810,15 @@ export const AccionAuditoria = definirEsquema(
                 description:
                     '`X-Iris-Conversacion` de esa llamada (id de la conversación en Iris); null en lo demás',
             },
+            via_token_id: {
+                type: ['integer', 'null'],
+                description:
+                    'Actuación vinculada (contrato Iris 0.7.0): token del usuario técnico Iris por el que llegó una ' +
+                    'acción que corrió como el usuario de Argos vinculado al operador de Iris (`actor_id`); null en lo demás',
+            },
             created_at: instante,
         },
-        ['iris_actor', 'iris_conversacion'],
+        ['iris_actor', 'iris_conversacion', 'via_token_id'],
     ),
 )
 

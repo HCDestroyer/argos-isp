@@ -9,9 +9,8 @@
 |
 */
 import router from '@adonisjs/core/services/router'
-import { middleware } from '#start/kernel'
 import { registroRutas } from '#start/routes/index'
-import { PREFIJO_API, despachar, esParametroEntero, parametrosDeRuta } from '#shared/rutas'
+import { montarRuta } from '#shared/montar_ruta'
 
 router.get('/health', async () => ({ ok: true }))
 
@@ -33,26 +32,4 @@ router.get('/conectar', async ({ response }) => {
     return response.redirect().status(302).toPath(urlConectarPanel())
 })
 
-for (const ruta of registroRutas) {
-    const seguridad = ruta.seguridad ?? 'sesion'
-    const cadena = []
-    if (seguridad === 'sesion' && ruta.nodoPortal) {
-        // sesión (auth + empresa) o, sin ella, el token de un nodo portal (contrato nodo-portal.md)
-        cadena.push(middleware.sesionONodo())
-    } else if (seguridad === 'sesion') {
-        cadena.push(middleware.auth())
-        // multiempresa: `X-Empresa-Id` → ctx.empresa (403 empresa_no_permitida)
-        cadena.push(middleware.empresa())
-        if (ruta.permiso) cadena.push(middleware.autorizar({ permiso: ruta.permiso }))
-    }
-    if (seguridad === 'interno') cadena.push(middleware.interno())
-    if (ruta.idempotente) cadena.push(middleware.idempotencia())
-
-    const montada = router[ruta.metodo](PREFIJO_API + ruta.ruta, (ctx) => despachar(ruta, ctx))
-        .as(ruta.operacion)
-        .use(cadena)
-
-    for (const nombre of parametrosDeRuta(ruta.ruta)) {
-        if (esParametroEntero(nombre)) montada.where(nombre, router.matchers.number())
-    }
-}
+for (const ruta of registroRutas) montarRuta(ruta)

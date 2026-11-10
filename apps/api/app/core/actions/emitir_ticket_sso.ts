@@ -3,6 +3,7 @@ import { Problema, Prohibido } from '#shared/errores'
 import { usuarioHorus } from '#core/integraciones_horus'
 import { usuarioIris } from '#core/integraciones_iris'
 import {
+    FORMATO_ID_EXTERNO_IRIS,
     VIGENCIA_TICKET_S,
     generarSecretoSso,
     urlPanel,
@@ -33,7 +34,11 @@ export interface EntradaEmitirTicketSso {
     /** sistema que pide el ticket (lo fija la ruta: `/integraciones/<conector>/sso/tickets`) */
     conector: ConectorSso
     usuario: { id_externo: string; correo?: string | null; nombre?: string | null }
-    destino: { tipo: TipoDestinoSso; id_externo: string }
+    /**
+     * Recurso que abre el canje. Opcional solo para Iris (contrato 0.7.0, «Vincular mi usuario de
+     * Argos»): sin destino el canje lleva al inicio del panel. Horus siempre lo manda (422 si no).
+     */
+    destino?: { tipo: TipoDestinoSso; id_externo: string } | null
     /** id (`core.tokens_api.id`) del token de integración que hizo la petición; el ticket queda ligado a él. No se llama `token_*` para que la auditoría no lo enmascare */
     atk_id: number
 }
@@ -54,6 +59,10 @@ export interface SalidaEmitirTicketSso {
  * - Si el conector se preparó con un enlace (§1.4), solo el `atk_` de ese canje (403 con otro
  *   token del usuario técnico) y con el conector encendido (409 `horus_apagado` / `iris_apagado`).
  * - Destino `cliente` o `servicio` (ids de Argos); `router` y `hallazgo` son ids de Horus → 422.
+ *   Iris puede omitirlo (contrato 0.7.0): el canje lleva al inicio del panel. Horus no (422
+ *   `destino_requerido`).
+ * - Con Iris, `usuario.id_externo` cumple `[A-Za-z0-9_-]{1,64}` (el id de `X-Iris-Actor`); si no,
+ *   422 (lo valida la ruta; aquí se repite por si la acción se llama desde otro lado).
  * - Se guarda solo el sha256; vence a los 60 s y sirve una vez. El valor nunca llega a la auditoría
  *   (que registra quién lo pidió, para qué usuario externo y qué recurso).
  * - No da privilegios: el canje abre la sesión del usuario local vinculado, con sus permisos.
@@ -64,6 +73,18 @@ export default class EmitirTicketSso extends DomainAction<EntradaEmitirTicketSso
     protected async handle(input: EntradaEmitirTicketSso, t: Transaccion): Promise<SalidaEmitirTicketSso> {
         const conector = input.conector
         const definicion = CONECTORES[conector]
+        const destino = input.destino ?? null
+        if (!destino && conector !== 'iris') {
+            throw new Problema(422, 'destino_requerido', 'Falta el destino', 'El ticket necesita destino')
+        }
+        if (conector === 'iris' && !FORMATO_ID_EXTERNO_IRIS.test(input.usuario.id_externo)) {
+            throw new Problema(
+                422,
+                'id_externo_invalido',
+                'Id externo inválido',
+                'El id del usuario de Iris debe tener 1 a 64 caracteres A-Z a-z 0-9 _ -',
+            )
+        }
         const tecnico = await definicion.usuario(t.trx)
         const token = (await t.trx
             .from('core.tokens_api')
@@ -107,8 +128,8 @@ export default class EmitirTicketSso extends DomainAction<EntradaEmitirTicketSso
                 usuario_id_externo: input.usuario.id_externo,
                 usuario_correo: input.usuario.correo ?? null,
                 usuario_nombre: input.usuario.nombre ?? null,
-                destino_tipo: input.destino.tipo,
-                destino_id_externo: input.destino.id_externo,
+                destino_tipo: destino?.tipo ?? null,
+                destino_id_externo: destino?.id_externo ?? null,
                 expira_en: expiraEn,
             })
             .returning('id')) as Array<{ id: number }>

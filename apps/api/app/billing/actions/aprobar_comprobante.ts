@@ -12,6 +12,7 @@ import {
 } from '#billing/comprobantes'
 import RegistrarPago, { type ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 import CumplirPromesa from '#billing/actions/cumplir_promesa'
+import { exigirComprobanteParaIris } from '#billing/iris'
 
 /**
  * `comprobantes.aprobar` (`POST /comprobantes/:id/aprobar`): un cajero o contador verificó el
@@ -28,6 +29,12 @@ import CumplirPromesa from '#billing/actions/cumplir_promesa'
  * - Reconexión temporal ligada (contrato Iris 0.6.0 §7.3): se revisa en la misma transacción
  *   (`CumplirPromesa` anidada). Si el pago saldó lo vencido → `promesa.cumplida`; si no, sigue
  *   activa hasta su `hasta` y entonces se incumple como cualquier promesa.
+ * - Desde Iris (contrato 0.7.0 §7.7, A23): un operador de Iris aprueba como su usuario de Argos
+ *   vinculado (`t.ctx.via`): actor, `registrado_por` del pago y `verificado_por` del comprobante
+ *   son ese usuario. Solo comprobantes con `canal = iris` (409 `comprobante_no_es_de_iris`) de
+ *   una empresa suya (403 `actor_sin_empresa`), revisado en `bloquearComprobante` con la fila
+ *   bloqueada y antes de `comprobante_revisado`. Todo (pago, asiento, reactivación, promesa y
+ *   reconexión) sigue en esta única transacción.
  * - Con `canal = iris`, el pago lleva `origen: 'iris'` en `pago.registrado` y el evento del
  *   comprobante `origen: 'iris'`: Iris confirma al cliente y notify no avisa por su cuenta.
  */
@@ -82,6 +89,9 @@ export async function bloquearComprobante(t: Transaccion, id: number): Promise<F
         )
         .firstOrFail()) as FilaComprobante
     fila.empresa_id = Number(fila.empresa_id)
+    // Iris 0.7.0 (A23): con la actuación vinculada, 403 actor_sin_empresa y 409
+    // comprobante_no_es_de_iris antes del estado; el panel no cambia
+    exigirComprobanteParaIris(t.ctx, fila)
     exigirAccesoEmpresa(t.ctx, fila.empresa_id)
     t.fijarEmpresa(fila.empresa_id)
     if (fila.estado !== 'pendiente') {

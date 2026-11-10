@@ -84,7 +84,7 @@ import RegistrarComprobante, {
     type ArchivoComprobante as ArchivoSubido,
 } from '#billing/actions/registrar_comprobante'
 import RegistrarReconexionTemporal from '#billing/actions/registrar_reconexion_temporal'
-import { canalPromesaIris, exigirIdempotenciaIris } from '#billing/iris'
+import { canalPromesaIris, exigirEmpresaActuacion, exigirIdempotenciaIris } from '#billing/iris'
 import { readFile } from 'node:fs/promises'
 import type { Reporte } from '#billing/reportes/definicion'
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
@@ -760,6 +760,10 @@ const promesas: Ruta[] = [
     }),
 ]
 
+/** Aprobar y rechazar desde la conversación de Iris (contrato Iris 0.7.0 §7.7, A23). */
+const DESCRIPCION_IRIS_070 =
+    'Contrato Iris 0.7.0 §7.7: también con el token de Iris, a nombre del usuario de Argos vinculado a X-Iris-Actor: usuario:<id> (auditoría con via_token_id; el pago y el comprobante quedan con ese usuario). Con ese token exige X-Iris-Actor, X-Iris-Conversacion (400 cabecera_iris_requerida) e Idempotency-Key (400 idempotency_key_requerida; la huella incluye X-Iris-Actor: otra clave igual con otro actor es 422 idempotency_key_reutilizada). 403 actor_ia_no_permitido, actor_sin_vinculo, actor_inactivo, actor_sin_permiso o actor_sin_empresa; 409 iris_apagado; 409 comprobante_no_es_de_iris si el comprobante no llegó por Iris (canal ≠ iris). Desde el panel no cambia nada. '
+
 const comprobantes: Ruta[] = [
     definirRuta({
         metodo: 'post',
@@ -943,12 +947,18 @@ const comprobantes: Ruta[] = [
         permiso: 'comprobantes.aprobar',
         cuerpo: v.aprobarComprobanteValidator,
         idempotente: true,
+        cabecerasIris: true,
+        actuarComoVinculado: 'comprobantes.aprobar',
+        antes: exigirIdempotenciaIris,
         descripcion:
+            DESCRIPCION_IRIS_070 +
             'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
         respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: Comprobante },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAcceso(ctx, await dimensionesDeComprobante(id))
+            const dimensiones = await dimensionesDeComprobante(id)
+            exigirEmpresaActuacion(ctx, id, dimensiones.empresa_id)
+            exigirAcceso(ctx, dimensiones)
             for (const facturaId of new Set(cuerpo.facturas ?? [])) {
                 const deFactura = await dimensionesDeFactura(facturaId).catch(() => null)
                 if (deFactura) exigirAcceso(ctx, deFactura)
@@ -968,12 +978,18 @@ const comprobantes: Ruta[] = [
         permiso: 'comprobantes.rechazar',
         cuerpo: v.rechazarComprobanteValidator,
         idempotente: true,
+        cabecerasIris: true,
+        actuarComoVinculado: 'comprobantes.rechazar',
+        antes: exigirIdempotenciaIris,
         descripcion:
+            DESCRIPCION_IRIS_070 +
             'Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. `causa` (por defecto otro) viaja en comprobante.rechazado; falta_dato: el cliente lo vuelve a mandar completo. Si respaldaba una reconexión temporal activa, se cancela (promesa.cancelada, comprobante_rechazado) y el servicio se re-evalúa respetando la hora de corte. 409 comprobante_revisado si ya se revisó.',
         respuesta: { status: 200, descripcion: 'Comprobante rechazado', esquema: Comprobante },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
-            exigirAcceso(ctx, await dimensionesDeComprobante(id))
+            const dimensiones = await dimensionesDeComprobante(id)
+            exigirEmpresaActuacion(ctx, id, dimensiones.empresa_id)
+            exigirAcceso(ctx, dimensiones)
             return new RechazarComprobante().execute(
                 { comprobante_id: id, motivo: cuerpo.motivo, causa: cuerpo.causa ?? null },
                 ctx.contextoAccion(),
