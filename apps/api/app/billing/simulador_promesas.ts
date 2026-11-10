@@ -14,6 +14,7 @@ import {
     type ResultadoEvaluacion,
 } from '#billing/promesas'
 import {
+    limitesDeCanal,
     normalizarReglasPromesa,
     type CanalPromesa,
     type ReglasPromesaParciales,
@@ -102,7 +103,7 @@ function mananaFinDelDia(ahora: Date): Date {
 
 export function limitesDe(datos: DatosEvaluacion): LimitesPromesa {
     const { reglas, canal } = datos
-    const delCanal = reglas.canales[canal]
+    const delCanal = limitesDeCanal(reglas, canal).limites
     const plazo = delCanal.plazo_max_dias ?? reglas.plazo_max_dias
     const hoy = hoyGuatemala(datos.ahora)
     let fechaMaxima = DateTime.fromISO(hoy, { zone: 'utc' }).plus({ days: plazo }).toISODate()!

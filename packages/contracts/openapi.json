@@ -54642,6 +54642,9 @@
                         "minimum": 0,
                         "maximum": 365
                       },
+                      "mismas_reglas_ia_operador": {
+                        "type": "boolean"
+                      },
                       "canales": {
                         "type": "object",
                         "properties": {
@@ -55138,6 +55141,9 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 365
+                      },
+                      "mismas_reglas_ia_operador": {
+                        "type": "boolean"
                       },
                       "canales": {
                         "type": "object",
@@ -60781,6 +60787,9 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 365
+                      },
+                      "mismas_reglas_ia_operador": {
+                        "type": "boolean"
                       },
                       "canales": {
                         "type": "object",
@@ -110102,6 +110111,10 @@
           },
           "bloqueo_tras_incumplida_dias": {
             "type": "integer"
+          },
+          "mismas_reglas_ia_operador": {
+            "type": "boolean",
+            "description": "Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta (opcional en el schema hasta que los fixtures de A4 lo lleven)"
           },
           "canales": {
             "type": "object",

@@ -18276,6 +18276,8 @@ export interface components {
             antiguedad_minima_dias: number;
             cumplimiento_minimo_pct: number | null;
             bloqueo_tras_incumplida_dias: number;
+            /** @description Mismas reglas para IA y operador: true → el canal ia usa exactamente los límites efectivos de operador (se ignora canales.ia). Por defecto false. Siempre viene en la respuesta (opcional en el schema hasta que los fixtures de A4 lo lleven) */
+            mismas_reglas_ia_operador?: boolean;
             canales: {
                 portal: {
                     permitido: boolean;
@@ -50371,6 +50373,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;
@@ -50567,6 +50570,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;
@@ -53846,6 +53850,7 @@ export interface operations {
                         antiguedad_minima_dias?: number;
                         cumplimiento_minimo_pct?: number | null;
                         bloqueo_tras_incumplida_dias?: number;
+                        mismas_reglas_ia_operador?: boolean;
                         canales?: {
                             portal?: {
                                 permitido?: boolean;
