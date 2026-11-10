@@ -17,12 +17,26 @@ import { Problema } from '#shared/errores'
 export const CONECTORES_SSO = ['horus', 'iris'] as const
 export type ConectorSso = (typeof CONECTORES_SSO)[number]
 
+/** Nombre visible del conector, para los mensajes. */
+export const NOMBRES_CONECTOR_SSO: Record<ConectorSso, string> = { horus: 'Horus', iris: 'Iris' }
+
+/** Nombre visible de un conector guardado (`horus` → `Horus`); el valor tal cual si no se conoce. */
+export function nombreConectorSso(conector: string): string {
+    return (NOMBRES_CONECTOR_SSO as Record<string, string>)[conector] ?? conector
+}
+
 /**
  * Destinos que Argos abre (contrato §1.5, 1.7.0): `cliente` y `servicio` con el id de Argos. Los
  * tipos `router` y `hallazgo` llevan ids de Horus y solo existen con Horus como destino.
  */
 export const TIPOS_DESTINO_SSO = ['cliente', 'servicio'] as const
 export type TipoDestinoSso = (typeof TIPOS_DESTINO_SSO)[number]
+
+/**
+ * Id de un usuario de Iris (`usuario.id_externo` del ticket y `<id>` de `X-Iris-Actor:
+ * usuario:<id>`): el mismo formato en los dos, para que la vinculación sirva a la actuación.
+ */
+export const FORMATO_ID_EXTERNO_IRIS = /^[A-Za-z0-9_-]{1,64}$/
 
 export const VIGENCIA_TICKET_S = 60
 export const VIGENCIA_VINCULACION_S = 600
@@ -36,8 +50,15 @@ export function hashSecretoSso(valor: string): string {
     return createHash('sha256').update(valor).digest('hex')
 }
 
-/** Ruta local del panel para el destino (`id_externo` del otro sistema = id de Argos). */
-export function rutaDestino(tipo: TipoDestinoSso, idExterno: string): string {
+/** Ruta del panel cuando el ticket no trae destino (Iris 0.7.0: «Vincular mi usuario de Argos»). */
+export const RUTA_INICIO_PANEL = '/'
+
+/**
+ * Ruta local del panel para el destino (`id_externo` del otro sistema = id de Argos). Sin destino
+ * (solo tickets de Iris), el inicio del panel.
+ */
+export function rutaDestino(tipo: TipoDestinoSso | null, idExterno: string | null): string {
+    if (tipo === null || idExterno === null) return RUTA_INICIO_PANEL
     const rutas: Record<TipoDestinoSso, string> = {
         cliente: '/clientes/',
         servicio: '/servicios/',

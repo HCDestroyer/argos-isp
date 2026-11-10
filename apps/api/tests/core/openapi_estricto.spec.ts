@@ -47,8 +47,9 @@ const OPCIONALES: Record<string, string[]> = {
     // `coincide_en` solo con el filtro `telefono` (Iris 0.6.0 §7.6)
     Cliente: ['referencia', 'coincide_en'],
     // `iris_actor` / `iris_conversacion` (5 nov, Iris 0.6.0 §7.1): la API siempre los envía;
-    // obligatorios cuando las fixtures del panel los traigan (fila en `a1.md`)
-    AccionAuditoria: ['iris_actor', 'iris_conversacion'],
+    // obligatorios cuando las fixtures del panel los traigan (fila en `a1.md`); igual
+    // `via_token_id` (10 nov, Iris 0.7.0 A23, actuación vinculada)
+    AccionAuditoria: ['iris_actor', 'iris_conversacion', 'via_token_id'],
     Plan: ['warnings'],
     // `csrf` solo con la sesión del panel por cookie
     Me: ['csrf'],

@@ -87,6 +87,11 @@ function nombreCanal(canal: CanalReglasPromesa): string {
     return CANALES_PROMESA[canal]
 }
 
+/** Con «Mismas reglas para IA y operador», `canales.ia` se conserva pero la API no lo aplica. */
+function canalIgnorado(canal: CanalReglasPromesa): boolean {
+    return canalDeLimites(estado.reglas_promesa, canal) !== canal
+}
+
 async function cargarActual() {
     if (!base.value) {
         return
@@ -509,6 +514,12 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                             <h4 class="text-sm font-medium text-highlighted">
                                 Por canal
                             </h4>
+                            <UCheckbox
+                                v-model="estado.reglas_promesa.mismas_reglas_ia_operador"
+                                label="Mismas reglas para IA y operador"
+                                description="El asistente de IA usará los mismos límites que una persona (operador)."
+                                data-prueba="plantilla-mismas-reglas-ia-operador"
+                            />
                             <div class="grid gap-3 lg:grid-cols-2">
                                 <UCard
                                     v-for="canal in CANALES_REGLAS"
@@ -516,60 +527,82 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                                     variant="subtle"
                                     :ui="{ body: 'flex flex-col gap-3 p-4 sm:p-4' }"
                                     :data-prueba="`plantilla-canal-${canal}`"
+                                    :data-ignorado="canalIgnorado(canal) ? 'si' : undefined"
                                 >
                                     <span class="text-sm font-medium text-highlighted">{{ nombreCanal(canal) }}</span>
-                                    <USwitch
-                                        v-model="estado.reglas_promesa.canales[canal].permitido"
-                                        label="Permitido"
+                                    <UAlert
+                                        v-if="canalIgnorado(canal)"
+                                        icon="i-lucide-link"
+                                        color="info"
+                                        variant="subtle"
+                                        title="Usa las reglas de Operador"
+                                        description="Estos límites no se aplican mientras la opción esté puesta. Se conservan por si la quitas."
+                                        :data-prueba="`plantilla-canal-${canal}-ignorado`"
                                     />
-                                    <template v-if="estado.reglas_promesa.canales[canal].permitido">
+                                    <div
+                                        class="flex flex-col gap-3"
+                                        :class="{ 'opacity-50': canalIgnorado(canal) }"
+                                        :aria-disabled="canalIgnorado(canal) || undefined"
+                                    >
                                         <USwitch
-                                            v-model="estado.reglas_promesa.canales[canal].requiere_aprobacion"
-                                            label="Requiere aprobación"
-                                            description="La promesa queda pendiente hasta que alguien con «promesas.aprobar» la apruebe."
-                                            :data-prueba="`plantilla-canal-${canal}-aprobacion`"
+                                            v-model="estado.reglas_promesa.canales[canal].permitido"
+                                            label="Permitido"
+                                            :disabled="canalIgnorado(canal)"
+                                            :data-prueba="`plantilla-canal-${canal}-permitido`"
                                         />
-                                        <div class="grid gap-3 sm:grid-cols-3">
-                                            <UFormField
-                                                label="Plazo (días)"
-                                                :name="`reglas_promesa.canales.${canal}.plazo_max_dias`"
-                                            >
-                                                <UInputNumber
-                                                    :model-value="estado.reglas_promesa.canales[canal].plazo_max_dias ?? undefined"
-                                                    :min="1"
-                                                    :max="60"
-                                                    :placeholder="`General: ${estado.reglas_promesa.plazo_max_dias}`"
-                                                    class="w-full"
-                                                    :data-prueba="`plantilla-canal-${canal}-plazo`"
-                                                    @update:model-value="v => estado.reglas_promesa.canales[canal].plazo_max_dias = numeroONulo(v)"
-                                                />
-                                            </UFormField>
-                                            <UFormField
-                                                label="Por periodo"
-                                                :name="`reglas_promesa.canales.${canal}.max_por_periodo`"
-                                            >
-                                                <UInputNumber
-                                                    :model-value="estado.reglas_promesa.canales[canal].max_por_periodo ?? undefined"
-                                                    :min="0"
-                                                    :max="12"
-                                                    :placeholder="`General: ${estado.reglas_promesa.max_por_periodo}`"
-                                                    class="w-full"
-                                                    @update:model-value="v => estado.reglas_promesa.canales[canal].max_por_periodo = numeroONulo(v)"
-                                                />
-                                            </UFormField>
-                                            <UFormField
-                                                label="Deuda máx."
-                                                :name="`reglas_promesa.canales.${canal}.deuda_maxima`"
-                                            >
-                                                <UInput
-                                                    v-model="estado.reglas_promesa.canales[canal].deuda_maxima"
-                                                    inputmode="decimal"
-                                                    placeholder="General"
-                                                    class="w-full"
-                                                />
-                                            </UFormField>
-                                        </div>
-                                    </template>
+                                        <template v-if="estado.reglas_promesa.canales[canal].permitido">
+                                            <USwitch
+                                                v-model="estado.reglas_promesa.canales[canal].requiere_aprobacion"
+                                                label="Requiere aprobación"
+                                                description="La promesa queda pendiente hasta que alguien con «promesas.aprobar» la apruebe."
+                                                :disabled="canalIgnorado(canal)"
+                                                :data-prueba="`plantilla-canal-${canal}-aprobacion`"
+                                            />
+                                            <div class="grid gap-3 sm:grid-cols-3">
+                                                <UFormField
+                                                    label="Plazo (días)"
+                                                    :name="`reglas_promesa.canales.${canal}.plazo_max_dias`"
+                                                >
+                                                    <UInputNumber
+                                                        :model-value="estado.reglas_promesa.canales[canal].plazo_max_dias ?? undefined"
+                                                        :min="1"
+                                                        :max="60"
+                                                        :placeholder="`General: ${estado.reglas_promesa.plazo_max_dias}`"
+                                                        :disabled="canalIgnorado(canal)"
+                                                        class="w-full"
+                                                        :data-prueba="`plantilla-canal-${canal}-plazo`"
+                                                        @update:model-value="v => estado.reglas_promesa.canales[canal].plazo_max_dias = numeroONulo(v)"
+                                                    />
+                                                </UFormField>
+                                                <UFormField
+                                                    label="Por periodo"
+                                                    :name="`reglas_promesa.canales.${canal}.max_por_periodo`"
+                                                >
+                                                    <UInputNumber
+                                                        :model-value="estado.reglas_promesa.canales[canal].max_por_periodo ?? undefined"
+                                                        :min="0"
+                                                        :max="12"
+                                                        :placeholder="`General: ${estado.reglas_promesa.max_por_periodo}`"
+                                                        :disabled="canalIgnorado(canal)"
+                                                        class="w-full"
+                                                        @update:model-value="v => estado.reglas_promesa.canales[canal].max_por_periodo = numeroONulo(v)"
+                                                    />
+                                                </UFormField>
+                                                <UFormField
+                                                    label="Deuda máx."
+                                                    :name="`reglas_promesa.canales.${canal}.deuda_maxima`"
+                                                >
+                                                    <UInput
+                                                        v-model="estado.reglas_promesa.canales[canal].deuda_maxima"
+                                                        inputmode="decimal"
+                                                        placeholder="General"
+                                                        :disabled="canalIgnorado(canal)"
+                                                        class="w-full"
+                                                    />
+                                                </UFormField>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </UCard>
                             </div>
                         </div>

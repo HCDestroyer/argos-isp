@@ -15,6 +15,10 @@ import CancelarReconexionTemporal from '#billing/actions/cancelar_reconexion_tem
  * `comprobante.rechazado` con `causa` y `servicio_estado` (notify avisa al cliente con el motivo,
  * salvo `canal = iris`). 409 `comprobante_revisado` si ya se revisó.
  *
+ * Desde Iris (contrato 0.7.0 §7.7, A23) rechaza el usuario de Argos vinculado al operador
+ * (`verificado_por`); solo comprobantes con `canal = iris` de una empresa suya (ver
+ * `bloquearComprobante` y `exigirComprobanteParaIris`).
+ *
  * Si el comprobante respaldaba una reconexión temporal activa (contrato Iris 0.6.0 §7.3), se
  * cancela en la misma transacción (`CancelarReconexionTemporal`: `promesa.cancelada` con
  * `motivo = comprobante_rechazado`) y el servicio se re-evalúa respetando la hora de corte.

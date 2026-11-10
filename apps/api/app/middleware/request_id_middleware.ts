@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-import { contextoCliente, esCanal, type Canal, type ContextoAccion, type OrigenIris } from '#shared/contexto'
+import {
+    contextoCliente,
+    esCanal,
+    type Canal,
+    type ContextoAccion,
+    type OrigenIris,
+    type ViaActuacion,
+} from '#shared/contexto'
 
 const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
 
@@ -35,6 +42,21 @@ export default class RequestIdMiddleware {
                     ? 'ia'
                     : 'api'
                 : null
+            // Iris 0.7.0 (A23): la ruta pidió actuar como el usuario vinculado y el middleware
+            // `actuarComoVinculado` ya lo resolvió; canal `api`, la vía queda en la auditoría
+            const vinculada = ctx.actuacionVinculada
+            if (vinculada) {
+                return {
+                    actor: { tipo: 'usuario', id: vinculada.usuarioId },
+                    canal: canalForzado ?? 'api',
+                    requestId,
+                    ...(ctx.empresa
+                        ? { empresaId: ctx.empresa.activa, empresasPermitidas: ctx.empresa.permitidas }
+                        : {}),
+                    ...(ctx.iris ? { iris: ctx.iris } : {}),
+                    via: vinculada.via,
+                }
+            }
             return {
                 actor: usuario
                     ? { tipo: guard === 'tokens' ? 'token' : 'usuario', id: usuario.id }
@@ -89,6 +111,11 @@ declare module '@adonisjs/core/http' {
          * las rutas de §7; `exigirCabecerasIris`). `contextoAccion()` las lleva a `ctx.iris`.
          */
         iris?: OrigenIris
+        /**
+         * Actuación vinculada ya resuelta (middleware `actuarComoVinculado`, solo en las rutas que
+         * la declaran): `contextoAccion()` audita al usuario vinculado con esta vía.
+         */
+        actuacionVinculada?: { usuarioId: number; via: ViaActuacion }
         /** Contexto para `DomainAction.execute`. `canalForzado` lo usan rutas de un canal fijo (portal, interno). */
         contextoAccion(canalForzado?: Canal): ContextoAccion
         /** actor `cliente` (portal autenticado; la sesión ya se verificó), canal `portal` por defecto */

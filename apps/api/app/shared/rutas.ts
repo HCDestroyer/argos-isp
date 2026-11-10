@@ -4,6 +4,7 @@ import type { Infer, SchemaTypes } from '@vinejs/vine/types'
 import type { EsquemaJson } from '#shared/openapi/esquemas'
 import { NoImplementado, Problema } from '#shared/errores'
 import type { Permiso } from '#core/permisos'
+import { esPermisoActuacionVinculada, type PermisoActuacionVinculada } from '#core/actuacion_vinculada'
 import {
     esRespuestaJson,
     esTokenIris,
@@ -127,6 +128,13 @@ export interface DefinicionRuta<
      */
     cabecerasIris?: boolean | ((ctx: HttpContext) => boolean)
     /**
+     * Iris 0.7.0 (A23): con el token de Iris y `X-Iris-Actor: usuario:<id>`, la acción corre y se
+     * audita como el usuario de Argos vinculado (`#core/actuacion_vinculada`). Debe ser igual a
+     * `permiso` y estar en `PERMISOS_ACTUACION_VINCULADA`; implica `cabecerasIris: true`. Ninguna
+     * otra ruta puede declararlo (el router falla al arrancar).
+     */
+    actuarComoVinculado?: PermisoActuacionVinculada
+    /**
      * Gancho que corre después de autenticar, autorizar e idempotencia, pero **antes** de validar
      * cuerpo y query con VineJS. Para el límite de peticiones: un cuerpo inválido (422) también
      * consume el cupo. Si lanza, ni se valida ni corre el handler.
@@ -137,6 +145,30 @@ export interface DefinicionRuta<
 
 /** Ruta ya normalizada (tipos borrados) para montar en el router y generar el OpenAPI. */
 export type Ruta = DefinicionRuta<ValidadorVine | undefined, ValidadorVine | undefined>
+
+/**
+ * Revisa la declaración `actuarComoVinculado` de una ruta (la llama el router al montar y el
+ * generador del OpenAPI): solo con un permiso de `PERMISOS_ACTUACION_VINCULADA`, igual al permiso
+ * de la ruta, con sesión y con `cabecerasIris: true`.
+ */
+export function validarActuacionVinculada(ruta: Ruta): void {
+    if (ruta.actuarComoVinculado === undefined) return
+    const p = ruta.actuarComoVinculado
+    if (!esPermisoActuacionVinculada(p)) {
+        throw new Error(`${ruta.operacion}: actuarComoVinculado no admite ${String(p)}`)
+    }
+    if (ruta.permiso !== p) {
+        throw new Error(`${ruta.operacion}: actuarComoVinculado (${p}) debe ser el permiso de la ruta`)
+    }
+    if ((ruta.seguridad ?? 'sesion') !== 'sesion' || ruta.cabecerasIris !== true) {
+        throw new Error(`${ruta.operacion}: actuarComoVinculado exige seguridad sesion y cabecerasIris: true`)
+    }
+}
+
+/** ¿La huella de `Idempotency-Key` incluye `X-Iris-Actor`? (rutas de atención de Iris). */
+export function idempotenciaPorActorIris(ruta: Ruta): boolean {
+    return Boolean(ruta.cabecerasIris) || ruta.actuarComoVinculado !== undefined
+}
 
 /** Ayuda de tipos: infiere cuerpo y query del handler a partir de los validadores. */
 export function definirRuta<

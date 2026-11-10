@@ -11,7 +11,7 @@ import type { ServicioFacturable } from '#billing/configuracion'
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
 import { diasEntre, periodosHasta } from '#billing/periodos'
 import { ESTADOS_PENDIENTES } from '#billing/facturas'
-import type { CanalPromesa, ReglasPromesa } from '#billing/reglas_promesa'
+import { limitesDeCanal, type CanalPromesa, type ReglasPromesa } from '#billing/reglas_promesa'
 import type { PayloadPromesa } from '#shared/eventos'
 
 /**
@@ -187,7 +187,8 @@ export function cumplimiento(resueltas: EstadoPromesa[], ventana: number) {
  *
  * Límites por canal: `canales.<canal>.plazo_max_dias`, `max_por_periodo` y `deuda_maxima`, si no
  * son null, **reemplazan** al general. `permitido: false` rechaza y `requiere_aprobacion: true`
- * deja la promesa `pendiente_aprobacion` cuando todo lo demás pasa.
+ * deja la promesa `pendiente_aprobacion` cuando todo lo demás pasa. Con
+ * `mismas_reglas_ia_operador`, el canal `ia` usa los de `operador` (`limitesDeCanal`).
  */
 export function evaluarReglas(
     datos: DatosEvaluacion,
@@ -196,7 +197,9 @@ export function evaluarReglas(
     const { reglas, canal } = datos
     const completo = opciones.completo ?? false
     let primera: ReglaEvaluada | null = null
-    const limitesCanal = reglas.canales[canal]
+    // con `mismas_reglas_ia_operador`, `ia` evalúa con los límites de `operador` (origen = operador)
+    const { limites: limitesCanal, origen: canalLimites } = limitesDeCanal(reglas, canal)
+    const espejo = canalLimites === canal ? '' : ` (mismas reglas que ${canalLimites})`
     const historial = cumplimiento(datos.resueltas, reglas.historial_ventana)
     const evaluadas: ReglaEvaluada[] = []
     const base = {
@@ -265,10 +268,10 @@ export function evaluarReglas(
             ok: limitesCanal.permitido,
             valor: canal,
             limite: limitesCanal.permitido,
-            origen: canal,
+            origen: canalLimites,
             detalle: limitesCanal.permitido
-                ? `El canal ${canal} puede crear promesas`
-                : `El canal ${canal} no puede crear promesas`,
+                ? `El canal ${canal}${espejo} puede crear promesas`
+                : `El canal ${canal}${espejo} no puede crear promesas`,
         })
     ) {
         return fin('rechazada', 'canal_permitido', evaluadas.at(-1)!.detalle)
@@ -295,7 +298,7 @@ export function evaluarReglas(
     const diaVence = hoyGuatemala(datos.vence_en)
     const plazo = diasEntre(hoy, diaVence)
     const plazoMax = limitesCanal.plazo_max_dias ?? reglas.plazo_max_dias
-    const origenPlazo = limitesCanal.plazo_max_dias !== null ? canal : 'general'
+    const origenPlazo = limitesCanal.plazo_max_dias !== null ? canalLimites : 'general'
     if (
         revisar({
             regla: 'plazo_max_dias',
@@ -306,7 +309,7 @@ export function evaluarReglas(
             detalle:
                 plazo <= plazoMax
                     ? `Vence en ${PLURAL(plazo, 'día', 'días')} (máximo ${plazoMax})`
-                    : `Vence en ${PLURAL(plazo, 'día', 'días')}; el máximo${origenPlazo === 'general' ? '' : ` del canal ${canal}`} es ${PLURAL(plazoMax, 'día', 'días')}`,
+                    : `Vence en ${PLURAL(plazo, 'día', 'días')}; el máximo${origenPlazo === 'general' ? '' : ` del canal ${canalLimites}`} es ${PLURAL(plazoMax, 'día', 'días')}`,
         })
     ) {
         return fin('rechazada', 'plazo_max_dias', evaluadas.at(-1)!.detalle)
@@ -339,7 +342,7 @@ export function evaluarReglas(
     const deudaMaxima = limitesCanal.deuda_maxima ?? reglas.deuda_maxima
     if (deudaMaxima !== null) {
         const ok = datos.deuda.vencida.lte(dec(deudaMaxima))
-        const origen = limitesCanal.deuda_maxima !== null ? canal : 'general'
+        const origen = limitesCanal.deuda_maxima !== null ? canalLimites : 'general'
         if (
             revisar({
                 regla: 'deuda_maxima',
@@ -349,7 +352,7 @@ export function evaluarReglas(
                 origen,
                 detalle: ok
                     ? `Deuda vencida Q${aTexto(datos.deuda.vencida)} (máximo Q${aTexto(deudaMaxima)})`
-                    : `La deuda vencida es Q${aTexto(datos.deuda.vencida)}; el máximo${origen === 'general' ? '' : ` del canal ${canal}`} para prometer es Q${aTexto(deudaMaxima)}`,
+                    : `La deuda vencida es Q${aTexto(datos.deuda.vencida)}; el máximo${origen === 'general' ? '' : ` del canal ${canalLimites}`} para prometer es Q${aTexto(deudaMaxima)}`,
             })
         ) {
             return fin('rechazada', 'deuda_maxima', evaluadas.at(-1)!.detalle)
@@ -463,7 +466,7 @@ export function evaluarReglas(
     const maximo =
         limitesCanal.max_por_periodo ??
         (buenHistorial ? reglas.max_por_periodo_buen_historial : reglas.max_por_periodo)
-    const origenMaximo = limitesCanal.max_por_periodo !== null ? canal : 'general'
+    const origenMaximo = limitesCanal.max_por_periodo !== null ? canalLimites : 'general'
     const okCupo = datos.en_periodo < maximo
     if (
         revisar({
@@ -475,7 +478,7 @@ export function evaluarReglas(
             detalle:
                 (okCupo
                     ? `Lleva ${PLURAL(datos.en_periodo, 'promesa', 'promesas')} en el periodo (máximo ${maximo})`
-                    : `Ya tiene ${PLURAL(datos.en_periodo, 'promesa', 'promesas')} en el periodo que empezó el ${datos.periodo_actual}; el máximo${origenMaximo === 'general' ? '' : ` del canal ${canal}`} es ${maximo}`) +
+                    : `Ya tiene ${PLURAL(datos.en_periodo, 'promesa', 'promesas')} en el periodo que empezó el ${datos.periodo_actual}; el máximo${origenMaximo === 'general' ? '' : ` del canal ${canalLimites}`} es ${maximo}`) +
                 (origenMaximo === 'general' && buenHistorial ? ' (por buen historial)' : ''),
         })
     ) {
@@ -491,8 +494,8 @@ export function evaluarReglas(
             ok: true,
             valor: canal,
             limite: true,
-            origen: canal,
-            detalle: `Las promesas del canal ${canal} requieren aprobación de un supervisor`,
+            origen: canalLimites,
+            detalle: `Las promesas del canal ${canal}${espejo} requieren aprobación de un supervisor`,
         })
         return fin('pendiente_aprobacion', 'requiere_aprobacion', evaluadas.at(-1)!.detalle)
     }

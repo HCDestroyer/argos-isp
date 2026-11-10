@@ -26,6 +26,7 @@ router.use([
 ])
 
 export const middleware = router.named({
+    actuarComoVinculado: () => import('#middleware/actuar_como_vinculado_middleware'),
     auth: () => import('#middleware/auth_middleware'),
     autorizar: () => import('#middleware/autorizar_middleware'),
     empresa: () => import('#middleware/empresa_middleware'),

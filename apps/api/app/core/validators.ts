@@ -20,7 +20,7 @@ import { CAMPOS_EXCEPCION } from '#billing/excepciones'
 import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
-import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
+import { CONECTORES_SSO, FORMATO_ID_EXTERNO_IRIS, TIPOS_DESTINO_SSO } from '#core/sso'
 import { ESTADOS_SERVICIO, MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
 import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
@@ -1042,6 +1042,44 @@ export const emitirTicketSsoValidator = vine.compile(
                 .regex(/^[1-9]\d{0,17}$/)
                 .meta({ description: 'Id del cliente o del servicio en ArgosIsp' }),
         }),
+    }),
+)
+
+/**
+ * `POST /integraciones/iris/sso/tickets` (servidor de Iris con su token `atk_`). Como el de Horus,
+ * pero `destino` es opcional (contrato Iris 0.7.0, «Vincular mi usuario de Argos»: sin destino el
+ * canje lleva al inicio del panel) y `usuario.id_externo` tiene el formato del id de
+ * `X-Iris-Actor: usuario:<id>` (`[A-Za-z0-9_-]{1,64}`), porque la vinculación sirve también para
+ * que el operador apruebe comprobantes como su usuario de Argos.
+ */
+export const emitirTicketSsoIrisValidator = vine.compile(
+    vine.object({
+        usuario: vine.object({
+            id_externo: vine.string().trim().regex(FORMATO_ID_EXTERNO_IRIS).meta({
+                description:
+                    'Id del usuario en Iris (1 a 64 caracteres A-Z a-z 0-9 _ -), el mismo de `X-Iris-Actor: usuario:<id>`; con el conector forma la vinculación',
+            }),
+            correo: vine
+                .string()
+                .trim()
+                .maxLength(254)
+                .nullable()
+                .optional()
+                .meta({ description: 'Solo informativo: nunca se vincula por correo' }),
+            nombre: vine.string().trim().maxLength(200).nullable().optional(),
+        }),
+        destino: vine
+            .object({
+                tipo: vine.enum(TIPOS_DESTINO_SSO),
+                id_externo: vine
+                    .string()
+                    .trim()
+                    .regex(/^[1-9]\d{0,17}$/)
+                    .meta({ description: 'Id del cliente o del servicio en ArgosIsp' }),
+            })
+            .nullable()
+            .optional()
+            .meta({ description: 'Opcional: sin destino el canje lleva al inicio del panel' }),
     }),
 )
 
