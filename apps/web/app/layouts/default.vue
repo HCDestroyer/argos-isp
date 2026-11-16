@@ -148,6 +148,11 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                     aria-label="Menú principal"
                     data-prueba="menu-principal"
                 />
+                <!-- En el teléfono la barra superior no tiene espacio para «Ayuda»: va aquí. -->
+                <AyudaBoton
+                    class="sm:hidden"
+                    con-etiqueta
+                />
             </template>
 
             <template #footer="{ collapsed }">

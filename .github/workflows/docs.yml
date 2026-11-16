@@ -1,0 +1,70 @@
+name: Documentación
+
+# Publica el sitio de documentación (apps/docs, contenido en /docs) en GitHub Pages con cada
+# cambio en main. La compilación también corre en CI (`pnpm build`), así que un enlace roto o una
+# página que no compila falla la PR antes de llegar aquí.
+#
+# Una sola vez: Settings → Pages → Build and deployment → Source: «GitHub Actions».
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - apps/docs/**
+      - packages/contracts/openapi.json
+      # La referencia de permisos y eventos se genera de estos dos archivos.
+      - apps/api/app/core/permisos.ts
+      - apps/api/app/shared/eventos.ts
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  compilar:
+    name: Compilar el sitio
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # La fecha de «Actualizado» de cada página sale del historial de git.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias del sitio
+        run: pnpm install --frozen-lockfile --filter @argosisp/docs...
+
+      - name: Compilar
+        run: pnpm --filter @argosisp/docs build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/docs/.vitepress/dist
+
+  publicar:
+    name: Publicar en GitHub Pages
+    needs: compilar
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - id: despliegue
+        uses: actions/deploy-pages@v4

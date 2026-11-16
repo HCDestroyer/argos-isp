@@ -1,3 +1,7 @@
+---
+orden: 12
+---
+
 # Runbook · Conectar Argos con Horus Flow
 
 Contrato: `.claude/integration/contratos/horus.md`. Código: `apps/api/app/integraciones/horus`.
@@ -6,10 +10,14 @@ enteran.
 
 ## Antes de empezar
 
-1. `API_PUBLIC_URL` en `infra/.env` es la URL **https** con la que Horus llega a la API de Argos
-   (receptor de webhooks y enlace de conexión). Reinicia `api` si la cambias.
-2. El servicio `horus-worker` corre (`docker compose ps horus-worker`).
-3. Laboratorio sin TLS: `HORUS_PERMITIR_HTTP=true` en `infra/.env`. **Nunca** en producción.
+1. `API_PUBLIC_URL` es la URL **https** con la que Horus llega a la API de Argos (receptor de
+   webhooks y enlace de conexión). En un servidor instalado con `instalar.sh` ya es
+   `https://api.<dominio>` y no hay que tocarla. En desarrollo va en `infra/.env`; reinicia `api` si
+   la cambias.
+2. El servicio `horus-worker` corre (`sudo argosisp estado`; en desarrollo,
+   `docker compose -f infra/docker-compose.yml ps horus-worker`).
+3. Laboratorio sin TLS: `HORUS_PERMITIR_HTTP=true` en `infra/.env`. **Nunca** en producción (el
+   compose de producción lo deja en `false`).
 4. Necesitas un usuario con rol `admin` en Argos y un administrador de Horus.
 
 ## Opción A · Enlace de conexión (recomendada)
@@ -28,7 +36,8 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 ### A2. El enlace sale de Horus
 
 1. Horus → **Generar enlace de conexión**. Copia `https://<horus>/conectar#…`.
-2. Argos → Integraciones → Horus → **Conectar con enlace de Horus** → pega el enlace.
+2. Argos → Configuración → Integraciones → Horus → pega el enlace en **«Enlace generado en Horus»**
+   → **Conectar**.
 3. Si Argos responde `enlace_vencido`, genera otro en Horus. Si responde `horus_error`, el
    mensaje es el error real de Horus (red, TLS, 4xx/5xx) y no se guardó nada.
 
@@ -41,19 +50,19 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 3. El primer guardado muestra **una sola vez** el secreto del receptor de Argos y su URL
    (`<API_PUBLIC_URL>/api/v1/integraciones/horus/webhook`): pégalos en Horus (canal `webhook`).
    Si lo pierdes: **Regenerar secreto** y vuelve a pegarlo en Horus.
-4. En Argos → Integraciones → Horus → Tokens genera el token `atk_` de Horus
-   (`POST /integraciones/horus/tokens`, permiso `horus.generar_token`; o `node ace
-   integraciones:horus-token`): usuario técnico `horus@integraciones.argosisp.local`, rol
+4. En Argos → Integraciones → Horus → **Generar token** crea el token `atk_` de Horus
+   (`POST /integraciones/horus/tokens`, permiso `horus.generar_token`; o
+   `sudo argosisp compose exec api node ace.js integraciones:horus-token`): usuario técnico `horus@integraciones.argosisp.local`, rol
    `integracion_horus` (`ip.resolver`, `clientes.ver`, `servicios.ver`, `sso.emitir`). Pégalo en Horus.
 
 ## Encender y verificar
 
 1. **Probar conexión**: debe decir `ok`. Si no, el mensaje es el error real:
-   - `ECONNREFUSED` / `ENOTFOUND`: URL o red; `Horus respondió 401`: código revocado o vencido.
-   - `Horus respondió 403` en `routers/status`: el código se emitió antes de que la plantilla
-     ArgosISP llevara `devices.read` (contrato 1.7.0); genera un enlace o un código nuevo.
-   - `webhook: HTTP 401`: el secreto del receptor de Horus no coincide.
-2. Enciende el interruptor y guarda.
+    - `ECONNREFUSED` / `ENOTFOUND`: URL o red; `Horus respondió 401`: código revocado o vencido.
+    - `Horus respondió 403` en `routers/status`: el código se emitió antes de que la plantilla
+      ArgosISP llevara `devices.read` (contrato 1.7.0); genera un enlace o un código nuevo.
+    - `webhook: HTTP 401`: el secreto del receptor de Horus no coincide.
+2. Enciende **«Activar la integración con Horus»** y guarda.
 3. Abre la ficha de un servicio activo: el bloque Horus muestra consumo, salud y seguridad, sin
    la marca "desactualizado".
 4. Suspende y reactiva un servicio de prueba: en Integraciones → Horus → Envíos aparecen dos
@@ -62,16 +71,16 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 
 ## Problemas
 
-| Síntoma | Qué mirar |
-| --- | --- |
-| La ficha dice "desactualizado" | `salud` del conector: `ultimo_error` y `pausa_hasta`. Argos reintenta solo, con espera hasta 15 min. Nada que hacer en Argos si Horus está caído |
-| Envíos en `pendiente` con `HTTP 401` | Secreto del receptor de Horus cambiado: pega el nuevo. Los pendientes se reintentan solos (1 min, 5 min, 30 min, 2 h, 12 h) |
-| Envíos `fallido` | Pasaron los 5 reintentos. Horus se resincroniza con su barrido de 6 h; no hace falta reenviar |
-| Envíos `descartado` | Estaban pendientes cuando se apagó el conector |
-| Horus recibe 401 `firma_invalida` | El secreto de Argos en Horus no es el actual (¿se regeneró?) |
-| Horus recibe 401 `timestamp_fuera_de_ventana` | Relojes desfasados más de 5 min: NTP en ambos servidores |
-| Horus recibe 503 `horus_apagado` | El conector de Argos está apagado |
-| "Ver en Horus" responde `horus_error` | El `hf_pat_` no tiene `sso.issue` o Horus aún no tiene §1.5 |
+| Síntoma                                       | Qué mirar                                                                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| La ficha dice "desactualizado"                | `salud` del conector: `ultimo_error` y `pausa_hasta`. Argos reintenta solo, con espera hasta 15 min. Nada que hacer en Argos si Horus está caído |
+| Envíos en `pendiente` con `HTTP 401`          | Secreto del receptor de Horus cambiado: pega el nuevo. Los pendientes se reintentan solos (1 min, 5 min, 30 min, 2 h, 12 h)                      |
+| Envíos `fallido`                              | Pasaron los 5 reintentos. Horus se resincroniza con su barrido de 6 h; no hace falta reenviar                                                    |
+| Envíos `descartado`                           | Estaban pendientes cuando se apagó el conector                                                                                                   |
+| Horus recibe 401 `firma_invalida`             | El secreto de Argos en Horus no es el actual (¿se regeneró?)                                                                                     |
+| Horus recibe 401 `timestamp_fuera_de_ventana` | Relojes desfasados más de 5 min: NTP en ambos servidores                                                                                         |
+| Horus recibe 503 `horus_apagado`              | El conector de Argos está apagado                                                                                                                |
+| "Ver en Horus" responde `horus_error`         | El `hf_pat_` no tiene `sso.issue` o Horus aún no tiene §1.5                                                                                      |
 
 ## Desconectar
 
