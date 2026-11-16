@@ -3,10 +3,16 @@
  * Botón «Ayuda» de la barra superior (contrato `documentacion.md` §6): abre en otra pestaña la
  * página del manual que explica la pantalla actual. La clave sale de la ruta de Nuxt
  * (`claveAyudaDeRuta`) y el sitio de `runtimeConfig.public.docsUrl` (`NUXT_PUBLIC_DOCS_URL`).
- * En el teléfono queda solo el icono, con su `aria-label` y el tooltip del navegador (`title`).
+ * En la barra superior se muestra desde `sm` (en el teléfono la barra no tiene espacio y taparía el
+ * botón del menú); en el teléfono va en el menú lateral con `con-etiqueta`.
  * No usa `UTooltip`: va en la barra de todas las pantallas y las pruebas montan cada pantalla
  * sola, sin el proveedor de tooltips de `UApp`.
  */
+const props = defineProps<{
+    /** Con la etiqueta siempre visible (menú lateral del teléfono). */
+    conEtiqueta?: boolean
+}>()
+
 const route = useRoute()
 const config = useRuntimeConfig()
 
@@ -26,7 +32,9 @@ const url = computed(() => clave.value ? urlAyuda(String(config.public.docsUrl),
         variant="ghost"
         title="Ayuda de esta pantalla"
         aria-label="Ayuda de esta pantalla (se abre en otra pestaña)"
-        :ui="{ label: 'hidden md:inline' }"
+        :block="props.conEtiqueta"
+        :class="props.conEtiqueta ? 'justify-start' : undefined"
+        :ui="{ label: props.conEtiqueta ? '' : 'hidden md:inline' }"
         data-prueba="boton-ayuda"
     />
 </template>
