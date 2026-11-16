@@ -19742,6 +19742,7 @@
       "get": {
         "operationId": "empresaVer",
         "summary": "Configuración de la empresa (panel)",
+        "description": "La empresa activa (`X-Empresa-Id`, o la única del usuario o de la instalación). 422 `empresa_requerida` si el usuario tiene varias y no eligió; 403 `empresa_no_permitida` fuera de su alcance.",
         "tags": [
           "empresa"
         ],
@@ -19791,7 +19792,7 @@
       "put": {
         "operationId": "empresaEditar",
         "summary": "Edita la configuración de la empresa",
-        "description": "Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).",
+        "description": "Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago de la empresa activa (`X-Empresa-Id`, o la única del usuario o de la instalación; 422 `empresa_requerida` si el usuario tiene varias y no eligió, 403 `empresa_no_permitida` fuera de su alcance). `version` 0 la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).",
         "tags": [
           "empresa"
         ],

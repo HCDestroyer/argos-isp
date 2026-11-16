@@ -7,7 +7,9 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
  *
  * Multiempresa (A1, `contratos/multiempresa.md`): los datos viven en `core.empresas`. Esta vista
  * conserva los nombres de siempre (`nombre` = `nombre_comercial`, `direccion` =
- * `direccion_fiscal`) y lee la empresa 1 (la principal) salvo que se pase otra.
+ * `direccion_fiscal`). Quien la lee elige la empresa: el panel la activa del request
+ * (`resolverEmpresaActiva`, nunca la 1 en silencio), el portal y `/corte` la del servicio o el
+ * cliente, los documentos y avisos la de la factura o el evento.
  *
  * Con `version = 0` (la empresa 1 nunca se guardó) se usan los valores por defecto: `nombre` de
  * `NOTIFY_EMPRESA_NOMBRE` (o "ArgosIsp"), `telefono` de `NOTIFY_EMPRESA_TELEFONO` y lo demás vacío.
@@ -71,8 +73,9 @@ export const COLUMNA_EMPRESA: Record<(typeof CAMPOS_EMPRESA)[number], string> = 
 }
 
 /**
- * Datos de la empresa `empresaId` (por defecto la 1, la principal). Una empresa que no existe
- * devuelve los valores por defecto (como la empresa 1 sin guardar).
+ * Datos de la empresa `empresaId`. Una empresa que no existe devuelve los valores por defecto
+ * (como la empresa 1 sin guardar). El valor por defecto (la 1) queda solo para la migración y sus
+ * pruebas: el código de la aplicación siempre pasa la empresa.
  */
 export async function verEmpresa(
     cliente: QueryClientContract = db.connection(),
@@ -88,7 +91,10 @@ export async function verEmpresa(
 }
 
 /** Datos de la empresa sin `version` (documentos y mensajes). */
-export async function leerEmpresa(cliente?: QueryClientContract, empresaId?: number): Promise<DatosEmpresa> {
+export async function leerEmpresa(
+    cliente: QueryClientContract | undefined,
+    empresaId: number,
+): Promise<DatosEmpresa> {
     return sinVersion(await verEmpresa(cliente, empresaId))
 }
 

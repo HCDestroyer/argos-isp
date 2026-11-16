@@ -1,6 +1,14 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, restablecerEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import {
+    contextoPrueba,
+    estado,
+    restablecerEmpresaPrincipal,
+    soloEmpresaPrincipal,
+    unico,
+    usuarioConRoles,
+} from '#tests/ayudas'
+import { crearEmpresaFila } from '#tests/core/fabricas'
 import { usarFuenteCuentasDeposito, type CuentaDeposito } from '#portal/cuentas_deposito'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import { bancoId } from '#tests/billing/ayudas_billing'
@@ -17,7 +25,9 @@ const CUENTAS: CuentaDeposito[] = [
 ]
 
 test.group('Empresa: configuración editable', (group) => {
-    group.each.setup(() => {
+    group.each.setup(async () => {
+        // Una sola empresa activa (otras pruebas dejan empresas creadas): se comporta como siempre.
+        await soloEmpresaPrincipal()
         const previo = process.env.PORTAL_REDIS_PREFIJO
         process.env.PORTAL_REDIS_PREFIJO = unico('prueba-empresa')
         return async () => {
@@ -173,5 +183,147 @@ test.group('Empresa: configuración editable', (group) => {
             assert.equal(cuenta.moneda, 'GTQ')
             assert.sameMembers(Object.keys(cuenta), ['id', 'banco', 'alias', 'numero', 'moneda'])
         }
+    })
+})
+
+/** Usuario con esos roles acotado a esas empresas (sin alcance global). */
+async function usuarioEnEmpresas(roles: string[], empresas: number[]) {
+    const datos = await usuarioConRoles(roles)
+    await db.from('core.usuarios').where('id', datos.usuario.id).update({ alcance_global: false })
+    await db
+        .table('core.usuarios_empresas')
+        .multiInsert(empresas.map((empresaId) => ({ usuario_id: datos.usuario.id, empresa_id: empresaId })))
+    return datos
+}
+
+test.group('Empresa: configuración con dos empresas (empresa activa)', (group) => {
+    let sur: number
+
+    group.each.setup(async () => {
+        await soloEmpresaPrincipal()
+        await restablecerEmpresaPrincipal()
+        sur = await crearEmpresaFila({ nombre_comercial: unico('Fibra Sur'), telefono: '7700-0002' })
+        return async () => {
+            await db.from('core.empresas').where('id', sur).update({ activa: false })
+            await restablecerEmpresaPrincipal()
+        }
+    })
+
+    test('sin empresa activa: 422 empresa_requerida al leer y al guardar, sin tocar la empresa 1', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const ver = await estado(client.get('/api/v1/empresa').bearerToken(token), 422)
+        assert.equal(ver.body().type.split(':').pop(), 'empresa_requerida')
+        const guardar = await estado(
+            client.put('/api/v1/empresa').bearerToken(token).json({ version: 0, nombre: 'Silencio' }),
+            422,
+        )
+        assert.equal(guardar.body().type.split(':').pop(), 'empresa_requerida')
+        const principal = await db.from('core.empresas').where('id', 1).firstOrFail()
+        assert.include(principal, { nombre_comercial: 'ArgosIsp', version: 0 })
+    })
+
+    test('X-Empresa-Id: lee y guarda esa empresa, con auditoría a su nombre; la 1 no cambia', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const leida = await estado(
+            client.get('/api/v1/empresa').bearerToken(token).header('X-Empresa-Id', String(sur)),
+            200,
+        )
+        assert.include(leida.body(), { telefono: '7700-0002', version: 1 })
+        assert.match(leida.body().nombre, /^Fibra Sur/)
+
+        const guardada = await estado(
+            client
+                .put('/api/v1/empresa')
+                .bearerToken(token)
+                .header('X-Empresa-Id', String(sur))
+                .json({ version: 1, nombre: 'Fibra Sur Editada', horario: 'L-S 8 a 18' }),
+            200,
+        )
+        assert.include(guardada.body(), { nombre: 'Fibra Sur Editada', horario: 'L-S 8 a 18', version: 2 })
+        const fila = await db.from('core.empresas').where('id', sur).firstOrFail()
+        assert.include(fila, { nombre_comercial: 'Fibra Sur Editada', horario: 'L-S 8 a 18', version: 2 })
+        const principal = await db.from('core.empresas').where('id', 1).firstOrFail()
+        assert.include(principal, { nombre_comercial: 'ArgosIsp', horario: null, version: 0 })
+
+        const accion = await db
+            .from('audit.acciones')
+            .where('accion', 'empresa.editar')
+            .orderBy('id', 'desc')
+            .firstOrFail()
+        assert.include(accion, { entidad_tipo: 'empresa', resultado: 'ok' })
+        assert.equal(Number(accion.entidad_id), sur)
+        assert.equal(Number(accion.empresa_id), sur)
+        const cambios = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'empresa', entidad_id: sur })
+            .select('campo')
+        assert.includeMembers(
+            cambios.map((c) => c.campo),
+            ['nombre', 'horario'],
+        )
+
+        // La empresa 1, por su lado, sigue con su versión 0 y sus valores por defecto.
+        const una = await estado(
+            client.get('/api/v1/empresa').bearerToken(token).header('X-Empresa-Id', '1'),
+            200,
+        )
+        assert.equal(una.body().version, 0)
+        // La versión de otra empresa no sirve: 409.
+        await estado(
+            client
+                .put('/api/v1/empresa')
+                .bearerToken(token)
+                .header('X-Empresa-Id', '1')
+                .json({ version: 2, nombre: 'Cruzada' }),
+            409,
+        )
+    })
+
+    test('alcance del usuario: su única empresa sin cabecera; otra empresa 403', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioEnEmpresas(['admin'], [sur])
+        const leida = await estado(client.get('/api/v1/empresa').bearerToken(token), 200)
+        assert.equal(leida.body().telefono, '7700-0002')
+        await estado(
+            client.put('/api/v1/empresa').bearerToken(token).json({ version: 1, whatsapp: '5555-0002' }),
+            200,
+        )
+        const editada = await db.from('core.empresas').where('id', sur).firstOrFail()
+        assert.equal(editada.whatsapp, '5555-0002')
+
+        const ajena = await estado(
+            client.get('/api/v1/empresa').bearerToken(token).header('X-Empresa-Id', '1'),
+            403,
+        )
+        assert.equal(ajena.body().type.split(':').pop(), 'empresa_no_permitida')
+        await estado(
+            client
+                .put('/api/v1/empresa')
+                .bearerToken(token)
+                .header('X-Empresa-Id', '1')
+                .json({ version: 0, nombre: 'Ajena' }),
+            403,
+        )
+        const principal = await db.from('core.empresas').where('id', 1).firstOrFail()
+        assert.equal(principal.version, 0)
+    })
+
+    test('el portal público sigue resolviendo la empresa por su cuenta', async ({ client, assert }) => {
+        usarFuenteCuentasDeposito({ activas: async () => [] })
+        const publica = await estado(client.get(`/api/v1/portal/empresa?empresa_id=${sur}`), 200)
+        assert.match(publica.body().nombre, /^Fibra Sur/)
+        assert.equal(publica.body().telefono, '7700-0002')
+        // Sin empresa ni cliente: la principal, como siempre.
+        const principal = await estado(client.get('/api/v1/portal/empresa'), 200)
+        assert.equal(principal.body().nombre, process.env.NOTIFY_EMPRESA_NOMBRE || 'ArgosIsp')
+        usarFuenteCuentasDeposito(undefined)
     })
 })

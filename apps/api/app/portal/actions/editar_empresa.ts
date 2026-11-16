@@ -1,3 +1,4 @@
+import { resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ConflictoVersion } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
@@ -19,21 +20,23 @@ export type EntradaEditarEmpresa = Partial<DatosEmpresa> & {
  * Guarda la configuración de la empresa (`PUT /empresa`, permiso `empresa.editar`): nombre, NIT,
  * dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago.
  *
- * - Edita la empresa 1 (la principal) de `core.empresas` (multiempresa, A1); las demás empresas se
- *   editan con `empresas.editar` (`PUT /empresas/:id`).
+ * - Edita la empresa activa del contexto (`X-Empresa-Id`, o la única del usuario o de la
+ *   instalación; `resolverEmpresaActiva`): 422 `empresa_requerida` si hay varias y no se eligió,
+ *   403 `empresa_no_permitida` fuera del alcance del actor. Nunca cae en la empresa 1 en silencio.
  * - Versión 0 = valores por defecto: guarda los valores por defecto más lo enviado y queda con
  *   `version = 1`. Si no, control optimista por `version` (409).
  * - Solo cambia los campos enviados; `null` o texto vacío borra el dato (salvo `nombre`).
- * - Diff por campo en `audit.cambios` (entidad `empresa`, id 1).
+ * - Diff por campo en `audit.cambios` (entidad `empresa`, id de la empresa editada).
  */
 export default class EditarEmpresa extends DomainAction<EntradaEditarEmpresa, EmpresaVista> {
     readonly nombre = 'empresa.editar'
 
     protected async handle(input: EntradaEditarEmpresa, t: Transaccion): Promise<EmpresaVista> {
-        t.fijarEntidad('empresa', 1)
-        t.fijarEmpresa(1)
-        await t.trx.from('core.empresas').where('id', 1).forUpdate().select('id')
-        const antes = await verEmpresa(t.trx)
+        const empresaId = await resolverEmpresaActiva(t.ctx, t.trx)
+        t.fijarEntidad('empresa', empresaId)
+        t.fijarEmpresa(empresaId)
+        await t.trx.from('core.empresas').where('id', empresaId).forUpdate().select('id')
+        const antes = await verEmpresa(t.trx, empresaId)
 
         const cambios: Record<string, string | null> = {}
         for (const campo of CAMPOS_EMPRESA) {
@@ -51,20 +54,20 @@ export default class EditarEmpresa extends DomainAction<EntradaEditarEmpresa, Em
                 ]),
             )
         if (antes.version === 0) {
-            if (input.version !== 0) throw new ConflictoVersion('empresa', 1)
+            if (input.version !== 0) throw new ConflictoVersion('empresa', empresaId)
             await actualizarConVersion(
                 t.trx,
                 'core.empresas',
-                1,
+                empresaId,
                 0,
                 columnas({ ...sinVersion(antes), ...cambios }),
             )
         } else {
-            await actualizarConVersion(t.trx, 'core.empresas', 1, input.version, columnas(cambios))
+            await actualizarConVersion(t.trx, 'core.empresas', empresaId, input.version, columnas(cambios))
         }
 
-        const despues = await verEmpresa(t.trx)
-        await t.registrarCambios({ tipo: 'empresa', id: 1 }, antes, despues)
+        const despues = await verEmpresa(t.trx, empresaId)
+        await t.registrarCambios({ tipo: 'empresa', id: empresaId }, antes, despues)
         return despues
     }
 }
