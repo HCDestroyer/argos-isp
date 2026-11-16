@@ -1,3 +1,7 @@
+---
+orden: 2
+---
+
 # Runbook · Actualizar y revertir ArgosIsp
 
 Para el operador de un servidor instalado con `instalar.sh` (`docs/runbooks/instalacion.md`). Cómo se publican las versiones: al final de este archivo.
@@ -20,13 +24,13 @@ Pide confirmación (`s`); un cambio **mayor** pide escribir la versión y muestr
 
 Qué hace, en orden, y qué pasa si falla cada paso:
 
-| Paso | Si falla |
-| --- | --- |
-| 1. Descarga y verifica (sha256) el paquete de la versión nueva y `docker compose config` con el `.env` actual | No cambia nada. Si el compose nuevo pide una variable que el `.env` no tiene, el error la nombra: agrégala y repite |
-| 2. Descarga las imágenes nuevas (`docker compose pull`), con todo arriba | No cambia nada |
-| 3. Detiene la aplicación (Postgres y Redis siguen) y hace un **respaldo** en `respaldos/actualizaciones/` (sin cifrar y sin copia remota: es para revertir en este servidor). Si la red de compose ya no coincide con el `.env` (p. ej. `COMPOSE_SUBNET_V4` cambiado), antes la rehace con un down completo (`red-compose.md`) | Vuelve a levantar la versión instalada y termina con error |
-| 4. Cambia `ARGOSISP_VERSION` y `actual`, levanta: `migrate` corre las migraciones, después todo lo demás | ↓ |
-| 5. Espera a que cada servicio quede sano y que la API responda `/health` con la versión nueva | **Revierte solo**: detiene la versión nueva, vuelve a la anterior, **restaura el respaldo del paso 3** (base y comprobantes) y la levanta. Termina con error y el registro dice por qué falló |
+| Paso                                                                                                                                                                                                                                                                                                                           | Si falla                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Descarga y verifica (sha256) el paquete de la versión nueva y `docker compose config` con el `.env` actual                                                                                                                                                                                                                  | No cambia nada. Si el compose nuevo pide una variable que el `.env` no tiene, el error la nombra: agrégala y repite                                                                           |
+| 2. Descarga las imágenes nuevas (`docker compose pull`), con todo arriba                                                                                                                                                                                                                                                       | No cambia nada                                                                                                                                                                                |
+| 3. Detiene la aplicación (Postgres y Redis siguen) y hace un **respaldo** en `respaldos/actualizaciones/` (sin cifrar y sin copia remota: es para revertir en este servidor). Si la red de compose ya no coincide con el `.env` (p. ej. `COMPOSE_SUBNET_V4` cambiado), antes la rehace con un down completo (`red-compose.md`) | Vuelve a levantar la versión instalada y termina con error                                                                                                                                    |
+| 4. Cambia `ARGOSISP_VERSION` y `actual`, levanta: `migrate` corre las migraciones, después todo lo demás                                                                                                                                                                                                                       | ↓                                                                                                                                                                                             |
+| 5. Espera a que cada servicio quede sano y que la API responda `/health` con la versión nueva                                                                                                                                                                                                                                  | **Revierte solo**: detiene la versión nueva, vuelve a la anterior, **restaura el respaldo del paso 3** (base y comprobantes) y la levanta. Termina con error y el registro dice por qué falló |
 
 La aplicación no atiende entre el paso 3 y el 5 (unos minutos, la mayor parte el respaldo). RADIUS también se detiene: las sesiones PPPoE ya establecidas siguen, pero los routers no autentican conexiones nuevas hasta que vuelve (usar una ventana de mantenimiento; con failover a secrets locales del MikroTik, ver `aaa-caido.md`).
 
@@ -62,12 +66,12 @@ Contrato: `.claude/integration/contratos/corte-identificacion.md`. Cada router e
 2. Si el operador ya usa `/ip proxy` en ese router (caché, filtros), no pasa nada: Argos solo agrega el puerto 3346 y sus reglas, y no toca lo demás. Anota igual lo que tiene: `/ip proxy print` y `/ip proxy access print`.
 3. Panel → Routers → editar → **Identificación del cortado: Por código** → Guardar (por la API: `PUT /api/v1/routers/:id` con `corte_identificacion: "codigo"` y la `version` del router). Argos reconcilia ese router en el acto (`portal.config_cambiada` con `router_id`); «Reconciliar ahora» lo repite.
 4. Verifica en el router:
-   ```routeros
-   /ip proxy print                                        # enabled=yes, port incluye 3346, max-cache-size=none si era solo de Argos
-   /ip proxy access print                                 # primero argosisp:servicio:<id> de cada suspendido, luego "argosisp: corte proxy sin codigo"
-   /ip firewall nat print where comment~"proxy de corte"  # redirect to-ports=3346 (IPv4); igual en /ipv6 firewall nat
-   /ip firewall filter print where comment~"proxy de corte" # drop del 3346 con connection-nat-state=!dstnat y accept en argos-corte-in
-   ```
+    ```routeros
+    /ip proxy print                                        # enabled=yes, port incluye 3346, max-cache-size=none si era solo de Argos
+    /ip proxy access print                                 # primero argosisp:servicio:<id> de cada suspendido, luego "argosisp: corte proxy sin codigo"
+    /ip firewall nat print where comment~"proxy de corte"  # redirect to-ports=3346 (IPv4); igual en /ipv6 firewall nat
+    /ip firewall filter print where comment~"proxy de corte" # drop del 3346 con connection-nat-state=!dstnat y accept en argos-corte-in
+    ```
 5. **Probar conexión → Corte**: `proxy_corte` en verde. Desde un suspendido, `curl -sI http://example.com` responde `307` con `Location: …/corte?c=…`.
 6. Desde fuera (la WAN del router): el 3346 no responde (`nc -vz <IP WAN> 3346` agota el tiempo).
 7. Un router que se conecta de cero con «incluir configuración de servicio» ya sale con estas piezas si está en `codigo` (el script trae las mismas reglas que el reconciliador).
@@ -81,18 +85,18 @@ Contrato: `corte-identificacion.md` §5 ter. Con WireGuard activo (`ARGOSISP_WIR
 1. `sudo argosisp actualizar`. El instalador vuelve a escribir `/etc/sysctl.d/90-argosisp-wireguard.conf`, ahora con `net.ipv4.conf.all.src_valid_mark = 1`. Si tu servidor tiene `rp_filter=1` (RHEL y derivados), aplica con `sudo sysctl --system` o reinicia.
 2. `sudo argosisp estado`: si avisa de `ARGOSISP_BIND_IP`, quítala del `.env` (el puerto del corte debe escuchar también en la IP del túnel) o pon `PORTAL_CORTE_TUNEL=0`, y luego `sudo argosisp levantar`.
 3. **Routers con API en modo Por IP:** «Reconciliar ahora». En el router:
-   ```routeros
-   /ip firewall nat print where comment~"corte"   # dst-nat to-addresses=10.255.0.1 to-ports=8088; arriba "argosisp:top corte por tunel sin NAT"
-   /ip firewall address-list print where comment="argosisp: portal tunel"
-   ```
-   **Probar conexión → Corte**: `portal_ip_cliente` debe salir en verde.
+    ```routeros
+    /ip firewall nat print where comment~"corte"   # dst-nat to-addresses=10.255.0.1 to-ports=8088; arriba "argosisp:top corte por tunel sin NAT"
+    /ip firewall address-list print where comment="argosisp: portal tunel"
+    ```
+    **Probar conexión → Corte**: `portal_ip_cliente` debe salir en verde.
 4. **Routers sin API:** «Generar script» con «incluir configuración de servicio» y córrelo otra vez. Si no lo haces, siguen como antes («no identificado», con su motivo).
 5. **Routers en modo código:** no cambia nada.
 6. **Servidor dentro de la LAN del ISP** (sin túnel): no hay nada que cambiar en Argos. En el router, tu masquerade no debe aplicar hacia la IPv4 del portal; el de Argos solo sale por la WAN. Si el diagnóstico dice que el portal ve la IP del router, agrega antes de tu masquerade:
-   ```routeros
-   /ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=<IPv4 del portal> action=accept place-before=0 comment="sin NAT hacia el portal"
-   ```
-   El servidor necesita ruta de vuelta a las redes de clientes: el router es su puerta de enlace, o tiene rutas estáticas.
+    ```routeros
+    /ip firewall nat add chain=srcnat src-address-list=argos-clientes dst-address=<IPv4 del portal> action=accept place-before=0 comment="sin NAT hacia el portal"
+    ```
+    El servidor necesita ruta de vuelta a las redes de clientes: el router es su puerta de enlace, o tiene rutas estáticas.
 
 Para volver atrás: `PORTAL_CORTE_TUNEL=0` en el `.env` y `sudo argosisp levantar`. El reconciliador devuelve el dst-nat a la IPv4 del portal y el agente deja en cada peer solo su `/32`.
 
@@ -126,11 +130,11 @@ El comando termina con `NO SE PUDO RESTAURAR …` o `LA VERSIÓN … NO QUEDÓ S
 
 1. `sudo argosisp logs migrate api backup` y el registro de `/opt/argosisp/registros/`. Si el error habla de la red (`has active endpoints`, `network … not found`), `sudo argosisp reparar-red` y seguir con `red-compose.md`.
 2. Restaurar a mano el respaldo previo (nombre en el registro, o el más nuevo de `respaldos/actualizaciones/`):
-   ```sh
-   sudo argosisp compose run --rm backup restaurar.sh /backups/actualizaciones/argosisp-<marca>.dump \
-     --base argosisp --reemplazar --comprobantes-dir /comprobantes
-   sudo argosisp levantar
-   ```
+    ```sh
+    sudo argosisp compose run --rm backup restaurar.sh /backups/actualizaciones/argosisp-<marca>.dump \
+      --base argosisp --reemplazar --comprobantes-dir /comprobantes
+    sudo argosisp levantar
+    ```
 3. Si el respaldo previo no sirve, el último respaldo diario: `docs/runbooks/restaurar-backup.md`.
 
 ## Cómo se publica una versión (equipo)

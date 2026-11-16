@@ -1,3 +1,7 @@
+---
+orden: 8
+---
+
 # Runbook · Red de compose rota o distinta del `.env`
 
 Síntomas (en `argosisp actualizar`, `levantar`, `revertir` o en el registro de `/opt/argosisp/registros/`):

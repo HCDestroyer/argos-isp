@@ -1,3 +1,7 @@
+---
+orden: 22
+---
+
 # Runbook · Cierre mensual del libro
 
 Para contabilidad. Qué revisar antes de cerrar un mes, cómo cerrarlo en el panel, qué hacer si algo no cuadra y cómo se corrige después. Verificado contra el panel (`/libro`, pestaña **Cierres**) y la API (`POST /libro/periodos/cerrar`, `POST /libro/periodos/reabrir`, `GET /libro/periodos`) de la semana 3.
