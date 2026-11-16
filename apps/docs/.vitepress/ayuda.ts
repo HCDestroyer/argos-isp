@@ -35,7 +35,9 @@ function archivos(dir: string, ext: string): string[] {
 export function pantallasDelPanel(paginas: string): string[] {
     return archivos(paginas, '.vue')
         .map((f) => {
-            const clave = `/${relative(paginas, f).replace(/\.vue$/, '').replace(/(^|\/)index$/, '')}`
+            const clave = `/${relative(paginas, f)
+                .replace(/\.vue$/, '')
+                .replace(/(^|\/)index$/, '')}`
             return clave === '/' ? '/' : clave.replace(/\/$/, '')
         })
         .filter((c) => !SIN_AYUDA.has(c))
@@ -51,13 +53,19 @@ export function mapaDeAyuda(raiz: string): Map<string, string> {
         if (!frente) continue
         const bloque = /^pantallas:\s*\n((?:\s+-\s+.+\n?)+)/m.exec(frente)?.[1]
         if (!bloque) continue
-        const pagina = `/${relative(raiz, f).replace(/\.md$/, '').replace(/(^|\/)index$/, '$1')}`
+        const pagina = `/${relative(raiz, f)
+            .replace(/\.md$/, '')
+            .replace(/(^|\/)index$/, '$1')}`
         for (const linea of bloque.split('\n')) {
-            const valor = /^\s+-\s+(.+)$/.exec(linea)?.[1]?.trim().replace(/^['"]|['"]$/g, '')
+            const valor = /^\s+-\s+(.+)$/
+                .exec(linea)?.[1]
+                ?.trim()
+                .replace(/^['"]|['"]$/g, '')
             if (!valor) continue
             const [clave = '', ancla] = valor.split('#')
             const previo = mapa.get(clave)
-            if (previo) throw new Error(`La pantalla ${clave} tiene dos páginas de ayuda: ${previo} y ${pagina}`)
+            if (previo)
+                throw new Error(`La pantalla ${clave} tiene dos páginas de ayuda: ${previo} y ${pagina}`)
             mapa.set(clave, ancla ? `${pagina}#${ancla}` : pagina)
         }
     }
@@ -65,7 +73,12 @@ export function mapaDeAyuda(raiz: string): Map<string, string> {
 }
 
 /** Comprueba la cobertura y escribe /ayuda/index.html en el sitio compilado. */
-export function generarAyuda(opciones: { raiz: string; paginas: string; salida: string; base: string }): void {
+export function generarAyuda(opciones: {
+    raiz: string
+    paginas: string
+    salida: string
+    base: string
+}): void {
     const mapa = mapaDeAyuda(opciones.raiz)
     const pantallas = pantallasDelPanel(opciones.paginas)
     const faltan = pantallas.filter((p) => !mapa.has(p))
@@ -79,7 +92,9 @@ export function generarAyuda(opciones: { raiz: string; paginas: string; salida: 
         if (process.env.DOCS_AYUDA_ESTRICTA === '1') throw new Error(texto)
         console.warn(`\n${texto}\n`)
     }
-    const destinos = Object.fromEntries([...mapa].map(([clave, url]) => [clave, `${opciones.base}${url.replace(/^\//, '')}`]))
+    const destinos = Object.fromEntries(
+        [...mapa].map(([clave, url]) => [clave, `${opciones.base}${url.replace(/^\//, '')}`]),
+    )
     const html = `<!doctype html>
 <html lang="es-GT">
 <head>

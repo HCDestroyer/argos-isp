@@ -30,7 +30,8 @@ const secciones = [
 export default defineConfig({
     lang: 'es-GT',
     title: 'ArgosIsp',
-    description: 'Documentación y tutoriales de ArgosIsp: gestión, facturación y RADIUS para proveedores de internet.',
+    description:
+        'Documentación y tutoriales de ArgosIsp: gestión, facturación y RADIUS para proveedores de internet.',
     srcDir: raiz,
     base,
     cleanUrls: true,
@@ -49,7 +50,9 @@ export default defineConfig({
             for (const regla of ['text', 'code_inline'] as const) {
                 const original = md.renderer.rules[regla]
                 md.renderer.rules[regla] = (tokens, idx, options, env, self) => {
-                    const html = original ? original(tokens, idx, options, env, self) : (tokens[idx]?.content ?? '')
+                    const html = original
+                        ? original(tokens, idx, options, env, self)
+                        : (tokens[idx]?.content ?? '')
                     return html.includes('{{') ? `<span v-pre>${html}</span>` : html
                 }
             }
@@ -62,12 +65,17 @@ export default defineConfig({
                     const destino = normalize(join('docs', dirname(String(env.relativePath ?? '')), ruta))
                     const ext = extname(ruta)
                     const esPagina = ext === '' || ext === '.md'
-                    if (!destino.startsWith('docs/') || (!esPagina && !/\.(png|jpe?g|svg|gif|webp)$/i.test(ruta))) {
+                    if (
+                        !destino.startsWith('docs/') ||
+                        (!esPagina && !/\.(png|jpe?g|svg|gif|webp)$/i.test(ruta))
+                    ) {
                         const tipo = ext === '' && !destino.startsWith('docs/') ? 'tree' : 'blob'
                         token.attrSet('href', `${repo}/${tipo}/main/${destino}${ancla ? `#${ancla}` : ''}`)
                     }
                 }
-                return previo ? previo(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options)
+                return previo
+                    ? previo(tokens, idx, options, env, self)
+                    : self.renderToken(tokens, idx, options)
             }
         },
     },
@@ -128,7 +136,11 @@ export default defineConfig({
         lightModeSwitchTitle: 'Cambiar a claro',
         darkModeSwitchTitle: 'Cambiar a oscuro',
         langMenuLabel: 'Idioma',
-        notFound: { title: 'Página no encontrada', quote: 'Esta página no existe o cambió de lugar.', linkText: 'Ir al inicio' },
+        notFound: {
+            title: 'Página no encontrada',
+            quote: 'Esta página no existe o cambió de lugar.',
+            linkText: 'Ir al inicio',
+        },
         footer: { message: 'ArgosIsp · parte de la familia Horus', copyright: 'Licencia en el repositorio' },
     },
 })
