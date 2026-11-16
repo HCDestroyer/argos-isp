@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.16.0](https://github.com/HCDestroyer/argos-isp/compare/v1.15.0...v1.16.0) (2026-11-16)
+
+
+### Funcionalidades
+
+* **iris:** contrato 0.7.1 (A24): quién decidió el comprobante y a quién se da acceso al vincular ([#245](https://github.com/HCDestroyer/argos-isp/issues/245)) ([4a9edc7](https://github.com/HCDestroyer/argos-isp/commit/4a9edc700b07e03110f1825b28a332b212faa27a))
+
+
+### Correcciones
+
+* **core:** sin escalada de privilegios en tokens, usuarios y roles; X-Canal limitado ([#240](https://github.com/HCDestroyer/argos-isp/issues/240)) ([0eaff61](https://github.com/HCDestroyer/argos-isp/commit/0eaff61a7522783c27b8a6a5c55a23f505604bcb))
+* **notify:** aviso de suspensión manual y alerta de aaa caído sin datos falsos ([#241](https://github.com/HCDestroyer/argos-isp/issues/241)) ([d1ac0f3](https://github.com/HCDestroyer/argos-isp/commit/d1ac0f34d71a8bfb9918a42bce80ea3ac922ce3c))
+* **portal:** /configuracion/empresa lee y guarda la empresa activa, no la 1 ([#242](https://github.com/HCDestroyer/argos-isp/issues/242)) ([93fdd3c](https://github.com/HCDestroyer/argos-isp/commit/93fdd3c31a5353d7d6f2439da9d64a0163fec2a1))
+* **web:** integraciones con iris.ver, extracto solo CSV, IPv6 de documentación y cuenta de premios ([#243](https://github.com/HCDestroyer/argos-isp/issues/243)) ([1361a14](https://github.com/HCDestroyer/argos-isp/commit/1361a143c60fd7ad0c61c992382d07f93ff7f9f5))
+
 ## [1.15.0](https://github.com/HCDestroyer/argos-isp/compare/v1.14.0...v1.15.0) (2026-11-10)
 
 
