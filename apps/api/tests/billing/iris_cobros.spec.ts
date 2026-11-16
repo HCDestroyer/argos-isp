@@ -232,6 +232,7 @@ test.group('Iris 0.6.0 · comprobantes (§7.2)', () => {
             causa: null,
             servicio_estado: 'suspendido',
             origen: 'iris',
+            verificado_iris_actor: null,
         })
         // un comprobante no es un pago: ni dinero ni estado
         assert.equal(await estadoServicio(servicioId), 'suspendido')

@@ -1125,6 +1125,11 @@ export const Comprobante = definirEsquema(
                 ...nulable(texto),
                 description: 'Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris»)',
             },
+            verificado_iris_actor: {
+                ...nulable(texto),
+                description:
+                    'Solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null si se decidió en el panel o sigue pendiente',
+            },
             nota: nulable(texto),
             estado: enumerado(['pendiente', 'aprobado', 'rechazado']),
             motivo_rechazo: nulable(texto),
@@ -1156,6 +1161,7 @@ export const Comprobante = definirEsquema(
             'canal_contacto',
             'iris_actor',
             'iris_conversacion',
+            'verificado_iris_actor',
             'causa_rechazo',
         ],
     ),

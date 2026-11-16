@@ -87960,6 +87960,13 @@
             ],
             "description": "Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris»)"
           },
+          "verificado_iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null si se decidió en el panel o sigue pendiente"
+          },
           "nota": {
             "type": [
               "string",

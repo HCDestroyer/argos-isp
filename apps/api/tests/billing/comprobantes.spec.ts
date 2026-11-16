@@ -131,6 +131,7 @@ test.group('billing · comprobantes de depósito', () => {
             causa: null,
             servicio_estado: 'suspendido',
             origen: null,
+            verificado_iris_actor: null,
         })
         // la auditoría guarda nombre y tamaño del archivo, nunca su contenido
         const auditoria = await db
