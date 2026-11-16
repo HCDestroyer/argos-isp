@@ -137,8 +137,8 @@ largas siguen en otra página.
 | Endpoint                     | Permiso                  | Qué hace                                                                                                                                                                                                                                     |
 | ---------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/portal/empresa` | público (límite por IP)  | `EmpresaPublica`: contacto, horario, instrucciones de pago y `cuentas_deposito`                                                                                                                                                              |
-| `GET /api/v1/empresa`        | `empresa.ver`            | `Empresa` con `version` (0 = nunca se guardó)                                                                                                                                                                                                |
-| `PUT /api/v1/empresa`        | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id 1) |
+| `GET /api/v1/empresa`        | `empresa.ver`            | `Empresa` de la empresa activa (`X-Empresa-Id` o la única del usuario o de la instalación; 422 `empresa_requerida`, 403 `empresa_no_permitida`) con `version` (0 = nunca se guardó) |
+| `PUT /api/v1/empresa`        | `empresa.editar` (admin) | Acción `empresa.editar` (`actions/editar_empresa.ts`): nombre, NIT, dirección, teléfono y teléfono alterno, WhatsApp, correo, horario, instrucciones de pago. 409 por `version`, diff por campo en `audit.cambios` (entidad `empresa`, id de la empresa). Edita la empresa activa, como el `GET`; nunca cae en la 1 en silencio |
 
 - Multiempresa (A1): los datos son la empresa 1 de `core.empresas` (antes `core.empresa`, una fila). Sin
   guardar (versión 0): `nombre` de `NOTIFY_EMPRESA_NOMBRE`, `telefono` de
@@ -529,7 +529,9 @@ con canal a correo e idempotente, 503 sin bot y límite por IP.
 
 `tests/portal/empresa.spec.ts`: valores por defecto con versión 0 y sin cuentas, guardado con auditoría
 y diff, lectura pública con las cuentas de la fuente (falsa), documentos con `{{empresa.*}}`, borrar
-campos, 409, 422 y 403.
+campos, 409, 422 y 403. Con dos empresas: sin empresa activa 422 `empresa_requerida` (la 1 no cambia),
+`X-Empresa-Id` lee y guarda esa empresa con auditoría a su nombre, un usuario acotado usa su única empresa
+y recibe 403 en otra, y `/portal/empresa` sigue resolviendo la suya.
 
 `tests/portal/auditoria_unica.spec.ts`: misma IP y servicio auditan una vez (quien-soy y estado por
 separado), otra IP u otro servicio se auditan, IP sin servicio, fin de la ventana, ventana `0`, Redis
