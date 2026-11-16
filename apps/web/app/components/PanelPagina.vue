@@ -32,6 +32,7 @@ withDefaults(defineProps<{
                         <SelectorEmpresa class="hidden sm:flex" />
                         <CajaAccesoDirecto />
                         <slot name="acciones" />
+                        <AyudaBoton />
                         <UColorModeButton />
                     </template>
                 </UDashboardNavbar>
