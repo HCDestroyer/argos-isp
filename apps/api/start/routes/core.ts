@@ -397,6 +397,9 @@ const usuarios: Ruta[] = [
         ruta: '/usuarios',
         operacion: 'usuariosCrear',
         resumen: 'Crear usuario',
+        descripcion:
+            'Los roles asignados (con su alcance de router/zona/caja) deben estar cubiertos por los permisos de quien ' +
+            'crea el usuario; si no, 403 `rol_excede_permisos` con el detalle en `errors[]`. Un admin global asigna todo.',
         etiqueta: 'acl',
         permiso: 'usuarios.crear',
         cuerpo: v.crearUsuarioValidator,
@@ -418,6 +421,9 @@ const usuarios: Ruta[] = [
         ruta: '/usuarios/:id',
         operacion: 'usuariosEditar',
         resumen: 'Editar usuario y sus roles',
+        descripcion:
+            'No se edita a un usuario con permisos, alcances o empresas que el actor no cubre, ni se asignan roles ' +
+            '(tampoco a uno mismo) más allá de lo que el actor tenía: 403 `rol_excede_permisos`. Un admin global puede todo.',
         etiqueta: 'acl',
         permiso: 'usuarios.editar',
         cuerpo: v.editarUsuarioValidator,
@@ -433,7 +439,8 @@ const usuarios: Ruta[] = [
         resumen: 'Definir las empresas del usuario o su alcance global',
         descripcion:
             'Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global ' +
-            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).',
+            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`). Tampoco se ' +
+            'cambian las de un usuario con permisos, alcances o empresas que el actor no cubre (403 `rol_excede_permisos`).',
         etiqueta: 'acl',
         permiso: 'usuarios.asignar_empresas',
         cuerpo: v.asignarEmpresasUsuarioValidator,
@@ -457,6 +464,8 @@ const usuarios: Ruta[] = [
         ruta: '/roles',
         operacion: 'rolesCrear',
         resumen: 'Crear rol',
+        descripcion:
+            'Solo con permisos que el actor tiene sin alcance de router/zona/caja; si no, 403 `rol_excede_permisos`.',
         etiqueta: 'acl',
         permiso: 'roles.crear',
         cuerpo: v.crearRolValidator,
@@ -468,6 +477,9 @@ const usuarios: Ruta[] = [
         ruta: '/roles/:id',
         operacion: 'rolesEditar',
         resumen: 'Editar rol y sus permisos',
+        descripcion:
+            'Los permisos que se agregan deben ser del actor sin alcance (contando lo que tenía antes del cambio); ' +
+            'si no, 403 `rol_excede_permisos`. Quitar permisos no se restringe.',
         etiqueta: 'acl',
         permiso: 'roles.editar',
         cuerpo: v.editarRolValidator,
@@ -519,6 +531,11 @@ const usuarios: Ruta[] = [
         ruta: '/tokens',
         operacion: 'tokensCrear',
         resumen: 'Crear token de API (se muestra una sola vez)',
+        descripcion:
+            'El actor debe tener, como mínimo, lo que tendría el token: cada permiso efectivo (los del usuario ' +
+            'destino ∩ `alcances.permisos`) con alcance de router/zona/caja que cubra el del token (recortado por ' +
+            'el token con el que actúa el actor, si es uno) y las empresas del usuario destino. Si no, 403 ' +
+            '`token_excede_permisos` con el detalle en `errors[]`. Un admin global puede crear cualquiera.',
         etiqueta: 'acl',
         permiso: 'tokens.crear',
         cuerpo: v.crearTokenValidator,
@@ -530,6 +547,9 @@ const usuarios: Ruta[] = [
         ruta: '/tokens/:id/revocar',
         operacion: 'tokensRevocar',
         resumen: 'Revocar token de API',
+        descripcion:
+            'Los tokens del propio usuario se revocan siempre. Los de otro usuario, solo si el actor cubre lo que ' +
+            'tiene el token (mismas reglas que al crearlo); si no, 403 `token_excede_permisos`.',
         etiqueta: 'acl',
         permiso: 'tokens.revocar',
         respuesta: { status: 200, descripcion: 'Token revocado', esquema: TokenApi },

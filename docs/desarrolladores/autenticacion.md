@@ -132,10 +132,14 @@ Ver [Multiempresa](./arquitectura.md#multiempresa).
 
 ## Otras cabeceras
 
-| Cabecera          | Para qué                                                                                                                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `X-Request-Id`    | Id de la petición (1 a 128 caracteres `A-Za-z0-9._:-`). Si no llega o no es válido se genera un UUID. Vuelve en la respuesta y queda en `audit.acciones` y en los eventos (`request_id`). |
-| `X-Canal`         | Canal con el que se audita la acción (`panel`, `portal`, `api`, `ia`, …). Por defecto `panel` con la cookie y `api` con Bearer.                                                           |
-| `Idempotency-Key` | Ver [Convenciones](./convenciones-api.md#idempotencia).                                                                                                                                   |
+| Cabecera          | Para qué                                                                                                                                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Request-Id`    | Id de la petición (1 a 128 caracteres `A-Za-z0-9._:-`). Si no llega o no es válido se genera un UUID. Vuelve en la respuesta y queda en `audit.acciones` y en los eventos (`request_id`).                      |
+| `X-Canal`         | Canal con el que se audita la acción: solo `panel`, `portal`, `api` o `ia`. Otro valor se ignora (los canales internos solo valen con el token interno). Por defecto `panel` con la cookie y `api` con Bearer. |
+| `Idempotency-Key` | Ver [Convenciones](./convenciones-api.md#idempotencia).                                                                                                                                                        |
 
 Las rutas `/api/v1/internal/*` no aceptan estas credenciales: son para `aaa` y `coa` y usan `Authorization: Bearer <INTERNAL_TOKEN>`.
+
+## Sin escalada de privilegios
+
+Crear o revocar el token de otro usuario, asignar roles o empresas a un usuario, editarlo, y crear o editar un rol exigen que quien lo hace tenga todo lo que estaría dando: permisos, alcances de router, zona o caja y empresas. Si no, la API responde `403` `application/problem+json` con `token_excede_permisos` (tokens) o `rol_excede_permisos` (usuarios y roles) y el detalle en `errors[]`. Un usuario con alcance global y todos los permisos (`admin`) pasa siempre. Si quien lo hace actúa con un token de API, cuenta lo que ese token tiene, no su usuario.

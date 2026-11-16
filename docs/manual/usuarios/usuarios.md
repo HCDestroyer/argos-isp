@@ -58,6 +58,8 @@ Arriba, las pestañas **Usuarios**, **Roles y permisos** y **Tokens de API** (ca
 
 ## Preguntas frecuentes y errores
 
+**«La asignación excede tus permisos».** Solo puedes dar roles, alcances y empresas que tú mismo tienes. Tampoco puedes editar (ni cambiar la contraseña, el correo o las empresas) a un usuario que tiene más permisos que tú. Así nadie se sube permisos solo ni toma la cuenta de un administrador. Un administrador puede todo.
+
 **«Alguien más cambió este usuario».** No se guardó. Cierra, vuelve a abrirlo y repite el cambio.
 
 **Un usuario dice que no ve un botón.** Le falta el permiso de esa acción. Revisa sus roles en [Roles y permisos](roles.md): cada permiso tiene el mismo nombre que la acción.

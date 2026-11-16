@@ -3,6 +3,7 @@ import { Prohibido, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { actualizarConVersion } from '#shared/version'
 import { verUsuario, type UsuarioVista } from '#core/consultas/acl'
+import { CODIGO_ROL_EXCEDE, coberturaDelActor, exigirCoberturaUsuario } from '#core/cobertura_permisos'
 
 export interface EntradaAsignarEmpresasUsuario {
     id: number
@@ -21,6 +22,9 @@ export interface EntradaAsignarEmpresasUsuario {
  *   existe o está desactivada: 422 en `empresas.<i>`.
  * - Quien asigna solo reparte lo que tiene: dar alcance global exige tenerlo (403) y cada empresa
  *   de la lista debe estar en su alcance (403 `empresa_no_permitida`).
+ * - Tampoco se cambian las empresas de un usuario con permisos, alcances o empresas que quien
+ *   asigna no cubre (403 `rol_excede_permisos`, `#core/cobertura_permisos`): llevar a otra empresa
+ *   a alguien con más permisos le daría allí lo que el actor no tiene.
  * - Diff en `audit.cambios` (`alcance_global` y `empresas`). Las sesiones abiertas toman el nuevo
  *   alcance en la siguiente petición.
  */
@@ -32,6 +36,10 @@ export default class AsignarEmpresasUsuario extends DomainAction<
 
     protected async handle(input: EntradaAsignarEmpresasUsuario, t: Transaccion): Promise<UsuarioVista> {
         t.fijarEntidad('usuario', input.id)
+        const cobertura = await coberturaDelActor(t.trx, t.ctx, CODIGO_ROL_EXCEDE)
+        if (cobertura && cobertura.usuarioId !== input.id) {
+            await exigirCoberturaUsuario(t.trx, cobertura, input.id, 'editar')
+        }
         const antes = await verUsuario(input.id, t.trx)
         const empresas = input.alcance_global ? [] : [...new Set(input.empresas ?? [])].sort((a, b) => a - b)
 

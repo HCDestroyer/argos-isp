@@ -18,6 +18,7 @@ export default class InternoMiddleware {
         if (!token || !timingSafeEqual(digest(token), digest(env.get('INTERNAL_TOKEN')))) {
             throw new NoAutenticado('Se requiere el token interno')
         }
+        ctx.autenticadoInterno = true
         return next()
     }
 }

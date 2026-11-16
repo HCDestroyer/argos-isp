@@ -81,7 +81,7 @@ Cada ruta se declara una vez en `start/routes/<modulo>.ts` con `definirRuta({ me
 - Errores: RFC 9457 `application/problem+json` (`type`, `title`, `status`, `detail`, `errors[]`). Lanza las clases de `app/shared/errores.ts`.
 - Listas: `?cursor=&limit=` → `{ data, nextCursor }` con `paginar()` y `reglasPaginacion`.
 - `Idempotency-Key`: `idempotente: true` en la ruta; la respuesta 2xx se guarda en `core.idempotency_keys` por `(clave, actor)` y se repite.
-- `X-Request-Id` (o uno generado) viaja a la auditoría y vuelve en la respuesta; `X-Canal: panel|portal|ia…` fija el canal.
+- `X-Request-Id` (o uno generado) viaja a la auditoría y vuelve en la respuesta; `X-Canal: panel|portal|api|ia` fija el canal (solo esos; `cron`, `worker`, `webhook`, `interno` y `consola` se ignoran salvo con el token interno, y queda el canal por defecto).
 
 Si cambias un validador, una ruta o un schema, regenera y commitea los contratos:
 
