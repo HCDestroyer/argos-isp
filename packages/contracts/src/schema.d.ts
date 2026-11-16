@@ -10422,7 +10422,10 @@ export interface paths {
         /** Listar tokens de API */
         get: operations["tokensListar"];
         put?: never;
-        /** Crear token de API (se muestra una sola vez) */
+        /**
+         * Crear token de API (se muestra una sola vez)
+         * @description El actor debe tener, como mínimo, lo que tendría el token: cada permiso efectivo (los del usuario destino ∩ `alcances.permisos`) con alcance de router/zona/caja que cubra el del token (recortado por el token con el que actúa el actor, si es uno) y las empresas del usuario destino. Si no, 403 `token_excede_permisos` con el detalle en `errors[]`. Un admin global puede crear cualquiera.
+         */
         post: operations["tokensCrear"];
         delete?: never;
         options?: never;
@@ -10439,7 +10442,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revocar token de API */
+        /**
+         * Revocar token de API
+         * @description Los tokens del propio usuario se revocan siempre. Los de otro usuario, solo si el actor cubre lo que tiene el token (mismas reglas que al crearlo); si no, 403 `token_excede_permisos`.
+         */
         post: operations["tokensRevocar"];
         delete?: never;
         options?: never;

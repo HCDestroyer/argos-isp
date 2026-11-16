@@ -8,6 +8,7 @@ import {
     rechazarAlcanceDeRed,
     usuarioSoloEmpresas,
 } from '#core/alcance_usuario_tecnico'
+import { exigirCoberturaToken } from '#core/cobertura_token'
 
 export interface EntradaCrearTokenApi {
     usuario_id: number
@@ -26,6 +27,10 @@ export interface SalidaCrearTokenApi {
  * el valor se devuelve una única vez. `alcances.permisos` recorta los permisos del usuario y
  * `routers`/`zonas`/`cajas` restringen su alcance, salvo en el usuario técnico de Iris, que solo
  * tiene alcance por empresas (422 `usuario_tecnico_solo_empresas`).
+ *
+ * Sin escalada de privilegios: el actor debe tener, como mínimo, los permisos (con su alcance de
+ * router/zona/caja) y las empresas que tendría el token; si no, 403 `token_excede_permisos`
+ * (`#core/cobertura_token`). Un admin global puede crear cualquiera.
  */
 export default class CrearTokenApi extends DomainAction<EntradaCrearTokenApi, SalidaCrearTokenApi> {
     readonly nombre = 'tokens.crear'
@@ -76,6 +81,7 @@ export default class CrearTokenApi extends DomainAction<EntradaCrearTokenApi, Sa
                 )
             }
         }
+        await exigirCoberturaToken(t.trx, t.ctx, input.usuario_id, alcances, { verbo: 'crear' })
 
         const { valor, hash } = generarTokenApi()
         const [fila] = (await t.trx

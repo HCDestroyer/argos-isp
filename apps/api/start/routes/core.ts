@@ -519,6 +519,11 @@ const usuarios: Ruta[] = [
         ruta: '/tokens',
         operacion: 'tokensCrear',
         resumen: 'Crear token de API (se muestra una sola vez)',
+        descripcion:
+            'El actor debe tener, como mínimo, lo que tendría el token: cada permiso efectivo (los del usuario ' +
+            'destino ∩ `alcances.permisos`) con alcance de router/zona/caja que cubra el del token (recortado por ' +
+            'el token con el que actúa el actor, si es uno) y las empresas del usuario destino. Si no, 403 ' +
+            '`token_excede_permisos` con el detalle en `errors[]`. Un admin global puede crear cualquiera.',
         etiqueta: 'acl',
         permiso: 'tokens.crear',
         cuerpo: v.crearTokenValidator,
@@ -530,6 +535,9 @@ const usuarios: Ruta[] = [
         ruta: '/tokens/:id/revocar',
         operacion: 'tokensRevocar',
         resumen: 'Revocar token de API',
+        descripcion:
+            'Los tokens del propio usuario se revocan siempre. Los de otro usuario, solo si el actor cubre lo que ' +
+            'tiene el token (mismas reglas que al crearlo); si no, 403 `token_excede_permisos`.',
         etiqueta: 'acl',
         permiso: 'tokens.revocar',
         respuesta: { status: 200, descripcion: 'Token revocado', esquema: TokenApi },

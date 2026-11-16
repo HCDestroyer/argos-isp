@@ -32,6 +32,14 @@ export const CANALES = [
 ] as const
 export type Canal = (typeof CANALES)[number]
 
+/**
+ * Canales que un cliente HTTP puede declarar con `X-Canal`: el panel (`apps/web`), el portal
+ * (`apps/portal`), integraciones y tokens (`api`) y agentes de IA (`ia`). Los demás son de
+ * procesos del sistema y el middleware los ignora salvo con el token interno.
+ */
+export const CANALES_HTTP = ['panel', 'portal', 'api', 'ia'] as const satisfies readonly Canal[]
+export type CanalHttp = (typeof CANALES_HTTP)[number]
+
 export interface ContextoAccion {
     actor: Actor
     canal: Canal
@@ -62,6 +70,12 @@ export interface ContextoAccion {
      * `actuarComoVinculado` en las rutas que lo declaran; ausente en todo lo demás.
      */
     via?: ViaActuacion | null
+    /**
+     * `core.tokens_api.id` del token de API con el que se autenticó la petición (actor `token`).
+     * Lo pone `contextoAccion()`; las acciones de tokens lo usan para recortar al actor con los
+     * alcances de ese token (`#core/cobertura_token`). Ausente con sesión de login y fuera de HTTP.
+     */
+    tokenApiId?: number | null
 }
 
 /** Vía de una actuación vinculada: con qué token y para qué permiso (= acción de nivel superior). */
