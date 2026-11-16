@@ -57,8 +57,8 @@ describe('pools editables y migrables', () => {
         await esperar(() => expect(document.body.querySelector('[data-prueba="form-pool"]')).not.toBeNull())
         document.body.querySelector<HTMLButtonElement>('[data-prueba="pool-sugerir"]')!.click()
         await esperar(() => expect(document.body.querySelector('[data-prueba="pool-vista-previa"]')?.textContent).toContain('Caben 16,384 clientes'))
-        expect(document.body.querySelector<HTMLInputElement>('[data-prueba="pool-prefijo"] input, input[data-prueba="pool-prefijo"]')?.value).toBe('2803:d100:1040::/42')
-        expect(document.body.querySelector('[data-prueba="pool-vista-previa"]')?.textContent).toContain('Cliente 1: 2803:d100:1040::/56')
+        expect(document.body.querySelector<HTMLInputElement>('[data-prueba="pool-prefijo"] input, input[data-prueba="pool-prefijo"]')?.value).toBe('2001:db8:1040::/42')
+        expect(document.body.querySelector('[data-prueba="pool-vista-previa"]')?.textContent).toContain('Cliente 1: 2001:db8:1040::/56')
     })
 
     it('vista previa del bloque: división sugerida y lo que recibe cada cliente', async () => {

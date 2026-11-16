@@ -32,13 +32,13 @@ test('editar, sugerir y mover pools del router', async ({ page }) => {
 
     // Pool nuevo: «Sugerir» toma un prefijo libre y la vista previa dice qué entrega.
     await direccionamiento.locator('[data-prueba="agregar-pool-1"]').click()
-    modal = page.getByRole('dialog', { name: /Agregar pool en 2803:d100:1000::\/40/ })
+    modal = page.getByRole('dialog', { name: /Agregar pool en 2001:db8:1000::\/40/ })
     await modal.locator('[data-prueba="pool-sugerir"]').click()
-    await expect(campo(modal, 'pool-prefijo')).toHaveValue('2803:d100:1040::/42')
+    await expect(campo(modal, 'pool-prefijo')).toHaveValue('2001:db8:1040::/42')
     await expect(modal.locator('[data-prueba="pool-vista-previa"]')).toContainText('Caben 16,384 clientes')
     await modal.locator('[data-prueba="pool-guardar"]').click()
     await expect(modal).toBeHidden()
-    await expect(direccionamiento.locator('[data-bloque="1"]')).toContainText('2803:d100:1040::/42')
+    await expect(direccionamiento.locator('[data-bloque="1"]')).toContainText('2001:db8:1040::/42')
 
     // Mover la red a otro router: primero se revisa qué servicios pasan.
     await direccionamiento.locator('[data-prueba="migrar-red-2"]').click()

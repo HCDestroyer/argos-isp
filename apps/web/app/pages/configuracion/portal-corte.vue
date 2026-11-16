@@ -191,7 +191,7 @@ onMounted(cargar)
                             >
                                 <UInput
                                     v-model="estado.portal_v6"
-                                    placeholder="2803:d100::20"
+                                    placeholder="2001:db8::20"
                                     autocomplete="off"
                                     class="w-full font-mono"
                                     data-prueba="portal-corte-v6"

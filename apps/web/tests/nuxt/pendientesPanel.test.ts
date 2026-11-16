@@ -121,11 +121,11 @@ describe('plan por router y direccionamiento del router', () => {
         expect(red.ok).toBe(true)
         const solapada = await useRouters().agregarRed(id, { cidr: '100.64.40.0/24', tipo: 'pool' })
         expect(!solapada.ok && solapada.problema.errors?.[0]?.rule).toBe('solapamiento')
-        const bloque = await useRouters().agregarBloque(id, { prefijo: '2803:d100:4000::/40' })
+        const bloque = await useRouters().agregarBloque(id, { prefijo: '2001:db8:4000::/40' })
         const bloqueId = bloque.ok ? bloque.data.id : 0
-        const enlaceMal = await useIpv6Pools().crear(bloqueId, { prefijo: '2803:d100:4000::/44', tipo: 'enlace', tamano_entrega: 56 })
+        const enlaceMal = await useIpv6Pools().crear(bloqueId, { prefijo: '2001:db8:4000::/44', tipo: 'enlace', tamano_entrega: 56 })
         expect(!enlaceMal.ok && enlaceMal.problema.errors?.[0]?.field).toBe('tamano_entrega')
-        const pool = await useIpv6Pools().crear(bloqueId, { prefijo: '2803:d100:4000::/44', tipo: 'enlace', tamano_entrega: 64 })
+        const pool = await useIpv6Pools().crear(bloqueId, { prefijo: '2001:db8:4000::/44', tipo: 'enlace', tamano_entrega: 64 })
         expect(pool.ok && pool.data.bloque_id).toBe(bloqueId)
     })
 
