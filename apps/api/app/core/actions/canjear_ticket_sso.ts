@@ -5,6 +5,7 @@ import { emitirSesion, type SalidaIniciarSesion } from '#core/actions/iniciar_se
 import { conectorVigente as conectorTokenVigente, usuarioVinculado } from '#core/vinculo_externo'
 import {
     TicketInvalido,
+    instalacionConector,
     type ConectorSso,
     VIGENCIA_VINCULACION_S,
     generarSecretoSso,
@@ -29,7 +30,16 @@ export type SalidaCanjearTicketSso =
           resultado: 'vinculacion_requerida'
           ruta: string
           conector: string
-          vinculacion: { token: string; expira_en: string; usuario_externo: UsuarioExternoSso }
+          vinculacion: {
+              token: string
+              expira_en: string
+              /**
+               * Host de la instalación del conector que pidió el autologin (`url_base` de su fila),
+               * para mostrar a quién se le da acceso; null si el conector no tiene `url_base`.
+               */
+              instalacion: string | null
+              usuario_externo: UsuarioExternoSso
+          }
       }
 
 /** Fila de `core.sso_tickets` que lee el canje. */
@@ -104,6 +114,7 @@ export default class CanjearTicketSso extends DomainAction<EntradaCanjearTicketS
             return { resultado: 'sesion', ruta, conector: ticket.conector, sesion }
         }
 
+        const instalacion = await instalacionConector(ticket.conector as ConectorSso, t.trx)
         const { valor, hash } = generarSecretoSso()
         const expiraEn = new Date(Date.now() + VIGENCIA_VINCULACION_S * 1000)
         await t.trx
@@ -121,10 +132,11 @@ export default class CanjearTicketSso extends DomainAction<EntradaCanjearTicketS
             vinculacion: {
                 token: valor,
                 expira_en: expiraEn.toISOString(),
+                instalacion,
                 usuario_externo: {
                     id_externo: ticket.usuario_id_externo,
-                    correo: ticket.usuario_correo,
-                    nombre: ticket.usuario_nombre,
+                    correo: ticket.usuario_correo ?? null,
+                    nombre: ticket.usuario_nombre ?? null,
                 },
             },
         }

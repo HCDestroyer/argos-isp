@@ -25,6 +25,49 @@ export function nombreConectorSso(conector: string): string {
     return (NOMBRES_CONECTOR_SSO as Record<string, string>)[conector] ?? conector
 }
 
+/** Fila (única, `id = 1`) de cada conector: su `url_base` es el origen de la otra instalación. */
+export const TABLAS_CONECTOR_SSO: Record<ConectorSso, string> = {
+    horus: 'integraciones.horus_conector',
+    iris: 'integraciones.iris_conector',
+}
+
+/**
+ * Host (con puerto si no es el estándar del esquema) de una URL http(s); null si no hay o no se
+ * entiende. Nunca devuelve el esquema, credenciales, ruta, consulta ni fragmento.
+ */
+export function hostDeUrl(url: string | null | undefined): string | null {
+    if (!url) return null
+    try {
+        const u = new URL(url.trim())
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+        // `URL.host` ya omite el puerto estándar (443/80) y nunca lleva usuario ni contraseña
+        return u.host || null
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Instalación del otro sistema que pidió el autologin: el host de la `url_base` de su conector
+ * (p. ej. `iris.isp.example` o `horus.isp.example:8443`), o null si el conector no tiene
+ * `url_base`. Se muestra en `/sso/entrar` antes de pedir el login, para que quien entra vea a qué
+ * instalación le da acceso con su cuenta de Argos (un enlace reenviado vincularía la cuenta de
+ * otra persona).
+ */
+export async function instalacionConector(
+    conector: ConectorSso,
+    cliente: QueryClientContract = db.connection(),
+): Promise<string | null> {
+    const fila = (await cliente
+        .from(TABLAS_CONECTOR_SSO[conector])
+        .where('id', 1)
+        .select('url_base')
+        .first()) as {
+        url_base: string | null
+    } | null
+    return hostDeUrl(fila?.url_base)
+}
+
 /**
  * Destinos que Argos abre (contrato §1.5, 1.7.0): `cliente` y `servicio` con el id de Argos. Los
  * tipos `router` y `hallazgo` llevan ids de Horus y solo existen con Horus como destino.

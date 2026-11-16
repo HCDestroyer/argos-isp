@@ -85829,7 +85829,7 @@
           },
           "conector": {
             "type": "string",
-            "description": "Sistema que pidió el autologin (`horus`)"
+            "description": "Sistema que pidió el autologin (`horus` o `iris`)"
           },
           "sesion": {
             "anyOf": [
@@ -85861,6 +85861,13 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "instalacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base. Siempre presente en la respuesta (opcional en el esquema solo por compatibilidad)"
+              },
               "usuario_externo": {
                 "type": "object",
                 "required": [
@@ -85884,7 +85891,8 @@
                       "null"
                     ]
                   }
-                }
+                },
+                "description": "Usuario del otro sistema que pidió el autologin; `correo` y `nombre` llegan tal como los mandó el ticket (null si no los trajo). Solo informativos: nunca se vincula por correo"
               }
             },
             "description": "Solo con `resultado: vinculacion_requerida`"
