@@ -1,0 +1,19 @@
+{
+    "name": "@argosisp/docs",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Sitio público de documentación y tutoriales de ArgosIsp (VitePress). El contenido vive en /docs.",
+    "scripts": {
+        "dev": "vitepress dev --port 3100",
+        "build": "vitepress build",
+        "preview": "vitepress preview --port 3100",
+        "typecheck": "tsc --noEmit -p ."
+    },
+    "devDependencies": {
+        "@types/node": "^22.15.0",
+        "typescript": "~5.9.3",
+        "vitepress": "^1.6.3",
+        "vue": "^3.5.44"
+    }
+}
