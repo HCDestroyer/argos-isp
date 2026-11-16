@@ -37,6 +37,8 @@ export default defineNuxtConfig({
             apiBase: 'http://localhost:3333',
             // NUXT_PUBLIC_USE_FIXTURES=true responde desde apps/web/fixtures sin backend.
             useFixtures: false,
+            // NUXT_PUBLIC_DOCS_URL: sitio de documentación que abre el botón «Ayuda».
+            docsUrl: 'https://hcdestroyer.github.io/argos-isp/',
         },
     },
 
