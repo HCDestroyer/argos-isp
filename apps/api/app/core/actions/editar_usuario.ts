@@ -11,6 +11,7 @@ import {
     type AsignacionRolEntrada,
 } from '#core/asignaciones_rol'
 import { verUsuario, type UsuarioVista } from '#core/consultas/acl'
+import { CODIGO_ROL_EXCEDE, coberturaDelActor, exigirCoberturaUsuario } from '#core/cobertura_permisos'
 
 export interface EntradaEditarUsuario {
     id: number
@@ -25,6 +26,11 @@ export interface EntradaEditarUsuario {
 /**
  * Edita datos, contraseña, estado y roles de un usuario. Control optimista por `version` (409).
  * Desactivar o cambiar la contraseña revoca sus sesiones de login abiertas.
+ *
+ * Sin escalada (`#core/cobertura_permisos`, 403 `rol_excede_permisos`): no se edita a un usuario
+ * que tiene permisos, alcances o empresas que el actor no cubre (cambiarle la contraseña o el
+ * correo sería tomar su cuenta), y los roles nuevos deben quedar cubiertos por lo que el actor
+ * tenía antes del cambio (tampoco a sí mismo). Un admin global puede todo.
  */
 export default class EditarUsuario extends DomainAction<EntradaEditarUsuario, UsuarioVista> {
     readonly nombre = 'usuarios.editar'
@@ -35,6 +41,10 @@ export default class EditarUsuario extends DomainAction<EntradaEditarUsuario, Us
             throw new ReglaNegocio('No puedes desactivar tu propio usuario', 'autodesactivacion')
         }
 
+        const actor = await coberturaDelActor(t.trx, t.ctx, CODIGO_ROL_EXCEDE)
+        if (actor && actor.usuarioId !== input.id) {
+            await exigirCoberturaUsuario(t.trx, actor, input.id, 'editar')
+        }
         const antes = await verUsuario(input.id, t.trx)
         const cambios: Record<string, unknown> = {}
         if (input.nombre !== undefined) cambios.nombre = input.nombre
@@ -59,7 +69,10 @@ export default class EditarUsuario extends DomainAction<EntradaEditarUsuario, Us
         await actualizarConVersion(t.trx, 'core.usuarios', input.id, input.version, cambios)
 
         const rolesAntes = await asignacionesActuales(t.trx, input.id)
-        if (input.roles !== undefined) await reemplazarAsignaciones(t.trx, input.id, input.roles)
+        if (input.roles !== undefined) {
+            await reemplazarAsignaciones(t.trx, input.id, input.roles)
+            await exigirCoberturaUsuario(t.trx, actor, input.id, 'asignar')
+        }
         // con otro correo puede volverse el usuario técnico de Iris: sus roles no pueden ser de red
         else if (cambios.email !== undefined) await exigirRolesSinAlcanceDeRed(t.trx, input.id)
 

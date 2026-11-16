@@ -60,6 +60,8 @@ Desactivar al usuario de un token también apaga todos sus tokens.
 
 **No veo el botón «Nuevo token».** Hacen falta `tokens.crear` y `usuarios.ver`.
 
+**«El token excede tus permisos».** No puedes crear un token para un usuario que tiene permisos, alcances de router, zona o caja, o empresas que tú no tienes (por ejemplo, para un administrador si tú no lo eres). Pídele a un administrador que lo cree. Lo mismo al revocar el token de otro usuario con más permisos que tú; tus propios tokens siempre los puedes revocar.
+
 **La integración recibe «sin permiso».** El usuario del token no tiene ese permiso, o el recorte del token no lo incluye, o la acción es sobre un router, zona o caja fuera de su alcance.
 
 ## Relacionado
