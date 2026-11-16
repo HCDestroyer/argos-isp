@@ -104,7 +104,7 @@ import { leerEmpresa, verEmpresa } from '#portal/empresa'
 import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
 import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#portal/marca'
 import { leerDestinoCorte, resolverServicio } from '#portal/consultas'
-import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
+import { EMPRESA_PRINCIPAL, filaEmpresa, resolverEmpresaActiva } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
 import { rechazarSiPendiente } from '#core/instalacion'
 import {
@@ -1198,10 +1198,13 @@ const empresa: Ruta[] = [
         ruta: '/empresa',
         operacion: 'empresaVer',
         resumen: 'Configuración de la empresa (panel)',
+        descripcion:
+            'La empresa activa (`X-Empresa-Id`, o la única del usuario o de la instalación). 422 ' +
+            '`empresa_requerida` si el usuario tiene varias y no eligió; 403 `empresa_no_permitida` fuera de su alcance.',
         etiqueta: 'empresa',
         permiso: 'empresa.ver',
         respuesta: { status: 200, descripcion: 'Empresa', esquema: Empresa },
-        handler: async () => verEmpresa(),
+        handler: async (ctx) => verEmpresa(undefined, await resolverEmpresaActiva(ctx.contextoAccion())),
     }),
     definirRuta({
         metodo: 'put',
@@ -1209,7 +1212,9 @@ const empresa: Ruta[] = [
         operacion: 'empresaEditar',
         resumen: 'Edita la configuración de la empresa',
         descripcion:
-            'Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago. `version` 0 ' +
+            'Nombre, NIT, dirección, teléfonos, WhatsApp, correo, horario e instrucciones de pago de la empresa ' +
+            'activa (`X-Empresa-Id`, o la única del usuario o de la instalación; 422 `empresa_requerida` si el ' +
+            'usuario tiene varias y no eligió, 403 `empresa_no_permitida` fuera de su alcance). `version` 0 ' +
             'la crea. Diff por campo en audit.cambios. Las cuentas bancarias se editan en /cuentas-bancarias (A3).',
         etiqueta: 'empresa',
         permiso: 'empresa.editar',
