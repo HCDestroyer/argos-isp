@@ -34,8 +34,27 @@ function relativo(ruta: string): string {
     return relative(WEB, ruta)
 }
 
-function permisoDePagina(texto: string): string | undefined {
-    return texto.match(/definePageMeta\(\{[^}]*permiso: '([^']+)'/)?.[1]
+/** Permiso de la página: uno, o la lista de la que basta uno (`permiso: ['horus.ver', 'iris.ver']`). */
+function permisoDePagina(texto: string): string | string[] | undefined {
+    const meta = texto.match(/definePageMeta\(\{[^}]*permiso: ('[^']+'|\[[^\]]*\])/)?.[1]
+    if (!meta) {
+        return undefined
+    }
+    const lista = [...meta.matchAll(/'([^']+)'/g)].map(m => m[1] ?? '')
+    return meta.startsWith('[') ? lista : lista[0]
+}
+
+/**
+ * Si el permiso de la página cubre `permiso`. Una página con lista no cubre ninguno por sí sola:
+ * se entra con cualquiera, así que cada llamada comprueba el suyo con `puede('…')`.
+ */
+function cubre(pagina: string | string[] | undefined, permiso: string): boolean {
+    return typeof pagina === 'string' && pagina === permiso
+}
+
+/** Si el destino de un enlace (uno o una lista de la que basta uno) ya está comprobado. */
+function destinoCubierto(destino: string | string[], pagina: string | string[] | undefined, vistos: Set<string>): boolean {
+    return (typeof destino === 'string' ? [destino] : destino).some(permiso => cubre(pagina, permiso) || vistos.has(permiso))
 }
 
 function comprobados(texto: string): Set<string> {
@@ -87,7 +106,7 @@ function llamadas(texto: string): [string, string][] {
 }
 
 /** Permiso de la página a la que lleva un enlace (`/clientes/${id}?tab=cuenta` → `clientes.ver`). */
-function permisoDeEnlace(destino: string, paginas: Map<string, string>): string | undefined {
+function permisoDeEnlace(destino: string, paginas: Map<string, string | string[]>): string | string[] | undefined {
     const ruta = destino.replace(/^[`'"]/, '').split(/[?#`'"]/)[0]?.replace(/\$\{[^}]+\}/g, ':id') ?? ''
     const partes = ruta.split('/').filter(Boolean)
     for (const [patron, permiso] of paginas) {
@@ -100,8 +119,8 @@ function permisoDeEnlace(destino: string, paginas: Map<string, string>): string 
 }
 
 /** Ruta de cada página con su permiso (`app/pages/clientes/[id]/editar.vue` → `/clientes/:id/editar`). */
-function rutasDePaginas(): Map<string, string> {
-    const mapa = new Map<string, string>()
+function rutasDePaginas(): Map<string, string | string[]> {
+    const mapa = new Map<string, string | string[]>()
     // Las rutas fijas primero, para que `/clientes/nuevo` no caiga en `/clientes/:id`.
     const ordenadas = [...PAGINAS].sort((a, b) => Number(a.includes('[')) - Number(b.includes('[')))
     for (const archivo of ordenadas) {
@@ -337,7 +356,7 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
             for (const [composable, funcion] of llamadas(texto)) {
                 for (const endpoint of composables.get(composable)?.get(funcion) ?? []) {
                     const permiso = api.get(endpoint)
-                    if (!permiso || permiso === pagina || vistos.has(permiso) || componente?.permisos.includes(permiso)) {
+                    if (!permiso || cubre(pagina, permiso) || vistos.has(permiso) || componente?.permisos.includes(permiso)) {
                         continue
                     }
                     huecos.push(`${relativo(archivo)}: ${composable}().${funcion} → ${endpoint} pide ${permiso}`)
@@ -356,7 +375,7 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
                 const texto = leer(join(WEB, 'app', archivo))
                 const pagina = permisoDePagina(texto)
                 for (const permiso of permisos) {
-                    if (permiso !== pagina && !comprobados(texto).has(permiso) && !exentos?.[archivo]?.includes(permiso)) {
+                    if (!cubre(pagina, permiso) && !comprobados(texto).has(permiso) && !exentos?.[archivo]?.includes(permiso)) {
                         huecos.push(`${archivo} abre ${componente} sin comprobar ${permiso}`)
                     }
                 }
@@ -379,7 +398,7 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
                 const permiso = permisoDeEnlace(m[1] ?? '', rutas)
                 const linea = texto.slice(0, m.index).split('\n').length
                 const conGuardia = /enlace\(|puedeAbrir\(|destinoPermitido\(/.test(lineas[linea - 1] ?? '')
-                if (!permiso || permiso === pagina || vistos.has(permiso) || conGuardia) {
+                if (!permiso || destinoCubierto(permiso, pagina, vistos) || conGuardia) {
                     continue
                 }
                 huecos.push(`${relativo(archivo)}:${linea} enlaza ${m[1]} (pide ${permiso})`)

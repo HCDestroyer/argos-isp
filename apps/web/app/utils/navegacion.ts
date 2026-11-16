@@ -10,7 +10,8 @@ export interface SeccionPanel {
     descripcion: string
     icono: string
     ruta: string
-    permiso: string
+    /** Uno, o una lista de la que basta uno (igual que el `permiso` de `definePageMeta`). */
+    permiso: string | readonly string[]
 }
 
 /**
@@ -166,7 +167,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'campos-personalizados', etiqueta: 'Campos personalizados', descripcion: 'Datos extra de la ficha del cliente: tipo, obligatorio, orden; activar y desactivar.', icono: 'i-lucide-text-cursor-input', ruta: '/campos-personalizados', permiso: 'campos_personalizados.editar' },
             { id: 'portal-corte', etiqueta: 'Portal de corte', descripcion: 'A dónde mandan los routers a los suspendidos (IP y puerto) y cómo se suspende la sesión.', icono: 'i-lucide-octagon-pause', ruta: '/configuracion/portal-corte', permiso: 'portal_corte.ver' },
             { id: 'nodos-portal', etiqueta: 'Nodos del portal', descripcion: 'Portales del cliente instalados en otro sitio: alta con token y revocar.', icono: 'i-lucide-server', ruta: '/configuracion/nodos-portal', permiso: 'nodos_portal.administrar' },
-            { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow e Iris: conexión, token, enlace de conexión y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: 'horus.ver' },
+            { id: 'integraciones', etiqueta: 'Integraciones', descripcion: 'Horus Flow e Iris: conexión, token, enlace de conexión y autologin.', icono: 'i-lucide-blocks', ruta: '/configuracion/integraciones', permiso: ['horus.ver', 'iris.ver'] },
             { id: 'integracion-iris', etiqueta: 'Iris', descripcion: 'Conector con Iris: enlace de conexión, configuración a mano, tokens y envíos.', icono: 'i-lucide-clipboard-list', ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' },
             { id: 'aviso-cobro', etiqueta: 'Plantillas de documentos', descripcion: 'HTML con variables del PDF del aviso de cobro, la factura FEL y la nota de crédito.', icono: 'i-lucide-file-code-2', ruta: '/configuracion/aviso-cobro', permiso: 'documentos.ver' },
         ],

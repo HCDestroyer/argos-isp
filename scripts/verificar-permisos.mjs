@@ -28,9 +28,11 @@ function* archivos(dir) {
     }
 }
 
-// Literales de permiso: `permiso: 'x.y'`, `puede('x.y')`, `puedeAlguno(['x.y', ...])`, `conPermiso('x.y')`.
+// Literales de permiso: `permiso: 'x.y'`, `permiso: ['x.y', ...]` (basta uno), `puede('x.y')`,
+// `puedeAlguno(['x.y', ...])`, `conPermiso('x.y')`.
 const patrones = [
     /permiso:\s*'([a-z0-9_]+\.[a-z0-9_.]+)'/g,
+    /permiso:\s*\[([^\]]*)\]/g,
     /(?:puede|conPermiso)\(\s*'([a-z0-9_]+\.[a-z0-9_.]+)'/g,
     /(?:puedeAlguno|puedeTodos)\(\s*\[([^\]]*)\]/g,
 ]
