@@ -174,6 +174,18 @@ export function rutaLocalSegura(ruta: string | null | undefined): string {
     return typeof ruta === 'string' && ruta.startsWith('/') && !ruta.startsWith('//') && !ruta.includes('\\') ? ruta : '/'
 }
 
+/** Sistemas conocidos que piden autologin, por `conector`. */
+const SISTEMAS_SSO: Record<string, string> = { horus: 'Horus', iris: 'Iris' }
+
+/**
+ * Nombre visible del sistema de un conector de autologin (`iris` → Iris, `horus` → Horus). Un
+ * conector desconocido se muestra tal cual: nunca se presenta como Horus por defecto.
+ */
+export function nombreSistemaSso(conector: string | null | undefined): string {
+    const valor = (conector ?? '').trim()
+    return SISTEMAS_SSO[valor.toLowerCase()] ?? (valor || 'sistema no informado')
+}
+
 /** Ticket del fragmento (`#<ticket>`) de `/sso/entrar`, o `null` si no parece uno. */
 export function ticketDelFragmento(hash: string): string | null {
     const ticket = decodeURIComponent(hash.replace(/^#/, '')).trim()
@@ -184,7 +196,7 @@ export function ticketDelFragmento(hash: string): string | null {
 export function mensajeErrorSso(problema: Problem): { titulo: string, detalle: string } {
     const codigo = codigoProblema(problema)
     if (problema.status === 410 || codigo === 'ticket_invalido' || codigo === 'vinculacion_invalida') {
-        return { titulo: 'El enlace venció', detalle: 'Los enlaces de Horus duran 60 segundos y sirven una sola vez. Vuelve a abrirlo desde Horus.' }
+        return { titulo: 'El enlace venció', detalle: 'Los enlaces de autologin duran 60 segundos y sirven una sola vez. Vuelve a abrirlo desde el sistema donde estabas (Horus o Iris).' }
     }
     if (problema.status === 401) {
         return { titulo: 'Correo o contraseña incorrectos', detalle: problema.detail ?? 'Revisa tus credenciales de ArgosIsp.' }
@@ -192,7 +204,7 @@ export function mensajeErrorSso(problema: Problem): { titulo: string, detalle: s
     if (problema.status === 429) {
         return { titulo: 'Demasiados intentos', detalle: problema.detail ?? 'Espera unos minutos e intenta de nuevo.' }
     }
-    return { titulo: problema.title, detalle: problema.detail ?? 'No se pudo completar el inicio de sesión desde Horus.' }
+    return { titulo: problema.title, detalle: problema.detail ?? 'No se pudo completar el inicio de sesión automático.' }
 }
 
 /** Texto de la explicación de un botón "Ver en Horus" deshabilitado. */

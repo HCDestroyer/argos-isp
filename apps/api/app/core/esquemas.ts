@@ -937,18 +937,30 @@ export const CanjeSso = definirEsquema(
                 'normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`',
         },
         ruta: { type: 'string', description: 'Ruta local del panel del destino, p. ej. `/servicios/812`' },
-        conector: { type: 'string', description: 'Sistema que pidió el autologin (`horus`)' },
+        conector: { type: 'string', description: 'Sistema que pidió el autologin (`horus` o `iris`)' },
         sesion: { ...nulable(SesionPanel), description: 'Solo con `resultado: sesion`' },
         vinculacion: {
             ...nulable(
                 objeto({
                     token: { type: 'string', description: 'Token de vinculación: 10 min, un solo uso' },
                     expira_en: instante,
-                    usuario_externo: objeto({
-                        id_externo: texto,
-                        correo: nulable(texto),
-                        nombre: nulable(texto),
-                    }),
+                    instalacion: {
+                        ...nulable(texto),
+                        description:
+                            'Host (con puerto si no es el estándar) de la instalación del conector que pidió el ' +
+                            'autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra ' +
+                            'vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base',
+                    },
+                    usuario_externo: {
+                        ...objeto({
+                            id_externo: texto,
+                            correo: nulable(texto),
+                            nombre: nulable(texto),
+                        }),
+                        description:
+                            'Usuario del otro sistema que pidió el autologin; `correo` y `nombre` llegan tal ' +
+                            'como los mandó el ticket (null si no los trajo). Solo informativos: nunca se vincula por correo',
+                    },
                 }),
             ),
             description: 'Solo con `resultado: vinculacion_requerida`',
