@@ -3,19 +3,19 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Autologin desde Horus (`contratos/horus.md` §1.5, lado receptor de A1): Horus abre
+ * Autologin desde Horus o Iris (`contratos/horus.md` §1.5, lado receptor de A1): el otro sistema abre
  * `/sso/entrar#<ticket>`. El ticket va en el fragmento (el navegador no lo manda al servidor ni lo
  * deja en registros); aquí se borra de la URL antes de nada y se canjea una sola vez (60 s).
  * - Con vinculación: la API abre la sesión del usuario local (con **sus** permisos) y se va a la ruta.
  * - Sin vinculación: el login normal de ArgosIsp; al entrar, la API guarda la vinculación. Nunca se
- *   crea un usuario ni se vincula por correo.
+ *   crea un usuario ni se vincula por correo. Antes del login se muestra a quién se le da acceso
+ *   (sistema, nombre, correo e instalación) con un aviso: un enlace reenviado por otra persona no
+ *   debe vincularse a la cuenta de quien lo abre.
  */
 definePageMeta({
     layout: false,
     publica: true,
 })
-
-useHead({ title: 'Entrar desde Horus · ArgosIsp' })
 
 const { canjear, vincular } = useSso()
 
@@ -23,6 +23,10 @@ type Fase = 'canjeando' | 'vincular' | 'error' | 'entrando'
 const fase = ref<Fase>('canjeando')
 const error = ref<{ titulo: string, detalle: string } | null>(null)
 const vinculacion = shallowRef<NonNullable<CanjeSso['vinculacion']> | null>(null)
+const conector = ref<string | null>(null)
+const sistema = computed(() => nombreSistemaSso(conector.value))
+
+useHead({ title: () => (conector.value ? `Entrar desde ${sistema.value} · ArgosIsp` : 'Entrar · ArgosIsp') })
 
 const estado = reactive<Partial<DatosLogin>>({ email: '', password: '' })
 const enviando = ref(false)
@@ -38,7 +42,7 @@ onMounted(async () => {
     // El ticket sale de la URL (y del historial) antes de cualquier petición.
     window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
     if (!ticket) {
-        error.value = { titulo: 'Enlace incompleto', detalle: 'Abre de nuevo el registro desde Horus con "Ver en ArgosIsp".' }
+        error.value = { titulo: 'Enlace incompleto', detalle: 'Abre de nuevo el registro con "Ver en ArgosIsp" desde el sistema donde estabas (Horus o Iris).' }
         fase.value = 'error'
         return
     }
@@ -52,6 +56,7 @@ onMounted(async () => {
         await entrar(resultado.data)
         return
     }
+    conector.value = resultado.data.conector
     vinculacion.value = resultado.data.vinculacion
     fase.value = 'vincular'
 })
@@ -78,7 +83,23 @@ async function alEnviar(evento: FormSubmitEvent<DatosLogin>) {
     problemaLogin.value = { ...resultado.problema, title: mensaje.titulo, detail: mensaje.detalle }
 }
 
-const nombreExterno = computed(() => vinculacion.value?.usuario_externo.nombre ?? vinculacion.value?.usuario_externo.correo ?? vinculacion.value?.usuario_externo.id_externo ?? '')
+/** Datos de la persona del otro sistema; el id externo solo cuando el ticket no trajo nombre ni correo. */
+const datosExternos = computed(() => {
+    const externo = vinculacion.value?.usuario_externo
+    if (!externo) {
+        return []
+    }
+    const filas: { clave: string, etiqueta: string, valor: string, informado: boolean, mono: boolean }[] = [
+        { clave: 'nombre', etiqueta: 'Nombre', valor: externo.nombre ?? 'nombre no informado', informado: externo.nombre !== null, mono: false },
+        { clave: 'correo', etiqueta: 'Correo', valor: externo.correo ?? 'correo no informado', informado: externo.correo !== null, mono: false },
+    ]
+    if (externo.nombre === null && externo.correo === null) {
+        filas.push({ clave: 'id_externo', etiqueta: `Usuario en ${sistema.value}`, valor: externo.id_externo, informado: true, mono: true })
+    }
+    const instalacion = vinculacion.value?.instalacion ?? null
+    filas.push({ clave: 'instalacion', etiqueta: 'Instalación', valor: instalacion ?? 'instalación no informada', informado: instalacion !== null, mono: instalacion !== null })
+    return filas
+})
 </script>
 
 <template>
@@ -111,7 +132,7 @@ const nombreExterno = computed(() => vinculacion.value?.usuario_externo.nombre ?
                         class="size-8 animate-spin text-muted motion-reduce:animate-none"
                     />
                     <p class="text-sm text-muted">
-                        {{ fase === 'canjeando' ? 'Entrando desde Horus…' : 'Abriendo…' }}
+                        {{ fase === 'canjeando' ? 'Entrando…' : 'Abriendo…' }}
                     </p>
                 </div>
 
@@ -139,19 +160,56 @@ const nombreExterno = computed(() => vinculacion.value?.usuario_externo.nombre ?
 
                 <template v-else-if="fase === 'vincular' && vinculacion">
                     <div class="mb-4 text-center">
-                        <h1 class="text-xl font-semibold text-highlighted">
-                            Vincula tu cuenta de Horus
+                        <h1
+                            class="text-xl font-semibold tracking-[-0.015em] text-highlighted"
+                            data-prueba="sso-titulo"
+                        >
+                            Vincula tu cuenta de {{ sistema }}
                         </h1>
                     </div>
-                    <UAlert
-                        color="info"
-                        variant="subtle"
-                        icon="i-lucide-link"
-                        :title="`Usuario de Horus: ${nombreExterno}`"
-                        description="Inicia sesión con tu usuario de ArgosIsp. Desde ahora Horus te abrirá ArgosIsp con tus propios permisos, sin pedirte la contraseña."
-                        class="mb-4"
+                    <div
+                        class="mb-4 flex flex-col gap-3 rounded-lg border border-default bg-elevated/50 p-3"
                         data-prueba="sso-vincular"
+                    >
+                        <p class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                            <UIcon
+                                name="i-lucide-user-round"
+                                class="size-4 shrink-0 text-muted"
+                            />
+                            Persona de {{ sistema }}
+                        </p>
+                        <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+                            <template
+                                v-for="fila in datosExternos"
+                                :key="fila.clave"
+                            >
+                                <dt class="text-muted">
+                                    {{ fila.etiqueta }}
+                                </dt>
+                                <dd
+                                    class="break-all"
+                                    :class="[fila.informado ? 'font-medium text-highlighted' : 'italic text-muted', fila.mono ? 'font-mono' : '']"
+                                    :data-prueba="`sso-dato-${fila.clave}`"
+                                >
+                                    {{ fila.valor }}
+                                </dd>
+                            </template>
+                        </dl>
+                    </div>
+                    <UAlert
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-triangle-alert"
+                        :title="`Vas a dar acceso a tu cuenta de ArgosIsp a esta persona de ${sistema}. Si no eres tú, no continúes.`"
+                        class="mb-4"
+                        data-prueba="sso-aviso"
                     />
+                    <p
+                        class="mb-4 text-sm text-muted"
+                        data-prueba="sso-explicacion"
+                    >
+                        Inicia sesión con tu usuario de ArgosIsp. Desde ahora {{ sistema }} te abrirá ArgosIsp con tus propios permisos, sin pedirte la contraseña.
+                    </p>
                     <UForm
                         :schema="esquemaLogin"
                         :state="estado"

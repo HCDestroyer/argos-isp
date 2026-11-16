@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 
 /**
  * Mi cuenta: datos del usuario de la sesión y sus vinculaciones de autologin (`contratos/horus.md`
- * §1.5): la cuenta de Horus con la que entra a ArgosIsp sin volver a escribir la contraseña. Cada
+ * §1.5): la cuenta de Horus o Iris con la que entra a ArgosIsp sin volver a escribir la contraseña. Cada
  * usuario quita las suyas; el administrador las revoca todas desde Configuración → Integraciones.
  */
 useHead({ title: 'Mi cuenta · ArgosIsp' })
@@ -27,8 +27,6 @@ async function cargar() {
 
 onMounted(cargar)
 
-const SISTEMAS: Record<string, string> = { horus: 'Horus Flow' }
-
 const columnas: TableColumn<VinculacionExterna>[] = [
     { accessorKey: 'conector', header: 'Sistema' },
     { accessorKey: 'nombre_externo', header: 'Cuenta en el otro sistema', meta: { class: { td: 'whitespace-normal' } } },
@@ -49,7 +47,7 @@ function quitar(): Promise<Resultado<VinculacionExterna>> {
 }
 
 function alQuitar(vinculacion: VinculacionExterna) {
-    toast.add({ title: 'Vinculación quitada', description: `La próxima vez que entres desde ${SISTEMAS[vinculacion.conector] ?? vinculacion.conector} te pediremos la contraseña.`, color: 'success', icon: 'i-lucide-circle-check' })
+    toast.add({ title: 'Vinculación quitada', description: `La próxima vez que entres desde ${nombreSistemaSso(vinculacion.conector)} te pediremos la contraseña.`, color: 'success', icon: 'i-lucide-circle-check' })
     void cargar()
 }
 </script>
@@ -98,7 +96,7 @@ function alQuitar(vinculacion: VinculacionExterna) {
                         Cuentas vinculadas
                     </h2>
                     <p class="text-sm text-muted">
-                        Con una cuenta vinculada, "Ver en ArgosIsp" desde Horus te abre ArgosIsp con tus permisos, sin pedirte la contraseña.
+                        Con una cuenta vinculada, "Ver en ArgosIsp" desde Horus o Iris te abre ArgosIsp con tus permisos, sin pedirte la contraseña.
                     </p>
                 </div>
                 <ProblemaAlerta
@@ -115,7 +113,7 @@ function alQuitar(vinculacion: VinculacionExterna) {
                     data-prueba="tabla-vinculaciones"
                 >
                     <template #conector-cell="{ row }">
-                        <span class="text-sm font-medium text-highlighted">{{ SISTEMAS[row.original.conector] ?? row.original.conector }}</span>
+                        <span class="text-sm font-medium text-highlighted">{{ nombreSistemaSso(row.original.conector) }}</span>
                     </template>
                     <template #nombre_externo-cell="{ row }">
                         <div class="flex min-w-0 flex-col">
@@ -136,7 +134,7 @@ function alQuitar(vinculacion: VinculacionExterna) {
                             color="error"
                             variant="ghost"
                             size="sm"
-                            :aria-label="`Quitar la vinculación con ${SISTEMAS[row.original.conector] ?? row.original.conector}`"
+                            :aria-label="`Quitar la vinculación con ${nombreSistemaSso(row.original.conector)}`"
                             :data-prueba="`quitar-vinculacion-${row.original.id}`"
                             @click="pedirQuitar(row.original)"
                         />
@@ -145,7 +143,7 @@ function alQuitar(vinculacion: VinculacionExterna) {
                         <UEmpty
                             icon="i-lucide-link-2-off"
                             title="Sin cuentas vinculadas"
-                            description="Se vinculan solas la primera vez que entras desde Horus e inicias sesión."
+                            description="Se vinculan solas la primera vez que entras desde Horus o Iris e inicias sesión."
                             variant="naked"
                         />
                     </template>
@@ -156,7 +154,7 @@ function alQuitar(vinculacion: VinculacionExterna) {
         <ConfirmacionModal
             v-model:open="quitarAbierto"
             titulo="Quitar vinculación"
-            :efecto="`Tu cuenta ${elegida?.nombre_externo ?? elegida?.id_externo ?? ''} de ${SISTEMAS[elegida?.conector ?? ''] ?? elegida?.conector ?? ''} ya no abrirá ArgosIsp sin contraseña.`"
+            :efecto="`Tu cuenta ${elegida?.nombre_externo ?? elegida?.id_externo ?? ''} de ${nombreSistemaSso(elegida?.conector)} ya no abrirá ArgosIsp sin contraseña.`"
             confirmar="Quitar"
             icono="i-lucide-unlink"
             :ejecutar="quitar"

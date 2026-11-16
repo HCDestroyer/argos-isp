@@ -12083,8 +12083,8 @@ export interface components {
                 token: string;
                 /** Format: date-time */
                 expira_en: string;
-                /** @description Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base. Siempre presente en la respuesta (opcional en el esquema solo por compatibilidad) */
-                instalacion?: string | null;
+                /** @description Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base */
+                instalacion: string | null;
                 /** @description Usuario del otro sistema que pidió el autologin; `correo` y `nombre` llegan tal como los mandó el ticket (null si no los trajo). Solo informativos: nunca se vincula por correo */
                 usuario_externo: {
                     id_externo: string;

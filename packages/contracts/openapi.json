@@ -85850,6 +85850,7 @@
             "required": [
               "token",
               "expira_en",
+              "instalacion",
               "usuario_externo"
             ],
             "properties": {
@@ -85866,7 +85867,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base. Siempre presente en la respuesta (opcional en el esquema solo por compatibilidad)"
+                "description": "Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base"
               },
               "usuario_externo": {
                 "type": "object",

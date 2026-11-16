@@ -40,6 +40,41 @@ export const vinculacionesIniciales: Schema<'VinculacionExterna'>[] = [
 export const TICKET_VINCULADO = 'tkt_fixture_vinculado_000000000001'
 export const TICKET_SIN_VINCULAR = 'tkt_fixture_sin_vincular_0000000001'
 export const TOKEN_VINCULACION = 'vin_fixture_000000000000000000001'
+/** Autologin pedido desde Iris, sin vinculación y con un conector sin URL base (`instalacion: null`). */
+export const TICKET_SIN_VINCULAR_IRIS = 'tkt_fixture_sin_vincular_iris_00001'
+export const TOKEN_VINCULACION_IRIS = 'vin_fixture_iris_0000000000000000001'
+/** Autologin de un conector desconocido cuyo ticket no trae nombre ni correo (solo el id externo). */
+export const TICKET_SIN_VINCULAR_ANONIMO = 'tkt_fixture_sin_vincular_anon_00001'
+export const TOKEN_VINCULACION_ANONIMO = 'vin_fixture_anon_0000000000000000001'
+
+/** Lo que responde `POST /auth/sso/canjear` para cada ticket sin vinculación, por ticket. */
+export interface CanjeSinVincular {
+    token: string
+    conector: string
+    instalacion: string | null
+    usuario_externo: { id_externo: string, correo: string | null, nombre: string | null }
+}
+
+export const CANJES_SIN_VINCULAR: Record<string, CanjeSinVincular> = {
+    [TICKET_SIN_VINCULAR]: {
+        token: TOKEN_VINCULACION,
+        conector: 'horus',
+        instalacion: 'horus.isp.example',
+        usuario_externo: { id_externo: 'u-42', correo: 'luis@horus.isp.gt', nombre: 'Luis Pérez (Horus)' },
+    },
+    [TICKET_SIN_VINCULAR_IRIS]: {
+        token: TOKEN_VINCULACION_IRIS,
+        conector: 'iris',
+        instalacion: null,
+        usuario_externo: { id_externo: 'iris-7', correo: 'marta@iris.isp.gt', nombre: 'Marta Gómez (Iris)' },
+    },
+    [TICKET_SIN_VINCULAR_ANONIMO]: {
+        token: TOKEN_VINCULACION_ANONIMO,
+        conector: 'nexo',
+        instalacion: 'nexo.isp.example:8443',
+        usuario_externo: { id_externo: 'ext-991', correo: null, nombre: null },
+    },
+}
 
 export interface HorusFixtures {
     conector: Schema<'ConectorHorus'>
