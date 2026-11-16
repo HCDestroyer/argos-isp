@@ -8979,7 +8979,10 @@ export interface paths {
         /** Listar roles con sus permisos */
         get: operations["rolesListar"];
         put?: never;
-        /** Crear rol */
+        /**
+         * Crear rol
+         * @description Solo con permisos que el actor tiene sin alcance de router/zona/caja; si no, 403 `rol_excede_permisos`.
+         */
         post: operations["rolesCrear"];
         delete?: never;
         options?: never;
@@ -8995,7 +8998,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Editar rol y sus permisos */
+        /**
+         * Editar rol y sus permisos
+         * @description Los permisos que se agregan deben ser del actor sin alcance (contando lo que tenía antes del cambio); si no, 403 `rol_excede_permisos`. Quitar permisos no se restringe.
+         */
         put: operations["rolesEditar"];
         post?: never;
         delete?: never;
@@ -10463,7 +10469,10 @@ export interface paths {
         /** Listar usuarios */
         get: operations["usuariosListar"];
         put?: never;
-        /** Crear usuario */
+        /**
+         * Crear usuario
+         * @description Los roles asignados (con su alcance de router/zona/caja) deben estar cubiertos por los permisos de quien crea el usuario; si no, 403 `rol_excede_permisos` con el detalle en `errors[]`. Un admin global asigna todo.
+         */
         post: operations["usuariosCrear"];
         delete?: never;
         options?: never;
@@ -10480,7 +10489,10 @@ export interface paths {
         };
         /** Ver usuario */
         get: operations["usuariosVer"];
-        /** Editar usuario y sus roles */
+        /**
+         * Editar usuario y sus roles
+         * @description No se edita a un usuario con permisos, alcances o empresas que el actor no cubre, ni se asignan roles (tampoco a uno mismo) más allá de lo que el actor tenía: 403 `rol_excede_permisos`. Un admin global puede todo.
+         */
         put: operations["usuariosEditar"];
         post?: never;
         delete?: never;
@@ -10499,7 +10511,7 @@ export interface paths {
         get?: never;
         /**
          * Definir las empresas del usuario o su alcance global
-         * @description Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).
+         * @description Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`). Tampoco se cambian las de un usuario con permisos, alcances o empresas que el actor no cubre (403 `rol_excede_permisos`).
          */
         put: operations["usuariosAsignarEmpresas"];
         post?: never;

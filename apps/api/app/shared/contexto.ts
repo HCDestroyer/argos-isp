@@ -73,7 +73,7 @@ export interface ContextoAccion {
     /**
      * `core.tokens_api.id` del token de API con el que se autenticó la petición (actor `token`).
      * Lo pone `contextoAccion()`; las acciones de tokens lo usan para recortar al actor con los
-     * alcances de ese token (`#core/cobertura_token`). Ausente con sesión de login y fuera de HTTP.
+     * alcances de ese token (`#core/cobertura_permisos`). Ausente con sesión de login y fuera de HTTP.
      */
     tokenApiId?: number | null
 }

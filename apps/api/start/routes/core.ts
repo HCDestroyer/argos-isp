@@ -397,6 +397,9 @@ const usuarios: Ruta[] = [
         ruta: '/usuarios',
         operacion: 'usuariosCrear',
         resumen: 'Crear usuario',
+        descripcion:
+            'Los roles asignados (con su alcance de router/zona/caja) deben estar cubiertos por los permisos de quien ' +
+            'crea el usuario; si no, 403 `rol_excede_permisos` con el detalle en `errors[]`. Un admin global asigna todo.',
         etiqueta: 'acl',
         permiso: 'usuarios.crear',
         cuerpo: v.crearUsuarioValidator,
@@ -418,6 +421,9 @@ const usuarios: Ruta[] = [
         ruta: '/usuarios/:id',
         operacion: 'usuariosEditar',
         resumen: 'Editar usuario y sus roles',
+        descripcion:
+            'No se edita a un usuario con permisos, alcances o empresas que el actor no cubre, ni se asignan roles ' +
+            '(tampoco a uno mismo) más allá de lo que el actor tenía: 403 `rol_excede_permisos`. Un admin global puede todo.',
         etiqueta: 'acl',
         permiso: 'usuarios.editar',
         cuerpo: v.editarUsuarioValidator,
@@ -433,7 +439,8 @@ const usuarios: Ruta[] = [
         resumen: 'Definir las empresas del usuario o su alcance global',
         descripcion:
             'Sin alcance global hace falta al menos una empresa activa (422). Solo quien tiene alcance global ' +
-            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`).',
+            'puede darlo, y nadie asigna empresas fuera de su alcance (403 `empresa_no_permitida`). Tampoco se ' +
+            'cambian las de un usuario con permisos, alcances o empresas que el actor no cubre (403 `rol_excede_permisos`).',
         etiqueta: 'acl',
         permiso: 'usuarios.asignar_empresas',
         cuerpo: v.asignarEmpresasUsuarioValidator,
@@ -457,6 +464,8 @@ const usuarios: Ruta[] = [
         ruta: '/roles',
         operacion: 'rolesCrear',
         resumen: 'Crear rol',
+        descripcion:
+            'Solo con permisos que el actor tiene sin alcance de router/zona/caja; si no, 403 `rol_excede_permisos`.',
         etiqueta: 'acl',
         permiso: 'roles.crear',
         cuerpo: v.crearRolValidator,
@@ -468,6 +477,9 @@ const usuarios: Ruta[] = [
         ruta: '/roles/:id',
         operacion: 'rolesEditar',
         resumen: 'Editar rol y sus permisos',
+        descripcion:
+            'Los permisos que se agregan deben ser del actor sin alcance (contando lo que tenía antes del cambio); ' +
+            'si no, 403 `rol_excede_permisos`. Quitar permisos no se restringe.',
         etiqueta: 'acl',
         permiso: 'roles.editar',
         cuerpo: v.editarRolValidator,

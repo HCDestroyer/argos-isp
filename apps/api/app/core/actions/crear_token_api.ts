@@ -8,7 +8,7 @@ import {
     rechazarAlcanceDeRed,
     usuarioSoloEmpresas,
 } from '#core/alcance_usuario_tecnico'
-import { exigirCoberturaToken } from '#core/cobertura_token'
+import { exigirCoberturaToken } from '#core/cobertura_permisos'
 
 export interface EntradaCrearTokenApi {
     usuario_id: number
@@ -30,7 +30,7 @@ export interface SalidaCrearTokenApi {
  *
  * Sin escalada de privilegios: el actor debe tener, como mínimo, los permisos (con su alcance de
  * router/zona/caja) y las empresas que tendría el token; si no, 403 `token_excede_permisos`
- * (`#core/cobertura_token`). Un admin global puede crear cualquiera.
+ * (`#core/cobertura_permisos`). Un admin global puede crear cualquiera.
  */
 export default class CrearTokenApi extends DomainAction<EntradaCrearTokenApi, SalidaCrearTokenApi> {
     readonly nombre = 'tokens.crear'

@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { verToken, type TokenApiVista } from '#core/consultas/acl'
-import { exigirCoberturaToken } from '#core/cobertura_token'
+import { exigirCoberturaToken } from '#core/cobertura_permisos'
 import { usuarioDelActor } from '#shared/contexto'
 
 export interface EntradaRevocarTokenApi {
