@@ -5,9 +5,9 @@
   "type": "module",
   "description": "Sitio público de documentación y tutoriales de ArgosIsp (VitePress). El contenido vive en /docs.",
   "scripts": {
-    "dev": "node scripts/generar-api.mjs && vitepress dev --port 3100",
+    "dev": "node scripts/generar-api.mjs && vitepress dev --port 3110",
     "build": "node scripts/generar-api.mjs && vitepress build",
-    "preview": "vitepress preview --port 3100",
+    "preview": "vitepress preview --port 3110",
     "typecheck": "tsc --noEmit -p ."
   },
   "devDependencies": {

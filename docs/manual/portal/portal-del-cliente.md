@@ -1,5 +1,6 @@
 ---
 orden: 2
+pageClass: capturas-movil
 ---
 
 # Portal del cliente

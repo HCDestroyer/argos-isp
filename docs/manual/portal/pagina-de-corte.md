@@ -1,5 +1,6 @@
 ---
 orden: 1
+pageClass: capturas-movil
 ---
 
 # Página de corte

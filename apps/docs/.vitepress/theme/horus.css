@@ -42,3 +42,10 @@
 table {
     font-variant-numeric: tabular-nums;
 }
+
+/* Capturas de teléfono (portal del cliente): a su tamaño, no al ancho de la página. */
+.capturas-movil .vp-doc img {
+    max-width: min(100%, 320px);
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 14px;
+}

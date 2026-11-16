@@ -13,6 +13,9 @@ on:
       - docs/**
       - apps/docs/**
       - packages/contracts/openapi.json
+      # La referencia de permisos y eventos se genera de estos dos archivos.
+      - apps/api/app/core/permisos.ts
+      - apps/api/app/shared/eventos.ts
       - .github/workflows/docs.yml
   workflow_dispatch:
 

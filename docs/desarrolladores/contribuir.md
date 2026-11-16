@@ -126,12 +126,12 @@ Una PR se mergea solo con CI en verde contra el `main` actual. Para traer `main`
 ## Este sitio de documentación
 
 ```sh
-pnpm --filter @argosisp/docs dev       # http://localhost:3100
+pnpm --filter @argosisp/docs dev       # http://localhost:3110
 pnpm --filter @argosisp/docs build     # lo mismo que corre el CI
 ```
 
 ::: tip
-El servidor de desarrollo usa el puerto 3100, el mismo que publica `aaa` en el compose con el perfil `lab`. Si los dos corren a la vez, pasa otro puerto: `pnpm --filter @argosisp/docs exec vitepress dev --port 3150`.
+El servidor de desarrollo usa el puerto 3110 (el 3100 lo publica `aaa` en el compose con el perfil `lab`).
 :::
 
 - El contenido está en `docs/` (Markdown). La barra lateral sale de las carpetas: `orden:` en el frontmatter ordena las páginas.
