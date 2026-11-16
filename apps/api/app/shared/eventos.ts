@@ -160,6 +160,12 @@ export interface PayloadComprobante {
     causa: CausaRechazoComprobante | null
     servicio_estado: EstadoServicioConPendiente | null
     origen: 'iris' | null
+    /**
+     * Contrato Iris 0.7.1: `X-Iris-Actor` de quien aprobó o rechazó desde Iris (actuación
+     * vinculada); null desde el panel y siempre null en `comprobante.recibido`. Billing siempre lo
+     * envía; opcional en el tipo porque los eventos anteriores a 0.7.1 no lo traen
+     */
+    verificado_iris_actor?: string | null
 }
 
 interface PayloadSesion {

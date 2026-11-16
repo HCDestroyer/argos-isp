@@ -12673,6 +12673,8 @@ export interface components {
             iris_actor?: string | null;
             /** @description Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris») */
             iris_conversacion?: string | null;
+            /** @description Solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null si se decidió en el panel o sigue pendiente */
+            verificado_iris_actor?: string | null;
             nota: string | null;
             /** @enum {string} */
             estado: "pendiente" | "aprobado" | "rechazado";

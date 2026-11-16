@@ -48,6 +48,14 @@ export function esActuacionIris(ctx: Pick<ContextoAccion, 'via'>): boolean {
 }
 
 /**
+ * `X-Iris-Actor` de quien decide un comprobante desde Iris (contrato Iris 0.7.1): solo con la
+ * actuación vinculada (`ctx.via`); null en el panel. Va a `billing.comprobantes.verificado_iris_actor`.
+ */
+export function actorIrisDeLaDecision(ctx: Pick<ContextoAccion, 'via' | 'iris'>): string | null {
+    return esActuacionIris(ctx) ? (ctx.iris?.actor ?? null) : null
+}
+
+/**
  * Comprobante que un operador de Iris quiere aprobar o rechazar (contrato Iris 0.7.0 §7.7). Sin
  * actuación vinculada no hace nada: el panel sigue igual. La llama `bloquearComprobante` con la
  * fila ya bloqueada (`FOR UPDATE`) y **antes** de mirar su estado, en este orden:

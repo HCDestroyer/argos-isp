@@ -282,6 +282,7 @@ test.group('Iris 0.7.0 · aprobar y rechazar desde la conversación (A23)', (gro
             'pago_id',
             'servicio_estado',
             'servicio_id',
+            'verificado_iris_actor',
         ])
         assert.include(evento.payload, {
             pago_id: pagoId,
@@ -593,6 +594,133 @@ test.group('Iris 0.7.0 · aprobar y rechazar desde la conversación (A23)', (gro
         )
         assert.equal(rechazo.body().estado, 'rechazado')
         assert.equal(rechazo.body().causa_rechazo, 'otro')
+        await afirmarLibroCuadrado(assert)
+    })
+
+    /** Cambio de `verificado_iris_actor` en `audit.cambios` del comprobante (o null si no hay). */
+    async function cambioActorIris(comprobanteId: number) {
+        return db
+            .from('audit.cambios')
+            .where('entidad_tipo', 'comprobante')
+            .where('entidad_id', comprobanteId)
+            .where('campo', 'verificado_iris_actor')
+            .select('antes', 'despues')
+            .first()
+    }
+
+    /** `GET /comprobantes/:id` y la fila de la lista del cliente, con el token del panel. */
+    async function leido(client: ApiClient, token: string, comprobanteId: number, clienteId: number) {
+        const uno = await estado(client.get(`/api/v1/comprobantes/${comprobanteId}`).bearerToken(token), 200)
+        const lista = await estado(
+            client.get(`/api/v1/comprobantes?cliente_id=${clienteId}&limit=50`).bearerToken(token),
+            200,
+        )
+        const fila = (lista.body().data as Array<Record<string, unknown>>).find((c) => c.id === comprobanteId)
+        return { uno: uno.body(), fila: fila! }
+    }
+
+    test('0.7.1 · verificado_iris_actor: aprobar y rechazar desde Iris guardan el X-Iris-Actor del operador', async ({
+        client,
+        assert,
+    }) => {
+        const iris = await tokenIris()
+        const caja = await usuarioConRoles(['cajero'])
+
+        // aprobación desde Iris
+        const op = await operador()
+        const aprobado = await boletaDeIris(client, iris.token)
+        const r = await estado(aprobar(client, iris.token, aprobado.comprobanteId, op.actor), 200)
+        assert.equal(r.body().verificado_iris_actor, op.actor)
+        // iris_actor es quien lo registró y no cambia
+        assert.equal(r.body().iris_actor, 'asistente_ia')
+        const fila = await db.from('billing.comprobantes').where('id', aprobado.comprobanteId).firstOrFail()
+        assert.equal(fila.verificado_iris_actor, op.actor)
+        assert.equal(fila.iris_actor, 'asistente_ia')
+        assert.deepInclude(await cambioActorIris(aprobado.comprobanteId), { antes: null, despues: op.actor })
+        const a = await leido(client, caja.token, aprobado.comprobanteId, aprobado.clienteId)
+        assert.equal(a.uno.verificado_iris_actor, op.actor)
+        assert.equal(a.fila.verificado_iris_actor, op.actor)
+        const [evAprobado] = await eventosDe('comprobante.aprobado', 'comprobante_id', aprobado.comprobanteId)
+        assert.include(evAprobado.payload, { origen: 'iris', verificado_iris_actor: op.actor })
+        const [recibido] = await eventosDe('comprobante.recibido', 'comprobante_id', aprobado.comprobanteId)
+        assert.isNull(recibido.payload.verificado_iris_actor)
+
+        // rechazo desde Iris, con otro operador
+        const contador = await operador(['contabilidad'])
+        const rechazado = await boletaDeIris(client, iris.token)
+        const rr = await estado(rechazar(client, iris.token, rechazado.comprobanteId, contador.actor), 200)
+        assert.equal(rr.body().verificado_iris_actor, contador.actor)
+        assert.equal(rr.body().iris_actor, 'asistente_ia')
+        assert.deepInclude(await cambioActorIris(rechazado.comprobanteId), {
+            antes: null,
+            despues: contador.actor,
+        })
+        const b = await leido(client, caja.token, rechazado.comprobanteId, rechazado.clienteId)
+        assert.equal(b.uno.verificado_iris_actor, contador.actor)
+        assert.equal(b.fila.verificado_iris_actor, contador.actor)
+        const [evRechazado] = await eventosDe(
+            'comprobante.rechazado',
+            'comprobante_id',
+            rechazado.comprobanteId,
+        )
+        assert.include(evRechazado.payload, { origen: 'iris', verificado_iris_actor: contador.actor })
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('0.7.1 · verificado_iris_actor: desde el panel queda null al aprobar y al rechazar', async ({
+        client,
+        assert,
+    }) => {
+        const iris = await tokenIris()
+        const caja = await usuarioConRoles(['cajero'])
+        const contador = await usuarioConRoles(['contabilidad'])
+
+        // un comprobante de Iris aprobado en el panel
+        const deIris = await boletaDeIris(client, iris.token)
+        const pendiente = await leido(client, caja.token, deIris.comprobanteId, deIris.clienteId)
+        assert.isNull(pendiente.uno.verificado_iris_actor)
+        const r = await estado(
+            client
+                .post(`/api/v1/comprobantes/${deIris.comprobanteId}/aprobar`)
+                .bearerToken(caja.token)
+                .json({}),
+            200,
+        )
+        assert.isNull(r.body().verificado_iris_actor)
+        assert.equal(r.body().iris_actor, 'asistente_ia')
+        assert.isNull(await cambioActorIris(deIris.comprobanteId))
+        const a = await leido(client, caja.token, deIris.comprobanteId, deIris.clienteId)
+        assert.isNull(a.uno.verificado_iris_actor)
+        assert.isNull(a.fila.verificado_iris_actor)
+        const [evAprobado] = await eventosDe('comprobante.aprobado', 'comprobante_id', deIris.comprobanteId)
+        assert.include(evAprobado.payload, { origen: 'iris', verificado_iris_actor: null })
+
+        // otro de Iris rechazado en el panel y uno del portal
+        const otro = await boletaDeIris(client, iris.token)
+        const rr = await estado(
+            client
+                .post(`/api/v1/comprobantes/${otro.comprobanteId}/rechazar`)
+                .bearerToken(contador.token)
+                .json({ motivo: 'No aparece en el banco' }),
+            200,
+        )
+        assert.isNull(rr.body().verificado_iris_actor)
+        assert.isNull(await cambioActorIris(otro.comprobanteId))
+        const [evRechazado] = await eventosDe('comprobante.rechazado', 'comprobante_id', otro.comprobanteId)
+        assert.include(evRechazado.payload, { origen: 'iris', verificado_iris_actor: null })
+
+        const portal = await boletaDelPortal()
+        const rp = await estado(
+            client
+                .post(`/api/v1/comprobantes/${portal.comprobanteId}/rechazar`)
+                .bearerToken(contador.token)
+                .json({ motivo: 'Foto ilegible', causa: 'ilegible' }),
+            200,
+        )
+        assert.isNull(rp.body().verificado_iris_actor)
+        assert.isNull(rp.body().iris_actor)
+        const fila = await db.from('billing.comprobantes').where('id', portal.comprobanteId).firstOrFail()
+        assert.isNull(fila.verificado_iris_actor)
         await afirmarLibroCuadrado(assert)
     })
 })
