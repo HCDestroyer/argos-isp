@@ -93,7 +93,10 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         cuerpo:
             'ALERTA · RADIUS (aaa) caído\nNodo: {{alerta.nodo}}\nDesde: {{alerta.desde}}' +
             '{{#alerta.ultimo_error}}\nÚltimo error: {{alerta.ultimo_error}}{{/alerta.ultimo_error}}' +
-            '\nLos routers autentican con sus secrets locales hasta que vuelva.',
+            '\nLos clientes conectados siguen navegando, pero los que se reconecten quedan rechazados mientras no responda' +
+            ' (salvo que el router tenga un segundo nodo /radius; los routers en modo PPPoE local no dependen de aaa).' +
+            '\nQué hacer: docs/runbooks/aaa-caido.md. Si no vuelve en 15 min, cargar los secrets de emergencia' +
+            ' (emergencia:secrets-ppp) en el router afectado: no existen hasta que alguien los importa.',
     },
     {
         evento: 'alerta.aaa.recuperado',
@@ -431,8 +434,12 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
         'servicio.estado_cambiado',
         '{{#estado.es_activo}}Servicio reactivado{{/estado.es_activo}}{{#estado.es_limitado}}Servicio limitado{{/estado.es_limitado}}{{#estado.es_suspendido}}Servicio suspendido{{/estado.es_suspendido}}{{#estado.es_retirado}}Servicio retirado{{/estado.es_retirado}}',
         '{{#estado.es_activo}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} está activo de nuevo. ¡Gracias!{{/estado.es_activo}}' +
-            '{{#estado.es_limitado}}La velocidad de tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue limitada por saldo pendiente.{{/estado.es_limitado}}' +
-            '{{#estado.es_suspendido}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue suspendido por saldo pendiente. Se reactiva automáticamente al registrar tu pago.{{/estado.es_suspendido}}' +
+            '{{#estado.es_limitado}}La velocidad de tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue limitada' +
+            '{{#estado.por_falta_de_pago}} por saldo pendiente.{{/estado.por_falta_de_pago}}' +
+            '{{^estado.por_falta_de_pago}}. Si tienes dudas, comunícate con nosotros.{{/estado.por_falta_de_pago}}{{/estado.es_limitado}}' +
+            '{{#estado.es_suspendido}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue suspendido' +
+            '{{#estado.por_falta_de_pago}} por saldo pendiente. Se reactiva automáticamente al registrar tu pago.{{/estado.por_falta_de_pago}}' +
+            '{{^estado.por_falta_de_pago}}. Para reactivarlo, comunícate con nosotros.{{/estado.por_falta_de_pago}}{{/estado.es_suspendido}}' +
             '{{#estado.es_retirado}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue dado de baja.{{/estado.es_retirado}}' +
             portal,
     ),
