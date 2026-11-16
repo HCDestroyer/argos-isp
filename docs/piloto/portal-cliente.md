@@ -1,3 +1,7 @@
+---
+pageClass: capturas-movil
+---
+
 # Portal del cliente: guía para el piloto
 
 Para el personal del ISP (caja, soporte, cobranza). Explica qué ve un cliente con el servicio
@@ -10,7 +14,7 @@ Cuando el servicio está suspendido, cualquier página que el cliente abra (y el
 en la red" que muestran Android, iPhone y Windows) lo lleva a la **página de corte**. El portal lo
 reconoce por la conexión, sin usuario ni contraseña.
 
-<img src="img/01-corte.png" alt="Página de corte: servicio suspendido, monto pendiente y acciones" width="300">
+![Página de corte: servicio suspendido, monto pendiente y acciones](img/01-corte.png)
 
 Ve solo lo necesario: su primer nombre con una inicial, el estado del servicio, el monto pendiente y
 cuántas facturas están vencidas. Nunca su nombre completo, NIT, dirección ni teléfono.
@@ -30,7 +34,7 @@ Desde ahí puede, con el botón principal y las tarjetas de acceso rápido:
 Las tarjetas muestran solo lo que el sistema aceptaría en ese momento: nunca se ofrece algo que luego
 dé error.
 
-<img src="img/02-datos-deposito.png" alt="Datos para depósito con las cuentas de la empresa" width="300">
+![Datos para depósito con las cuentas de la empresa](img/02-datos-deposito.png)
 
 Las cuentas, el teléfono, el horario y las instrucciones se cambian en el panel:
 **Configuración · Empresa** y **Configuración · Cuentas bancarias**.
@@ -43,7 +47,7 @@ Las cuentas, el teléfono, el horario y las instrucciones se cambian en el panel
 3. Elige el día y el monto (vienen llenos con la fecha máxima y el saldo vencido) y toca
    **Solicitar promesa**.
 
-<img src="img/03-promesa.png" alt="Formulario de promesa de pago con fecha y monto" width="300">
+![Formulario de promesa de pago con fecha y monto](img/03-promesa.png)
 
 La respuesta es inmediata:
 
@@ -55,7 +59,7 @@ La respuesta es inmediata:
   plazo" o "ya usaste tus promesas de este mes") y, si se puede corregir, ofrece cambiar fecha o
   monto; si no, contactar a la oficina.
 
-<img src="img/04-ya-tienes-servicio.png" alt="Ya tienes servicio, con el recordatorio de la promesa" width="300">
+![Ya tienes servicio, con el recordatorio de la promesa](img/04-ya-tienes-servicio.png)
 
 Las reglas (plazo, cantidad por mes, abono, aprobación) son las de la plantilla del cliente en el
 panel; el portal no decide nada por su cuenta.
@@ -68,8 +72,8 @@ panel; el portal no decide nada por su cuenta.
 4. Toma una foto con la cámara o elige el archivo (foto JPG, PNG o WebP, o PDF, hasta 5 MB) y toca
    **Enviar comprobante**.
 
-<img src="img/05-comprobante.png" alt="Formulario para subir el comprobante" width="300">
-<img src="img/06-comprobante-recibido.png" alt="Comprobante recibido, en revisión" width="300">
+![Formulario para subir el comprobante](img/05-comprobante.png)
+![Comprobante recibido, en revisión](img/06-comprobante-recibido.png)
 
 El comprobante **no reactiva solo**: queda en revisión en el panel (**Comprobantes**). Cuando
 caja o cobranza lo aprueba, el pago se abona a sus facturas y, si estaba suspendido, el servicio
@@ -89,8 +93,8 @@ Telegram sirve para recibir avisos (factura, vencimiento, corte) y el código de
    luego **Abrir Telegram**.
 4. En Telegram, toca **Iniciar**. La pantalla del portal cambia sola a "Vinculado".
 
-<img src="img/07-entrar-codigo.png" alt="Entrar a mi cuenta con el código de 6 dígitos" width="300">
-<img src="img/08-telegram.png" alt="Vincular Telegram en la sección Cuenta" width="300">
+![Entrar a mi cuenta con el código de 6 dígitos](img/07-entrar-codigo.png)
+![Vincular Telegram en la sección Cuenta](img/08-telegram.png)
 
 Si el enlace no abre Telegram, el portal muestra el mensaje para enviar a mano (`/start` y el
 código). El código vence en unos minutos; se puede pedir otro. Una vez vinculado, puede elegir
@@ -106,12 +110,12 @@ del navegador, **Agregar a pantalla de inicio** deja el ícono del portal en el 
 Es lo esperado mientras el servicio está suspendido. Al pagar, prometer o al aprobar su comprobante,
 vuelve solo; no hace falta reiniciar el router.
 
-**"Dice *No pudimos identificar tu servicio*."**
+**"Dice _No pudimos identificar tu servicio_."**
 Está conectado desde otra red (datos móviles, otro wifi) o su equipo aún no tiene sesión. Puede
 **Entrar con mi NIT o usuario** y hacer todo desde **Mi cuenta**, o ver los datos de depósito.
 Si está en su casa y sigue saliendo, que reinicie el router; si persiste, revisar su sesión PPPoE.
 
-<img src="img/09-no-identificado.png" alt="Página de corte sin identificar el servicio" width="300">
+![Página de corte sin identificar el servicio](img/09-no-identificado.png)
 
 **"Ya pagué en el banco y sigo sin servicio."**
 El depósito se aplica cuando el comprobante se aprueba. Pídale que lo suba desde el portal (o
@@ -127,10 +131,10 @@ Va al correo registrado (o a Telegram, si está vinculado y es su canal preferid
 correo del cliente esté bien en el panel. Hay un máximo de 5 códigos por hora; cada código vence en
 unos minutos.
 
-**"Me sale *Demasiadas consultas*."**
+**"Me sale _Demasiadas consultas_."**
 El portal limita las consultas por conexión para protegerse. Basta esperar un minuto.
 
-**"Me sale *No pudimos consultar tu servicio* o *No pudimos contactar al sistema*."**
+**"Me sale _No pudimos consultar tu servicio_ o _No pudimos contactar al sistema_."**
 El sistema no respondió. El portal no muestra montos inventados: hay que tocar **Reintentar**. Si
 dura más de unos minutos, avisar a soporte técnico. Mientras tanto el cliente sigue viendo los
 datos de depósito y el teléfono de soporte.
