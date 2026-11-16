@@ -14,7 +14,7 @@ Los datos de contacto, el horario de atención y las instrucciones de pago que v
 - Editar: `empresa.editar` (`admin`). Sin este permiso la pantalla se ve en solo lectura.
 
 ::: warning Con varias empresas
-Esta pantalla guarda los datos de la empresa principal. Los datos fiscales y de contacto de cada empresa (NIT) se editan en [Empresas](empresas.md).
+Esta pantalla lee y guarda los datos de la empresa activa (la del selector de empresa). Con «Todas las empresas» seleccionada no se puede abrir: elige primero una empresa. Los datos fiscales y de contacto de cada empresa (NIT) se editan en [Empresas](empresas.md).
 :::
 
 ## Qué ves
