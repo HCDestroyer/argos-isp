@@ -1,3 +1,7 @@
+---
+orden: 2
+---
+
 # Mapeo Mikrowisp 6 → ArgosIsp
 
 De qué tablas y columnas de la base de Mikrowisp 6 sale cada entidad del formato canónico del importador (`apps/api/app/importacion/canonico.ts`) y cómo se transforma. El adaptador es `apps/api/app/importacion/origenes/mikrowisp.ts`; el esquema real de referencia, `scripts/importacion/esquemas/mikrowisp6.sql` (102 tablas, exportado con Adminer, MariaDB 10.11).

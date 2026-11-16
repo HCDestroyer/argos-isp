@@ -1,16 +1,20 @@
+---
+orden: 1
+---
+
 # Runbook · Instalar ArgosIsp en un servidor
 
 Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las imágenes vienen compiladas de GitHub Container Registry y nunca necesita Node, pnpm ni el código fuente. Actualizar y revertir: `docs/runbooks/actualizacion.md`.
 
 ## Requisitos
 
-| Qué | Mínimo |
-| --- | --- |
-| Sistema | Ubuntu 22.04/24.04 o Debian 12 (también Raspberry Pi OS de 64 bits), amd64 o arm64, con systemd |
-| Memoria y disco | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos) |
-| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), TCP 8088 (`/corte` con cualquier Host, `PORTAL_CORTE_PUERTO`), UDP 1812 y 1813 (RADIUS) y, con WireGuard, UDP 51820 |
-| DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
-| Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt |
+| Qué               | Mínimo                                                                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sistema           | Ubuntu 22.04/24.04 o Debian 12 (también Raspberry Pi OS de 64 bits), amd64 o arm64, con systemd                                                                   |
+| Memoria y disco   | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos)                                                                                       |
+| Puertos libres    | TCP 80 y 443 (panel, API, portal y `/corte`), TCP 8088 (`/corte` con cualquier Host, `PORTAL_CORTE_PUERTO`), UDP 1812 y 1813 (RADIUS) y, con WireGuard, UDP 51820 |
+| DNS               | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor                                                                    |
+| Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt                                                                                  |
 
 El 443 debe ser alcanzable desde internet para que Let's Encrypt emita los certificados (reto TLS-ALPN; el HTTP-01 va por el 80). Si el servidor ya tiene Nginx Proxy Manager u otro proxy en 80 y 443: `detras-de-proxy.md` (Argos en 8080/8443 y la IP real del cliente con `ARGOSISP_PROXIES_CONFIABLES`). Docker se instala solo si falta (repositorio oficial); si ya está, se exige Engine 25+ y Compose 2.24+.
 
@@ -55,8 +59,8 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 
 1. Entra a `https://panel.<dominio>` con el correo y la clave mostrados, **cambia la clave** y borra `credenciales-iniciales.txt`. Si pierdes la clave de un administrador: `sudo argosisp admin-clave <correo>` (abajo, "Comandos").
 2. **Copia `/opt/argosisp/.env` fuera del servidor** (gestor de contraseñas o bóveda). `AAA_PPP_KEY` cifra las contraseñas PPPoE y los secrets RADIUS: sin ella un respaldo no sirve.
-3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`).
-4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone en `infra/README.md`, "Respaldos". Después de editar el `.env`: `sudo argosisp levantar`.
+3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`; [guía](../manual/notificaciones/configuracion.md)). Para que el bot responda a los clientes, registra su webhook una vez: `sudo argosisp compose exec api node ace.js telegram:webhook`.
+4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone: [Respaldos](./respaldos.md). Después de editar el `.env`: `sudo argosisp levantar`.
 5. RADIUS: con WireGuard no hay nada que hacer (RADIUS queda en la IP del túnel, abajo). Sin WireGuard, en `.env`, `RADIUS_BIND_IP` = la IP por la que llegan los MikroTik (la de la LAN). `COA_ORIGEN_IP` se deja **vacía**: `coa` corre en la red bridge del compose y su socket solo puede usar la IP del contenedor (con la IP del servidor, el `bind` falla); el NAT de Docker cambia el origen por la IP del servidor en la interfaz hacia el router, y esa es la que cada MikroTik debe tener en `/radius` (`radiusAddr`, `infra/mikrotik/README.md`). Da de alta los routers en el panel y genera los clientes de FreeRADIUS con `sudo argosisp radius-clientes`. Configuración del router: `infra/mikrotik/README.md`.
 6. **IPs del servidor en `/corte`**: `PORTAL_IPS_SERVIDOR` en el `.env` lista las IPs de este servidor (las de sus interfaces, la de `ARGOSISP_WG_ENDPOINT` si es una IP y las del proxy de delante; las pone el instalador, o las que pases en `ARGOSISP_IPS_SERVIDOR`). Si la página de corte ve una de ellas, dice «no pudimos identificar tu servicio» en vez de mostrar los datos de otro cliente. Si el servidor sale a internet por un NAT, su IP pública no está en ninguna interfaz: agrégala (separadas por coma) y `sudo argosisp levantar`. `sudo argosisp estado` avisa si falta. Cuando el router hace NAT hacia el portal, pásalo a **Identificación por código** (`docs/runbooks/actualizacion.md`, «Identificación del cortado»).
 7. HSTS del portal: empieza en 300 s (`PORTAL_HSTS_MAX_AGE`); súbelo a `31536000` cuando el certificado del portal funcione.
@@ -113,37 +117,39 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 
 1. En el servidor principal: `sudo argosisp nodo-portal crear <nombre>`. Copia el token: se muestra una sola vez.
 2. En el VPS del nodo (con `portal.<dominio>`, o el que pongas en `ARGOSISP_DOMINIO_PORTAL`, apuntando a él):
-   ```sh
-   curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh | sudo bash -s -- \
-     --rol portal --central https://api.<dominio> --token '<token>' --dominio <dominio> --correo <correo>
-   ```
-   Instala solo el portal y Caddy (sin Postgres, Redis ni workers), en la versión del central.
+    ```sh
+    curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh | sudo bash -s -- \
+      --rol portal --central https://api.<dominio> --token '<token>' --dominio <dominio> --correo <correo>
+    ```
+    Instala solo el portal y Caddy (sin Postgres, Redis ni workers), en la versión del central.
 3. `sudo argosisp nodo-portal listar` y `revocar <nombre>` en el principal. Un token revocado deja al nodo sin API.
 
 ## Comandos
 
-| Comando | Qué hace |
-| --- | --- |
-| `sudo argosisp estado` | Versión instalada, última publicada, parches automáticos y estado de cada servicio |
-| `sudo argosisp levantar` | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`) |
-| `sudo argosisp reparar-red [--si]` | Baja todo el proyecto (los datos quedan), borra la red de compose y vuelve a levantar. Para `has active endpoints` o `network … not found`: `docs/runbooks/red-compose.md` |
-| `sudo argosisp logs [servicio]` | Registros en vivo |
-| `sudo argosisp admin-clave <correo> [--stdin]` | Clave nueva para ese usuario del panel (si no existe, lo crea con el rol `admin`) y la muestra **una sola vez**; con `--stdin` la toma de la entrada estándar (`echo 'clave' \| sudo argosisp admin-clave …`). Cierra sus sesiones y queda en la auditoría (actor sistema, canal consola, la clave como `***`) |
-| `sudo argosisp desinstalar [--borrar-datos] [--si]` | Baja todo el proyecto y quita el comando y el timer. Sin `--borrar-datos` conserva volúmenes y `/opt/argosisp` (se vuelve con `/opt/argosisp/actual/argosisp levantar`); con él borra todo, previa confirmación y respaldo final |
-| `sudo argosisp respaldar` | Respaldo ahora (el mismo del diario) |
-| `sudo argosisp compose …` | `docker compose` del proyecto con la versión instalada (`compose ps`, `compose exec api …`) |
-| `sudo argosisp actualizar` / `revertir` / `auto …` | `docs/runbooks/actualizacion.md` |
+Lista completa, con los comandos de la API que se corren dentro del contenedor: [Comandos del servidor](./comandos.md).
+
+| Comando                                             | Qué hace                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sudo argosisp estado`                              | Versión instalada, última publicada, parches automáticos y estado de cada servicio                                                                                                                                                                                                                             |
+| `sudo argosisp levantar`                            | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`)                                                                                                                                                                                                                            |
+| `sudo argosisp reparar-red [--si]`                  | Baja todo el proyecto (los datos quedan), borra la red de compose y vuelve a levantar. Para `has active endpoints` o `network … not found`: `docs/runbooks/red-compose.md`                                                                                                                                     |
+| `sudo argosisp logs [servicio]`                     | Registros en vivo                                                                                                                                                                                                                                                                                              |
+| `sudo argosisp admin-clave <correo> [--stdin]`      | Clave nueva para ese usuario del panel (si no existe, lo crea con el rol `admin`) y la muestra **una sola vez**; con `--stdin` la toma de la entrada estándar (`echo 'clave' \| sudo argosisp admin-clave …`). Cierra sus sesiones y queda en la auditoría (actor sistema, canal consola, la clave como `***`) |
+| `sudo argosisp desinstalar [--borrar-datos] [--si]` | Baja todo el proyecto y quita el comando y el timer. Sin `--borrar-datos` conserva volúmenes y `/opt/argosisp` (se vuelve con `/opt/argosisp/actual/argosisp levantar`); con él borra todo, previa confirmación y respaldo final                                                                               |
+| `sudo argosisp respaldar`                           | Respaldo ahora (el mismo del diario)                                                                                                                                                                                                                                                                           |
+| `sudo argosisp compose …`                           | `docker compose` del proyecto con la versión instalada (`compose ps`, `compose exec api …`)                                                                                                                                                                                                                    |
+| `sudo argosisp actualizar` / `revertir` / `auto …`  | `docs/runbooks/actualizacion.md`                                                                                                                                                                                                                                                                               |
 
 ## Problemas
 
-| Síntoma | Qué hacer |
-| --- | --- |
-| "el puerto TCP 80 ya está en uso" | Otro servidor web (Apache, nginx). Si es un proxy que debe quedarse (Nginx Proxy Manager), instala detrás de él: `detras-de-proxy.md`. Si no, detenlo: el 80 lo necesita la página de corte |
-| Instalaste la 1.1.0 con `curl … \| sudo bash` y la salida terminó en "arriba y sano", sin la clave ni `credenciales-iniciales.txt` | Error de esa versión: un comando del instalador leyó el resto del script de la entrada estándar (corregido en la siguiente). La instalación quedó completa: la clave inicial del admin es `SEED_ADMIN_PASSWORD` en `/opt/argosisp/.env` (`sudo grep ^SEED_ADMIN_PASSWORD= /opt/argosisp/.env`); el usuario, `SEED_ADMIN_EMAIL`. Cámbiala al entrar |
-| "ArgosIsp no quedó sano" | `sudo argosisp logs migrate api`. El `.env` ya quedó escrito: corrige y corre `sudo argosisp levantar` (no reinstales: el instalador se niega si hay `.env`) |
-| El navegador avisa de certificado inválido | Los registros DNS aún no apuntan al servidor o el 443 no es alcanzable desde internet. `sudo argosisp logs proxy`; Caddy reintenta solo |
-| Reinstalar desde cero (borra **todos** los datos) | `sudo argosisp desinstalar --borrar-datos` (pide escribir BORRAR y ofrece un respaldo final en `/var/backups/argosisp-final-<fecha>/` con el `.env`; `--si` no pregunta nada) y después el comando de instalación. Baja todos los servicios (también `api-portal` y los huérfanos de otra versión), borra volúmenes, red y `/opt/argosisp`, y quita el comando y el timer. En la 1.1.0, `argosisp compose down -v` dejaba vivos `api-portal` y otros contenedores (y el proxy en el 80): si te pasó, `docker ps -aq --filter label=com.docker.compose.project=argosisp \| xargs -r docker rm -f` |
-| Servidor sin internet | Copia el paquete (`argosisp-<v>.tar.gz`, `.sha256`) y un archivo `estable` con la versión a una carpeta, carga las imágenes con `docker load`, y corre `sudo ARGOSISP_FUENTE=/carpeta ARGOSISP_SIN_DESCARGA=1 bash instalar.sh …` |
+| Síntoma                                                                                                                            | Qué hacer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| "el puerto TCP 80 ya está en uso"                                                                                                  | Otro servidor web (Apache, nginx). Si es un proxy que debe quedarse (Nginx Proxy Manager), instala detrás de él: `detras-de-proxy.md`. Si no, detenlo: el 80 lo necesita la página de corte                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Instalaste la 1.1.0 con `curl … \| sudo bash` y la salida terminó en "arriba y sano", sin la clave ni `credenciales-iniciales.txt` | Error de esa versión: un comando del instalador leyó el resto del script de la entrada estándar (corregido en la siguiente). La instalación quedó completa: la clave inicial del admin es `SEED_ADMIN_PASSWORD` en `/opt/argosisp/.env` (`sudo grep ^SEED_ADMIN_PASSWORD= /opt/argosisp/.env`); el usuario, `SEED_ADMIN_EMAIL`. Cámbiala al entrar                                                                                                                                                                                                                                               |
+| "ArgosIsp no quedó sano"                                                                                                           | `sudo argosisp logs migrate api`. El `.env` ya quedó escrito: corrige y corre `sudo argosisp levantar` (no reinstales: el instalador se niega si hay `.env`)                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| El navegador avisa de certificado inválido                                                                                         | Los registros DNS aún no apuntan al servidor o el 443 no es alcanzable desde internet. `sudo argosisp logs proxy`; Caddy reintenta solo                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Reinstalar desde cero (borra **todos** los datos)                                                                                  | `sudo argosisp desinstalar --borrar-datos` (pide escribir BORRAR y ofrece un respaldo final en `/var/backups/argosisp-final-<fecha>/` con el `.env`; `--si` no pregunta nada) y después el comando de instalación. Baja todos los servicios (también `api-portal` y los huérfanos de otra versión), borra volúmenes, red y `/opt/argosisp`, y quita el comando y el timer. En la 1.1.0, `argosisp compose down -v` dejaba vivos `api-portal` y otros contenedores (y el proxy en el 80): si te pasó, `docker ps -aq --filter label=com.docker.compose.project=argosisp \| xargs -r docker rm -f` |
+| Servidor sin internet                                                                                                              | Copia el paquete (`argosisp-<v>.tar.gz`, `.sha256`) y un archivo `estable` con la versión a una carpeta, carga las imágenes con `docker load`, y corre `sudo ARGOSISP_FUENTE=/carpeta ARGOSISP_SIN_DESCARGA=1 bash instalar.sh …`                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Cómo se prueba
 
