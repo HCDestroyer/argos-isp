@@ -568,9 +568,9 @@ export function contrapartidaLegible(contrapartida: string | null): string {
  * Lista blanca de la contrapartida `cuenta` de un bien (H25, igual que `cuentaParaBienDePremio` de la
  * API): activo imputable de la empresa o global, sin contracuentas ni auxiliar de clientes y fuera de las
  * cuentas control (caja y bancos, CxC, impuestos, cobros por liquidar, fondos en tránsito, estimación,
- * gastos anticipados y el activo no corriente).
+ * gastos anticipados, la del kardex (1.1.14, H39: solo la mueve el inventario) y el activo no corriente).
  */
-const CUENTAS_CONTROL_BIEN = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.2']
+const CUENTAS_CONTROL_BIEN = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.1.14', '1.2']
 
 export function cuentaParaBienDePremio(c: Pick<Schema<'Cuenta'>, 'codigo' | 'tipo' | 'imputable' | 'contracuenta' | 'auxiliar_cliente' | 'empresa_id' | 'activa'>, empresaId: number | null): boolean {
     if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente || !c.activa) {

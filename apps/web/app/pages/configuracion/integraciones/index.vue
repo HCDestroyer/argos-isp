@@ -4,9 +4,10 @@ import type { Problem } from '@argosisp/contracts'
 /**
  * Configuración → Integraciones: Horus Flow (tráfico, salud y seguridad de la red) e Iris
  * (tickets, órdenes de trabajo y comercial). Cada tarjeta lee su conector por separado: si una
- * falla, la otra se ve igual.
+ * falla, la otra se ve igual. Se abre con `horus.ver` o con `iris.ver`, y cada tarjeta se muestra
+ * (y lee su conector) solo con el suyo.
  */
-definePageMeta({ permiso: 'horus.ver' })
+definePageMeta({ permiso: ['horus.ver', 'iris.ver'] })
 
 useHead({ title: 'Integraciones · ArgosIsp' })
 
@@ -24,6 +25,7 @@ async function cargar() {
 }
 
 const { puede } = usePermisos()
+const verHorus = computed(() => puede('horus.ver'))
 const verIris = computed(() => puede('iris.ver'))
 
 const conectorIris = shallowRef<ConectorIris | null>(null)
@@ -46,7 +48,9 @@ const avisoReconexionTarjeta = computed(() => (conectorIris.value ? avisoReconex
 const textoDesconexionTarjeta = computed(() => (avisoCanjeTarjeta.value?.estado === 'desconectado' ? textoDesconexionIris(avisoCanjeTarjeta.value) : null))
 
 onMounted(() => {
-    void cargar()
+    if (verHorus.value) {
+        void cargar()
+    }
     if (verIris.value) {
         void cargarIris()
     }
@@ -61,6 +65,7 @@ onMounted(() => {
     >
         <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
             <UPageCard
+                v-if="verHorus"
                 title="Horus Flow"
                 description="Consumo, salud y seguridad de cada servicio, avisos de Horus y autologin entre los dos sistemas."
                 icon="i-lucide-radar"

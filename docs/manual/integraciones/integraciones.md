@@ -10,8 +10,8 @@ Las otras aplicaciones de la familia que se conectan con ArgosIsp. Cada una tien
 
 ## Quién la usa
 
-- Abrir la pantalla: `horus.ver` (`admin`, `lectura`).
-- La tarjeta de Iris aparece con `iris.ver`.
+- Abrir la pantalla: `horus.ver` o `iris.ver` (`admin`, `lectura`).
+- Cada tarjeta aparece solo con su permiso: la de Horus con `horus.ver` y la de Iris con `iris.ver`.
 
 ## Qué ves
 

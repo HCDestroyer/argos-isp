@@ -5,6 +5,7 @@
  * ```ts
  * const { puede } = usePermisos()
  * puede('servicios.suspender')
+ * puede(['horus.ver', 'iris.ver']) // basta uno (el `permiso` de una página o sección con varias tarjetas)
  * ```
  */
 export function usePermisos() {
@@ -13,16 +14,17 @@ export function usePermisos() {
 
     const permisos = computed(() => new Set(usuario.value?.permisos ?? []))
 
-    function puede(permiso: string): boolean {
-        return permisos.value.has(permiso)
+    /** Con una lista, basta uno (igual que `puedeAlguno`): así se lee el `permiso` de páginas y secciones. */
+    function puede(permiso: string | readonly string[]): boolean {
+        return typeof permiso === 'string' ? permisos.value.has(permiso) : puedeAlguno(permiso)
     }
 
     function puedeAlguno(lista: readonly string[]): boolean {
-        return lista.some(puede)
+        return lista.some(permiso => permisos.value.has(permiso))
     }
 
     function puedeTodos(lista: readonly string[]): boolean {
-        return lista.every(puede)
+        return lista.every(permiso => permisos.value.has(permiso))
     }
 
     /**

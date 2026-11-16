@@ -41,14 +41,15 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
 
     it('lista blanca de la cuenta y líneas de bien de compras vigentes de la empresa', () => {
         const cuenta = (codigo: string, extra: Partial<Cuenta> = {}) => ({ codigo, tipo: 'activo' as const, imputable: true, contracuenta: false, auxiliar_cliente: false, empresa_id: null, activa: true, ...extra })
-        expect(cuentaParaBienDePremio(cuenta('1.1.14'), 1)).toBe(true)
-        expect(['1.1.01.01', '1.1.02', '1.1.07', '1.2.01.01'].map(c => cuentaParaBienDePremio(cuenta(c), 1))).toEqual([false, false, false, false])
-        expect(cuentaParaBienDePremio(cuenta('1.1.14', { empresa_id: 2 }), 1)).toBe(false)
-        expect(cuentaParaBienDePremio(cuenta('1.1.14', { auxiliar_cliente: true }), 1)).toBe(false)
+        expect(cuentaParaBienDePremio(cuenta('1.1.15'), 1)).toBe(true)
+        // H39: la cuenta del kardex (1.1.14) solo la mueve el inventario.
+        expect(['1.1.01.01', '1.1.02', '1.1.07', '1.1.14', '1.2.01.01'].map(c => cuentaParaBienDePremio(cuenta(c), 1))).toEqual([false, false, false, false, false])
+        expect(cuentaParaBienDePremio(cuenta('1.1.15', { empresa_id: 2 }), 1)).toBe(false)
+        expect(cuentaParaBienDePremio(cuenta('1.1.15', { auxiliar_cliente: true }), 1)).toBe(false)
         expect(cuentaParaBienDePremio(cuenta('5.1.03', { tipo: 'gasto' }), 1)).toBe(false)
         expect(lineasDeBien(bd.compras, 1).map(({ linea, quedan }) => [linea.id, quedan])).toEqual([[11, 2], [21, 1], [22, 1]])
         expect(lineasDeBien(bd.compras, 1, { 11: 1, 21: 1 }).map(({ linea, quedan }) => [linea.id, quedan])).toEqual([[11, 1], [22, 1]])
-        expect(esCuentaDeActivoFijo('1.2.01.03') && esCuentaDeActivoFijo('1.2.02') && !esCuentaDeActivoFijo('1.1.14')).toBe(true)
+        expect(esCuentaDeActivoFijo('1.2.01.03') && esCuentaDeActivoFijo('1.2.02') && !esCuentaDeActivoFijo('1.1.15')).toBe(true)
     })
 
     it('bien: proveedor es 422; línea anulada, de otra empresa o de servicio es 422; con la compra queda entregado', async () => {
@@ -70,7 +71,7 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         // 1 de las 2 unidades: la mitad de la base de la línea (Q 4,464.29 / 2, redondeado).
         expect(entregado && [entregado.estado, entregado.contrapartida, entregado.compra_linea_id, entregado.compra_unidades, entregado.compra_base]).toEqual(['entregado', 'compra 1', 11, 1, '2232.15'])
         expect(contrapartidaLegible('compra 1')).toBe('Compra #1')
-        expect(contrapartidaLegible('cuenta 1.1.14')).toBe('Cuenta 1.1.14')
+        expect(contrapartidaLegible('cuenta 1.1.15')).toBe('Cuenta 1.1.15')
     })
 
     it('anular entrega: motivo obligatorio; el ganador vuelve a por notificar y se puede volver a entregar', async () => {
@@ -118,7 +119,7 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         await esperar(() => expect(document.querySelector('[data-prueba="entrega-compra-linea"]')).not.toBeNull())
         const vm = modal.vm as unknown as { itemsLinea: { value: number }[], itemsCuentaActivo: { value: string }[] }
         await esperar(() => expect(vm.itemsLinea.map(i => i.value)).toEqual([22, 11]))
-        expect(vm.itemsCuentaActivo.map(i => i.value)).toEqual(['1.1.14'])
+        expect(vm.itemsCuentaActivo.map(i => i.value)).toEqual(['1.1.15'])
         modal.unmount()
     })
 

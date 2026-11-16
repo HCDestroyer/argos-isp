@@ -57,8 +57,8 @@ describe('esquemaServicio (espejo de crearServicioValidator)', () => {
     it('DUID y prefijo estático según el modo IPv6', () => {
         expect(esquemaServicio.safeParse({ ...entradaValida(), ipv6_modo: 'duid' }).success).toBe(false)
         expect(esquemaServicio.safeParse({ ...entradaValida(), ipv6_modo: 'estatico', prefijo_delegado_v6: 'abc' }).success).toBe(false)
-        const estatico = esquemaServicio.parse({ ...entradaValida(), ipv6_modo: 'estatico', prefijo_delegado_v6: '2803:d100:1000:100::/56' })
-        expect(cuerpoServicio(estatico).prefijo_delegado_v6).toBe('2803:d100:1000:100::/56')
+        const estatico = esquemaServicio.parse({ ...entradaValida(), ipv6_modo: 'estatico', prefijo_delegado_v6: '2001:db8:1000:100::/56' })
+        expect(cuerpoServicio(estatico).prefijo_delegado_v6).toBe('2001:db8:1000:100::/56')
     })
 
     it.each([

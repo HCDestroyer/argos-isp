@@ -357,7 +357,7 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                         label="Cuenta de activo"
                         name="cuenta_codigo"
                         required
-                        help="Solo activos imputables fuera de las cuentas control (caja, bancos, CxC, impuestos, tránsito, activo fijo…)."
+                        help="Solo activos imputables fuera de las cuentas control (caja, bancos, CxC, impuestos, tránsito, inventarios 1.1.14, activo fijo…)."
                     >
                         <USelect
                             v-if="puede('libro.ver')"
@@ -371,7 +371,7 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                         <UInput
                             v-else
                             v-model="estado.cuenta_codigo"
-                            placeholder="Código, p. ej. 1.1.14"
+                            placeholder="Código de la cuenta de activo, p. ej. inventario de premios"
                             class="w-full font-mono"
                             data-prueba="entrega-cuenta"
                         />

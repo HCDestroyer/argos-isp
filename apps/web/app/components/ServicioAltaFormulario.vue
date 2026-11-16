@@ -878,7 +878,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             >
                                 <UInput
                                     v-model="estado.prefijo_delegado_v6"
-                                    placeholder="2803:d100:1000:100::/56"
+                                    placeholder="2001:db8:1000:100::/56"
                                     class="w-full font-mono"
                                 />
                             </UFormField>
