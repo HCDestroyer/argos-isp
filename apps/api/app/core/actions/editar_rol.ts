@@ -3,6 +3,7 @@ import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { verRol, type RolVista } from '#core/consultas/acl'
 import { ROLES_BASE } from '#core/permisos'
+import { CODIGO_ROL_EXCEDE, coberturaDelActor, exigirPermisosGlobales } from '#core/cobertura_permisos'
 
 export interface EntradaEditarRol {
     id: number
@@ -49,6 +50,7 @@ export default class EditarRol extends DomainAction<EntradaEditarRol, RolVista> 
     protected async handle(input: EntradaEditarRol, t: Transaccion): Promise<RolVista> {
         t.fijarEntidad('rol', input.id)
         const antes = await verRol(input.id, t.trx)
+        const actor = await coberturaDelActor(t.trx, t.ctx, CODIGO_ROL_EXCEDE)
         if (input.permisos !== undefined && Object.hasOwn(ROLES_BASE, antes.nombre)) {
             throw new ReglaNegocio(
                 `Los permisos del rol base ${antes.nombre} se definen en código; crea un rol propio`,
@@ -59,7 +61,15 @@ export default class EditarRol extends DomainAction<EntradaEditarRol, RolVista> 
         const cambios: Record<string, unknown> = {}
         if (input.descripcion !== undefined) cambios.descripcion = input.descripcion
         await actualizarConVersion(t.trx, 'core.roles', input.id, input.version, cambios)
-        if (input.permisos !== undefined) await reemplazarPermisosRol(t, input.id, input.permisos)
+        if (input.permisos !== undefined) {
+            // sin escalada: solo se agregan permisos que el actor tiene sin alcance (403 rol_excede_permisos)
+            await reemplazarPermisosRol(t, input.id, input.permisos)
+            const previos = new Set(antes.permisos)
+            exigirPermisosGlobales(
+                actor,
+                [...new Set(input.permisos)].filter((p) => !previos.has(p)),
+            )
+        }
 
         const despues = await verRol(input.id, t.trx)
         await t.registrarCambios(

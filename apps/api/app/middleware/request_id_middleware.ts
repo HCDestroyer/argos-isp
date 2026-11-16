@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import {
+    CANALES_HTTP,
     contextoCliente,
     esCanal,
     type Canal,
@@ -17,6 +18,12 @@ const ID_VALIDO = /^[A-Za-z0-9._:-]{1,128}$/
  * `requestId` y `contextoAccion()`, que arma el `ContextoAccion` para las acciones de dominio:
  * actor = usuario autenticado (`token` si entró con un token de API; sistema si es anónimo), canal = header `X-Canal` (por defecto `panel` con la cookie del panel y `api` en lo demás).
  *
+ * `X-Canal` solo puede declarar un canal de HTTP (`CANALES_HTTP`: panel, portal, api, ia). Los
+ * internos (`cron`, `worker`, `webhook`, `interno`, `consola`) los ponen los workers, crons y la
+ * consola, que no pasan por aquí, o la ruta con `contextoAccion('<canal>')`; con el token interno
+ * (`InternoMiddleware`) el header también los admite. Un valor no permitido se ignora y queda el
+ * canal por defecto: un cliente no puede hacerse pasar por un proceso del sistema en la auditoría.
+ *
  * Log de acceso (pedido de A6): al terminar cada petición, una línea `info` con `request_id`,
  * `metodo`, `ruta` (el patrón de la ruta, p. ej. `/api/v1/servicios/:id`, nunca la URL con datos;
  * null si no hubo ruta), `status` y `duracion_ms`. Sin cuerpo, query ni headers. El logger de la
@@ -27,7 +34,7 @@ export default class RequestIdMiddleware {
         const entrante = ctx.request.header('x-request-id')
         const requestId = entrante && ID_VALIDO.test(entrante) ? entrante : randomUUID()
         const canalHeader = ctx.request.header('x-canal')
-        const canal: Canal | null = esCanal(canalHeader) ? canalHeader : null
+        const canalDeclarado: Canal | null = esCanal(canalHeader) ? canalHeader : null
 
         ctx.requestId = requestId
         ctx.response.header('X-Request-Id', requestId)
@@ -44,6 +51,7 @@ export default class RequestIdMiddleware {
                 : null
             // Iris 0.7.0 (A23): la ruta pidió actuar como el usuario vinculado y el middleware
             // `actuarComoVinculado` ya lo resolvió; canal `api`, la vía queda en la auditoría
+            const canal = canalPermitido(canalDeclarado, ctx.autenticadoInterno === true)
             const vinculada = ctx.actuacionVinculada
             if (vinculada) {
                 return {
@@ -64,6 +72,9 @@ export default class RequestIdMiddleware {
                 // la cookie del panel implica canal `panel` si no llega `X-Canal`
                 canal: canalForzado ?? canalIris ?? canal ?? (guard === 'panel' ? 'panel' : 'api'),
                 requestId,
+                ...(guard === 'tokens' && ctx.auth.use('tokens').token
+                    ? { tokenApiId: Number(ctx.auth.use('tokens').token!.id) }
+                    : {}),
                 // multiempresa: empresa activa y alcance (middleware `empresa`, rutas con sesión)
                 ...(ctx.empresa
                     ? { empresaId: ctx.empresa.activa, empresasPermitidas: ctx.empresa.permitidas }
@@ -76,6 +87,13 @@ export default class RequestIdMiddleware {
 
         return next()
     }
+}
+
+/** Canal de `X-Canal` que se respeta: uno de HTTP, o cualquiera con el token interno; si no, null. */
+export function canalPermitido(declarado: Canal | null, interno: boolean): Canal | null {
+    if (declarado === null) return null
+    if (interno || (CANALES_HTTP as readonly string[]).includes(declarado)) return declarado
+    return null
 }
 
 /** Escribe la línea de acceso cuando la respuesta termina de enviarse (o se corta la conexión). */
@@ -106,6 +124,8 @@ export function registrarAcceso(ctx: HttpContext) {
 declare module '@adonisjs/core/http' {
     interface HttpContext {
         requestId: string
+        /** La petición trae el token interno válido (lo marca `InternoMiddleware`). */
+        autenticadoInterno?: boolean
         /**
          * Cabeceras `X-Iris-Actor` y `X-Iris-Conversacion` ya validadas (solo con el token de Iris en
          * las rutas de §7; `exigirCabecerasIris`). `contextoAccion()` las lleva a `ctx.iris`.

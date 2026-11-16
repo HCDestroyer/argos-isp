@@ -49,6 +49,8 @@ El rol dice **qué** se puede hacer. **Dónde** (un router, una zona o una caja)
 
 ## Preguntas frecuentes
 
+**«La asignación excede tus permisos».** Al crear o editar un rol solo puedes agregar permisos que tú tienes sin alcance (en todos los routers, zonas y cajas). Quitar permisos siempre se puede.
+
 **¿Puedo quitarle a `cajero` un permiso?** No: los permisos de un rol base no se editan. Crea un rol propio con los permisos que quieras y asígnalo en su lugar.
 
 **Mientras editabas, alguien más guardó el rol.** Verás un error de conflicto. Recarga y vuelve a aplicar el cambio.
