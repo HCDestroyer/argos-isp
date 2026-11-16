@@ -129,6 +129,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+        env:
+          # El sitio de documentación falla si una pantalla del panel no tiene su página de ayuda.
+          DOCS_AYUDA_ESTRICTA: "1"
 
       - name: Regenerar contratos (OpenAPI → packages/contracts)
         run: pnpm contracts:build
