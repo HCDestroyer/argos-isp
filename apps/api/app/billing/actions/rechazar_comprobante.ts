@@ -4,6 +4,7 @@ import { ValidacionFallida } from '#shared/errores'
 import { CAUSAS_RECHAZO_COMPROBANTE, type CausaRechazoComprobante } from '#shared/eventos'
 import { payloadComprobante, verComprobante, type ComprobanteVista } from '#billing/comprobantes'
 import { bloquearComprobante } from '#billing/actions/aprobar_comprobante'
+import { actorIrisDeLaDecision } from '#billing/iris'
 import CancelarReconexionTemporal from '#billing/actions/cancelar_reconexion_temporal'
 
 /**
@@ -17,7 +18,8 @@ import CancelarReconexionTemporal from '#billing/actions/cancelar_reconexion_tem
  *
  * Desde Iris (contrato 0.7.0 §7.7, A23) rechaza el usuario de Argos vinculado al operador
  * (`verificado_por`); solo comprobantes con `canal = iris` de una empresa suya (ver
- * `bloquearComprobante` y `exigirComprobanteParaIris`).
+ * `bloquearComprobante` y `exigirComprobanteParaIris`), y `verificado_iris_actor` guarda su
+ * `X-Iris-Actor` (contrato Iris 0.7.1; null desde el panel).
  *
  * Si el comprobante respaldaba una reconexión temporal activa (contrato Iris 0.6.0 §7.3), se
  * cancela en la misma transacción (`CancelarReconexionTemporal`: `promesa.cancelada` con
@@ -53,6 +55,7 @@ export default class RechazarComprobante extends DomainAction<EntradaRechazarCom
         }
         if (errores.length > 0) throw new ValidacionFallida(errores)
         const comprobante = await bloquearComprobante(t, input.comprobante_id)
+        const verificadoIrisActor = actorIrisDeLaDecision(t.ctx)
         await t.trx
             .from('billing.comprobantes')
             .where('id', comprobante.id)
@@ -61,18 +64,26 @@ export default class RechazarComprobante extends DomainAction<EntradaRechazarCom
                 motivo_rechazo: motivo,
                 causa_rechazo: causa,
                 verificado_por: usuarioDelActor(t.ctx.actor),
+                verificado_iris_actor: verificadoIrisActor,
                 verificado_en: t.trx.knexRawQuery('now()'),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         await t.registrarCambios(
             { tipo: 'comprobante', id: comprobante.id },
-            { estado: comprobante.estado, motivo_rechazo: null, causa_rechazo: null, verificado_por: null },
+            {
+                estado: comprobante.estado,
+                motivo_rechazo: null,
+                causa_rechazo: null,
+                verificado_por: null,
+                verificado_iris_actor: null,
+            },
             {
                 estado: 'rechazado',
                 motivo_rechazo: motivo,
                 causa_rechazo: causa,
                 verificado_por: usuarioDelActor(t.ctx.actor),
+                verificado_iris_actor: verificadoIrisActor,
             },
         )
 

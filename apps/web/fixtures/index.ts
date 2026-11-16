@@ -47,7 +47,7 @@ import { rutasLibros } from './libros/rutas'
 import { rutasBloqueosLibro, rutasCorridasConBloqueo } from './libro/bloqueos'
 import { rutasChecksCierre, rutasCorridasFacturacion } from './libro/checks'
 import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
-import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horus/datos'
+import { CANJES_SIN_VINCULAR, TICKET_SIN_VINCULAR, TICKET_VINCULADO } from './horus/datos'
 import { rutasHorus } from './horus/rutas'
 import { rutasIris } from './iris/rutas'
 import { rutasImplementacionesPlan } from './planes/implementaciones'
@@ -419,7 +419,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
      */
     'POST /api/v1/auth/sso/canjear': ({ cuerpo }) => {
         const ticket = typeof cuerpo === 'object' && cuerpo !== null && 'ticket' in cuerpo && typeof cuerpo.ticket === 'string' ? cuerpo.ticket : ''
-        if (bd.horus.usados.includes(ticket) || (ticket !== TICKET_VINCULADO && ticket !== TICKET_SIN_VINCULAR)) {
+        const sinVincular = CANJES_SIN_VINCULAR[ticket]
+        if (bd.horus.usados.includes(ticket) || (ticket !== TICKET_VINCULADO && !sinVincular)) {
             return problemaTipado(410, 'ticket_invalido', 'Ticket inválido', 'El ticket de autologin venció, ya se usó o el conector ya no está conectado')
         }
         bd.horus.usados.push(ticket)
@@ -427,15 +428,21 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
             const canje: Schema<'CanjeSso'> = { resultado: 'sesion', ruta: '/servicios/1', conector: 'horus', sesion: abrirSesion(loginAdmin), vinculacion: null }
             return { status: 200, cuerpo: canje }
         }
+        // El ticket vinculado de otro usuario pide vincular como el de Horus sin vinculación.
+        const datos = sinVincular ?? CANJES_SIN_VINCULAR[TICKET_SIN_VINCULAR]
+        if (!datos) {
+            return problemaTipado(410, 'ticket_invalido', 'Ticket inválido', 'El ticket de autologin venció, ya se usó o el conector ya no está conectado')
+        }
         const canje: Schema<'CanjeSso'> = {
             resultado: 'vinculacion_requerida',
             ruta: '/clientes/1',
-            conector: 'horus',
+            conector: datos.conector,
             sesion: null,
             vinculacion: {
-                token: TOKEN_VINCULACION,
+                token: datos.token,
                 expira_en: new Date(Date.now() + 10 * 60_000).toISOString(),
-                usuario_externo: { id_externo: 'u-42', correo: 'luis@horus.isp.gt', nombre: 'Luis Pérez (Horus)' },
+                instalacion: datos.instalacion,
+                usuario_externo: { ...datos.usuario_externo },
             },
         }
         return { status: 200, cuerpo: canje }
@@ -443,8 +450,9 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
 
     /** Login normal con el token de vinculación (10 min, un uso): guarda la vinculación. */
     'POST /api/v1/auth/sso/vincular': ({ cuerpo }) => {
-        const token = typeof cuerpo === 'object' && cuerpo !== null && 'token_vinculacion' in cuerpo ? cuerpo.token_vinculacion : null
-        if (token !== TOKEN_VINCULACION || bd.horus.usados.includes(token)) {
+        const token = typeof cuerpo === 'object' && cuerpo !== null && 'token_vinculacion' in cuerpo && typeof cuerpo.token_vinculacion === 'string' ? cuerpo.token_vinculacion : ''
+        const datos = Object.values(CANJES_SIN_VINCULAR).find(c => c.token === token)
+        if (!datos || bd.horus.usados.includes(token)) {
             return problemaTipado(410, 'vinculacion_invalida', 'Vinculación inválida', 'El token de vinculación venció o ya se usó')
         }
         const revision = revisarCredenciales(cuerpo)
@@ -454,15 +462,15 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         bd.horus.usados.push(token)
         bd.horus.vinculaciones.push({
             id: siguienteId(bd.horus.vinculaciones),
-            conector: 'horus',
-            id_externo: 'u-42',
+            conector: datos.conector,
+            id_externo: datos.usuario_externo.id_externo,
             usuario_id: revision.respuesta.usuario.id,
-            correo_externo: 'luis@horus.isp.gt',
-            nombre_externo: 'Luis Pérez (Horus)',
+            correo_externo: datos.usuario_externo.correo,
+            nombre_externo: datos.usuario_externo.nombre,
             revocada_en: null,
             created_at: new Date().toISOString(),
         })
-        const canje: Schema<'CanjeSso'> = { resultado: 'sesion', ruta: '/clientes/1', conector: 'horus', sesion: abrirSesion(revision.respuesta), vinculacion: null }
+        const canje: Schema<'CanjeSso'> = { resultado: 'sesion', ruta: '/clientes/1', conector: datos.conector, sesion: abrirSesion(revision.respuesta), vinculacion: null }
         return { status: 200, cuerpo: canje }
     },
 

@@ -12,7 +12,7 @@ import {
 } from '#billing/comprobantes'
 import RegistrarPago, { type ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 import CumplirPromesa from '#billing/actions/cumplir_promesa'
-import { exigirComprobanteParaIris } from '#billing/iris'
+import { actorIrisDeLaDecision, exigirComprobanteParaIris } from '#billing/iris'
 
 /**
  * `comprobantes.aprobar` (`POST /comprobantes/:id/aprobar`): un cajero o contador verificó el
@@ -37,6 +37,8 @@ import { exigirComprobanteParaIris } from '#billing/iris'
  *   reconexión) sigue en esta única transacción.
  * - Con `canal = iris`, el pago lleva `origen: 'iris'` en `pago.registrado` y el evento del
  *   comprobante `origen: 'iris'`: Iris confirma al cliente y notify no avisa por su cuenta.
+ * - `verificado_iris_actor` (contrato Iris 0.7.1): el `X-Iris-Actor` de quien aprobó desde Iris;
+ *   null desde el panel. `iris_actor` sigue siendo el de quien lo registró.
  */
 
 export interface EntradaAprobarComprobante {
@@ -115,6 +117,7 @@ export default class AprobarComprobante extends DomainAction<
         t: Transaccion,
     ): Promise<ResultadoAprobarComprobante> {
         const comprobante = await bloquearComprobante(t, input.comprobante_id)
+        const verificadoIrisActor = actorIrisDeLaDecision(t.ctx)
 
         const facturas =
             input.facturas && input.facturas.length > 0
@@ -151,14 +154,20 @@ export default class AprobarComprobante extends DomainAction<
                 estado: 'aprobado',
                 pago_id: pago.id,
                 verificado_por: usuarioDelActor(t.ctx.actor),
+                verificado_iris_actor: verificadoIrisActor,
                 verificado_en: t.trx.knexRawQuery('now()'),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         await t.registrarCambios(
             { tipo: 'comprobante', id: comprobante.id },
-            { estado: comprobante.estado, pago_id: null, verificado_por: null },
-            { estado: 'aprobado', pago_id: pago.id, verificado_por: usuarioDelActor(t.ctx.actor) },
+            { estado: comprobante.estado, pago_id: null, verificado_por: null, verificado_iris_actor: null },
+            {
+                estado: 'aprobado',
+                pago_id: pago.id,
+                verificado_por: usuarioDelActor(t.ctx.actor),
+                verificado_iris_actor: verificadoIrisActor,
+            },
         )
         const reconexion = (await t.trx
             .from('billing.promesas')

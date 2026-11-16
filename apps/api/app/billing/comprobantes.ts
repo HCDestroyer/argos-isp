@@ -59,6 +59,8 @@ export interface ComprobanteVista {
     /** solo Iris: cabeceras X-Iris-Actor y X-Iris-Conversacion */
     iris_actor: string | null
     iris_conversacion: string | null
+    /** solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null en el panel */
+    verificado_iris_actor: string | null
     nota: string | null
     estado: EstadoComprobante
     motivo_rechazo: string | null
@@ -104,6 +106,7 @@ function consulta(cliente: QueryClientContract) {
             'k.canal_contacto',
             'k.iris_actor',
             'k.iris_conversacion',
+            'k.verificado_iris_actor',
             'k.nota',
             'k.estado',
             'k.motivo_rechazo',
@@ -271,6 +274,7 @@ export async function payloadComprobante(
             'k.pago_id',
             'k.motivo_rechazo',
             'k.causa_rechazo',
+            'k.verificado_iris_actor',
             's.estado as servicio_estado',
         )
         .first()) as {
@@ -284,6 +288,7 @@ export async function payloadComprobante(
         motivo_rechazo: string | null
         causa_rechazo: CausaRechazoComprobante | null
         servicio_estado: EstadoServicioConPendiente | null
+        verificado_iris_actor: string | null
     } | null
     if (!fila) throw new NoEncontrado(`El comprobante ${id} no existe`)
     return {
@@ -298,5 +303,6 @@ export async function payloadComprobante(
         causa: fila.causa_rechazo,
         servicio_estado: fila.servicio_id === null ? null : fila.servicio_estado,
         origen: fila.canal === 'iris' ? 'iris' : null,
+        verificado_iris_actor: fila.verificado_iris_actor,
     }
 }

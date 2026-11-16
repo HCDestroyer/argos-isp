@@ -4,6 +4,7 @@ import { usuarioHorus } from '#core/integraciones_horus'
 import { usuarioIris } from '#core/integraciones_iris'
 import {
     FORMATO_ID_EXTERNO_IRIS,
+    TABLAS_CONECTOR_SSO,
     VIGENCIA_TICKET_S,
     generarSecretoSso,
     urlPanel,
@@ -19,13 +20,13 @@ const CONECTORES: Record<
     horus: {
         nombre: 'Horus',
         usuario: usuarioHorus,
-        tabla: 'integraciones.horus_conector',
+        tabla: TABLAS_CONECTOR_SSO.horus,
         apagado: () => new ConectorHorusApagado(),
     },
     iris: {
         nombre: 'Iris',
         usuario: usuarioIris,
-        tabla: 'integraciones.iris_conector',
+        tabla: TABLAS_CONECTOR_SSO.iris,
         apagado: () => new ConectorIrisApagado(),
     },
 }
@@ -126,8 +127,9 @@ export default class EmitirTicketSso extends DomainAction<EntradaEmitirTicketSso
                 conector,
                 token_api_id: input.atk_id,
                 usuario_id_externo: input.usuario.id_externo,
-                usuario_correo: input.usuario.correo ?? null,
-                usuario_nombre: input.usuario.nombre ?? null,
+                // vacío = no lo trajo (se muestra en el canje solo si viene)
+                usuario_correo: input.usuario.correo || null,
+                usuario_nombre: input.usuario.nombre || null,
                 destino_tipo: destino?.tipo ?? null,
                 destino_id_externo: destino?.id_externo ?? null,
                 expira_en: expiraEn,

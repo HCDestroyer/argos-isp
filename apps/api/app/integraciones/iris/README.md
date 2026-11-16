@@ -243,7 +243,8 @@ boleta de Iris como su usuario de Argos vinculado, por las rutas de caja:
   `iris_actor` e `iris_conversacion` (también en las acciones anidadas); `verificado_por` del
   comprobante y `registrado_por` del pago = el vinculado. Pago, asiento, reactivación,
   `CumplirPromesa` y la reconexión temporal (cumplida o cancelada) van en la misma transacción.
-- **Webhooks:** `comprobante.aprobado` / `comprobante.rechazado` sin cambios de forma.
+- **Webhooks:** `comprobante.aprobado` / `comprobante.rechazado` con la forma de siempre; desde 0.7.1
+  (A24) traen además `verificado_iris_actor` (ver Eventos).
 - Pruebas: `tests/billing/iris_aprobar_070.spec.ts` (billing) y `tests/core/iris_actuacion_070.spec.ts`
   (mecanismo de A1).
 
@@ -304,7 +305,9 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   contrato cambie después (el contrato solo sube).
 - **Pagos y atención** (contrato 0.6.0, §7.2 y §7.4; `EVENTOS_DESDE_060`, solo con
   `conectorAdmite('0.6.0')`): `comprobante.aprobado` / `.rechazado` (`comprobante_id`, `empresa_id`,
-  `cliente_id`, `servicio_id`, `canal`, `monto`, `pago_id`, `motivo`, `causa`, `servicio_estado`) y
+  `cliente_id`, `servicio_id`, `canal`, `monto`, `pago_id`, `motivo`, `causa`, `servicio_estado` y, desde 0.7.1 (A24, §7.2),
+  `verificado_iris_actor`: el `X-Iris-Actor` de quien decidió desde Iris, o null si decidió caja en
+  el panel; aditivo, sin filtro de versión, y de la fila si el evento es anterior) y
   `promesa.creada` / `.cumplida` / `.incumplida` / `.cancelada` (`promesa_id`, `empresa_id`,
   `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `vence`, `monto`; `motivo` solo en
   `cancelada`), de cualquier canal dentro del alcance. Lo que el evento no trae se completa con

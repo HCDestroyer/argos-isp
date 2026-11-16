@@ -455,9 +455,12 @@ function instanteIso(valor: unknown): string | null {
 
 /**
  * `comprobante.aprobado` / `comprobante.rechazado` (0.6.0, §7.2): comprobante_id, empresa_id,
- * cliente_id, servicio_id, canal, monto, pago_id, motivo, causa y servicio_estado. Lo que A3 no trae
- * en el evento sale de `billing.comprobantes` (y el estado, de `core.servicios`). Para comprobantes
- * de cualquier canal dentro del alcance.
+ * cliente_id, servicio_id, canal, monto, pago_id, motivo, causa, servicio_estado y, desde 0.7.1
+ * (A24, §7.2 y §7.7), verificado_iris_actor: el `X-Iris-Actor` de quien decidió desde Iris, o null
+ * si decidió caja en el panel. Es aditivo: va a todo conector ≥ 0.6.0, sin condición de versión
+ * (el contrato no lo condiciona; un Iris 0.6/0.7.0 ignora el campo). Lo que A3 no trae en el
+ * evento sale de `billing.comprobantes` (y el estado, de `core.servicios`). Para comprobantes de
+ * cualquier canal dentro del alcance.
  */
 async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIris | null> {
     const comprobanteId = entero(p.comprobante_id)
@@ -465,7 +468,16 @@ async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIr
     const fila = (await db
         .from('billing.comprobantes')
         .where('id', comprobanteId)
-        .select('empresa_id', 'cliente_id', 'servicio_id', 'canal', 'monto', 'pago_id', 'motivo_rechazo')
+        .select(
+            'empresa_id',
+            'cliente_id',
+            'servicio_id',
+            'canal',
+            'monto',
+            'pago_id',
+            'motivo_rechazo',
+            'verificado_iris_actor',
+        )
         .first()) as {
         empresa_id: number
         cliente_id: number
@@ -474,6 +486,7 @@ async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIr
         monto: string
         pago_id: number | null
         motivo_rechazo: string | null
+        verificado_iris_actor: string | null
     } | null
     const empresaId = entero(p.empresa_id) ?? entero(fila?.empresa_id)
     if (!empresaId) return null
@@ -503,6 +516,12 @@ async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIr
             // Sin causa en el evento (A3 anterior a 0.6.0), el rechazo cuenta como `otro`
             causa: aprobado ? null : (unoDe(p.causa, CAUSAS_RECHAZO) ?? 'otro'),
             servicio_estado: servicioId ? servicioEstado : null,
+            // 0.7.1 (A24): quién decidió desde Iris; null si decidió caja en el panel. Un evento
+            // anterior a 0.7.1 (sin la clave) lo toma de la fila
+            verificado_iris_actor:
+                'verificado_iris_actor' in p
+                    ? texto(p.verificado_iris_actor)
+                    : texto(fila?.verificado_iris_actor),
         },
         empresas: [empresaId],
     }

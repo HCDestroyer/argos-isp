@@ -12094,7 +12094,7 @@ export interface components {
             resultado: "sesion" | "vinculacion_requerida";
             /** @description Ruta local del panel del destino, p. ej. `/servicios/812` */
             ruta: string;
-            /** @description Sistema que pidió el autologin (`horus`) */
+            /** @description Sistema que pidió el autologin (`horus` o `iris`) */
             conector: string;
             /** @description Solo con `resultado: sesion` */
             sesion: components["schemas"]["SesionPanel"] | null;
@@ -12104,6 +12104,9 @@ export interface components {
                 token: string;
                 /** Format: date-time */
                 expira_en: string;
+                /** @description Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base */
+                instalacion: string | null;
+                /** @description Usuario del otro sistema que pidió el autologin; `correo` y `nombre` llegan tal como los mandó el ticket (null si no los trajo). Solo informativos: nunca se vincula por correo */
                 usuario_externo: {
                     id_externo: string;
                     correo: string | null;
@@ -12673,6 +12676,8 @@ export interface components {
             iris_actor?: string | null;
             /** @description Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris») */
             iris_conversacion?: string | null;
+            /** @description Solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null si se decidió en el panel o sigue pendiente */
+            verificado_iris_actor?: string | null;
             nota: string | null;
             /** @enum {string} */
             estado: "pendiente" | "aprobado" | "rechazado";

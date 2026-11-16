@@ -85836,7 +85836,7 @@
           },
           "conector": {
             "type": "string",
-            "description": "Sistema que pidió el autologin (`horus`)"
+            "description": "Sistema que pidió el autologin (`horus` o `iris`)"
           },
           "sesion": {
             "anyOf": [
@@ -85857,6 +85857,7 @@
             "required": [
               "token",
               "expira_en",
+              "instalacion",
               "usuario_externo"
             ],
             "properties": {
@@ -85867,6 +85868,13 @@
               "expira_en": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "instalacion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Host (con puerto si no es el estándar) de la instalación del conector que pidió el autologin, p. ej. `iris.isp.example`: mostrarlo antes del login para que quien entra vea a quién le da acceso. Nunca la URL completa. null si el conector no tiene URL base"
               },
               "usuario_externo": {
                 "type": "object",
@@ -85891,7 +85899,8 @@
                       "null"
                     ]
                   }
-                }
+                },
+                "description": "Usuario del otro sistema que pidió el autologin; `correo` y `nombre` llegan tal como los mandó el ticket (null si no los trajo). Solo informativos: nunca se vincula por correo"
               }
             },
             "description": "Solo con `resultado: vinculacion_requerida`"
@@ -87966,6 +87975,13 @@
               "null"
             ],
             "description": "Solo Iris: X-Iris-Conversacion (botón «Ver conversación en Iris»)"
+          },
+          "verificado_iris_actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo Iris (0.7.1): X-Iris-Actor de quien lo aprobó o rechazó desde Iris; null si se decidió en el panel o sigue pendiente"
           },
           "nota": {
             "type": [
