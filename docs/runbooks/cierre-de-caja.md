@@ -1,6 +1,10 @@
+---
+orden: 20
+---
+
 # Runbook · Cierre de caja
 
-Para el cajero y el supervisor de caja. Cómo abrir y cerrar un turno, qué hacer si el efectivo no cuadra y cómo se corrige un error. Verificado contra el panel (`/caja`, `/pagos`) y la API (`POST /cajas/:id/abrir`, `POST /cajas/:id/cerrar`) de la semana 3.
+Para el cajero y el supervisor de caja. Cómo abrir y cerrar un turno, qué hacer si el efectivo no cuadra y cómo se corrige un error. Verificado contra el panel (`/caja`, `/pagos`) y la API (`POST /cajas/:id/abrir`, `POST /cajas/:id/cerrar`) (revisado en noviembre de 2026).
 
 ## Antes de empezar
 
@@ -11,40 +15,48 @@ Para el cajero y el supervisor de caja. Cómo abrir y cerrar un turno, qué hace
 ## 1. Abrir el turno
 
 1. Menú **Caja**. Elige tu caja en los botones de arriba; dice "Cerrada" si no tiene turno.
-2. Botón **Abrir turno**. Escribe el **Fondo inicial**: el efectivo con el que empiezas (p. ej. `500.00`).
-3. **Abrir turno**. Aparece "Turno #N abierto" con la hora.
+2. Botón **Abrir caja**. Escribe el **Fondo inicial**: el efectivo con el que empiezas (p. ej. `500.00`).
+3. **Abrir caja** en la ventana. Aparece el aviso "Turno abierto" y la tarjeta "Turno #N abierto · desde" con la hora.
+
+También puedes abrirla desde **Cobrar**: si eliges **Efectivo en caja** sin caja abierta, el aviso trae el botón **Abrir caja**.
 
 Si dice que ya hay un turno abierto (409 `turno_abierto`), alguien no cerró el anterior: no abras otro y avisa al supervisor.
 
 ## 2. Durante el día
 
 - Cobra desde **Cobrar** (`/cobro`) con el método **Efectivo en caja**. Cada cobro entra al turno abierto de tu caja.
-- La tarjeta del turno muestra **Fondo inicial**, **Cobros en efectivo**, **Efectivo cobrado** y **Esperado en caja**. Este esperado es **provisional**: suma el fondo y los cobros en efectivo de la página, pero **no resta los egresos pagados en efectivo** de la caja. El oficial lo calcula el sistema al cerrar.
-- Los gastos pagados con el efectivo de la caja los registra contabilidad o un administrador en **Egresos** con método caja. Bajan el esperado oficial.
+- La tarjeta del turno muestra **Fondo inicial**, **Cobros en efectivo**, **Efectivo cobrado**, **Egresos en efectivo**, **Depositado al banco** y **Esperado en caja**. Este esperado es **provisional**: fondo + efectivo cobrado − egresos en efectivo − depósitos al banco del turno. No toma en cuenta los pagos a proveedores en efectivo ni las constancias de retención de un cobro; el oficial lo calcula el sistema al cerrar.
+- Si no se pudieron leer los cobros, egresos o depósitos, la tarjeta dice "Sin esperado provisional" y la razón. Igual puedes cerrar: el sistema calcula el oficial.
+- Los gastos pagados con el efectivo de la caja se registran en **Egresos** con método caja. Bajan el esperado.
+- Para llevar efectivo al banco durante el turno usa **Depositar al banco** (monto, boleta, cuenta que recibe y fecha). El depósito sale de la caja, queda en tránsito hasta que se concilie el extracto y baja el esperado. No puede ser mayor que el efectivo del turno.
 
 ## 3. Cerrar el turno
 
 1. Cuenta **todo** el efectivo de la caja, **fondo incluido**.
-2. En **Caja**, botón **Cerrar turno**.
+2. En **Caja**, botón **Cerrar caja**.
 3. Escribe el **Efectivo contado**, o activa **Contar por denominación** y escribe cuántos billetes y monedas hay de cada uno: el sistema suma.
 4. Si lo contado no es igual a lo esperado, escribe el **Motivo de la diferencia** (obligatorio). Ejemplo: "faltaron Q 5.00, vuelto mal entregado".
-5. **Cerrar turno**. El aviso y la tarjeta "Turno cerrado" muestran **Esperado**, **contado** y la diferencia.
+5. **Cerrar caja** en la ventana. El aviso y la tarjeta "Turno cerrado" muestran **Esperado**, **contado** y la diferencia.
 
 Qué calcula el sistema:
 
 ```
-esperado   = fondo inicial + cobros vigentes del turno − egresos en efectivo vigentes del turno
+esperado   = fondo inicial
+           + efectivo de los cobros vigentes del turno
+           − egresos en efectivo vigentes del turno
+           − depósitos al banco del turno
+           − pagos a proveedores en efectivo del turno
 diferencia = contado − esperado      (negativa = faltante, positiva = sobrante)
 ```
 
-- Los cobros **anulados** no cuentan.
+- Los cobros **anulados** no cuentan. De un cobro con constancias de retención solo cuenta el efectivo que entró.
 - Con diferencia, el sistema deja un asiento contable: faltante a `5.2.06 Faltantes de caja`, sobrante a `4.1.04 Sobrantes de caja`. Se avisa a los responsables (evento `caja.cerrada`).
 
-| Mensaje                                                | Qué significa                         | Qué hacer                                   |
-| ------------------------------------------------------ | ------------------------------------- | ------------------------------------------- |
-| 422 en "Motivo de la diferencia" (muestra el esperado) | Hay diferencia y no escribiste motivo | Recuenta. Si sigue igual, escribe el motivo |
-| 409 `sin_turno_abierto`                                | La caja ya estaba cerrada             | Recarga la página: otro usuario la cerró    |
-| 403                                                    | La caja no es tuya                    | Pide al administrador que te asigne         |
+| Mensaje                                                                            | Qué significa                         | Qué hacer                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
+| 422 "Hay una diferencia de Q… (esperado Q…, contado Q…): el motivo es obligatorio" | Hay diferencia y no escribiste motivo | Recuenta. Si sigue igual, escribe el motivo |
+| 409 `sin_turno_abierto`                                                            | La caja ya estaba cerrada             | Recarga la página: otro usuario la cerró    |
+| 403                                                                                | La caja no es tuya                    | Pide al administrador que te asigne         |
 
 ## 4. Si no cuadra
 
@@ -52,7 +64,7 @@ Antes de cerrar, en este orden:
 
 1. **Recuenta** el efectivo, fondo incluido.
 2. **Revisa los cobros del turno** en la tabla de la página (o en **Pagos** con el filtro de caja). Busca un cobro registrado con monto equivocado o un cobro en efectivo que se registró con otro método.
-3. **Revisa los egresos** del turno en **Egresos** (filtro **Pagado con** = caja y las fechas del turno). Si el panel muestra un esperado mayor que el que te dio el cierre, casi siempre es un egreso en efectivo: el provisional no lo resta.
+3. **Revisa los egresos y depósitos** del turno: los ves en la tarjeta del turno, y los egresos también en **Egresos** (filtro **Pagado con** = caja y las fechas del turno). Si el esperado oficial es menor que el provisional, casi siempre es un pago a proveedor en efectivo o un cobro con constancia de retención: el provisional no los resta.
 4. **Revisa vueltos** y billetes falsos detectados después del cobro.
 5. Si encontraste un cobro mal registrado, **no cierres todavía**: pide al supervisor que lo anule (ver abajo) y que se registre bien. Después cierra.
 6. Si no encuentras la causa, cierra con el motivo real ("faltante sin causa identificada") y avisa al supervisor. El faltante queda en el libro; no se "arregla" cambiando el contado.

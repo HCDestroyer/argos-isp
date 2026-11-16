@@ -20,3 +20,6 @@ test-results/
 
 # Snapshot de Redis local de pruebas
 dump.rdb
+
+# Referencia de la API del sitio de documentación: la genera apps/docs/scripts/generar-api.mjs
+docs/desarrolladores/referencia/

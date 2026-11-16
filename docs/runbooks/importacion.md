@@ -1,3 +1,7 @@
+---
+orden: 11
+---
+
 # Runbook · Importación desde otro sistema (Mikrowisp, SmartISP, CSV)
 
 Para el operador que pasa los datos del sistema anterior a ArgosIsp: clientes, routers, planes, servicios, facturas, pagos históricos y saldos. Detalle técnico en `apps/api/app/importacion/README.md`.
@@ -61,12 +65,12 @@ Notas:
 pnpm importar:plantillas /ruta/plantillas
 ```
 
-Deja `routers.csv`, `redes.csv`, `planes.csv`, `clientes.csv`, `servicios.csv`, `facturas.csv`, `saldos.csv`, `pagos.csv` (encabezado y una fila de ejemplo) y `LEEME.md` con cada columna: obligatoria o no, qué es y un ejemplo.
+Deja `routers.csv`, `redes.csv`, `planes.csv`, `clientes.csv`, `servicios.csv`, `facturas.csv`, `saldos.csv`, `pagos.csv`, `promesas.csv` (encabezado y una fila de ejemplo) y `LEEME.md` con cada columna: obligatoria o no, qué es y un ejemplo.
 
 1. Abre cada plantilla en Excel, **borra la fila de ejemplo** y pega los datos exportados del sistema anterior en las columnas que correspondan. Las columnas que no tengas se quedan vacías o se borran; las obligatorias no.
 2. Los `id`, `cliente_id`, `router_id`, `plan_id` y `factura_id` son los ids del sistema anterior, tal cual: con ellos se enlazan los archivos entre sí.
 3. Guarda cada hoja como **CSV UTF-8** con el mismo nombre de archivo, todas en un mismo directorio. Coma o punto y coma da igual.
-4. `redes`, `facturas`, `saldos` y `pagos` pueden faltar. Sin `saldos.csv`, el saldo de cada cliente es lo pendiente de sus facturas.
+4. `redes`, `facturas`, `saldos`, `pagos` y `promesas` pueden faltar. Sin `saldos.csv`, el saldo de cada cliente es lo pendiente de sus facturas.
 5. Pon un nombre corto al sistema para `--sistema` (minúsculas, dígitos y `_`: `wisphub`, `smartisp`, `excel_2026`) y úsalo siempre igual.
 
 Una columna con un nombre que el importador no conoce se ignora y sale como `aviso` en el reporte: revisa esos avisos, suelen ser un encabezado mal escrito.
@@ -74,7 +78,7 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 ### 0.3 Antes de la primera corrida
 
 - [ ] **Empresa (multiempresa).** Todo lo importado (servicios, sus facturas, pagos y promesas, la empresa sugerida de las zonas y routers nuevos, la auditoría y el archivo del origen) va a **una** empresa: `--empresa=<id|nit>` (id o NIT, con o sin guion). Con una sola empresa activa no hace falta; con varias, el comando se detiene antes de tocar nada con la lista de empresas. Un ISP con dos NIT en el mismo sistema anterior se importa en dos corridas (un volcado o CSV por empresa), o se corrige después con "Cambiar empresa" del servicio. Si una segunda corrida usa otra empresa, lo ya importado no se mueve y el reporte lo lista en `servicios_otra_empresa`.
-- [ ] Backup reciente de ArgosIsp (`infra/backups/respaldar.sh`, ver `docs/runbooks/restaurar-backup.md`).
+- [ ] Backup reciente de ArgosIsp (`sudo argosisp respaldar` en un servidor instalado; ver [Respaldos](./respaldos.md)).
 - [ ] Una plantilla de facturación creada en el panel. Si hay varias, anota el id de la que llevarán los servicios importados (`--plantilla=<id>`).
 - [ ] **Ningún mes cerrado en el libro** que caiga en las fechas de los pagos del origen: los pagos históricos entran con su fecha original y un mes cerrado los rechaza (`periodo_cerrado`). Importa antes del primer cierre mensual, o pide a contabilidad reabrir esos meses durante la importación.
 - [ ] Historial completo (modo B, por defecto): todas las facturas por su total (también las pagadas, los cargos únicos, las de clientes retirados y las de total 0), todos los pagos con su fecha, las promesas vigentes y un saldo inicial solo para la diferencia. El saldo final de cada cliente es el del origen.
@@ -82,7 +86,7 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 
 ## 1. Corrida en seco
 
-Desde la raíz del repositorio, con el `.env` de la API apuntando a la base destino:
+Desde la raíz del repositorio, con el `.env` de la API apuntando a la base destino (en un servidor instalado, ver «En un servidor instalado» más abajo):
 
 ```sh
 pnpm importar --origen=mikrowisp --fuente=/ruta/mikrowisp-AAAAMMDD.sql --dry-run --salida=/ruta/reporte-1
@@ -103,7 +107,18 @@ cat scripts/importacion/esquemas/smartisp.sql scripts/importacion/smartisp-sinte
 pnpm importar --origen=smartisp --fuente=/tmp/smartisp.sql --plantilla=<id> --dry-run --salida=/tmp/reporte-smartisp
 ```
 
-En Docker: `docker compose -f infra/docker-compose.yml run --rm --no-deps -v /ruta:/datos api node ace.js importar --origen=mikrowisp --fuente=/datos/mikrowisp-AAAAMMDD.sql --dry-run --salida=/datos/reporte-1`.
+**En un servidor instalado con `instalar.sh`** no hay repositorio ni `pnpm`: se corre con la imagen de la API, montando la carpeta del volcado (el contenedor corre como el usuario `node`, uid 1000, que tiene que poder leer el volcado y escribir en la carpeta del reporte):
+
+```sh
+sudo install -d -o 1000 -m 700 /root/importacion
+sudo cp mikrowisp-AAAAMMDD.sql /root/importacion/ && sudo chown 1000 /root/importacion/mikrowisp-AAAAMMDD.sql
+sudo argosisp compose run --rm --no-deps -v /root/importacion:/datos api node ace.js importar \
+    --origen=mikrowisp --fuente=/datos/mikrowisp-AAAAMMDD.sql --dry-run --salida=/datos/reporte-1
+```
+
+Las plantillas CSV, igual: `… api node ace.js importar:plantillas /datos/plantillas`.
+
+En el compose de desarrollo: `docker compose -f infra/docker-compose.yml run --rm --no-deps -v /ruta:/datos api node ace.js importar --origen=mikrowisp --fuente=/datos/mikrowisp-AAAAMMDD.sql --dry-run --salida=/datos/reporte-1`.
 
 Si el comando se detiene antes de importar ("no tiene el esquema que espera el origen…", "Falta clientes.csv…", "columna repetida…"), no tocó la base: corrige lo que dice y repite.
 

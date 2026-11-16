@@ -1,3 +1,7 @@
+---
+orden: 10
+---
+
 # Runbook · RADIUS (`aaa`) caído
 
 Para el turno de operación: qué pasa cuando el servicio `aaa` no responde, cómo nos enteramos, cómo se recupera y qué revisar después. Lo técnico (camino de una autorización, métricas, logs, `radtest`, modo degradado por dentro, verificar un router antes de migrarlo) está en el runbook de A2: [`services/aaa/RUNBOOK.md`](../../services/aaa/RUNBOOK.md).
@@ -40,15 +44,19 @@ Con **modo degradado** (A2): si lo caído es Redis y la API, pero el proceso `aa
 
 El vigía usa `/health`, que sigue en 200 en modo degradado: en ese caso avisa `AaaDegradado`, no "aaa caído".
 
+Las alertas con «(Alertmanager)» vienen de Prometheus y Alertmanager, que están en el compose de desarrollo y laboratorio (perfil `monitoreo`) pero **no** en un servidor instalado con `instalar.sh`: ahí solo llega la del vigía, salvo que tengas tu propio Prometheus ([Monitoreo y alertas](./monitoreo.md)).
+
 ## Qué hacer
 
-`dc` = `docker compose -f infra/docker-compose.yml` en el servidor (perfil `lab`/producción con `COMPOSE_PROFILES`).
+`dc` = `sudo argosisp compose` en un servidor instalado con `instalar.sh` ([Comandos](./comandos.md)); en el compose de desarrollo o laboratorio, `docker compose -f infra/docker-compose.yml` (con `COMPOSE_PROFILES=lab`).
 
 ### 1. Ver qué está caído (2 min)
 
 ```sh
 dc ps aaa freeradius redis api              # ¿healthy?
-curl -s localhost:3100/health               # aaa: {"redis":"ok|caido","modo":"normal|degradado",...}
+dc exec aaa node -e "fetch('http://127.0.0.1:3100/health').then(r=>r.text()).then(console.log)"
+                                            # aaa: {"redis":"ok|caido","modo":"normal|degradado",...}
+                                            # (en desarrollo también: curl -s localhost:3100/health)
 dc logs --tail 50 aaa                       # "modo degradado: inicio", errores de Redis o de la API
 dc logs --tail 50 freeradius
 ```
@@ -61,7 +69,7 @@ dc restart freeradius           # si FreeRADIUS no responde (healthcheck Status-
 dc up -d redis                  # si Redis está detenido; aaa vuelve solo a Redis al recuperarse
 ```
 
-Si el contenedor no arranca (error de configuración tras un cambio): `dc logs aaa`, volver a la imagen anterior (`IMAGE_TAG=<anterior> dc up -d aaa`) y avisar a quien hizo el cambio.
+Si el contenedor no arranca (error de configuración tras un cambio): `dc logs aaa` y avisar a quien hizo el cambio. Si empezó con una actualización, en un servidor instalado `sudo argosisp revertir` vuelve a la versión anterior ([Actualizar y revertir](./actualizacion.md)); en desarrollo, `IMAGE_TAG=<anterior> dc up -d aaa`.
 
 Con **dos nodos** (`radiusAddr2` en el MikroTik): si un nodo cae, el MikroTik usa el otro sin intervención. Reiniciar el caído con calma.
 
@@ -72,6 +80,7 @@ Con **dos nodos** (`radiusAddr2` en el MikroTik): si un nodo cae, el MikroTik us
 1. Exportar los secrets del router afectado (necesita la API y Postgres, no `aaa`):
 
     ```sh
+    sudo install -d -o 1000 -m 700 /root/emergencia   # el contenedor escribe como el usuario node (uid 1000)
     dc run --rm --no-deps -v /root/emergencia:/salida api node ace.js emergencia:secrets-ppp <router_id> --salida=/salida/argosisp-emergencia.rsc
     # o, desde un checkout con el .env de producción: pnpm emergencia:secrets-ppp <router_id> --salida=/root/emergencia/argosisp-emergencia.rsc
     ```
