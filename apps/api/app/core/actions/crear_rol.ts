@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { verRol, type RolVista } from '#core/consultas/acl'
 import { reemplazarPermisosRol } from '#core/actions/editar_rol'
+import { CODIGO_ROL_EXCEDE, coberturaDelActor, exigirPermisosGlobales } from '#core/cobertura_permisos'
 
 export interface EntradaCrearRol {
     nombre: string
@@ -14,6 +15,7 @@ export default class CrearRol extends DomainAction<EntradaCrearRol, RolVista> {
     readonly nombre = 'roles.crear'
 
     protected async handle(input: EntradaCrearRol, t: Transaccion): Promise<RolVista> {
+        const actor = await coberturaDelActor(t.trx, t.ctx, CODIGO_ROL_EXCEDE)
         const repetido = await t.trx.from('core.roles').where('nombre', input.nombre).first()
         if (repetido) throw new Conflicto(`Ya existe el rol ${input.nombre}`, 'rol_duplicado')
 
@@ -25,6 +27,8 @@ export default class CrearRol extends DomainAction<EntradaCrearRol, RolVista> {
         const id = fila!.id
         t.fijarEntidad('rol', id)
         await reemplazarPermisosRol(t, id, input.permisos)
+        // sin escalada: el rol solo lleva permisos que el actor tiene sin alcance (403 rol_excede_permisos)
+        exigirPermisosGlobales(actor, [...new Set(input.permisos)])
 
         const rol = await verRol(id, t.trx)
         await t.registrarCambios({ tipo: 'rol', id }, null, {
