@@ -106,6 +106,10 @@ test.group('notify · alertas internas', (group) => {
         })
         assert.include(envios[0]!.cuerpo, nodo)
         assert.include(envios[0]!.cuerpo, 'ECONNREFUSED redis')
+        // Sin secrets de emergencia importados a mano, el que se reconecta queda fuera
+        assert.include(envios[0]!.cuerpo, 'los que se reconecten quedan rechazados')
+        assert.include(envios[0]!.cuerpo, 'docs/runbooks/aaa-caido.md')
+        assert.notInclude(envios[0]!.cuerpo, 'autentican con sus secrets locales')
         assert.deepEqual([...new Set(cola.ids)], [envios[0]!.id], 'la reentrega reencola el mismo envío')
 
         // Payload del contrato de A2: { nodo, desde, hasta, ultimo_error }; hasta = desde + 40 min

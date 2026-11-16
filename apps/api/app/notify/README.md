@@ -271,6 +271,8 @@ Según el evento:
 
 Las fechas se muestran en `America/Guatemala`. Los montos llegan como string con 2 decimales y su versión `_q` ya formateada en quetzales. Para condicionar texto se usan secciones: `{{#estado.es_suspendido}}…{{/estado.es_suspendido}}`.
 
+**Suspensión o límite manual.** `por_falta_de_pago` es verdadero solo con el motivo de `evaluarEstadoServicio` (`N facturas vencidas (se corta|limita con M)`); la suspensión y el límite que pide el operador (`POST /servicios/:id/suspender|limitar`, motivo libre) lo tienen en falso. Las plantillas de fábrica de correo y Telegram solo dicen «por saldo pendiente… se reactiva al registrar tu pago» con `{{#estado.por_falta_de_pago}}`; en el caso manual (`{{^estado.por_falta_de_pago}}`) piden comunicarse con la empresa y nunca muestran el motivo del operador, que es interno. La migración `1794820974314_alter_notify_textos_suspension_aaas_table` corrige las plantillas ya sembradas solo si su cuerpo sigue siendo exactamente el de fábrica (las personalizadas no se tocan; sube `version` y deja el diff en `audit.cambios`). Prueba: `tests/notify/textos_estado_servicio.spec.ts`.
+
 ## API
 
 WhatsApp: `POST /api/v1/notificaciones/consentimientos` (`notificaciones.registrar_consentimiento`) y `GET /api/v1/notificaciones/whatsapp/clientes/:id` (`notificaciones.ver`); ver la sección de WhatsApp.
