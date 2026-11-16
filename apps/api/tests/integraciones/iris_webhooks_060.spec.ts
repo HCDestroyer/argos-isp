@@ -104,6 +104,7 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
             motivo: null,
             causa: null,
             servicio_estado: 'activo',
+            verificado_iris_actor: null,
         })
 
         const rechazado: PayloadComprobante = {
@@ -129,6 +130,7 @@ test.group('integraciones · iris · webhooks 0.6.0 (comprobantes y promesas)', 
             motivo: 'No aparece en el banco',
             causa: 'no_aparece',
             servicio_estado: null,
+            verificado_iris_actor: null,
         })
 
         // `servicio_estado` lo trae A3 (el de después del rechazo); un evento viejo sin causa sale `otro`
