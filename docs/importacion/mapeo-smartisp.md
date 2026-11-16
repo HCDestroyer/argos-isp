@@ -1,3 +1,7 @@
+---
+orden: 3
+---
+
 # Mapeo SmartISP → ArgosIsp
 
 De qué tablas y columnas de la base de SmartISP sale cada entidad del formato canónico del importador (`apps/api/app/importacion/canonico.ts`) y cómo se transforma. El adaptador es `apps/api/app/importacion/origenes/smartisp.ts`; el esquema real de referencia, `scripts/importacion/esquemas/smartisp.sql` (112 tablas, exportado con phpMyAdmin, MySQL 5.7, Laravel).
