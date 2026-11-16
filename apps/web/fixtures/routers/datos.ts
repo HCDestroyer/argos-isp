@@ -166,8 +166,8 @@ export const redesIpv4: Schema<'RedIpv4'>[] = [
 const SIN_ESPACIO = { espacio: { pools: 0, porcentaje_en_pools: 0 } }
 
 export const ipv6Bloques: Schema<'Ipv6Bloque'>[] = [
-    { id: 1, router_id: 1, nombre: 'Principal', proveedor: 'Tigo Business', prefijo: '2803:d100:1000::/40', ...SIN_ESPACIO, ...meta },
-    { id: 2, router_id: 2, nombre: null, proveedor: null, prefijo: '2803:d100:2000::/40', ...SIN_ESPACIO, ...meta },
+    { id: 1, router_id: 1, nombre: 'Principal', proveedor: 'Tigo Business', prefijo: '2001:db8:1000::/40', ...SIN_ESPACIO, ...meta },
+    { id: 2, router_id: 2, nombre: null, proveedor: null, prefijo: '2001:db8:2000::/40', ...SIN_ESPACIO, ...meta },
 ]
 
 /** Entrega antes de calcularla (la ruta la recalcula con `entregaPool`). */
@@ -175,8 +175,8 @@ export const ENTREGA_SIN_CALCULAR: Schema<'EntregaPoolIpv6'> = { atributo_radius
 
 /** Pools del bloque del RB-Centro: enlace /64 por servicio y delegación /56, como en el laboratorio. */
 export const ipv6Pools: Schema<'Ipv6Pool'>[] = [
-    { id: 1, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
-    { id: 2, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
+    { id: 1, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2001:db8:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
+    { id: 2, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2001:db8:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
 ]
 
 /** Conexión WireGuard de cada router (`GET /routers/:id/conexion`): uno conectado, uno a medias y uno sin configurar. */

@@ -84,11 +84,11 @@ test('router nuevo con red IPv4, bloque y pool IPv6; plan implementado en él', 
     // El bloque con la división sugerida: dos pools en un paso.
     await direccionamiento.locator('[data-prueba="agregar-bloque"]').click()
     modal = page.getByRole('dialog', { name: 'Agregar bloque IPv6' })
-    await campo(modal, 'bloque-prefijo').fill('2803:d100:4000::/40')
+    await campo(modal, 'bloque-prefijo').fill('2001:db8:4000::/40')
     await campo(modal, 'bloque-proveedor').fill('Proveedor Norte')
     await expect(modal.locator('[data-prueba="bloque-clientes"]')).toContainText('Caben 32,768 clientes')
     await modal.locator('[data-prueba="bloque-guardar"]').click()
-    const bloque = direccionamiento.locator('[data-bloque]').filter({ hasText: '2803:d100:4000::/40' })
+    const bloque = direccionamiento.locator('[data-bloque]').filter({ hasText: '2001:db8:4000::/40' })
     await expect(bloque).toBeVisible()
     await expect(bloque).toContainText('de Proveedor Norte')
     await expect(bloque).toContainText('Enlace · /64')

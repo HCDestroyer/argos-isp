@@ -78,8 +78,8 @@ describe('direccionamiento del router explicado', () => {
         expect(vista.get('[data-bloque="1"]').text()).toContain('de Tigo Business')
         expect(vista.findAll('[data-prueba="barra-bloque-1"] span')).toHaveLength(2)
         const explicacion = vista.get('[data-prueba="ipv6-explicacion"]')
-        expect(explicacion.text()).toContain('Cliente 1: 2803:d100:1000::/64')
-        expect(explicacion.text()).toContain('Cliente 1: 2803:d100:1080::/56')
+        expect(explicacion.text()).toContain('Cliente 1: 2001:db8:1000::/64')
+        expect(explicacion.text()).toContain('Cliente 1: 2001:db8:1080::/56')
         expect(vista.get('[data-prueba="ipv6-capacidad"]').text()).toContain('Caben 32,768 clientes con IPv6 completa')
     })
 

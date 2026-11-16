@@ -382,9 +382,10 @@ function basesIncompletas(s: Sorteo): RespuestaFixture | null {
 
 /**
  * H25 (`cuentaParaBienDePremio` de la API): la contrapartida `cuenta` de un bien es un activo imputable
- * de la empresa o global, sin contracuenta ni auxiliar de clientes y fuera de las cuentas control.
+ * de la empresa o global, sin contracuenta ni auxiliar de clientes y fuera de las cuentas control (H39:
+ * tampoco la del kardex, 1.1.14, que solo mueve el inventario).
  */
-const CONTROL_NO_PERMITIDAS = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.2']
+const CONTROL_NO_PERMITIDAS = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.1.14', '1.2']
 
 function cuentaPermitida(codigo: unknown, empresaId: number): boolean {
     const c = bd.cuentas.find(x => x.codigo === codigo)

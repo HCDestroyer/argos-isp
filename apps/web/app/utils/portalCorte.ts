@@ -14,7 +14,7 @@ export const esquemaPortalCorte = z.object({
         .refine(v => v === '' || z.ipv4().safeParse(v).success, 'Escribe una IPv4, p. ej. 190.56.10.20, o déjala vacía')
         .transform(v => (v === '' ? null : v)),
     portal_v6: z.string().trim()
-        .refine(v => v === '' || z.ipv6().safeParse(v).success, 'Escribe una IPv6, p. ej. 2803:d100::20, o déjala vacía')
+        .refine(v => v === '' || z.ipv6().safeParse(v).success, 'Escribe una IPv6, p. ej. 2001:db8::20, o déjala vacía')
         .transform(v => (v === '' ? null : v.toLowerCase())),
     portal_puerto: z.number('Escribe el puerto').int('Solo números enteros').min(1, 'De 1 a 65535').max(65535, 'De 1 a 65535'),
     modo_suspension: z.enum(['desconectar', 'coa']),

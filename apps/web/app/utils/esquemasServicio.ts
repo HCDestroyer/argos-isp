@@ -93,7 +93,7 @@ export const esquemaServicio = z.object({
         ctx.addIssue({ code: 'custom', path: ['ipv6_duid'], message: 'El modo DUID necesita el DUID del equipo' })
     }
     if (datos.ipv6_modo === 'estatico' && !PATRON_PREFIJO_V6.test(datos.prefijo_delegado_v6)) {
-        ctx.addIssue({ code: 'custom', path: ['prefijo_delegado_v6'], message: 'Prefijo IPv6 en notación CIDR, por ejemplo 2803:d100:1000:100::/56' })
+        ctx.addIssue({ code: 'custom', path: ['prefijo_delegado_v6'], message: 'Prefijo IPv6 en notación CIDR, por ejemplo 2001:db8:1000:100::/56' })
     }
 })
 

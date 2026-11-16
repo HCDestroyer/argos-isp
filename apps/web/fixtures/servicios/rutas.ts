@@ -288,10 +288,10 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         costo_override: texto(cuerpo.costo_override),
         excluir_firewall: cuerpo.excluir_firewall === true,
         ipv4,
-        prefijo_enlace_v6: conV6 ? `2803:d100:1000:${(id * 16).toString(16)}::/64` : null,
+        prefijo_enlace_v6: conV6 ? `2001:db8:1000:${(id * 16).toString(16)}::/64` : null,
         prefijo_delegado_v6: modo === 'estatico'
             ? texto(cuerpo.prefijo_delegado_v6)
-            : conV6 ? `2803:d100:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/${plan?.tamano_prefijo_delegado ?? 56}` : null,
+            : conV6 ? `2001:db8:10${(40 + id).toString(16)}:${(id * 256).toString(16)}::/${plan?.tamano_prefijo_delegado ?? 56}` : null,
         ipv6_modo: plan?.dual_stack === 'v4' ? 'ninguno' : modo,
         ipv6_duid: texto(cuerpo.ipv6_duid),
         suspension_manual: false,

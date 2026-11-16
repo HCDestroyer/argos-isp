@@ -84,12 +84,12 @@ describe('portal de corte · esquema espejo de configurarPortalCorteValidator', 
     it('IPs vacías = null; IPv6 en minúsculas; rechaza IPs y puertos inválidos', () => {
         const vacia = esquemaPortalCorte.safeParse(base)
         expect(vacia.success && vacia.data).toEqual({ portal_v4: null, portal_v6: null, portal_puerto: 80, modo_suspension: 'desconectar' })
-        const llena = esquemaPortalCorte.safeParse({ ...base, portal_v4: ' 190.56.10.20 ', portal_v6: '2803:D100::20', portal_puerto: 8088, modo_suspension: 'coa' })
-        expect(llena.success && llena.data).toEqual({ portal_v4: '190.56.10.20', portal_v6: '2803:d100::20', portal_puerto: 8088, modo_suspension: 'coa' })
-        for (const mala of ['190.56.10', '300.1.1.1', 'portal.argosnet.gt', '2803:d100::20']) {
+        const llena = esquemaPortalCorte.safeParse({ ...base, portal_v4: ' 190.56.10.20 ', portal_v6: '2001:DB8::20', portal_puerto: 8088, modo_suspension: 'coa' })
+        expect(llena.success && llena.data).toEqual({ portal_v4: '190.56.10.20', portal_v6: '2001:db8::20', portal_puerto: 8088, modo_suspension: 'coa' })
+        for (const mala of ['190.56.10', '300.1.1.1', 'portal.argosnet.gt', '2001:db8::20']) {
             expect(esquemaPortalCorte.safeParse({ ...base, portal_v4: mala }).success, mala).toBe(false)
         }
-        for (const mala of ['190.56.10.20', '2803:d100::20::1', 'zz::1']) {
+        for (const mala of ['190.56.10.20', '2001:db8::20::1', 'zz::1']) {
             expect(esquemaPortalCorte.safeParse({ ...base, portal_v6: mala }).success, mala).toBe(false)
         }
         for (const puerto of [0, 65536, 80.5]) {

@@ -222,6 +222,20 @@ describe('iris · pantalla', () => {
         expect(sinIris.find('[data-prueba="tarjeta-iris"]').exists()).toBe(false)
     })
 
+    it('índice de integraciones: con iris.ver sin horus.ver se abre y muestra solo la tarjeta de Iris', async () => {
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'horus.ver') }
+        const { puedeAbrir, puede } = usePermisos()
+        expect(puedeAbrir('/configuracion/integraciones')).toBe(true)
+        expect(puede(obtenerSeccion('integraciones').permiso)).toBe(true)
+        const vista = await mountSuspended(conApp(PaginaIntegraciones), { route: '/configuracion/integraciones' })
+        await esperar(() => expect(vista.find('[data-prueba="estado-tarjeta-iris"]').text()).toBe('Sin conectar'))
+        expect(vista.find('[data-prueba="tarjeta-horus"]').exists()).toBe(false)
+
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['horus.ver', 'iris.ver'].includes(p)) }
+        expect(puedeAbrir('/configuracion/integraciones')).toBe(false)
+        expect(puede(obtenerSeccion('integraciones').permiso)).toBe(false)
+    })
+
     it('menú: Configuración → Iris con el permiso iris.ver', () => {
         const seccion = SECCIONES_PANEL.find(s => s.id === 'integracion-iris')
         expect(seccion).toMatchObject({ ruta: '/configuracion/integraciones/iris', permiso: 'iris.ver' })
