@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.17.0](https://github.com/HCDestroyer/argos-isp/compare/v1.16.0...v1.17.0) (2026-11-17)
+
+
+### Funcionalidades
+
+* **portal:** políticas públicas para Meta (privacidad, términos y eliminar datos) ([#247](https://github.com/HCDestroyer/argos-isp/issues/247)) ([1811894](https://github.com/HCDestroyer/argos-isp/commit/1811894a569eb03eb835067faa9a8853a0cb6c27))
+
+
+### Correcciones
+
+* **routeros:** agregar el 3346 a /ip proxy antes de las reglas del corte por código ([#246](https://github.com/HCDestroyer/argos-isp/issues/246)) ([2489e28](https://github.com/HCDestroyer/argos-isp/commit/2489e282dd6c9af0440143817f16212ac3f41d67))
+
 ## [1.16.0](https://github.com/HCDestroyer/argos-isp/compare/v1.15.0...v1.16.0) (2026-11-16)
 
 
