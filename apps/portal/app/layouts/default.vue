@@ -80,6 +80,23 @@ const mostrarProducto = computed(() => nombre.value !== 'ArgosIsp')
                     {{ empresa?.telefono ? `Soporte: ${empresa.telefono}` : 'Contacto' }}
                 </ULink>
             </UContainer>
+            <!-- Políticas públicas (revisión de Meta): enlaces internos, sin recursos externos; también en /corte. -->
+            <UContainer>
+                <nav
+                    aria-label="Políticas"
+                    class="flex flex-wrap items-center justify-center gap-x-1 text-xs sm:justify-end"
+                    data-testid="pie-politicas"
+                >
+                    <ULink
+                        v-for="politica in POLITICAS"
+                        :key="politica.to"
+                        :to="politica.to"
+                        class="inline-flex min-h-11 items-center px-2 text-muted hover:text-default"
+                    >
+                        {{ politica.label }}
+                    </ULink>
+                </nav>
+            </UContainer>
         </footer>
 
         <PortalNavegacion

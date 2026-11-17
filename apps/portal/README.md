@@ -307,6 +307,22 @@ Contrato: `.claude/integration/contratos/multiempresa.md` § Marca.
 
 `NUXT_PUBLIC_EMPRESA_TELEFONO`, `NUXT_PUBLIC_EMPRESA_CORREO` y `NUXT_PUBLIC_DEPOSITO_*` ya no existen.
 
+## Políticas públicas para Meta (`/privacidad`, `/terminos`, `/eliminar-datos`)
+
+Las URLs que pide la revisión de apps de Meta (WhatsApp Business). Públicas, sin sesión, y
+**renderizadas en el servidor** con el texto completo y la empresa responsable en el HTML (el
+revisor y su rastreador no ejecutan JavaScript). Manual: `docs/manual/portal/politicas-meta.md`.
+
+| Pieza | Dónde |
+| --- | --- |
+| La empresa se lee en el servidor antes de renderizar, con la IP de origen y la cookie (mismas cabeceras que el proxy, nunca sin IP); corre después de `portal-cautivo.ts`, así un Host ajeno sale con su 302 a `/corte` sin llamar a la API | `server/middleware/responsable-politicas.ts`, `server/utils/politicas.ts` |
+| Qué empresa: `?empresa=<id>`, o la que decide la API (la del servicio de la IP, la principal del cliente de la sesión o la principal de la instalación: la que ve el revisor de Meta) | `app/composables/usePoliticas.ts` |
+| Responsable: `razon_social` (nombre legal), nombre comercial, NIT, dirección, correo, teléfonos y horario; lo que falta no se inventa y se remite a `/contacto` | `app/components/politica/Responsable.vue` |
+| Si la API no responde: 200 con el texto y un aviso con "Reintentar" | `app/components/politica/Pagina.vue` |
+| Versión, vigencia y plazo de respuesta (30 días): al cambiar el texto, sube la versión y la fecha | `app/utils/politicas.ts` |
+| Enlaces en el pie de todas las páginas, `/corte` incluida (enlaces internos, sin recursos externos) | `app/layouts/default.vue` |
+| Pruebas: HTML del servidor (`tests/servidor/portal.test.ts`), axe y 390/1280 px en claro y oscuro (`tests/e2e/accesibilidad.spec.ts`) | |
+
 ## Lo que deja el día 1
 
 | Pieza | Dónde |

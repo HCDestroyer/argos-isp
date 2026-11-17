@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
  * Accesibilidad del portal: axe sin violaciones WCAG 2.1 A/AA (contraste AA incluido) en claro y en
  * oscuro, a 390 px (teléfono) y 1280 px (escritorio, los dos proyectos de `playwright.config.ts`).
  *
- * Recorre `/corte`, `/entrar`, `/contacto` y las cuatro secciones de `/cuenta`, con una empresa y
+ * Recorre `/corte`, `/entrar`, `/contacto`, las políticas públicas y las cuatro secciones de `/cuenta`, con una empresa y
  * con servicios en dos empresas (multiempresa: una sección por empresa con su saldo, sus facturas y
  * una tarjeta de Telegram por empresa). En modo fixtures la sesión vive en memoria: después de
  * entrar se navega por la SPA (barra de secciones), nunca con `page.goto`, que la reiniciaría.
@@ -69,6 +69,26 @@ for (const tema of ['light', 'dark'] as const) {
             await page.goto('/contacto')
             await page.getByRole('heading', { level: 1 }).first().waitFor()
             await revisar(page, 'contacto')
+        })
+
+        test('políticas públicas (privacidad, términos, eliminar datos) sin violaciones de axe ni desborde', async ({ page }) => {
+            for (const [ruta, titulo] of [
+                ['/privacidad', 'Política de privacidad'],
+                ['/terminos', 'Términos del servicio'],
+                ['/eliminar-datos', 'Instrucciones para eliminar tus datos'],
+            ] as const) {
+                await page.goto(ruta)
+                await expect(page.getByRole('heading', { level: 1 })).toHaveText(titulo, { timeout: 90_000 })
+                await expect(page.getByTestId('politica-empresa')).toContainText('Red Altiplano')
+                await revisar(page, ruta)
+                const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+                expect(ancho).toBeLessThanOrEqual(0)
+            }
+            // Enlazadas desde el pie de /corte
+            await page.goto('/corte')
+            await page.getByTestId('pie-politicas').getByRole('link', { name: 'Eliminar mis datos' }).click()
+            await expect(page).toHaveURL(/\/eliminar-datos$/)
+            await expect(page.getByTestId('responsable-correo')).toHaveText('cobros@redaltiplano.example')
         })
 
         test('promociones: tarjeta y carrusel en /corte e inicio de /cuenta sin violaciones de axe', async ({ page }) => {

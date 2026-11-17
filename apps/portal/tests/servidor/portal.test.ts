@@ -13,6 +13,7 @@ import { setup, url, useTestContext } from '@nuxt/test-utils/e2e'
 import { SONDAS } from '../../server/utils/portalCautivo'
 import { hashScript, scriptsEnLinea } from '../../server/utils/cabecerasSeguridad'
 import { BUILD_PRUEBAS, RAIZ_PORTAL, levantarApiFalsa, pedir, servidorCon, type Respuesta } from './ayudas'
+import { EMPRESA_FIXTURE } from '../../fixtures/empresa'
 
 const api = await levantarApiFalsa()
 const URL_PUBLICA = 'http://portal.argosisp.example'
@@ -352,6 +353,95 @@ describe('arranque con el puerto ocupado (carrera de puertos del CI)', () => {
     })
 })
 
+describe('políticas públicas para Meta (/privacidad, /terminos, /eliminar-datos)', () => {
+    const HOST = 'portal.argosisp.example'
+    const POLITICAS = [
+        ['/privacidad', 'Política de privacidad', 'Política de privacidad'],
+        ['/terminos', 'Términos del servicio', 'Términos del servicio'],
+        ['/eliminar-datos', 'Instrucciones para eliminar tus datos', 'Eliminar mis datos'],
+    ] as const
+
+    beforeEach(async () => {
+        await servidorCon({ NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' })
+        api.respuestas.set('/api/v1/portal/empresa', JSON.stringify(EMPRESA_FIXTURE))
+        api.rutas.length = 0
+        api.cabeceras.length = 0
+    })
+
+    afterAll(() => {
+        api.respuestas.delete('/api/v1/portal/empresa')
+    })
+
+    it.each(POLITICAS)('%s: 200 sin sesión, con el texto y la empresa en el HTML del servidor', async (ruta, titulo, pestana) => {
+        const respuesta = await pedir(ruta, { host: HOST })
+        expect(respuesta.status).toBe(200)
+        expect(respuesta.headers['content-type']).toContain('text/html')
+        const html = respuesta.cuerpo
+        // Título y descripción propios (los lee el rastreador de Meta sin JavaScript).
+        expect(html).toContain(`<title>${pestana} · Red Altiplano</title>`)
+        expect(html).toMatch(/<meta name="description" content="[^"]*Red Altiplano, Sociedad Anónima[^"]*">/)
+        expect(html).toContain(`>${titulo}</h1>`)
+        expect(html).toContain('Versión 1.0 · Vigente desde el 17 de noviembre de 2026')
+        // Responsable: nombre legal, comercial, NIT, dirección, correo y teléfono de la empresa.
+        expect(html).toContain('Red Altiplano, Sociedad Anónima (Red Altiplano)')
+        expect(html).toContain('1234567-8')
+        expect(html).toContain('4a calle 12-30 zona 3, Quetzaltenango')
+        expect(html).toContain('cobros@redaltiplano.example')
+        expect(html).toContain('7765-4321')
+        expect(html).not.toContain('No pudimos cargar los datos de la empresa')
+        // Enlaces a las tres políticas en el pie.
+        for (const [otra] of POLITICAS) {
+            expect(html).toContain(`href="${otra}"`)
+        }
+        // El servidor pidió la empresa con la IP de origen (como el proxy del navegador), nunca sin ella.
+        expect(api.rutas).toEqual(['/api/v1/portal/empresa'])
+        expect(String(api.cabeceras[0]?.['x-forwarded-for'])).toMatch(/127\.0\.0\.1$/)
+    })
+
+    it('texto de cada página: datos tratados, terceros, eliminación y baja de WhatsApp', async () => {
+        const privacidad = (await pedir('/privacidad', { host: HOST })).cuerpo
+        for (const texto of ['NIT o CUI', 'coordenadas', 'No guardamos el contenido de lo que navegas', 'factura electrónica (FEL)', 'WhatsApp Business de Meta', 'Telegram', 'No vendemos tus datos']) {
+            expect(privacidad).toContain(texto)
+        }
+        const terminos = (await pedir('/terminos', { host: HOST })).cuerpo
+        for (const texto of ['Promesas de pago', 'Corte y reactivación', 'pendiente de verificación', 'leyes de la República de Guatemala']) {
+            expect(terminos).toContain(texto)
+        }
+        const eliminar = (await pedir('/eliminar-datos', { host: HOST })).cuerpo
+        for (const texto of ['href="mailto:cobros@redaltiplano.example"', 'href="tel:77654321"', 'Qué conservamos y por qué', 'Acepto recibir avisos por WhatsApp', '30 días calendario']) {
+            expect(eliminar).toContain(texto)
+        }
+    })
+
+    it('?empresa=<id> pide esa empresa y reenvía la cookie de la sesión', async () => {
+        const respuesta = await pedir('/privacidad?empresa=2', { host: HOST, headers: { cookie: 'argos_portal=abc' } })
+        expect(respuesta.status).toBe(200)
+        expect(api.rutas).toEqual(['/api/v1/portal/empresa?empresa_id=2'])
+        expect(api.cabeceras[0]?.cookie).toBe('argos_portal=abc')
+    })
+
+    it('sin correo configurado no inventa uno: muestra lo disponible y remite al contacto', async () => {
+        api.respuestas.set('/api/v1/portal/empresa', JSON.stringify({ ...EMPRESA_FIXTURE, correo: null, razon_social: null }))
+        const html = (await pedir('/eliminar-datos', { host: HOST })).cuerpo
+        expect(html).not.toContain('mailto:')
+        expect(html).toContain('7765-4321')
+        expect(html).toContain('página de contacto')
+        expect(html).toMatch(/<title>Eliminar mis datos · Red Altiplano<\/title>/)
+    })
+
+    it('con otro Host (dst-nat del suspendido) va a /corte sin pedir la empresa', async () => {
+        const respuesta = await pedir('/privacidad', { host: 'ejemplo.com' })
+        expect(respuesta.status).toBe(302)
+        expect(api.rutas).not.toContain('/api/v1/portal/empresa')
+    })
+
+    it('/corte también enlaza las políticas en el pie', async () => {
+        const html = (await pedir('/corte', { host: HOST })).cuerpo
+        expect(html).toContain('data-testid="pie-politicas"')
+        expect(html).toContain('href="/eliminar-datos"')
+    })
+})
+
 describe('proxy a la API caída (piloto, tarea 2)', () => {
     // Puerto 9 (discard) en 127.0.0.1: conexión rechazada, como una API caída.
     beforeEach(() => servidorCon({ NUXT_API_BASE_INTERNAL: 'http://127.0.0.1:9' }))
@@ -368,5 +458,11 @@ describe('proxy a la API caída (piloto, tarea 2)', () => {
 
         // El HTML de /corte no depende de la API (se consulta en el navegador).
         expect((await pedir('/corte', { host: 'portal.argosisp.example' })).status).toBe(200)
+
+        // Las políticas salen igual (200, con su texto) y avisan que no se pudo leer la empresa.
+        const politica = await pedir('/privacidad', { host: 'portal.argosisp.example' })
+        expect(politica.status).toBe(200)
+        expect(politica.cuerpo).toContain('Qué datos guardamos')
+        expect(politica.cuerpo).toContain('No pudimos cargar los datos de la empresa')
     })
 })
