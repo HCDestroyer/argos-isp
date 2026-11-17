@@ -113,7 +113,7 @@ El problema clásico: el masquerade del router (o Nginx Proxy Manager y Docker e
 
 ### Modo por código
 
-- Argos activa el web proxy del router en el puerto **3346**, cerrado desde fuera (solo entra lo que trae el `dst-nat` de un suspendido). Si el proxy ya se usaba para otra cosa, solo agrega su puerto y sus reglas.
+- Argos activa el web proxy del router en el puerto **3346**, cerrado desde fuera (solo entra lo que trae el `dst-nat` de un suspendido). Si el proxy ya se usaba para otra cosa, solo agrega su puerto y sus reglas. Primero cierra el 3346 desde fuera y agrega el puerto al proxy sin encenderlo; luego escribe las reglas y el NAT, y enciende el proxy al final (RouterOS no acepta reglas para un puerto que el proxy aún no tiene).
 - Por cada suspendido escribe una regla `/ip proxy access` que lo redirige a `/corte?c=<código>`, más una regla final sin código. El reconciliador las mantiene y borra las que sobran.
 - Necesita la API del router. Sin ella la API responde 422 `corte_codigo_sin_api`.
 

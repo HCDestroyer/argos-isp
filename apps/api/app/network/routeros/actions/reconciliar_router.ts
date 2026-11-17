@@ -35,7 +35,6 @@ import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import {
     aplicarCorte,
     aplicarEstado,
-    asegurarProxyCorte,
     ordenarAccesoProxy,
     asegurarVelocidad,
     leerCorteRouter,
@@ -252,9 +251,10 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                         lecturaCorte.get('/ppp/profile') ?? [],
                     )
                     salida.avisos.push(...corte.avisos)
-                    // El proxy se enciende después de que existen su regla final (nunca un 3346 que reenvíe a
-                    // internet) y el `drop` de input (no es un proxy abierto); mientras tanto el NAT al 3346 solo
-                    // recibe un rechazo. Al volver a `ip` se apaga después de quitar el NAT.
+                    // Modo código, en este orden (`aplicarCorte`): el `drop` de input del 3346, el puerto en
+                    // `/ip proxy` sin encenderlo (RouterOS no acepta un `local-port` que no esté ahí), la regla
+                    // final y su orden, el NAT al 3346 y al final se enciende el proxy. Al volver a `ip`, al
+                    // revés: el NAT, las reglas del 3346, el puerto y por último el `drop` de input.
                     const hechosCorte = await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)
                     salida.correcciones.push(...hechosCorte)
                     // Respaldo de `router.redes_cambiadas` (§5 ter.10 de contratos/corte-identificacion.md):
@@ -270,9 +270,6 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     ) {
                         await emitirRedesCambiadas(t, [input.router_id])
                     }
-                    // Las reglas del corte antes que las del operador (una suya sin `local-port` ganaría en el 3346).
-                    if (modoCodigo) salida.correcciones.push(...(await ordenarAccesoProxy(cliente, ctxPlan)))
-                    salida.correcciones.push(...(await asegurarProxyCorte(cliente, modoCodigo, ctxPlan)))
                     // DNS del router: solo se revisa (es del operador). Mal = el suspendido no resuelve.
                     let dnsRouter: Record<string, string> | null = null
                     try {

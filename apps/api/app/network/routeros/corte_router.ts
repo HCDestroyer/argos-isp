@@ -898,16 +898,40 @@ export function esCambioDeCorte(c: { ruta: string; comment: string }): boolean {
 |--------------------------------------------------------------------------
 */
 
-/** Lo que hay que cambiar en `/ip proxy` (`set`), o null si ya está como debe. */
+/** Puertos de `/ip proxy` (`port=8080,3346`). */
+export function puertosProxy(actual: Record<string, string | undefined>): string[] {
+    return (actual.port ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+}
+
+/**
+ * Primer paso del modo código (bug v1.16.0 del PM, `failure: invalid local port`): RouterOS solo acepta
+ * en `/ip proxy access` un `local-port` que ya está en `/ip proxy port`, así que el 3346 se agrega
+ * **antes** de crear las reglas, sin encender el proxy: apagado → `port=3346 max-cache-size=none` y
+ * sigue apagado (se enciende al final, con `ajusteProxy`); encendido (del operador) → se agrega el puerto
+ * a los suyos. null si ya lo tiene.
+ */
+export function ajustePuertoProxy(actual: Record<string, string | undefined>): Record<string, string> | null {
+    const habilitado = actual.enabled === 'true' || actual.enabled === 'yes'
+    const puertos = puertosProxy(actual)
+    if (puertos.includes(PUERTO_PROXY_CORTE)) return null
+    if (!habilitado) return { port: PUERTO_PROXY_CORTE, 'max-cache-size': 'none' }
+    return { port: [...puertos, PUERTO_PROXY_CORTE].join(',') }
+}
+
+/**
+ * Lo que hay que cambiar en `/ip proxy` (`set`), o null si ya está como debe. Es el estado final: en modo
+ * código lo aplica `aplicarCorte` al terminar (después de `ajustePuertoProxy` y de las reglas); en modo ip,
+ * después de borrar el NAT y las reglas de `/ip proxy access` con el 3346.
+ */
 export function ajusteProxy(
     actual: Record<string, string | undefined>,
     codigo: boolean,
 ): Record<string, string> | null {
     const habilitado = actual.enabled === 'true' || actual.enabled === 'yes'
-    const puertos = (actual.port ?? '')
-        .split(',')
-        .map((p) => p.trim())
-        .filter(Boolean)
+    const puertos = puertosProxy(actual)
     const conCorte = puertos.includes(PUERTO_PROXY_CORTE)
     if (codigo) {
         // Proxy apagado: es solo del corte (sin caché). Encendido: es del operador; se agrega el puerto.

@@ -107,11 +107,21 @@ y responde con rechazo a todo lo demás (nunca un descarte silencioso, para que 
 Cómo sabe la página de corte qué cliente es (se elige por router, en el panel):
 
 - **Por IP** (por defecto): el router hace `dst-nat` del TCP/80 al portal y el portal identifica por la IP de origen. Con WireGuard, el router lo manda a la IP del servidor en el túnel, sin NAT, para que el portal vea la IP real del cliente.
-- **Por código** (necesita la API del router): el TCP/80 va al web proxy del propio router (puerto 3346, cerrado desde la WAN), que responde con una redirección a `/corte?c=<código>`. Sirve aunque haya NAT o proxies en medio.
+- **Por código** (necesita la API del router): el TCP/80 va al web proxy del propio router (puerto 3346, cerrado desde la WAN), que responde con una redirección a `/corte?c=<código>`. Sirve aunque haya NAT o proxies en medio. Argos lo arma en este orden: el bloqueo del 3346 desde fuera, el puerto en el proxy (sin encenderlo), la regla final, el NAT y al final enciende el proxy.
 
 Revisa cada router con **Probar conexión → Corte** en su ficha. Pasar un router de un modo a otro: [Actualizar y revertir](./actualizacion.md#identificacion-del-cortado-desde-la-1-13-0).
 
 ArgosIsp mantiene estas reglas en cada router con API (el reconciliador): si alguien las borra, las vuelve a poner. «Reconciliar ahora» en la ficha del router lo hace en el momento, con vista previa.
+
+### `failure: invalid local port`
+
+Sale al importar el script o en `routeros.fallido` al pasar un router al corte **por código**, en un comando como `/ip proxy access add local-port=3346 …`.
+
+- **Causa:** RouterOS solo acepta una regla de `/ip proxy access` con un `local-port` que ya está en `/ip proxy port`. Hasta la 1.16.0, el script y el reconciliador creaban la regla antes de agregar el 3346 al proxy.
+- **Arreglo:** actualiza ArgosIsp (el script y el reconciliador ya agregan el puerto primero). Si no puedes actualizar ahora, agrega el puerto a mano, sin encender el proxy, y vuelve a correr el script o «Reconciliar ahora»:
+    - si no usas el web proxy del router: `/ip proxy set port=3346 max-cache-size=none`;
+    - si ya lo usas: `/ip proxy set port=<tus puertos>,3346` (por ejemplo `port=8080,3346`).
+- Revisa con `/ip proxy print`: el proxy queda encendido solo al final, cuando ya existen la regla `argosisp: corte proxy sin codigo` y el `drop` del 3346 en `input`.
 
 ### DNS del router
 

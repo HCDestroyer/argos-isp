@@ -157,6 +157,8 @@ test.group('RouterOS: cliente REST contra el RouterOS falso', (group) => {
 
     test('opera los diecinueve menús administrados', async ({ assert }) => {
         const c = cliente(falso)
+        // Como RouterOS: el `local-port` de `/ip proxy access` tiene que estar en `/ip proxy port`
+        falso.proxy = { ...falso.proxy, port: '3346' }
         const props: Record<RutaRouterOS, Record<string, string>> = {
             '/queue/simple': { target: '10.0.0.1/32', 'max-limit': '1M/2M' },
             '/queue/tree': { name: 'argosisp-plan-1-bajada', parent: 'global', 'max-limit': '20M' },
