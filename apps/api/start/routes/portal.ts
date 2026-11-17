@@ -1144,11 +1144,14 @@ const empresa: Ruta[] = [
             const ip = await origenDelCliente(ctx, 'empresa')
             const empresaId = await empresaDeLaPeticion(ctx, ip, query)
             const datos = await leerEmpresa(undefined, empresaId)
-            const { logo_etag: etag } = await filaEmpresa(empresaId)
+            const fila = await filaEmpresa(empresaId)
             return {
                 id: empresaId,
-                logo_url: urlLogoPortal(empresaId, etag),
+                logo_url: urlLogoPortal(empresaId, fila.logo_etag),
                 ...datos,
+                // Responsable en las políticas del portal. La empresa 1 sin guardar (versión 0) no
+                // tiene nombre legal: `null`, nunca el nombre por defecto del entorno.
+                razon_social: Number(fila.version) > 0 ? fila.razon_social?.trim() || null : null,
                 cuentas_deposito: await fuenteCuentasDeposito().activas(empresaId),
                 // La pasarela es una sola para la instalación; cada cobro lleva facturas de una empresa.
                 pago_en_linea: pagoEnLineaDisponible(),

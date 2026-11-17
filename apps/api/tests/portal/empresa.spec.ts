@@ -46,6 +46,8 @@ test.group('Empresa: configuración editable', (group) => {
         const publica = await estado(client.get('/api/v1/portal/empresa'), 200)
         assert.deepEqual(publica.body().cuentas_deposito, [])
         assert.isNull(publica.body().whatsapp)
+        // Sin guardar no hay nombre legal: nunca el nombre por defecto del entorno.
+        assert.isNull(publica.body().razon_social)
         assert.notProperty(publica.body(), 'version')
 
         const { token } = await usuarioConRoles(['lectura'])
@@ -223,6 +225,27 @@ test.group('Empresa: configuración con dos empresas (empresa activa)', (group) 
         assert.equal(guardar.body().type.split(':').pop(), 'empresa_requerida')
         const principal = await db.from('core.empresas').where('id', 1).firstOrFail()
         assert.include(principal, { nombre_comercial: 'ArgosIsp', version: 0 })
+    })
+
+    test('GET /portal/empresa?empresa_id: nombre legal (razón social) para las políticas del portal', async ({
+        client,
+        assert,
+    }) => {
+        await db
+            .from('core.empresas')
+            .where('id', sur)
+            .update({ razon_social: 'Fibra Sur, Sociedad Anónima' })
+        const publica = await estado(client.get(`/api/v1/portal/empresa?empresa_id=${sur}`), 200)
+        assert.include(publica.body(), {
+            id: sur,
+            razon_social: 'Fibra Sur, Sociedad Anónima',
+            telefono: '7700-0002',
+        })
+
+        await db.from('core.empresas').where('id', sur).update({ razon_social: null })
+        const sinLegal = await estado(client.get(`/api/v1/portal/empresa?empresa_id=${sur}`), 200)
+        assert.isNull(sinLegal.body().razon_social)
+        assert.match(sinLegal.body().nombre, /^Fibra Sur/)
     })
 
     test('X-Empresa-Id: lee y guarda esa empresa, con auditoría a su nombre; la 1 no cambia', async ({

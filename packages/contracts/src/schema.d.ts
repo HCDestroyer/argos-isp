@@ -14374,6 +14374,8 @@ export interface components {
             horario: string | null;
             /** @description Texto que acompaña los datos de depósito */
             instrucciones_pago: string | null;
+            /** @description Nombre legal (razón social) de la empresa, como aparece en su NIT; null si no se configuró. Lo usan las políticas del portal (/privacidad, /terminos, /eliminar-datos) */
+            razon_social: string | null;
             /** @description Cuentas bancarias activas en quetzales de ESTA empresa para depósito (fuente: billing.cuentas_bancarias de A3; las de USD no se muestran). Vacía = no se muestran */
             cuentas_deposito: components["schemas"]["CuentaDeposito"][];
             /** @description Hay pasarela de pago en línea configurada (el botón "Pagar en línea" se habilita) */

@@ -731,6 +731,11 @@ export const EmpresaPublica = definirEsquema(
             description: 'Logo por el mismo origen del portal; null sin logo',
         },
         ...camposEmpresa,
+        razon_social: {
+            ...nulable(texto),
+            description:
+                'Nombre legal (razón social) de la empresa, como aparece en su NIT; null si no se configuró. Lo usan las políticas del portal (/privacidad, /terminos, /eliminar-datos)',
+        },
         cuentas_deposito: {
             ...lista(CuentaDeposito),
             description:

@@ -94610,6 +94610,7 @@
           "correo",
           "horario",
           "instrucciones_pago",
+          "razon_social",
           "cuentas_deposito",
           "pago_en_linea"
         ],
@@ -94679,6 +94680,13 @@
               "null"
             ],
             "description": "Texto que acompaña los datos de depósito"
+          },
+          "razon_social": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre legal (razón social) de la empresa, como aparece en su NIT; null si no se configuró. Lo usan las políticas del portal (/privacidad, /terminos, /eliminar-datos)"
           },
           "cuentas_deposito": {
             "type": "array",
