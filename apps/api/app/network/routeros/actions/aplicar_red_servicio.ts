@@ -24,7 +24,7 @@ import {
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import { sincronizarCodigoCorte } from '#portal/codigos_corte'
 import { corteUrlVigente } from '#network/routeros/corte_vigente'
-import { urlCorteConCodigo } from '#network/routeros/corte_router'
+import { PUERTO_PROXY_CORTE, puertosProxy, urlCorteConCodigo } from '#network/routeros/corte_router'
 import {
     aplicarEstado,
     liberarAccesoProxy,
@@ -228,6 +228,26 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 // Objetos del servicio; en modo código, antes se liberan sus IPs de reglas ajenas y después
                 // su regla nueva se pone antes de la final sin código.
                 const aplicarServicio = async () => {
+                    // RouterOS rechaza una regla de `/ip proxy access` cuyo `local-port` no está en
+                    // `/ip proxy port` (`failure: invalid local port`, bug v1.16.0). Si el router aún no tiene
+                    // el corte por código armado (el 3346 lo agrega el reconciliador, después del `drop` de
+                    // input), la regla del servicio espera: el router queda pendiente y la reconciliación la
+                    // escribe después del puerto. El suspendido sigue en `suspendidos` mientras tanto.
+                    if (modoCodigo && estado.presentes.some((o) => o.ruta === '/ip/proxy/access')) {
+                        const puertos = puertosProxy(await cliente.leerProxy())
+                        if (!puertos.includes(PUERTO_PROXY_CORTE)) {
+                            estado = {
+                                ...estado,
+                                presentes: estado.presentes.filter((o) => o.ruta !== '/ip/proxy/access'),
+                            }
+                            fila.avisos = [
+                                ...fila.avisos,
+                                `el proxy de corte del router aún no tiene el puerto ${PUERTO_PROXY_CORTE}: la ` +
+                                    'regla del servicio se escribe al reconciliar el router',
+                            ]
+                            t.alConfirmar(() => marcarPendiente(routerId))
+                        }
+                    }
                     const hechos = [
                         ...(modoCodigo ? await liberarAccesoProxy(cliente, estado, ctx) : []),
                         ...(await aplicarEstado(cliente, estado, ctx)),

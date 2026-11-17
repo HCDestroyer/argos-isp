@@ -18,14 +18,16 @@ import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
 import type { RutaRouterOS } from '#network/routeros/cliente'
-import { RUTAS_ORDENADAS, type Propiedades } from '#network/routeros/cliente'
+import { RUTAS_ORDENADAS, type Propiedades, type RutaOrdenada } from '#network/routeros/cliente'
 import {
+    ajustePuertoProxy,
     ajusteProxy,
     esAccesoDeServicio,
     movimientos,
     normalizarDireccion,
     ordenAccesoProxy,
     ordenDeseado,
+    REGLA_PROXY_SIN_CODIGO,
     type EstadoCorte,
     type ResolverIPv4,
 } from '#network/routeros/corte_router'
@@ -502,11 +504,25 @@ export function planCorte(estado: EstadoCorte, lectura: LecturaCorte): CambioCor
     return cambios
 }
 
+const FILTROS: readonly RutaRouterOS[] = ['/ip/firewall/filter', '/ipv6/firewall/filter']
+const NATS: readonly RutaRouterOS[] = ['/ip/firewall/nat', '/ipv6/firewall/nat']
+const PROXY_ACCESS = '/ip/proxy/access' as const
+
 /**
- * Deja el corte como pide `estado`, en orden seguro: crea y corrige (la lista de interfaces y el
- * perfil antes que las reglas que los usan), mueve las reglas a su lugar (los saltos `argosisp:top`
- * antes de FastTrack y de `accept established,related`) y al final borra lo que sobra. Cada comando
- * queda en `audit.red`.
+ * Deja el corte como pide `estado`, en orden seguro. Cada comando queda en `audit.red`.
+ *
+ * 1. Listas, perfil `suspendido` y reglas de filtro (con el `drop` de input del 3346), ya en su lugar
+ *    (los saltos `argosisp:top` antes de FastTrack y de `accept established,related`).
+ * 2. Modo código: el 3346 entra en `/ip proxy port` **sin encender** el proxy si estaba apagado
+ *    (`ajustePuertoProxy`). RouterOS rechaza una regla de `/ip proxy access` con un `local-port` que no
+ *    está ahí (`failure: invalid local port`, bug v1.16.0 del PM).
+ * 3. `/ip proxy access`: la regla final (nunca un 3346 que reenvíe a internet) y las por servicio, antes
+ *    que las del operador. Si el proxy ya era del operador y estaba encendido, entre 2 y 3 escucha en el
+ *    3346 pero nadie llega: el `drop` de input ya está y el NAT al 3346 aún no.
+ * 4. NAT (el HTTP del suspendido al 3346, o el dst-nat al portal).
+ * 5. Lo que sobra, de afuera hacia adentro: el NAT, las reglas de `/ip proxy access`, el puerto (`ajusteProxy`:
+ *    en código enciende el proxy; en ip quita el 3346 después de las reglas que lo usan) y al final los
+ *    filtros (el `drop` de input es lo último en irse).
  */
 export async function aplicarCorte(
     cliente: ClienteRouterOS,
@@ -516,20 +532,25 @@ export async function aplicarCorte(
 ): Promise<Cambio[]> {
     const hechos: Cambio[] = []
     const plan = planCorte(estado, lectura)
+    const codigo = estado.reglas.some((r) => r.ruta === PROXY_ACCESS)
     const cambio = (c: CambioCorte, accion: Cambio['accion']) =>
         hechos.push({ ruta: c.ruta, comment: c.clave, accion })
-    for (const c of plan.filter((x) => x.accion === 'crear' || x.accion === 'actualizar')) {
-        if (c.ruta === '/interface/list' || c.ruta === '/ppp/profile') {
-            await cliente.asegurarPor(c.ruta, { name: c.clave }, c.propiedades!, ctx)
-        } else if (c.accion === 'crear') {
-            await cliente.crear(c.ruta, c.propiedades!, ctx)
-        } else {
-            await cliente.actualizar(c.ruta, c.id!, c.propiedades!, ctx)
+    const escribir = async (de: (ruta: RutaRouterOS) => boolean) => {
+        for (const c of plan.filter(
+            (x) => (x.accion === 'crear' || x.accion === 'actualizar') && de(x.ruta),
+        )) {
+            if (c.ruta === '/interface/list' || c.ruta === '/ppp/profile') {
+                await cliente.asegurarPor(c.ruta, { name: c.clave }, c.propiedades!, ctx)
+            } else if (c.accion === 'crear') {
+                await cliente.crear(c.ruta, c.propiedades!, ctx)
+            } else {
+                await cliente.actualizar(c.ruta, c.id!, c.propiedades!, ctx)
+            }
+            cambio(c, c.accion === 'crear' ? 'creado' : 'actualizado')
         }
-        cambio(c, c.accion === 'crear' ? 'creado' : 'actualizado')
     }
-    // Orden: se vuelve a leer cada tabla con las reglas nuevas (ya con su `.id`).
-    for (const ruta of RUTAS_ORDENADAS) {
+    // Orden: se vuelve a leer la tabla con las reglas nuevas (ya con su `.id`).
+    const ordenar = async (ruta: RutaOrdenada) => {
         const reglas = estado.reglas.filter((r) => r.ruta === ruta)
         const propias = estado.propias.get(ruta) ?? new Set<string>()
         const deseadas = new Set(reglas.map((r) => r.comment))
@@ -551,10 +572,30 @@ export async function aplicarCorte(
             })
         }
     }
-    for (const c of plan.filter((x) => x.accion === 'borrar')) {
-        await cliente.borrarPorId(c.ruta, c.id!, ctx)
-        cambio(c, 'borrado')
+    const borrar = async (de: (ruta: RutaRouterOS) => boolean) => {
+        for (const c of plan.filter((x) => x.accion === 'borrar' && de(x.ruta))) {
+            await cliente.borrarPorId(c.ruta, c.id!, ctx)
+            cambio(c, 'borrado')
+        }
     }
+    const esNat = (ruta: RutaRouterOS) => NATS.includes(ruta)
+
+    // 1. Listas, perfil y filtros.
+    await escribir((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
+    for (const ruta of RUTAS_ORDENADAS) if (FILTROS.includes(ruta)) await ordenar(ruta)
+    // 2. El puerto del corte en el proxy, sin encenderlo.
+    if (codigo) hechos.push(...(await abrirPuertoProxy(cliente, ctx)))
+    // 3. Reglas de `/ip proxy access` y su orden (las del corte antes que las del operador).
+    await escribir((ruta) => ruta === PROXY_ACCESS)
+    if (codigo) hechos.push(...(await ordenarAccesoProxy(cliente, ctx)))
+    // 4. NAT.
+    await escribir(esNat)
+    for (const ruta of RUTAS_ORDENADAS) if (esNat(ruta)) await ordenar(ruta)
+    // 5. Lo que sobra y el estado final del proxy.
+    await borrar(esNat)
+    await borrar((ruta) => ruta === PROXY_ACCESS)
+    hechos.push(...(await asegurarProxyCorte(cliente, codigo, ctx)))
+    await borrar((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
     return hechos
 }
 
@@ -565,18 +606,43 @@ export async function aplicarCorte(
 */
 
 /**
+ * Paso 2 de `aplicarCorte` en modo código: el 3346 en `/ip proxy port` antes de las reglas que lo usan,
+ * sin encender el proxy si estaba apagado (`ajustePuertoProxy`).
+ */
+export async function abrirPuertoProxy(cliente: ClienteRouterOS, ctx: ContextoRed): Promise<Cambio[]> {
+    const ajuste = ajustePuertoProxy(await cliente.leerProxy())
+    if (!ajuste) return []
+    await cliente.ajustarProxy(ajuste, ctx)
+    return [{ ruta: '/ip/proxy', comment: Object.keys(ajuste).join(','), accion: 'actualizado' }]
+}
+
+/**
  * Deja `/ip proxy` como pide el modo del router (`ajusteProxy`): con `codigo`, habilitado y con el puerto
- * del corte; con `ip`, sin ese puerto (y apagado si solo era del corte). Lo demás del operador no se toca.
+ * del corte (va después de la regla final y del `drop` de input); con `ip`, sin ese puerto (y apagado si
+ * solo era del corte). Antes de quitar el puerto en modo ip se borran las reglas de ArgosIsp que lo usan
+ * (las por servicio; la final ya la borró `aplicarCorte`): RouterOS valida el `local-port` contra los
+ * puertos del proxy. El NAT al 3346 ya no existe en ese punto. Lo demás del operador no se toca.
  */
 export async function asegurarProxyCorte(
     cliente: ClienteRouterOS,
     codigo: boolean,
     ctx: ContextoRed,
 ): Promise<Cambio[]> {
-    const ajuste = ajusteProxy(await cliente.leerProxy(), codigo)
+    const actual = await cliente.leerProxy()
+    const ajuste = ajusteProxy(actual, codigo)
     if (!ajuste) return []
+    const cambios: Cambio[] = []
+    if (!codigo) {
+        for (const o of await cliente.listar(PROXY_ACCESS)) {
+            if (o.dynamic === 'true') continue
+            if (!esAccesoDeServicio(o) && o.comment !== REGLA_PROXY_SIN_CODIGO) continue
+            await cliente.borrarPorId(PROXY_ACCESS, o['.id'], { ...ctx, motivo: 'corte por ip' })
+            cambios.push({ ruta: PROXY_ACCESS, comment: o.comment!, accion: 'borrado' })
+        }
+    }
     await cliente.ajustarProxy(ajuste, ctx)
-    return [{ ruta: '/ip/proxy', comment: Object.keys(ajuste).join(','), accion: 'actualizado' }]
+    cambios.push({ ruta: '/ip/proxy', comment: Object.keys(ajuste).join(','), accion: 'actualizado' })
+    return cambios
 }
 
 /**

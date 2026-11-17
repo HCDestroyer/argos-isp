@@ -154,6 +154,14 @@ const ORDENADOS = new Set<RutaRouterOS>([
     '/ip/proxy/access',
 ])
 
+/** Puertos de `/ip proxy` (`8080,3346`). */
+function puertosDe(port: string | undefined): string[] {
+    return (port ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+}
+
 /** Tipos de cola que trae RouterOS (`/queue/type print`); los demás deben existir en la tabla. */
 const TIPOS_DE_FABRICA = new Set([
     'default',
@@ -382,7 +390,15 @@ export class RouterOSFalso {
             return this.#json(res, 200, this.proxy)
         }
         if (camino === '/ip/proxy/set' && metodo === 'POST') {
-            this.proxy = { ...this.proxy, ...normalizar('/ip/proxy/access', cuerpo ?? {}) }
+            const nuevo = { ...this.proxy, ...normalizar('/ip/proxy/access', cuerpo ?? {}) }
+            // Más estricto que lo comprobado en RouterOS: no se quita un puerto que usa una regla de
+            // `/ip proxy access`. Así ninguna prueba pasa con un orden que dependa de que el equipo lo acepte.
+            const puertos = puertosDe(nuevo.port)
+            const enUso = this.tabla('/ip/proxy/access').find(
+                (o) => o['local-port'] && !puertos.includes(o['local-port']),
+            )
+            if (enUso) return this.#error(res, 400, 'Bad Request', 'failure: invalid local port')
+            this.proxy = nuevo
             return this.#json(res, 200, [])
         }
         // `/execute` (solo el `connection remove` que manda ArgosIsp al suspender): quita de
@@ -594,6 +610,15 @@ export class RouterOSFalso {
             !this.version.startsWith('7')
         ) {
             return `input does not match any value of kind`
+        }
+        // Como RouterOS (bug v1.16.0 del PM): el `local-port` de `/ip proxy access` tiene que estar en
+        // `/ip proxy port`, aunque el proxy esté apagado.
+        if (
+            ruta === '/ip/proxy/access' &&
+            props['local-port'] &&
+            !puertosDe(this.proxy.port).includes(props['local-port'])
+        ) {
+            return 'failure: invalid local port'
         }
         if (ruta === '/ppp/secret' && props.profile && !existe('/ppp/profile', props.profile)) {
             return `input does not match any value of profile`

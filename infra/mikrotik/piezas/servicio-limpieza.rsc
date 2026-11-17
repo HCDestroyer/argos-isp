@@ -8,9 +8,11 @@
 # El drop del 3346 en input y la regla final del proxy de corte NO se borran aquí: si el proxy ya está
 # encendido con el 3346 (router en modo codigo), borrarlos dejaría el 3346 abierto sin regla final
 # hasta la sección 9 bis. Las secciones 8, 9 y 9 bis los actualizan en su lugar; en modo ip, la 9 bis
-# primero quita el 3346 del proxy y recién después los borra.
+# borra la regla final y las de servicio, quita el 3346 del proxy y recién después borra el drop.
 :local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"
 :local reglaProxyFinal "argosisp: corte proxy sin codigo"
+# El NAT al 3346 se crea deshabilitado y se habilita en la sección 9 bis (después del puerto y de la final).
+:local reglaNatProxy "argosisp: corte-nat HTTP al proxy de corte"
 /ip firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ip firewall nat remove [find where comment~$propio]
 /ip firewall mangle remove [find where comment~$propio]

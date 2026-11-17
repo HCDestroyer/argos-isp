@@ -197,9 +197,11 @@
 # El drop del 3346 en input y la regla final del proxy de corte NO se borran aquí: si el proxy ya está
 # encendido con el 3346 (router en modo codigo), borrarlos dejaría el 3346 abierto sin regla final
 # hasta la sección 9 bis. Las secciones 8, 9 y 9 bis los actualizan en su lugar; en modo ip, la 9 bis
-# primero quita el 3346 del proxy y recién después los borra.
+# borra la regla final y las de servicio, quita el 3346 del proxy y recién después borra el drop.
 :local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"
 :local reglaProxyFinal "argosisp: corte proxy sin codigo"
+# El NAT al 3346 se crea deshabilitado y se habilita en la sección 9 bis (después del puerto y de la final).
+:local reglaNatProxy "argosisp: corte-nat HTTP al proxy de corte"
 /ip firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ip firewall nat remove [find where comment~$propio]
 /ip firewall mangle remove [find where comment~$propio]
@@ -466,14 +468,15 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 # NAT: HTTP de los suspendidos → página de corte del portal. Walled garden y portal sin NAT.
 # Modo ip: dst-nat al portal (el portal identifica por la IP de origen). Modo código: redirect al proxy
 # del propio router (puerto proxyCortePuerto), que responde 307 a /corte?c=<código> según la IP del
-# suspendido (/ip proxy access, sección 9 bis); no depende de que el portal vea la IP real.
+# suspendido (/ip proxy access, sección 9 bis); no depende de que el portal vea la IP real. El redirect
+# se crea deshabilitado y se habilita en la sección 9 bis, después del puerto y de la regla final del proxy.
 /ip firewall nat
 add chain=dstnat src-address-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por address-list"
 add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-corte-nat comment="argosisp:top corte NAT por interface-list"
 add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
 add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
 :if ($corteIdentificacion = "codigo") do={
-    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto disabled=yes comment="argosisp: corte-nat HTTP al proxy de corte"
 } else={
     :if ($corteTunelIp != "") do={
         # Corte por el túnel WireGuard (contratos/corte-identificacion.md §5 ter.6): al servidor en el
@@ -508,7 +511,8 @@ add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=mas
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
     :if ($corteIdentificacion = "codigo") do={
-        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+        # Deshabilitado hasta la sección 9 bis, como el de IPv4.
+        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto disabled=yes comment="argosisp: corte-nat HTTP al proxy de corte"
     } else={
         /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
     }
@@ -574,17 +578,25 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 # ============================================================================
 # 9 bis. Web proxy del corte (modo código, contratos/corte-identificacion.md §5 bis)
 # ============================================================================
-# Lo mismo que el reconciliador de ArgosIsp (ajusteProxy y reglasProxy en corte_router.ts):
+# Lo mismo que el reconciliador de ArgosIsp (aplicarCorte en dispatcher.ts, ajustePuertoProxy,
+# ajusteProxy y reglasProxy en corte_router.ts):
 # - codigo: la regla final de /ip proxy access (local-port=3346) existe SIEMPRE: redirect a /corte sin
 #   código, o deny si no hay URL del portal (corteUrl ni portalV4). Sin regla final el proxy reenviaría
 #   a internet el HTTP del suspendido (sale por output, sin pasar por argos-corte). Las reglas del corte
 #   (las de servicio, argosisp:servicio:<id>, que escribe ArgosIsp por la API, y la final) van antes que
 #   las del operador: un allow suyo sin local-port ganaría en el 3346.
-#   El proxy se enciende (o se le agrega el 3346) solo DESPUÉS de la regla final y del drop de input
-#   (sección 8): si estaba apagado es solo del corte (enabled=yes port=3346 max-cache-size=none); si el
-#   operador ya lo usa, solo se agrega el puerto 3346 y no se toca nada más.
-# - ip: se quita el 3346; si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica. Solo
-#   después se borran el drop del 3346 y la regla final (la limpieza de la sección 0 no los toca).
+#   RouterOS solo acepta en /ip proxy access un local-port que ya está en /ip proxy port ("failure:
+#   invalid local port"), así que el orden es:
+#     1. el drop de input del 3346 (sección 8) y el NAT al 3346 creado deshabilitado (secciones 8 y 9);
+#     2. el 3346 en /ip proxy port SIN encender el proxy: apagado -> port=3346 max-cache-size=none y
+#        sigue apagado; encendido por el operador -> solo se agrega el 3346 a sus puertos;
+#     3. la regla final y el orden (las del corte antes que las del operador);
+#     4. se habilita el NAT al 3346 (si el operador ya tenía el proxy encendido, entre 2 y 4 el 3346
+#        escucha pero no le llega nada: el drop de input ya está y el NAT aún no);
+#     5. recién entonces enabled=yes, si estaba apagado.
+# - ip: el NAT al 3346 ya no existe (limpieza de la sección 0); se borran la regla final y las de
+#   servicio (usan el 3346 y RouterOS no deja quitar el puerto con reglas que lo usan), se quita el
+#   3346 (si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica) y al final el drop.
 :put "argosisp: web proxy del corte"
 :local proxyCon false
 :local proxyResto ""
@@ -598,7 +610,15 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 }
 :local proxyEncendido [/ip proxy get enabled]
 :if ($corteIdentificacion = "codigo") do={
-    # 1. Regla final: redirect a /corte (la URL pública o el destino del NAT) o deny.
+    # 2. El puerto del corte, sin encender el proxy (va antes de cualquier regla con local-port=3346).
+    :if (!$proxyEncendido) do={
+        /ip proxy set port=$proxyCortePuerto max-cache-size=none
+    } else={
+        :if (!$proxyCon) do={
+            :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
+        }
+    }
+    # 3. Regla final: redirect a /corte (la URL pública o el destino del NAT) o deny.
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
     # La de una corrida anterior se actualiza en su lugar (la limpieza no la borra); si hay repetidas,
@@ -623,7 +643,7 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
             /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no
         }
     }
-    # 2. Las del corte al inicio: las de servicio y luego la final, antes de la primera del operador.
+    # Las del corte al inicio: las de servicio y luego la final, antes de la primera del operador.
     :local destinoProxy
     :foreach id in=[/ip proxy access find] do={
         :if ([:typeof $destinoProxy] = "nothing" && $id != $finalProxy && !([:tostr [/ip proxy access get $id comment]] ~ "^argosisp:servicio:")) do={ :set destinoProxy $id }
@@ -632,16 +652,18 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
         :foreach id in=[/ip proxy access find where comment~"^argosisp:servicio:"] do={ /ip proxy access move $id destination=$destinoProxy }
         /ip proxy access move $finalProxy destination=$destinoProxy
     }
-    # 3. Recién ahora el proxy (la regla final y el drop de input ya existen).
+    # 4. El NAT al 3346 (creado deshabilitado en las secciones 8 y 9), con la regla final ya puesta.
+    /ip firewall nat enable [find where comment=$reglaNatProxy]
+    /ipv6 firewall nat enable [find where comment=$reglaNatProxy]
+    # 5. Recién ahora se enciende el proxy, si estaba apagado (el drop de input y la final ya existen).
     :if (!$proxyEncendido) do={
-        /ip proxy set enabled=yes port=$proxyCortePuerto max-cache-size=none
-    } else={
-        :if (!$proxyCon) do={
-            :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
-        }
+        /ip proxy set enabled=yes
     }
 } else={
-    # Modo ip: primero se cierra el 3346 del proxy y recién después se borran su drop y su regla final.
+    # Modo ip, al revés: las reglas que usan el 3346 (el NAT al 3346 ya lo quitó la limpieza), el
+    # puerto y por último su drop de input.
+    /ip proxy access remove [find where comment=$reglaProxyFinal]
+    /ip proxy access remove [find where comment~"^argosisp:servicio:"]
     :if ($proxyCon) do={
         :if ($proxyResto = "") do={
             :if ($proxyEncendido) do={ /ip proxy set enabled=no port=8080 } else={ /ip proxy set port=8080 }
@@ -651,7 +673,6 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     }
     /ip firewall filter remove [find where comment=$reglaProxyDrop]
     /ipv6 firewall filter remove [find where comment=$reglaProxyDrop]
-    /ip proxy access remove [find where comment=$reglaProxyFinal]
 }
 
 # ============================================================================
