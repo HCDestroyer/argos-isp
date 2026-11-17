@@ -8,7 +8,12 @@ import { bloquearCliente } from '#billing/cobros'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { periodosHasta } from '#billing/periodos'
 import { coberturaDeServicio, payloadPromesa } from '#billing/promesas'
-import type { CanalPromesa } from '#billing/reglas_promesa'
+import {
+    MOTIVOS_RECONEXION,
+    venceReconexionTemporal,
+    type CanalPromesa,
+    type MotivoReconexion,
+} from '#billing/reglas_promesa'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 
@@ -38,7 +43,10 @@ import type { EstadoServicioConPendiente } from '#shared/eventos'
  * Un comprobante de otro servicio u otro cliente responde `servicio_de_otro_cliente`.
  *
  * La promesa: `tipo = reconexion_temporal`, `comprobante_id`, `monto` = lo vencido (cubre esas
- * facturas, regla `facturas`), `vence_en` = ahora + `horas_max`, canal `ia` u `operador` según
+ * facturas, regla `facturas`), `motivo_reconexion` = el motivo de la petición (`fuera_de_horario`
+ * o `sin_personal`: horario hábil sin nadie de caja; mismas reglas, el comprobante sigue pendiente
+ * en la cola de caja), `vence_en` según `vigencia` (`horas`: ahora + `horas_max`; `medianoche`:
+ * la siguiente medianoche de Guatemala, ver `venceReconexionTemporal`), canal `ia` u `operador` según
  * `X-Iris-Actor`, `sistema_origen = iris`. Evento `promesa.creada` (Iris le explica al cliente;
  * Argos no avisa). Cómo termina: ver `AprobarComprobante`, `CancelarReconexionTemporal` e
  * `IncumplirPromesa`. No genera asientos.
@@ -48,7 +56,7 @@ export interface EntradaReconexionTemporal {
     comprobante_id: number
     /** obligatorio solo si el comprobante no tiene servicio; si lo tiene, debe ser el mismo */
     servicio_id?: number | null
-    motivo: 'fuera_de_horario'
+    motivo: MotivoReconexion
     canal: Extract<CanalPromesa, 'ia' | 'operador'>
     /** instante de referencia (pruebas); por defecto ahora */
     ahora?: Date
@@ -90,9 +98,13 @@ export default class RegistrarReconexionTemporal extends DomainAction<
         t: Transaccion,
     ): Promise<ResultadoReconexionTemporal> {
         const ahora = input.ahora ?? new Date()
-        if (input.motivo !== 'fuera_de_horario') {
+        if (!(MOTIVOS_RECONEXION as readonly string[]).includes(input.motivo)) {
             throw new ValidacionFallida([
-                { field: 'motivo', message: 'Se acepta fuera_de_horario', rule: 'enum' },
+                {
+                    field: 'motivo',
+                    message: `Se acepta ${MOTIVOS_RECONEXION.join(' o ')}`,
+                    rule: 'enum',
+                },
             ])
         }
         t.fijarEntidad('comprobante', input.comprobante_id)
@@ -270,11 +282,13 @@ export default class RegistrarReconexionTemporal extends DomainAction<
             )
         }
 
-        const venceEn = DateTime.fromJSDate(ahora).plus({ hours: politica.horas_max }).toJSDate()
+        const venceEn = venceReconexionTemporal(politica, ahora)
+        const duracion =
+            politica.vigencia === 'medianoche' ? 'hasta la medianoche' : `${politica.horas_max} h`
         const evaluacion = {
             resultado: 'aprobada',
             regla: null,
-            motivo: `Reconexión temporal mientras caja revisa el comprobante ${comprobante.id} (${politica.horas_max} h)`,
+            motivo: `Reconexión temporal mientras caja revisa el comprobante ${comprobante.id} (${duracion})`,
             canal: input.canal,
             evaluada_en: ahora.toISOString(),
             reglas: [],
@@ -293,6 +307,7 @@ export default class RegistrarReconexionTemporal extends DomainAction<
                 en_periodo: enPeriodo,
                 max_por_periodo: politica.max_por_periodo,
                 horas_max: politica.horas_max,
+                vigencia: politica.vigencia,
             },
         }
         const [fila] = (await t.trx
@@ -309,6 +324,7 @@ export default class RegistrarReconexionTemporal extends DomainAction<
                 canal: input.canal,
                 tipo: 'reconexion_temporal',
                 comprobante_id: comprobante.id,
+                motivo_reconexion: input.motivo,
                 sistema_origen: t.ctx.iris ? 'iris' : null,
                 reglas_snapshot: JSON.stringify(config.reglas_promesa),
                 resultado_evaluacion: JSON.stringify(evaluacion),

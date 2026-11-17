@@ -9,7 +9,7 @@ import {
     motivo,
     versionEsperada,
 } from '#shared/validadores'
-import { reglasPromesaSchema } from '#billing/reglas_promesa'
+import { MOTIVOS_RECONEXION, reglasPromesaSchema } from '#billing/reglas_promesa'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
 import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
@@ -475,7 +475,10 @@ export const reconexionTemporalValidator = vine.compile(
             .nullable()
             .optional()
             .meta({ description: 'Obligatorio solo si el comprobante no tiene servicio' }),
-        motivo: vine.enum(['fuera_de_horario'] as const),
+        motivo: vine.enum(MOTIVOS_RECONEXION).meta({
+            description:
+                'fuera_de_horario: caja cerrada. sin_personal: horario hábil, pero nadie de caja disponible. Mismas reglas; el comprobante queda pendiente en la cola de caja',
+        }),
     }),
 )
 

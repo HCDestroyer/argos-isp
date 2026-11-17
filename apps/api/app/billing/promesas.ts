@@ -11,7 +11,12 @@ import type { ServicioFacturable } from '#billing/configuracion'
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
 import { diasEntre, periodosHasta } from '#billing/periodos'
 import { ESTADOS_PENDIENTES } from '#billing/facturas'
-import { limitesDeCanal, type CanalPromesa, type ReglasPromesa } from '#billing/reglas_promesa'
+import {
+    limitesDeCanal,
+    type CanalPromesa,
+    type MotivoReconexion,
+    type ReglasPromesa,
+} from '#billing/reglas_promesa'
 import type { PayloadPromesa } from '#shared/eventos'
 
 /**
@@ -792,6 +797,8 @@ export interface PromesaVista {
     /** `reconexion_temporal`: ligada a `comprobante_id` (contrato Iris 0.6.0 §7.3) */
     tipo: TipoPromesa
     comprobante_id: number | null
+    /** solo en una reconexión temporal: `fuera_de_horario` o `sin_personal` */
+    motivo_reconexion: MotivoReconexion | null
     /** `iris` si la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta) */
     sistema_origen: 'iris' | null
     aprobada_por: number | null
@@ -835,6 +842,7 @@ const COLUMNAS = [
     'p.canal',
     'p.tipo',
     'p.comprobante_id',
+    'p.motivo_reconexion',
     'p.sistema_origen',
     'p.aprobada_por',
     'p.resultado_evaluacion',
@@ -872,6 +880,7 @@ export async function payloadPromesa(
             'tipo',
             'canal',
             'comprobante_id',
+            'motivo_reconexion',
             'vence_en',
             cliente.raw('monto::text as monto'),
             'sistema_origen',
@@ -884,6 +893,7 @@ export async function payloadPromesa(
         tipo: TipoPromesa
         canal: CanalPromesa
         comprobante_id: number | null
+        motivo_reconexion: MotivoReconexion | null
         vence_en: Date
         monto: string
         sistema_origen: 'iris' | null
@@ -897,6 +907,7 @@ export async function payloadPromesa(
         tipo: fila.tipo,
         canal: fila.canal,
         comprobante_id: fila.comprobante_id === null ? null : Number(fila.comprobante_id),
+        motivo_reconexion: fila.motivo_reconexion ?? null,
         vence: new Date(fila.vence_en).toISOString(),
         monto: aTexto(fila.monto),
         origen: fila.sistema_origen ?? null,

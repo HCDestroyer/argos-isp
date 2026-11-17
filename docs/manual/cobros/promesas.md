@@ -47,7 +47,16 @@ El asistente de IA pasa por **las mismas reglas** que cualquiera; no tiene atajo
 
 ### Reconexión temporal
 
-Es un tipo especial de promesa («Reconexión temporal»). La pide Iris cuando un cliente cortado mandó su comprobante y caja no lo puede revisar pronto. Dura unas horas (las que diga la plantilla), cubre todo lo vencido y tiene su propio cupo. Si caja aprueba el comprobante y salda lo vencido, se cumple; si lo rechaza, se cancela y el servicio vuelve a cortarse; si vence sin revisar, se cancela sin contar como incumplida.
+Es un tipo especial de promesa («Reconexión temporal»). La pide Iris cuando un cliente cortado mandó su comprobante y caja no lo puede revisar pronto. Cubre todo lo vencido y tiene su propio cupo. Si caja aprueba el comprobante y salda lo vencido, se cumple; si lo rechaza, se cancela y el servicio vuelve a cortarse; si vence sin revisar, se cancela sin contar como incumplida.
+
+Iris dice por qué la pide, y la promesa guarda ese motivo:
+
+- **Fuera de horario:** la caja está cerrada.
+- **Sin personal de caja:** es horario hábil, pero no hay nadie de caja disponible para revisar el comprobante.
+
+Las reglas son las mismas en los dos casos. El comprobante se queda en la cola de comprobantes pendientes para que caja lo revise cuando pueda.
+
+Cuánto dura depende de la plantilla: unas horas desde que se crea, o hasta la siguiente medianoche (hora de Guatemala). Si se pide a menos de una hora de la medianoche, dura hasta la medianoche del día siguiente, para que no se corte casi al instante.
 
 ## Qué ves
 

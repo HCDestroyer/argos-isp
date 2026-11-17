@@ -17,7 +17,8 @@ import {
 import { crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenIris from '#core/actions/generar_token_iris'
 import { usuarioIris } from '#core/integraciones_iris'
-import { normalizarReglasPromesa } from '#billing/reglas_promesa'
+import vine from '@vinejs/vine'
+import { normalizarReglasPromesa, reglasPromesaSchema } from '#billing/reglas_promesa'
 import AprobarComprobante from '#billing/actions/aprobar_comprobante'
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
 import CancelarReconexionTemporal from '#billing/actions/cancelar_reconexion_temporal'
@@ -479,6 +480,7 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
             tipo: 'reconexion_temporal',
             comprobante_id: boleta.body().id,
             sistema_origen: 'iris',
+            motivo_reconexion: 'fuera_de_horario',
             canal: 'ia',
             estado: 'activa',
             monto: '300.00',
@@ -492,6 +494,7 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
             tipo: 'reconexion_temporal',
             canal: 'ia',
             comprobante_id: boleta.body().id,
+            motivo_reconexion: 'fuera_de_horario',
             vence: r.body().hasta,
             monto: '300.00',
             origen: 'iris',
@@ -692,6 +695,7 @@ test.group('Iris 0.6.0 · reconexión temporal (§7.3)', () => {
             tipo: 'reconexion_temporal',
             canal: 'ia',
             comprobante_id: datos.comprobanteId,
+            motivo_reconexion: 'fuera_de_horario',
             vence: new Date(promesa.vence_en).toISOString(),
             monto: '300.00',
             origen: 'iris',
@@ -1076,5 +1080,251 @@ test.group('Iris 0.6.0 · lecturas de §7 con el token de Iris', () => {
         // otro usuario no las necesita
         const { token: admin } = await usuarioConRoles(['admin'])
         await estado(client.get('/api/v1/bancos').bearerToken(admin), 200)
+    })
+})
+
+/**
+ * Decisión del PM del 17 nov 2026: motivo `sin_personal` (horario hábil sin nadie de caja) además
+ * de `fuera_de_horario`, guardado en `promesas.motivo_reconexion` y en el payload de `promesa.*`;
+ * y `reglas_promesa.reconexion_temporal.vigencia` (`horas` por defecto, o `medianoche`: la
+ * siguiente medianoche de Guatemala, la del día siguiente si faltan menos de 60 minutos).
+ */
+test.group('Reconexión temporal · motivo sin_personal y vigencia medianoche', () => {
+    /** Comprobante pendiente del servicio por todo lo vencido (Q300), sin pasar por Iris. */
+    async function comprobantePendiente(clienteId: number, servicioId: number): Promise<number> {
+        const cuenta = await cuentaBancariaPrueba()
+        const [fila] = (await db
+            .table('billing.comprobantes')
+            .insert({
+                empresa_id: 1,
+                cliente_id: clienteId,
+                servicio_id: servicioId,
+                metodo: 'deposito',
+                cuenta_bancaria_id: cuenta.id,
+                referencia: await unicoBd('boleta-vigencia'),
+                monto: '300.00',
+                fecha_deposito: '2026-10-08',
+                archivo: `2026/10/${unico('x')}.png`,
+                archivo_tipo: 'image/png',
+                archivo_tamano: 10,
+                canal: 'panel',
+                estado: 'pendiente',
+            })
+            .returning('id')) as Array<{ id: number }>
+        return fila!.id
+    }
+
+    async function reconectarEn(
+        ahora: Date,
+        reconexion: Record<string, unknown> = {},
+        motivo: 'fuera_de_horario' | 'sin_personal' = 'sin_personal',
+    ) {
+        const datos = await servicioCortado()
+        await habilitarReconexion(datos.plantillaId, reconexion)
+        const comprobanteId = await comprobantePendiente(datos.clienteId, datos.servicioId)
+        const r = await new RegistrarReconexionTemporal().execute(
+            { comprobante_id: comprobanteId, motivo, canal: 'operador', ahora },
+            contextoPrueba(),
+        )
+        return { ...datos, comprobanteId, r }
+    }
+
+    test('sin_personal por la API de Iris: 201, motivo guardado y en promesa.creada; el comprobante sigue en la cola', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const datos = await servicioCortado()
+        await habilitarReconexion(datos.plantillaId)
+        const cuenta = await cuentaBancariaPrueba()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(datos.clienteId, datos.servicioId, cuenta.id)),
+            201,
+        )
+        const antes = Date.now()
+        const r = await estado(reconectar(client, token, boleta.body().id, { motivo: 'sin_personal' }), 201)
+        assert.deepEqual(r.body().servicio, { id: datos.servicioId, estado: 'activo' })
+        // vigencia por defecto (horas): igual que fuera_de_horario
+        const horas = (new Date(r.body().hasta).getTime() - antes) / 3_600_000
+        assert.isAbove(horas, 23.9)
+        assert.isBelow(horas, 24.1)
+        const fila = await db.from('billing.promesas').where('id', r.body().promesa_id).firstOrFail()
+        assert.equal(fila.motivo_reconexion, 'sin_personal')
+        assert.equal(fila.resultado_evaluacion.reconexion_temporal.motivo, 'sin_personal')
+        assert.equal(fila.resultado_evaluacion.reconexion_temporal.vigencia, 'horas')
+        const [creada] = await eventosDe('promesa.creada', 'promesa_id', r.body().promesa_id)
+        assert.include(creada.payload, {
+            tipo: 'reconexion_temporal',
+            motivo_reconexion: 'sin_personal',
+            comprobante_id: boleta.body().id,
+            origen: 'iris',
+        })
+        const lectura = await estado(
+            client
+                .get(`/api/v1/promesas?servicio_id=${datos.servicioId}&tipo=reconexion_temporal`)
+                .bearerToken(token),
+            200,
+        )
+        assert.equal(lectura.body().data[0].motivo_reconexion, 'sin_personal')
+        const comprobante = await db.from('billing.comprobantes').where('id', boleta.body().id).firstOrFail()
+        assert.equal(comprobante.estado, 'pendiente')
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('sin_personal respeta las mismas reglas: no_habilitada y cupo_agotado', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const datos = await servicioCortado()
+        const cuenta = await cuentaBancariaPrueba()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(datos.clienteId, datos.servicioId, cuenta.id)),
+            201,
+        )
+        assert.equal(
+            await ruleDe(reconectar(client, token, boleta.body().id, { motivo: 'sin_personal' })),
+            'no_habilitada',
+        )
+        await habilitarReconexion(datos.plantillaId, { max_por_periodo: 0 })
+        assert.equal(
+            await ruleDe(reconectar(client, token, boleta.body().id, { motivo: 'sin_personal' })),
+            'cupo_agotado',
+        )
+    })
+
+    test('motivo inválido → 422 (validador y acción); fuera_de_horario sigue igual', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const datos = await servicioCortado()
+        await habilitarReconexion(datos.plantillaId)
+        const cuenta = await cuentaBancariaPrueba()
+        const boleta = await estado(
+            subir(client, token, await camposBoleta(datos.clienteId, datos.servicioId, cuenta.id)),
+            201,
+        )
+        const malo = await reconectar(client, token, boleta.body().id, { motivo: 'otro' })
+        malo.assertStatus(422)
+        assert.equal(malo.body().errors[0].field, 'motivo')
+        const directo = await new RegistrarReconexionTemporal()
+            .execute(
+                { comprobante_id: boleta.body().id, motivo: 'otro' as never, canal: 'operador' },
+                contextoPrueba(),
+            )
+            .then(
+                () => null,
+                (e: { status?: number; errores?: Array<{ field: string }> }) => e,
+            )
+        assert.equal(directo?.status, 422)
+        assert.equal(directo?.errores?.[0]?.field, 'motivo')
+        assert.lengthOf(await db.from('billing.promesas').where('comprobante_id', boleta.body().id), 0)
+        const r = await estado(reconectar(client, token, boleta.body().id), 201)
+        const fila = await db.from('billing.promesas').where('id', r.body().promesa_id).firstOrFail()
+        assert.equal(fila.motivo_reconexion, 'fuera_de_horario')
+    })
+
+    test('vigencia medianoche: creada a media tarde vence esa medianoche; a las 23:30, la siguiente', async ({
+        assert,
+    }) => {
+        // 13 oct 2026 15:30 Guatemala → 14 oct 00:00 Guatemala = 06:00 UTC
+        const tarde = await reconectarEn(new Date('2026-10-13T15:30:00-06:00'), { vigencia: 'medianoche' })
+        assert.equal(tarde.r.hasta, '2026-10-14T06:00:00.000Z')
+        assert.equal(tarde.r.servicio.estado, 'activo')
+        const fila = await db.from('billing.promesas').where('id', tarde.r.promesa_id).firstOrFail()
+        assert.equal(new Date(fila.vence_en).toISOString(), '2026-10-14T06:00:00.000Z')
+        assert.equal(fila.resultado_evaluacion.reconexion_temporal.vigencia, 'medianoche')
+        assert.match(fila.resultado_evaluacion.motivo, /hasta la medianoche/)
+        const [creada] = await eventosDe('promesa.creada', 'promesa_id', tarde.r.promesa_id)
+        assert.include(creada.payload, {
+            vence: '2026-10-14T06:00:00.000Z',
+            motivo_reconexion: 'sin_personal',
+        })
+
+        // 23:30: faltan 30 min (< 60) → la medianoche del 15 de octubre
+        const noche = await reconectarEn(new Date('2026-10-13T23:30:00-06:00'), { vigencia: 'medianoche' })
+        assert.equal(noche.r.hasta, '2026-10-15T06:00:00.000Z')
+        // 22:59: faltan 61 min → todavía esa misma medianoche
+        const justo = await reconectarEn(new Date('2026-10-13T22:59:00-06:00'), { vigencia: 'medianoche' })
+        assert.equal(justo.r.hasta, '2026-10-14T06:00:00.000Z')
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('vigencia horas (por defecto): ahora + horas_max, sin cambios', async ({ assert }) => {
+        assert.equal(normalizarReglasPromesa({}).reconexion_temporal.vigencia, 'horas')
+        // reglas guardadas antes de la opción (sin vigencia) toman horas
+        assert.equal(
+            normalizarReglasPromesa({ reconexion_temporal: { permitida: true, horas_max: 6 } })
+                .reconexion_temporal.vigencia,
+            'horas',
+        )
+        const ahora = new Date('2026-10-13T23:30:00-06:00')
+        const r = await reconectarEn(ahora, { horas_max: 12 }, 'fuera_de_horario')
+        assert.equal(r.r.hasta, new Date(ahora.getTime() + 12 * 3_600_000).toISOString())
+        const explicita = await reconectarEn(ahora, { horas_max: 12, vigencia: 'horas' })
+        assert.equal(explicita.r.hasta, r.r.hasta)
+    })
+
+    test('vigencia exceptuable por servicio y validada por VineJS', async ({ assert }) => {
+        const datos = await servicioCortado()
+        await habilitarReconexion(datos.plantillaId)
+        await db.table('core.servicios_excepciones').insert({
+            servicio_id: datos.servicioId,
+            campo: 'reglas_promesa',
+            valor: JSON.stringify({ reconexion_temporal: { vigencia: 'medianoche' } }),
+        })
+        const comprobanteId = await comprobantePendiente(datos.clienteId, datos.servicioId)
+        const r = await new RegistrarReconexionTemporal().execute(
+            {
+                comprobante_id: comprobanteId,
+                motivo: 'fuera_de_horario',
+                canal: 'operador',
+                ahora: new Date('2026-10-13T15:30:00-06:00'),
+            },
+            contextoPrueba(),
+        )
+        assert.equal(r.hasta, '2026-10-14T06:00:00.000Z')
+
+        const validador = vine.compile(vine.object({ reglas: reglasPromesaSchema() }))
+        const ok = await validador.validate({ reglas: { reconexion_temporal: { vigencia: 'medianoche' } } })
+        assert.equal(ok.reglas.reconexion_temporal?.vigencia, 'medianoche')
+        await assert.rejects(() =>
+            validador.validate({ reglas: { reconexion_temporal: { vigencia: 'semana' } } }),
+        )
+    })
+
+    test('al vencer (medianoche) con el comprobante pendiente: cancelada vencida_sin_revisar, comprobante en la cola, se re-evalúa', async ({
+        assert,
+    }) => {
+        const datos = await reconectarEn(new Date('2026-10-13T15:30:00-06:00'), { vigencia: 'medianoche' })
+        assert.equal(await estadoServicio(datos.servicioId), 'activo')
+        // un minuto antes de la medianoche sigue activa
+        const antes = await new IncumplirPromesas().execute(
+            { servicio_id: datos.servicioId, ahora: new Date('2026-10-13T23:59:00-06:00') },
+            contextoPrueba(),
+        )
+        assert.equal(antes.canceladas, 0)
+        const r = await new IncumplirPromesas().execute(
+            { servicio_id: datos.servicioId, ahora: new Date('2026-10-14T00:01:00-06:00') },
+            contextoPrueba(),
+        )
+        assert.equal(r.canceladas, 1)
+        assert.equal(r.incumplidas, 0)
+        const fila = await db.from('billing.promesas').where('id', datos.r.promesa_id).firstOrFail()
+        assert.equal(fila.estado, 'cancelada')
+        const [cancelada] = await eventosDe('promesa.cancelada', 'promesa_id', datos.r.promesa_id)
+        assert.include(cancelada.payload, {
+            motivo: 'vencida_sin_revisar',
+            tipo: 'reconexion_temporal',
+            motivo_reconexion: 'sin_personal',
+        })
+        const comprobante = await db
+            .from('billing.comprobantes')
+            .where('id', datos.comprobanteId)
+            .firstOrFail()
+        assert.equal(comprobante.estado, 'pendiente')
+        assert.equal(await estadoServicio(datos.servicioId), 'suspendido')
+        await afirmarLibroCuadrado(assert)
     })
 })

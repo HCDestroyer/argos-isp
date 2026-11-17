@@ -106,6 +106,11 @@ export interface PayloadPromesa {
     tipo: 'promesa' | 'reconexion_temporal'
     canal: 'portal' | 'ia' | 'operador' | 'supervisor'
     comprobante_id: number | null
+    /**
+     * Solo en una reconexión temporal: por qué la pidió Iris (`fuera_de_horario` o `sin_personal`);
+     * null en las demás. Desde el 17 nov 2026; los eventos anteriores no lo traen.
+     */
+    motivo_reconexion?: 'fuera_de_horario' | 'sin_personal' | null
     /** instante ISO 8601 */
     vence: string
     monto: Dinero

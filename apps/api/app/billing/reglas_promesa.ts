@@ -1,4 +1,6 @@
 import vine from '@vinejs/vine'
+import { DateTime } from 'luxon'
+import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { dinero } from '#shared/validadores'
 
 /**
@@ -30,6 +32,10 @@ import { dinero } from '#shared/validadores'
  *   defecto), `max_por_periodo` (por periodo de facturación y servicio, aparte del cupo de las
  *   promesas normales; cuentan todas las creadas en el periodo, en cualquier estado) y
  *   `horas_max` (duración desde que se crea). Las demás reglas de arriba no se le aplican.
+ *   `vigencia` (decisión del PM del 17 nov 2026) decide cuándo vence: `horas` (por defecto, como
+ *   siempre) = al crearla + `horas_max`; `medianoche` = la siguiente medianoche en hora de
+ *   Guatemala, o la de un día después si para esa faltan menos de 60 minutos (ver
+ *   `venceReconexionTemporal`). Con `medianoche`, `horas_max` no se usa.
  */
 
 export const CANALES_PROMESA = ['portal', 'ia', 'operador', 'supervisor'] as const
@@ -44,10 +50,19 @@ export interface LimitesCanal {
     deuda_maxima: string | null
 }
 
+export const VIGENCIAS_RECONEXION = ['horas', 'medianoche'] as const
+export type VigenciaReconexion = (typeof VIGENCIAS_RECONEXION)[number]
+
+/** Por qué Iris pide la reconexión temporal (`motivo` de la petición, `promesas.motivo_reconexion`). */
+export const MOTIVOS_RECONEXION = ['fuera_de_horario', 'sin_personal'] as const
+export type MotivoReconexion = (typeof MOTIVOS_RECONEXION)[number]
+
 export interface ReglasReconexionTemporal {
     permitida: boolean
     max_por_periodo: number
     horas_max: number
+    /** `horas`: vence a `horas_max`; `medianoche`: la siguiente medianoche de Guatemala */
+    vigencia: VigenciaReconexion
 }
 
 export interface ReglasPromesa {
@@ -97,7 +112,7 @@ export const REGLAS_PROMESA_POR_DEFECTO: ReglasPromesa = {
         operador: { ...SIN_LIMITES_CANAL },
         supervisor: { ...SIN_LIMITES_CANAL, plazo_max_dias: 15, max_por_periodo: 3 },
     },
-    reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24 },
+    reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24, vigencia: 'horas' },
 }
 
 /*
@@ -148,6 +163,10 @@ export const reglasPromesaSchema = () =>
                 permitida: vine.boolean().optional(),
                 max_por_periodo: entero(0, 12).optional(),
                 horas_max: entero(1, 168).optional(),
+                vigencia: vine.enum(VIGENCIAS_RECONEXION).optional().meta({
+                    description:
+                        'horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)',
+                }),
             })
             .optional(),
     })
@@ -185,6 +204,24 @@ export function limitesDeCanal(
 ): { limites: LimitesCanal; origen: CanalPromesa } {
     const origen: CanalPromesa = canal === 'ia' && reglas.mismas_reglas_ia_operador ? 'operador' : canal
     return { limites: reglas.canales[origen], origen }
+}
+
+/** Minutos mínimos antes de la medianoche: si faltan menos, vence en la del día siguiente. */
+export const MINUTOS_MINIMOS_MEDIANOCHE = 60
+
+/**
+ * Cuándo vence una reconexión temporal creada en `ahora` (instante UTC) según su política:
+ * `horas` → `ahora + horas_max`; `medianoche` → la siguiente medianoche en `America/Guatemala`
+ * (en UTC), o la siguiente a esa si faltan menos de `MINUTOS_MINIMOS_MEDIANOCHE` minutos.
+ */
+export function venceReconexionTemporal(politica: ReglasReconexionTemporal, ahora: Date): Date {
+    const inicio = DateTime.fromJSDate(ahora)
+    if (politica.vigencia !== 'medianoche') return inicio.plus({ hours: politica.horas_max }).toJSDate()
+    let medianoche = inicio.setZone(ZONA_NEGOCIO).plus({ days: 1 }).startOf('day')
+    if (medianoche.diff(inicio, 'minutes').minutes < MINUTOS_MINIMOS_MEDIANOCHE) {
+        medianoche = medianoche.plus({ days: 1 })
+    }
+    return medianoche.toUTC().toJSDate()
 }
 
 function sinIndefinidos<T extends object>(objeto: T): Partial<T> {

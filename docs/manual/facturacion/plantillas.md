@@ -112,7 +112,14 @@ Cuando un cliente cortado manda su comprobante de depósito por Iris y caja no l
 
 - **Permitir reconexión temporal:** la habilita.
 - **Reconexiones por periodo:** cuántas por servicio y periodo de facturación. Es un cupo aparte del de promesas.
-- **Duración máxima (horas):** de 1 a 168, contadas desde que se crea.
+- **Vigencia:** hasta cuándo dura la reconexión.
+    - **Por horas** (la de siempre): dura las horas de «Duración máxima».
+    - **Hasta la medianoche:** dura hasta la siguiente medianoche, hora de Guatemala. Si se pide a menos de una hora de la medianoche (por ejemplo, a las 23:30), dura hasta la medianoche del día siguiente.
+- **Duración máxima (horas):** de 1 a 168, contadas desde que se crea. Solo se usa con la vigencia «Por horas».
+
+Iris la puede pedir por dos motivos: **fuera de horario** (la caja está cerrada) o **sin personal de caja** (es horario hábil, pero nadie de caja puede revisar el comprobante). Las reglas son las mismas para los dos, y el comprobante se queda pendiente en la cola para que caja lo revise después.
+
+La vigencia, como las demás reglas de promesa, se puede cambiar para un servicio con una excepción.
 
 Solo se concede si el comprobante cubre todo lo vencido. Si caja lo rechaza, o vence sin revisarse, el servicio se vuelve a cortar a la hora de corte.
 

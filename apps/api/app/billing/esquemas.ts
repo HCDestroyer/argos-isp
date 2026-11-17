@@ -69,18 +69,31 @@ export const ReglasPromesa = definirEsquema(
                 supervisor: limitesCanal,
             }),
             reconexion_temporal: {
-                ...objeto({
-                    permitida: {
-                        ...booleano,
-                        description: 'Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)',
+                ...objeto(
+                    {
+                        permitida: {
+                            ...booleano,
+                            description:
+                                'Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)',
+                        },
+                        max_por_periodo: {
+                            ...entero,
+                            description:
+                                'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
+                        },
+                        horas_max: {
+                            ...entero,
+                            description:
+                                'Duración desde que se crea (por defecto 24). Solo con vigencia horas',
+                        },
+                        vigencia: {
+                            ...enumerado(['horas', 'medianoche']),
+                            description:
+                                'horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta',
+                        },
                     },
-                    max_por_periodo: {
-                        ...entero,
-                        description:
-                            'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
-                    },
-                    horas_max: { ...entero, description: 'Duración desde que se crea (por defecto 24)' },
-                }),
+                    ['vigencia'],
+                ),
                 description:
                     'Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta',
             },
@@ -962,6 +975,11 @@ export const Promesa = definirEsquema(
                 description:
                     'iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)',
             },
+            motivo_reconexion: {
+                ...enumeradoNulable(['fuera_de_horario', 'sin_personal']),
+                description:
+                    'Solo en una reconexión temporal: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); null en las demás. Siempre viene',
+            },
             aprobada_por: nulable(id),
             resultado_evaluacion: {
                 ...nulable(EvaluacionPromesa),
@@ -985,6 +1003,7 @@ export const Promesa = definirEsquema(
             'tipo',
             'comprobante_id',
             'sistema_origen',
+            'motivo_reconexion',
         ],
     ),
 )

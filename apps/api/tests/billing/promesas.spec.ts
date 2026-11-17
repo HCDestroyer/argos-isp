@@ -94,6 +94,7 @@ test.group('billing · promesas: crear y evaluar', () => {
             tipo: 'promesa',
             canal: 'operador',
             comprobante_id: null,
+            motivo_reconexion: null,
             vence: gt('2026-10-12T18:00').toISOString(),
             monto: '300.00',
             origen: null,
