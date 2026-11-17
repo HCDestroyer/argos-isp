@@ -392,7 +392,7 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
             assert.equal(proxy.length, 1, `${p} ${fam}: NAT al proxy`)
             assert.match(
                 proxy[0],
-                /chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=\$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"$/,
+                /chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=\$proxyCortePuerto disabled=yes comment="argosisp: corte-nat HTTP al proxy de corte"$/,
             )
             // drop del 3346 en input si no llegó por el dst-nat, argosisp:top
             const drop = linea(
@@ -424,10 +424,26 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
         for (const l of linea(t, /\$proxyCortePuerto/).filter((l) => !/^\s*#/.test(l))) {
             assert.match(l, /^\s{4,}/, `${p}: ${l.trim()} fuera de un :if`)
         }
-        // /ip proxy: apagado -> solo del corte sin caché; encendido -> solo se agrega el puerto; ip -> se quita
-        assert.match(t, /\/ip proxy set enabled=yes port=\$proxyCortePuerto max-cache-size=none/, p)
+        // /ip proxy: apagado -> solo del corte sin caché (el puerto sin encender, y se enciende al final);
+        // encendido -> solo se agrega el puerto; ip -> se quita
+        assert.match(t, /\/ip proxy set port=\$proxyCortePuerto max-cache-size=none\n/, p)
+        assert.match(t, /\/ip proxy set enabled=yes\n/, p)
+        assert.doesNotMatch(t, /\/ip proxy set enabled=yes port=/, p)
         assert.match(t, /\/ip proxy set port=\(\$proxyResto \. "," \. \$proxyCortePuerto\)/, p)
         assert.match(t, /\/ip proxy set enabled=no port=8080/, p)
+        // bug v1.16.0 (failure: invalid local port): el 3346 en /ip proxy port ANTES de cualquier regla de
+        // /ip proxy access con local-port=3346; el NAT al 3346 se habilita después de la regla final y el
+        // proxy se enciende al último
+        const puerto = t.indexOf('/ip proxy set port=$proxyCortePuerto max-cache-size=none')
+        const agregar = t.indexOf('/ip proxy set port=($proxyResto . "," . $proxyCortePuerto)')
+        const primeraRegla = t.search(/\/ip proxy access (add|set \$finalProxy) local-port=/)
+        assert.ok(puerto > -1 && puerto < primeraRegla, `${p}: el puerto antes de las reglas`)
+        assert.ok(agregar > -1 && agregar < primeraRegla, `${p}: el puerto del operador antes de las reglas`)
+        const habilitarNat = t.indexOf('/ip firewall nat enable [find where comment=$reglaNatProxy]')
+        assert.ok(habilitarNat > t.lastIndexOf('comment="argosisp: corte proxy sin codigo"'), p)
+        assert.ok(habilitarNat > t.lastIndexOf('/ip proxy access move $finalProxy'), p)
+        assert.ok(t.includes('/ipv6 firewall nat enable [find where comment=$reglaNatProxy]'), p)
+        assert.ok(t.indexOf('/ip proxy set enabled=yes\n') > habilitarNat, `${p}: se enciende al final`)
         // regla final de /ip proxy access y su limpieza
         assert.match(
             t,
@@ -490,13 +506,21 @@ test('reimportar en modo código: el 3346 nunca queda abierto sin regla final ni
         assert.ok(lineas.includes(':local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"'), p)
         assert.ok(lineas.includes(':local reglaProxyFinal "argosisp: corte proxy sin codigo"'), p)
         const limpieza = t.indexOf(':local reglaProxyDrop')
-        // ningún remove de esas reglas antes de cerrar el 3346 del proxy (modo ip)
+        // modo ip: las reglas con local-port=3346 se borran ANTES de quitar el puerto (RouterOS valida el
+        // local-port contra /ip proxy port) y el drop de input DESPUÉS (el 3346 nunca queda abierto)
         const cierre = t.indexOf('/ip proxy set enabled=no port=8080')
         assert.ok(cierre > limpieza, p)
         for (const quitar of [
+            '/ip proxy access remove [find where comment=$reglaProxyFinal]',
+            '/ip proxy access remove [find where comment~"^argosisp:servicio:"]',
+        ]) {
+            const i = t.indexOf(quitar)
+            assert.ok(i > limpieza && i < cierre, `${p}: ${quitar} después de quitar el 3346 del proxy`)
+            assert.equal(t.indexOf(quitar, i + 1), -1, `${p}: ${quitar} repetido`)
+        }
+        for (const quitar of [
             '/ip firewall filter remove [find where comment=$reglaProxyDrop]',
             '/ipv6 firewall filter remove [find where comment=$reglaProxyDrop]',
-            '/ip proxy access remove [find where comment=$reglaProxyFinal]',
         ]) {
             const i = t.indexOf(quitar)
             assert.ok(i > cierre, `${p}: ${quitar} antes de quitar el 3346 del proxy`)
@@ -574,7 +598,9 @@ test('corte por el túnel WireGuard (contratos/corte-identificacion.md §5 ter.6
             p,
         )
         // el túnel solo en modo ip: en código manda el proxy del router
-        const codigo = t.indexOf(':if ($corteIdentificacion = "codigo") do={\n    /ip firewall nat add chain=argos-corte-nat')
+        const codigo = t.indexOf(
+            ':if ($corteIdentificacion = "codigo") do={\n    /ip firewall nat add chain=argos-corte-nat',
+        )
         assert.ok(codigo >= 0 && codigo < t.indexOf('to-addresses=$corteTunelIp'), p)
         // el accept de clientes queda antes de cualquier masquerade (argosisp:top al inicio de la tabla NAT)
         assert.match(t, /:foreach id in=\[\/ip firewall nat find where comment~"\^argosisp:top"\]/, p)
@@ -583,7 +609,11 @@ test('corte por el túnel WireGuard (contratos/corte-identificacion.md §5 ter.6
     for (const p of ['lab.rsc', 'lab-sin-radius.rsc']) assert.match(leer(p), /^:local corteTunelIp ""$/m, p)
     // render: IP y puerto validados por patrón; vacíos = dst-nat a portal_v4
     for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
-        const r = renderizar(leer(p), { ...VALORES, corte_tunel_ip: '10.255.0.1', corte_tunel_puerto: '8088' })
+        const r = renderizar(leer(p), {
+            ...VALORES,
+            corte_tunel_ip: '10.255.0.1',
+            corte_tunel_puerto: '8088',
+        })
         assert.match(r, /:local corteTunelIp "10.255.0.1"/)
         assert.match(r, /:local corteTunelPuerto \[:tonum "8088"\]/)
         assert.match(renderizar(leer(p), VALORES), /:local corteTunelIp ""/)

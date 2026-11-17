@@ -124,13 +124,18 @@ Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 bis. Segú
 
 - **`ip`** (por defecto): `argos-corte-nat` hace `dst-nat` del TCP/80 al portal (`portalV4:portalCortePuerto`, y en IPv6 a `portalV6` si existe) y el portal identifica por la IP de origen. Si el router tenía el puerto 3346 en `/ip proxy` (de un modo `codigo` anterior), el script lo quita y, si era el único, apaga el proxy (`port=8080`).
 - **`codigo`** (necesita la API del router; sin API la API responde 422 `corte_codigo_sin_api`):
-  - `/ip proxy`: si estaba apagado, `enabled=yes port=3346 max-cache-size=none` (solo del corte, sin caché); si el operador ya lo usa, **solo** agrega `3346` a `port` y no toca nada más.
-  - NAT (IPv4 e IPv6): `argosisp: corte-nat HTTP al proxy de corte` = `protocol=tcp dst-port=80 action=redirect to-ports=3346` en lugar del `dst-nat`. En IPv6 va aunque no haya IPv6 del portal (el proxy escucha en las dos familias).
+  - `/ip proxy`: si estaba apagado, `port=3346 max-cache-size=none` (solo del corte, sin caché) y se enciende (`enabled=yes`) al final; si el operador ya lo usa, **solo** agrega `3346` a `port` y no toca nada más.
+  - NAT (IPv4 e IPv6): `argosisp: corte-nat HTTP al proxy de corte` = `protocol=tcp dst-port=80 action=redirect to-ports=3346` en lugar del `dst-nat`. El script lo crea deshabilitado y lo habilita en la sección 9 bis, con la regla final ya puesta. En IPv6 va aunque no haya IPv6 del portal (el proxy escucha en las dos familias).
   - `input` (IPv4 e IPv6, `argosisp:top`): `argosisp:top proxy de corte solo redirigido` = `tcp dst-port=3346 connection-nat-state=!dstnat action=drop`: solo entra al proxy lo que trajo el redirect de un suspendido; desde la WAN o desde un cliente activo, nada (el router nunca es un proxy abierto).
   - `argos-corte-in`: `argosisp: corte-in proxy de corte` (`tcp dst-port=3346 accept`) antes del `tcp-reset`.
   - `/ip proxy access`: `argosisp: corte proxy sin codigo` existe **siempre**: `local-port=3346 action=redirect action-data=<corteUrl>` (o `http://<portalV4>:<portalCortePuerto>/corte`), y `action=deny` si no hay ninguna URL. Sin regla final el proxy reenviaría a internet el HTTP del suspendido (sale por `output`, sin pasar por `argos-corte`). El script mueve las reglas del corte (las de servicio y la final) antes de la primera del operador.
-  - El proxy se enciende (o se le agrega el 3346) **después** de la regla final y del `drop` de `input`.
-  - **Reimportar** el script no abre el 3346 ni un segundo: la limpieza inicial no borra el `drop` ni la regla final, y el script los actualiza en su lugar (`set` si existen, `add` si no). Al pasar a `ip`, primero quita el 3346 del proxy y después borra esas reglas. Las reglas por servicio (`argosisp:servicio:<id>`, `src-address=<IP o prefijo>`, `action-data=…/corte?c=<código>`) **solo** las escribe ArgosIsp por la API: el código no sale nunca en el script.
+  - **Orden** (igual en el script y en el reconciliador, `aplicarCorte`). RouterOS solo acepta en `/ip proxy access` un `local-port` que ya está en `/ip proxy port` (si no: `failure: invalid local port`):
+    1. el `drop` de `input` del 3346;
+    2. el 3346 en `/ip proxy port`, **sin encender** el proxy si estaba apagado (si el operador lo tenía encendido, desde aquí el 3346 escucha, pero no le llega nada: el `drop` ya está y el NAT aún no);
+    3. la regla final (y las por servicio) y su orden, antes que las del operador;
+    4. el NAT al 3346;
+    5. `enabled=yes`, si estaba apagado.
+  - **Reimportar** el script no abre el 3346 ni un segundo: la limpieza inicial no borra el `drop` ni la regla final, y el script los actualiza en su lugar (`set` si existen, `add` si no). Al pasar a `ip`, al revés: sin NAT al 3346 (lo quita la limpieza), borra la regla final y las por servicio (usan el 3346 y RouterOS no deja quitar un puerto en uso), quita el 3346 del proxy (y lo apaga si era el único puerto) y por último borra el `drop`. Las reglas por servicio (`argosisp:servicio:<id>`, `src-address=<IP o prefijo>`, `action-data=…/corte?c=<código>`) **solo** las escribe ArgosIsp por la API: el código no sale nunca en el script.
   - El proxy responde **307** a `/corte?c=<código>`, que va al portal por `argos-portal` (sin NAT).
 
 **Corte por el túnel WireGuard** (modo `ip`, `corteTunelIp` no vacía; contrato §5 ter.6). Lo llena Argos si el túnel de corte está habilitado (`PORTAL_CORTE_TUNEL=1`, por defecto). El HTTP del suspendido va a la IP del servidor en el túnel sin masquerade, y el portal ve la IP del cliente. El script agrega:

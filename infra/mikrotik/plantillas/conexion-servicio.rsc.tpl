@@ -100,6 +100,7 @@
 :local propio "^argosisp(: |:top )"
 :local reglaProxyDrop "argosisp:top proxy de corte solo redirigido"
 :local reglaProxyFinal "argosisp: corte proxy sin codigo"
+:local reglaNatProxy "argosisp: corte-nat HTTP al proxy de corte"
 /ip firewall filter remove [find where comment~$propio and comment!=$reglaProxyDrop]
 /ip firewall nat remove [find where comment~$propio]
 /ip firewall mangle remove [find where comment~$propio]
@@ -385,7 +386,7 @@ add chain=dstnat in-interface-list=suspendidos action=jump jump-target=argos-cor
 add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
 add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
 :if ($corteIdentificacion = "codigo") do={
-    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+    /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto disabled=yes comment="argosisp: corte-nat HTTP al proxy de corte"
 } else={
     :if ($corteTunelIp != "") do={
         /ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$corteTunelIp to-ports=$corteTunelPuerto comment="argosisp: corte-nat HTTP a /corte"
@@ -404,7 +405,7 @@ add chain=srcnat src-address-list=argos-clientes out-interface=$wanIf action=mas
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-portal action=return comment="argosisp: corte-nat portal sin NAT"
     /ipv6 firewall nat add chain=argos-corte-nat dst-address-list=argos-walled action=return comment="argosisp: corte-nat walled garden sin NAT"
     :if ($corteIdentificacion = "codigo") do={
-        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto comment="argosisp: corte-nat HTTP al proxy de corte"
+        /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=redirect to-ports=$proxyCortePuerto disabled=yes comment="argosisp: corte-nat HTTP al proxy de corte"
     } else={
         /ipv6 firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-address=($portalV6 . "/128") to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"
     }
@@ -469,6 +470,13 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 }
 :local proxyEncendido [/ip proxy get enabled]
 :if ($corteIdentificacion = "codigo") do={
+    :if (!$proxyEncendido) do={
+        /ip proxy set port=$proxyCortePuerto max-cache-size=none
+    } else={
+        :if (!$proxyCon) do={
+            :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
+        }
+    }
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
     :local finales [/ip proxy access find where comment=$reglaProxyFinal]
@@ -499,14 +507,14 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
         :foreach id in=[/ip proxy access find where comment~"^argosisp:servicio:"] do={ /ip proxy access move $id destination=$destinoProxy }
         /ip proxy access move $finalProxy destination=$destinoProxy
     }
+    /ip firewall nat enable [find where comment=$reglaNatProxy]
+    /ipv6 firewall nat enable [find where comment=$reglaNatProxy]
     :if (!$proxyEncendido) do={
-        /ip proxy set enabled=yes port=$proxyCortePuerto max-cache-size=none
-    } else={
-        :if (!$proxyCon) do={
-            :if ($proxyResto = "") do={ /ip proxy set port=$proxyCortePuerto } else={ /ip proxy set port=($proxyResto . "," . $proxyCortePuerto) }
-        }
+        /ip proxy set enabled=yes
     }
 } else={
+    /ip proxy access remove [find where comment=$reglaProxyFinal]
+    /ip proxy access remove [find where comment~"^argosisp:servicio:"]
     :if ($proxyCon) do={
         :if ($proxyResto = "") do={
             :if ($proxyEncendido) do={ /ip proxy set enabled=no port=8080 } else={ /ip proxy set port=8080 }
@@ -516,7 +524,6 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     }
     /ip firewall filter remove [find where comment=$reglaProxyDrop]
     /ipv6 firewall filter remove [find where comment=$reglaProxyDrop]
-    /ip proxy access remove [find where comment=$reglaProxyFinal]
 }
 :if ($wispHabilitar) do={
     :put "argosisp: WISP"
