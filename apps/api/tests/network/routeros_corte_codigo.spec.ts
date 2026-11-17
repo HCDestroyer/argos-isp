@@ -18,9 +18,13 @@ import {
     REGLA_NAT_HTTP,
     REGLA_NAT_PROXY,
     REGLA_PROXY_SIN_CODIGO,
+    ajustePuertoProxy,
     ajusteProxy,
     urlCorteConCodigo,
 } from '#network/routeros/corte_router'
+import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
+import { redis } from '#shared/redis'
+import { clavePendientes } from '#network/routeros/dispatcher'
 import { diagnosticoCorte } from '#network/routeros/diagnostico'
 import { generarCodigoCorte, normalizarCodigoCorte } from '#portal/codigos_corte'
 import type { EventoEntrante } from '#shared/eventos_bus'
@@ -139,6 +143,19 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
     const reconciliar = () =>
         new ReconciliarRouterOS(OPCIONES).execute({ router_id: routerId, motivo: 'manual' }, contextoPrueba())
     const acceso = () => falso.tabla('/ip/proxy/access').filter((o) => o.dynamic !== 'true')
+    /** Posición de la primera escritura que cumple `cumple` en `falso.escrituras` (-1 si no hay). */
+    const posicion = (
+        cumple: (p: { metodo: string; ruta: string; cuerpo: Record<string, string> | null }) => boolean,
+    ) => falso.escrituras.findIndex(cumple)
+    const esProxySet = (p: { ruta: string }) => p.ruta === '/rest/ip/proxy/set'
+    const esPutAcceso = (p: { metodo: string; ruta: string }) =>
+        p.metodo === 'PUT' && p.ruta === '/rest/ip/proxy/access'
+    const esPut =
+        (ruta: string, comment: string) =>
+        (p: { metodo: string; ruta: string; cuerpo: Record<string, string> | null }) =>
+            p.metodo === 'PUT' && p.ruta === `/rest${ruta}` && p.cuerpo?.comment === comment
+    const esDelete = (ruta: string, id: string) => (p: { metodo: string; ruta: string }) =>
+        p.metodo === 'DELETE' && p.ruta === `/rest${ruta}/${encodeURIComponent(id)}`
     const codigoDe = async (servicioId: number) =>
         (await db
             .from('core.codigos_corte')
@@ -427,6 +444,151 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
         assert.isTrue(d.chequeos.find((c) => c.clave === 'proxy_corte')!.ok)
     })
 
+    test('router nuevo en código con el proxy apagado: drop de input, puerto sin encender, reglas, NAT y al final encender', async ({
+        assert,
+    }) => {
+        // Bug v1.16.0 del PM: `failure: invalid local port` si la regla va antes que el puerto
+        const r = await reconciliar()
+        assert.isNull(r.error)
+        const drop = posicion(esPut('/ip/firewall/filter', REGLA_INPUT_PROXY))
+        const sets = falso.escrituras.filter(esProxySet)
+        assert.deepEqual(
+            sets.map((p) => p.cuerpo),
+            [
+                { port: PUERTO_PROXY_CORTE, 'max-cache-size': 'none' },
+                { enabled: 'yes', port: PUERTO_PROXY_CORTE, 'max-cache-size': 'none' },
+            ],
+        )
+        const puerto = posicion(esProxySet)
+        const regla = posicion(esPutAcceso)
+        const nat = posicion(esPut('/ip/firewall/nat', REGLA_NAT_PROXY))
+        const encender = falso.escrituras.findIndex((p) => esProxySet(p) && p.cuerpo?.enabled === 'yes')
+        assert.isAbove(drop, -1)
+        assert.isBelow(drop, puerto)
+        assert.isBelow(puerto, regla)
+        assert.isBelow(regla, nat)
+        assert.isBelow(nat, encender)
+        assert.containsSubset(falso.proxy, { enabled: 'true', port: PUERTO_PROXY_CORTE })
+    })
+
+    test('proxy del operador encendido en 8080: el puerto se agrega con el drop puesto y antes de la regla final y del NAT', async ({
+        assert,
+    }) => {
+        falso.proxy = { enabled: 'true', port: '8080', 'max-cache-size': 'unlimited' }
+        const r = await reconciliar()
+        assert.isNull(r.error)
+        const sets = falso.escrituras.filter(esProxySet)
+        // Un solo cambio: el puerto; nunca se toca `enabled` ni la caché del operador
+        assert.deepEqual(
+            sets.map((p) => p.cuerpo),
+            [{ port: `8080,${PUERTO_PROXY_CORTE}` }],
+        )
+        const drop = posicion(esPut('/ip/firewall/filter', REGLA_INPUT_PROXY))
+        const puerto = posicion(esProxySet)
+        const regla = posicion(esPutAcceso)
+        const nat = posicion(esPut('/ip/firewall/nat', REGLA_NAT_PROXY))
+        assert.isBelow(drop, puerto)
+        assert.isBelow(puerto, regla)
+        assert.isBelow(regla, nat)
+    })
+
+    test('volver a ip: NAT, reglas del 3346, puerto y por último el drop de input', async ({
+        client,
+        assert,
+    }) => {
+        await reconciliar()
+        const servicio = await crearWisp(client)
+        await entregar(await cambiarEstado(servicio.id, 'suspendido'))
+        const idDe = (ruta: Parameters<typeof falso.tabla>[0], comment: string) =>
+            falso.tabla(ruta).find((o) => o.comment === comment)!['.id']
+        const natId = idDe('/ip/firewall/nat', REGLA_NAT_PROXY)
+        const finalId = idDe('/ip/proxy/access', REGLA_PROXY_SIN_CODIGO)
+        const servicioId = idDe('/ip/proxy/access', commentServicio(servicio.id))
+        const dropId = idDe('/ip/firewall/filter', REGLA_INPUT_PROXY)
+        const antes = falso.escrituras.length
+
+        await db.from('network.routers').where('id', routerId).update({ corte_identificacion: 'ip' })
+        const r = await reconciliar()
+        assert.isNull(r.error)
+        const despues = (cumple: (p: any) => boolean) => falso.escrituras.slice(antes).findIndex(cumple)
+        const nat = despues(esDelete('/ip/firewall/nat', natId))
+        const final = despues(esDelete('/ip/proxy/access', finalId))
+        const delServicio = despues(esDelete('/ip/proxy/access', servicioId))
+        const puerto = despues(esProxySet)
+        const drop = despues(esDelete('/ip/firewall/filter', dropId))
+        assert.isAbove(nat, -1)
+        assert.isBelow(nat, final)
+        assert.isBelow(nat, delServicio)
+        assert.isBelow(final, puerto)
+        assert.isBelow(delServicio, puerto)
+        assert.isBelow(puerto, drop)
+        assert.containsSubset(falso.proxy, { enabled: 'false', port: '8080' })
+        assert.lengthOf(acceso(), 0)
+    })
+
+    test('suspender por evento con el router sin el 3346: sin error, aviso, router pendiente y la regla al reconciliar', async ({
+        client,
+        assert,
+    }) => {
+        await redis().del(clavePendientes())
+        // Sin reconciliar: el router está en código pero el proxy no tiene el puerto del corte
+        const servicio = await crearWisp(client)
+        // El cambio de estado sin entregar sus eventos: la acción del dispatcher se corre a mano
+        await cambiarEstado(servicio.id, 'suspendido')
+        const r = await new AplicarRedServicio(OPCIONES).execute(
+            { servicio_id: servicio.id, evento: 'servicio.estado_cambiado' },
+            contextoPrueba(),
+        )
+        const fila = r.routers.find((x) => x.router_id === routerId)!
+        assert.isNull(fila.error)
+        assert.isTrue(fila.avisos.some((a) => a.includes(PUERTO_PROXY_CORTE)))
+        assert.lengthOf(acceso(), 0)
+        assert.isFalse(falso.escrituras.some(esPutAcceso))
+        assert.include(await redis().smembers(clavePendientes()), String(routerId))
+
+        await reconciliar()
+        assert.deepEqual(
+            acceso().map((o) => o.comment),
+            [commentServicio(servicio.id), REGLA_PROXY_SIN_CODIGO],
+        )
+        // Con el corte armado, la siguiente suspensión por evento escribe su regla en el acto
+        await entregar(await cambiarEstado(servicio.id, 'activo'))
+        assert.deepEqual(
+            acceso().map((o) => o.comment),
+            [REGLA_PROXY_SIN_CODIGO],
+        )
+        await entregar(await cambiarEstado(servicio.id, 'suspendido'))
+        assert.deepEqual(
+            acceso().map((o) => o.comment),
+            [commentServicio(servicio.id), REGLA_PROXY_SIN_CODIGO],
+        )
+    })
+
+    test('el falso valida como RouterOS: local-port fuera de /ip proxy port es invalid local port', async ({
+        assert,
+    }) => {
+        const auth = `Basic ${Buffer.from(`${falso.usuario}:${falso.password}`).toString('base64')}`
+        const pedir = (metodo: string, ruta: string, cuerpo: Record<string, string>) =>
+            fetch(`${falso.url}/rest${ruta}`, {
+                method: metodo,
+                headers: { authorization: auth, 'content-type': 'application/json' },
+                body: JSON.stringify(cuerpo),
+            })
+        const regla = { 'local-port': PUERTO_PROXY_CORTE, action: 'deny', comment: 'prueba' }
+        let r = await pedir('PUT', '/ip/proxy/access', regla)
+        assert.equal(r.status, 400)
+        assert.include(await r.text(), 'invalid local port')
+        // Con el puerto agregado (proxy apagado) sí la acepta
+        r = await pedir('POST', '/ip/proxy/set', { port: PUERTO_PROXY_CORTE })
+        assert.equal(r.status, 200)
+        r = await pedir('PUT', '/ip/proxy/access', regla)
+        assert.equal(r.status, 201)
+        assert.equal(falso.proxy.enabled, 'false')
+        // Quitar el puerto con una regla que lo usa: rechazado
+        r = await pedir('POST', '/ip/proxy/set', { port: '8080' })
+        assert.equal(r.status, 400)
+    })
+
     test('ajusteProxy: encender, agregar puerto, quitar y apagar', ({ assert }) => {
         assert.deepEqual(ajusteProxy({ enabled: 'false', port: '8080' }, true), {
             enabled: 'yes',
@@ -437,6 +599,20 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
             port: `8080,${PUERTO_PROXY_CORTE}`,
         })
         assert.isNull(ajusteProxy({ enabled: 'true', port: `8080,${PUERTO_PROXY_CORTE}` }, true))
+        // Primer paso: el puerto sin encender
+        assert.deepEqual(ajustePuertoProxy({ enabled: 'false', port: '8080' }), {
+            port: PUERTO_PROXY_CORTE,
+            'max-cache-size': 'none',
+        })
+        assert.deepEqual(ajustePuertoProxy({ enabled: 'true', port: '8080' }), {
+            port: `8080,${PUERTO_PROXY_CORTE}`,
+        })
+        assert.isNull(ajustePuertoProxy({ enabled: 'false', port: PUERTO_PROXY_CORTE }))
+        assert.deepEqual(ajusteProxy({ enabled: 'false', port: PUERTO_PROXY_CORTE }, true), {
+            enabled: 'yes',
+            port: PUERTO_PROXY_CORTE,
+            'max-cache-size': 'none',
+        })
         assert.isNull(ajusteProxy({ enabled: 'false', port: '8080' }, false))
         assert.deepEqual(ajusteProxy({ enabled: 'true', port: PUERTO_PROXY_CORTE }, false), {
             enabled: 'no',

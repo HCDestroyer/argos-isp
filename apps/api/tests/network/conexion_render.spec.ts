@@ -17,6 +17,7 @@ import {
     REGLA_INPUT_PROXY,
     REGLA_NAT_PROXY,
     REGLA_PROXY_SIN_CODIGO,
+    ajustePuertoProxy,
     ajusteProxy,
     configCorte,
     estadoCorteRouter,
@@ -223,19 +224,27 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
                     )
                 }
             }
-            // /ip proxy: lo mismo que ajusteProxy con el proxy apagado (solo del corte, sin caché)
-            const apagado = ajusteProxy({ enabled: 'false', port: '8080' }, true)!
-            assert.include(
-                script,
+            // /ip proxy: lo mismo que ajustePuertoProxy con el proxy apagado (solo del corte, sin caché, sin
+            // encender) ANTES de cualquier regla de /ip proxy access (RouterOS: `failure: invalid local port`)
+            const apagado = ajustePuertoProxy({ enabled: 'false', port: '8080' })!
+            const puerto = script.indexOf(
                 `/ip proxy set ${Object.entries(apagado)
                     .map(([k, v]) => `${k}=${k === 'port' ? '$proxyCortePuerto' : v}`)
                     .join(' ')}`,
             )
-            // el proxy se enciende solo después de la regla final y del drop de input
-            const encender = script.indexOf('/ip proxy set enabled=yes')
-            assert.isAbove(encender, script.indexOf(`comment="${REGLA_PROXY_SIN_CODIGO}"`))
+            assert.isAbove(puerto, -1)
+            assert.isBelow(puerto, script.search(/\/ip proxy access (add|set \$finalProxy) local-port=/))
+            // y se enciende al final (ajusteProxy), después de la regla final, del drop de input y del NAT
+            assert.containsSubset(ajusteProxy({ enabled: 'false', port: PUERTO_PROXY_CORTE }, true), {
+                enabled: 'yes',
+            })
+            const encender = script.indexOf('/ip proxy set enabled=yes\n')
             assert.isAbove(encender, script.lastIndexOf(`comment="${REGLA_PROXY_SIN_CODIGO}"`))
             assert.isAbove(encender, script.lastIndexOf(`comment="${REGLA_INPUT_PROXY}"`))
+            assert.isAbove(
+                encender,
+                script.indexOf('/ip firewall nat enable [find where comment=$reglaNatProxy]'),
+            )
             // las del corte se mueven antes de la primera regla del operador
             assert.include(script, '/ip proxy access move $finalProxy destination=$destinoProxy')
         }
