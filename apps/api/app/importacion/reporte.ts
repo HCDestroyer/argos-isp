@@ -223,6 +223,23 @@ export interface ReporteImportacion {
         /** servicio ya importado en otra empresa: no se mueve (`servicios.cambiar_empresa` en el panel) */
         servicios_otra_empresa: Array<{ servicio_origen: string; servicio_id: number; empresa_id: number }>
     }
+    /**
+     * Facturación de los servicios creados: plantilla con la que entraron (`--plantilla` o la por
+     * defecto; null = sin plantilla, no facturan) y el primer periodo que ArgosIsp les factura
+     * (`billing.servicios_facturar_desde`, `importacion.fijar_facturar_desde`): el siguiente inicio
+     * de ciclo después de la importación o, si es posterior, el ciclo siguiente al último periodo
+     * importado. `generarFacturas` nunca emite un periodo anterior.
+     */
+    facturacion: {
+        plantilla_id: number | null
+        servicios: Array<{
+            /** id del origen (el de ArgosIsp cambia entre corridas en seco: no va en el reporte) */
+            servicio_origen: string
+            facturar_desde: string
+            /** último periodo que entró como factura importada (null: ninguno) */
+            ultimo_periodo_importado: string | null
+        }>
+    }
     /** filas con formato inválido (omitidas) o campos descartados (avisos) */
     formato: ProblemaFila[]
     /** errores que devolvieron las acciones de dominio */
@@ -233,6 +250,24 @@ export interface ReporteImportacion {
 
 export function conteoVacio(origen = 0): ConteoEntidad {
     return { origen, creados: 0, existentes: 0, omitidos: 0 }
+}
+
+/** «Facturan desde 2026-12-01 (3), 2027-01-01 (1)», o sin plantilla. */
+function formatearFacturacion(f: ReporteImportacion['facturacion'] | undefined): string {
+    if (!f || f.plantilla_id === null) {
+        return 'Facturación: los servicios nuevos entran sin plantilla (no facturan)'
+    }
+    const porFecha = new Map<string, number>()
+    for (const s of f.servicios) porFecha.set(s.facturar_desde, (porFecha.get(s.facturar_desde) ?? 0) + 1)
+    const fechas = [...porFecha.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([fecha, n]) => `${fecha} (${n})`)
+    return (
+        `Facturación: plantilla ${f.plantilla_id}; ` +
+        (fechas.length > 0
+            ? `primer periodo de los servicios creados ${fechas.join(', ')} (nada hacia atrás)`
+            : 'ningún servicio creado')
+    )
 }
 
 export function formatearReporte(r: ReporteImportacion): string {
@@ -277,6 +312,7 @@ export function formatearReporte(r: ReporteImportacion): string {
             `  - ${x.entidad} ${x.id_origen} → ${x.id}: quedó en la empresa ${x.empresa_id}, se esperaba la ${x.esperada}`,
         )
     }
+    lineas.push(formatearFacturacion(r.facturacion))
     lineas.push(
         `Ids externos: ${r.ids_externos === 'tabla' ? 'core.ids_externos' : 'claves naturales (sin core.ids_externos)'}`,
     )
