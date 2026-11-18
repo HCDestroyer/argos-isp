@@ -102,7 +102,8 @@ test('fase 2: el corte por el túnel sin la regla dice qué hacer y queda en ver
     await prueba.locator('[data-prueba="corte-reconciliar"]').click()
     const modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
     await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
-    await expect(modal.locator('[data-prueba="reconciliar-encolado"]')).toContainText('Reconciliando RB-Centro')
+    // El modal sigue el trabajo (en cola, aplicando) hasta que termina y dice qué hizo.
+    await expect(modal.locator('[data-prueba="reconciliar-resultado"]')).toContainText(/Listo: \d+ cambios? aplicados? en el router|El router ya estaba como debe/, { timeout: 15_000 })
     await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
     await prueba.locator('[data-prueba="probar-de-nuevo"]').click()
     await expect(ip).toContainText('Bien')

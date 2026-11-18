@@ -101,6 +101,20 @@ export interface SesionSimulada {
 /** Fila de `core.codigos_corte` sin el código (lo que el panel puede saber). */
 export type CodigoCorteFixture = Pick<Schema<'CodigoCorteServicio'>, 'servicio_id' | 'creado_en' | 'cerrado_en'>
 
+/** Lo que cambia de un sondeo a otro de un trabajo de reconciliación (las fechas las pone la ruta). */
+export type PasoReconciliacion = Pick<Schema<'ReconciliacionEstado'>, 'estado' | 'cambios' | 'errores' | 'error'>
+
+export interface ReconciliacionFixture {
+    router_id: number
+    job_id: string
+    encolado_en: string
+    pasos: PasoReconciliacion[]
+    /** Sondeos ya respondidos. */
+    consultas: number
+    iniciado_en: string | null
+    terminado_en: string | null
+}
+
 interface BaseFixtures {
     clientes: Schema<'Cliente'>[]
     servicios: Schema<'Servicio'>[]
@@ -112,6 +126,21 @@ interface BaseFixtures {
     routersReconciliados: number[]
     /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
     routersSinRespuesta: number[]
+    /**
+     * Trabajos de «Reconciliar ahora» en la cola del worker. Cada `GET …/reconciliaciones/:job_id`
+     * devuelve el paso siguiente de `pasos` (el último se repite), como si el worker avanzara.
+     */
+    reconciliaciones: ReconciliacionFixture[]
+    /**
+     * Routers con RouterOS 7.17+ cuyo device-mode no permite el proxy web (A1, `failure: invalid local
+     * port`): en modo código el diagnóstico trae `proxy_device_mode` en rojo y la reconciliación termina
+     * con el error `proxy_corte`.
+     */
+    routersSinProxyWeb: number[]
+    /** Error de RouterOS que «Sincronizar con el router» devuelve por router (`rechazado`, `device_mode`…). */
+    fallasRouterOs: Record<number, NonNullable<Schema<'SincronizacionServicio'>['error']>>
+    /** Pasos del próximo trabajo que se encole (pruebas de cada estado); `null` = el recorrido normal. */
+    guionReconciliacion: PasoReconciliacion[] | null
     /**
      * Códigos de corte (`core.codigos_corte`, A5): uno por suspensión en un router en modo código. El
      * código no se guarda aquí porque el panel nunca lo ve.
@@ -325,6 +354,10 @@ function inicial(): BaseFixtures {
         secretosRadius,
         routersReconciliados: [],
         routersSinRespuesta: [],
+        reconciliaciones: [],
+        routersSinProxyWeb: [],
+        fallasRouterOs: {},
+        guionReconciliacion: null,
         codigosCorte,
         conexionesRouter,
         qosPerfiles: perfilesQos,

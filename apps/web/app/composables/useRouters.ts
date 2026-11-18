@@ -26,6 +26,9 @@ export type ConexionRouter = Schema<'ConexionRouter'>
 export type PruebaConexion = Schema<'PruebaConexion'>
 export type ChequeoConexion = Schema<'ChequeoConexion'>
 export type ReconciliacionEncolada = Schema<'ReconciliacionEncolada'>
+/** `GET …/reconciliaciones/:job_id`: en qué va un trabajo de «Reconciliar ahora». */
+export type ReconciliacionEstado = Schema<'ReconciliacionEstado'>
+export type EstadoReconciliacion = ReconciliacionEstado['estado']
 export type OpcionesScript = NonNullable<paths['/api/v1/routers/{id}/script-conexion']['get']['parameters']['query']>
 /** `GET …/vista-previa-tipo-conexion` (`contratos/tipo-conexion-router.md` §3). */
 export type VistaPreviaTipoConexion = Schema<'VistaPreviaTipoConexion'>
@@ -134,6 +137,14 @@ export function useRouters() {
         return resolver(api.POST('/api/v1/routers/{id}/reconciliar', { params: { path: { id } } }))
     }
 
+    /**
+     * `GET /routers/:id/reconciliaciones/:job_id` (`routers.reconciliar`): en qué va el trabajo que
+     * devolvió `reconciliar` (`en_espera`, `en_curso`, `completada`, `fallida` o `desconocida`).
+     */
+    function estadoReconciliacion(routerId: number, jobId: string): Promise<Resultado<ReconciliacionEstado>> {
+        return resolver(api.GET('/api/v1/routers/{id}/reconciliaciones/{job_id}', { params: { path: { id: routerId, job_id: jobId } } }))
+    }
+
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } } }))
     }
@@ -224,5 +235,5 @@ export function useRouters() {
         }))
     }
 
-    return { vistaPreviaTipoConexion, cambiarTipoConexion, duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    return { vistaPreviaTipoConexion, cambiarTipoConexion, duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, estadoReconciliacion, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

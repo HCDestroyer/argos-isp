@@ -9,6 +9,33 @@ import type { Schema } from '@argosisp/contracts'
 type Chequeo = Schema<'ChequeoConexion'>
 type EstadoTunel = Schema<'ConexionRouter'>['estado']
 type Color = 'success' | 'warning' | 'error' | 'neutral' | 'info'
+/** `MOTIVOS_API` de A1 (`diagnostico_routeros.ts`): por qué falló la API del router. */
+export type MotivoApiRouter = NonNullable<Chequeo['motivo']>
+
+/**
+ * Título de los motivos en que el router sí respondió (A1): `rechazado` (RouterOS rechazó un comando;
+ * el detalle dice cuál y qué contestó) y `device_mode` (RouterOS 7.17+ sin proxy web). Nunca «no
+ * responde» para estos dos.
+ */
+export const TITULOS_MOTIVO_API: Partial<Record<MotivoApiRouter, string>> = {
+    rechazado: 'El router rechazó un comando',
+    device_mode: 'El router no permite el proxy web',
+}
+
+/** Título de un error de RouterOS por su motivo; `null` = el genérico de cada pantalla. */
+export function tituloMotivoApi(motivo: MotivoApiRouter | null | undefined): string | null {
+    return motivo ? TITULOS_MOTIVO_API[motivo] ?? null : null
+}
+
+/**
+ * Pasos para permitir el proxy web en el device-mode (RouterOS 7.17+). No es reconciliable: el cambio
+ * se confirma en el router mismo, y si no se confirma en 5 minutos RouterOS lo descarta.
+ */
+export const PASOS_DEVICE_MODE = [
+    'En el router (New Terminal): /system/device-mode/update proxy=yes',
+    'Confírmalo en el router antes de 5 minutos: presiona su botón o apágalo y enciéndelo. Si no, RouterOS descarta el cambio.',
+    'Después usa «Reconciliar ahora» para poner el proxy de corte.',
+] as const
 
 export const ETIQUETAS_CHEQUEO: Record<Chequeo['clave'], string> = {
     tunel: 'Túnel WireGuard',
@@ -66,6 +93,10 @@ export function consejoChequeo(chequeo: Chequeo): string | null {
                     return 'En «Conexión de la API» va el certificado de la CA (argos-ca), no el del servicio.'
                 case 'protocolo':
                     return 'La URL de la API se corrige en «Conexión de la API».'
+                case 'rechazado':
+                    return 'El router sí responde: arriba está el comando que rechazó y lo que contestó. Corrígelo en el router y prueba de nuevo.'
+                case 'device_mode':
+                    return `El router sí responde, pero su device-mode no permite el proxy web. ${PASOS_DEVICE_MODE.join(' ')}`
                 default:
                     return null
             }

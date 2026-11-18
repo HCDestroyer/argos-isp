@@ -624,6 +624,10 @@ function sincronizarRouter(solicitud: SolicitudFixture): ReturnType<ManejadorFix
         return problemaTipado(422, 'router_sin_api', 'Router sin API', `Argos no controla el router ${router.nombre} por la API: le falta el usuario y la clave de la API REST. Cárgalos en la ficha del router o genera su script de conexión`)
     }
     const base = { servicio_id: servicio.id, router_id: router.id }
+    const falla = bd.fallasRouterOs[router.id]
+    if (falla) {
+        return { status: 200, cuerpo: { ...base, cambios: [], ya_estaba_bien: false, avisos: [], error: falla } satisfies Schema<'SincronizacionServicio'> }
+    }
     if (router.id === 2) {
         return { status: 200, cuerpo: { ...base, cambios: [], ya_estaba_bien: false, avisos: [], error: { motivo: 'sin_certificado', detalle: 'El router no tiene certificado en www-ssl, así que no puede hacer HTTPS. En el router (New Terminal):\n/certificate add name=argos-ca common-name=argos-ca key-usage=key-cert-sign,crl-sign days-valid=3650\n/certificate sign argos-ca' } } satisfies Schema<'SincronizacionServicio'> }
     }
