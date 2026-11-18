@@ -431,6 +431,7 @@ const OLT_TEXTO = (vlan: Vlan) => (vlan.puerto_pon ? `${vlan.puerto_pon.olt_nomb
             v-if="puede('routers.reconciliar')"
             v-model:open="derivaAbierta"
             :router="router"
+            @reconciliado="cargar"
         />
         <OltsSlideover
             v-if="puede('red_acceso.ver')"

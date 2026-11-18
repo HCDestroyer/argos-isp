@@ -82,7 +82,8 @@ test('probar conexión: el chequeo de corte con sus pasos, comandos y «Reconcil
     const modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
     await expect(modal.locator('[data-prueba="reconciliar-grupo-corte"]')).toContainText('argosisp:top corte')
     await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
-    await expect(modal.locator('[data-prueba="reconciliar-encolado"]')).toContainText('Reconciliando RB-Centro')
+    // El modal sigue el trabajo (en cola, aplicando) hasta que termina y dice qué hizo.
+    await expect(modal.locator('[data-prueba="reconciliar-resultado"]')).toContainText(/Listo: \d+ cambios? aplicados? en el router|El router ya estaba como debe/, { timeout: 15_000 })
     await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
     await prueba.locator('[data-prueba="probar-de-nuevo"]').click()
     await expect(corte.locator('[data-prueba="corte-resumen"]')).toContainText('ve la página de corte')

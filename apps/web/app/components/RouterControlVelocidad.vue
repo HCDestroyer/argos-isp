@@ -424,6 +424,7 @@ const conExcepcion = computed(() => planes.value.filter(p => tieneExcepcion(p.im
             v-if="puede('routers.reconciliar')"
             v-model:open="reconciliarAbierto"
             :router="actual"
+            @reconciliado="recargarRouter"
         />
     </div>
 </template>

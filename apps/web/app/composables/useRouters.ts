@@ -1,4 +1,5 @@
 import type { Schema, paths } from '@argosisp/contracts'
+import { RUTA_ESTADO_RECONCILIACION, type ClienteReconciliaciones, type ReconciliacionEstado } from '~/types/reconciliacion'
 
 /** `Router` a secas choca con el tipo de vue-router. */
 export type RouterNas = Schema<'Router'>
@@ -134,6 +135,16 @@ export function useRouters() {
         return resolver(api.POST('/api/v1/routers/{id}/reconciliar', { params: { path: { id } } }))
     }
 
+    /**
+     * `GET /routers/:id/reconciliaciones/:job_id` (`routers.reconciliar`): en qué va el trabajo que
+     * devolvió `reconciliar` (`en_espera`, `en_curso`, `completada`, `fallida` o `desconocida`).
+     */
+    function estadoReconciliacion(routerId: number, jobId: string): Promise<Resultado<ReconciliacionEstado>> {
+        // TEMPORAL: la ruta no está en `paths` todavía (`~/types/reconciliacion`).
+        const cliente = api as unknown as ClienteReconciliaciones
+        return resolver(cliente.GET(RUTA_ESTADO_RECONCILIACION, { params: { path: { id: routerId, job_id: jobId } } }))
+    }
+
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } } }))
     }
@@ -224,5 +235,5 @@ export function useRouters() {
         }))
     }
 
-    return { vistaPreviaTipoConexion, cambiarTipoConexion, duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    return { vistaPreviaTipoConexion, cambiarTipoConexion, duplicados, unir, eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, conexion, scriptConexion, rotarConexion, pegarClave, probarConexion, reconciliar, estadoReconciliacion, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

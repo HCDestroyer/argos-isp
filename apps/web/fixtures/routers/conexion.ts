@@ -1,7 +1,8 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import { diagnosticoCorte } from './estrategias'
-import { bd } from '../bd'
+import type { ReconciliacionEstado } from '~/types/reconciliacion'
+import { diagnosticoCorte, vistaReconciliar } from './estrategias'
+import { bd, type PasoReconciliacion, type ReconciliacionFixture } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion } from '../comun'
 
 /**
@@ -196,16 +197,54 @@ export const rutasConexionRouters: RutasFixture = {
         if (!router) {
             return noEncontrado('el router')
         }
-        // Una reconciliación pedida hace menos de un minuto sigue «en curso»: la segunda no se encola.
+        // Una reconciliación pedida hace menos de un minuto sigue «en curso»: la segunda no se encola
+        // y la API devuelve el `job_id` del trabajo que ya estaba.
         const reciente = bd.acciones.some(a => a.accion === 'routers.reconciliar' && a.entidad_id === router.id && Date.now() - Date.parse(a.created_at) < 60_000)
         const encolado = !reciente
-        if (encolado) {
-            registrarAccion(solicitud, 'routers.reconciliar', { tipo: 'router', id: router.id }, {})
-            // El worker la aplica al momento en los fixtures: la vista previa y el corte quedan limpios.
-            if (router.api_usuario && router.tiene_api_password && !bd.routersSinRespuesta.includes(router.id)) {
-                bd.routersReconciliados = [...new Set([...bd.routersReconciliados, router.id])]
-            }
+        if (!encolado) {
+            const previo = bd.reconciliaciones.filter(r => r.router_id === router.id).at(-1)
+            return { status: 202, cuerpo: { router_id: router.id, job_id: previo?.job_id ?? `reconciliar-${router.id}-0`, encolado } satisfies Schema<'ReconciliacionEncolada'> }
         }
-        return { status: 202, cuerpo: { router_id: router.id, job_id: `reconciliar-${router.id}`, encolado } satisfies Schema<'ReconciliacionEncolada'> }
+        registrarAccion(solicitud, 'routers.reconciliar', { tipo: 'router', id: router.id }, {})
+        // Lo que el worker encontrará: la vista previa de antes de aplicar.
+        const vista = vistaReconciliar(router)
+        const pasos: PasoReconciliacion[] = bd.guionReconciliacion ?? [
+            { estado: 'en_espera', cambios: null, errores: [], error: null },
+            { estado: 'en_curso', cambios: null, errores: [], error: null },
+            vista.error
+                ? { estado: 'fallida', cambios: null, errores: [], error: vista.error }
+                : { estado: 'completada', cambios: vista.cambios.length + (vista.red_acceso?.length ?? 0), errores: [], error: null },
+        ]
+        bd.guionReconciliacion = null
+        // El worker la aplica al momento en los fixtures: si termina, la vista previa y el corte quedan limpios.
+        if (!vista.error && pasos.at(-1)?.estado === 'completada') {
+            bd.routersReconciliados = [...new Set([...bd.routersReconciliados, router.id])]
+        }
+        const trabajo: ReconciliacionFixture = { router_id: router.id, job_id: `reconciliar-${router.id}-${bd.reconciliaciones.length + 1}`, encolado_en: ahora(), pasos, consultas: 0, iniciado_en: null, terminado_en: null }
+        bd.reconciliaciones.push(trabajo)
+        return { status: 202, cuerpo: { router_id: router.id, job_id: trabajo.job_id, encolado } satisfies Schema<'ReconciliacionEncolada'> }
+    }),
+
+    // TEMPORAL: la ruta aún no está en `packages/contracts` (`~/types/reconciliacion`).
+    'GET /api/v1/routers/:id/reconciliaciones/:job_id': conPermiso('routers.reconciliar', (solicitud) => {
+        const router = bd.routers.find(r => r.id === idDe(solicitud))
+        if (!router) {
+            return noEncontrado('el router')
+        }
+        const jobId = solicitud.params.job_id ?? ''
+        const trabajo = bd.reconciliaciones.find(r => r.router_id === router.id && r.job_id === jobId)
+        if (!trabajo) {
+            // La cola ya no tiene el trabajo (vencido o de otro reinicio): la API no inventa un resultado.
+            return { status: 200, cuerpo: { router_id: router.id, job_id: jobId, estado: 'desconocida', encolado_en: null, iniciado_en: null, terminado_en: null, cambios: null, errores: [], error: null } satisfies ReconciliacionEstado }
+        }
+        const paso = trabajo.pasos[Math.min(trabajo.consultas, trabajo.pasos.length - 1)] ?? { estado: 'desconocida', cambios: null, errores: [], error: null }
+        trabajo.consultas++
+        if (paso.estado !== 'en_espera' && !trabajo.iniciado_en) {
+            trabajo.iniciado_en = ahora()
+        }
+        if (['completada', 'fallida'].includes(paso.estado) && !trabajo.terminado_en) {
+            trabajo.terminado_en = ahora()
+        }
+        return { status: 200, cuerpo: { router_id: router.id, job_id: trabajo.job_id, encolado_en: trabajo.encolado_en, iniciado_en: trabajo.iniciado_en, terminado_en: trabajo.terminado_en, ...paso } satisfies ReconciliacionEstado }
     }),
 }

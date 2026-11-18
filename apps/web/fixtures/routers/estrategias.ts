@@ -491,7 +491,7 @@ function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'
     return []
 }
 
-function vistaReconciliar(router: Router): VistaPreviaReconciliar {
+export function vistaReconciliar(router: Router): VistaPreviaReconciliar {
     if (!router.tiene_api_password || !router.api_usuario) {
         return { router_id: router.id, cambios: [], menus: [], avisos: [], red_acceso: [], conflictos: [], error: SIN_API }
     }

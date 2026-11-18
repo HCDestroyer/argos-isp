@@ -202,6 +202,7 @@ const resumen = computed(() => {
         v-if="puede('routers.reconciliar')"
         v-model:open="reconciliarAbierto"
         :router="router"
+        @reconciliado="probar"
     />
     <RouterEditarModal
         v-if="puede('routers.editar')"

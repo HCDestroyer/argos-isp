@@ -4,6 +4,7 @@
  */
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture } from '~/utils/fetchFixtures'
+import type { ReconciliacionEstado } from '~/types/reconciliacion'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
@@ -101,6 +102,20 @@ export interface SesionSimulada {
 /** Fila de `core.codigos_corte` sin el código (lo que el panel puede saber). */
 export type CodigoCorteFixture = Pick<Schema<'CodigoCorteServicio'>, 'servicio_id' | 'creado_en' | 'cerrado_en'>
 
+/** Lo que cambia de un sondeo a otro de un trabajo de reconciliación (las fechas las pone la ruta). */
+export type PasoReconciliacion = Pick<ReconciliacionEstado, 'estado' | 'cambios' | 'errores' | 'error'>
+
+export interface ReconciliacionFixture {
+    router_id: number
+    job_id: string
+    encolado_en: string
+    pasos: PasoReconciliacion[]
+    /** Sondeos ya respondidos. */
+    consultas: number
+    iniciado_en: string | null
+    terminado_en: string | null
+}
+
 interface BaseFixtures {
     clientes: Schema<'Cliente'>[]
     servicios: Schema<'Servicio'>[]
@@ -112,6 +127,13 @@ interface BaseFixtures {
     routersReconciliados: number[]
     /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
     routersSinRespuesta: number[]
+    /**
+     * Trabajos de «Reconciliar ahora» en la cola del worker. Cada `GET …/reconciliaciones/:job_id`
+     * devuelve el paso siguiente de `pasos` (el último se repite), como si el worker avanzara.
+     */
+    reconciliaciones: ReconciliacionFixture[]
+    /** Pasos del próximo trabajo que se encole (pruebas de cada estado); `null` = el recorrido normal. */
+    guionReconciliacion: PasoReconciliacion[] | null
     /**
      * Códigos de corte (`core.codigos_corte`, A5): uno por suspensión en un router en modo código. El
      * código no se guarda aquí porque el panel nunca lo ve.
@@ -325,6 +347,8 @@ function inicial(): BaseFixtures {
         secretosRadius,
         routersReconciliados: [],
         routersSinRespuesta: [],
+        reconciliaciones: [],
+        guionReconciliacion: null,
         codigosCorte,
         conexionesRouter,
         qosPerfiles: perfilesQos,

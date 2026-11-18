@@ -150,7 +150,20 @@ En «Acciones → Conexión de la API» (`routers.editar` para guardar): **URL d
 
 ### Reconciliar ahora
 
-«Reconciliar ahora» (`routers.reconciliar`) lee el router y muestra lo que crearía, cambiaría, movería o borraría para dejar colas, perfiles, árbol y reglas de corte como deben estar. Al confirmar, el trabajo se encola y el resultado de cada comando queda en los eventos de red del router. Si ya hay una en curso, no se encola otra.
+«Reconciliar ahora» (`routers.reconciliar`) lee el router y muestra lo que crearía, cambiaría, movería o borraría para dejar colas, perfiles, árbol y reglas de corte como deben estar. Nada se escribe hasta confirmar.
+
+Al confirmar, el trabajo se encola y el worker de Argos lo aplica por la API del router. Mientras el modal esté abierto, Argos pregunta cada 2 segundos en qué va y lo muestra:
+
+| Estado | Qué ves | Qué hacer |
+| --- | --- | --- |
+| En cola | «En cola…» | Esperar. Si pasan más de 30 segundos, aparece el aviso «El worker no ha tomado el trabajo»: revisa que el servicio worker de Argos esté corriendo. |
+| En curso | «Aplicando en el router…» | Esperar. |
+| Terminó | «Listo: N cambios aplicados en el router», o «El router ya estaba como debe» si no hizo falta cambiar nada | Nada. La ficha se actualiza sola. |
+| Terminó con errores | Aviso amarillo con cada operación que falló («operación — mensaje») | Lo demás sí se aplicó. Corrige la causa en el router y vuelve a reconciliar. |
+| Falló | Aviso rojo con el motivo (por ejemplo, el router no respondió) y «Reintentar» | «Reintentar» vuelve a leer el router y muestra otra vez la vista previa. |
+| Resultado desconocido | «No se pudo saber el resultado» | Revisa los eventos de red del router: ahí queda cada comando con la respuesta del equipo. |
+
+Si ya había una reconciliación pedida, no se encola otra: el modal lo dice y muestra en qué va esa. Puedes cerrar el modal en cualquier momento: el trabajo sigue en el worker, solo deja de mostrarse su avance. El resultado de cada comando queda siempre en los eventos de red del router.
 
 ## Avanzado
 
