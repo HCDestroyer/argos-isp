@@ -1081,6 +1081,16 @@ export const CuentaBancaria = definirEsquema(
             banco_nombre: texto,
             numero: texto,
             alias: texto,
+            titular: {
+                type: ['string', 'null'],
+                description:
+                    'Nombre del titular (2 a 120 caracteres). null en las cuentas anteriores a Argos 1.18.0 hasta que alguien las edite (contrato Iris 0.8.0)',
+            },
+            tipo: {
+                ...enumeradoNulable(['monetaria', 'ahorro']),
+                description:
+                    'Tipo de cuenta; null en las cuentas anteriores a Argos 1.18.0 (contrato Iris 0.8.0)',
+            },
             moneda: enumerado(['GTQ', 'USD']),
             activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
             cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
@@ -1442,7 +1452,11 @@ export const ReconexionTemporal = definirEsquema(
     objeto({
         promesa_id: { ...id, description: 'La promesa de tipo reconexion_temporal (GET /promesas/:id)' },
         reconexion_id: { ...id, description: 'Alias de promesa_id para Iris' },
-        hasta: { ...instante, description: 'Vencimiento de la promesa: ahora + horas_max de la plantilla' },
+        hasta: {
+            ...instante,
+            description:
+                'Vencimiento de la promesa (RFC 3339 en UTC, con milisegundos), según `vigencia` de la plantilla: `horas` = ahora + horas_max; `medianoche` = 00:00 del día siguiente en Guatemala (la siguiente si faltan menos de 60 minutos). No es la hora del corte: al vencer, el corte respeta la hora_corte de la plantilla',
+        },
         servicio: objeto({
             id,
             estado: {

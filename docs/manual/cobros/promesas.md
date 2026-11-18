@@ -56,7 +56,7 @@ Iris dice por qué la pide, y la promesa guarda ese motivo:
 
 Las reglas son las mismas en los dos casos. El comprobante se queda en la cola de comprobantes pendientes para que caja lo revise cuando pueda.
 
-Cuánto dura depende de la plantilla: unas horas desde que se crea, o hasta la siguiente medianoche (hora de Guatemala). Si se pide a menos de una hora de la medianoche, dura hasta la medianoche del día siguiente, para que no se corte casi al instante.
+Cuánto dura depende de la plantilla: unas horas desde que se crea, o hasta la siguiente medianoche (hora de Guatemala). Si se pide a menos de una hora de la medianoche, dura hasta la medianoche del día siguiente, para que no se corte casi al instante. Cuando vence, el servicio se vuelve a evaluar, pero el corte respeta la hora de corte de la plantilla: la reconexión vale «hasta» esa hora, no significa que el servicio se corte justo a medianoche.
 
 ## Qué ves
 

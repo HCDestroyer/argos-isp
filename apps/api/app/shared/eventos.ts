@@ -263,6 +263,18 @@ interface PayloadAdicional {
 /** Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers. */
 export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas'
 
+/** Campos de `cuenta_bancaria.cambiada` (contrato Iris 0.8.0 §7.8); `empresa_id` no se edita. */
+export const CAMPOS_CUENTA_BANCARIA_CAMBIADA = [
+    'banco_id',
+    'numero',
+    'alias',
+    'titular',
+    'tipo',
+    'moneda',
+    'activa',
+] as const
+export type CampoCuentaBancariaCambiada = (typeof CAMPOS_CUENTA_BANCARIA_CAMBIADA)[number]
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -998,6 +1010,19 @@ export interface CatalogoEventos {
         lineas: number
         monto: Dinero
     }
+    /**
+     * Se creó o editó una cuenta bancaria propia (contrato Iris 0.8.0 §7.8, pedido A26). Al crear,
+     * `creada: true` y `campos` = todo lo que se guardó; al editar, solo los campos que cambiaron.
+     * `activa` es el valor después del cambio. `campos`: solo nombres, nunca valores. Las cuentas
+     * nunca se borran.
+     */
+    'cuenta_bancaria.cambiada': {
+        cuenta_bancaria_id: number
+        empresa_id: number
+        campos: CampoCuentaBancariaCambiada[]
+        activa: boolean
+        creada: boolean
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1448,6 +1473,7 @@ export const EVENTOS = [
     'caja.depositada',
     'banco.extracto_importado',
     'banco.conciliado',
+    'cuenta_bancaria.cambiada',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',

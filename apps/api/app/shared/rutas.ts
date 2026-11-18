@@ -124,9 +124,11 @@ export interface DefinicionRuta<
      * Ruta de pagos y atención del contrato Iris 0.6.0 §7: con el token de Iris exige
      * `X-Iris-Actor` y `X-Iris-Conversacion` (`400 cabecera_iris_requerida`) y las lleva al contexto
      * y a la auditoría (`#integraciones/iris/atencion`). Una función decide por petición (p. ej. solo
-     * con el filtro `telefono`). Otros actores no las necesitan.
+     * con el filtro `telefono`). `'opcional'` (contrato Iris 0.8.0, lecturas que Iris también hace
+     * sin conversación): si faltan las dos no hay 400; si viene alguna, se validan las dos y van al
+     * contexto igual. Otros actores no las necesitan.
      */
-    cabecerasIris?: boolean | ((ctx: HttpContext) => boolean)
+    cabecerasIris?: boolean | 'opcional' | ((ctx: HttpContext) => boolean)
     /**
      * Iris 0.7.0 (A23): con el token de Iris y `X-Iris-Actor: usuario:<id>`, la acción corre y se
      * audita como el usuario de Argos vinculado (`#core/actuacion_vinculada`). Debe ser igual a
@@ -235,7 +237,9 @@ export async function despachar(ruta: Ruta, ctx: HttpContext) {
             'Esta operación exige el header Idempotency-Key',
         )
     }
-    if (typeof ruta.cabecerasIris === 'function' ? ruta.cabecerasIris(ctx) : ruta.cabecerasIris) {
+    if (ruta.cabecerasIris === 'opcional') {
+        exigirCabecerasIris(ctx, { opcional: true })
+    } else if (typeof ruta.cabecerasIris === 'function' ? ruta.cabecerasIris(ctx) : ruta.cabecerasIris) {
         exigirCabecerasIris(ctx)
     }
     if (ruta.antes) await ruta.antes(ctx)

@@ -1051,7 +1051,7 @@ test.group('Iris 0.6.0 · promesas (§7.4)', () => {
 })
 
 test.group('Iris 0.6.0 · lecturas de §7 con el token de Iris', () => {
-    test('GET /cuentas-bancarias, GET /bancos y GET /comprobantes/:id exigen las cabeceras de Iris', async ({
+    test('GET /comprobantes/:id exige las cabeceras de Iris; GET /cuentas-bancarias y GET /bancos las aceptan opcionales (0.8.0)', async ({
         client,
         assert,
     }) => {
@@ -1062,15 +1062,30 @@ test.group('Iris 0.6.0 · lecturas de §7 con el token de Iris', () => {
             subir(client, token, await camposBoleta(clienteId, servicioId, cuenta.id)),
             201,
         )
-        for (const ruta of [
-            '/api/v1/cuentas-bancarias?activa=true',
-            '/api/v1/bancos',
-            `/api/v1/comprobantes/${boleta.body().id}`,
-        ]) {
-            const sin = await client.get(ruta).bearerToken(token)
-            sin.assertStatus(400)
-            assert.equal(sin.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
+        const sin = await client.get(`/api/v1/comprobantes/${boleta.body().id}`).bearerToken(token)
+        sin.assertStatus(400)
+        assert.equal(sin.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
+        await estado(
+            cabeceras(client.get(`/api/v1/comprobantes/${boleta.body().id}`).bearerToken(token), null),
+            200,
+        )
+
+        // contrato Iris 0.8.0 (§2.5, primera sincronización sin conversación): opcionales
+        for (const ruta of ['/api/v1/cuentas-bancarias?activa=true', '/api/v1/bancos']) {
+            const lista = await estado(client.get(ruta).bearerToken(token), 200)
+            assert.isArray(lista.body())
             await estado(cabeceras(client.get(ruta).bearerToken(token), null), 200)
+            // si vienen, se validan: mal formadas o solo una de las dos → 400
+            for (const [actor, conversacion] of [
+                ['gerente', 'wa:1'],
+                ['asistente_ia', 'con espacio'],
+                ['asistente_ia', null],
+                [null, 'wa:1'],
+            ] as const) {
+                const mala = await cabeceras(client.get(ruta).bearerToken(token), null, actor, conversacion)
+                mala.assertStatus(400)
+                assert.equal(mala.body().type, 'urn:argosisp:problema:cabecera_iris_requerida')
+            }
         }
         const vista = await estado(
             cabeceras(client.get(`/api/v1/comprobantes/${boleta.body().id}`).bearerToken(token), null),
@@ -1080,6 +1095,30 @@ test.group('Iris 0.6.0 · lecturas de §7 con el token de Iris', () => {
         // otro usuario no las necesita
         const { token: admin } = await usuarioConRoles(['admin'])
         await estado(client.get('/api/v1/bancos').bearerToken(admin), 200)
+    })
+    test('POST /comprobantes a una cuenta desactivada: 422 cuenta_bancaria_id/inactiva; inexistente sigue exists (0.8.0)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await tokenIris()
+        const { clienteId, servicioId } = await servicioCortado()
+        const cuenta = await cuentaBancariaPrueba()
+        await db.from('billing.cuentas_bancarias').where('id', cuenta.id).update({ activa: false })
+        const inactiva = await subir(client, token, await camposBoleta(clienteId, servicioId, cuenta.id))
+        inactiva.assertStatus(422)
+        assert.equal(inactiva.body().type, 'urn:argosisp:problema:validacion')
+        assert.deepInclude(
+            inactiva.body().errors.map((e: { field: string; rule: string }) => [e.field, e.rule]),
+            ['cuenta_bancaria_id', 'inactiva'],
+        )
+        const inexistente = await subir(client, token, await camposBoleta(clienteId, servicioId, 999_999_999))
+        inexistente.assertStatus(422)
+        assert.deepInclude(
+            inexistente.body().errors.map((e: { field: string; rule: string }) => [e.field, e.rule]),
+            ['cuenta_bancaria_id', 'exists'],
+        )
+        const guardados = await db.from('billing.comprobantes').where('cliente_id', clienteId).count('* as n')
+        assert.equal(Number(guardados[0].n), 0)
     })
 })
 
@@ -1264,6 +1303,49 @@ test.group('Reconexión temporal · motivo sin_personal y vigencia medianoche', 
         assert.equal(r.r.hasta, new Date(ahora.getTime() + 12 * 3_600_000).toISOString())
         const explicita = await reconectarEn(ahora, { horas_max: 12, vigencia: 'horas' })
         assert.equal(explicita.r.hasta, r.r.hasta)
+    })
+
+    test('GET /promesas?motivo_reconexion= filtra por motivo e implica tipo=reconexion_temporal (0.8.0)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const sinPersonal = await reconectarEn(new Date('2026-10-13T15:30:00-06:00'))
+        const fuera = await reconectarEn(new Date('2026-10-13T15:30:00-06:00'), {}, 'fuera_de_horario')
+        const ids = async (qs: string) => {
+            const r = await estado(client.get(`/api/v1/promesas?${qs}`).bearerToken(token), 200)
+            return r.body().data.map((p: { id: number }) => p.id) as number[]
+        }
+
+        assert.deepEqual(await ids(`servicio_id=${sinPersonal.servicioId}&motivo_reconexion=sin_personal`), [
+            sinPersonal.r.promesa_id,
+        ])
+        assert.deepEqual(
+            await ids(`servicio_id=${sinPersonal.servicioId}&motivo_reconexion=fuera_de_horario`),
+            [],
+        )
+        assert.deepEqual(await ids(`servicio_id=${fuera.servicioId}&motivo_reconexion=fuera_de_horario`), [
+            fuera.r.promesa_id,
+        ])
+        // con tipo=promesa no hay ninguna (motivo_reconexion es null en toda promesa normal)
+        assert.deepEqual(
+            await ids(`servicio_id=${fuera.servicioId}&tipo=promesa&motivo_reconexion=fuera_de_horario`),
+            [],
+        )
+        // sin servicio: todas las de la página son reconexiones con ese motivo
+        const pagina = await estado(
+            client.get('/api/v1/promesas?motivo_reconexion=sin_personal&limit=100').bearerToken(token),
+            200,
+        )
+        assert.isAbove(pagina.body().data.length, 0)
+        for (const p of pagina.body().data) {
+            assert.equal(p.tipo, 'reconexion_temporal')
+            assert.equal(p.motivo_reconexion, 'sin_personal')
+        }
+        const invalido = await client.get('/api/v1/promesas?motivo_reconexion=otro').bearerToken(token)
+        invalido.assertStatus(422)
+        assert.equal(invalido.body().errors[0].field, 'motivo_reconexion')
+        assert.equal(invalido.body().errors[0].rule, 'enum')
     })
 
     test('vigencia exceptuable por servicio y validada por VineJS', async ({ assert }) => {

@@ -919,6 +919,8 @@ export interface FiltrosPromesas extends OpcionesPaginacion {
     cliente_id?: number
     estado?: EstadoPromesa
     tipo?: TipoPromesa
+    /** solo reconexiones temporales con ese motivo (implica `tipo = reconexion_temporal`) */
+    motivo_reconexion?: MotivoReconexion
 }
 
 /** Alcance de una promesa: zona del cliente y router del servicio. */
@@ -941,6 +943,9 @@ export async function listarPromesas(
         .if(filtros.cliente_id, (q) => q.where('p.cliente_id', filtros.cliente_id!))
         .if(filtros.estado, (q) => q.where('p.estado', filtros.estado!))
         .if(filtros.tipo, (q) => q.where('p.tipo', filtros.tipo!))
+        .if(filtros.motivo_reconexion, (q) =>
+            q.where('p.tipo', 'reconexion_temporal').where('p.motivo_reconexion', filtros.motivo_reconexion!),
+        )
     filtrarPorAlcance(consulta, alcance, dimensionesPromesa)
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('p.empresa_id', ids))
     return paginar<PromesaVista>(consulta, filtros, { columna: 'p.id' })

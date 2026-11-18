@@ -87,6 +87,8 @@ export const rutasBancos: RutasFixture = {
             banco_nombre: banco?.nombre ?? '',
             numero,
             alias: String(cuerpo.alias).trim(),
+            titular: typeof cuerpo.titular === 'string' ? cuerpo.titular.trim() : null,
+            tipo: cuerpo.tipo === 'monetaria' || cuerpo.tipo === 'ahorro' ? cuerpo.tipo : null,
             moneda: cuerpo.moneda === 'USD' ? 'USD' : 'GTQ',
             activa: cuerpo.activa !== false,
             cuenta_id: 100 + id,

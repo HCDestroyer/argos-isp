@@ -13528,6 +13528,13 @@ export interface components {
             banco_nombre: string;
             numero: string;
             alias: string;
+            /** @description Nombre del titular (2 a 120 caracteres). null en las cuentas anteriores a Argos 1.18.0 hasta que alguien las edite (contrato Iris 0.8.0) */
+            titular: string | null;
+            /**
+             * @description Tipo de cuenta; null en las cuentas anteriores a Argos 1.18.0 (contrato Iris 0.8.0)
+             * @enum {string|null}
+             */
+            tipo: "monetaria" | "ahorro" | null;
             /** @enum {string} */
             moneda: "GTQ" | "USD";
             /** @description Una cuenta inactiva no recibe pagos nuevos */
@@ -18049,7 +18056,7 @@ export interface components {
             reconexion_id: number;
             /**
              * Format: date-time
-             * @description Vencimiento de la promesa: ahora + horas_max de la plantilla
+             * @description Vencimiento de la promesa (RFC 3339 en UTC, con milisegundos), según `vigencia` de la plantilla: `horas` = ahora + horas_max; `medianoche` = 00:00 del día siguiente en Guatemala (la siguiente si faltan menos de 60 minutos). No es la hora del corte: al vencer, el corte respeta la hora_corte de la plantilla
              */
             hasta: string;
             servicio: {
@@ -22809,9 +22816,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
                 "X-Iris-Actor"?: string;
-                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
             };
             path?: never;
@@ -22828,7 +22835,7 @@ export interface operations {
                     "application/json": components["schemas"]["Banco"][];
                 };
             };
-            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            /** @description Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -29227,9 +29234,9 @@ export interface operations {
                 activa?: boolean;
             };
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
                 "X-Iris-Actor"?: string;
-                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
             };
             path?: never;
@@ -29246,7 +29253,7 @@ export interface operations {
                     "application/json": components["schemas"]["CuentaBancaria"][];
                 };
             };
-            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            /** @description Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -29298,6 +29305,10 @@ export interface operations {
                     banco_id: number;
                     numero: string;
                     alias: string;
+                    /** @description Nombre del titular de la cuenta (2 a 120); null = sin dato */
+                    titular?: string | null;
+                    /** @description Tipo de cuenta; null = sin dato */
+                    tipo?: ("monetaria" | "ahorro") | null;
                     /** @enum {string} */
                     moneda?: "GTQ" | "USD";
                     activa?: boolean;
@@ -29412,6 +29423,10 @@ export interface operations {
                     banco_id?: number;
                     numero?: string;
                     alias?: string;
+                    /** @description Nombre del titular de la cuenta (2 a 120); null = sin dato */
+                    titular?: string | null;
+                    /** @description Tipo de cuenta; null = sin dato */
+                    tipo?: ("monetaria" | "ahorro") | null;
                     /** @enum {string} */
                     moneda?: "GTQ" | "USD";
                     activa?: boolean;
@@ -53506,6 +53521,8 @@ export interface operations {
                 estado?: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
                 /** @description reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3) */
                 tipo?: "promesa" | "reconexion_temporal";
+                /** @description Solo reconexiones temporales con ese motivo (contrato Iris 0.8.0): implica tipo=reconexion_temporal; con tipo=promesa la lista sale vacía */
+                motivo_reconexion?: "fuera_de_horario" | "sin_personal";
             };
             header?: never;
             path?: never;

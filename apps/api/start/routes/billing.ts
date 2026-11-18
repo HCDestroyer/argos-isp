@@ -1479,7 +1479,7 @@ const bancos: Ruta[] = [
         resumen: 'Catálogo de bancos de Guatemala (banco de origen de transferencias y ACH)',
         etiqueta: 'pagos',
         permiso: null,
-        cabecerasIris: true,
+        cabecerasIris: 'opcional',
         respuesta: { status: 200, descripcion: 'Bancos activos', esquema: lista(Banco) },
         handler: () => listarBancos(),
     }),
@@ -1490,7 +1490,7 @@ const bancos: Ruta[] = [
         resumen: 'Cuentas bancarias propias (destino de depósitos, transferencias, ACH y remesas)',
         etiqueta: 'pagos',
         permiso: 'cuentas_bancarias.ver',
-        cabecerasIris: true,
+        cabecerasIris: 'opcional',
         query: v.listarCuentasBancariasValidator,
         respuesta: { status: 200, descripcion: 'Cuentas bancarias', esquema: lista(CuentaBancaria) },
         handler: (ctx, { query }) =>

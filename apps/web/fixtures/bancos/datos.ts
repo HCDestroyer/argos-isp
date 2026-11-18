@@ -40,6 +40,9 @@ function cuentaBancaria(id: number, bancoId: number, numero: string, alias: stri
         banco_nombre: bancos.find(b => b.id === bancoId)?.nombre ?? '',
         numero,
         alias,
+        // contrato Iris 0.8.0: null en las cuentas anteriores a Argos 1.18.0
+        titular: null,
+        tipo: null,
         moneda: 'GTQ',
         activa: true,
         cuenta_id: cuentaId,

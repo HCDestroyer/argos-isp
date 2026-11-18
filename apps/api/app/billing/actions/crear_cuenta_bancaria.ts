@@ -3,6 +3,7 @@ import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import { CAMPOS_CUENTA_BANCARIA_CAMBIADA } from '#shared/eventos'
 import {
     nombreCuentaLibro,
     verCuentaBancaria,
@@ -15,6 +16,8 @@ import {
  * registra una cuenta bancaria propia y crea su subcuenta de `1.1.02 Bancos` en el libro
  * (`1.1.02.NN`, el siguiente número libre). Los pagos por depósito, transferencia, ACH o remesa
  * a esta cuenta se debitan en esa subcuenta. 409 si el número ya existe en ese banco.
+ * `titular` y `tipo` son opcionales en la API (contrato Iris 0.8.0). Emite
+ * `cuenta_bancaria.cambiada` con `creada: true` y todos los campos guardados.
  */
 
 /** Advisory lock para numerar subcuentas de Bancos sin carreras. */
@@ -89,6 +92,8 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
                 banco_id: input.banco_id,
                 numero,
                 alias: input.alias.trim(),
+                titular: input.titular?.trim() || null,
+                tipo: input.tipo ?? null,
                 moneda: input.moneda ?? 'GTQ',
                 activa: input.activa ?? true,
                 cuenta_id: cuenta!.id,
@@ -100,9 +105,18 @@ export default class CrearCuentaBancaria extends DomainAction<EntradaCuentaBanca
             banco_id: creada.banco_id,
             numero: creada.numero,
             alias: creada.alias,
+            titular: creada.titular,
+            tipo: creada.tipo,
             moneda: creada.moneda,
             activa: creada.activa,
             cuenta_id: creada.cuenta_id,
+        })
+        await t.emit('cuenta_bancaria.cambiada', {
+            cuenta_bancaria_id: creada.id,
+            empresa_id: creada.empresa_id,
+            campos: [...CAMPOS_CUENTA_BANCARIA_CAMBIADA],
+            activa: creada.activa,
+            creada: true,
         })
         return creada
     }

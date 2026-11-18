@@ -10,12 +10,19 @@ import { NoEncontrado } from '#shared/errores'
 
 export type Moneda = 'GTQ' | 'USD'
 
+/** Tipo de cuenta (contrato Iris 0.8.0); null en las cuentas anteriores a 1.18.0. */
+export const TIPOS_CUENTA_BANCARIA = ['monetaria', 'ahorro'] as const
+export type TipoCuentaBancaria = (typeof TIPOS_CUENTA_BANCARIA)[number]
+
 export interface EntradaCuentaBancaria {
     /** empresa dueña de la cuenta (solo al crear); por defecto la activa */
     empresa_id?: number | null
     banco_id: number
     numero: string
     alias: string
+    /** nombre del titular (2 a 120); null o ausente = sin dato */
+    titular?: string | null
+    tipo?: TipoCuentaBancaria | null
     moneda?: Moneda
     activa?: boolean
 }
@@ -34,6 +41,8 @@ export interface CuentaBancariaVista {
     banco_nombre: string
     numero: string
     alias: string
+    titular: string | null
+    tipo: TipoCuentaBancaria | null
     moneda: Moneda
     activa: boolean
     cuenta_id: number
@@ -69,6 +78,8 @@ function consultaCuentas(cliente: QueryClientContract) {
             'b.nombre as banco_nombre',
             'cb.numero',
             'cb.alias',
+            'cb.titular',
+            'cb.tipo',
             'cb.moneda',
             'cb.activa',
             'cb.cuenta_id',
