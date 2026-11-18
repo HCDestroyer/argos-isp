@@ -302,6 +302,23 @@
 /interface pppoe-server server set [find where service-name=$pppoeServicio] interface=$labIf \
     default-profile=default authentication=pap,chap one-session-per-host=yes \
     max-mtu=1480 max-mru=1480 keepalive-timeout=30 disabled=no
+:local dmProxy true
+:if ($corteIdentificacion = "codigo") do={
+    :do {
+        :local leerDm [:parse ":return [/system device-mode get proxy]"]
+        :local dm [$leerDm]
+        :if ([:tostr $dm] = "false" || [:tostr $dm] = "no") do={ :set dmProxy false }
+    } on-error={}
+    :do {
+        :local leerInactivo [:parse ":return [/ip proxy get inactivated]"]
+        :local inactivo [$leerInactivo]
+        :if ([:tostr $inactivo] = "true" || [:tostr $inactivo] = "yes") do={ :set dmProxy false }
+    } on-error={}
+    :if (!$dmProxy) do={
+        :set corteIdentificacion "ip"
+        :put "argosisp: AVISO el device-mode no permite el proxy web: /system/device-mode/update proxy=yes y confirmar con el boton o apagando y encendiendo dentro de 5 minutos; luego Reconciliar ahora"
+    }
+}
 :put "argosisp: address-lists"
 /ip firewall address-list add list=argos-portal address=$portalV4 comment="argosisp: portal IP"
 /ip firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"

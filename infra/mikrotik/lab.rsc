@@ -352,6 +352,39 @@
 /ppp aaa set use-radius=yes accounting=yes interim-update=5m
 
 # ============================================================================
+# 6 bis. Device-mode y proxy web del corte (modo código)
+# ============================================================================
+# RouterOS 7.17+ en modo home (o con el proxy quitado del device-mode) deja el proxy web inactivo:
+# /ip proxy print muestra ";;; inactivated, not allowed by device-mode" (aunque diga enabled: yes) y
+# cualquier regla de /ip proxy access con local-port=3346 falla con "failure: invalid local port". Solo se
+# desbloquea desde el router: /system/device-mode/update proxy=yes y confirmación física (botón o
+# apagado y encendido) dentro de 5 minutos. Mientras tanto el router se corta como en modo ip (igual
+# que el reconciliador de ArgosIsp, proxyCorteBloqueado en dispatcher.ts): dst-nat del HTTP al portal,
+# sin regla final ni reglas de /ip proxy access y sin el NAT al 3346. Se revisa aquí, antes de las
+# secciones 7 a 9 bis, para que todas armen el corte del modo ip (la 9 bis lo deja como modo ip y no
+# llega al paso 2). El orden 1-5 de la sección 9 bis no cambia.
+# /system device-mode no existe antes de 7.13 y su "proxy" puede faltar: se leen con :parse dentro de
+# :do on-error (un comando desconocido escrito tal cual haría fallar el bloque entero al pegarlo o al
+# importarlo); si no se pueden leer, el proxy se da por permitido. "get proxy" devuelve un booleano.
+:local dmProxy true
+:if ($corteIdentificacion = "codigo") do={
+    :do {
+        :local leerDm [:parse ":return [/system device-mode get proxy]"]
+        :local dm [$leerDm]
+        :if ([:tostr $dm] = "false" || [:tostr $dm] = "no") do={ :set dmProxy false }
+    } on-error={}
+    :do {
+        :local leerInactivo [:parse ":return [/ip proxy get inactivated]"]
+        :local inactivo [$leerInactivo]
+        :if ([:tostr $inactivo] = "true" || [:tostr $inactivo] = "yes") do={ :set dmProxy false }
+    } on-error={}
+    :if (!$dmProxy) do={
+        :set corteIdentificacion "ip"
+        :put "argosisp: AVISO el device-mode no permite el proxy web: /system/device-mode/update proxy=yes y confirmar con el boton o apagando y encendiendo dentro de 5 minutos; luego Reconciliar ahora"
+    }
+}
+
+# ============================================================================
 # 7. Address-lists (IPv4 e IPv6). Las entradas por FQDN las resuelve el router.
 # ============================================================================
 :put "argosisp: address-lists"
@@ -586,7 +619,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 #   (las de servicio, argosisp:servicio:<id>, que escribe ArgosIsp por la API, y la final) van antes que
 #   las del operador: un allow suyo sin local-port ganaría en el 3346.
 #   RouterOS solo acepta en /ip proxy access un local-port que ya está en /ip proxy port ("failure:
-#   invalid local port"), así que el orden es:
+#   invalid local port", bug v1.16.0). En RouterOS 7.17+ ese mismo error sale cuando el device-mode no
+#   permite el proxy (/ip proxy print -> ";;; inactivated, not allowed by device-mode"): eso lo revisa
+#   la sección 6 bis, que deja el router en modo ip. Con el proxy permitido, el orden es:
 #     1. el drop de input del 3346 (sección 8) y el NAT al 3346 creado deshabilitado (secciones 8 y 9);
 #     2. el 3346 en /ip proxy port SIN encender el proxy: apagado -> port=3346 max-cache-size=none y
 #        sigue apagado; encendido por el operador -> solo se agrega el 3346 a sus puertos;
@@ -594,6 +629,7 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
 #     4. se habilita el NAT al 3346 (si el operador ya tenía el proxy encendido, entre 2 y 4 el 3346
 #        escucha pero no le llega nada: el drop de input ya está y el NAT aún no);
 #     5. recién entonces enabled=yes, si estaba apagado.
+# - device-mode sin proxy (sección 6 bis): corteIdentificacion ya es "ip" aquí y se sigue la rama ip.
 # - ip: el NAT al 3346 ya no existe (limpieza de la sección 0); se borran la regla final y las de
 #   servicio (usan el 3346 y RouterOS no deja quitar el puerto con reglas que lo usan), se quita el
 #   3346 (si era el único puerto, el proxy se apaga y vuelve al 8080 de fábrica) y al final el drop.
