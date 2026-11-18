@@ -309,8 +309,11 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   `verificado_iris_actor`: el `X-Iris-Actor` de quien decidió desde Iris, o null si decidió caja en
   el panel; aditivo, sin filtro de versión, y de la fila si el evento es anterior) y
   `promesa.creada` / `.cumplida` / `.incumplida` / `.cancelada` (`promesa_id`, `empresa_id`,
-  `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `vence`, `monto`; `motivo` solo en
-  `cancelada`), de cualquier canal dentro del alcance. Lo que el evento no trae se completa con
+  `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `motivo_reconexion`, `vence`,
+  `monto`; `motivo` solo en `cancelada`), de cualquier canal dentro del alcance. `motivo_reconexion`
+  (desde el 17 nov 2026): `fuera_de_horario` | `sin_personal` en una reconexión temporal, null en una
+  promesa común; aditivo, sin filtro de versión, y de `billing.promesas.motivo_reconexion` si el
+  evento es anterior (sin la clave). Lo que el evento no trae se completa con
   `billing.comprobantes` / `billing.promesas`; sin `causa` el rechazo sale `otro`, sin `tipo` es
   `promesa`. Nunca la imagen ni la referencia bancaria.
 - **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
