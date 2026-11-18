@@ -104,17 +104,17 @@ Un directorio con un CSV por entidad en el formato canónico. `pnpm importar:pla
 
 Opciones de `node ace importar`:
 
-| Opción                     | Qué hace                                                                                                                                                                                                                            |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--origen=<origen>`        | `mikrowisp`, `smartisp` o `csv` (obligatoria)                                                                                                                                                                                       |
-| `--fuente=<ruta>`          | Volcado `.sql` (mikrowisp, smartisp) o directorio de CSV (csv). Relativa a donde se llamó (obligatoria)                                                                                                                             |
-| `--sistema=<nombre>`       | Solo con `csv`: nombre del sistema que exportó los CSV (`[a-z0-9_]`, por defecto `csv`). Es la clave de idempotencia: siempre el mismo para el mismo sistema                                                                        |
-| `--dry-run`                | Corre todo en una transacción que se revierte al final. El reporte dice lo que pasaría                                                                                                                                              |
-| `--salida=<directorio>`    | Guarda `reporte.md` (para leer), `diferencias.csv` (una línea por diferencia, para filtrar) y `reporte.json`. Ninguno lleva request_id ni horas salvo el JSON: dos corridas en seco sobre la misma base dan el mismo `.md` y `.csv` |
-| `--reporte=<archivo>`      | Guarda el reporte completo en JSON (rutas relativas a donde se llamó)                                                                                                                                                               |
-| `--ipv6=ninguno\|plan`     | `ninguno` (por defecto): los servicios entran solo con IPv4 (los orígenes no traen IPv6). `plan`: modo IPv6 por defecto del plan (requiere pools IPv6 en el router)                                                                 |
-| `--solo-planes-existentes` | No crea planes: mapea por nombre (o `equivale_a`) a planes que ya existen y deja el resto sin equivalente                                                                                                                           |
-| `--plantilla=<id>`         | Plantilla de facturación de los servicios nuevos. Sin ella, la única que exista (`plantillaPorDefecto` de A1); con varias, los servicios entran sin plantilla y sus facturas pendientes no se importan (queda en errores)           |
+| Opción                     | Qué hace                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--origen=<origen>`        | `mikrowisp`, `smartisp` o `csv` (obligatoria)                                                                                                                                                                                                                                                                                                                           |
+| `--fuente=<ruta>`          | Volcado `.sql` (mikrowisp, smartisp) o directorio de CSV (csv). Relativa a donde se llamó (obligatoria)                                                                                                                                                                                                                                                                 |
+| `--sistema=<nombre>`       | Solo con `csv`: nombre del sistema que exportó los CSV (`[a-z0-9_]`, por defecto `csv`). Es la clave de idempotencia: siempre el mismo para el mismo sistema                                                                                                                                                                                                            |
+| `--dry-run`                | Corre todo en una transacción que se revierte al final. El reporte dice lo que pasaría                                                                                                                                                                                                                                                                                  |
+| `--salida=<directorio>`    | Guarda `reporte.md` (para leer), `diferencias.csv` (una línea por diferencia, para filtrar) y `reporte.json`. Ninguno lleva request_id ni horas salvo el JSON: dos corridas en seco sobre la misma base dan el mismo `.md` y `.csv`                                                                                                                                     |
+| `--reporte=<archivo>`      | Guarda el reporte completo en JSON (rutas relativas a donde se llamó)                                                                                                                                                                                                                                                                                                   |
+| `--ipv6=ninguno\|plan`     | `ninguno` (por defecto): los servicios entran solo con IPv4 (los orígenes no traen IPv6). `plan`: modo IPv6 por defecto del plan (requiere pools IPv6 en el router)                                                                                                                                                                                                     |
+| `--solo-planes-existentes` | No crea planes: mapea por nombre (o `equivale_a`) a planes que ya existen y deja el resto sin equivalente                                                                                                                                                                                                                                                               |
+| `--plantilla=<id>`         | Plantilla de facturación de los servicios nuevos. Sin ella, la por defecto (`plantillaPorDefecto` de A1: la marcada, p. ej. «Genera 1 · vence 15» de fábrica, o la única); con varias sin marca, entran sin plantilla y sus facturas no se importan (queda en errores). Con plantilla, cada servicio creado recibe su `facturar_desde` (ver «Sin facturar hacia atrás») |
 
 ## Qué hace con cada entidad
 
@@ -153,35 +153,35 @@ Por eso es **idempotente**: una segunda corrida no crea nada, no deja auditoría
 
 Encabezado: `origen` (sistema), `fuente` (ruta), `modo`, `request_id`. Por entidad: `origen`, `creados`, `existentes`, `omitidos`. `dinero` (origen, ArgosIsp, diferencia y explicación), `tablas` (cuadre por tabla del origen) y `notas_origen` (p. ej. servicios sin PPPoE por router). Los ids del sistema de origen van en campos `*_origen` (`cliente_origen`, `servicios_origen`...); los de ArgosIsp, sin sufijo. Además:
 
-| Diferencia                              | Qué se hace                                                                                                                                        |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Routers sin credenciales                | Se importan; el reporte dice qué falta (usuario y clave de la API, secreto RADIUS) para cargarlo en el panel                                       |
-| Clientes con el mismo NIT               | Se importan todos (son cuentas distintas en el origen); el operador decide si unirlos                                                              |
-| Servicios sin plan                      | No se importan; sus facturas van al saldo inicial del cliente, así que el saldo cuadra                                                             |
-| Pagos a facturas de otro cliente        | Informativo: el pago se importa a nombre de quien pagó y salda la factura del otro cliente (los dos van en modo B)                                 |
-| Pagos sin factura                       | Su factura no entró (sin servicio, cliente faltante): el pago queda a favor del pagador y el saldo inicial lo compensa                             |
-| Pagos no importados                     | Sin fecha en el origen (el pago histórico la exige): no entra al historial; el saldo inicial lo compensa                                           |
-| IPs duplicadas en el origen             | Se importa el primer servicio del archivo; los demás se omiten                                                                                     |
-| IP fuera de las redes del router        | El servicio se omite (importarlo sin IP le daría otra al cliente)                                                                                  |
-| IP en uso por otro servicio de ArgosIsp | El servicio se omite                                                                                                                               |
-| Servicio sin IP                         | Se importa; ArgosIsp le asigna una de las redes del router (se lista cuál)                                                                         |
-| Planes sin equivalente                  | Plan que no está en `planes`, cuyo `equivale_a` no existe o que no se pudo crear; sus servicios se omiten                                          |
-| Clientes sin NIT                        | Se importan sin NIT                                                                                                                                |
-| NIT inválidos                           | Se importan sin NIT; el valor original queda en `campos_personalizados.<sistema>_nit` para corregirlo                                              |
+| Diferencia                              | Qué se hace                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Routers sin credenciales                | Se importan; el reporte dice qué falta (usuario y clave de la API, secreto RADIUS) para cargarlo en el panel                                                                                                                                                                                                     |
+| Clientes con el mismo NIT               | Se importan todos (son cuentas distintas en el origen); el operador decide si unirlos                                                                                                                                                                                                                            |
+| Servicios sin plan                      | No se importan; sus facturas van al saldo inicial del cliente, así que el saldo cuadra                                                                                                                                                                                                                           |
+| Pagos a facturas de otro cliente        | Informativo: el pago se importa a nombre de quien pagó y salda la factura del otro cliente (los dos van en modo B)                                                                                                                                                                                               |
+| Pagos sin factura                       | Su factura no entró (sin servicio, cliente faltante): el pago queda a favor del pagador y el saldo inicial lo compensa                                                                                                                                                                                           |
+| Pagos no importados                     | Sin fecha en el origen (el pago histórico la exige): no entra al historial; el saldo inicial lo compensa                                                                                                                                                                                                         |
+| IPs duplicadas en el origen             | Se importa el primer servicio del archivo; los demás se omiten                                                                                                                                                                                                                                                   |
+| IP fuera de las redes del router        | El servicio se omite (importarlo sin IP le daría otra al cliente)                                                                                                                                                                                                                                                |
+| IP en uso por otro servicio de ArgosIsp | El servicio se omite                                                                                                                                                                                                                                                                                             |
+| Servicio sin IP                         | Se importa; ArgosIsp le asigna una de las redes del router (se lista cuál)                                                                                                                                                                                                                                       |
+| Planes sin equivalente                  | Plan que no está en `planes`, cuyo `equivale_a` no existe o que no se pudo crear; sus servicios se omiten                                                                                                                                                                                                        |
+| Clientes sin NIT                        | Se importan sin NIT                                                                                                                                                                                                                                                                                              |
+| NIT inválidos                           | Se importan sin NIT; el valor original queda en `campos_personalizados.<sistema>_nit` para corregirlo                                                                                                                                                                                                            |
 | Teléfonos (`telefono`, `movil`)         | `CrearCliente` los normaliza con `#core/telefonos` (`5512-3344` → `+502 5512-3344`). Los que no cumplen la regla se importan **tal cual** (recortados; canal `consola`, no rechaza el cliente) y salen en `telefonos_invalidos` (`telefono_invalido` en el reporte), para corregirlos en el origen o en el panel |
-| `user_ppp` duplicados                   | En el origen: se importa el primero. En ArgosIsp con otro cliente: se omite                                                                        |
-| Suspendidos en el origen                | Se importan activos; el corte se aplicará con las facturas (A3)                                                                                    |
-| Retirados en el origen                  | No se importan                                                                                                                                     |
-| Referencias faltantes                   | Servicio cuyo cliente, router o plan no está o no se pudo importar: se omite                                                                       |
-| Formato                                 | Fila omitida (falta un dato obligatorio, IP o red mal escrita) o campo descartado con aviso (correo, coordenadas, MAC, fecha, columna desconocida) |
-| Servicios sin PPPoE pendientes          | `ip_estatica` / `dhcp_fija` mientras ArgosIsp no tenga `tipo_conexion` (modelo de A1): no se importan                                              |
-| Facturas a saldo                        | Factura sin servicio en ArgosIsp (no se importó o el cliente tiene varios y la factura no dice cuál): su monto va al saldo inicial                 |
-| Cargos únicos                           | Factura sin periodo (tipo 1 de Mikrowisp), sin servicio en ArgosIsp o la segunda del mismo servicio y periodo: entra como cargo único con su nota  |
-| Facturas sin cargo                      | Total 0 (SmartISP status 2): entra pagada, sin asiento                                                                                             |
-| Saldadas en el origen                   | Pagada y ningún pago del origen la cubre: entra `saldada_en_origen` (pagada, sin asiento ni pago)                                                  |
-| Promesas no importadas                  | Vencida, sin deuda, el servicio ya tiene una abierta, o su factura no entró: queda en el archivo con el motivo                                     |
-| Saldos distintos                        | Cliente cuyo saldo en ArgosIsp no es el del origen, con la diferencia                                                                              |
-| Errores                                 | Lo que rechazó una acción de dominio, con su mensaje                                                                                               |
+| `user_ppp` duplicados                   | En el origen: se importa el primero. En ArgosIsp con otro cliente: se omite                                                                                                                                                                                                                                      |
+| Suspendidos en el origen                | Se importan activos; el corte se aplicará con las facturas (A3)                                                                                                                                                                                                                                                  |
+| Retirados en el origen                  | No se importan                                                                                                                                                                                                                                                                                                   |
+| Referencias faltantes                   | Servicio cuyo cliente, router o plan no está o no se pudo importar: se omite                                                                                                                                                                                                                                     |
+| Formato                                 | Fila omitida (falta un dato obligatorio, IP o red mal escrita) o campo descartado con aviso (correo, coordenadas, MAC, fecha, columna desconocida)                                                                                                                                                               |
+| Servicios sin PPPoE pendientes          | `ip_estatica` / `dhcp_fija` mientras ArgosIsp no tenga `tipo_conexion` (modelo de A1): no se importan                                                                                                                                                                                                            |
+| Facturas a saldo                        | Factura sin servicio en ArgosIsp (no se importó o el cliente tiene varios y la factura no dice cuál): su monto va al saldo inicial                                                                                                                                                                               |
+| Cargos únicos                           | Factura sin periodo (tipo 1 de Mikrowisp), sin servicio en ArgosIsp o la segunda del mismo servicio y periodo: entra como cargo único con su nota                                                                                                                                                                |
+| Facturas sin cargo                      | Total 0 (SmartISP status 2): entra pagada, sin asiento                                                                                                                                                                                                                                                           |
+| Saldadas en el origen                   | Pagada y ningún pago del origen la cubre: entra `saldada_en_origen` (pagada, sin asiento ni pago)                                                                                                                                                                                                                |
+| Promesas no importadas                  | Vencida, sin deuda, el servicio ya tiene una abierta, o su factura no entró: queda en el archivo con el motivo                                                                                                                                                                                                   |
+| Saldos distintos                        | Cliente cuyo saldo en ArgosIsp no es el del origen, con la diferencia                                                                                                                                                                                                                                            |
+| Errores                                 | Lo que rechazó una acción de dominio, con su mensaje                                                                                                                                                                                                                                                             |
 
 ## Reporte en Markdown y CSV
 
@@ -193,6 +193,19 @@ Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinan
 
 - Una fecha de pago en un mes cerrado del libro termina en `errores` (422 `periodo_cerrado` de A3) y el saldo de ese cliente no cuadra: importar antes de cerrar el primer mes, o reabrir el mes (ver el contrato).
 - Forma de pago del origen → `METODOS_PAGO` con `metodoPago` (`efectivo` → `caja`, `depósito`/`boleta` → `deposito`, `transferencia`, `tarjeta` → `debito`, `en línea`/`PayPal` → `pasarela`; lo desconocido, `caja`). El texto original queda en la nota del pago.
+
+## Sin facturar hacia atrás (`facturar_desde`)
+
+Desde las plantillas de fábrica (A3, 18 nov) el importador casi siempre encuentra una plantilla por defecto. Sin más, `generarFacturas` («todo lo pendiente hasta ahora») emitiría a cada servicio importado todos los periodos desde `fecha_instalacion`, que el origen ya cobró o que entran como facturas pendientes importadas (solo el periodo exacto de una importada estaba protegido por su `clave_unica`).
+
+Tras las facturas, para cada servicio **creado** por la corrida con plantilla, `FijarFacturarDesde` (`actions/fijar_facturar_desde.ts`, `importacion.fijar_facturar_desde`, solo sistema) deja su fila en `billing.servicios_facturar_desde` con `origen = 'importacion'` (migración `1795028278831`, que amplía el CHECK de A3):
+
+- El criterio de la asignación de A3: `primerPeriodoTrasAsignacion(config, inicio, hoy)` de `#billing/periodos` con `configuracionDeServicio` y `leerServicio` (plantilla + excepciones, primer día facturable): el siguiente inicio de ciclo **después** del día de la importación (si ese día es inicio de ciclo, el siguiente), o el primer día facturable si aún no llegó.
+- Si el servicio ya tiene facturas de periodo (las importadas) y la última es de ese ciclo o posterior: el ciclo siguiente a ella (`primerPeriodoTrasAsignacion` con la fecha del último periodo). No se duplica.
+- Nunca hacia atrás (`greatest`). Diff `facturar_desde` en `audit.cambios` (`entidad_tipo = servicio`). Sin evento.
+- `generarFacturas` descarta los periodos anteriores y `EmitirFactura` responde `antes_de_facturar_desde` (A3). `ImportarFacturaPendiente` no mira `facturar_desde`: las facturas del origen entran igual.
+- Lo ya importado en una corrida anterior (`existentes`) no se toca; el reporte lo lleva en `facturacion { plantilla_id, servicios[] }` y la línea `Facturación:` del texto.
+- Pruebas: `tests/importacion/facturar_desde.spec.ts`.
 
 ## Transacción y auditoría
 
@@ -208,33 +221,35 @@ Las facturas, los saldos iniciales y los pagos históricos pasan por `CargaFinan
 
 ## Eventos
 
-No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.cambiada` por servicio. Las acciones de facturas, pagos, saldos y promesas de A3 no emiten eventos (no notifican: es carga histórica), ni `ArchivarFilasOrigen`.
+No consume. Emite, por las acciones que llama, `servicio.creado` y `asignacion.cambiada` por servicio. Las acciones de facturas, pagos, saldos y promesas de A3 no emiten eventos (no notifican: es carga histórica), ni `ArchivarFilasOrigen` ni `FijarFacturarDesde`.
 
 ## Archivos
 
-| Archivo                                | Qué es                                                                                               |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `canonico.ts`                          | Formato canónico: tipos, `COLUMNAS` (única definición del formato) y `normalizarFuente` (validación) |
-| `origenes/index.ts`                    | `ADAPTADORES` y `leerOrigen(origen, ruta)`                                                           |
-| `origenes/mikrowisp.ts`                | Adaptador Mikrowisp 6: tablas y columnas reales y su traducción al formato canónico                  |
-| `origenes/smartisp.ts`                 | Adaptador SmartISP: tablas y columnas reales y su traducción al formato canónico                     |
-| `origenes/csv.ts`                      | Adaptador CSV: lee el directorio, avisa de columnas desconocidas, genera plantillas y LEEME          |
-| `origenes/esquema_sql.ts`              | Comprobación del esquema de un volcado (`EsquemaIncompleto`), ids, montos, problemas del origen      |
-| `montos.ts`                            | Lectura de montos sin ambigüedad (`leerMonto`) y `--decimal` (`parsearFormatoDecimal`)               |
-| `csv.ts`                               | Lector y escritor de CSV (RFC 4180, coma o punto y coma)                                             |
-| `mysql_dump.ts`                        | Lector de volcados MySQL (CREATE TABLE e INSERT), sin MySQL                                          |
-| `carga_financiera.ts`                  | Puerto hacia las acciones de carga histórica de A3                                                   |
-| `archivo.ts`                           | Archivo del origen y cuadre por tabla (`archivarYCuadrar`, `FilasSinContar`, `enmascararFila`)       |
-| `actions/archivar_filas_origen.ts`     | `ArchivarFilasOrigen` (`importacion.archivar`): escribe un lote en `importacion.filas_origen`        |
-| `ids_externos.ts`                      | Interfaz `IdsExternos` y lectura de `core.ids_externos` por sistema                                  |
-| `importador.ts`                        | Núcleo: `importar(fuente, { sistema, ... })` orquesta las acciones y arma el reporte                 |
-| `reporte.ts`                           | Tipos del reporte y versión en texto                                                                 |
-| `reporte_salidas.ts`                   | Reporte en Markdown y CSV, una línea por diferencia                                                  |
-| `commands/importar.ts`                 | `node ace importar --origen --fuente` (`pnpm importar` desde la raíz)                                |
-| `commands/importar_plantillas.ts`      | `node ace importar:plantillas <dir>` (`pnpm importar:plantillas`)                                    |
-| `tests/importacion/montos.spec.ts`     | Montos en todos los formatos y en cada adaptador (CSV, Mikrowisp, SmartISP)                          |
-| `tests/importacion/importador.spec.ts` | Pruebas con el ejemplo CSV (`scripts/importacion/ejemplo/`)                                          |
-| `tests/importacion/mikrowisp.spec.ts`  | Volcado sintético sobre el esquema real: dos en seco iguales, real dos veces sin duplicar, saldos    |
-| `tests/importacion/smartisp.spec.ts`   | Lo mismo con el volcado sintético de SmartISP sobre su esquema real                                  |
-| `tests/importacion/origenes.spec.ts`   | Esquemas reales, CSV = Mikrowisp con los mismos datos, idempotencia por origen, plantillas           |
-| `tests/importacion/archivo.spec.ts`    | Archivo del origen: credenciales enmascaradas, fila sin contar = la corrida falla, fila que cambia   |
+| Archivo                                    | Qué es                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `canonico.ts`                              | Formato canónico: tipos, `COLUMNAS` (única definición del formato) y `normalizarFuente` (validación)           |
+| `origenes/index.ts`                        | `ADAPTADORES` y `leerOrigen(origen, ruta)`                                                                     |
+| `origenes/mikrowisp.ts`                    | Adaptador Mikrowisp 6: tablas y columnas reales y su traducción al formato canónico                            |
+| `origenes/smartisp.ts`                     | Adaptador SmartISP: tablas y columnas reales y su traducción al formato canónico                               |
+| `origenes/csv.ts`                          | Adaptador CSV: lee el directorio, avisa de columnas desconocidas, genera plantillas y LEEME                    |
+| `origenes/esquema_sql.ts`                  | Comprobación del esquema de un volcado (`EsquemaIncompleto`), ids, montos, problemas del origen                |
+| `montos.ts`                                | Lectura de montos sin ambigüedad (`leerMonto`) y `--decimal` (`parsearFormatoDecimal`)                         |
+| `csv.ts`                                   | Lector y escritor de CSV (RFC 4180, coma o punto y coma)                                                       |
+| `mysql_dump.ts`                            | Lector de volcados MySQL (CREATE TABLE e INSERT), sin MySQL                                                    |
+| `carga_financiera.ts`                      | Puerto hacia las acciones de carga histórica de A3                                                             |
+| `archivo.ts`                               | Archivo del origen y cuadre por tabla (`archivarYCuadrar`, `FilasSinContar`, `enmascararFila`)                 |
+| `actions/archivar_filas_origen.ts`         | `ArchivarFilasOrigen` (`importacion.archivar`): escribe un lote en `importacion.filas_origen`                  |
+| `actions/fijar_facturar_desde.ts`          | `FijarFacturarDesde` (`importacion.fijar_facturar_desde`): primer periodo facturable del servicio              |
+| `ids_externos.ts`                          | Interfaz `IdsExternos` y lectura de `core.ids_externos` por sistema                                            |
+| `importador.ts`                            | Núcleo: `importar(fuente, { sistema, ... })` orquesta las acciones y arma el reporte                           |
+| `reporte.ts`                               | Tipos del reporte y versión en texto                                                                           |
+| `reporte_salidas.ts`                       | Reporte en Markdown y CSV, una línea por diferencia                                                            |
+| `commands/importar.ts`                     | `node ace importar --origen --fuente` (`pnpm importar` desde la raíz)                                          |
+| `commands/importar_plantillas.ts`          | `node ace importar:plantillas <dir>` (`pnpm importar:plantillas`)                                              |
+| `tests/importacion/montos.spec.ts`         | Montos en todos los formatos y en cada adaptador (CSV, Mikrowisp, SmartISP)                                    |
+| `tests/importacion/importador.spec.ts`     | Pruebas con el ejemplo CSV (`scripts/importacion/ejemplo/`)                                                    |
+| `tests/importacion/mikrowisp.spec.ts`      | Volcado sintético sobre el esquema real: dos en seco iguales, real dos veces sin duplicar, saldos              |
+| `tests/importacion/smartisp.spec.ts`       | Lo mismo con el volcado sintético de SmartISP sobre su esquema real                                            |
+| `tests/importacion/origenes.spec.ts`       | Esquemas reales, CSV = Mikrowisp con los mismos datos, idempotencia por origen, plantillas                     |
+| `tests/importacion/facturar_desde.spec.ts` | Plantilla de fábrica sin `--plantilla`: nada hacia atrás; facturas importadas del ciclo siguiente sin duplicar |
+| `tests/importacion/archivo.spec.ts`        | Archivo del origen: credenciales enmascaradas, fila sin contar = la corrida falla, fila que cambia             |

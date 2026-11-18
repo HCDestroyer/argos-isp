@@ -11,6 +11,8 @@ import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billin
 import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
 import RetirarPlantilla from '#billing/actions/retirar_plantilla'
+import AsignarPlantillaSinPlantilla from '#billing/actions/asignar_plantilla_sin_plantilla'
+import { vistaPreviaSinPlantilla } from '#billing/asignacion_plantilla'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
@@ -148,6 +150,8 @@ import {
     Pago,
     Cobro,
     PlantillaFacturacion,
+    VistaPreviaSinPlantilla,
+    AsignacionSinPlantilla,
     Promesa,
     ResultadoGeneracion,
     CorridasFacturacion,
@@ -236,6 +240,45 @@ const plantillas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Plantilla retirada', esquema: PlantillaFacturacion },
         handler: (ctx, { cuerpo, params }) =>
             new RetirarPlantilla().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/plantillas-facturacion/:id/servicios-sin-plantilla',
+        operacion: 'plantillasServiciosSinPlantilla',
+        resumen: 'Vista previa: servicios vigentes sin plantilla que recibirían esta plantilla',
+        etiqueta: 'facturacion',
+        permiso: 'plantillas.asignar_sin_plantilla',
+        descripcion:
+            'Solo lectura. Servicios activo, limitado y suspendido sin plantilla_facturacion_id (nunca retirados ni pendientes de instalación) de la empresa activa (X-Empresa-Id, o las del alcance del usuario) y del alcance router/zona del permiso. total va como total_esperado a POST asignar-servicios-sin-plantilla. facturar_desde: el primer periodo que se facturaría (primer inicio de ciclo de hoy en adelante, hoy mismo si hoy empieza un ciclo; nada hacia atrás). 404 si no existe, 409 plantilla_retirada.',
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaSinPlantilla },
+        handler: (ctx, { params }) =>
+            vistaPreviaSinPlantilla(Number(params.id), {
+                empresas: empresasDeLaLista(ctx.empresa),
+                alcance: ctx.alcance,
+            }),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-facturacion/:id/asignar-servicios-sin-plantilla',
+        operacion: 'plantillasAsignarServiciosSinPlantilla',
+        resumen: 'Asignar esta plantilla a los servicios vigentes sin plantilla (sin facturar hacia atrás)',
+        etiqueta: 'facturacion',
+        permiso: 'plantillas.asignar_sin_plantilla',
+        cuerpo: v.asignarSinPlantillaValidator,
+        idempotente: true,
+        descripcion:
+            'Asigna la plantilla al mismo conjunto de la vista previa (GET servicios-sin-plantilla). total_esperado = el total de la vista previa: si cambió, 409 total_cambiado y no asigna nada (vuelve a pedir la vista previa). El primer periodo facturado de cada servicio es el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo), completo, sin prorrateo ni periodos anteriores. Cada servicio deja su diff en audit.cambios; sin evento. 404 si no existe, 409 plantilla_retirada.',
+        respuesta: { status: 200, descripcion: 'Plantilla asignada', esquema: AsignacionSinPlantilla },
+        handler: (ctx, { cuerpo, params }) =>
+            new AsignarPlantillaSinPlantilla().execute(
+                {
+                    plantilla_id: Number(params.id),
+                    total_esperado: cuerpo.total_esperado,
+                    empresas: empresasDeLaLista(ctx.empresa),
+                    alcance: ctx.alcance,
+                },
+                ctx.contextoAccion(),
+            ),
     }),
 ]
 

@@ -7,6 +7,11 @@ import type { TableColumn } from '@nuxt/ui'
  * promesas; alta (`plantillas.crear`) y edición (`plantillas.editar`) con todas las reglas de
  * promesas, generales y por canal. Sin `plantillas.editar` se abren en solo lectura. La API no
  * borra plantillas: un servicio siempre tiene la suya (`.claude/integration/a4.md`).
+ *
+ * Plantillas de fábrica (decisión del PM, 18 nov): «Asignar a servicios sin plantilla»
+ * (`plantillas.asignar_sin_plantilla`) en la cabecera, con la de por defecto, y en cada fila vigente;
+ * si «Genera 1 · vence 15» existe pero otra es la de por defecto, un aviso ofrece «Marcar como por
+ * defecto» (`PUT` con `por_defecto` y `version`, `plantillas.editar`).
  */
 definePageMeta({ permiso: 'plantillas.ver' })
 
@@ -49,6 +54,48 @@ function alGuardar(plantilla: PlantillaFacturacion) {
     void cargar()
 }
 
+const puedeAsignar = computed(() => puede('plantillas.asignar_sin_plantilla'))
+const vigentes = computed(() => plantillas.value.filter(p => p.retirada_en === null))
+const porDefecto = computed(() => vigentes.value.find(p => p.por_defecto) ?? null)
+
+const asignando = shallowRef<PlantillaFacturacion | null>(null)
+const asignarAbierto = ref(false)
+
+function abrirAsignar(plantilla: PlantillaFacturacion) {
+    asignando.value = plantilla
+    asignarAbierto.value = true
+}
+
+/** La de fábrica que el PM eligió por defecto, si existe, está vigente y no es la marcada. */
+const fabricaSinMarcar = computed(() => {
+    const fabrica = vigentes.value.find(p => p.nombre === PLANTILLA_FABRICA_POR_DEFECTO)
+    return fabrica && !fabrica.por_defecto ? fabrica : null
+})
+const marcando = ref(false)
+
+async function marcarPorDefecto(plantilla: PlantillaFacturacion) {
+    marcando.value = true
+    const resultado = await usePlantillas().marcarPorDefecto(plantilla)
+    marcando.value = false
+    if (resultado.ok) {
+        toast.add({
+            title: `${resultado.data.nombre} es la plantilla por defecto`,
+            description: 'Los servicios nuevos sin plantilla facturan con esta. Los que ya tienen una no cambian.',
+            icon: 'i-lucide-circle-check',
+            color: 'success',
+        })
+    }
+    else {
+        toast.add({
+            title: resultado.problema.title,
+            description: resultado.problema.status === 409 ? 'Otra persona cambió las plantillas: se recargó la lista.' : resultado.problema.detail,
+            icon: 'i-lucide-circle-alert',
+            color: 'error',
+        })
+    }
+    void cargar()
+}
+
 const columnas: TableColumn<PlantillaFacturacion>[] = [
     { accessorKey: 'nombre', header: 'Plantilla', meta: { class: { td: 'whitespace-normal' } } },
     { id: 'corte', header: 'Corte', meta: { class: { th: 'hidden lg:table-cell', td: 'hidden lg:table-cell whitespace-normal' } } },
@@ -75,9 +122,32 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
         </template>
 
         <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Cada servicio factura con una plantilla: ciclo, días de gracia, cuándo limitar y suspender, recargo por mora, cuándo certificar con FEL y qué promesas de pago acepta.
-            </p>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p class="text-sm text-muted">
+                    Cada servicio factura con una plantilla: ciclo, días de gracia, cuándo limitar y suspender, recargo por mora, cuándo certificar con FEL y qué promesas de pago acepta.
+                </p>
+                <UButton
+                    v-if="puedeAsignar && porDefecto"
+                    label="Asignar a servicios sin plantilla"
+                    icon="i-lucide-list-checks"
+                    color="neutral"
+                    variant="outline"
+                    class="shrink-0 self-start"
+                    data-prueba="asignar-sin-plantilla"
+                    @click="abrirAsignar(porDefecto)"
+                />
+            </div>
+
+            <UAlert
+                v-if="!problema && fabricaSinMarcar && puede('plantillas.editar')"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-star"
+                :title="`${fabricaSinMarcar.nombre} no es la plantilla por defecto`"
+                :description="porDefecto ? `Ahora lo es ${porDefecto.nombre}. La de por defecto la reciben los servicios sin plantilla.` : 'Ninguna está marcada. La de por defecto la reciben los servicios sin plantilla.'"
+                :actions="[{ label: 'Marcar como por defecto', icon: 'i-lucide-star', color: 'warning', variant: 'outline', loading: marcando, onClick: () => marcarPorDefecto(fabricaSinMarcar!) }]"
+                data-prueba="marcar-por-defecto"
+            />
 
             <ProblemaAlerta
                 v-if="problema"
@@ -168,15 +238,31 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                     </div>
                 </template>
                 <template #acciones-cell="{ row }">
-                    <UButton
-                        :icon="puede('plantillas.editar') ? 'i-lucide-pencil' : 'i-lucide-eye'"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        :aria-label="`${puede('plantillas.editar') ? 'Editar' : 'Ver'} ${row.original.nombre}`"
-                        :data-prueba="`editar-plantilla-${row.original.id}`"
-                        @click="abrir(row.original)"
-                    />
+                    <div class="flex justify-end gap-1">
+                        <UTooltip
+                            v-if="puedeAsignar && row.original.retirada_en === null"
+                            text="Asignar a servicios sin plantilla"
+                        >
+                            <UButton
+                                icon="i-lucide-list-checks"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Asignar ${row.original.nombre} a servicios sin plantilla`"
+                                :data-prueba="`asignar-sin-plantilla-${row.original.id}`"
+                                @click="abrirAsignar(row.original)"
+                            />
+                        </UTooltip>
+                        <UButton
+                            :icon="puede('plantillas.editar') ? 'i-lucide-pencil' : 'i-lucide-eye'"
+                            color="neutral"
+                            variant="ghost"
+                            size="sm"
+                            :aria-label="`${puede('plantillas.editar') ? 'Editar' : 'Ver'} ${row.original.nombre}`"
+                            :data-prueba="`editar-plantilla-${row.original.id}`"
+                            @click="abrir(row.original)"
+                        />
+                    </div>
                 </template>
                 <template #empty>
                     <UEmpty
@@ -188,6 +274,12 @@ const columnas: TableColumn<PlantillaFacturacion>[] = [
                 </template>
             </UTable>
         </div>
+
+        <PlantillaAsignarSinPlantillaModal
+            v-if="asignando"
+            v-model:open="asignarAbierto"
+            :plantilla="asignando"
+        />
 
         <PlantillaFormulario
             v-model:open="formularioAbierto"

@@ -15,6 +15,7 @@ Para entender cómo se usan estas reglas en el día a día, lee [El ciclo de cob
 - **Ver:** permiso `plantillas.ver`. Lo traen los roles `admin`, `contabilidad`, `soporte` y `lectura`.
 - **Crear:** `plantillas.crear` (`admin`, `contabilidad`).
 - **Editar:** `plantillas.editar` (`admin`, `contabilidad`). Sin este permiso, el botón de cada fila es un ojo y la plantilla se abre en solo lectura.
+- **Asignar a servicios sin plantilla:** `plantillas.asignar_sin_plantilla` (`admin`, `contabilidad`).
 
 Se llega desde **Configuración → Plantillas**.
 
@@ -31,7 +32,23 @@ Una tabla con una fila por plantilla:
 
 En el teléfono, las columnas que no caben se muestran como líneas debajo del nombre.
 
-Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al menos una antes de dar de alta servicios o de importar clientes.
+Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al menos una antes de dar de alta servicios o de importar clientes. Desde la versión que trae las plantillas de fábrica esto ya no pasa: el sistema las crea solo al actualizar.
+
+## Plantillas de fábrica
+
+Al instalar o actualizar ArgosIsp, el sistema crea solo estas tres plantillas si todavía no existen:
+
+| Plantilla                | La factura sale | Vence                         |
+| ------------------------ | --------------- | ----------------------------- |
+| **Genera 1 · vence 15**  | el día 1        | el día 15 (14 días de gracia) |
+| **Genera 14 · vence 29** | el día 14       | el día 29 (15 días de gracia) |
+| **Genera 1 · vence 5**   | el día 1        | el día 5 (4 días de gracia)   |
+
+- Todo lo demás (corte con 1 factura vencida, hora de corte 08:00, sin mora, FEL al pagar, prorrateo del primer mes) es lo mismo que trae una plantilla nueva. Puedes editarlas como cualquier otra.
+- En febrero, «Genera 14 · vence 29» vence el 29 de febrero si el año es bisiesto; si no, el 1 de marzo.
+- **«Genera 1 · vence 15» queda como plantilla por defecto**, salvo que ya tuvieras otra marcada: en ese caso se respeta la tuya y la de fábrica se crea sin la estrella. Puedes marcarla después: la lista te lo ofrece (ver «Marcar la plantilla por defecto»).
+- Si ya tenías una plantilla con alguno de esos nombres, no se duplica ni se cambia.
+- Que existan no cambia nada en tus servicios: cada uno sigue con la plantilla que tenía.
 
 ## Acciones
 
@@ -50,6 +67,23 @@ Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al me
 ### Marcar la plantilla por defecto
 
 En el formulario, el interruptor «Plantilla por defecto». La reciben los servicios que se crean sin elegir plantilla. Solo puede haber una: marcar esta desmarca la anterior.
+
+Si existe «Genera 1 · vence 15» pero otra es la de por defecto, arriba de la tabla aparece el aviso «Genera 1 · vence 15 no es la plantilla por defecto» con el botón **«Marcar como por defecto»** (permiso `plantillas.editar`). Al pulsarlo verás «Genera 1 · vence 15 es la plantilla por defecto», la estrella pasa a esa fila y el aviso desaparece. Los servicios que ya tienen plantilla no cambian.
+
+### Asignar la plantilla a los servicios sin plantilla
+
+Sirve para los servicios que quedaron sin plantilla (por ejemplo, creados antes de que hubiera una por defecto). Mientras un servicio no tenga plantilla, **no se le factura**.
+
+- **Permiso:** `plantillas.asignar_sin_plantilla`
+- **Dónde:** el botón «Asignar a servicios sin plantilla», junto a la descripción arriba de la tabla, usa la plantilla por defecto (la de la estrella). Para asignar otra, el ícono de lista al final de su fila.
+- **Antes de confirmar** se abre un diálogo con cuántos servicios se van a afectar y cuántos son activos, limitados y suspendidos, el aviso «Se cobra desde el …; no se cobra nada atrasado» con la fecha en hora de Guatemala y una tabla con hasta 20 de ejemplo (cliente, usuario PPP, estado, plan y desde cuándo se le cobra). Solo cuentan los servicios de la empresa en la que estás trabajando y de las zonas o routers que te tocan.
+- **Si no hay ninguno**, el diálogo dice «No hay servicios sin plantilla» y no hay nada que confirmar.
+- **Qué pasa al confirmar** («Asignar a N servicios»): esos servicios quedan con esta plantilla y verás el aviso «N servicios asignados». Cada cambio queda en la bitácora del servicio.
+- **Si algo falla** (por ejemplo, no se pudo leer el conteo), el diálogo muestra el error con «Reintentar» y no muestra números.
+- **No se cobra nada hacia atrás.** La primera factura de cada servicio es la del **primer inicio de ciclo desde el día en que pulsas el botón**, por el mes completo. Con «Genera 1 · vence 15»: si la asignas el 1 de diciembre, la primera factura es la del 1 de diciembre (vence el 15 de diciembre); si la asignas el 2 de diciembre o después, la primera es la del 1 de enero. Aunque el servicio esté instalado desde enero, nunca se le emite una factura de un mes anterior.
+- **No se tocan:** los servicios que ya tienen plantilla, los retirados y los pendientes de instalación. Un pendiente de instalación que se activa después sigue sin plantilla (salvo que la recibiera al venderse) y aparecerá en este conteo la próxima vez.
+- **Si el número cambió** entre que viste el conteo y pulsaste confirmar (alguien creó o retiró un servicio), no se asigna nada: verás el aviso «Cambió la cantidad de servicios sin plantilla» y el diálogo vuelve a cargar el conteo actualizado. Confirma de nuevo.
+- Una plantilla retirada no se puede asignar.
 
 ## Campos del formulario
 
@@ -124,6 +158,8 @@ La vigencia, como las demás reglas de promesa, se puede cambiar para un servici
 Solo se concede si el comprobante cubre todo lo vencido. Si caja lo rechaza, o vence sin revisarse, el servicio se vuelve a cortar a la hora de corte.
 
 ## Preguntas frecuentes y errores
+
+**Tengo servicios que no facturan.** Probablemente no tienen plantilla. Usa «Asignar a servicios sin plantilla» en la plantilla que corresponda: empiezan a facturar desde el siguiente ciclo, sin cobros atrasados.
 
 **¿Puedo borrar una plantilla?** No. Un servicio siempre tiene su plantilla, así que las plantillas no se borran.
 

@@ -721,6 +721,13 @@ export const retirarPlantillaValidator = vine.compile(
     }),
 )
 
+export const asignarSinPlantillaValidator = vine.compile(
+    vine.object({
+        /** el `total` de la vista previa; si cambió, 409 `total_cambiado` */
+        total_esperado: vine.number().withoutDecimals().min(0),
+    }),
+)
+
 export const simularPromesaValidator = vine.compile(
     vine.object({
         servicio_id: idEntidad(),

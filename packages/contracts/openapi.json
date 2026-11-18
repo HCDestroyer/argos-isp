@@ -55721,6 +55721,130 @@
         "x-implementado": true
       }
     },
+    "/api/v1/plantillas-facturacion/{id}/asignar-servicios-sin-plantilla": {
+      "post": {
+        "operationId": "plantillasAsignarServiciosSinPlantilla",
+        "summary": "Asignar esta plantilla a los servicios vigentes sin plantilla (sin facturar hacia atrás)",
+        "description": "Asigna la plantilla al mismo conjunto de la vista previa (GET servicios-sin-plantilla). total_esperado = el total de la vista previa: si cambió, 409 total_cambiado y no asigna nada (vuelve a pedir la vista previa). El primer periodo facturado de cada servicio es el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo), completo, sin prorrateo ni periodos anteriores. Cada servicio deja su diff en audit.cambios; sin evento. 404 si no existe, 409 plantilla_retirada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "total_esperado": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "total_esperado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla asignada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionSinPlantilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso plantillas.asignar_sin_plantilla; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "plantillas.asignar_sin_plantilla",
+        "x-implementado": true
+      }
+    },
     "/api/v1/plantillas-facturacion/{id}/retirar": {
       "post": {
         "operationId": "plantillasRetirar",
@@ -55848,6 +55972,79 @@
           }
         },
         "x-permiso": "plantillas.retirar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/plantillas-facturacion/{id}/servicios-sin-plantilla": {
+      "get": {
+        "operationId": "plantillasServiciosSinPlantilla",
+        "summary": "Vista previa: servicios vigentes sin plantilla que recibirían esta plantilla",
+        "description": "Solo lectura. Servicios activo, limitado y suspendido sin plantilla_facturacion_id (nunca retirados ni pendientes de instalación) de la empresa activa (X-Empresa-Id, o las del alcance del usuario) y del alcance router/zona del permiso. total va como total_esperado a POST asignar-servicios-sin-plantilla. facturar_desde: el primer periodo que se facturaría (primer inicio de ciclo de hoy en adelante, hoy mismo si hoy empieza un ciclo; nada hacia atrás). 404 si no existe, 409 plantilla_retirada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaSinPlantilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso plantillas.asignar_sin_plantilla",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "plantillas.asignar_sin_plantilla",
         "x-implementado": true
       }
     },
@@ -66243,6 +66440,7 @@
                         "planes.editar",
                         "planes.sincronizar",
                         "planes.ver",
+                        "plantillas.asignar_sin_plantilla",
                         "plantillas.crear",
                         "plantillas.editar",
                         "plantillas.retirar",
@@ -66624,6 +66822,7 @@
                         "planes.editar",
                         "planes.sincronizar",
                         "planes.ver",
+                        "plantillas.asignar_sin_plantilla",
                         "plantillas.crear",
                         "plantillas.editar",
                         "plantillas.retirar",
@@ -78700,6 +78899,7 @@
                             "planes.editar",
                             "planes.sincronizar",
                             "planes.ver",
+                            "plantillas.asignar_sin_plantilla",
                             "plantillas.crear",
                             "plantillas.editar",
                             "plantillas.retirar",
@@ -82009,6 +82209,51 @@
               "null"
             ],
             "minimum": 1
+          }
+        }
+      },
+      "AsignacionSinPlantilla": {
+        "type": "object",
+        "required": [
+          "plantilla_id",
+          "asignados",
+          "por_estado",
+          "facturar_desde"
+        ],
+        "properties": {
+          "plantilla_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asignados": {
+            "type": "integer"
+          },
+          "por_estado": {
+            "type": "object",
+            "required": [
+              "activo",
+              "limitado",
+              "suspendido"
+            ],
+            "properties": {
+              "activo": {
+                "type": "integer"
+              },
+              "limitado": {
+                "type": "integer"
+              },
+              "suspendido": {
+                "type": "integer"
+              }
+            }
+          },
+          "facturar_desde": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Primeros periodos que se facturarán (distintos, ascendentes)"
           }
         }
       },
@@ -102069,6 +102314,7 @@
           "planes.editar",
           "planes.sincronizar",
           "planes.ver",
+          "plantillas.asignar_sin_plantilla",
           "plantillas.crear",
           "plantillas.editar",
           "plantillas.retirar",
@@ -102342,6 +102588,7 @@
           "Editar planes e implementaciones por router",
           "Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers",
           "Ver planes",
+          "Asignar una plantilla de facturación a los servicios vigentes sin plantilla (sin facturar hacia atrás)",
           "Crear plantillas de facturación",
           "Editar plantillas de facturación",
           "Retirar una plantilla de facturación (sigue con sus servicios; no se asigna a nuevos)",
@@ -116354,6 +116601,7 @@
               "planes.editar",
               "planes.sincronizar",
               "planes.ver",
+              "plantillas.asignar_sin_plantilla",
               "plantillas.crear",
               "plantillas.editar",
               "plantillas.retirar",
@@ -116716,6 +116964,7 @@
               "pagos.registrar",
               "pagos.ver",
               "planes.ver",
+              "plantillas.asignar_sin_plantilla",
               "plantillas.crear",
               "plantillas.editar",
               "plantillas.retirar",
@@ -117706,6 +117955,58 @@
           },
           "motivo": {
             "type": "string"
+          }
+        }
+      },
+      "ServicioSinPlantilla": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "cliente_id",
+          "cliente_nombre",
+          "empresa_id",
+          "estado",
+          "user_ppp",
+          "plan_nombre",
+          "facturar_desde"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido"
+            ]
+          },
+          "user_ppp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan_nombre": {
+            "type": "string"
+          },
+          "facturar_desde": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo; nada hacia atrás)"
           }
         }
       },
@@ -122129,6 +122430,87 @@
               "null"
             ],
             "description": "El router no respondió o no tiene credenciales"
+          }
+        }
+      },
+      "VistaPreviaSinPlantilla": {
+        "type": "object",
+        "required": [
+          "plantilla",
+          "total",
+          "por_estado",
+          "facturar_desde",
+          "muestra"
+        ],
+        "properties": {
+          "plantilla": {
+            "type": "object",
+            "required": [
+              "id",
+              "nombre",
+              "ciclo",
+              "dia"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "nombre": {
+                "type": "string"
+              },
+              "ciclo": {
+                "type": "string",
+                "enum": [
+                  "dia_fijo",
+                  "aniversario"
+                ]
+              },
+              "dia": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Servicios activo/limitado/suspendido sin plantilla de la empresa activa y el alcance; va como total_esperado al asignar"
+          },
+          "por_estado": {
+            "type": "object",
+            "required": [
+              "activo",
+              "limitado",
+              "suspendido"
+            ],
+            "properties": {
+              "activo": {
+                "type": "integer"
+              },
+              "limitado": {
+                "type": "integer"
+              },
+              "suspendido": {
+                "type": "integer"
+              }
+            }
+          },
+          "facturar_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Primer periodo a facturar con la plantilla sin excepciones (dia_fijo); null en aniversario (ver muestra[].facturar_desde)"
+          },
+          "muestra": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicioSinPlantilla"
+            },
+            "description": "Hasta 20 servicios, por id"
           }
         }
       },

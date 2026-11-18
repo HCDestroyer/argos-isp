@@ -268,6 +268,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Tarea 8 y 9 (pantallas pendientes): plantillas, usuarios, roles y tokens de API. La página
     // abre el formulario en solo lectura sin el permiso de editar (y lo dice el propio formulario).
     'PlantillaFormulario.vue': { permisos: ['plantillas.crear', 'plantillas.editar', 'plantillas.ver'], desde: ['pages/plantillas/index.vue'] },
+    // Plantillas de fábrica (18 nov): la página solo lo monta con `plantillas.asignar_sin_plantilla`.
+    'PlantillaAsignarSinPlantillaModal.vue': { permisos: ['plantillas.asignar_sin_plantilla'], desde: ['pages/plantillas/index.vue'] },
     'UsuarioFormulario.vue': { permisos: ['usuarios.crear', 'usuarios.editar'], desde: ['pages/usuarios/index.vue'] },
     'RolFormulario.vue': { permisos: ['roles.crear', 'roles.editar'], desde: ['pages/usuarios/roles.vue'] },
     'TokenApiModal.vue': { permisos: ['tokens.crear'], desde: ['pages/usuarios/tokens.vue'] },

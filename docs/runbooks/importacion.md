@@ -79,7 +79,8 @@ Una columna con un nombre que el importador no conoce se ignora y sale como `avi
 
 - [ ] **Empresa (multiempresa).** Todo lo importado (servicios, sus facturas, pagos y promesas, la empresa sugerida de las zonas y routers nuevos, la auditoría y el archivo del origen) va a **una** empresa: `--empresa=<id|nit>` (id o NIT, con o sin guion). Con una sola empresa activa no hace falta; con varias, el comando se detiene antes de tocar nada con la lista de empresas. Un ISP con dos NIT en el mismo sistema anterior se importa en dos corridas (un volcado o CSV por empresa), o se corrige después con "Cambiar empresa" del servicio. Si una segunda corrida usa otra empresa, lo ya importado no se mueve y el reporte lo lista en `servicios_otra_empresa`.
 - [ ] Backup reciente de ArgosIsp (`sudo argosisp respaldar` en un servidor instalado; ver [Respaldos](./respaldos.md)).
-- [ ] Una plantilla de facturación creada en el panel. Si hay varias, anota el id de la que llevarán los servicios importados (`--plantilla=<id>`).
+- [ ] **Plantilla de facturación de los servicios importados.** Sin `--plantilla`, entran con la plantilla marcada por defecto: en una instalación nueva es la de fábrica «Genera 1 · vence 15» (el `migrate` la siembra). Si no es la que quieres, indica `--plantilla=<id>`. Con varias plantillas y ninguna marcada, los servicios entran sin plantilla y sus facturas no se importan.
+- [ ] **Desde qué mes factura ArgosIsp.** Los servicios importados nunca se facturan hacia atrás: cada uno queda con su **primer periodo** (`facturar_desde`) en el siguiente inicio de ciclo después del día de la importación (el mismo criterio que «Asignar a servicios sin plantilla»). Si el sistema anterior ya emitió una factura de ese ciclo o de uno posterior y entra como factura importada, el primer periodo queda en el ciclo siguiente a la última importada, para no cobrarlo dos veces. Ejemplo con «Genera 1»: importando el 18 de noviembre, ArgosIsp factura desde el 1 de diciembre; si el origen ya emitió la de diciembre, desde el 1 de enero. Lo de antes sale del origen (facturas pendientes y saldo inicial). Por eso conviene importar justo después de que el sistema anterior emita sus facturas del mes y pausar la facturación allá desde ese momento.
 - [ ] **Ningún mes cerrado en el libro** que caiga en las fechas de los pagos del origen: los pagos históricos entran con su fecha original y un mes cerrado los rechaza (`periodo_cerrado`). Importa antes del primer cierre mensual, o pide a contabilidad reabrir esos meses durante la importación.
 - [ ] Historial completo (modo B, por defecto): todas las facturas por su total (también las pagadas, los cargos únicos, las de clientes retirados y las de total 0), todos los pagos con su fecha, las promesas vigentes y un saldo inicial solo para la diferencia. El saldo final de cada cliente es el del origen.
 - [ ] El volcado y los CSV tienen datos personales y contraseñas PPPoE: guárdalos fuera del repositorio y bórralos al terminar.
@@ -138,6 +139,8 @@ Qué revisar primero en el reporte de un volcado de Mikrowisp o SmartISP (son la
 | `status … sin paid_on` / `con paid_on`                  | El significado supuesto del estado de factura puede estar mal | Mandarlo al equipo antes de la corrida real                        |
 
 ## 2. Leer el reporte
+
+La línea `Facturación:` del reporte dice con qué plantilla entraron los servicios y su primer periodo (`facturar_desde`), agrupado por fecha (p. ej. `primer periodo de los servicios creados 2026-12-01 (40), 2027-01-01 (3)`). En `reporte.json`, `facturacion.servicios[]` lo trae por servicio con el último periodo importado. Si la fecha no es la que esperas (otro día de ciclo, otra plantilla), corrige `--plantilla` antes de la corrida real: después, la fecha solo se mueve hacia adelante.
 
 `--salida` deja tres archivos:
 
@@ -214,6 +217,7 @@ No sirve para **actualizar** lo ya importado (un cambio de plan o de IP en el or
 
 ## 5. Después
 
+- [ ] Primera corrida de facturación (`facturas.generar`): los servicios importados no deben recibir facturas de meses anteriores a su `facturar_desde`. Servicios importados **antes** de este cambio (sin fila en `billing.servicios_facturar_desde`) facturan desde su instalación: revísalos antes de la primera corrida (`SELECT s.id FROM core.servicios s LEFT JOIN billing.servicios_facturar_desde fd ON fd.servicio_id = s.id WHERE s.plantilla_facturacion_id IS NOT NULL AND fd.servicio_id IS NULL`) y avisa al equipo.
 - [ ] Los servicios suspendidos en el origen entran activos: el corte lo decide la evaluación con las facturas importadas (cron de corte). Revisar la primera corrida de corte.
 - [ ] Migrar los routers al nuevo RADIUS por grupos (`infra/mikrotik/README.md`).
 - [ ] Borrar el volcado, los CSV y los reportes con datos personales cuando ya no se necesiten.
