@@ -8,6 +8,7 @@ import { Problema, ValidacionFallida } from '#shared/errores'
 import { normalizarNitCui } from '#core/nit_cui'
 import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import CrearServicio, { type EntradaCrearServicio } from '#core/actions/crear_servicio'
+import FijarFacturarDesde from '#importacion/actions/fijar_facturar_desde'
 import { saldoAnticipos } from '#billing/cobros'
 import { saldoCliente, saldoClientePorEmpresa } from '#ledger/consultas'
 import { hoyGuatemala } from '#ledger/fechas'
@@ -75,8 +76,10 @@ export interface OpcionesImportacion {
     fuente?: string | null
     /**
      * Plantilla de facturación de los servicios nuevos. Sin ella, la plantilla por defecto
-     * (`plantillaPorDefecto` de A1: la única que haya); si hay varias, los servicios entran sin
-     * plantilla y sus facturas pendientes no se pueden importar (queda en errores).
+     * (`plantillaPorDefecto` de A1: la marcada `por_defecto`, como «Genera 1 · vence 15» de fábrica,
+     * o la única que haya); si hay varias sin marca, los servicios entran sin plantilla y sus
+     * facturas pendientes no se pueden importar (queda en errores). Con plantilla, cada servicio
+     * creado recibe su `facturar_desde` (`importacion.fijar_facturar_desde`): nada hacia atrás.
      */
     plantillaId?: number | null
     /** acciones de carga histórica de A3 (pruebas o el adaptador nuevo); por defecto `cargaFinancieraA3` */
@@ -288,6 +291,8 @@ class Importador {
     readonly #empresaServicio = new Map<number, number>()
     /** plantilla de los servicios nuevos (resuelta una vez) */
     #plantilla: number | null = null
+    /** servicios creados por esta corrida con plantilla: reciben su `facturar_desde` tras las facturas */
+    readonly #creadosConPlantilla = new Map<number, string>()
     /** planes del origen que no se pueden usar: plan_origen → motivo */
     readonly #planesSinEquivalente = new Map<string, { nombre: string | null; motivo: string }>()
     readonly #carga: CargaFinanciera
@@ -444,6 +449,7 @@ class Importador {
                 saldos_distintos: [],
                 servicios_otra_empresa: [],
             },
+            facturacion: { plantilla_id: null, servicios: [] },
             formato: fuente.problemas,
             errores: [],
             pendiente: [...PENDIENTE],
@@ -471,6 +477,8 @@ class Importador {
         // Orden del contrato: facturas → pagos → saldo inicial (el del modo B depende de los
         // pagos) → promesas (su avance ignora los pagos anteriores a su creación).
         await this.facturas()
+        // después de las facturas: el primer periodo queda tras el último importado
+        await this.facturarDesde()
         await this.pagos()
         await this.saldos()
         await this.promesas()
@@ -526,6 +534,11 @@ class Importador {
     }
 
     async #resolverPlantilla() {
+        await this.#elegirPlantilla()
+        this.reporte.facturacion.plantilla_id = this.#plantilla
+    }
+
+    async #elegirPlantilla() {
         if (this.opciones.plantillaId !== undefined) {
             this.#plantilla = this.opciones.plantillaId
             return
@@ -1069,6 +1082,7 @@ class Importador {
             })
             this.#servicios.set(s.id, creado.id)
             this.#empresaServicio.set(creado.id, this.empresa.id)
+            if (this.#plantilla !== null) this.#creadosConPlantilla.set(creado.id, s.id)
             await this.ids.registrar('servicio', s.id, creado.id)
             if (s.ip) ipTomada.set(s.ip, s.id)
             else d.ips_nuevas.push({ servicio_origen: s.id, ip: creado.ipv4 })
@@ -1268,6 +1282,29 @@ class Importador {
             f.cliente_id,
             (this.#cargadoModoA.get(f.cliente_id) ?? new D(0)).plus(f.pendiente),
         )
+    }
+
+    /**
+     * Sin facturar hacia atrás: cada servicio creado por esta corrida con plantilla (la de
+     * `--plantilla` o la por defecto, p. ej. la de fábrica) recibe su `facturar_desde`
+     * (`importacion.fijar_facturar_desde`): el siguiente inicio de ciclo después de hoy, o el ciclo
+     * siguiente al último periodo que entró como factura importada si ese es posterior. Sin esto,
+     * `generarFacturas` emitiría todos los periodos desde `fecha_instalacion`, que el origen ya
+     * cobró. Lo ya importado en una corrida anterior no se toca.
+     */
+    async facturarDesde() {
+        const lista = this.reporte.facturacion.servicios
+        for (const [servicioId, servicioOrigen] of this.#creadosConPlantilla) {
+            const r = await this.#accion('servicio', servicioOrigen, 'importacion.fijar_facturar_desde', () =>
+                new FijarFacturarDesde().execute({ servicio_id: servicioId }, this.ctx, { trx: this.trx }),
+            )
+            if (!r?.facturar_desde) continue
+            lista.push({
+                servicio_origen: servicioOrigen,
+                facturar_desde: r.facturar_desde,
+                ultimo_periodo_importado: r.ultimo_periodo_facturado,
+            })
+        }
     }
 
     /** Servicio de ArgosIsp de la factura, o null con el motivo (sin anotar nada). */
