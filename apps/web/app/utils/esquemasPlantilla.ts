@@ -8,6 +8,12 @@ export type DatosPlantilla = paths['/api/v1/plantillas-facturacion']['post']['re
 export type CambiosPlantilla = paths['/api/v1/plantillas-facturacion/{id}']['put']['requestBody']['content']['application/json']
 export type CanalReglasPromesa = keyof ReglasPromesa['canales']
 
+/**
+ * Plantilla de fábrica que el PM eligió como la de por defecto (`PLANTILLAS_FABRICA` de A3, 18 nov):
+ * si existe y otra es la marcada, la lista ofrece «Marcar como por defecto».
+ */
+export const PLANTILLA_FABRICA_POR_DEFECTO = 'Genera 1 · vence 15'
+
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
 const MENSAJE_MONTO = 'Escribe un monto con hasta 2 decimales, sin comas (ej. 500.00)'

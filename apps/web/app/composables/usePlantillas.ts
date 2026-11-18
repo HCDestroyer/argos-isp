@@ -1,6 +1,8 @@
 import type { Schema } from '@argosisp/contracts'
 
 export type PlantillaFacturacion = Schema<'PlantillaFacturacion'>
+export type VistaPreviaSinPlantilla = Schema<'VistaPreviaSinPlantilla'>
+export type AsignacionSinPlantilla = Schema<'AsignacionSinPlantilla'>
 
 /** Plantillas de facturación (ciclo, corte, mora, reglas de promesas). */
 export function usePlantillas() {
@@ -35,5 +37,34 @@ export function usePlantillas() {
         return editar(plantilla.id, { version: plantilla.version, certificar_al: certificarAl })
     }
 
-    return { listar, ver, crear, editar, cambiarCertificarAl }
+    /**
+     * Marca la plantilla como la de por defecto (`PUT` con `por_defecto: true` y la `version` leída,
+     * `plantillas.editar`): la API desmarca la anterior. 409 si otra persona la cambió.
+     */
+    function marcarPorDefecto(plantilla: Pick<PlantillaFacturacion, 'id' | 'version'>): Promise<Resultado<PlantillaFacturacion>> {
+        return editar(plantilla.id, { version: plantilla.version, por_defecto: true })
+    }
+
+    /**
+     * `GET /plantillas-facturacion/:id/servicios-sin-plantilla` (`plantillas.asignar_sin_plantilla`):
+     * vista previa de solo lectura. Su `total` va como `total_esperado` al asignar. 404 si no existe,
+     * 409 `plantilla_retirada`.
+     */
+    function vistaPreviaSinPlantilla(id: number): Promise<Resultado<VistaPreviaSinPlantilla>> {
+        return resolver(api.GET('/api/v1/plantillas-facturacion/{id}/servicios-sin-plantilla', { params: { path: { id } } }))
+    }
+
+    /**
+     * `POST /plantillas-facturacion/:id/asignar-servicios-sin-plantilla` (`plantillas.asignar_sin_plantilla`)
+     * con el `total` de la vista previa. 409 `total_cambiado` si el conjunto cambió (no asigna nada:
+     * se vuelve a pedir la vista previa) y 409 `plantilla_retirada`. Nada se cobra hacia atrás.
+     */
+    function asignarSinPlantilla(id: number, totalEsperado: number, idempotencyKey: string): Promise<Resultado<AsignacionSinPlantilla>> {
+        return resolver(api.POST('/api/v1/plantillas-facturacion/{id}/asignar-servicios-sin-plantilla', {
+            params: { path: { id }, header: { 'Idempotency-Key': idempotencyKey } },
+            body: { total_esperado: totalEsperado },
+        }))
+    }
+
+    return { listar, ver, crear, editar, cambiarCertificarAl, marcarPorDefecto, vistaPreviaSinPlantilla, asignarSinPlantilla }
 }

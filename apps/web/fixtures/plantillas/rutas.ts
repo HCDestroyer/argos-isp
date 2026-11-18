@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
-import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 
 type Plantilla = Schema<'PlantillaFacturacion'>
 type ReglasPromesa = Schema<'ReglasPromesa'>
@@ -229,6 +229,139 @@ function crear(solicitud: SolicitudFixture) {
     return { status: 201, cuerpo: plantilla }
 }
 
+type ServicioSinPlantilla = Schema<'ServicioSinPlantilla'>
+type EstadoAsignable = ServicioSinPlantilla['estado']
+
+const ESTADOS_ASIGNABLES: readonly EstadoAsignable[] = ['activo', 'limitado', 'suspendido']
+const TAMANO_MUESTRA = 20
+
+/** Hoy en Guatemala (`AAAA-MM-DD`), como `hoyGuatemala` de la API. */
+function hoyGuatemala(): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
+
+/** `AAAA-MM-DD` del día `dia` del mes (recortado al último día del mes, como un 31 en febrero). */
+function fechaDelMes(anio: number, mes: number, dia: number): string {
+    const ultimo = new Date(Date.UTC(anio, mes + 1, 0)).getUTCDate()
+    return new Date(Date.UTC(anio, mes, Math.min(dia, ultimo))).toISOString().slice(0, 10)
+}
+
+/**
+ * Primer inicio de ciclo mayor o igual a `hoy` (pedido del líder a A3: si la asignación cae el día de
+ * inicio, ese periodo es el primero; nunca uno anterior). Un servicio que empieza después de hoy
+ * factura desde su inicio.
+ */
+function primerPeriodo(dia: number, inicioServicio: string, hoy: string): string {
+    if (inicioServicio > hoy) {
+        return inicioServicio
+    }
+    const [anio, mes] = hoy.split('-').map(Number) as [number, number]
+    const esteMes = fechaDelMes(anio, mes - 1, dia)
+    return esteMes >= hoy ? esteMes : fechaDelMes(anio, mes, dia)
+}
+
+/** Día del ciclo de un servicio con la plantilla: el fijo o el de su instalación (aniversario). */
+function diaDelCiclo(plantilla: Plantilla, inicioServicio: string): number {
+    return plantilla.ciclo === 'dia_fijo' && plantilla.dia !== null ? plantilla.dia : Number(inicioServicio.slice(8, 10))
+}
+
+/** Como `consultaSinPlantilla`: vigentes (activo, limitado, suspendido) sin plantilla de la empresa, por id. */
+function sinPlantilla(solicitud: SolicitudFixture) {
+    return deLaEmpresa(bd.servicios, solicitud)
+        .filter(s => s.plantilla_facturacion_id === null && (ESTADOS_ASIGNABLES as readonly string[]).includes(s.estado))
+        .sort((a, b) => a.id - b.id)
+}
+
+function conteo(servicios: ReturnType<typeof sinPlantilla>): Record<EstadoAsignable, number> {
+    const porEstado: Record<EstadoAsignable, number> = { activo: 0, limitado: 0, suspendido: 0 }
+    for (const servicio of servicios) {
+        porEstado[servicio.estado as EstadoAsignable] += 1
+    }
+    return porEstado
+}
+
+/** La plantilla vigente de la ruta, o la respuesta de error (404, 409 `plantilla_retirada`). */
+function plantillaAsignable(solicitud: SolicitudFixture): Plantilla | RespuestaFixture {
+    const plantilla = bd.plantillas.find(p => p.id === idDe(solicitud))
+    if (!plantilla) {
+        return noEncontrado('la plantilla')
+    }
+    if (plantilla.retirada_en !== null) {
+        return problemaTipado(409, 'plantilla_retirada', 'Plantilla retirada', `La plantilla ${plantilla.nombre} está retirada: no se asigna a servicios`)
+    }
+    return plantilla
+}
+
+function esPlantilla(valor: Plantilla | RespuestaFixture): valor is Plantilla {
+    return 'nombre' in valor
+}
+
+/** `GET /plantillas-facturacion/:id/servicios-sin-plantilla` (`vistaPreviaSinPlantilla` de A3). */
+function vistaPrevia(solicitud: SolicitudFixture) {
+    const plantilla = plantillaAsignable(solicitud)
+    if (!esPlantilla(plantilla)) {
+        return plantilla
+    }
+    const hoy = hoyGuatemala()
+    const servicios = sinPlantilla(solicitud)
+    const porEstado = conteo(servicios)
+    const muestra: ServicioSinPlantilla[] = servicios.slice(0, TAMANO_MUESTRA).map(s => ({
+        servicio_id: s.id,
+        cliente_id: s.cliente_id,
+        cliente_nombre: s.cliente_nombre ?? '',
+        empresa_id: s.empresa_id ?? 1,
+        estado: s.estado as EstadoAsignable,
+        user_ppp: s.user_ppp,
+        plan_nombre: s.plan_nombre ?? '',
+        facturar_desde: primerPeriodo(diaDelCiclo(plantilla, s.fecha_instalacion ?? hoy), s.fecha_instalacion ?? hoy, hoy),
+    }))
+    const cuerpo: Schema<'VistaPreviaSinPlantilla'> = {
+        plantilla: { id: plantilla.id, nombre: plantilla.nombre, ciclo: plantilla.ciclo, dia: plantilla.dia },
+        total: servicios.length,
+        por_estado: porEstado,
+        facturar_desde: plantilla.ciclo === 'dia_fijo' && plantilla.dia !== null ? primerPeriodo(plantilla.dia, '0000-01-01', hoy) : null,
+        muestra,
+    }
+    return { status: 200, cuerpo }
+}
+
+/**
+ * `POST /plantillas-facturacion/:id/asignar-servicios-sin-plantilla` (`AsignarPlantillaSinPlantilla`):
+ * el mismo conjunto de la vista previa; 409 `total_cambiado` si `total_esperado` no coincide.
+ */
+function asignar(solicitud: SolicitudFixture) {
+    const plantilla = plantillaAsignable(solicitud)
+    if (!esPlantilla(plantilla)) {
+        return plantilla
+    }
+    const cuerpo = cuerpoObjeto(solicitud)
+    const esperado = cuerpo.total_esperado
+    if (typeof esperado !== 'number' || !Number.isInteger(esperado) || esperado < 0) {
+        return datosInvalidos([{ field: 'total_esperado', message: 'El campo total_esperado debe ser un entero de 0 o más', rule: 'number' }])
+    }
+    const servicios = sinPlantilla(solicitud)
+    if (servicios.length !== esperado) {
+        return problemaTipado(409, 'total_cambiado', 'El total cambió', `La vista previa tenía ${esperado} servicios sin plantilla y ahora hay ${servicios.length}: vuelve a pedirla`)
+    }
+    const hoy = hoyGuatemala()
+    const fechas = new Set<string>()
+    for (const servicio of servicios) {
+        const inicio = servicio.fecha_instalacion ?? hoy
+        fechas.add(primerPeriodo(diaDelCiclo(plantilla, inicio), inicio, hoy))
+        servicio.plantilla_facturacion_id = plantilla.id
+        servicio.version += 1
+        servicio.updated_at = ahora()
+    }
+    registrarAccion(solicitud, 'plantillas.asignar_sin_plantilla', { tipo: 'plantilla_facturacion', id: plantilla.id }, cuerpo)
+    const respuesta: Schema<'AsignacionSinPlantilla'> = {
+        plantilla_id: plantilla.id,
+        asignados: servicios.length,
+        por_estado: conteo(servicios),
+        facturar_desde: [...fechas].sort(),
+    }
+    return { status: 200, cuerpo: respuesta }
+}
+
 export const rutasPlantillas: RutasFixture = {
     'GET /api/v1/plantillas-facturacion': conPermiso('plantillas.ver', () => ({ status: 200, cuerpo: bd.plantillas })),
 
@@ -275,4 +408,8 @@ export const rutasPlantillas: RutasFixture = {
         registrarAccion(solicitud, 'plantillas.editar', { tipo: 'plantilla_facturacion', id: plantilla.id }, cuerpo)
         return { status: 200, cuerpo: plantilla }
     }),
+
+    'GET /api/v1/plantillas-facturacion/:id/servicios-sin-plantilla': conPermiso('plantillas.asignar_sin_plantilla', vistaPrevia),
+
+    'POST /api/v1/plantillas-facturacion/:id/asignar-servicios-sin-plantilla': conPermiso('plantillas.asignar_sin_plantilla', conIdempotencia(asignar)),
 }

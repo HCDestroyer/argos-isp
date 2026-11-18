@@ -230,6 +230,7 @@
             "pagos.registrar",
             "pagos.ver",
             "planes.ver",
+            "plantillas.asignar_sin_plantilla",
             "plantillas.crear",
             "plantillas.editar",
             "plantillas.retirar",

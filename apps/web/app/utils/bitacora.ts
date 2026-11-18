@@ -78,6 +78,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'plantillas.crear': 'Plantilla de facturación creada',
     'plantillas.editar': 'Plantilla de facturación editada',
     'plantillas.retirar': 'Plantilla de facturación retirada',
+    'plantillas.asignar_sin_plantilla': 'Plantilla asignada a servicios sin plantilla',
     'facturas.generar': 'Avisos de cobro generados',
     'facturas.anular': 'Aviso de cobro anulado',
     'facturas.nota_credito': 'Nota de crédito emitida',
