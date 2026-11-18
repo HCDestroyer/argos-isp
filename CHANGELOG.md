@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0](https://github.com/HCDestroyer/argos-isp/compare/v1.18.1...v1.19.0) (2026-11-18)
+
+
+### Funcionalidades
+
+* **billing:** plantillas de fábrica, asignar a servicios sin plantilla y facturar sin periodos atrasados ([#253](https://github.com/HCDestroyer/argos-isp/issues/253)) ([65c0564](https://github.com/HCDestroyer/argos-isp/commit/65c05640ee5f06161b3a243c5fbfbfe492ce10b3))
+
 ## [1.18.1](https://github.com/HCDestroyer/argos-isp/compare/v1.18.0...v1.18.1) (2026-11-18)
 
 
