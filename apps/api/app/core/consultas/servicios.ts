@@ -6,6 +6,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
+import { precioEfectivoSql } from '#billing/configuracion'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import type { PlantaServicio } from '#core/instalacion'
@@ -118,9 +119,9 @@ export const MONEDA_SERVICIO = 'GTQ'
  * adicionales, descuentos, mora, prorrateo ni cargos únicos. Es la misma regla de `leerServicio`
  * (`#billing/configuracion`, `precio`).
  */
-// TODO(líder): unificar con A3 (función única de precio en `app/billing/configuracion.ts`, rama agente/a3-080)
 export function precioMensualSql(alias = 's'): string {
-    return `(SELECT coalesce(${alias}.costo_override, p_pm.precio)::numeric(14,2)::text FROM network.planes p_pm WHERE p_pm.id = ${alias}.plan_id)`
+    // Un solo cálculo de precio en todo Argos: el de facturación (`precioEfectivoSql`).
+    return `(${precioEfectivoSql(alias)}::text)`
 }
 
 function columnas(cliente: QueryClientContract) {
