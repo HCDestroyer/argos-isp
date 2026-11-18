@@ -41,7 +41,7 @@ Se encienden solas cuando Iris se actualiza y vuelve a informar su contrato.
 
 **Sincronización informada por Iris:** lo que Iris dice que ya copió de ArgosIsp en su primera sincronización. Arriba, el estado general («En curso», «Completa» o «Con errores»), cuándo empezó y el último aviso de Iris. Debajo, una fila por recurso (empresas, zonas, planes, routers, bancos, cuentas bancarias, clientes y servicios) con cuántos lleva de cuántos («120 de 300»), su estado («Sin empezar», «En curso», «Completa», «Con errores»), el error que informó Iris y cuándo terminó. Las fechas van en hora de Guatemala. ArgosIsp no calcula nada de esto: lo muestra tal como llegó. Si Iris nunca lo informó, dice «Iris aún no ha informado la sincronización». «Actualizar» vuelve a leerlo.
 
-**Empresas que ve Iris:** las empresas del usuario técnico «Iris». Iris copia los clientes, servicios y cuentas bancarias de estas empresas. «Alcance global» quiere decir todas, también las que se creen después. Se cambian en [Usuarios](../usuarios/usuarios.md#asignar-empresas).
+**Empresas que ve Iris:** las empresas del usuario técnico «Iris». Iris copia los clientes, los servicios y las cuentas bancarias de estas empresas. «Alcance global» quiere decir todas, también las que se creen después. Se cambian en [Usuarios](../usuarios/usuarios.md#asignar-empresas).
 
 ## Acciones
 
@@ -51,7 +51,7 @@ Se encienden solas cuando Iris se actualiza y vuelve a informar su contrato.
 - Pulsa «Generar enlace de conexión» y pégalo en Iris. Iris lo canjea y recibe en un paso su token de ArgosIsp; ArgosIsp guarda la URL de Iris, su token y su receptor.
 - El enlace dura 15 minutos y sirve una vez. Un enlace nuevo anula los anteriores sin usar.
 - El conector queda apagado hasta que lo actives. Con el botón «Conectar con Argos» de Iris, en cambio, se enciende solo al confirmar la conexión.
-- Iris copiará los clientes, servicios y cuentas bancarias de las empresas de «Empresas que ve Iris».
+- Iris copiará los clientes, los servicios y las cuentas bancarias de las empresas de «Empresas que ve Iris».
 
 ### Configuración a mano
 
@@ -75,7 +75,7 @@ Si dice «No se envía nada a Iris», falta el conector activo con el receptor d
 Iris también puede pedir la conexión con un botón. Iris te manda a esta pantalla de ArgosIsp; si no tienes sesión, primero inicias sesión.
 
 1. Revisa la dirección: «Iris en … pide conectarse con Argos». Dice con qué usuario la apruebas.
-2. Revisa **Empresas que verá Iris**: las del usuario técnico «Iris». Si Iris nunca se conectó, verás «Todas las empresas, también las futuras». Las empresas de ese usuario se cambian en [Usuarios](../usuarios/usuarios.md#asignar-empresas). El aviso «Iris copiará los clientes, servicios y cuentas bancarias de estas empresas» recuerda qué datos salen hacia Iris.
+2. Revisa **Empresas que verá Iris**: las del usuario técnico «Iris». Si Iris nunca se conectó, verás «Todas las empresas, también las futuras». Las empresas de ese usuario se cambian en [Usuarios](../usuarios/usuarios.md#asignar-empresas). El aviso «Iris copiará los clientes, los servicios y las cuentas bancarias de estas empresas» recuerda qué datos salen hacia Iris.
 3. Si aparece «Esta dirección de Iris no está registrada en Argos», solo aprueba si tú abriste esta conexión desde tu Iris, y escribe el dominio de Iris (tal como aparece arriba, sin `https://`) para confirmar.
 4. Pulsa «Aprobar». Vuelves a Iris con la conexión hecha. La conexión se enciende sola cuando Iris la confirma.
 

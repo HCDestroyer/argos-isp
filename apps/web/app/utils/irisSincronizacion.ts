@@ -116,4 +116,4 @@ export function textoAlcanceTecnicoIris(alcance: Schema<'ResumenEnviosIris'>['al
 export const ETIQUETA_RECUPERACION_IRIS = 'Vía de recuperación (avanzado)'
 
 /** Aviso de la aprobación con el botón y del enlace de conexión (contrato Iris 0.8.0). */
-export const AVISO_COPIA_IRIS = 'Iris copiará los clientes, servicios y cuentas bancarias de estas empresas.'
+export const AVISO_COPIA_IRIS = 'Iris copiará los clientes, los servicios y las cuentas bancarias de estas empresas.'

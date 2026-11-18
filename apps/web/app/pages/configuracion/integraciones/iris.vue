@@ -750,7 +750,7 @@ onMounted(() => {
                         />
                     </h2>
                     <p class="text-sm text-muted">
-                        Iris copia los clientes, servicios y cuentas bancarias de estas empresas, con el usuario técnico «Iris».
+                        Iris copia los clientes, los servicios y las cuentas bancarias de estas empresas, con el usuario técnico «Iris».
                     </p>
                     <p
                         v-if="problemaEnvios"

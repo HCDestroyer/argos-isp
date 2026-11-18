@@ -218,11 +218,11 @@ describe('iris 0.8.0 · pantalla del conector', () => {
 })
 
 describe('iris 0.8.0 · aprobación con el botón', () => {
-    it('avisa que Iris copiará clientes, servicios y cuentas bancarias', async () => {
+    it('avisa que Iris copiará los clientes, los servicios y las cuentas bancarias', async () => {
         const query = new URLSearchParams({ iris: ORIGENES_IRIS_FIXTURES[0] ?? '', state: 'st4te-de-iris_0123456789', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256' })
         const vista = await mountSuspended(conApp(PaginaAutorizar), { route: `/integraciones/iris/autorizar?${query.toString()}` })
         await esperar(() => expect(vista.find('[data-prueba="autorizar-aviso-copia"]').exists()).toBe(true))
-        expect(vista.find('[data-prueba="autorizar-aviso-copia"]').text()).toContain('Iris copiará los clientes, servicios y cuentas bancarias de estas empresas')
+        expect(vista.find('[data-prueba="autorizar-aviso-copia"]').text()).toContain('Iris copiará los clientes, los servicios y las cuentas bancarias de estas empresas')
         vista.unmount()
     })
 })
