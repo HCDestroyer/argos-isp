@@ -1,6 +1,8 @@
 import {
     booleano,
     definirEsquema,
+    entero,
+    enumerado,
     id,
     instante,
     lista,
@@ -16,6 +18,49 @@ const secreto = {
     enum: ['***', null],
     description: 'Secreto de solo escritura: `***` si está guardado, null si no',
 }
+
+const ESTADOS_SINCRONIZACION = ['en_curso', 'completa', 'con_errores']
+
+/** Lo que informó Iris de su primera sincronización (contrato 0.8.0, §2.5). */
+export const SincronizacionIris = definirEsquema(
+    'SincronizacionIris',
+    objeto({
+        sincronizacion_id: { ...texto, description: 'UUID v7 de Iris (en minúsculas)' },
+        estado: enumerado(ESTADOS_SINCRONIZACION),
+        iniciada_en: instante,
+        actualizada_en: instante,
+        etapas: lista(
+            objeto({
+                recurso: enumerado([
+                    'empresas',
+                    'zonas',
+                    'planes',
+                    'routers',
+                    'cuentas_bancarias',
+                    'bancos',
+                    'clientes',
+                    'servicios',
+                ]),
+                estado: enumerado(['pendiente', 'en_curso', 'completa', 'con_errores']),
+                procesados: { ...entero, minimum: 0 },
+                total: nulable({ ...entero, minimum: 0 }),
+                error: { ...nulable(texto), description: 'Hasta 300 caracteres, sin datos de clientes' },
+                terminada_en: nulable(instante),
+            }),
+        ),
+        recibida_en: { ...instante, description: 'Cuándo lo recibió Argos' },
+    }),
+)
+
+/** Respuesta de `PUT /integraciones/iris/sincronizacion`. */
+export const SincronizacionIrisGuardada = definirEsquema(
+    'SincronizacionIrisGuardada',
+    objeto({
+        sincronizacion_id: texto,
+        estado: enumerado(ESTADOS_SINCRONIZACION),
+        actualizada_en: instante,
+    }),
+)
 
 export const ConectorIris = definirEsquema(
     'ConectorIris',
@@ -93,9 +138,16 @@ export const ConectorIris = definirEsquema(
                     'Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior ' +
                     'sigue igual. null si no hay',
             },
+            sincronizacion: {
+                ...nulable(SincronizacionIris),
+                description:
+                    'Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización ' +
+                    '(`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado»)',
+            },
             version: { type: 'integer', minimum: 0 },
         },
         [
+            'sincronizacion',
             'estado_canje',
             'canje_vence_en',
             'desconectado_en',

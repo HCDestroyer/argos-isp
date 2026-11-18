@@ -103,7 +103,8 @@ test.group('Planes temporales · programar, iniciar y terminar', (group) => {
         assert.deepInclude(eventos, {
             servicio_id: servicio.id,
             empresa_id: servicio.empresa_id,
-            campos: ['plan'],
+            // el temporal cuesta 250.00 y el base 150.00: cambia el precio efectivo (contrato Iris 0.8.0)
+            campos: ['plan', 'precio'],
             motivo: 'plan_temporal',
             plan_temporal_id: temporal.id,
         })

@@ -88,6 +88,8 @@ export default class ConfigurarIris extends DomainAction<EntradaConfigurarIris, 
             cambios.webhook_salida_secreto_cifrado = secreto === null ? null : cifrar(secreto)
         }
         if (input.activo !== undefined) cambios.activo = input.activo
+        // 0.8.0: si el admin decide `activo` a mano, confirmar el canje del botón ya no lo cambia
+        if (input.activo !== undefined && antes?.encender_al_confirmar) cambios.encender_al_confirmar = false
         // 0.6.3: encender a mano un conector desconectado lo deja como conector configurado a mano, sin
         // canje: ni pendiente ni vencido (el barrido no lo vuelve a tomar). El `atk_` de aquel canje ya
         // está revocado; Iris usa uno creado en el panel (`POST /integraciones/iris/tokens`).

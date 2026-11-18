@@ -1,8 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Prohibido } from '#shared/errores'
-import { usuarioIris } from '#core/integraciones_iris'
+import { exigirTokenIris } from '#integraciones/iris/token_iris'
 import {
-    bloquearConectorIris,
     guardarConectorIris,
     versionesIris,
     type EstadoConectorIris,
@@ -49,23 +47,7 @@ export default class InformarContratoIris extends DomainAction<
         t: Transaccion,
     ): Promise<SalidaInformarContratoIris> {
         t.fijarEmpresa(null)
-        const tecnico = await usuarioIris(t.trx)
-        const token =
-            input.atk_id === null
-                ? null
-                : ((await t.trx
-                      .from('core.tokens_api')
-                      .where('id', input.atk_id)
-                      .whereNull('revocado_en')
-                      .select('usuario_id')
-                      .first()) as { usuario_id: number } | null)
-        if (tecnico === null || !token || Number(token.usuario_id) !== tecnico) {
-            throw new Prohibido('Solo el token de la integración Iris puede informar su contrato')
-        }
-        const antes = await bloquearConectorIris(t)
-        if (antes?.conectado_por_enlace_en && Number(antes.token_argos_id) !== Number(input.atk_id)) {
-            throw new Prohibido('El conector se preparó con un enlace: solo vale el token de ese canje')
-        }
+        const antes = await exigirTokenIris(t, input.atk_id, 'informar su contrato')
         const cambios: Record<string, unknown> = {}
         if (antes?.contrato !== input.contrato) cambios.contrato = input.contrato
         const receptor = input.receptor_argos

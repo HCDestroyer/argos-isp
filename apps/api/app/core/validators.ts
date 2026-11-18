@@ -192,6 +192,14 @@ export const listarClientesValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: con alguna factura vencida; false: sin ninguna' }),
+        excluir_retirados: vine
+            .boolean()
+            .optional()
+            .meta({
+                description:
+                    'true: solo clientes con al menos un servicio no retirado (con estado_servicio, router_id o ' +
+                    'plan_id, ese mismo servicio). Por defecto false (contrato Iris 0.8.0)',
+            }),
         nit_cui_invalido: vine.boolean().optional().meta({
             description:
                 'true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal)',
@@ -543,6 +551,9 @@ export const listarServiciosValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: el servicio tiene alguna factura vencida; false: ninguna' }),
+        excluir_retirados: vine.boolean().optional().meta({
+            description: 'true: sin los servicios `retirado`. Por defecto false (contrato Iris 0.8.0)',
+        }),
         tipo: vine
             .enum(TIPOS_PLAN)
             .optional()
