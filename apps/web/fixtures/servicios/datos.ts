@@ -22,6 +22,12 @@ const suspensionManual: Record<number, string> = {
     22: 'Solicitud del cliente: viaja dos meses',
 }
 
+/**
+ * Servicios sin plantilla de facturación (anteriores a las plantillas de fábrica, decisión del PM del
+ * 18 nov): los recoge «Asignar a servicios sin plantilla». Solo el servicio principal del cliente.
+ */
+export const CLIENTES_SIN_PLANTILLA = new Set([17, 22, 23, 26, 27])
+
 /** Clientes sin servicio todavía (recién dados de alta). */
 const sinServicio = new Set([14, 28])
 
@@ -62,7 +68,7 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         empresa_id: sucursal ? 2 : 1,
         router_id: router,
         plan_id: plan,
-        plantilla_facturacion_id: cliente.tipo === 'empresa' ? 2 : 1,
+        plantilla_facturacion_id: !sucursal && CLIENTES_SIN_PLANTILLA.has(cliente.id) ? null : (cliente.tipo === 'empresa' ? 2 : 1),
         estado,
         promesa_activa: cliente.id === 12 || cliente.id === 8,
         // Como la API (A1, semana 2): siempre trae el tipo de conexión y el amarre.

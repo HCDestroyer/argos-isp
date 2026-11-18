@@ -91,7 +91,8 @@ describe('useRouters, usePlantillas y useServicios.crear', () => {
         const bloques = await useRouters().ipv6Bloques(3)
         expect(bloques.ok && bloques.data).toEqual([])
         const plantillas = await usePlantillas().listar()
-        expect(plantillas.ok && plantillas.data).toHaveLength(2)
+        // Dos propias y las tres de fábrica.
+        expect(plantillas.ok && plantillas.data).toHaveLength(5)
     })
 
     it('crea el servicio con IPv4 automática y no lo duplica al reintentar', async () => {

@@ -91,4 +91,29 @@ export const plantillas: Schema<'PlantillaFacturacion'>[] = [
         },
         ...meta,
     },
+    // Plantillas de fábrica (A3, `PLANTILLAS_FABRICA`): las crea el seed con los valores por defecto de
+    // `CrearPlantilla` y `vence = inicio + dias_gracia`. Aquí la de por defecto sigue siendo «Mensual
+    // día 1» (una instalación que ya tenía una marcada), así la lista ofrece «Marcar como por defecto».
+    ...([
+        { id: 3, nombre: 'Genera 1 · vence 15', dia: 1, dias_gracia: 14 },
+        { id: 4, nombre: 'Genera 14 · vence 29', dia: 14, dias_gracia: 15 },
+        { id: 5, nombre: 'Genera 1 · vence 5', dia: 1, dias_gracia: 4 },
+    ] as const).map(({ id, nombre, dia, dias_gracia }): Schema<'PlantillaFacturacion'> => ({
+        id,
+        nombre,
+        ciclo: 'dia_fijo',
+        dia,
+        prorrateo: true,
+        dias_gracia,
+        facturas_para_limitar: 1,
+        facturas_para_cortar: 1,
+        mora_tipo: 'ninguna',
+        mora_valor: '0.00',
+        mora_recurrente: false,
+        hora_corte: '08:00',
+        por_defecto: false,
+        certificar_al: 'pagar',
+        reglas_promesa: structuredClone(reglasPromesa),
+        ...meta,
+    })),
 ]
