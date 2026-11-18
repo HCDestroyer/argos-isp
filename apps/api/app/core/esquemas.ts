@@ -597,9 +597,6 @@ export const Servicio = definirEsquema(
             'servidor_pppoe_id',
             'local_address',
             'local_address_derivado',
-            // contrato Iris 0.8.0: la API siempre los envía; opcionales hasta las fixtures del panel
-            'precio_mensual',
-            'moneda',
         ],
     ),
 )

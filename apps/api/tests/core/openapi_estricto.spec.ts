@@ -43,9 +43,6 @@ const OPCIONALES: Record<string, string[]> = {
         'servidor_pppoe_id',
         'local_address',
         'local_address_derivado',
-        // `precio_mensual` y `moneda` (18 nov, Iris 0.8.0): igual, hasta las fixtures (fila en `a1.md`)
-        'precio_mensual',
-        'moneda',
     ],
     // `coincide_en` solo con el filtro `telefono` (Iris 0.6.0 §7.6)
     Cliente: ['referencia', 'coincide_en'],

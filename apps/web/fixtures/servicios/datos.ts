@@ -39,6 +39,15 @@ function usuarioPpp(nombre: string, id: number): string {
     return `${partes[0] ?? 'cliente'}.${partes[1] ?? ''}${id}`.replace(/\.$/, '')
 }
 
+/**
+ * `precio_mensual` como la API (A1 + A3, contrato Iris 0.8.0): `costo_override` o, sin él, el
+ * precio del plan vigente (un plan temporal activo ya está en `plan_id`), IVA incluido, con dos
+ * decimales. La moneda siempre es `GTQ`.
+ */
+export function precioMensualServicio(costoOverride: string | null, planId: number, catalogo: readonly Schema<'Plan'>[]): string {
+    return costoOverride ?? catalogo.find(p => p.id === planId)?.precio ?? '0.00'
+}
+
 function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean): Servicio {
     const router = cliente.zona_id === 3 ? 2 : 1
     const plan = cliente.tipo === 'empresa' ? (router === 1 ? 3 : 4) : ((cliente.id % 2) + 1)
@@ -73,6 +82,8 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         instalado_en: instalado.toISOString(),
         planta: null,
         costo_override: cliente.id === 11 && sucursal ? '299.00' : null,
+        precio_mensual: precioMensualServicio(cliente.id === 11 && sucursal ? '299.00' : null, plan, planes),
+        moneda: 'GTQ',
         excluir_firewall: false,
         ipv4: estado === 'retirado' ? null : (router === 1 ? `100.64.10.${10 + id}` : `100.64.20.${10 + id}`),
         prefijo_enlace_v6: v6 && estado !== 'retirado' ? `2001:db8:1000:${(id * 16).toString(16)}::/64` : null,

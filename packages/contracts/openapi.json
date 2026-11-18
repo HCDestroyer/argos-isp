@@ -89000,6 +89000,7 @@
           "contrato",
           "requiere_reconectar",
           "motivo_reconectar",
+          "sincronizacion",
           "version"
         ],
         "properties": {
@@ -117100,6 +117101,8 @@
           "instalado_en",
           "planta",
           "costo_override",
+          "precio_mensual",
+          "moneda",
           "excluir_firewall",
           "ipv4",
           "prefijo_enlace_v6",

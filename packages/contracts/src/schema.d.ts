@@ -12966,7 +12966,7 @@ export interface components {
              */
             reconexion_vence_en?: string | null;
             /** @description Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización (`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado») */
-            sincronizacion?: components["schemas"]["SincronizacionIris"] | null;
+            sincronizacion: components["schemas"]["SincronizacionIris"] | null;
             version: number;
         };
         ConexionRouter: {
@@ -19753,12 +19753,12 @@ export interface components {
             } | null;
             costo_override: components["schemas"]["Dinero"] | null;
             /** @description Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 decimales (contrato Iris 0.8.0) */
-            precio_mensual?: components["schemas"]["Dinero"];
+            precio_mensual: components["schemas"]["Dinero"];
             /**
              * @description Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)
              * @enum {string}
              */
-            moneda?: "GTQ";
+            moneda: "GTQ";
             excluir_firewall: boolean;
             ipv4: string | null;
             prefijo_enlace_v6: string | null;

@@ -18,8 +18,8 @@ describe('configuración · cuentas bancarias', () => {
     })
 
     it('el esquema es espejo del validador (número 3–40, alias 2–80, banco obligatorio)', () => {
-        expect(esquemaCuentaBancaria.safeParse({ banco_id: 1, numero: '3-123-45678-9', alias: 'Monetaria', moneda: 'GTQ', activa: true }).success).toBe(true)
-        const malo = esquemaCuentaBancaria.safeParse({ banco_id: undefined, numero: '12', alias: 'M', moneda: 'GTQ', activa: true })
+        expect(esquemaCuentaBancaria.safeParse({ banco_id: 1, numero: '3-123-45678-9', alias: 'Monetaria', titular: 'ArgosNet, S.A.', tipo: 'monetaria', moneda: 'GTQ', activa: true }).success).toBe(true)
+        const malo = esquemaCuentaBancaria.safeParse({ banco_id: undefined, numero: '12', alias: 'M', titular: 'ArgosNet, S.A.', tipo: 'monetaria', moneda: 'GTQ', activa: true })
         expect(malo.success).toBe(false)
         expect(new Set(malo.error?.issues.map(i => i.path[0]))).toEqual(new Set(['banco_id', 'numero', 'alias']))
     })

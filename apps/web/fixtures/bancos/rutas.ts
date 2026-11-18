@@ -15,7 +15,7 @@ function conflicto(codigo: string, titulo: string, detalle: string): RespuestaFi
 /** Espejo del validador de `POST/PUT /cuentas-bancarias` (A3). */
 function validar(cuerpo: Record<string, unknown>, parcial: boolean): Errores {
     const errores: Errores = []
-    const { banco_id: bancoId, numero, alias, moneda, activa } = cuerpo
+    const { banco_id: bancoId, numero, alias, titular, tipo, moneda, activa } = cuerpo
     if (!parcial || bancoId !== undefined) {
         if (!bd.bancos.some(b => b.id === bancoId)) {
             errores.push({ field: 'banco_id', message: `El banco ${String(bancoId)} no existe`, rule: 'exists' })
@@ -32,6 +32,16 @@ function validar(cuerpo: Record<string, unknown>, parcial: boolean): Errores {
         if (texto.length < 2 || texto.length > 80) {
             errores.push({ field: 'alias', message: 'El alias debe tener entre 2 y 80 caracteres', rule: 'minLength' })
         }
+    }
+    // contrato Iris 0.8.0: opcionales en la API (ausente = sin cambio, null = sin dato)
+    if (titular !== undefined && titular !== null) {
+        const texto = typeof titular === 'string' ? titular.trim() : ''
+        if (texto.length < 2 || texto.length > 120) {
+            errores.push({ field: 'titular', message: 'El titular debe tener entre 2 y 120 caracteres', rule: 'minLength' })
+        }
+    }
+    if (tipo !== undefined && tipo !== null && tipo !== 'monetaria' && tipo !== 'ahorro') {
+        errores.push({ field: 'tipo', message: 'Tipo inválido', rule: 'enum' })
     }
     if (moneda !== undefined && moneda !== 'GTQ' && moneda !== 'USD') {
         errores.push({ field: 'moneda', message: 'Moneda inválida', rule: 'enum' })
@@ -125,6 +135,8 @@ export const rutasBancos: RutasFixture = {
             banco_nombre: bd.bancos.find(b => b.id === bancoId)?.nombre ?? cuenta.banco_nombre,
             numero,
             alias: typeof cuerpo.alias === 'string' ? cuerpo.alias.trim() : cuenta.alias,
+            titular: 'titular' in cuerpo ? (typeof cuerpo.titular === 'string' ? cuerpo.titular.trim() : null) : cuenta.titular,
+            tipo: 'tipo' in cuerpo ? (cuerpo.tipo === 'monetaria' || cuerpo.tipo === 'ahorro' ? cuerpo.tipo : null) : cuenta.tipo,
             moneda: cuerpo.moneda === 'USD' || cuerpo.moneda === 'GTQ' ? cuerpo.moneda : cuenta.moneda,
             activa: typeof cuerpo.activa === 'boolean' ? cuerpo.activa : cuenta.activa,
             version: cuenta.version + 1,

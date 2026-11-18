@@ -313,7 +313,11 @@ function alEliminar() {
     void navigateTo('/servicios')
 }
 
-const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
+/**
+ * `precio_mensual` de la API (contrato Iris 0.8.0): el precio con el que Argos factura el servicio
+ * (`costo_override` o el del plan vigente, IVA incluido). No depende de poder ver los planes.
+ */
+const precio = computed(() => servicio.value?.precio_mensual ?? null)
 
 watch(servicioId, cargar)
 onMounted(cargar)
@@ -598,6 +602,7 @@ onMounted(cargar)
                         <DatoFicha
                             etiqueta="Precio mensual"
                             :valor="precio ? `${formatearQuetzales(precio)}${servicio.costo_override ? ' (precio especial)' : ''}` : null"
+                            data-prueba="precio-mensual-servicio"
                         />
                         <DatoFicha
                             v-if="plan"

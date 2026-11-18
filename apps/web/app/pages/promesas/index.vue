@@ -34,8 +34,16 @@ function tipoQuery(valor: unknown): TipoPromesa | typeof TODOS {
     return texto in TIPOS_PROMESA ? (texto as TipoPromesa) : TODOS
 }
 
+type MotivoReconexion = NonNullable<Promesa['motivo_reconexion']>
+
+function motivoQuery(valor: unknown): MotivoReconexion | typeof TODOS {
+    const texto = textoQuery(valor)
+    return texto in MOTIVOS_RECONEXION ? (texto as MotivoReconexion) : TODOS
+}
+
 const estado = ref<EstadoPromesa | typeof TODOS>(estadoQuery(route.query.estado))
 const tipo = ref<TipoPromesa | typeof TODOS>(tipoQuery(route.query.tipo))
+const motivo = ref<MotivoReconexion | typeof TODOS>(motivoQuery(route.query.motivo_reconexion))
 const clienteId = ref(idQuery(route.query.cliente))
 const servicioId = ref(idQuery(route.query.servicio))
 const clienteElegido = shallowRef<Cliente | null>(null)
@@ -54,6 +62,17 @@ const itemsTipo: SelectItem[] = [
     ...Object.entries(TIPOS_PROMESA).map(([valor, datos]) => ({ label: datos.etiqueta, value: valor, icon: datos.icono })),
 ]
 
+/**
+ * Motivo de la reconexión temporal (contrato Iris 0.8.0, `motivo_reconexion`). La API lo trata
+ * como `tipo=reconexion_temporal`; con «Promesa» elegida el filtro no aplica y se oculta.
+ */
+const itemsMotivo: SelectItem[] = [
+    { label: 'Todos los motivos', value: TODOS },
+    ...Object.entries(MOTIVOS_RECONEXION).map(([valor, datos]) => ({ label: datos.etiqueta, value: valor, icon: datos.icono })),
+]
+
+const conMotivo = computed(() => tipo.value !== 'promesa')
+
 function filtros(): FiltrosPromesas {
     const resultado: FiltrosPromesas = {}
     if (estado.value !== TODOS) {
@@ -61,6 +80,9 @@ function filtros(): FiltrosPromesas {
     }
     if (tipo.value !== TODOS) {
         resultado.tipo = tipo.value
+    }
+    if (conMotivo.value && motivo.value !== TODOS) {
+        resultado.motivo_reconexion = motivo.value
     }
     if (clienteId.value) {
         resultado.cliente_id = clienteId.value
@@ -83,7 +105,7 @@ const columnas = computed<TableColumn<Promesa>[]>(() => [
     ...(conAcciones.value ? [{ id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden text-right sm:table-cell' } } }] : []),
 ])
 
-const hayFiltros = computed(() => estado.value !== TODOS || tipo.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
+const hayFiltros = computed(() => estado.value !== TODOS || tipo.value !== TODOS || motivo.value !== TODOS || clienteId.value !== 0 || servicioId.value !== 0)
 
 async function aplicarFiltros() {
     const query: Record<string, string> = {}
@@ -92,6 +114,9 @@ async function aplicarFiltros() {
     }
     if (tipo.value !== TODOS) {
         query.tipo = tipo.value
+    }
+    if (conMotivo.value && motivo.value !== TODOS) {
+        query.motivo_reconexion = motivo.value
     }
     if (clienteId.value) {
         query.cliente = String(clienteId.value)
@@ -106,6 +131,7 @@ async function aplicarFiltros() {
 function limpiarFiltros() {
     estado.value = TODOS
     tipo.value = TODOS
+    motivo.value = TODOS
     clienteId.value = 0
     clienteElegido.value = null
     servicioId.value = 0
@@ -159,7 +185,13 @@ function alAprobar(promesa: Promesa) {
     void lista.recargar()
 }
 
-watch([estado, tipo, clienteId, servicioId], aplicarFiltros)
+watch(tipo, (valor) => {
+    // Con «Promesa» no hay motivo de reconexión: la API devolvería la lista vacía.
+    if (valor === 'promesa') {
+        motivo.value = TODOS
+    }
+})
+watch([estado, tipo, motivo, clienteId, servicioId], aplicarFiltros)
 
 const simuladorAbierto = ref(false)
 
@@ -249,6 +281,15 @@ onMounted(async () => {
                     aria-label="Filtrar por tipo"
                     class="w-full sm:w-52"
                     data-prueba="filtro-tipo-promesa"
+                />
+                <USelect
+                    v-if="conMotivo"
+                    v-model="motivo"
+                    :items="itemsMotivo"
+                    icon="i-lucide-clock-alert"
+                    aria-label="Filtrar por motivo de reconexión"
+                    class="w-full sm:w-56"
+                    data-prueba="filtro-motivo-reconexion"
                 />
                 <UBadge
                     v-if="servicioId"

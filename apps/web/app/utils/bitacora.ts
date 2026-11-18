@@ -273,6 +273,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'iris.revocar_conexion': 'Iris canceló la conexión que no completó',
     'iris.vencer_canje': 'Conexión con Iris vencida por falta de uso',
     'iris.confirmar_canje': 'Iris activó la nueva conexión',
+    // Contrato Iris 0.8.0.
+    'iris.informar_sincronizacion': 'Iris informó el avance de su sincronización',
     'clientes.verificar_identidad': 'Identidad del cliente verificada por Iris',
     'comprobantes.reconexion_temporal': 'Reconexión temporal mientras se revisa el comprobante',
     'promesas.cancelar_reconexion': 'Reconexión temporal cancelada (comprobante rechazado)',

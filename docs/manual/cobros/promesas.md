@@ -61,7 +61,7 @@ Cuánto dura depende de la plantilla: unas horas desde que se crea, o hasta la s
 ## Qué ves
 
 - **Accesos rápidos:** «Todas», «Pendientes de aprobación» y «Activas».
-- **Filtros:** cliente, estado y tipo («Promesa» o «Reconexión temporal»). Si llegaste desde un servicio, verás «Servicio …» como filtro. «Limpiar filtros» los quita.
+- **Filtros:** cliente, estado, tipo («Promesa» o «Reconexión temporal») y motivo de la reconexión («Fuera de horario» o «Sin personal de caja»; elegir un motivo muestra solo reconexiones temporales y el filtro se oculta con «Promesa»). Si llegaste desde un servicio, verás «Servicio …» como filtro. «Limpiar filtros» los quita.
 
 | Columna                 | Qué muestra                                                                            |
 | ----------------------- | -------------------------------------------------------------------------------------- |

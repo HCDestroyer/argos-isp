@@ -519,7 +519,8 @@ async function registrar(evento: FormSubmitEvent<SalidaCobro>) {
         }
         if (status === 422) {
             // Cada error junto a su campo; los de `facturas.<i>` van en el aviso de abajo.
-            formulario.value?.setErrors(erroresDeFormulario(resultado.problema))
+            // Una cuenta desactivada (`inactiva`) se explica en llano junto al campo.
+            formulario.value?.setErrors(erroresConCuentaInactiva(resultado.problema))
         }
         if (duplicada) {
             formulario.value?.setErrors([{ name: 'referencia', message: 'Ya está registrada en otro pago con este método y cuenta. Revisa el número.' }])
@@ -1383,6 +1384,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                     <ProblemaAlerta
                         v-else-if="problemaPago && problemaPago.status !== 422"
                         :problema="problemaPago"
+                    />
+                    <UAlert
+                        v-else-if="esCuentaInactiva(problemaPago)"
+                        color="error"
+                        variant="subtle"
+                        icon="i-lucide-landmark"
+                        title="La cuenta bancaria está desactivada"
+                        :description="MENSAJE_CUENTA_INACTIVA"
+                        data-prueba="cuenta-inactiva"
                     />
                     <UAlert
                         v-else-if="sinCaja"

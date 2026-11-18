@@ -26,6 +26,7 @@ export const conectorIrisInicial: Schema<'ConectorIris'> = {
     motivo_desconexion: null,
     reconexion_pendiente_desde: null,
     reconexion_vence_en: null,
+    sincronizacion: null,
     version: 0,
 }
 
@@ -61,6 +62,7 @@ export const conectorIrisPorReconectar: Schema<'ConectorIris'> = {
     motivo_desconexion: null,
     reconexion_pendiente_desde: null,
     reconexion_vence_en: null,
+    sincronizacion: null,
     version: 4,
 }
 
@@ -92,6 +94,8 @@ export function conectorIrisCanjePendiente(canjeadoEn: Date = new Date()): Schem
         motivo_desconexion: null,
         reconexion_pendiente_desde: null,
         reconexion_vence_en: null,
+        // contrato Iris 0.8.0: null hasta que Iris informe su sincronización
+        sincronizacion: null,
         version: 1,
     }
 }
@@ -143,6 +147,32 @@ export function conectorIrisReconexionPendiente(canjeadoEn: Date = new Date()): 
 export function conectorIrisAnterior063(): Schema<'ConectorIris'> {
     const { estado_canje: _estado, canje_vence_en: _vence, desconectado_en: _desconectado, motivo_desconexion: _motivo, reconexion_pendiente_desde: _reconexion, reconexion_vence_en: _reconexionVence, ...resto } = conectorIrisCanjePendiente()
     return { ...resto, contrato: '0.6.2' }
+}
+
+/**
+ * Lo que guarda `PUT /integraciones/iris/sincronizacion` (contrato Iris 0.8.0) a mitad de la
+ * primera sincronización: empresas, zonas, planes, routers y bancos listos, cuentas bancarias con
+ * un error, clientes en curso y servicios pendientes.
+ */
+export function sincronizacionIrisEjemplo(estado: Schema<'SincronizacionIris'>['estado'] = 'en_curso'): Schema<'SincronizacionIris'> {
+    const terminada = '2026-11-18T15:02:00.000Z'
+    return {
+        sincronizacion_id: '019a8f2e-7c41-7b3a-9d2e-5f6a7b8c9d0e',
+        estado,
+        iniciada_en: '2026-11-18T15:00:00.000Z',
+        actualizada_en: '2026-11-18T15:10:00.000Z',
+        etapas: [
+            { recurso: 'empresas', estado: 'completa', procesados: 2, total: 2, error: null, terminada_en: terminada },
+            { recurso: 'zonas', estado: 'completa', procesados: 3, total: 3, error: null, terminada_en: terminada },
+            { recurso: 'planes', estado: 'completa', procesados: 4, total: 4, error: null, terminada_en: terminada },
+            { recurso: 'routers', estado: 'completa', procesados: 2, total: 2, error: null, terminada_en: terminada },
+            { recurso: 'bancos', estado: 'completa', procesados: 18, total: 18, error: null, terminada_en: terminada },
+            { recurso: 'cuentas_bancarias', estado: 'con_errores', procesados: 3, total: 4, error: 'Una cuenta sin titular no se pudo copiar', terminada_en: terminada },
+            { recurso: 'clientes', estado: estado === 'en_curso' ? 'en_curso' : 'completa', procesados: estado === 'en_curso' ? 120 : 300, total: 300, error: null, terminada_en: estado === 'en_curso' ? null : terminada },
+            { recurso: 'servicios', estado: estado === 'en_curso' ? 'pendiente' : 'completa', procesados: estado === 'en_curso' ? 0 : 310, total: estado === 'en_curso' ? null : 310, error: null, terminada_en: estado === 'en_curso' ? null : terminada },
+        ],
+        recibida_en: '2026-11-18T15:10:01.000Z',
+    }
 }
 
 export interface IrisFixtures {

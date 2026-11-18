@@ -147,7 +147,6 @@ export const ConectorIris = definirEsquema(
             version: { type: 'integer', minimum: 0 },
         },
         [
-            'sincronizacion',
             'estado_canje',
             'canje_vence_en',
             'desconectado_en',

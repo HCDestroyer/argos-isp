@@ -246,9 +246,16 @@ function rechazar() {
                                 <span class="text-muted">{{ empresa.nit ? `NIT ${empresa.nit}` : 'Sin NIT' }}</span>
                             </li>
                         </ul>
+                        <UAlert
+                            color="info"
+                            variant="subtle"
+                            icon="i-lucide-copy"
+                            :title="AVISO_COPIA_IRIS"
+                            data-prueba="autorizar-aviso-copia"
+                        />
                         <p class="text-xs text-muted">
                             Iris consultará clientes, servicios, planes y routers, y podrá registrar instalaciones y
-                            retiros. La conexión queda apagada hasta que la actives en Iris.
+                            retiros. La conexión se enciende sola cuando Iris la confirma.
                         </p>
                     </section>
 

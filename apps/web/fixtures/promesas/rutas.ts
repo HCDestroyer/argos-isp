@@ -129,17 +129,23 @@ export const rutasPromesas: RutasFixture = {
         const cliente = numeroQuery(solicitud, 'cliente_id')
         const estado = solicitud.query.get('estado')
         const tipo = solicitud.query.get('tipo')
+        const motivo = solicitud.query.get('motivo_reconexion')
         if (estado && !(ESTADOS as readonly string[]).includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
         }
         if (tipo && tipo !== 'promesa' && tipo !== 'reconexion_temporal') {
             return datosInvalidos([{ field: 'tipo', message: 'Tipo inválido', rule: 'enum' }])
         }
+        if (motivo && motivo !== 'fuera_de_horario' && motivo !== 'sin_personal') {
+            return datosInvalidos([{ field: 'motivo_reconexion', message: 'Motivo inválido', rule: 'enum' }])
+        }
         const filas = deLaEmpresa(bd.promesas, solicitud)
             .filter(p => servicio === undefined || p.servicio_id === servicio)
             .filter(p => cliente === undefined || p.cliente_id === cliente)
             .filter(p => !estado || p.estado === estado)
             .filter(p => !tipo || p.tipo === tipo)
+            // contrato Iris 0.8.0: el motivo implica `tipo=reconexion_temporal`
+            .filter(p => !motivo || (p.tipo === 'reconexion_temporal' && p.motivo_reconexion === motivo))
             .sort((a, b) => b.id - a.id)
             .map(conSaldosDeHoy)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
