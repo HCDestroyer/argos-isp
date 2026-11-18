@@ -147,13 +147,16 @@ export async function serviciosSinPlantilla(
     })
 }
 
-export type ConteoPorEstado = Record<EstadoAsignable, number>
+/** Cantidad de servicios (nunca dinero). */
+export type CantidadServicios = number
+
+export type ConteoPorEstado = Record<EstadoAsignable, CantidadServicios>
 
 /** Total y cuántos por estado. */
 export async function contarSinPlantilla(
     cliente: QueryClientContract,
     filtro: FiltroSinPlantilla,
-): Promise<{ total: number; por_estado: ConteoPorEstado }> {
+): Promise<{ total: CantidadServicios; por_estado: ConteoPorEstado }> {
     const filas = (await consultaSinPlantilla(cliente, filtro)
         .groupBy('s.estado')
         .select('s.estado')
@@ -166,7 +169,7 @@ export async function contarSinPlantilla(
 
 export interface VistaPreviaSinPlantilla {
     plantilla: { id: number; nombre: string; ciclo: 'dia_fijo' | 'aniversario'; dia: number | null }
-    total: number
+    total: CantidadServicios
     por_estado: ConteoPorEstado
     /**
      * primer periodo a facturar con la plantilla sin excepciones (`dia_fijo`); null en `aniversario`
