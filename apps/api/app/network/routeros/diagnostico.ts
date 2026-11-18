@@ -23,6 +23,8 @@ import {
     REGLA_PROXY_SIN_CODIGO,
     PUERTO_PROXY_CORTE,
     ajusteProxy,
+    COMANDOS_PROXY_DEVICE_MODE,
+    MENSAJE_PROXY_DEVICE_MODE,
     ordenAccesoProxy,
     revisarDnsRouter,
     urlCorteConCodigo,
@@ -61,6 +63,7 @@ import {
     leerVelocidadRouter,
     perfilSuspendido,
     planCorte,
+    proxyCorteBloqueado,
     type CambioCorte,
     type LecturaCorte,
     type OpcionesDispatcher,
@@ -119,11 +122,17 @@ export async function vistaPreviaReconciliar(
         error: null,
     }
     const todos = await serviciosVigentesDeRouter(routerId)
-    const modoCodigo = await conCodigosAbiertos(router, todos)
+    let modoCodigo = await conCodigosAbiertos(router, todos)
     const planes = planesDeRouter(router.velocidad, todos)
     try {
         const cliente = (opciones.clientes ?? fabricaPorDefecto)(router.api)
         try {
+            // Device-mode sin proxy web: la reconciliación corta como en modo ip (sin reglas del proxy).
+            if (modoCodigo && (await proxyCorteBloqueado(cliente))) {
+                modoCodigo = false
+                sinCodigo(todos)
+                salida.avisos.push(`${MENSAJE_PROXY_DEVICE_MODE} ${MIENTRAS_DEVICE_MODE}`)
+            }
             // Corte
             const lecturaCorte = await leerCorteRouter(cliente)
             const corte = estadoCorteRouter(
@@ -271,6 +280,8 @@ export type ClaveChequeoCorte =
     | 'portal_en_router'
     | 'portal_ip_cliente'
     | 'proxy_corte'
+    /** Modo código: el device-mode del router (RouterOS 7.17+) permite el proxy web; no reconciliable */
+    | 'proxy_device_mode'
 
 export type CodigoProblemaCorte =
     | 'sin_api'
@@ -297,6 +308,7 @@ export type CodigoProblemaCorte =
     /** Corte por el túnel WireGuard: el portal no ve la IP del cliente (falta el `srcnat accept` o la red en el peer) */
     | 'portal_ve_otra_ip_tunel'
     | 'proxy_corte'
+    | 'proxy_device_mode'
 
 export interface ChequeoCorte {
     clave: ClaveChequeoCorte
@@ -1088,6 +1100,31 @@ async function chequeoIpCliente(
     )
 }
 
+const MIENTRAS_DEVICE_MODE =
+    'Mientras tanto Argos corta a los suspendidos de este router como en «Identificación por IP» (sin código).'
+
+/** Sin reglas del proxy: el corte de modo ip (device-mode sin proxy web). */
+function sinCodigo(todos: ServicioRed[]): void {
+    for (const s of todos) s.url_corte_codigo = null
+}
+
+/**
+ * Modo código: ¿el device-mode del router (RouterOS 7.17+) permite el proxy web? Si no, ninguna regla de
+ * `/ip proxy access` entra (`failure: invalid local port`). «Reconciliar» no lo arregla: hace falta
+ * confirmar el cambio en el router (botón o apagado y encendido) dentro de 5 minutos.
+ */
+function chequeoDeviceMode(bloqueado: boolean): ChequeoCorte {
+    if (!bloqueado) return bien('proxy_device_mode', 'El device-mode del router permite el proxy web')
+    return mal(
+        'proxy_device_mode',
+        'proxy_device_mode',
+        `${MENSAJE_PROXY_DEVICE_MODE} Después de «update», presiona el botón del router (o apágalo y enciéndelo) ` +
+            `antes de 5 minutos; si no, el cambio se descarta. Luego usa «Reconciliar ahora». ${MIENTRAS_DEVICE_MODE}`,
+        [...COMANDOS_PROXY_DEVICE_MODE],
+        false,
+    )
+}
+
 /**
  * Modo código: el web proxy del router con el puerto del corte, la regla final y una regla por suspendido
  * con código. «Reconciliar ahora» lo deja bien.
@@ -1187,10 +1224,15 @@ export async function diagnosticoCorte(
         return salida
     }
     const todos = await serviciosVigentesDeRouter(routerId)
-    const modoCodigo = await conCodigosAbiertos(router, todos)
+    const pideCodigo = await conCodigosAbiertos(router, todos)
     try {
         const cliente = (opciones.clientes ?? fabricaPorDefecto)(router.api)
         try {
+            // Identificación por código con el device-mode sin proxy web: no se arregla con «Reconciliar»
+            // (paso físico en el router); mientras tanto el corte de este router es el de modo ip.
+            const bloqueado = pideCodigo && (await proxyCorteBloqueado(cliente))
+            const modoCodigo = pideCodigo && !bloqueado
+            if (bloqueado) sinCodigo(todos)
             const lectura = await leerCorteRouter(cliente)
             const opcionesCorte = await opcionesCorteRouter(routerId, router, todos, modoCodigo)
             const fasttrack = opcionesCorte.fasttrack
@@ -1234,6 +1276,7 @@ export async function diagnosticoCorte(
                     opcionesCorte.tunel ?? null,
                 ),
             )
+            if (pideCodigo) salida.chequeos.push(chequeoDeviceMode(bloqueado))
             if (modoCodigo) {
                 salida.chequeos.push(
                     await chequeoProxyCorte(cliente, lectura, suspendidosConCodigo(todos), config.corte_url),

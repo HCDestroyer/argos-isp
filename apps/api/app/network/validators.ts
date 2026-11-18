@@ -1103,3 +1103,10 @@ export const cambiarTipoConexionValidator = conMensajes(
         'tipo_conexion.enum': 'El tipo de conexión debe ser pppoe, ip_estatica o dhcp_fija',
     },
 )
+
+/** `GET /routers/:id/reconciliaciones/:job_id`: el `job_id` que devolvió `POST /routers/:id/reconciliar`. */
+export const jobReconciliacionValidator = vine.compile(
+    vine.object({
+        job_id: vine.string().trim().minLength(1).maxLength(200),
+    }),
+)

@@ -1007,6 +1007,7 @@ const CODIGOS_CORTE = [
     'portal_ve_otra_ip',
     'portal_ve_otra_ip_tunel',
     'proxy_corte',
+    'proxy_device_mode',
 ]
 
 const problemaEstrategia = objeto({
@@ -1222,6 +1223,7 @@ export const DiagnosticoCorte = definirEsquema(
                         'portal_en_router',
                         'portal_ip_cliente',
                         'proxy_corte',
+                        'proxy_device_mode',
                     ]),
                     description:
                         'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
@@ -1232,7 +1234,9 @@ export const DiagnosticoCorte = definirEsquema(
                         'portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente ' +
                         '(qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la ' +
                         'identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: ' +
-                        'el web proxy en el puerto 3346, la regla final y una por suspendido)',
+                        'el web proxy en el puerto 3346, la regla final y una por suspendido), proxy_device_mode (solo en modo ' +
+                        'código: el device-mode del router permite el proxy web; si no, paso físico en el router y no ' +
+                        'reconciliable)',
                 },
                 ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
                 codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },
@@ -1437,6 +1441,39 @@ export const ReconciliacionEncolada = definirEsquema(
     }),
 )
 
+export const ReconciliacionEstado = definirEsquema(
+    'ReconciliacionEstado',
+    objeto({
+        router_id: id,
+        job_id: texto,
+        estado: {
+            ...enumerado(['en_espera', 'en_curso', 'completada', 'fallida', 'desconocida']),
+            description:
+                'en_espera (encolada, el worker aún no la toma), en_curso, completada (puede traer `errores`: ' +
+                'fallos parciales), fallida (no pudo ni leer el router: `error`), desconocida (el job ya no existe ' +
+                'o no es de este router)',
+        },
+        encolado_en: { ...nulable(instante), description: 'Cuándo se encoló' },
+        iniciado_en: { ...nulable(instante), description: 'Cuándo el worker la tomó' },
+        terminado_en: { ...nulable(instante), description: 'Cuándo terminó (completada o fallida)' },
+        cambios: {
+            ...nulable(entero),
+            description:
+                'Comandos que escribió en el router (creó, cambió, movió o borró); null si no terminó',
+        },
+        errores: {
+            ...lista(objeto({ operacion: texto, mensaje: texto })),
+            description:
+                'Pasos que el router rechazó sin impedir lo demás (`operacion` = menú y acción, o `proxy_corte` ' +
+                'si el device-mode no permite el proxy web); cada uno también en `audit.red` y `routeros.fallido`',
+        },
+        error: {
+            ...nulable(texto),
+            description: 'Falla general (el router no responde, credenciales); null si no la hubo',
+        },
+    }),
+)
+
 export const SincronizacionServicio = definirEsquema(
     'SincronizacionServicio',
     objeto({
@@ -1464,7 +1501,10 @@ export const SincronizacionServicio = definirEsquema(
         avisos: lista(texto),
         error: {
             ...nulable(objeto({ motivo: enumerado(MOTIVOS_API), detalle: texto })),
-            description: 'El router no respondió o rechazó un comando (lenguaje simple); null si todo bien',
+            description:
+                'null si todo bien. `motivo`: no_responde (solo un problema de red), rechazado (RouterOS rechazó un ' +
+                'comando: el detalle dice cuál y el texto del router), device_mode (el device-mode no permite el ' +
+                'proxy web del corte por código; paso físico en el router), credenciales, politicas, certificado…',
         },
     }),
 )

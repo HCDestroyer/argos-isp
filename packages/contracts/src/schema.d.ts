@@ -9374,6 +9374,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routers/{id}/reconciliaciones/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de una reconciliación encolada («Reconciliar ahora»)
+         * @description Lee el job `job_id` (el que devolvió `POST /routers/:id/reconciliar`) en el worker de routeros: `en_espera`, `en_curso`, `completada` (con `cambios` y los pasos rechazados en `errores`, p. ej. `proxy_corte` si el device-mode no permite el proxy web), `fallida` (no pudo ni leer el router: `error`) o `desconocida` (el job ya no existe —se guarda un día— o no es de este router). 404 solo si el router no existe.
+         */
+        get: operations["routersReconciliacionEstado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers/{id}/reconciliar": {
         parameters: {
             query?: never;
@@ -12224,7 +12244,7 @@ export interface components {
              * @description Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta
              * @enum {string|null}
              */
-            motivo?: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta" | null;
+            motivo?: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta" | "rechazado" | "device_mode" | null;
             /** @description `equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica) */
             datos?: {
                 [key: string]: unknown;
@@ -13928,17 +13948,17 @@ export interface components {
             ok: boolean;
             chequeos: {
                 /**
-                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente (qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: el web proxy en el puerto 3346, la regla final y una por suspendido)
+                 * @description lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente (qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: el web proxy en el puerto 3346, la regla final y una por suspendido), proxy_device_mode (solo en modo código: el device-mode del router permite el proxy web; si no, paso físico en el router y no reconciliable)
                  * @enum {string}
                  */
-                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden" | "dns_router" | "portal_host" | "portal_en_router" | "portal_ip_cliente" | "proxy_corte";
+                clave: "lista_suspendidos" | "reglas" | "portal_http" | "sesiones_suspendidas" | "fasttrack" | "perfil_suspendido" | "walled_garden" | "dns_router" | "portal_host" | "portal_en_router" | "portal_ip_cliente" | "proxy_corte" | "proxy_device_mode";
                 /** @description null: no se pudo comprobar */
                 ok: boolean | null;
                 /**
                  * @description null si salió bien
                  * @enum {string|null}
                  */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte" | null;
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte" | "proxy_device_mode" | null;
                 /** @description Qué se vio y qué hacer, en lenguaje simple */
                 detalle: string;
                 /** @description Comandos de RouterOS (terminal) para arreglarlo a mano; vacío si no hace falta */
@@ -13948,7 +13968,7 @@ export interface components {
             }[];
             problemas: {
                 /** @enum {string} */
-                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte";
+                codigo: "sin_api" | "router_no_responde" | "faltan_reglas" | "reglas_desactivadas" | "reglas_distintas" | "reglas_desordenadas" | "falta_lista_suspendidos" | "falta_perfil_suspendido" | "walled_garden" | "portal_sin_configurar" | "portal_sin_ipv4" | "portal_inalcanzable" | "portal_sin_corte" | "suspendidos_fuera_de_lista" | "fasttrack" | "dns_router_sin_servidores" | "dns_router_documentacion" | "dns_router_sin_remotas" | "portal_no_acepta_host" | "portal_en_router" | "portal_ve_otra_ip" | "portal_ve_otra_ip_tunel" | "proxy_corte" | "proxy_device_mode";
                 /** @description Qué falla y qué hacer, en lenguaje simple */
                 mensaje: string;
                 /** @description «Reconciliar ahora» lo arregla */
@@ -18037,6 +18057,39 @@ export interface components {
             /** @description false: ya había una esperando o en curso (no se encoló otra) */
             encolado: boolean;
         };
+        ReconciliacionEstado: {
+            router_id: number;
+            job_id: string;
+            /**
+             * @description en_espera (encolada, el worker aún no la toma), en_curso, completada (puede traer `errores`: fallos parciales), fallida (no pudo ni leer el router: `error`), desconocida (el job ya no existe o no es de este router)
+             * @enum {string}
+             */
+            estado: "en_espera" | "en_curso" | "completada" | "fallida" | "desconocida";
+            /**
+             * Format: date-time
+             * @description Cuándo se encoló
+             */
+            encolado_en: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo el worker la tomó
+             */
+            iniciado_en: string | null;
+            /**
+             * Format: date-time
+             * @description Cuándo terminó (completada o fallida)
+             */
+            terminado_en: string | null;
+            /** @description Comandos que escribió en el router (creó, cambió, movió o borró); null si no terminó */
+            cambios: number | null;
+            /** @description Pasos que el router rechazó sin impedir lo demás (`operacion` = menú y acción, o `proxy_corte` si el device-mode no permite el proxy web); cada uno también en `audit.red` y `routeros.fallido` */
+            errores: {
+                operacion: string;
+                mensaje: string;
+            }[];
+            /** @description Falla general (el router no responde, credenciales); null si no la hubo */
+            error: string | null;
+        };
         ReconexionTemporal: {
             /** @description La promesa de tipo reconexion_temporal (GET /promesas/:id) */
             promesa_id: number;
@@ -19999,10 +20052,10 @@ export interface components {
             /** @description Nada que corregir y el router respondió */
             ya_estaba_bien: boolean;
             avisos: string[];
-            /** @description El router no respondió o rechazó un comando (lenguaje simple); null si todo bien */
+            /** @description null si todo bien. `motivo`: no_responde (solo un problema de red), rechazado (RouterOS rechazó un comando: el detalle dice cuál y el texto del router), device_mode (el device-mode no permite el proxy web del corte por código; paso físico en el router), credenciales, politicas, certificado… */
             error: {
                 /** @enum {string} */
-                motivo: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta";
+                motivo: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "certificado_proposito" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta" | "rechazado" | "device_mode";
                 detalle: string;
             } | null;
         };
@@ -57834,6 +57887,56 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    routersReconciliacionEstado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de la reconciliación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliacionEstado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso routers.reconciliar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

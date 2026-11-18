@@ -1,6 +1,6 @@
 import logger from '@adonisjs/core/services/logger'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ErrorRouterOS } from '#network/routeros/errores'
+import { ErrorRouterOS, RouterOSInalcanzable, type TipoErrorRouterOS } from '#network/routeros/errores'
 import { RouterSinCredenciales } from '#network/routeros/router'
 import { estadoDeseado, estadoVacio, type EstadoDeseado } from '#network/routeros/estado_deseado'
 import {
@@ -24,7 +24,12 @@ import {
 import { cerrarSesionesQuitadas } from '#network/sesiones/sesiones'
 import { sincronizarCodigoCorte } from '#portal/codigos_corte'
 import { corteUrlVigente } from '#network/routeros/corte_vigente'
-import { PUERTO_PROXY_CORTE, puertosProxy, urlCorteConCodigo } from '#network/routeros/corte_router'
+import {
+    MENSAJE_PROXY_DEVICE_MODE,
+    PUERTO_PROXY_CORTE,
+    puertosProxy,
+    urlCorteConCodigo,
+} from '#network/routeros/corte_router'
 import {
     aplicarEstado,
     liberarAccesoProxy,
@@ -41,7 +46,9 @@ import {
     perfilSuspendido,
     registrarFallo,
     reportarReglasOro,
+    proxyCorteBloqueado,
     type Cambio,
+    type ErrorOperacion,
     type FabricaClientes,
     type OpcionesDispatcher,
 } from '#network/routeros/dispatcher'
@@ -85,6 +92,22 @@ export interface ResultadoRouter {
     error: string | null
     /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
     errores_velocidad: string[]
+    /** Pasos que no se intentaron por un problema del router (`proxy_corte`: device-mode sin proxy web) */
+    errores: ErrorOperacion[]
+    /**
+     * El error de `error`, estructurado (para `diagnosticarErrorRouterOS`): `tipo` del cliente
+     * (`inalcanzable`, `credenciales`, `solicitud`, `respuesta`, o `sin_credenciales`), código de Node,
+     * status HTTP, el comando que falló (`ip/proxy/access add`) y el texto de RouterOS. null si no hubo.
+     */
+    fallo: FalloRouterOS | null
+}
+
+export interface FalloRouterOS {
+    tipo: TipoErrorRouterOS | 'sin_credenciales'
+    codigo: string | null
+    status: number | null
+    operacion: string | null
+    mensaje: string
 }
 
 export interface ResultadoAplicarRed {
@@ -125,7 +148,11 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
 
     protected auditarExito(salida: ResultadoAplicarRed): boolean {
         return salida.routers.some(
-            (r) => r.cambios.length > 0 || r.error !== null || r.errores_velocidad.length > 0,
+            (r) =>
+                r.cambios.length > 0 ||
+                r.error !== null ||
+                r.errores_velocidad.length > 0 ||
+                r.errores.length > 0,
         )
     }
 
@@ -211,6 +238,8 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 avisos: estado.avisos,
                 error: null,
                 errores_velocidad: [],
+                errores: [],
+                fallo: null,
             }
             resultado.routers.push(fila)
             if (!router) continue
@@ -233,6 +262,26 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                     // el corte por código armado (el 3346 lo agrega el reconciliador, después del `drop` de
                     // input), la regla del servicio espera: el router queda pendiente y la reconciliación la
                     // escribe después del puerto. El suspendido sigue en `suspendidos` mientras tanto.
+                    // Con el device-mode sin proxy (RouterOS 7.17+, bug v1.17.0 del PM) ninguna regla entra
+                    // (`invalid local port`): no se intenta, se reporta en `errores` (`proxy_corte`) y el
+                    // reconciliador corta ese router como en modo ip mientras tanto.
+                    if (
+                        modoCodigo &&
+                        estado.presentes.some((o) => o.ruta === '/ip/proxy/access') &&
+                        (await proxyCorteBloqueado(cliente))
+                    ) {
+                        estado = {
+                            ...estado,
+                            presentes: estado.presentes.filter((o) => o.ruta !== '/ip/proxy/access'),
+                        }
+                        fila.errores.push({ operacion: 'proxy_corte', mensaje: MENSAJE_PROXY_DEVICE_MODE })
+                        await t.emit('routeros.fallido', {
+                            servicio_id: input.servicio_id,
+                            router_id: routerId,
+                            operacion: 'proxy_corte',
+                            error: MENSAJE_PROXY_DEVICE_MODE,
+                        })
+                    }
                     if (modoCodigo && estado.presentes.some((o) => o.ruta === '/ip/proxy/access')) {
                         const puertos = puertosProxy(await cliente.leerProxy())
                         if (!puertos.includes(PUERTO_PROXY_CORTE)) {
@@ -365,6 +414,22 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                     throw error
                 }
                 fila.error = error.message
+                fila.fallo =
+                    error instanceof ErrorRouterOS
+                        ? {
+                              tipo: error.tipo,
+                              codigo: error instanceof RouterOSInalcanzable ? error.codigo : null,
+                              status: error.status,
+                              operacion: error.operacion,
+                              mensaje: error.message,
+                          }
+                        : {
+                              tipo: 'sin_credenciales',
+                              codigo: null,
+                              status: null,
+                              operacion: null,
+                              mensaje: error.message,
+                          }
                 await registrarFallo({
                     router_id: routerId,
                     servicio_id: input.servicio_id,
