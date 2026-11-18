@@ -147,6 +147,27 @@ const accionesDesconectado = computed(() => (puedeConfigurar.value
     ? [{ label: 'Generar enlace de conexión', icon: 'i-lucide-link-2', color: 'error' as const, variant: 'solid' as const, loading: generandoEnlace.value, onClick: generarEnlace }]
     : []))
 
+/* ---------- Contrato, sincronización y alcance (contrato Iris 0.8.0) ---------- */
+
+/** Contrato de este Argos (`GET /integraciones/iris/estado`, `iris.abrir`); sin el permiso no se pide. */
+const estadoArgos = shallowRef<EstadoConectorIrisPublico | null>(null)
+const problemaEstadoArgos = ref<Problem | null>(null)
+
+async function cargarEstadoArgos() {
+    if (!puede('iris.abrir')) {
+        return
+    }
+    problemaEstadoArgos.value = null
+    const resultado = await iris.estado()
+    estadoArgos.value = resultado.ok ? resultado.data : null
+    problemaEstadoArgos.value = resultado.ok ? null : resultado.problema
+}
+
+const contratoIris = computed(() => (conector.value ? estadoContratoIris(conector.value.contrato) : 'sin_dato'))
+const sincronizacion = computed(() => conector.value?.sincronizacion ?? null)
+const etapas = computed(() => (sincronizacion.value ? etapasOrdenadas(sincronizacion.value) : []))
+const { nombre: nombreEmpresa } = useEmpresaActiva()
+
 /* ---------- Lo que se muestra una sola vez ---------- */
 
 const unaVez = shallowRef<{ titulo: string, descripcion: string, valores: { etiqueta: string, valor: string }[], venceEn: string | null } | null>(null)
@@ -173,7 +194,7 @@ async function generarEnlace() {
     }
     mostrarUnaVez({
         titulo: 'Enlace de conexión para Iris',
-        descripcion: INSTRUCCION_ENLACE_IRIS,
+        descripcion: `${INSTRUCCION_ENLACE_IRIS} ${AVISO_COPIA_IRIS}`,
         valores: [{ etiqueta: 'Enlace', valor: resultado.data.enlace }],
         venceEn: resultado.data.vence_en,
     })
@@ -318,6 +339,7 @@ function cuandoEnvio(envio: EnvioIris): string {
 
 onMounted(() => {
     void cargar()
+    void cargarEstadoArgos()
     void cargarTokens()
     void cargarEnvios()
 })
@@ -541,6 +563,214 @@ onMounted(() => {
                     </dl>
                 </section>
 
+                <!-- Contrato y funciones (contrato Iris 0.8.0) -->
+                <section
+                    class="surface-card flex flex-col gap-4 p-4 sm:p-6"
+                    aria-labelledby="titulo-contrato-iris"
+                    data-prueba="contrato-iris"
+                >
+                    <h2
+                        id="titulo-contrato-iris"
+                        class="flex items-center gap-2 text-base font-semibold text-highlighted"
+                    >
+                        <UIcon
+                            name="i-lucide-file-check-2"
+                            class="size-5"
+                        />
+                        Contrato entre Argos e Iris
+                    </h2>
+                    <dl class="grid gap-4 sm:grid-cols-2">
+                        <DatoFicha
+                            v-if="puede('iris.abrir')"
+                            etiqueta="Contrato de Argos"
+                            :valor="estadoArgos ? `${estadoArgos.contrato} · Argos ${estadoArgos.version_argos}` : (problemaEstadoArgos ? 'No se pudo leer' : null)"
+                            data-prueba="contrato-argos"
+                        />
+                        <DatoFicha
+                            etiqueta="Contrato de Iris"
+                            :valor="conector.contrato ?? 'Iris aún no lo ha informado'"
+                            data-prueba="contrato-iris-valor"
+                        />
+                    </dl>
+                    <UAlert
+                        v-if="contratoIris !== 'al_dia'"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-power-off"
+                        :title="contratoIris === 'anterior' ? `Iris habla un contrato anterior a ${CONTRATO_IRIS_080}: algunas funciones quedan apagadas` : `Mientras Iris no informe su contrato, se trata como anterior a ${CONTRATO_IRIS_080}`"
+                        data-prueba="funciones-apagadas-iris"
+                    >
+                        <template #description>
+                            <ul class="list-disc space-y-1 pl-4">
+                                <li
+                                    v-for="funcion in FUNCIONES_DESDE_080"
+                                    :key="funcion"
+                                >
+                                    {{ funcion }}
+                                </li>
+                            </ul>
+                            <p class="mt-2">
+                                Se encienden solas cuando Iris se actualiza y vuelve a informar su contrato.
+                            </p>
+                        </template>
+                    </UAlert>
+                    <p
+                        v-else
+                        class="text-sm text-muted"
+                        data-prueba="funciones-al-dia-iris"
+                    >
+                        Iris está al día: recibe las cuentas bancarias al momento, puede pedir reconexiones sin personal de caja e informa su sincronización.
+                    </p>
+                </section>
+
+                <!-- Sincronización informada por Iris (contrato Iris 0.8.0) -->
+                <section
+                    class="surface-card flex flex-col gap-4 p-4 sm:p-6"
+                    aria-labelledby="titulo-sincronizacion-iris"
+                    data-prueba="sincronizacion-iris"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <h2
+                                id="titulo-sincronizacion-iris"
+                                class="flex flex-wrap items-center gap-2 text-base font-semibold text-highlighted"
+                            >
+                                <UIcon
+                                    name="i-lucide-refresh-ccw-dot"
+                                    class="size-5"
+                                />
+                                Sincronización informada por Iris
+                                <UBadge
+                                    v-if="sincronizacion"
+                                    :label="ESTADOS_SINCRONIZACION_IRIS[sincronizacion.estado].etiqueta"
+                                    :icon="ESTADOS_SINCRONIZACION_IRIS[sincronizacion.estado].icono"
+                                    :color="ESTADOS_SINCRONIZACION_IRIS[sincronizacion.estado].color"
+                                    variant="subtle"
+                                    data-prueba="estado-sincronizacion-iris"
+                                />
+                            </h2>
+                            <p class="text-sm text-muted">
+                                Lo que Iris dice que ya copió de ArgosIsp. Argos no lo calcula: lo muestra tal como llegó.
+                            </p>
+                        </div>
+                        <UButton
+                            label="Actualizar"
+                            icon="i-lucide-refresh-cw"
+                            color="neutral"
+                            variant="ghost"
+                            :loading="cargando"
+                            data-prueba="actualizar-sincronizacion-iris"
+                            @click="cargar"
+                        />
+                    </div>
+                    <p
+                        v-if="!sincronizacion"
+                        class="text-sm text-muted"
+                        data-prueba="sin-sincronizacion-iris"
+                    >
+                        {{ SIN_SINCRONIZACION_IRIS }}.
+                    </p>
+                    <template v-else>
+                        <p class="text-sm text-muted">
+                            Empezó el {{ formatearFechaHora(sincronizacion.iniciada_en) }} · último aviso de Iris el {{ formatearFechaHora(sincronizacion.actualizada_en) }}.
+                        </p>
+                        <ul
+                            class="flex flex-col divide-y divide-default"
+                            data-prueba="etapas-sincronizacion-iris"
+                        >
+                            <li
+                                v-for="etapa in etapas"
+                                :key="etapa.recurso"
+                                class="flex flex-col gap-1 py-2"
+                                :data-recurso="etapa.recurso"
+                            >
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <span class="font-medium text-highlighted">{{ RECURSOS_SINCRONIZACION_IRIS[etapa.recurso] }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <span
+                                            class="text-sm tabular-nums text-muted"
+                                            data-prueba="progreso-etapa"
+                                        >{{ textoProgresoEtapa(etapa) }}</span>
+                                        <UBadge
+                                            :label="ESTADOS_SINCRONIZACION_IRIS[etapa.estado].etiqueta"
+                                            :icon="ESTADOS_SINCRONIZACION_IRIS[etapa.estado].icono"
+                                            :color="ESTADOS_SINCRONIZACION_IRIS[etapa.estado].color"
+                                            variant="subtle"
+                                            size="sm"
+                                        />
+                                    </span>
+                                </div>
+                                <UProgress
+                                    v-if="porcentajeEtapa(etapa) !== null"
+                                    :model-value="porcentajeEtapa(etapa)"
+                                    :color="etapa.estado === 'con_errores' ? 'warning' : (etapa.estado === 'completa' ? 'success' : 'primary')"
+                                    size="xs"
+                                    :aria-label="`${RECURSOS_SINCRONIZACION_IRIS[etapa.recurso]}: ${textoProgresoEtapa(etapa)}`"
+                                />
+                                <p
+                                    v-if="etapa.error"
+                                    class="text-sm text-warning"
+                                    data-prueba="error-etapa"
+                                >
+                                    Iris informó: {{ etapa.error }}
+                                </p>
+                                <p
+                                    v-if="etapa.terminada_en"
+                                    class="text-xs text-muted"
+                                >
+                                    Terminó el {{ formatearFechaHora(etapa.terminada_en) }}
+                                </p>
+                            </li>
+                        </ul>
+                    </template>
+                </section>
+
+                <!-- Alcance del usuario técnico Iris -->
+                <section
+                    class="surface-card flex flex-col gap-3 p-4 sm:p-6"
+                    aria-labelledby="titulo-alcance-iris"
+                    data-prueba="alcance-iris"
+                >
+                    <h2
+                        id="titulo-alcance-iris"
+                        class="flex flex-wrap items-center gap-2 text-base font-semibold text-highlighted"
+                    >
+                        <UIcon
+                            name="i-lucide-building-2"
+                            class="size-5"
+                        />
+                        Empresas que ve Iris
+                        <UBadge
+                            v-if="resumen?.alcance?.global"
+                            label="Alcance global"
+                            icon="i-lucide-globe"
+                            color="info"
+                            variant="subtle"
+                            data-prueba="alcance-global-iris"
+                        />
+                    </h2>
+                    <p class="text-sm text-muted">
+                        Iris copia los clientes, los servicios y las cuentas bancarias de estas empresas, con el usuario técnico «Iris».
+                    </p>
+                    <p
+                        v-if="problemaEnvios"
+                        class="text-sm text-error"
+                    >
+                        No se pudo leer el alcance; reintenta en «Envíos recientes».
+                    </p>
+                    <USkeleton
+                        v-else-if="!resumen"
+                        class="h-6 w-full"
+                    />
+                    <p
+                        v-else
+                        class="text-sm text-highlighted"
+                        data-prueba="empresas-alcance-iris"
+                    >
+                        {{ textoAlcanceTecnicoIris(resumen.alcance, nombreEmpresa) }}
+                    </p>
+                </section>
+
                 <!-- Enlace de conexión -->
                 <section
                     v-if="puedeConfigurar"
@@ -558,8 +788,16 @@ onMounted(() => {
                         Conectar con un enlace
                     </h2>
                     <p class="text-sm text-muted">
-                        Iris lo canjea y recibe en un paso su token de ArgosIsp; ArgosIsp guarda la URL de Iris, su token y su receptor. El conector queda apagado hasta que lo actives. Un enlace nuevo anula los anteriores sin usar.
+                        Iris lo canjea y recibe en un paso su token de ArgosIsp; ArgosIsp guarda la URL de Iris, su token y su receptor. Con el enlace el conector queda apagado hasta que lo actives; con el botón «Conectar con Argos» de Iris se enciende solo al confirmar la conexión. Un enlace nuevo anula los anteriores sin usar.
                     </p>
+                    <UAlert
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-copy"
+                        :title="AVISO_COPIA_IRIS"
+                        description="Las empresas son las de «Empresas que ve Iris»."
+                        data-prueba="aviso-copia-enlace-iris"
+                    />
                     <UButton
                         label="Generar enlace de conexión"
                         icon="i-lucide-link-2"
@@ -593,9 +831,16 @@ onMounted(() => {
                                 class="size-5"
                             />
                             Configuración a mano
+                            <UBadge
+                                :label="ETIQUETA_RECUPERACION_IRIS"
+                                icon="i-lucide-life-buoy"
+                                color="neutral"
+                                variant="outline"
+                                data-prueba="recuperacion-manual-iris"
+                            />
                         </h2>
                         <p class="text-sm text-muted">
-                            Alternativa al enlace: copia los datos de Iris a mano.
+                            Úsala solo si el botón «Conectar con Argos» de Iris o el enlace no funcionan: aquí se pega a mano el token de Iris (iris_pat_) y su receptor.
                         </p>
                     </div>
                     <UForm
@@ -685,9 +930,16 @@ onMounted(() => {
                                 class="size-5"
                             />
                             Token de ArgosIsp para Iris
+                            <UBadge
+                                :label="ETIQUETA_RECUPERACION_IRIS"
+                                icon="i-lucide-life-buoy"
+                                color="neutral"
+                                variant="outline"
+                                data-prueba="recuperacion-tokens-iris"
+                            />
                         </h2>
                         <p class="text-sm text-muted">
-                            Lo que usa Iris para leer y escribir en ArgosIsp como el usuario técnico «Iris». El enlace de conexión lo genera solo.
+                            Lo que usa Iris para leer y escribir en ArgosIsp como el usuario técnico «Iris». El botón y el enlace de conexión lo generan solos; genera uno a mano solo para recuperar una conexión.
                         </p>
                     </div>
                     <UButton
@@ -871,7 +1123,7 @@ onMounted(() => {
         <UModal
             v-model:open="tokenAbierto"
             title="Generar token para Iris"
-            description="Un token nuevo no revoca los anteriores."
+            description="Vía de recuperación (avanzado). Un token nuevo no revoca los anteriores."
             :dismissible="!generandoToken"
         >
             <template #body>

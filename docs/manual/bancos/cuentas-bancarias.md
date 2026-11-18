@@ -19,13 +19,16 @@ Se llega desde **Configuración → Cuentas bancarias**.
 
 Filtro: «Todas», «Activas» o «Inactivas».
 
-| Columna       | Qué muestra                            |
-| ------------- | -------------------------------------- |
-| **Cuenta**    | Banco y alias.                         |
-| **Número**    | Número de cuenta.                      |
-| **Moneda**    | Quetzales o dólares.                   |
-| **Subcuenta** | La subcuenta del libro de esta cuenta. |
-| **Estado**    | «Activa» o «Inactiva».                 |
+| Columna            | Qué muestra                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| **Cuenta**         | Banco y alias.                                                                                  |
+| **Número**         | Número de cuenta.                                                                               |
+| **Titular y tipo** | A nombre de quién está la cuenta y si es monetaria o de ahorro. «Falta titular y tipo» si no los tiene. |
+| **Moneda**         | Quetzales o dólares.                                                                            |
+| **Subcuenta**      | La subcuenta del libro de esta cuenta.                                                          |
+| **Estado**         | «Activa» o «Inactiva».                                                                          |
+
+En el teléfono solo se ven la cuenta y el estado; el número y la moneda van debajo del nombre.
 
 ## Acciones
 
@@ -33,13 +36,15 @@ Filtro: «Todas», «Activas» o «Inactivas».
 
 - **Permiso:** `cuentas_bancarias.editar`.
 - **Dónde:** botón «Nueva cuenta».
-- **Qué pide:** **Banco**, **Alias** (cómo la verá el cajero, por ejemplo «Monetaria»), **Número de cuenta**, **Moneda** y «Activa (recibe pagos)».
-- **Qué pasa:** se crea la cuenta y su subcuenta en el libro.
+- **Qué pide:** **Banco**, **Alias** (cómo la verá el cajero, por ejemplo «Recaudación»), **Número de cuenta**, **Titular** (el nombre a quien se deposita, tal como lo escribe el cliente en la boleta; de 2 a 120 caracteres), **Tipo** (monetaria o de ahorro), **Moneda** y «Activa (recibe pagos)».
+- **Qué pasa:** se crea la cuenta y su subcuenta en el libro. Si Iris está conectado, Iris se entera del cambio y actualiza las cuentas que ofrece para depositar.
 
 ### Editar o desactivar
 
 - **Permiso:** `cuentas_bancarias.editar`.
 - **Dónde:** el lápiz de la fila.
+- Las cuentas creadas antes de la versión 1.18 no tienen **Titular** ni **Tipo** (la lista dice «Falta titular y tipo»): el formulario los pide al editarlas, aunque solo quieras cambiar otra cosa. Iris no ofrece para depositar una cuenta sin titular.
+- Cada cambio queda en la bitácora (antes y después de cada campo) y, si Iris está conectado, se le avisa.
 - Las cuentas **no se borran**, porque tienen movimientos en el libro. Se desactivan: una cuenta inactiva deja de aparecer en el cobro y en el portal, y sus pagos anteriores se conservan.
 
 ::: warning Cuentas en dólares
@@ -48,11 +53,13 @@ Una cuenta en dólares no recibe pagos (no hay tipo de cambio). Tampoco una inac
 
 ## Preguntas frecuentes y errores
 
-| Mensaje                                       | Qué hacer                                                        |
-| --------------------------------------------- | ---------------------------------------------------------------- |
-| «Ese número ya está registrado en este banco» | La cuenta ya existe: edítala.                                    |
-| «Alguien más cambió esta cuenta»              | «Recargar» trae la versión actual; vuelve a aplicar tus cambios. |
-| La cuenta no aparece en el cobro              | Revisa que esté activa y en quetzales.                           |
+| Mensaje                                       | Qué hacer                                                                                                                                |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| «Ese número ya está registrado en este banco» | La cuenta ya existe: edítala.                                                                                                            |
+| «Alguien más cambió esta cuenta»              | «Recargar» trae la versión actual; vuelve a aplicar tus cambios.                                                                         |
+| La cuenta no aparece en el cobro              | Revisa que esté activa y en quetzales.                                                                                                   |
+| «La cuenta bancaria está desactivada» (al cobrar) o «…: cuenta desactivada» (al aprobar un comprobante) | El pago o el comprobante apunta a una cuenta desactivada: elige otra cuenta activa o reactívala si de verdad sigue recibiendo depósitos. Si el cliente depositó en ella, reactívala o rechaza el comprobante y explícale dónde depositar. |
+| Iris no ofrece la cuenta a los clientes       | Revisa que tenga **Titular**, que esté activa y en quetzales.                                                                            |
 
 ## Relacionado
 

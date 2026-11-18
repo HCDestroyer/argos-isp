@@ -1,6 +1,7 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { CAMPOS_CUENTA_BANCARIA_CAMBIADA, type CampoCuentaBancariaCambiada } from '#shared/eventos'
 import {
     nombreCuentaLibro,
     verCuentaBancaria,
@@ -12,7 +13,9 @@ import {
  * `cuentas_bancarias.editar` (`PUT /cuentas-bancarias/:id`, con `version`): cambia banco, número,
  * alias, moneda o `activa` (una inactiva no recibe pagos nuevos). Renombra la subcuenta del
  * libro; nunca la desactiva (los reversos de pagos viejos deben poder usarla). Cada campo queda
- * en `audit.cambios`.
+ * en `audit.cambios`. `titular` y `tipo` (contrato Iris 0.8.0): ausente = sin cambio, null = sin
+ * dato. Si algo cambió, emite `cuenta_bancaria.cambiada` con los nombres de los campos y `activa`
+ * después del cambio; una edición sin cambios no emite nada.
  */
 
 export interface EntradaEditarCuentaBancaria extends Partial<EntradaCuentaBancaria> {
@@ -38,6 +41,8 @@ export default class EditarCuentaBancaria extends DomainAction<
                 'banco_id',
                 'numero',
                 'alias',
+                'titular',
+                'tipo',
                 'moneda',
                 'activa',
                 'cuenta_id',
@@ -54,6 +59,9 @@ export default class EditarCuentaBancaria extends DomainAction<
             banco_id: input.banco_id ?? previa.banco_id,
             numero: input.numero?.trim() ?? previa.numero,
             alias: input.alias?.trim() ?? previa.alias,
+            // null borra el dato; ausente lo deja como estaba
+            titular: input.titular === undefined ? previa.titular : input.titular?.trim() || null,
+            tipo: input.tipo === undefined ? previa.tipo : input.tipo,
             moneda: input.moneda ?? previa.moneda,
             activa: input.activa ?? previa.activa,
         }
@@ -104,11 +112,34 @@ export default class EditarCuentaBancaria extends DomainAction<
                 banco_id: previa.banco_id,
                 numero: previa.numero,
                 alias: previa.alias,
+                titular: previa.titular,
+                tipo: previa.tipo,
                 moneda: previa.moneda,
                 activa: previa.activa,
             },
             despues,
         )
+        const antes: Record<CampoCuentaBancariaCambiada, unknown> = {
+            banco_id: Number(previa.banco_id),
+            numero: previa.numero,
+            alias: previa.alias,
+            titular: previa.titular,
+            tipo: previa.tipo,
+            moneda: previa.moneda,
+            activa: previa.activa,
+        }
+        const campos = CAMPOS_CUENTA_BANCARIA_CAMBIADA.filter((c) =>
+            c === 'banco_id' ? antes.banco_id !== Number(despues.banco_id) : antes[c] !== despues[c],
+        )
+        if (campos.length > 0) {
+            await t.emit('cuenta_bancaria.cambiada', {
+                cuenta_bancaria_id: Number(previa.id),
+                empresa_id: Number(previa.empresa_id),
+                campos,
+                activa: despues.activa,
+                creada: false,
+            })
+        }
         return verCuentaBancaria(previa.id, t.trx)
     }
 }

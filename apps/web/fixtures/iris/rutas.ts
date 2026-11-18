@@ -7,7 +7,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
-import { conectorIrisAnterior063, conectorIrisCanjeConfirmado, conectorIrisCanjePendiente, conectorIrisDesconectado, conectorIrisPorReconectar, conectorIrisReconexionPendiente, ORIGENES_IRIS_FIXTURES } from './datos'
+import { conectorIrisAnterior063, conectorIrisCanjeConfirmado, conectorIrisCanjePendiente, conectorIrisDesconectado, conectorIrisPorReconectar, conectorIrisReconexionPendiente, ORIGENES_IRIS_FIXTURES, sincronizacionIrisEjemplo } from './datos'
 
 type Conector = Schema<'ConectorIris'>
 
@@ -29,8 +29,8 @@ function reconexionPedida(): boolean {
 /**
  * Clave de `localStorage` para Playwright (contrato Iris 0.6.3): su valor elige el estado del canje
  * con que `GET /integraciones/iris` toma el conector: `pendiente`, `confirmado`,
- * `revocado_por_iris`, `canje_sin_uso`, `reconexion` (reconexión pendiente) o `anterior` (API
- * anterior a 0.6.3, sin los campos).
+ * `revocado_por_iris`, `canje_sin_uso`, `reconexion` (reconexión pendiente), `anterior` (API
+ * anterior a 0.6.3, sin los campos) o `sincronizacion` (Iris 0.7.1 con su sincronización, 0.8.0).
  */
 export const CLAVE_IRIS_CANJE = 'argos_fixtures_iris_canje'
 
@@ -41,6 +41,8 @@ const ESCENARIOS_CANJE: Record<string, () => Conector> = {
     canje_sin_uso: () => conectorIrisDesconectado('canje_sin_uso', new Date(Date.now() - 30 * 60_000)),
     reconexion: () => conectorIrisReconexionPendiente(new Date(Date.now() - 3 * 60 * 60_000)),
     anterior: () => conectorIrisAnterior063(),
+    // contrato Iris 0.8.0: Iris 0.7.1 con su sincronización informada (con errores en una etapa)
+    sincronizacion: () => ({ ...conectorIrisCanjeConfirmado(new Date(Date.now() - 2 * 60 * 60_000)), contrato: '0.7.1', sincronizacion: sincronizacionIrisEjemplo('con_errores') }),
 }
 
 function escenarioCanje(): (() => Conector) | null {
@@ -158,7 +160,7 @@ function resumen(): Schema<'ResumenEnviosIris'> {
     return {
         destino_configurado: conector.activo && conector.webhook_salida_url !== null && conector.webhook_salida_secreto !== null,
         // El usuario técnico Iris nace con el primer token; los fixtures le dan alcance global.
-        alcance: tokens.length ? { global: true, empresas: [] } : null,
+        alcance: bd.iris.alcanceUsuario ?? (tokens.length ? { global: true, empresas: [] } : null),
         pendientes: envios.filter(e => e.estado === 'pendiente').length,
         fallidos: envios.filter(e => e.estado === 'fallido').length,
         ultimo_enviado_en: enviados.at(-1) ?? null,
@@ -276,7 +278,7 @@ export const rutasIris: RutasFixture = {
         const estado: Schema<'EstadoConectorIris'> = {
             activo: activo && url_base !== null && token !== null,
             version_argos: 'desarrollo',
-            contrato: '0.5.0',
+            contrato: '0.8.0',
         }
         return { status: 200, cuerpo: estado }
     }),

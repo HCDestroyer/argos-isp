@@ -32,6 +32,7 @@ import CanjearEnlaceIris from '#integraciones/iris/actions/canjear_enlace_iris'
 import AbrirEnIris from '#integraciones/iris/actions/abrir_en_iris'
 import AutorizarIris from '#integraciones/iris/actions/autorizar_iris'
 import InformarContratoIris from '#integraciones/iris/actions/informar_contrato_iris'
+import InformarSincronizacionIris from '#integraciones/iris/actions/informar_sincronizacion_iris'
 import RevocarConexionIris from '#integraciones/iris/actions/revocar_conexion_iris'
 import { vistaPreviaAutorizacionIris } from '#integraciones/iris/autorizacion'
 import { estadoConectorIris, verConectorIris } from '#integraciones/iris/configuracion'
@@ -43,6 +44,7 @@ import {
     ContratoConectorIris,
     EnlaceConexionIris,
     EstadoConectorIris,
+    SincronizacionIrisGuardada,
     TicketIris,
     VerificacionIdentidad,
     VistaPreviaAutorizacionIris,
@@ -133,6 +135,34 @@ const iris: Ruta[] = [
                     receptor_argos: cuerpo.receptor_argos ?? null,
                     atk_id: tokenDeLaPeticion(ctx),
                 },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/integraciones/iris/sincronizacion',
+        operacion: 'irisInformarSincronizacion',
+        resumen: 'Iris informa el avance de su primera sincronización (servidor a servidor)',
+        descripcion:
+            'Contrato Iris 0.8.0 (§2.5). Solo con el token `atk_` del usuario técnico Iris, como ' +
+            '`PUT /integraciones/iris/contrato` (403 con cualquier otra credencial; si el conector se preparó con ' +
+            'un enlace, solo el `atk_` de ese canje). Permiso de ruta `sso.emitir`. Funciona con el conector ' +
+            'apagado. Se guarda en el conector y sale en `GET /integraciones/iris` (`sincronizacion`). ' +
+            'Idempotente: la misma `sincronizacion_id` con el mismo `actualizada_en` responde lo guardado. ' +
+            '409 `sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o ' +
+            'si `sincronizacion_id` es más vieja que la guardada (UUID v7). Iris lo manda solo al cambiar de ' +
+            'etapa o de estado.',
+        etiqueta: 'integraciones',
+        permiso: 'sso.emitir',
+        cuerpo: vi.sincronizacionIrisValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Sincronización guardada',
+            esquema: SincronizacionIrisGuardada,
+        },
+        handler: (ctx, { cuerpo }) =>
+            new InformarSincronizacionIris().execute(
+                { ...cuerpo, atk_id: tokenDeLaPeticion(ctx) },
                 ctx.contextoAccion(),
             ),
     }),

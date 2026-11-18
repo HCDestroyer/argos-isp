@@ -155,7 +155,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
 | `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id, user_ppp (o null; nunca la contraseña); router: router_id, empresa_id (con túnel sale antes `router.conexion_eliminada`). Solo sin historial (`contratos/eliminar.md`); con historial se retira |
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo (`instalacion` al activar un `pendiente_instalacion`) |
-| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa, servidor_pppoe, credenciales: cambió user_ppp o pass_ppp, sin valores; coa hace Disconnect y routeros reescribe el /ppp secret), empresa_anterior_id (solo con `empresa`); motivo (opcional: `plan_temporal` con plan_temporal_id, o `union_routers` al unir routers duplicados, que no desconecta) |
+| `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa, servidor_pppoe, credenciales: cambió user_ppp o pass_ppp, sin valores; precio: cambió el precio efectivo por plan, `costo_override` o plan temporal; coa hace Disconnect y routeros reescribe el /ppp secret), empresa_anterior_id (solo con `empresa`); motivo (opcional: `plan_temporal` con plan_temporal_id, o `union_routers` al unir routers duplicados, que no desconecta) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
 | `servicio.adicional_agregado` / `servicio.adicional_cambiado` / `servicio.adicional_quitado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, modalidad; agregado: origen, primer_periodo, bloqueo; cambiado: campos[], modalidad_anterior; quitado: origen, motivo. Nunca la credencial (`contratos/adicionales.md`) |
 | `adicional.bloqueado` / `adicional.desbloqueado` | núcleo | servicio_id, cliente_id, empresa_id, asignacion_id, adicional_id, identificador, modalidad, estado_servicio, motivo (`contratos/adicionales.md`) |
@@ -169,6 +169,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` / `promesa.cancelada` | billing | promesa_id, empresa_id, cliente_id, servicio_id, tipo (`promesa` \| `reconexion_temporal`), canal, comprobante_id, vence, monto, origen; cancelada además estado (`cancelada` \| `rechazada`), motivo, detalle |
+| `cuenta_bancaria.cambiada` | billing | cuenta_bancaria_id, empresa_id, campos[] (banco_id, numero, alias, titular, tipo, moneda, activa; solo nombres), activa (después del cambio), creada. A Iris solo con contrato ≥ 0.8.0 |
 | `caja.cerrada` | ledger | caja_id, empresa_id, cajero_id, esperado, contado, diferencia |
 | `portal.config_cambiada` | núcleo (empresas) y portal (portal de corte) | empresa_id (null = configuración global del portal de corte), campos[] (`url_corte`, `portal_v4`, `portal_v6`, `portal_puerto`, `modo_suspension`, `corte_identificacion`; nunca valores), router_id (solo con `corte_identificacion`: reconcilia ese router). Lo consumen `routeros` (reconcilia el corte si cambió algo de red) y `coa` (relee el modo de suspensión) |
 | `portal.codigo_corte_emitido` | portal (routeros) | codigo_corte_id, servicio_id, empresa_id, cliente_id, router_id; nunca el código (`contratos/corte-identificacion.md`) |
@@ -190,7 +191,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 | `qos.config_cambiada` | network (QoS) | perfil_id, empresa_id, clase_id, router_id, campos[], routers[] (`contratos/qos.md`) |
 | `servicio.datos_cambiados` | núcleo | servicio_id, empresa_id, empresas[], cliente_id, campos[] (direccion, coordenadas, referencia, contacto_nombre, contacto_telefono; solo nombres). No lleva cambios de red |
-| `catalogo.cambiado` | núcleo | catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido; en plan siempre null), campos[] (nombre, activo, coordenadas) |
+| `catalogo.cambiado` | núcleo | catalogo (`zona` \| `plan` \| `router`), id, empresa_id (o null = compartido; en plan siempre null), campos[] (nombre, activo, coordenadas, precio en plan) |
 | `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
 | `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |

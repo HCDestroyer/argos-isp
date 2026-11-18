@@ -217,10 +217,14 @@ function operacion(ruta: Ruta): EsquemaJson {
     }
 
     if (ruta.cabecerasIris) {
+        const opcional = ruta.cabecerasIris === 'opcional'
         const condicion =
             typeof ruta.cabecerasIris === 'function'
                 ? ' cuando la petición es de atención (ver la descripción)'
                 : ''
+        const obligatoria = opcional
+            ? 'Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan'
+            : `Obligatoria con el token del usuario técnico Iris${condicion}`
         parametros.push(
             {
                 name: 'X-Iris-Actor',
@@ -228,14 +232,14 @@ function operacion(ruta: Ruta): EsquemaJson {
                 required: false,
                 description: ruta.actuarComoVinculado
                     ? `Obligatoria con el token del usuario técnico Iris: \`usuario:<id en Iris>\` de un operador con usuario de Argos vinculado (contrato Iris 0.7.0); la acción corre y se audita como ese usuario, con sus permisos y empresas (∩ las del token). \`asistente_ia\` responde 403 \`actor_ia_no_permitido\`. Con \`Idempotency-Key\`, la misma clave con otro actor es 422`
-                    : `Obligatoria con el token del usuario técnico Iris${condicion}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
+                    : `${obligatoria}: \`asistente_ia\` o \`usuario:<id en Iris>\` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (\`ia\` o \`api\`)`,
                 schema: { type: 'string', pattern: '^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$' },
             },
             {
                 name: 'X-Iris-Conversacion',
                 in: 'header',
                 required: false,
-                description: `Obligatoria con el token del usuario técnico Iris${condicion}: id de la conversación en Iris; queda en la auditoría`,
+                description: `${obligatoria}: id de la conversación en Iris; queda en la auditoría`,
                 schema: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' },
             },
         )
@@ -279,9 +283,11 @@ function operacion(ruta: Ruta): EsquemaJson {
         ruta.idempotente === 'obligatoria'
             ? 'Falta el header Idempotency-Key (`idempotency_key_requerida`)'
             : null,
-        ruta.cabecerasIris
-            ? 'Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)'
-            : null,
+        ruta.cabecerasIris === 'opcional'
+            ? 'Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`)'
+            : ruta.cabecerasIris
+              ? 'Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)'
+              : null,
     ].filter((m): m is string => m !== null)
     if (faltas400.length > 0) respuestas['400'] = problema(faltas400.join('; o '))
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')

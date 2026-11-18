@@ -508,6 +508,19 @@ export const Servicio = definirEsquema(
                     'lectura: la planta vive en OZmap y llega desde Iris al activar la instalación. null sin datos',
             },
             costo_override: nulable(Dinero),
+            precio_mensual: {
+                ...Dinero,
+                description:
+                    'Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el ' +
+                    'precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA ' +
+                    'incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 ' +
+                    'decimales (contrato Iris 0.8.0)',
+            },
+            moneda: {
+                type: 'string',
+                enum: ['GTQ'],
+                description: 'Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)',
+            },
             excluir_firewall: booleano,
             ipv4: nulable(texto),
             prefijo_enlace_v6: nulable(texto),

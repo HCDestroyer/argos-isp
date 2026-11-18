@@ -93,6 +93,8 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     con_promesa_activa?: boolean
     /** dependientes de este responsable de pago */
     responsable_pago_id?: number
+    /** solo clientes con al menos un servicio no retirado (el mismo que cumpla estado, router y plan) */
+    excluir_retirados?: boolean
     /** documento fiscal marcado inválido por la migración (true) o no (false) */
     nit_cui_invalido?: boolean
     /**
@@ -254,10 +256,11 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string,
  * deuda vencida y promesa activa son solo lectura sobre `billing` (A3 es dueño de esas tablas).
  */
 function aplicarFiltrosAvanzados(consulta: DatabaseQueryBuilderContract<any>, filtros: FiltrosClientes) {
-    if (filtros.estado_servicio || filtros.router_id || filtros.plan_id) {
+    if (filtros.estado_servicio || filtros.router_id || filtros.plan_id || filtros.excluir_retirados) {
         consulta.whereExists((s) => {
             s.from('core.servicios as s_f').whereRaw('s_f.cliente_id = c.id')
             if (filtros.estado_servicio) s.where('s_f.estado', filtros.estado_servicio)
+            if (filtros.excluir_retirados) s.whereNot('s_f.estado', 'retirado')
             if (filtros.router_id) s.where('s_f.router_id', filtros.router_id)
             if (filtros.plan_id) s.where('s_f.plan_id', filtros.plan_id)
         })

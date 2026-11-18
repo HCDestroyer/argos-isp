@@ -106,6 +106,11 @@ export interface PayloadPromesa {
     tipo: 'promesa' | 'reconexion_temporal'
     canal: 'portal' | 'ia' | 'operador' | 'supervisor'
     comprobante_id: number | null
+    /**
+     * Solo en una reconexión temporal: por qué la pidió Iris (`fuera_de_horario` o `sin_personal`);
+     * null en las demás. Desde el 17 nov 2026; los eventos anteriores no lo traen.
+     */
+    motivo_reconexion?: 'fuera_de_horario' | 'sin_personal' | null
     /** instante ISO 8601 */
     vence: string
     monto: Dinero
@@ -255,8 +260,23 @@ interface PayloadAdicional {
     modalidad: ModalidadAdicional
 }
 
-/** Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers. */
-export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas'
+/**
+ * Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers; `precio`
+ * solo en planes (contrato Iris 0.8.0: Iris relee `GET /servicios?plan_id=`).
+ */
+export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas' | 'precio'
+
+/** Campos de `cuenta_bancaria.cambiada` (contrato Iris 0.8.0 §7.8); `empresa_id` no se edita. */
+export const CAMPOS_CUENTA_BANCARIA_CAMBIADA = [
+    'banco_id',
+    'numero',
+    'alias',
+    'titular',
+    'tipo',
+    'moneda',
+    'activa',
+] as const
+export type CampoCuentaBancariaCambiada = (typeof CAMPOS_CUENTA_BANCARIA_CAMBIADA)[number]
 
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
@@ -314,6 +334,12 @@ export interface CatalogoEventos {
             | 'servidor_pppoe'
             /** cambió `user_ppp` o `pass_ppp` de un PPPoE que sigue PPPoE (nunca los valores; pedido del PM, 5 nov) */
             | 'credenciales'
+            /**
+             * cambió el precio efectivo (`precio_mensual`: `costo_override` o el plan, también al empezar o
+             * terminar un plan temporal con otro precio). Contrato Iris 0.8.0; sin valores. No cambia nada
+             * en la red: `coa` lo ignora y RouterOS no tiene nada que corregir
+             */
+            | 'precio'
         >
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'
@@ -993,6 +1019,19 @@ export interface CatalogoEventos {
         lineas: number
         monto: Dinero
     }
+    /**
+     * Se creó o editó una cuenta bancaria propia (contrato Iris 0.8.0 §7.8, pedido A26). Al crear,
+     * `creada: true` y `campos` = todo lo que se guardó; al editar, solo los campos que cambiaron.
+     * `activa` es el valor después del cambio. `campos`: solo nombres, nunca valores. Las cuentas
+     * nunca se borran.
+     */
+    'cuenta_bancaria.cambiada': {
+        cuenta_bancaria_id: number
+        empresa_id: number
+        campos: CampoCuentaBancariaCambiada[]
+        activa: boolean
+        creada: boolean
+    }
     'cartera.castigada': {
         castigo_id: number
         empresa_id: number
@@ -1443,6 +1482,7 @@ export const EVENTOS = [
     'caja.depositada',
     'banco.extracto_importado',
     'banco.conciliado',
+    'cuenta_bancaria.cambiada',
     'cartera.castigada',
     'compra.registrada',
     'compra.anulada',

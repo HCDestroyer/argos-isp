@@ -6,6 +6,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
+import { precioEfectivoSql } from '#billing/configuracion'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import type { PlantaServicio } from '#core/instalacion'
@@ -57,6 +58,13 @@ export interface ServicioVista {
     /** referencia de planta de la instalación (pedido A9 de Iris) o null */
     planta: PlantaServicio | null
     costo_override: string | null
+    /**
+     * Precio mensual efectivo (contrato Iris 0.8.0): `costo_override` o el precio del plan vigente,
+     * IVA incluido, 2 decimales (`precioMensualSql`)
+     */
+    precio_mensual: string
+    /** siempre `GTQ` */
+    moneda: 'GTQ'
     excluir_firewall: boolean
     ipv4: string | null
     prefijo_enlace_v6: string | null
@@ -101,6 +109,21 @@ export interface PlanTemporalResumen {
     version: number
 }
 
+/** Moneda de `precio_mensual` (contrato Iris 0.8.0): los planes no tienen moneda. */
+export const MONEDA_SERVICIO = 'GTQ'
+
+/**
+ * Precio mensual efectivo del servicio `alias` (fila de `core.servicios`), como texto con 2
+ * decimales: el precio con el que Argos lo factura, `costo_override ?? precio del plan vigente`, IVA
+ * incluido. Un plan temporal activo cuenta, porque `plan_id` ya es el temporal. No incluye
+ * adicionales, descuentos, mora, prorrateo ni cargos únicos. Es la misma regla de `leerServicio`
+ * (`#billing/configuracion`, `precio`).
+ */
+export function precioMensualSql(alias = 's'): string {
+    // Un solo cálculo de precio en todo Argos: el de facturación (`precioEfectivoSql`).
+    return `(${precioEfectivoSql(alias)}::text)`
+}
+
 function columnas(cliente: QueryClientContract) {
     return [
         's.id',
@@ -128,6 +151,8 @@ function columnas(cliente: QueryClientContract) {
         's.instalado_en',
         's.planta',
         's.costo_override',
+        cliente.raw(`${precioMensualSql('s')} AS precio_mensual`),
+        cliente.raw(`'${MONEDA_SERVICIO}'::text AS moneda`),
         's.excluir_firewall',
         cliente.raw(
             `(SELECT host(a.ip) FROM network.ipv4_asignaciones a WHERE a.servicio_id = s.id AND a.fin IS NULL LIMIT 1) AS ipv4`,
@@ -203,6 +228,8 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     con_deuda_vencida?: boolean
     /** tipo del plan del servicio */
     tipo?: TipoPlan
+    /** sin los servicios `retirado` (contrato Iris 0.8.0) */
+    excluir_retirados?: boolean
 }
 
 /**
@@ -219,6 +246,7 @@ export async function listarServicios(
     if (filtros.router_id) consulta.where('s.router_id', filtros.router_id)
     if (filtros.plan_id) consulta.where('s.plan_id', filtros.plan_id)
     if (filtros.estado) consulta.where('s.estado', filtros.estado)
+    if (filtros.excluir_retirados) consulta.whereNot('s.estado', 'retirado')
     if (filtros.tipo_conexion) consulta.where('s.tipo_conexion', filtros.tipo_conexion)
     if (filtros.tipo) {
         consulta.whereExists((c) =>

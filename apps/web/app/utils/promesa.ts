@@ -32,6 +32,19 @@ export const TIPOS_PROMESA: Record<NonNullable<PromesaPago['tipo']>, { etiqueta:
     reconexion_temporal: { etiqueta: 'Reconexión temporal', color: 'warning', icono: 'i-lucide-plug-zap' },
 }
 
+type MotivoReconexion = NonNullable<PromesaPago['motivo_reconexion']>
+
+/** Por qué Iris pidió la reconexión temporal (`motivo_reconexion`, A3 17 nov 2026), con las palabras del manual. */
+export const MOTIVOS_RECONEXION: Record<MotivoReconexion, { etiqueta: string, descripcion: string, icono: string }> = {
+    fuera_de_horario: { etiqueta: 'Fuera de horario', descripcion: 'La caja está cerrada', icono: 'i-lucide-moon' },
+    sin_personal: { etiqueta: 'Sin personal de caja', descripcion: 'Horario hábil, pero nadie de caja puede revisar el comprobante', icono: 'i-lucide-user-x' },
+}
+
+/** Etiqueta del motivo de una reconexión temporal; null en las promesas normales (o sin motivo). */
+export function etiquetaMotivoReconexion(promesa: Pick<PromesaPago, 'motivo_reconexion'>): string | null {
+    return promesa.motivo_reconexion ? MOTIVOS_RECONEXION[promesa.motivo_reconexion].etiqueta : null
+}
+
 /** Tipo de una promesa: sin `tipo` (fixtures viejos) es `promesa`, como en la API. */
 export function tipoPromesa(promesa: Pick<PromesaPago, 'tipo'>): NonNullable<PromesaPago['tipo']> {
     return promesa.tipo ?? 'promesa'

@@ -133,6 +133,9 @@ async function tipoEfectivo(
  * - desde `pppoe`: borra las credenciales y escribe la lápida en `aaa:user:<user_ppp viejo>`;
  *   los modos IPv6 por RADIUS pasan a `ninguno` si no se pidió otro modo.
  * Cambiar `mac` o `amarre_ip_mac` emite `servicio.config_cambiada` con ese campo (lease y ARP).
+ * Si cambia el precio efectivo (`precio_mensual`: `costo_override` o el plan), `campos` lleva
+ * además `precio` (contrato Iris 0.8.0; sin valores, Iris relee el servicio). Solo `precio` no abre
+ * un tramo en `asignaciones_historial`.
  *
  * Cambiar `direccion`, `coordenadas`, `referencia`, `contacto_nombre` o `contacto_telefono` (pedidos
  * A10, A12 y A13 de Iris) emite `servicio.datos_cambiados` con `campos[]` (solo nombres, nunca
@@ -377,6 +380,8 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         ) {
             campos.push('prefijo_v6')
         }
+        // contrato Iris 0.8.0: cambió el precio efectivo (`costo_override` o el plan); sin valores
+        if (despues.precio_mensual !== antes.precio_mensual) campos.push('precio')
         if (campos.includes('plan')) {
             await reconciliarIncluidos(
                 t,
@@ -386,7 +391,9 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             )
         }
         if (campos.length > 0) {
-            await registrarTramo(t.trx, id, `edicion: ${campos.join(', ')}`)
+            // el precio no es parte de la asignación (router, plan, IPs): no abre un tramo por sí solo
+            const camposTramo = campos.filter((c) => c !== 'precio')
+            if (camposTramo.length > 0) await registrarTramo(t.trx, id, `edicion: ${camposTramo.join(', ')}`)
             await t.emit('servicio.config_cambiada', {
                 servicio_id: id,
                 empresa_id: despues.empresa_id,

@@ -10,7 +10,8 @@ import type { OrigenIris } from '#shared/contexto'
  *
  * - **Cabeceras de atención** (`X-Iris-Actor`, `X-Iris-Conversacion`): obligatorias en las rutas de
  *   §7 (las que declaran `cabecerasIris` en `definirRuta`). Sin ellas o mal formadas:
- *   `400 cabecera_iris_requerida`. Ya validadas quedan en `ctx.iris`, y de ahí en el
+ *   `400 cabecera_iris_requerida`. Con `cabecerasIris: 'opcional'` (0.8.0) pueden faltar las dos;
+ *   si viene alguna, se validan igual. Ya validadas quedan en `ctx.iris`, y de ahí en el
  *   `ContextoAccion` (canal `ia` con `asistente_ia`, `api` con `usuario:<id>`) y en
  *   `audit.acciones` (`iris_actor`, `iris_conversacion`). Otro actor (panel, otro token) no las
  *   necesita y, si las manda, se ignoran.
@@ -69,10 +70,24 @@ export function leerCabecerasIris(actor: string | undefined, conversacion: strin
  * Exige las cabeceras de atención si el actor es el token de Iris y las deja en `ctx.iris`. Con otro
  * actor no hace nada (null). La llama `despachar` en las rutas con `cabecerasIris`; un handler
  * puede llamarla cuando solo una variante de la ruta es de §7 (`GET /clientes?telefono=`).
+ *
+ * `opcional` (rutas con `cabecerasIris: 'opcional'`, contrato Iris 0.8.0: lecturas que Iris también
+ * hace sin conversación, como la primera sincronización): si no viene **ninguna** de las dos,
+ * responde null sin error; si viene alguna, las dos se validan igual (400 `cabecera_iris_requerida`).
  */
-export function exigirCabecerasIris(ctx: HttpContext): OrigenIris | null {
+export function exigirCabecerasIris(
+    ctx: HttpContext,
+    opciones: { opcional?: boolean } = {},
+): OrigenIris | null {
     if (!esTokenIris(ctx)) return null
     if (ctx.iris) return ctx.iris
+    if (
+        opciones.opcional &&
+        ctx.request.header(CABECERA_IRIS_ACTOR) === undefined &&
+        ctx.request.header(CABECERA_IRIS_CONVERSACION) === undefined
+    ) {
+        return null
+    }
     const origen = leerCabecerasIris(
         ctx.request.header(CABECERA_IRIS_ACTOR),
         ctx.request.header(CABECERA_IRIS_CONVERSACION),

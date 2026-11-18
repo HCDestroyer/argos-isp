@@ -17,14 +17,20 @@ import { ConsumidorIris } from '#integraciones/iris/consumidor'
 import {
     EVENTOS_A_IRIS,
     EVENTOS_DESDE_060,
+    EVENTOS_DESDE_080,
     entregarPendientesIris,
     fijarFetchEnviosIris,
     registrarEnvioIris,
 } from '#integraciones/iris/envios'
 import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
 
-/** Los eventos de §2.3 hasta 0.5.0 (los de 0.6.0 se prueban en `iris_webhooks_060.spec.ts`). */
-const EVENTOS_HASTA_050 = EVENTOS_A_IRIS.filter((e) => !(EVENTOS_DESDE_060 as readonly string[]).includes(e))
+/**
+ * Los eventos de §2.3 hasta 0.5.0 (los de 0.6.0 se prueban en `iris_webhooks_060.spec.ts` y los de
+ * 0.8.0 en `iris_webhooks_080.spec.ts`).
+ */
+const EVENTOS_HASTA_050 = EVENTOS_A_IRIS.filter(
+    (e) => !([...EVENTOS_DESDE_060, ...EVENTOS_DESDE_080] as readonly string[]).includes(e),
+)
 
 /**
  * Webhooks Argos → Iris (`contratos/iris.md` §1.3 y §2.3): los catorce eventos (con los eliminados

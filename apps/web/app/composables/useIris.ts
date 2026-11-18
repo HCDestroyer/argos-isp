@@ -18,6 +18,14 @@ export function useIris() {
         return resolver(api.GET('/api/v1/integraciones/iris'))
     }
 
+    /**
+     * `GET /integraciones/iris/estado` (`iris.abrir`): si «Ver en Iris» funciona, la versión de
+     * Argos y el contrato Iris ↔ Argos que habla este Argos. Sin secretos.
+     */
+    function estado(): Promise<Resultado<EstadoConectorIrisPublico>> {
+        return resolver(api.GET('/api/v1/integraciones/iris/estado'))
+    }
+
     /** `PUT /integraciones/iris` (`iris.configurar`) con la `version` leída (409 si cambió). */
     function guardar(cambios: CambiosConectorIris): Promise<Resultado<ConectorIris>> {
         return resolver(api.PUT('/api/v1/integraciones/iris', { body: cambios }))
@@ -69,5 +77,5 @@ export function useIris() {
         return resolver(api.POST('/api/v1/integraciones/iris/autorizar', { body: datos }))
     }
 
-    return { conector, guardar, generarEnlace, tokens, generarToken, revocarToken, envios, resumenEnvios, vistaPreviaAutorizacion, autorizar }
+    return { conector, estado, guardar, generarEnlace, tokens, generarToken, revocarToken, envios, resumenEnvios, vistaPreviaAutorizacion, autorizar }
 }

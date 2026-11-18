@@ -29,7 +29,7 @@ export const FORMATO_TOKEN_IRIS = /^iris_pat_[A-Za-z0-9]{16,}$/
  * Versión del contrato `contratos/iris.md` que habla este Argos. Sale en el canje y en
  * `GET /integraciones/iris/estado` como `contrato` (0.5.0, «Versión y compatibilidad»).
  */
-export const CONTRATO_IRIS = '0.7.1'
+export const CONTRATO_IRIS = '0.8.0'
 
 /** Semver `x.y.z` con prerelease opcional (`0.5.0`, `0.6.0-rc.1`). Sin `v` ni metadatos `+`. */
 export const FORMATO_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
@@ -148,9 +148,34 @@ export interface FilaConectorIris {
     pendiente_canjeado_en: Date | null
     /** `JuegoPendienteIris` cifrado */
     pendiente_secreto_cifrado: string | null
+    /** 0.8.0: el canje directo nació del botón (§1.4) y se enciende al confirmarlo */
+    encender_al_confirmar: boolean
+    /** 0.8.0: lo último que informó Iris de su sincronización (`PUT /integraciones/iris/sincronizacion`) */
+    sincronizacion: SincronizacionIris | null
     version: number
     created_at: Date
     updated_at: Date
+}
+
+/**
+ * Primera sincronización de Iris (contrato 0.8.0, §2.5): lo último que informó con
+ * `PUT /integraciones/iris/sincronizacion`, tal cual (instantes en ISO UTC) más `recibida_en`.
+ */
+export interface SincronizacionIris {
+    sincronizacion_id: string
+    estado: 'en_curso' | 'completa' | 'con_errores'
+    iniciada_en: string
+    actualizada_en: string
+    etapas: Array<{
+        recurso: string
+        estado: 'pendiente' | 'en_curso' | 'completa' | 'con_errores'
+        procesados: number
+        total: number | null
+        error: string | null
+        terminada_en: string | null
+    }>
+    /** cuándo lo recibió Argos */
+    recibida_en: string
 }
 
 /** Configuración efectiva con los secretos en claro. Nunca sale del proceso (ni al log). */
@@ -392,6 +417,8 @@ export interface VistaConectorIris {
     reconexion_pendiente_desde: string | null
     /** cuándo se descarta esa reconexión si nadie la usa (24 h); null si no hay */
     reconexion_vence_en: string | null
+    /** 0.8.0: la sincronización que informó Iris; null si nunca (el panel muestra «no informado») */
+    sincronizacion: SincronizacionIris | null
     version: number
 }
 
@@ -464,6 +491,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
                   new Date(fila.pendiente_canjeado_en).getTime() + PLAZO_CONFIRMAR_CANJE_IRIS_MS,
               ).toISOString()
             : null,
+        sincronizacion: fila?.sincronizacion ?? null,
         version: fila?.version ?? 0,
     }
 }

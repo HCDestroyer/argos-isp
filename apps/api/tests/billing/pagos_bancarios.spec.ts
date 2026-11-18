@@ -6,6 +6,7 @@ import {
     bancoId,
     cuentaBancariaPrueba,
     escenario,
+    eventosDe,
     generar,
     lineasAsiento,
     unicoBd,
@@ -103,6 +104,136 @@ test.group('billing · bancos y cuentas bancarias', () => {
         assert.deepEqual(
             cambios.map((c) => c.despues),
             ['Recaudación', 'Depósitos'],
+        )
+    })
+})
+
+/** Contrato Iris 0.8.0 (§7.8): `titular`, `tipo` y el evento `cuenta_bancaria.cambiada`. */
+test.group('billing · cuentas bancarias · titular, tipo y cuenta_bancaria.cambiada (0.8.0)', () => {
+    test('crear sin titular ni tipo (compatibilidad): null y evento con creada: true y todos los campos', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['contabilidad'])
+        const creada = await estado(
+            client
+                .post('/api/v1/cuentas-bancarias')
+                .bearerToken(token)
+                .json({ banco_id: await bancoId('BAM'), numero: await unicoBd('3080'), alias: 'Vieja' }),
+            201,
+        )
+        assert.containSubset(creada.body(), { titular: null, tipo: null })
+        const eventos = await eventosDe('cuenta_bancaria.cambiada', 'cuenta_bancaria_id', creada.body().id)
+        assert.lengthOf(eventos, 1)
+        assert.deepEqual(eventos[0].payload, {
+            cuenta_bancaria_id: creada.body().id,
+            empresa_id: creada.body().empresa_id,
+            campos: ['banco_id', 'numero', 'alias', 'titular', 'tipo', 'moneda', 'activa'],
+            activa: true,
+            creada: true,
+        })
+    })
+
+    test('crear y editar titular y tipo: validación, diff en audit.cambios y evento solo con lo que cambió', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['contabilidad'])
+        const base = { banco_id: await bancoId('Banrural'), numero: await unicoBd('3081'), alias: 'Cobros' }
+        for (const [extra, campo, rule] of [
+            [{ titular: 'X' }, 'titular', 'minLength'],
+            [{ titular: 'x'.repeat(121) }, 'titular', 'maxLength'],
+            [{ tipo: 'corriente' }, 'tipo', 'enum'],
+        ] as const) {
+            const r = await client
+                .post('/api/v1/cuentas-bancarias')
+                .bearerToken(token)
+                .json({ ...base, ...extra })
+            r.assertStatus(422)
+            assert.equal(r.body().errors[0].field, campo)
+            assert.equal(r.body().errors[0].rule, rule)
+        }
+        const creada = await estado(
+            client
+                .post('/api/v1/cuentas-bancarias')
+                .bearerToken(token)
+                .json({ ...base, titular: '  Servicios de Internet, S.A.  ', tipo: 'monetaria' }),
+            201,
+        )
+        const id = creada.body().id as number
+        assert.containSubset(creada.body(), { titular: 'Servicios de Internet, S.A.', tipo: 'monetaria' })
+        const lista = await estado(client.get('/api/v1/cuentas-bancarias').bearerToken(token), 200)
+        assert.containSubset(
+            lista.body().find((c: { id: number }) => c.id === id),
+            { titular: 'Servicios de Internet, S.A.', tipo: 'monetaria' },
+        )
+
+        // editar titular y tipo y desactivar
+        const editada = await estado(
+            client
+                .put(`/api/v1/cuentas-bancarias/${id}`)
+                .bearerToken(token)
+                .json({ version: 1, titular: 'Otra Razón, S.A.', tipo: 'ahorro', activa: false }),
+            200,
+        )
+        assert.containSubset(editada.body(), { titular: 'Otra Razón, S.A.', tipo: 'ahorro', activa: false })
+        // ausente = sin cambio; solo el alias
+        await estado(
+            client
+                .put(`/api/v1/cuentas-bancarias/${id}`)
+                .bearerToken(token)
+                .json({ version: 2, alias: 'Cobros 2' }),
+            200,
+        )
+        // null borra el dato
+        const borrada = await estado(
+            client
+                .put(`/api/v1/cuentas-bancarias/${id}`)
+                .bearerToken(token)
+                .json({ version: 3, titular: null }),
+            200,
+        )
+        assert.containSubset(borrada.body(), { titular: null, tipo: 'ahorro', alias: 'Cobros 2' })
+        // sin cambios: no hay evento
+        await estado(
+            client
+                .put(`/api/v1/cuentas-bancarias/${id}`)
+                .bearerToken(token)
+                .json({ version: 4, tipo: 'ahorro' }),
+            200,
+        )
+
+        const eventos = await eventosDe('cuenta_bancaria.cambiada', 'cuenta_bancaria_id', id)
+        assert.deepEqual(
+            eventos.map((e) => [e.payload.campos, e.payload.activa, e.payload.creada]),
+            [
+                [['banco_id', 'numero', 'alias', 'titular', 'tipo', 'moneda', 'activa'], true, true],
+                [['titular', 'tipo', 'activa'], false, false],
+                [['alias'], false, false],
+                [['titular'], false, false],
+            ],
+        )
+        for (const e of eventos) {
+            assert.equal(e.payload.empresa_id, creada.body().empresa_id)
+            assert.equal(e.payload.cuenta_bancaria_id, id)
+        }
+
+        const cambios = await db
+            .from('audit.cambios')
+            .where('entidad_tipo', 'cuenta_bancaria')
+            .where('entidad_id', id)
+            .whereIn('campo', ['titular', 'tipo'])
+            .orderBy('id', 'asc')
+            .select('campo', 'antes', 'despues')
+        assert.sameDeepMembers(
+            cambios.map((c) => [c.campo, c.antes, c.despues]),
+            [
+                ['titular', null, 'Servicios de Internet, S.A.'],
+                ['tipo', null, 'monetaria'],
+                ['titular', 'Servicios de Internet, S.A.', 'Otra Razón, S.A.'],
+                ['tipo', 'monetaria', 'ahorro'],
+                ['titular', 'Otra Razón, S.A.', null],
+            ],
         )
     })
 })

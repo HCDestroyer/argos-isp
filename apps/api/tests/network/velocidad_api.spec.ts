@@ -164,7 +164,13 @@ test.group('Velocidad · planes', () => {
                 .json({ version: editado.version, precio: '175.00' }),
             200,
         )
-        assert.deepEqual(await eventos(otro), [])
+        // solo `catalogo.cambiado` con `precio` (contrato Iris 0.8.0), nunca `plan.velocidad_cambiada`
+        assert.deepEqual(await eventos(otro), [
+            {
+                evento: 'catalogo.cambiado',
+                payload: { catalogo: 'plan', id: plan.id, empresa_id: null, campos: ['precio'] },
+            },
+        ])
     })
 
     test('editar el plan valida antes del UPDATE (422, no 500) y contra las excepciones por router', async ({

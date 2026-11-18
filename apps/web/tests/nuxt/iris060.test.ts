@@ -56,7 +56,7 @@ describe('contrato Iris 0.6.0 en el panel', () => {
 
         it('reconexión temporal: apagada por defecto, rangos del validador y resumen', () => {
             const entrada = entradaPlantillaVacia()
-            expect(entrada.reglas_promesa.reconexion_temporal).toEqual({ permitida: false, max_por_periodo: 1, horas_max: 24 })
+            expect(entrada.reglas_promesa.reconexion_temporal).toEqual({ permitida: false, max_por_periodo: 1, horas_max: 24, vigencia: 'horas' })
             const fuera = structuredClone(entrada)
             fuera.nombre = 'Prueba'
             fuera.reglas_promesa.reconexion_temporal.horas_max = 200
@@ -64,7 +64,7 @@ describe('contrato Iris 0.6.0 en el panel', () => {
             expect(!resultado.success && resultado.error.issues[0]?.path.join('.')).toBe('reglas_promesa.reconexion_temporal.horas_max')
             const reglas = bd.plantillas[0]!.reglas_promesa
             expect(resumenReconexionTemporal(reglas)).toBe('Reconexión temporal apagada')
-            expect(resumenReconexionTemporal({ ...reglas, reconexion_temporal: { permitida: true, max_por_periodo: 1, horas_max: 24 } })).toBe('Reconexión temporal: hasta 1 por periodo · 24 h')
+            expect(resumenReconexionTemporal({ ...reglas, reconexion_temporal: { permitida: true, max_por_periodo: 1, horas_max: 24, vigencia: 'horas' } })).toBe('Reconexión temporal: hasta 1 por periodo · 24 h')
         })
 
         it('WhatsApp: baja de Iris, sin registro y casilla inicial', () => {

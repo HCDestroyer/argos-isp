@@ -1717,7 +1717,7 @@ export interface paths {
         put?: never;
         /**
          * Reconectar temporalmente mientras caja revisa el comprobante (promesa reconexion_temporal)
-         * @description Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).
+         * @description Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. motivo: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); mismas reglas, queda en promesas.motivo_reconexion y en promesa.*; el comprobante sigue pendiente en la cola de caja. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto); hasta según vigencia: horas (ahora + horas_max) o medianoche (la siguiente medianoche de Guatemala; si faltan menos de 60 min, la del día siguiente). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).
          */
         post: operations["comprobantesReconexionTemporal"];
         delete?: never;
@@ -3862,6 +3862,26 @@ export interface paths {
          * @description Pedido A8 de Iris: igual que `POST /integraciones/horus/resolver` (1 a 500 IPv4 o IPv6 en el cuerpo, nunca en la URL; prefijo más largo; fuera del alcance del token → `no_encontrada`). Cada llamada queda en la bitácora (`ip.resolver`).
          */
         post: operations["irisResolver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/sincronizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Iris informa el avance de su primera sincronización (servidor a servidor)
+         * @description Contrato Iris 0.8.0 (§2.5). Solo con el token `atk_` del usuario técnico Iris, como `PUT /integraciones/iris/contrato` (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Permiso de ruta `sso.emitir`. Funciona con el conector apagado. Se guarda en el conector y sale en `GET /integraciones/iris` (`sincronizacion`). Idempotente: la misma `sincronizacion_id` con el mismo `actualizada_en` responde lo guardado. 409 `sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si `sincronizacion_id` es más vieja que la guardada (UUID v7). Iris lo manda solo al cambiar de etapa o de estado.
+         */
+        put: operations["irisInformarSincronizacion"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12945,6 +12965,8 @@ export interface components {
              * @description Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior sigue igual. null si no hay
              */
             reconexion_vence_en?: string | null;
+            /** @description Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización (`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado») */
+            sincronizacion: components["schemas"]["SincronizacionIris"] | null;
             version: number;
         };
         ConexionRouter: {
@@ -13528,6 +13550,13 @@ export interface components {
             banco_nombre: string;
             numero: string;
             alias: string;
+            /** @description Nombre del titular (2 a 120 caracteres). null en las cuentas anteriores a Argos 1.18.0 hasta que alguien las edite (contrato Iris 0.8.0) */
+            titular: string | null;
+            /**
+             * @description Tipo de cuenta; null en las cuentas anteriores a Argos 1.18.0 (contrato Iris 0.8.0)
+             * @enum {string|null}
+             */
+            tipo: "monetaria" | "ahorro" | null;
             /** @enum {string} */
             moneda: "GTQ" | "USD";
             /** @description Una cuenta inactiva no recibe pagos nuevos */
@@ -17834,6 +17863,11 @@ export interface components {
              * @enum {string|null}
              */
             sistema_origen?: "iris" | null;
+            /**
+             * @description Solo en una reconexión temporal: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); null en las demás. Siempre viene
+             * @enum {string|null}
+             */
+            motivo_reconexion: "fuera_de_horario" | "sin_personal" | null;
             aprobada_por: number | null;
             /** @description Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md */
             resultado_evaluacion: components["schemas"]["EvaluacionPromesa"] | null;
@@ -18044,7 +18078,7 @@ export interface components {
             reconexion_id: number;
             /**
              * Format: date-time
-             * @description Vencimiento de la promesa: ahora + horas_max de la plantilla
+             * @description Vencimiento de la promesa (RFC 3339 en UTC, con milisegundos), según `vigencia` de la plantilla: `horas` = ahora + horas_max; `medianoche` = 00:00 del día siguiente en Guatemala (la siguiente si faltan menos de 60 minutos). No es la hora del corte: al vencer, el corte respeta la hora_corte de la plantilla
              */
             hasta: string;
             servicio: {
@@ -18348,8 +18382,13 @@ export interface components {
                 permitida: boolean;
                 /** @description Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado) */
                 max_por_periodo: number;
-                /** @description Duración desde que se crea (por defecto 24) */
+                /** @description Duración desde que se crea (por defecto 24). Solo con vigencia horas */
                 horas_max: number;
+                /**
+                 * @description horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta
+                 * @enum {string}
+                 */
+                vigencia: "horas" | "medianoche";
             };
         };
         RenglonCalculo: {
@@ -19713,6 +19752,13 @@ export interface components {
                 potencia_dbm?: string;
             } | null;
             costo_override: components["schemas"]["Dinero"] | null;
+            /** @description Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 decimales (contrato Iris 0.8.0) */
+            precio_mensual: components["schemas"]["Dinero"];
+            /**
+             * @description Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)
+             * @enum {string}
+             */
+            moneda: "GTQ";
             excluir_firewall: boolean;
             ipv4: string | null;
             prefijo_enlace_v6: string | null;
@@ -19963,6 +20009,40 @@ export interface components {
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
+        };
+        SincronizacionIris: {
+            /** @description UUID v7 de Iris (en minúsculas) */
+            sincronizacion_id: string;
+            /** @enum {string} */
+            estado: "en_curso" | "completa" | "con_errores";
+            /** Format: date-time */
+            iniciada_en: string;
+            /** Format: date-time */
+            actualizada_en: string;
+            etapas: {
+                /** @enum {string} */
+                recurso: "empresas" | "zonas" | "planes" | "routers" | "cuentas_bancarias" | "bancos" | "clientes" | "servicios";
+                /** @enum {string} */
+                estado: "pendiente" | "en_curso" | "completa" | "con_errores";
+                procesados: number;
+                total: number | null;
+                /** @description Hasta 300 caracteres, sin datos de clientes */
+                error: string | null;
+                /** Format: date-time */
+                terminada_en: string | null;
+            }[];
+            /**
+             * Format: date-time
+             * @description Cuándo lo recibió Argos
+             */
+            recibida_en: string;
+        };
+        SincronizacionIrisGuardada: {
+            sincronizacion_id: string;
+            /** @enum {string} */
+            estado: "en_curso" | "completa" | "con_errores";
+            /** Format: date-time */
+            actualizada_en: string;
         };
         SincronizacionPlan: {
             plan_id: number;
@@ -22799,9 +22879,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
                 "X-Iris-Actor"?: string;
-                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
             };
             path?: never;
@@ -22818,7 +22898,7 @@ export interface operations {
                     "application/json": components["schemas"]["Banco"][];
                 };
             };
-            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            /** @description Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -25652,6 +25732,8 @@ export interface operations {
                 plan_id?: number;
                 /** @description true: con alguna factura vencida; false: sin ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description true: solo clientes con al menos un servicio no retirado (con estado_servicio, router_id o plan_id, ese mismo servicio). Por defecto false (contrato Iris 0.8.0) */
+                excluir_retirados?: boolean;
                 /** @description true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal) */
                 nit_cui_invalido?: boolean;
                 /** @description true: con alguna promesa de pago activa; false: sin ninguna */
@@ -28711,8 +28793,11 @@ export interface operations {
                 "application/json": {
                     /** @description Obligatorio solo si el comprobante no tiene servicio */
                     servicio_id?: number | null;
-                    /** @enum {string} */
-                    motivo: "fuera_de_horario";
+                    /**
+                     * @description fuera_de_horario: caja cerrada. sin_personal: horario hábil, pero nadie de caja disponible. Mismas reglas; el comprobante queda pendiente en la cola de caja
+                     * @enum {string}
+                     */
+                    motivo: "fuera_de_horario" | "sin_personal";
                 };
             };
         };
@@ -29214,9 +29299,9 @@ export interface operations {
                 activa?: boolean;
             };
             header?: {
-                /** @description Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`) */
                 "X-Iris-Actor"?: string;
-                /** @description Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría */
+                /** @description Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría */
                 "X-Iris-Conversacion"?: string;
             };
             path?: never;
@@ -29233,7 +29318,7 @@ export interface operations {
                     "application/json": components["schemas"]["CuentaBancaria"][];
                 };
             };
-            /** @description Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`) */
+            /** @description Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -29285,6 +29370,10 @@ export interface operations {
                     banco_id: number;
                     numero: string;
                     alias: string;
+                    /** @description Nombre del titular de la cuenta (2 a 120); null = sin dato */
+                    titular?: string | null;
+                    /** @description Tipo de cuenta; null = sin dato */
+                    tipo?: ("monetaria" | "ahorro") | null;
                     /** @enum {string} */
                     moneda?: "GTQ" | "USD";
                     activa?: boolean;
@@ -29399,6 +29488,10 @@ export interface operations {
                     banco_id?: number;
                     numero?: string;
                     alias?: string;
+                    /** @description Nombre del titular de la cuenta (2 a 120); null = sin dato */
+                    titular?: string | null;
+                    /** @description Tipo de cuenta; null = sin dato */
+                    tipo?: ("monetaria" | "ahorro") | null;
                     /** @enum {string} */
                     moneda?: "GTQ" | "USD";
                     activa?: boolean;
@@ -36544,6 +36637,78 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisInformarSincronizacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description UUID v7 de la sincronización, generado por Iris */
+                    sincronizacion_id: string;
+                    /** @enum {string} */
+                    estado: "en_curso" | "completa" | "con_errores";
+                    /** Format: date-time */
+                    iniciada_en: string;
+                    /** Format: date-time */
+                    actualizada_en: string;
+                    etapas: {
+                        /** @enum {string} */
+                        recurso: "empresas" | "zonas" | "planes" | "routers" | "cuentas_bancarias" | "bancos" | "clientes" | "servicios";
+                        /** @enum {string} */
+                        estado: "pendiente" | "en_curso" | "completa" | "con_errores";
+                        procesados: number;
+                        total?: number | null;
+                        /** @description Hasta 300 caracteres, sin datos de clientes */
+                        error?: string | null;
+                        /** Format: date-time */
+                        terminada_en?: string | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Sincronización guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SincronizacionIrisGuardada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -50481,6 +50646,11 @@ export interface operations {
                             permitida?: boolean;
                             max_por_periodo?: number;
                             horas_max?: number;
+                            /**
+                             * @description horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)
+                             * @enum {string}
+                             */
+                            vigencia?: "horas" | "medianoche";
                         };
                     };
                     /** @description Plantilla de los servicios creados sin plantilla_facturacion_id. Solo una: marcar esta desmarca la anterior */
@@ -50678,6 +50848,11 @@ export interface operations {
                             permitida?: boolean;
                             max_por_periodo?: number;
                             horas_max?: number;
+                            /**
+                             * @description horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)
+                             * @enum {string}
+                             */
+                            vigencia?: "horas" | "medianoche";
                         };
                     };
                     /** @description true la marca por defecto (desmarca la anterior); false le quita la marca */
@@ -53483,6 +53658,8 @@ export interface operations {
                 estado?: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
                 /** @description reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3) */
                 tipo?: "promesa" | "reconexion_temporal";
+                /** @description Solo reconexiones temporales con ese motivo (contrato Iris 0.8.0): implica tipo=reconexion_temporal; con tipo=promesa la lista sale vacía */
+                motivo_reconexion?: "fuera_de_horario" | "sin_personal";
             };
             header?: never;
             path?: never;
@@ -53958,6 +54135,11 @@ export interface operations {
                             permitida?: boolean;
                             max_por_periodo?: number;
                             horas_max?: number;
+                            /**
+                             * @description horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)
+                             * @enum {string}
+                             */
+                            vigencia?: "horas" | "medianoche";
                         };
                     };
                 };
@@ -59280,6 +59462,8 @@ export interface operations {
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description true: sin los servicios `retirado`. Por defecto false (contrato Iris 0.8.0) */
+                excluir_retirados?: boolean;
                 /** @description Tipo del plan del servicio: residencial, empresarial o dedicado */
                 tipo?: "residencial" | "empresarial" | "dedicado";
             };

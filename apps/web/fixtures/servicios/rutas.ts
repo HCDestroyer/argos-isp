@@ -23,6 +23,7 @@ import {
     versionCambiada,
 } from '../comun'
 import { nuevaSesion } from '../sesiones/datos'
+import { precioMensualServicio } from './datos'
 import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
 import { pendienteInstalacion } from './instalacion'
@@ -73,7 +74,7 @@ export function nombresDe(clienteId: number, planId: number, routerId: number): 
 /** El servicio como lo devuelve la API: con los nombres al día (un cliente renombrado, por ejemplo). */
 function vista(servicio: Servicio): Servicio {
     // Red de acceso (A1): la API siempre envía el servidor PPPoE y el local-address (null si no hay).
-    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id), servidor_pppoe_id: servicio.servidor_pppoe_id ?? null, local_address: servicio.local_address ?? null, local_address_derivado: servicio.local_address_derivado ?? false }
+    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), precio_mensual: precioMensualServicio(servicio.costo_override, servicio.plan_id, bd.planes), moneda: 'GTQ', plan_temporal: planTemporalDe(servicio.id), servidor_pppoe_id: servicio.servidor_pppoe_id ?? null, local_address: servicio.local_address ?? null, local_address_derivado: servicio.local_address_derivado ?? false }
 }
 
 function texto(valor: unknown): string | null {
@@ -286,6 +287,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         instalado_en: pendiente ? null : momento,
         planta: null,
         costo_override: texto(cuerpo.costo_override),
+        precio_mensual: precioMensualServicio(texto(cuerpo.costo_override), Number(cuerpo.plan_id), bd.planes),
+        moneda: 'GTQ',
         excluir_firewall: cuerpo.excluir_firewall === true,
         ipv4,
         prefijo_enlace_v6: conV6 ? `2001:db8:1000:${(id * 16).toString(16)}::/64` : null,

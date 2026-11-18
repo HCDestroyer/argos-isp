@@ -12,6 +12,17 @@ const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
 const MENSAJE_MONTO = 'Escribe un monto con hasta 2 decimales, sin comas (ej. 500.00)'
 
+type VigenciaReconexion = NonNullable<NonNullable<ReglasPromesa['reconexion_temporal']>['vigencia']>
+
+/** `reglas_promesa.reconexion_temporal.vigencia` de la API, en el orden en que se muestran. */
+export const VIGENCIAS_RECONEXION = ['horas', 'medianoche'] as const satisfies readonly VigenciaReconexion[]
+
+/** Etiquetas del manual (`docs/manual/facturacion/plantillas.md`). */
+export const ETIQUETAS_VIGENCIA_RECONEXION: Record<VigenciaReconexion, { etiqueta: string, descripcion: string }> = {
+    horas: { etiqueta: 'Por horas', descripcion: 'Dura las horas de «Duración máxima», desde que se crea.' },
+    medianoche: { etiqueta: 'Hasta la medianoche', descripcion: 'Dura hasta la siguiente medianoche (hora de Guatemala); si falta menos de una hora, hasta la del día siguiente.' },
+}
+
 /** Canales en el orden en que se muestran (los de la API, `reglas_promesa.ts`). */
 export const CANALES_REGLAS: readonly CanalReglasPromesa[] = ['operador', 'supervisor', 'portal', 'ia']
 
@@ -83,6 +94,8 @@ export const esquemaPlantilla = z.object({
             permitida: z.boolean(),
             max_por_periodo: entero(0, 12, 'Reconexiones por periodo'),
             horas_max: entero(1, 168, 'Horas máximas'),
+            /** `horas` (por defecto): vence a `horas_max`; `medianoche`: la siguiente de Guatemala (A3, 17 nov 2026). */
+            vigencia: z.enum(VIGENCIAS_RECONEXION, { message: 'Elige la vigencia' }),
         }),
     }),
 }).superRefine((datos, ctx) => {
@@ -119,7 +132,7 @@ export type ReglasReconexionTemporal = EntradaPlantilla['reglas_promesa']['recon
  * hasta que la empresa la active, una por periodo de facturación y servicio, 24 h.
  */
 export function reconexionTemporalPorDefecto(): ReglasReconexionTemporal {
-    return { permitida: false, max_por_periodo: 1, horas_max: 24 }
+    return { permitida: false, max_por_periodo: 1, horas_max: 24, vigencia: 'horas' }
 }
 
 /**
@@ -194,8 +207,8 @@ export function entradaDesdePlantilla(plantilla: Plantilla): EntradaPlantilla {
             deuda_maxima: reglas.deuda_maxima ?? '',
             mismas_reglas_ia_operador: reglas.mismas_reglas_ia_operador,
             canales: { portal: canal('portal'), ia: canal('ia'), operador: canal('operador'), supervisor: canal('supervisor') },
-            // La API siempre la manda (normalizada); si faltara, los valores por defecto de la API.
-            reconexion_temporal: { ...(reglas.reconexion_temporal ?? reconexionTemporalPorDefecto()) },
+            // La API siempre la manda normalizada (con `vigencia`); si faltara, los valores por defecto de la API.
+            reconexion_temporal: { ...reconexionTemporalPorDefecto(), ...reglas.reconexion_temporal },
         },
     }
 }
@@ -280,13 +293,14 @@ export function limitesEfectivosCanal(reglas: ReglasPromesa, canal: CanalReglasP
     return reglas.canales[canalDeLimites(reglas, canal)]
 }
 
-/** `Reconexión temporal: hasta 1 por periodo · 24 h`, o `apagada`. */
+/** `Reconexión temporal: hasta 1 por periodo · 24 h` (o `· hasta la medianoche`), o `apagada`. */
 export function resumenReconexionTemporal(reglas: ReglasPromesa): string {
     const reconexion = reglas.reconexion_temporal ?? reconexionTemporalPorDefecto()
     if (!reconexion.permitida) {
         return 'Reconexión temporal apagada'
     }
-    return `Reconexión temporal: hasta ${reconexion.max_por_periodo} por periodo · ${reconexion.horas_max} h`
+    const duracion = reconexion.vigencia === 'medianoche' ? 'hasta la medianoche' : `${reconexion.horas_max} h`
+    return `Reconexión temporal: hasta ${reconexion.max_por_periodo} por periodo · ${duracion}`
 }
 
 export function resumenPromesas(reglas: ReglasPromesa): string {

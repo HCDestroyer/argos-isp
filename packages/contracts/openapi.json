@@ -3100,7 +3100,7 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
             "schema": {
               "type": "string",
               "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
@@ -3110,7 +3110,7 @@
             "name": "X-Iris-Conversacion",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9._:-]{1,128}$"
@@ -3132,7 +3132,7 @@
             }
           },
           "400": {
-            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "description": "Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8526,6 +8526,15 @@
             "in": "query",
             "required": false,
             "description": "true: con alguna factura vencida; false: sin ninguna",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "excluir_retirados",
+            "in": "query",
+            "required": false,
+            "description": "true: solo clientes con al menos un servicio no retirado (con estado_servicio, router_id o plan_id, ese mismo servicio). Por defecto false (contrato Iris 0.8.0)",
             "schema": {
               "type": "boolean"
             }
@@ -14895,7 +14904,7 @@
       "post": {
         "operationId": "comprobantesReconexionTemporal",
         "summary": "Reconectar temporalmente mientras caja revisa el comprobante (promesa reconexion_temporal)",
-        "description": "Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).",
+        "description": "Contrato Iris 0.6.0 §7.3 (pedido A17). Crea una promesa de tipo reconexion_temporal ligada al comprobante; evaluarEstadoServicio reactiva el servicio en la misma transacción. motivo: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); mismas reglas, queda en promesas.motivo_reconexion y en promesa.*; el comprobante sigue pendiente en la cola de caja. Política en reglas_promesa.reconexion_temporal de la plantilla (apagada por defecto); hasta según vigencia: horas (ahora + horas_max) o medianoche (la siguiente medianoche de Guatemala; si faltan menos de 60 min, la del día siguiente). 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, servicio_no_cortado, promesa_abierta, cupo_agotado, comprobante_no_cubre. Termina como promesa.cumplida (caja aprueba y el pago salda lo vencido), promesa.cancelada (comprobante_rechazado o vencida_sin_revisar) o promesa.incumplida (aprobado sin saldar). Canal ia u operador según X-Iris-Actor (operador con otro usuario).",
         "tags": [
           "pagos"
         ],
@@ -14967,8 +14976,10 @@
                   "motivo": {
                     "type": "string",
                     "enum": [
-                      "fuera_de_horario"
-                    ]
+                      "fuera_de_horario",
+                      "sin_personal"
+                    ],
+                    "description": "fuera_de_horario: caja cerrada. sin_personal: horario hábil, pero nadie de caja disponible. Mismas reglas; el comprobante queda pendiente en la cola de caja"
                   }
                 },
                 "required": [
@@ -15836,7 +15847,7 @@
             "name": "X-Iris-Actor",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: `asistente_ia` o `usuario:<id en Iris>` (contrato Iris 0.6.0 §7.1). Decide el canal de la auditoría (`ia` o `api`)",
             "schema": {
               "type": "string",
               "pattern": "^(asistente_ia|usuario:[A-Za-z0-9_-]{1,64})$"
@@ -15846,7 +15857,7 @@
             "name": "X-Iris-Conversacion",
             "in": "header",
             "required": false,
-            "description": "Obligatoria con el token del usuario técnico Iris: id de la conversación en Iris; queda en la auditoría",
+            "description": "Opcional con el token del usuario técnico Iris (contrato Iris 0.8.0): pueden faltar las dos; si viene alguna, las dos se validan: id de la conversación en Iris; queda en la auditoría",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9._:-]{1,128}$"
@@ -15868,7 +15879,7 @@
             }
           },
           "400": {
-            "description": "Token de Iris sin X-Iris-Actor o X-Iris-Conversacion válidas (`cabecera_iris_requerida`)",
+            "description": "Token de Iris con X-Iris-Actor o X-Iris-Conversacion presentes pero inválidas, o solo una de las dos (`cabecera_iris_requerida`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15946,6 +15957,30 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 80
+                  },
+                  "titular": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 120,
+                    "description": "Nombre del titular de la cuenta (2 a 120); null = sin dato"
+                  },
+                  "tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "monetaria",
+                          "ahorro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tipo de cuenta; null = sin dato"
                   },
                   "moneda": {
                     "type": "string",
@@ -16144,6 +16179,30 @@
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 80
+                  },
+                  "titular": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 120,
+                    "description": "Nombre del titular de la cuenta (2 a 120); null = sin dato"
+                  },
+                  "tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "monetaria",
+                          "ahorro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tipo de cuenta; null = sin dato"
                   },
                   "moneda": {
                     "type": "string",
@@ -28785,6 +28844,173 @@
           }
         },
         "x-permiso": "ip.resolver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/sincronizacion": {
+      "put": {
+        "operationId": "irisInformarSincronizacion",
+        "summary": "Iris informa el avance de su primera sincronización (servidor a servidor)",
+        "description": "Contrato Iris 0.8.0 (§2.5). Solo con el token `atk_` del usuario técnico Iris, como `PUT /integraciones/iris/contrato` (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Permiso de ruta `sso.emitir`. Funciona con el conector apagado. Se guarda en el conector y sale en `GET /integraciones/iris` (`sincronizacion`). Idempotente: la misma `sincronizacion_id` con el mismo `actualizada_en` responde lo guardado. 409 `sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si `sincronizacion_id` es más vieja que la guardada (UUID v7). Iris lo manda solo al cambiar de etapa o de estado.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sincronizacion_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "UUID v7 de la sincronización, generado por Iris"
+                  },
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "en_curso",
+                      "completa",
+                      "con_errores"
+                    ]
+                  },
+                  "iniciada_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "actualizada_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etapas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "recurso": {
+                          "type": "string",
+                          "enum": [
+                            "empresas",
+                            "zonas",
+                            "planes",
+                            "routers",
+                            "cuentas_bancarias",
+                            "bancos",
+                            "clientes",
+                            "servicios"
+                          ]
+                        },
+                        "estado": {
+                          "type": "string",
+                          "enum": [
+                            "pendiente",
+                            "en_curso",
+                            "completa",
+                            "con_errores"
+                          ]
+                        },
+                        "procesados": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "total": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 0
+                        },
+                        "error": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 300,
+                          "description": "Hasta 300 caracteres, sin datos de clientes"
+                        },
+                        "terminada_en": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "recurso",
+                        "estado",
+                        "procesados"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "sincronizacion_id",
+                  "estado",
+                  "iniciada_en",
+                  "actualizada_en",
+                  "etapas"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sincronización guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SincronizacionIrisGuardada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sso.emitir",
         "x-implementado": true
       }
     },
@@ -54890,6 +55116,14 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 168
+                          },
+                          "vigencia": {
+                            "type": "string",
+                            "enum": [
+                              "horas",
+                              "medianoche"
+                            ],
+                            "description": "horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)"
                           }
                         },
                         "required": [],
@@ -55390,6 +55624,14 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 168
+                          },
+                          "vigencia": {
+                            "type": "string",
+                            "enum": [
+                              "horas",
+                              "medianoche"
+                            ],
+                            "description": "horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)"
                           }
                         },
                         "required": [],
@@ -60103,6 +60345,19 @@
                 "reconexion_temporal"
               ]
             }
+          },
+          {
+            "name": "motivo_reconexion",
+            "in": "query",
+            "required": false,
+            "description": "Solo reconexiones temporales con ese motivo (contrato Iris 0.8.0): implica tipo=reconexion_temporal; con tipo=promesa la lista sale vacía",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fuera_de_horario",
+                "sin_personal"
+              ]
+            }
           }
         ],
         "responses": {
@@ -61036,6 +61291,14 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 168
+                          },
+                          "vigencia": {
+                            "type": "string",
+                            "enum": [
+                              "horas",
+                              "medianoche"
+                            ],
+                            "description": "horas (por defecto): vence a horas_max de creada. medianoche: la siguiente medianoche de Guatemala (si faltan menos de 60 min, la del día siguiente)"
                           }
                         },
                         "required": [],
@@ -72216,6 +72479,15 @@
             "in": "query",
             "required": false,
             "description": "true: el servicio tiene alguna factura vencida; false: ninguna",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "excluir_retirados",
+            "in": "query",
+            "required": false,
+            "description": "true: sin los servicios `retirado`. Por defecto false (contrato Iris 0.8.0)",
             "schema": {
               "type": "boolean"
             }
@@ -88728,6 +89000,7 @@
           "contrato",
           "requiere_reconectar",
           "motivo_reconectar",
+          "sincronizacion",
           "version"
         ],
         "properties": {
@@ -88884,6 +89157,17 @@
             ],
             "format": "date-time",
             "description": "Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior sigue igual. null si no hay"
+          },
+          "sincronizacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SincronizacionIris"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización (`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado»)"
           },
           "version": {
             "type": "integer",
@@ -91073,6 +91357,8 @@
           "banco_nombre",
           "numero",
           "alias",
+          "titular",
+          "tipo",
           "moneda",
           "activa",
           "cuenta_id",
@@ -91103,6 +91389,25 @@
           },
           "alias": {
             "type": "string"
+          },
+          "titular": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del titular (2 a 120 caracteres). null en las cuentas anteriores a Argos 1.18.0 hasta que alguien las edite (contrato Iris 0.8.0)"
+          },
+          "tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "monetaria",
+              "ahorro",
+              null
+            ],
+            "description": "Tipo de cuenta; null en las cuentas anteriores a Argos 1.18.0 (contrato Iris 0.8.0)"
           },
           "moneda": {
             "type": "string",
@@ -108314,6 +108619,7 @@
           "monto",
           "estado",
           "canal",
+          "motivo_reconexion",
           "aprobada_por",
           "resultado_evaluacion",
           "version",
@@ -108410,6 +108716,18 @@
               null
             ],
             "description": "iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)"
+          },
+          "motivo_reconexion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "fuera_de_horario",
+              "sin_personal",
+              null
+            ],
+            "description": "Solo en una reconexión temporal: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); null en las demás. Siempre viene"
           },
           "aprobada_por": {
             "type": [
@@ -109172,7 +109490,7 @@
           "hasta": {
             "type": "string",
             "format": "date-time",
-            "description": "Vencimiento de la promesa: ahora + horas_max de la plantilla"
+            "description": "Vencimiento de la promesa (RFC 3339 en UTC, con milisegundos), según `vigencia` de la plantilla: `horas` = ahora + horas_max; `medianoche` = 00:00 del día siguiente en Guatemala (la siguiente si faltan menos de 60 minutos). No es la hora del corte: al vencer, el corte respeta la hora_corte de la plantilla"
           },
           "servicio": {
             "type": "object",
@@ -110397,7 +110715,8 @@
             "required": [
               "permitida",
               "max_por_periodo",
-              "horas_max"
+              "horas_max",
+              "vigencia"
             ],
             "properties": {
               "permitida": {
@@ -110410,7 +110729,15 @@
               },
               "horas_max": {
                 "type": "integer",
-                "description": "Duración desde que se crea (por defecto 24)"
+                "description": "Duración desde que se crea (por defecto 24). Solo con vigencia horas"
+              },
+              "vigencia": {
+                "type": "string",
+                "enum": [
+                  "horas",
+                  "medianoche"
+                ],
+                "description": "horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta"
               }
             },
             "description": "Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta"
@@ -116774,6 +117101,8 @@
           "instalado_en",
           "planta",
           "costo_override",
+          "precio_mensual",
+          "moneda",
           "excluir_firewall",
           "ipv4",
           "prefijo_enlace_v6",
@@ -116956,6 +117285,17 @@
                 "type": "null"
               }
             ]
+          },
+          "precio_mensual": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 decimales (contrato Iris 0.8.0)"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ"
+            ],
+            "description": "Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)"
           },
           "excluir_firewall": {
             "type": "boolean"
@@ -117880,6 +118220,132 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
+          }
+        }
+      },
+      "SincronizacionIris": {
+        "type": "object",
+        "required": [
+          "sincronizacion_id",
+          "estado",
+          "iniciada_en",
+          "actualizada_en",
+          "etapas",
+          "recibida_en"
+        ],
+        "properties": {
+          "sincronizacion_id": {
+            "type": "string",
+            "description": "UUID v7 de Iris (en minúsculas)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "completa",
+              "con_errores"
+            ]
+          },
+          "iniciada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actualizada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "etapas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "recurso",
+                "estado",
+                "procesados",
+                "total",
+                "error",
+                "terminada_en"
+              ],
+              "properties": {
+                "recurso": {
+                  "type": "string",
+                  "enum": [
+                    "empresas",
+                    "zonas",
+                    "planes",
+                    "routers",
+                    "cuentas_bancarias",
+                    "bancos",
+                    "clientes",
+                    "servicios"
+                  ]
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "pendiente",
+                    "en_curso",
+                    "completa",
+                    "con_errores"
+                  ]
+                },
+                "procesados": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Hasta 300 caracteres, sin datos de clientes"
+                },
+                "terminada_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "recibida_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo lo recibió Argos"
+          }
+        }
+      },
+      "SincronizacionIrisGuardada": {
+        "type": "object",
+        "required": [
+          "sincronizacion_id",
+          "estado",
+          "actualizada_en"
+        ],
+        "properties": {
+          "sincronizacion_id": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "completa",
+              "con_errores"
+            ]
+          },
+          "actualizada_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

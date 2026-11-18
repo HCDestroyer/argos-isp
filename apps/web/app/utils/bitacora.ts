@@ -273,6 +273,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'iris.revocar_conexion': 'Iris canceló la conexión que no completó',
     'iris.vencer_canje': 'Conexión con Iris vencida por falta de uso',
     'iris.confirmar_canje': 'Iris activó la nueva conexión',
+    // Contrato Iris 0.8.0.
+    'iris.informar_sincronizacion': 'Iris informó el avance de su sincronización',
     'clientes.verificar_identidad': 'Identidad del cliente verificada por Iris',
     'comprobantes.reconexion_temporal': 'Reconexión temporal mientras se revisa el comprobante',
     'promesas.cancelar_reconexion': 'Reconexión temporal cancelada (comprobante rechazado)',
@@ -647,13 +649,20 @@ export function etiquetaActor(accion: Accion): string {
     return accion.actor_id === null ? base : `${base} #${accion.actor_id}`
 }
 
-/** `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. */
+/**
+ * `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. El de una reconexión
+ * temporal es un código (`fuera_de_horario`, `sin_personal`): se muestra en palabras.
+ */
 export function motivoAccion(accion: Accion): string | null {
     const { entrada } = accion
     if (typeof entrada !== 'object' || entrada === null || !('motivo' in entrada)) {
         return null
     }
-    return typeof entrada.motivo === 'string' && entrada.motivo.trim() ? entrada.motivo.trim() : null
+    const motivo = typeof entrada.motivo === 'string' ? entrada.motivo.trim() : ''
+    if (accion.accion === 'comprobantes.reconexion_temporal' && motivo in MOTIVOS_RECONEXION) {
+        return MOTIVOS_RECONEXION[motivo as keyof typeof MOTIVOS_RECONEXION].etiqueta
+    }
+    return motivo || null
 }
 
 /** `servicio 12`, o `null` si la acción no tiene entidad. */

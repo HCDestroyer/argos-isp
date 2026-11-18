@@ -79,7 +79,15 @@ export const ReglasPromesa = definirEsquema(
                         description:
                             'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
                     },
-                    horas_max: { ...entero, description: 'Duración desde que se crea (por defecto 24)' },
+                    horas_max: {
+                        ...entero,
+                        description: 'Duración desde que se crea (por defecto 24). Solo con vigencia horas',
+                    },
+                    vigencia: {
+                        ...enumerado(['horas', 'medianoche']),
+                        description:
+                            'horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta',
+                    },
                 }),
                 description:
                     'Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta',
@@ -962,6 +970,11 @@ export const Promesa = definirEsquema(
                 description:
                     'iris: la creó el usuario técnico Iris (Argos no avisa al cliente por su cuenta)',
             },
+            motivo_reconexion: {
+                ...enumeradoNulable(['fuera_de_horario', 'sin_personal']),
+                description:
+                    'Solo en una reconexión temporal: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); null en las demás. Siempre viene',
+            },
             aprobada_por: nulable(id),
             resultado_evaluacion: {
                 ...nulable(EvaluacionPromesa),
@@ -1068,6 +1081,16 @@ export const CuentaBancaria = definirEsquema(
             banco_nombre: texto,
             numero: texto,
             alias: texto,
+            titular: {
+                type: ['string', 'null'],
+                description:
+                    'Nombre del titular (2 a 120 caracteres). null en las cuentas anteriores a Argos 1.18.0 hasta que alguien las edite (contrato Iris 0.8.0)',
+            },
+            tipo: {
+                ...enumeradoNulable(['monetaria', 'ahorro']),
+                description:
+                    'Tipo de cuenta; null en las cuentas anteriores a Argos 1.18.0 (contrato Iris 0.8.0)',
+            },
             moneda: enumerado(['GTQ', 'USD']),
             activa: { ...booleano, description: 'Una cuenta inactiva no recibe pagos nuevos' },
             cuenta_id: { ...id, description: 'Subcuenta de 1.1.02 Bancos en el libro' },
@@ -1429,7 +1452,11 @@ export const ReconexionTemporal = definirEsquema(
     objeto({
         promesa_id: { ...id, description: 'La promesa de tipo reconexion_temporal (GET /promesas/:id)' },
         reconexion_id: { ...id, description: 'Alias de promesa_id para Iris' },
-        hasta: { ...instante, description: 'Vencimiento de la promesa: ahora + horas_max de la plantilla' },
+        hasta: {
+            ...instante,
+            description:
+                'Vencimiento de la promesa (RFC 3339 en UTC, con milisegundos), según `vigencia` de la plantilla: `horas` = ahora + horas_max; `medianoche` = 00:00 del día siguiente en Guatemala (la siguiente si faltan menos de 60 minutos). No es la hora del corte: al vencer, el corte respeta la hora_corte de la plantilla',
+        },
         servicio: objeto({
             id,
             estado: {

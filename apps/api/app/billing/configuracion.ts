@@ -2,6 +2,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
+import { aTexto, dec } from '#ledger/dinero'
 import { obtenerPlantilla } from '#billing/plantillas'
 import { aplicarExcepciones, type ConfiguracionFacturacion } from '#billing/excepciones'
 
@@ -19,7 +20,7 @@ export interface ServicioFacturable {
     plan_id: number
     plan_nombre: string
     estado: EstadoServicioConPendiente
-    /** precio efectivo: `costo_override` o el precio del plan (IVA incluido) */
+    /** precio efectivo (`precioEfectivo`): `costo_override` o el precio del plan (IVA incluido) */
     precio: string
     /** primer día facturable (`inicioFacturacionSql`): instalación, o el día de alta en Guatemala */
     inicio: string
@@ -75,6 +76,50 @@ export function activadoDesdePendienteSql(alias = 's'): string {
     return `(${alias}.instalado_en IS NOT NULL AND ${alias}.instalado_en > ${alias}.created_at)`
 }
 
+/**
+ * **Precio efectivo mensual** del servicio, en SQL: la única definición de «cuánto cuesta el plan
+ * de este servicio» (contrato Iris 0.8.0, `precio_mensual`; revisión punto 19). Es el precio con
+ * el que `generarFacturas` factura la línea del plan: `costo_override` si lo tiene, si no el
+ * `precio` del plan vigente, **IVA incluido**, como `numeric(14,2)` (Postgres lo devuelve como
+ * string con 2 decimales, p. ej. `"250.00"`). Un plan temporal activo cuenta, porque `plan_id` ya
+ * es el temporal. **No** incluye adicionales, descuentos o bonificaciones, mora, prorrateo ni
+ * cargos únicos.
+ *
+ * - `servicio`: alias de `core.servicios` en la consulta.
+ * - `plan`: alias de `network.planes` si la consulta ya lo une por `plan_id`; si se omite, el precio
+ *   se lee con una subconsulta escalar (no hace falta el join).
+ *
+ * ```ts
+ * import { precioEfectivoSql } from '#billing/configuracion'
+ * consulta.select(db.raw(`${precioEfectivoSql('s', 'p')} as precio_mensual`))
+ * ```
+ */
+export function precioEfectivoSql(servicio = 's', plan?: string): string {
+    const precioPlan = plan
+        ? `${plan}.precio`
+        : `(SELECT pe.precio FROM network.planes pe WHERE pe.id = ${servicio}.plan_id)`
+    return `(coalesce(${servicio}.costo_override, ${precioPlan})::numeric(14, 2))`
+}
+
+/**
+ * Versión TS de `precioEfectivoSql` para una fila ya leída (`costo_override` del servicio y
+ * `precio` de su plan vigente, como strings decimales): mismo resultado, con 2 decimales.
+ */
+export function precioEfectivo(fila: { costo_override: string | null; precio: string }): string {
+    return aTexto(dec(fila.costo_override ?? fila.precio))
+}
+
+/** Precio efectivo de un servicio por id (404 si no existe). */
+export async function leerPrecioEfectivo(cliente: QueryClientContract, servicioId: number): Promise<string> {
+    const fila = (await cliente
+        .from('core.servicios as s')
+        .where('s.id', servicioId)
+        .select(cliente.raw(`${precioEfectivoSql('s')}::text as precio`))
+        .first()) as { precio: string } | null
+    if (!fila) throw new NoEncontrado(`El servicio ${servicioId} no existe`)
+    return fila.precio
+}
+
 export async function leerServicio(
     cliente: QueryClientContract,
     servicioId: number,
@@ -107,7 +152,7 @@ export async function leerServicio(
         plan_id: fila.plan_id,
         plan_nombre: fila.plan_nombre,
         estado: fila.estado,
-        precio: fila.costo_override ?? fila.precio,
+        precio: precioEfectivo(fila),
         inicio: fila.inicio,
         limitable: (fila.bajada_limitada_kbps ?? 0) > 0 && (fila.subida_limitada_kbps ?? 0) > 0,
         plantilla_id: fila.plantilla_facturacion_id,

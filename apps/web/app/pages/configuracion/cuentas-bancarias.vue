@@ -36,6 +36,7 @@ const abierto = ref(false)
 const columnas: TableColumn<CuentaBancaria>[] = [
     { accessorKey: 'alias', header: 'Cuenta' },
     { accessorKey: 'numero', header: 'Número', meta: SOLO_ANCHO },
+    { accessorKey: 'titular', header: 'Titular y tipo', meta: SOLO_ESCRITORIO },
     { accessorKey: 'moneda', header: 'Moneda', meta: SOLO_ESCRITORIO },
     { accessorKey: 'cuenta_codigo', header: 'Subcuenta', meta: SOLO_ESCRITORIO },
     { accessorKey: 'activa', header: 'Estado' },
@@ -162,6 +163,24 @@ onMounted(() => {
                 </template>
                 <template #numero-cell="{ row }">
                     <span class="font-mono">{{ row.original.numero }}</span>
+                </template>
+                <template #titular-cell="{ row }">
+                    <div
+                        v-if="row.original.titular || row.original.tipo"
+                        class="flex flex-col"
+                    >
+                        <span>{{ row.original.titular ?? 'Sin titular' }}</span>
+                        <span class="text-xs text-muted">{{ row.original.tipo ? TIPOS_CUENTA_BANCARIA[row.original.tipo] : 'Sin tipo' }}</span>
+                    </div>
+                    <UBadge
+                        v-else
+                        label="Falta titular y tipo"
+                        icon="i-lucide-pencil-line"
+                        color="warning"
+                        variant="subtle"
+                        size="sm"
+                        data-prueba="cuenta-sin-titular"
+                    />
                 </template>
                 <template #cuenta_codigo-cell="{ row }">
                     <span class="font-mono text-muted">{{ row.original.cuenta_codigo }}</span>

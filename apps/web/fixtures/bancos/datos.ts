@@ -40,6 +40,9 @@ function cuentaBancaria(id: number, bancoId: number, numero: string, alias: stri
         banco_nombre: bancos.find(b => b.id === bancoId)?.nombre ?? '',
         numero,
         alias,
+        // contrato Iris 0.8.0: null en las cuentas anteriores a Argos 1.18.0
+        titular: null,
+        tipo: null,
         moneda: 'GTQ',
         activa: true,
         cuenta_id: cuentaId,
@@ -52,12 +55,14 @@ function cuentaBancaria(id: number, bancoId: number, numero: string, alias: stri
 }
 
 /**
- * Cuentas propias de destino (`GET /cuentas-bancarias`): dos en quetzales activas, una en
- * dólares (no recibe pagos) y una inactiva. `cuenta_id` es su subcuenta de 1.1.02 en el libro.
+ * Cuentas propias de destino (`GET /cuentas-bancarias`): dos en quetzales activas (con titular y
+ * tipo), una en dólares (no recibe pagos; sin titular ni tipo, como las anteriores a Argos 1.18.0)
+ * y una inactiva. `cuenta_id` es su subcuenta de 1.1.02 en el libro.
  */
 export const cuentasBancarias: CuentaBancaria[] = [
-    cuentaBancaria(1, 1, '3-033-04521-7', 'Recaudación', 6, '1.1.02.01'),
-    cuentaBancaria(2, 2, '146-0012345-6', 'Monetaria', 16, '1.1.02.02'),
+    cuentaBancaria(1, 1, '3-033-04521-7', 'Recaudación', 6, '1.1.02.01', { titular: 'ArgosNet, S.A.', tipo: 'monetaria' }),
+    cuentaBancaria(2, 2, '146-0012345-6', 'Monetaria', 16, '1.1.02.02', { titular: 'ArgosNet, S.A.', tipo: 'monetaria' }),
+    // anterior a Argos 1.18.0: sin titular ni tipo hasta que alguien la edite
     cuentaBancaria(3, 2, '146-0098765-1', 'Dólares', 17, '1.1.02.03', { moneda: 'USD' }),
     cuentaBancaria(4, 3, '90-1234567-8', 'Cuenta anterior', 18, '1.1.02.04', { activa: false, version: 2 }),
 ]

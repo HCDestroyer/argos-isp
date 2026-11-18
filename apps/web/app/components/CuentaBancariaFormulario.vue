@@ -25,13 +25,15 @@ interface EstadoFormulario {
     banco_id: number | undefined
     numero: string
     alias: string
+    titular: string
+    tipo: SalidaCuentaBancaria['tipo'] | undefined
     moneda: SalidaCuentaBancaria['moneda']
     activa: boolean
 }
 
 const idFormulario = useId()
 const formulario = useTemplateRef('formulario')
-const estado = reactive<EstadoFormulario>({ banco_id: undefined, numero: '', alias: '', moneda: 'GTQ', activa: true })
+const estado = reactive<EstadoFormulario>({ banco_id: undefined, numero: '', alias: '', titular: '', tipo: undefined, moneda: 'GTQ', activa: true })
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 
@@ -39,12 +41,16 @@ const editando = computed(() => props.cuenta !== null)
 const conflicto = computed(() => problema.value?.status === 409 && editando.value && !problema.value.type?.endsWith('duplicada'))
 
 const itemsBanco = computed(() => props.bancos.map(b => ({ label: b.nombre, value: b.id })))
+const itemsTipo: SelectItem[] = Object.entries(TIPOS_CUENTA_BANCARIA).map(([valor, etiqueta]) => ({ label: etiqueta, value: valor }))
 const itemsMoneda: SelectItem[] = Object.entries(MONEDAS_CUENTA).map(([valor, etiqueta]) => ({ label: etiqueta, value: valor }))
 
 function reiniciar() {
     estado.banco_id = props.cuenta?.banco_id
     estado.numero = props.cuenta?.numero ?? ''
     estado.alias = props.cuenta?.alias ?? ''
+    // Las cuentas anteriores a Argos 1.18.0 vienen sin titular ni tipo: el panel los pide al editar.
+    estado.titular = props.cuenta?.titular ?? ''
+    estado.tipo = props.cuenta?.tipo ?? undefined
     estado.moneda = props.cuenta?.moneda ?? 'GTQ'
     estado.activa = props.cuenta?.activa ?? true
     problema.value = null
@@ -127,6 +133,34 @@ async function guardar(evento: FormSubmitEvent<SalidaCuentaBancaria>) {
                         v-model="estado.alias"
                         autocomplete="off"
                         class="w-full"
+                    />
+                </UFormField>
+                <UFormField
+                    label="Titular"
+                    name="titular"
+                    required
+                    description="Nombre a quien está la cuenta, como lo pide el banco para depositar"
+                >
+                    <UInput
+                        v-model="estado.titular"
+                        autocomplete="off"
+                        placeholder="Servicios de Internet, S.A."
+                        class="w-full"
+                        data-prueba="cuenta-titular"
+                    />
+                </UFormField>
+                <UFormField
+                    label="Tipo"
+                    name="tipo"
+                    required
+                >
+                    <USelect
+                        v-model="estado.tipo"
+                        :items="itemsTipo"
+                        placeholder="Elegir tipo…"
+                        class="w-full"
+                        aria-label="Tipo de cuenta"
+                        data-prueba="cuenta-tipo"
                     />
                 </UFormField>
                 <UFormField

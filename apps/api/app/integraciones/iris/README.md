@@ -40,6 +40,7 @@ validador (`canjearEnlaceIrisValidator`: el de Horus más `code_verifier`); el c
 | `GET /integraciones/iris`                                          | `iris.ver`                                             | vista (secretos `***`, `requiere_reconectar`, 0.6.2)   |
 | `GET /integraciones/iris/estado`                                   | `iris.abrir` o el `atk_` de Iris                       | `{ activo, version_argos, contrato }` (botón «Ver en Iris»; Iris lee las versiones) |
 | `PUT /integraciones/iris/contrato`                                 | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_contrato`                               |
+| `PUT /integraciones/iris/sincronizacion`                           | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_sincronizacion` (0.8.0)                 |
 | `PUT /integraciones/iris`                                          | `iris.configurar`                                      | `iris.configurar` (con `version`)                      |
 | `POST /integraciones/iris/enlace`                                  | `iris.configurar`                                      | `iris.generar_enlace`                                  |
 | `GET /integraciones/iris/autorizar/vista-previa?iris=`             | `iris.configurar`                                      | lectura (sin auditoría): origen, `origen_conocido`, empresas |
@@ -188,6 +189,39 @@ el nuevo. Reglas:
   el barrido no lo vuelve a tomar. Iris usa entonces un `atk_` creado en el panel.
 - Prueba: `tests/core/iris_revocar_063.spec.ts`.
 
+## Conexión de un paso (contrato 0.8.0, §1.5 y §2.5; parte de A1)
+
+- **Host del receptor y origen aprobado** (`canjear_enlace_iris.ts`, `reglaReceptorIris` y
+  `WebhookInvalido` en `autorizacion.ts`): el host (sin puerto, sin distinguir mayúsculas) de
+  `webhook.url` debe ser el de `base_url`; y si el código nació del botón (tiene `code_challenge`),
+  `origen(base_url)` debe ser el `origen_iris` que aprobó el admin (`iris_enlaces`). Si no:
+  `422 urn:argosisp:problema:webhook_invalido` con `errors[0]` `{ field: "webhook.url", rule:
+  "mismo_host" }` o `{ field: "base_url", rule: "origen_aprobado" }`, y el código **queda gastado**
+  (`gastarCodigoIris`, como un `code_verifier` que no coincide): repetirlo responde `410`. Los
+  errores de formato (`422 validacion`) se revisan antes y no lo gastan. Un enlace de §1.3 no tiene
+  origen aprobado: solo se exige el mismo host.
+- **El botón enciende al confirmar** (columna `encender_al_confirmar`): un canje **directo** de un
+  código del botón queda apagado y marcado; la primera llamada autenticada de su `atk_`
+  (`iris.confirmar_canje`, también el cron si el guard no alcanzó) pone `activo = true` y quita la
+  marca (diff en `audit.cambios`, `encendido_al_confirmar` en la auditoría). Con el enlace (§1.3) y en
+  una reconexión `activo` no cambia. Si el admin decide `activo` a mano antes (`PUT
+  /integraciones/iris`), la marca se quita. Sin evento: no existe `iris.config_cambiada` (nadie
+  consume el estado del conector por evento; los envíos lo leen de la base).
+- **`PUT /integraciones/iris/sincronizacion`** (`actions/informar_sincronizacion_iris.ts`,
+  `iris.informar_sincronizacion`): Iris informa el avance de su primera sincronización. Solo su
+  `atk_` (`exigirTokenIris` en `token_iris.ts`, compartido con el PUT del contrato); funciona con el
+  conector apagado. Cuerpo: `sincronizacion_id` (UUID v7), `estado` (`en_curso` | `completa` |
+  `con_errores`), `iniciada_en`, `actualizada_en`, `etapas[]` (`recurso` ∈ empresas, zonas, planes,
+  routers, cuentas_bancarias, bancos, clientes, servicios, sin repetir; `estado` ∈ pendiente,
+  en_curso, completa, con_errores; `procesados`, `total` o null, `error` ≤ 300 o null,
+  `terminada_en` o null). Se guarda tal cual (más `recibida_en`) en `iris_conector.sincronizacion`
+  (jsonb) y sale en `GET /integraciones/iris` (`sincronizacion`, null si nunca). Misma
+  `sincronizacion_id` y mismo `actualizada_en`: 200 con lo guardado, sin escribir. `409
+  sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si la
+  `sincronizacion_id` es menor que la guardada (los UUID v7 se comparan como texto en minúsculas).
+  Una más nueva reemplaza. Respuesta `{ sincronizacion_id, estado, actualizada_en }`.
+- Migración `1794968994910_alter_iris_conector_080_table`. Pruebas: `tests/core/iris_080.spec.ts`.
+
 ## Pagos y atención (contrato 0.6.0, §1.1, §7.1, §7.5, §7.6; parte de A1)
 
 - **Permisos del usuario técnico** (§1.1 con los nombres de §9.1): `PERMISOS_IRIS_CONTRATO` suma
@@ -264,7 +298,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 | Archivo | Qué hace |
 | --- | --- |
-| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado` e `inventario.traslado_enviado` / `_recibido` / `_cancelado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado`, `inventario.traslado_enviado` / `_recibido` / `_cancelado`, `comprobante.*`, `promesa.*` y `cuenta_bancaria.cambiada` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
 | `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
 | `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
 
@@ -309,10 +343,25 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   `verificado_iris_actor`: el `X-Iris-Actor` de quien decidió desde Iris, o null si decidió caja en
   el panel; aditivo, sin filtro de versión, y de la fila si el evento es anterior) y
   `promesa.creada` / `.cumplida` / `.incumplida` / `.cancelada` (`promesa_id`, `empresa_id`,
-  `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `vence`, `monto`; `motivo` solo en
-  `cancelada`), de cualquier canal dentro del alcance. Lo que el evento no trae se completa con
+  `cliente_id`, `servicio_id`, `tipo`, `canal`, `comprobante_id`, `motivo_reconexion`, `vence`,
+  `monto`; `motivo` solo en `cancelada`), de cualquier canal dentro del alcance. `motivo_reconexion`
+  (desde el 17 nov 2026): `fuera_de_horario` | `sin_personal` en una reconexión temporal, null en una
+  promesa común; aditivo, sin filtro de versión, y de `billing.promesas.motivo_reconexion` si el
+  evento es anterior (sin la clave). Lo que el evento no trae se completa con
   `billing.comprobantes` / `billing.promesas`; sin `causa` el rechazo sale `otro`, sin `tipo` es
   `promesa`. Nunca la imagen ni la referencia bancaria.
+- **Cuentas bancarias** (contrato 0.8.0, §7.8; `EVENTOS_DESDE_080`, solo con
+  `conectorAdmite('0.8.0')`; lo emite A3 al crear y al editar): `cuenta_bancaria.cambiada`
+  (`cuenta_bancaria_id`, `empresa_id`, `campos[]`, `activa` después del cambio, `creada`). `campos[]`
+  es una lista cerrada (`CAMPOS_CUENTA_BANCARIA_CAMBIADA`: `banco_id`, `numero`, `alias`,
+  `titular`, `tipo`, `moneda`, `activa`), sin repetidos; un nombre fuera de la lista no sale.
+  Nunca valores: ni el número, ni el alias, ni el titular (Iris relee `GET /cuentas-bancarias/:id`).
+  Sigue el alcance de la empresa de la cuenta; si el evento no trae `empresa_id` o `activa`, salen de
+  `billing.cuentas_bancarias`. Un conector 0.7.x o sin contrato no lo recibe.
+- **Precio** (contrato 0.8.0, §2.4): `"precio"` en `campos[]` de `servicio.config_cambiada`
+  (cambió `costo_override` o un plan temporal con otro precio) y de `catalogo.cambiado` de plan
+  (cambió el precio) llega tal cual: `campos[]` se reenvía completo, sin filtro de versión (es
+  aditivo). Lo emite A1; prueba en `tests/integraciones/iris_webhooks_080.spec.ts`.
 - **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
   reservado; `receptor.ts`, `actions/recibir_webhook_iris.ts`, tabla `integraciones.iris_recibidos`).
   Misma firma `v1=` que Horus con el secreto de entrada del canje, ±5 min, 503 `iris_apagado` con el

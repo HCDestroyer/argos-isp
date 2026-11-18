@@ -11,6 +11,7 @@ const CERTIFICAR_AL = ['emitir', 'pagar', 'nunca'] as const
 const CICLOS = ['dia_fijo', 'aniversario'] as const
 const MORAS = ['ninguna', 'fija', 'porcentaje'] as const
 const CANALES: readonly Canal[] = ['portal', 'ia', 'operador', 'supervisor']
+const VIGENCIAS_RECONEXION: readonly NonNullable<ReglasPromesa['reconexion_temporal']>['vigencia'][] = ['horas', 'medianoche']
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -37,7 +38,7 @@ function reglasPorDefecto(): ReglasPromesa {
             operador: { ...sinLimites },
             supervisor: { ...sinLimites, plazo_max_dias: 15, max_por_periodo: 3 },
         },
-        reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24 },
+        reconexion_temporal: { permitida: false, max_por_periodo: 1, horas_max: 24, vigencia: 'horas' },
     }
 }
 
@@ -105,6 +106,9 @@ function erroresReglas(reglas: ReglasPromesa): Errores {
         }
         if (!enRango(reconexion.horas_max, 1, 168)) {
             errores.push({ field: 'reglas_promesa.reconexion_temporal.horas_max', message: 'El campo debe estar entre 1 y 168', rule: 'range' })
+        }
+        if (!(VIGENCIAS_RECONEXION as readonly unknown[]).includes(reconexion.vigencia)) {
+            errores.push({ field: 'reglas_promesa.reconexion_temporal.vigencia', message: 'El campo debe ser horas o medianoche', rule: 'enum' })
         }
     }
     if (reglas.max_por_periodo_buen_historial < reglas.max_por_periodo) {

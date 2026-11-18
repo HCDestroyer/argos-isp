@@ -211,9 +211,13 @@ function validarBancarios(cuerpo: Record<string, unknown>): Errores {
         }
     }
     if (valores.cuenta_bancaria_id !== null && requeridos.includes('cuenta_bancaria_id')) {
-        const cuenta = bd.cuentasBancarias.find(c => c.id === valores.cuenta_bancaria_id && c.activa)
+        const cuenta = bd.cuentasBancarias.find(c => c.id === valores.cuenta_bancaria_id)
         if (!cuenta) {
-            errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${valores.cuenta_bancaria_id} no existe o está inactiva`, rule: 'exists' })
+            errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${valores.cuenta_bancaria_id} no existe`, rule: 'exists' })
+        }
+        else if (!cuenta.activa) {
+            // contrato Iris 0.8.0 (A3): `inactiva` distingue una cuenta desactivada de una inexistente
+            errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${cuenta.id} está inactiva y no recibe pagos`, rule: 'inactiva' })
         }
         else if (cuenta.moneda !== 'GTQ') {
             errores.push({ field: 'cuenta_bancaria_id', message: `La cuenta bancaria ${cuenta.id} es en ${cuenta.moneda}; los pagos se registran en quetzales`, rule: 'moneda' })

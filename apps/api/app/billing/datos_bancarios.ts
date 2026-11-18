@@ -76,11 +76,18 @@ export async function validarDatosBancarios(
             .where('id', valores.cuenta_bancaria_id)
             .select('cuenta_id', 'activa', 'moneda', 'empresa_id')
             .first()
-        if (!cuenta || !cuenta.activa) {
+        if (!cuenta) {
             errores.push({
                 field: 'cuenta_bancaria_id',
-                message: `La cuenta bancaria ${valores.cuenta_bancaria_id} no existe o está inactiva`,
+                message: `La cuenta bancaria ${valores.cuenta_bancaria_id} no existe`,
                 rule: 'exists',
+            })
+        } else if (!cuenta.activa) {
+            // contrato Iris 0.8.0: `inactiva` distingue una cuenta desactivada de una inexistente
+            errores.push({
+                field: 'cuenta_bancaria_id',
+                message: `La cuenta bancaria ${valores.cuenta_bancaria_id} está inactiva y no recibe pagos`,
+                rule: 'inactiva',
             })
         } else if (cuenta.moneda !== 'GTQ') {
             errores.push({

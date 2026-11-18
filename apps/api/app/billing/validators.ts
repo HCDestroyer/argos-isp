@@ -9,7 +9,8 @@ import {
     motivo,
     versionEsperada,
 } from '#shared/validadores'
-import { reglasPromesaSchema } from '#billing/reglas_promesa'
+import { MOTIVOS_RECONEXION, reglasPromesaSchema } from '#billing/reglas_promesa'
+import { TIPOS_CUENTA_BANCARIA } from '#billing/cuentas_bancarias'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
 import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
@@ -305,6 +306,10 @@ export const listarPromesasValidator = vine.compile(
             .meta({
                 description: 'reconexion_temporal: las ligadas a un comprobante (contrato Iris 0.6.0 §7.3)',
             }),
+        motivo_reconexion: vine.enum(MOTIVOS_RECONEXION).optional().meta({
+            description:
+                'Solo reconexiones temporales con ese motivo (contrato Iris 0.8.0): implica tipo=reconexion_temporal; con tipo=promesa la lista sale vacía',
+        }),
     }),
 )
 
@@ -340,10 +345,29 @@ export const aprobarPromesaValidator = vine.compile(
 |--------------------------------------------------------------------------
 */
 
+/** Opcionales en la API por compatibilidad (contrato Iris 0.8.0); el panel los exige. */
+const titularCuentaBancaria = () =>
+    vine
+        .string()
+        .trim()
+        .minLength(2)
+        .maxLength(120)
+        .nullable()
+        .optional()
+        .meta({ description: 'Nombre del titular de la cuenta (2 a 120); null = sin dato' })
+const tipoCuentaBancaria = () =>
+    vine
+        .enum(TIPOS_CUENTA_BANCARIA)
+        .nullable()
+        .optional()
+        .meta({ description: 'Tipo de cuenta; null = sin dato' })
+
 const camposCuentaBancaria = {
     banco_id: idEntidad().meta({ description: 'Banco (GET /bancos)' }),
     numero: vine.string().trim().minLength(3).maxLength(40),
     alias: vine.string().trim().minLength(2).maxLength(80),
+    titular: titularCuentaBancaria(),
+    tipo: tipoCuentaBancaria(),
     moneda: vine.enum(['GTQ', 'USD'] as const).optional(),
     activa: vine.boolean().optional(),
 }
@@ -363,6 +387,8 @@ export const editarCuentaBancariaValidator = vine.compile(
         banco_id: camposCuentaBancaria.banco_id.optional(),
         numero: vine.string().trim().minLength(3).maxLength(40).optional(),
         alias: vine.string().trim().minLength(2).maxLength(80).optional(),
+        titular: titularCuentaBancaria(),
+        tipo: tipoCuentaBancaria(),
         moneda: vine.enum(['GTQ', 'USD'] as const).optional(),
         activa: vine.boolean().optional(),
     }),
@@ -475,7 +501,10 @@ export const reconexionTemporalValidator = vine.compile(
             .nullable()
             .optional()
             .meta({ description: 'Obligatorio solo si el comprobante no tiene servicio' }),
-        motivo: vine.enum(['fuera_de_horario'] as const),
+        motivo: vine.enum(MOTIVOS_RECONEXION).meta({
+            description:
+                'fuera_de_horario: caja cerrada. sin_personal: horario hábil, pero nadie de caja disponible. Mismas reglas; el comprobante queda pendiente en la cola de caja',
+        }),
     }),
 )
 
