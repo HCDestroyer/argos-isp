@@ -623,3 +623,87 @@ test('corte por el túnel WireGuard (contratos/corte-identificacion.md §5 ter.6
         )
     }
 })
+
+test('device-mode sin proxy web (RouterOS 7.17+, bug v1.17.0): el router en modo código se corta como en ip', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    const AVISO =
+        ':put "argosisp: AVISO el device-mode no permite el proxy web: /system/device-mode/update proxy=yes y confirmar con el boton o apagando y encendiendo dentro de 5 minutos; luego Reconciliar ahora"'
+    const revisar = (p, t) => {
+        const lineas = t.split('\n').map((l) => l.trim())
+        // se lee con :parse dentro de :do on-error: antes de 7.13 el menú no existe y un comando
+        // desconocido escrito tal cual rompe el bloque entero al pegarlo o importarlo
+        const leerDm = ':local leerDm [:parse ":return [/system device-mode get proxy]"]'
+        const leerInactivo = ':local leerInactivo [:parse ":return [/ip proxy get inactivated]"]'
+        for (const l of [leerDm, leerInactivo]) {
+            const i = lineas.indexOf(l)
+            assert.ok(i > 0, `${p}: ${l}`)
+            assert.equal(lineas[i - 1], ':do {', `${p}: ${l} fuera de :do`)
+            assert.equal(lineas.indexOf(l, i + 1), -1, `${p}: ${l} repetido`)
+        }
+        // /system device-mode solo dentro del :parse, nunca como comando suelto
+        for (const l of lineas.filter((l) => !l.startsWith('#') && /\/system device-mode/.test(l))) {
+            assert.equal(l, leerDm, `${p}: ${l}`)
+        }
+        assert.equal(lineas.filter((l) => l === '} on-error={}').length >= 2, true, p)
+        // get proxy devuelve un booleano (false), con "no" por si una versión lo da como texto; sin leer
+        // el device-mode, el proxy se da por permitido
+        assert.ok(lineas.includes(':local dmProxy true'), p)
+        assert.ok(
+            lineas.includes(':if ([:tostr $dm] = "false" || [:tostr $dm] = "no") do={ :set dmProxy false }'),
+            p,
+        )
+        // solo en modo código: pasa a ip y avisa cómo desbloquearlo
+        const revisa = t.indexOf(':local dmProxy true')
+        const siCodigo = t.indexOf(':if ($corteIdentificacion = "codigo") do={', revisa)
+        const bajar = t.indexOf(':if (!$dmProxy) do={\n        :set corteIdentificacion "ip"', revisa)
+        assert.ok(siCodigo > revisa && bajar > siCodigo, `${p}: el device-mode solo en modo código`)
+        assert.ok(t.indexOf(AVISO) > bajar, `${p}: aviso`)
+        assert.equal(t.split(AVISO).length, 2, `${p}: un solo aviso`)
+        assert.equal(lineas.filter((l) => /^:set corteIdentificacion /.test(l)).length, 1, p)
+        // antes de todo lo que depende del modo: address-list del túnel, NAT al 3346 o dst-nat al
+        // portal, drop y accept del 3346, y el paso 2 de la sección 9 bis
+        // la revisión usa el modo una sola vez (su :if) y todo lo demás que lo lee va después del aviso
+        const usos = [...t.matchAll(/\$corteIdentificacion/g)].map((m) => m.index)
+        assert.equal(usos.filter((i) => i > revisa && i < bajar).length, 1, `${p}: usos en la revisión`)
+        for (const i of usos.filter((i) => i > revisa && i > bajar)) assert.ok(i > t.indexOf(AVISO), p)
+        // y antes de todo lo que arma el corte: address-list del túnel, NAT al 3346 o dst-nat al portal,
+        // drop y accept del 3346 y el paso 2 de la sección 9 bis
+        for (const d of [
+            'address=$corteTunelIp comment="argosisp: portal tunel"',
+            'action=redirect to-ports=$proxyCortePuerto disabled=yes',
+            'action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto',
+            'connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"',
+            'action=accept comment="argosisp: corte-in proxy de corte"',
+            '/ip proxy set port=$proxyCortePuerto max-cache-size=none',
+            '/ip proxy access add local-port=',
+            '/ip firewall nat enable [find where comment=$reglaNatProxy]',
+        ]) {
+            assert.ok(t.indexOf(d) > t.indexOf(AVISO), `${p}: ${d} antes de revisar el device-mode`)
+        }
+        // la rama ip (el corte que queda) es el dst-nat del HTTP al portal y la limpieza del proxy:
+        // sin regla final, sin reglas de servicio, el 3346 fuera de /ip proxy port y sin su drop
+        assert.ok(
+            t.includes(
+                '/ip firewall nat add chain=argos-corte-nat protocol=tcp dst-port=80 action=dst-nat to-addresses=$portalV4 to-ports=$portalCortePuerto comment="argosisp: corte-nat HTTP a /corte"',
+            ),
+            p,
+        )
+        for (const l of [
+            '/ip proxy access remove [find where comment=$reglaProxyFinal]',
+            '/ip firewall filter remove [find where comment=$reglaProxyDrop]',
+        ]) {
+            assert.ok(t.indexOf(l) > t.indexOf(AVISO), `${p}: ${l}`)
+        }
+    }
+    for (const p of CON_SERVICIO) revisar(p, leer(p))
+    // render con modo código (el router del PM): la revisión va igual, ASCII y con llaves balanceadas
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        const r = renderizar(leer(p), { ...VALORES, corte_identificacion: 'codigo' })
+        assert.match(r, /:local corteIdentificacion "codigo"/)
+        assert.doesNotMatch(r, /[^\x09\x0a\x0d\x20-\x7e]/, p)
+        assert.equal(balance(r), null, p)
+        revisar(p, r)
+    }
+    // el script sin servicio no arma el corte: no revisa el device-mode
+    for (const p of [PLANTILLAS[0], SIN_RADIUS[0]]) assert.doesNotMatch(leer(p), /device-mode get/, p)
+})
