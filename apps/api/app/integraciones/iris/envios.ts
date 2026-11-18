@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { EventoEntrante } from '#shared/eventos_bus'
+import { CAMPOS_CUENTA_BANCARIA_CAMBIADA } from '#shared/eventos'
 import { alcanceEmpresasDeUsuario } from '#core/alcance_empresas'
 import { usuarioIris } from '#core/integraciones_iris'
 import {
@@ -54,6 +55,10 @@ import {
  *   alcance, solo a conectores con contrato ≥ 0.6.0 (`EVENTOS_DESDE_060`). Lo que A3 no trae en el
  *   evento se completa con la fila (`billing.comprobantes`, `billing.promesas`); nunca la imagen del
  *   comprobante ni la referencia bancaria.
+ * - **Cuentas bancarias** (contrato 0.8.0, §7.8): `cuenta_bancaria.cambiada` solo a conectores con
+ *   contrato ≥ 0.8.0 (`EVENTOS_DESDE_080`), con la empresa de la cuenta como alcance. Solo nombres
+ *   de campo (lista cerrada `CAMPOS_CUENTA_BANCARIA_CAMBIADA`), `activa` y `creada`: nunca el
+ *   número, el alias ni el titular. Iris relee la cuenta con `GET /cuentas-bancarias/:id`.
  */
 
 /** Eventos del bus que van a Iris (§2.3). */
@@ -78,6 +83,7 @@ export const EVENTOS_A_IRIS = [
     'promesa.cumplida',
     'promesa.incumplida',
     'promesa.cancelada',
+    'cuenta_bancaria.cambiada',
 ] as const
 
 /** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
@@ -101,6 +107,21 @@ export const EVENTOS_DESDE_060 = EVENTOS_IRIS_DESDE_060 satisfies ReadonlyArray<
 >
 
 export { CONTRATO_EVENTOS_060 }
+
+/** Eventos que nacieron con el contrato Iris 0.8.0 (§7.8): solo a conectores con contrato ≥ 0.8.0. */
+export const EVENTOS_DESDE_080 = ['cuenta_bancaria.cambiada'] as const satisfies ReadonlyArray<
+    (typeof EVENTOS_A_IRIS)[number]
+>
+
+/** Versión mínima del contrato para `EVENTOS_DESDE_080`. */
+export const CONTRATO_EVENTOS_080 = '0.8.0'
+
+/** Versión mínima propia de este módulo (0.5.0 y 0.8.0); la de 0.6.0 la decide A1. */
+function contratoMinimoEnvio(evento: string): string | null {
+    if ((EVENTOS_DESDE_050 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_050
+    if ((EVENTOS_DESDE_080 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_080
+    return contratoMinimoEventoIris(evento)
+}
 
 const CANALES_COMPROBANTE = ['portal', 'panel', 'iris'] as const
 const CAUSAS_RECHAZO = [
@@ -265,6 +286,7 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         return payloadComprobante(evento, p)
     }
     if (evento.startsWith('promesa.')) return payloadPromesa(evento, p)
+    if (evento === 'cuenta_bancaria.cambiada') return payloadCuentaBancaria(p)
 
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
@@ -577,6 +599,41 @@ async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris |
 }
 
 /**
+ * `cuenta_bancaria.cambiada` (0.8.0, §7.8): cuenta_bancaria_id, empresa_id, campos[] (solo los
+ * nombres de la lista cerrada, sin repetir), activa (después del cambio) y creada. Lo que A3 no
+ * trae en el evento sale de `billing.cuentas_bancarias` (solo `empresa_id` y `activa`). Nunca
+ * valores: ni `numero`, ni `alias`, ni `titular`.
+ */
+async function payloadCuentaBancaria(p: Payload): Promise<WebhookIris | null> {
+    const cuentaId = entero(p.cuenta_bancaria_id)
+    if (!cuentaId) return null
+    let empresaId = entero(p.empresa_id)
+    let activa = typeof p.activa === 'boolean' ? p.activa : null
+    if (!empresaId || activa === null) {
+        const fila = (await db
+            .from('billing.cuentas_bancarias')
+            .where('id', cuentaId)
+            .select('empresa_id', 'activa')
+            .first()) as { empresa_id: number; activa: boolean } | null
+        empresaId = empresaId ?? entero(fila?.empresa_id)
+        activa = activa ?? (typeof fila?.activa === 'boolean' ? fila.activa : null)
+    }
+    if (!empresaId || activa === null) return null
+    const permitidos = CAMPOS_CUENTA_BANCARIA_CAMBIADA as readonly string[]
+    const campos = [...new Set(textos(p.campos))].filter((c) => permitidos.includes(c))
+    return {
+        payload: {
+            cuenta_bancaria_id: cuentaId,
+            empresa_id: empresaId,
+            campos,
+            activa,
+            creada: p.creada === true,
+        },
+        empresas: [empresaId],
+    }
+}
+
+/**
  * Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global,
  * salvo el de infraestructura compartida (`compartido`), que pasa siempre.
  */
@@ -590,26 +647,16 @@ export function enAlcance(alcance: AlcanceConectorIris, empresas: number[], comp
 /**
  * Registra el webhook de un evento del bus (lo llama `ConsumidorIris`). Idempotente por id del
  * outbox. Devuelve el id del envío o null si no aplica (otro evento, conector sin destino, evento
- * de 0.5.0 con un conector anterior, fuera del alcance) o ya existía.
+ * de 0.5.0, 0.6.0 u 0.8.0 con un conector anterior, fuera del alcance) o ya existía.
  */
 export async function registrarEnvioIris(evento: EventoEntrante): Promise<number | null> {
     if (!(EVENTOS_A_IRIS as readonly string[]).includes(evento.evento)) return null
     if (!(await destinoWebhooksIris())) return null
-    if (
-        (EVENTOS_DESDE_050 as readonly string[]).includes(evento.evento) &&
-        !(await conectorAdmite(CONTRATO_EVENTOS_050))
-    ) {
-        logger.debug(
-            { outboxId: evento.id, evento: evento.evento },
-            'iris: el conector habla un contrato anterior a 0.5.0; webhook no enviado',
-        )
-        return null
-    }
-    const minimo = contratoMinimoEventoIris(evento.evento)
+    const minimo = contratoMinimoEnvio(evento.evento)
     if (minimo && !(await conectorAdmite(minimo))) {
         logger.debug(
-            { outboxId: evento.id, evento: evento.evento },
-            'iris: el conector habla un contrato anterior a 0.6.0; webhook no enviado',
+            { outboxId: evento.id, evento: evento.evento, minimo },
+            'iris: el conector habla un contrato anterior al del evento; webhook no enviado',
         )
         return null
     }

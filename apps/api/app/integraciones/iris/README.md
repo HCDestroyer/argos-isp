@@ -264,7 +264,7 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
 
 | Archivo | Qué hace |
 | --- | --- |
-| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado` e `inventario.traslado_enviado` / `_recibido` / `_cancelado` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas`, `servicio.eliminado`, `router.eliminado`, `servicio.datos_cambiados`, `catalogo.cambiado`, `inventario.traslado_enviado` / `_recibido` / `_cancelado`, `comprobante.*`, `promesa.*` y `cuenta_bancaria.cambiada` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
 | `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
 | `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
 
@@ -316,6 +316,18 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   evento es anterior (sin la clave). Lo que el evento no trae se completa con
   `billing.comprobantes` / `billing.promesas`; sin `causa` el rechazo sale `otro`, sin `tipo` es
   `promesa`. Nunca la imagen ni la referencia bancaria.
+- **Cuentas bancarias** (contrato 0.8.0, §7.8; `EVENTOS_DESDE_080`, solo con
+  `conectorAdmite('0.8.0')`; lo emite A3 al crear y al editar): `cuenta_bancaria.cambiada`
+  (`cuenta_bancaria_id`, `empresa_id`, `campos[]`, `activa` después del cambio, `creada`). `campos[]`
+  es una lista cerrada (`CAMPOS_CUENTA_BANCARIA_CAMBIADA`: `banco_id`, `numero`, `alias`,
+  `titular`, `tipo`, `moneda`, `activa`), sin repetidos; un nombre fuera de la lista no sale.
+  Nunca valores: ni el número, ni el alias, ni el titular (Iris relee `GET /cuentas-bancarias/:id`).
+  Sigue el alcance de la empresa de la cuenta; si el evento no trae `empresa_id` o `activa`, salen de
+  `billing.cuentas_bancarias`. Un conector 0.7.x o sin contrato no lo recibe.
+- **Precio** (contrato 0.8.0, §2.4): `"precio"` en `campos[]` de `servicio.config_cambiada`
+  (cambió `costo_override` o un plan temporal con otro precio) y de `catalogo.cambiado` de plan
+  (cambió el precio) llega tal cual: `campos[]` se reenvía completo, sin filtro de versión (es
+  aditivo). Lo emite A1; prueba en `tests/integraciones/iris_webhooks_080.spec.ts`.
 - **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
   reservado; `receptor.ts`, `actions/recibir_webhook_iris.ts`, tabla `integraciones.iris_recibidos`).
   Misma firma `v1=` que Horus con el secreto de entrada del canje, ±5 min, 503 `iris_apagado` con el
