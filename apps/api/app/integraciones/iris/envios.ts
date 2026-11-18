@@ -112,6 +112,7 @@ const CAUSAS_RECHAZO = [
     'otro',
 ] as const
 const TIPOS_PROMESA = ['promesa', 'reconexion_temporal'] as const
+const MOTIVOS_RECONEXION = ['fuera_de_horario', 'sin_personal'] as const
 const CANALES_PROMESA = ['portal', 'ia', 'operador', 'supervisor'] as const
 const ESTADOS_SERVICIO = ['pendiente_instalacion', 'activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -531,7 +532,9 @@ async function payloadComprobante(evento: string, p: Payload): Promise<WebhookIr
  * `promesa.*` (0.6.0, §7.4): promesa_id, empresa_id, cliente_id, servicio_id, tipo, canal,
  * comprobante_id, vence, monto y, en `promesa.cancelada`, motivo. Lo que no trae el evento sale de
  * `billing.promesas`. `tipo` y `comprobante_id` llegan de A3 (reconexión temporal); sin ellos, una
- * promesa común (`promesa`, null).
+ * promesa común (`promesa`, null). `motivo_reconexion` (`fuera_de_horario` | `sin_personal`, null
+ * fuera de una reconexión; desde el 17 nov 2026): aditivo, sin condición de versión; un evento
+ * anterior (sin la clave) lo toma de `billing.promesas.motivo_reconexion`.
  */
 async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris | null> {
     const promesaId = entero(p.promesa_id)
@@ -539,7 +542,7 @@ async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris |
     const fila = (await db
         .from('billing.promesas')
         .where('id', promesaId)
-        .select('empresa_id', 'cliente_id', 'servicio_id', 'canal', 'monto', 'vence_en')
+        .select('empresa_id', 'cliente_id', 'servicio_id', 'canal', 'monto', 'vence_en', 'motivo_reconexion')
         .first()) as {
         empresa_id: number
         cliente_id: number
@@ -547,6 +550,7 @@ async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris |
         canal: string
         monto: string
         vence_en: Date
+        motivo_reconexion: string | null
     } | null
     const empresaId = entero(p.empresa_id) ?? entero(fila?.empresa_id)
     if (!empresaId) return null
@@ -559,6 +563,11 @@ async function payloadPromesa(evento: string, p: Payload): Promise<WebhookIris |
             tipo: unoDe(p.tipo, TIPOS_PROMESA) ?? 'promesa',
             canal: unoDe(p.canal, CANALES_PROMESA) ?? unoDe(fila?.canal, CANALES_PROMESA),
             comprobante_id: entero(p.comprobante_id),
+            // Un evento anterior al 17 nov 2026 (sin la clave) lo toma de la fila
+            motivo_reconexion:
+                'motivo_reconexion' in p
+                    ? unoDe(p.motivo_reconexion, MOTIVOS_RECONEXION)
+                    : unoDe(fila?.motivo_reconexion, MOTIVOS_RECONEXION),
             vence: instanteIso(p.vence) ?? instanteIso(fila?.vence_en),
             monto: decimal(p.monto) ?? decimal(fila?.monto),
             ...(evento === 'promesa.cancelada' ? { motivo: texto(p.motivo) } : {}),
