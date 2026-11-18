@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.1](https://github.com/HCDestroyer/argos-isp/compare/v1.18.0...v1.18.1) (2026-11-18)
+
+
+### Correcciones
+
+* **routeros:** resultado de «Reconciliar ahora», proxy bloqueado por device-mode y rechazos de RouterOS bien diagnosticados ([#251](https://github.com/HCDestroyer/argos-isp/issues/251)) ([04f2d7a](https://github.com/HCDestroyer/argos-isp/commit/04f2d7a87a1d0f6d39dea31c60df07ef80b36405))
+
 ## [1.18.0](https://github.com/HCDestroyer/argos-isp/compare/v1.17.0...v1.18.0) (2026-11-18)
 
 
