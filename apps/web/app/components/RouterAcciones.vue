@@ -110,6 +110,7 @@ function alActualizar(router: RouterNas) {
             v-if="puede('routers.reconciliar')"
             v-model:open="reconciliarAbierto"
             :router="props.router"
+            @reconciliado="emit('probado')"
         />
         <RouterScriptModal
             v-if="puede('routers.generar_script')"

@@ -107,21 +107,40 @@ y responde con rechazo a todo lo demás (nunca un descarte silencioso, para que 
 Cómo sabe la página de corte qué cliente es (se elige por router, en el panel):
 
 - **Por IP** (por defecto): el router hace `dst-nat` del TCP/80 al portal y el portal identifica por la IP de origen. Con WireGuard, el router lo manda a la IP del servidor en el túnel, sin NAT, para que el portal vea la IP real del cliente.
-- **Por código** (necesita la API del router): el TCP/80 va al web proxy del propio router (puerto 3346, cerrado desde la WAN), que responde con una redirección a `/corte?c=<código>`. Sirve aunque haya NAT o proxies en medio. Argos lo arma en este orden: el bloqueo del 3346 desde fuera, el puerto en el proxy (sin encenderlo), la regla final, el NAT y al final enciende el proxy.
+- **Por código** (necesita la API del router): el TCP/80 va al web proxy del propio router (puerto 3346, cerrado desde la WAN), que responde con una redirección a `/corte?c=<código>`. Sirve aunque haya NAT o proxies en medio. En RouterOS 7.17+ necesita el proxy permitido en el device-mode (ver [`failure: invalid local port`](#failure-invalid-local-port)). Argos lo arma en este orden: el bloqueo del 3346 desde fuera, el puerto en el proxy (sin encenderlo), la regla final, el NAT y al final enciende el proxy.
 
 Revisa cada router con **Probar conexión → Corte** en su ficha. Pasar un router de un modo a otro: [Actualizar y revertir](./actualizacion.md#identificacion-del-cortado-desde-la-1-13-0).
 
-ArgosIsp mantiene estas reglas en cada router con API (el reconciliador): si alguien las borra, las vuelve a poner. «Reconciliar ahora» en la ficha del router lo hace en el momento, con vista previa.
+ArgosIsp mantiene estas reglas en cada router con API (el reconciliador): si alguien las borra, las vuelve a poner. «Reconciliar ahora» en la ficha del router lo hace en el momento, con vista previa, y muestra el resultado: en espera, en curso, completada (con los comandos que escribió y los que el router rechazó) o fallida (el router no respondió). Un comando rechazado no detiene lo demás.
 
 ### `failure: invalid local port`
 
-Sale al importar el script o en `routeros.fallido` al pasar un router al corte **por código**, en un comando como `/ip proxy access add local-port=3346 …`.
+Sale al importar el script, en «Reconciliar ahora» (en `errores`, operación `proxy_corte` o `/ip/proxy/access …`), en «Sincronizar con el router» o en `routeros.fallido` cuando el router está en el corte **por código**, en un comando como `/ip proxy access add local-port=3346 …`.
 
-- **Causa:** RouterOS solo acepta una regla de `/ip proxy access` con un `local-port` que ya está en `/ip proxy port`. Hasta la 1.16.0, el script y el reconciliador creaban la regla antes de agregar el 3346 al proxy.
-- **Arreglo:** actualiza ArgosIsp (el script y el reconciliador ya agregan el puerto primero). Si no puedes actualizar ahora, agrega el puerto a mano, sin encender el proxy, y vuelve a correr el script o «Reconciliar ahora»:
-    - si no usas el web proxy del router: `/ip proxy set port=3346 max-cache-size=none`;
-    - si ya lo usas: `/ip proxy set port=<tus puertos>,3346` (por ejemplo `port=8080,3346`).
-- Revisa con `/ip proxy print`: el proxy queda encendido solo al final, cuando ya existen la regla `argosisp: corte proxy sin codigo` y el `drop` del 3346 en `input`.
+**Causa más común (RouterOS 7.17 o más nuevo): el device-mode no permite el proxy web.** El proxy aparece encendido con el puerto 3346, pero no escucha y RouterOS rechaza cualquier `local-port`. Se ve así:
+
+```
+/ip proxy print
+;;; inactivated, not allowed by device-mode
+  enabled: yes
+     port: 3346
+```
+
+Argos lo detecta (lee `/system/device-mode`): no intenta las reglas del proxy, lo avisa en «Reconciliar ahora», en «Sincronizar con el router» y en **Probar conexión → Corte** (chequeo «device-mode»), y mientras tanto **corta ese router como en «Identificación por IP»** (el HTTP del suspendido va al portal sin código). El corte sigue funcionando; solo falta el código.
+
+Arreglo (solo se puede desde el router, ArgosIsp no puede hacerlo por la API):
+
+1. En la terminal del router: `/system/device-mode/print` (mira `proxy`: debe decir `yes`).
+2. `/system/device-mode/update proxy=yes`
+3. **Dentro de 5 minutos**, confírmalo en el equipo: presiona el botón (reset/mode) o apágalo y enciéndelo. Si no, RouterOS descarta el cambio. En un CHR o una VM, reiniciarla desde el hipervisor (un apagado «en frío»).
+4. Cuando vuelva, `/ip proxy print` ya no dice `inactivated`. Usa «Reconciliar ahora»: Argos arma el corte por código (reglas del proxy y NAT al 3346).
+
+**Otra causa (ArgosIsp 1.16.0 o anterior):** RouterOS solo acepta una regla de `/ip proxy access` con un `local-port` que ya está en `/ip proxy port`, y esas versiones creaban la regla antes de agregar el 3346. Actualiza ArgosIsp (el script y el reconciliador agregan el puerto primero) o agrégalo a mano, sin encender el proxy, y vuelve a correr el script o «Reconciliar ahora»:
+
+- si no usas el web proxy del router: `/ip proxy set port=3346 max-cache-size=none`;
+- si ya lo usas: `/ip proxy set port=<tus puertos>,3346` (por ejemplo `port=8080,3346`).
+
+Orden con que Argos arma el corte por código: el `drop` del 3346 en `input`, el puerto en el proxy (sin encenderlo), la regla `argosisp: corte proxy sin codigo`, el NAT al 3346 y al final enciende el proxy. Si un paso falla, no sigue con lo que depende de él (nunca un NAT al 3346 sin la regla final) y sí con lo demás.
 
 ### DNS del router
 

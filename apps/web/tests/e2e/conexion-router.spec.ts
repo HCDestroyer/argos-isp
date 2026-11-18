@@ -3,8 +3,8 @@ import { entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Conexión del router por WireGuard (`contratos/conexion-routers.md`), en escritorio y teléfono:
- * la ficha muestra el túnel, «Probar conexión» lista los chequeos, «Reconciliar ahora» avisa que se
- * encoló, el script se genera con sus pasos y avisa que lleva claves, y editar guarda la zona.
+ * la ficha muestra el túnel, «Probar conexión» lista los chequeos, «Reconciliar ahora» sigue el
+ * trabajo hasta decir qué hizo, el script se genera con sus pasos y avisa que lleva claves, y editar guarda la zona.
  */
 test('probar conexión, reconciliar, script de conexión y zona del router', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
@@ -29,13 +29,14 @@ test('probar conexión, reconciliar, script de conexión y zona del router', asy
     await modal.getByRole('button', { name: 'Cerrar' }).first().click()
     await expect(modal).toBeHidden()
 
-    // Reconciliar ahora: vista previa, confirmar y 202 (se avisa que quedó encolado).
+    // Reconciliar ahora: vista previa, confirmar, 202 y seguimiento hasta el resultado.
     await page.locator('[data-prueba="acciones-router-1"]').click()
     await page.getByRole('menuitem', { name: /Reconciliar ahora/ }).click()
     modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
     await expect(modal.locator('[data-prueba="reconciliar-grupo-corte"]')).toBeVisible()
     await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
-    await expect(modal.locator('[data-prueba="reconciliar-encolado"]')).toContainText('Reconciliando RB-Centro')
+    // El modal sigue el trabajo (en cola, aplicando) hasta que termina y dice qué hizo.
+    await expect(modal.locator('[data-prueba="reconciliar-resultado"]')).toContainText(/Listo: \d+ cambios? aplicados? en el router|El router ya estaba como debe/, { timeout: 15_000 })
     await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
     await expect(modal).toBeHidden()
 

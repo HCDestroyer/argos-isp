@@ -249,6 +249,23 @@ export class ClienteRouterOS {
     }
 
     /**
+     * `GET /rest/system/device-mode` (RouterOS 7.13+): qué funciones permite el modo del equipo
+     * (`proxy`, `scheduler`, `fetch`…). null si el menú no existe (versiones anteriores, 400/404) o la
+     * respuesta no es un objeto: se trata como «todo permitido». Inalcanzable o credenciales lanzan.
+     */
+    async leerDeviceMode(): Promise<Record<string, string> | null> {
+        return this.#conReintentos(async () => {
+            try {
+                const r = await this.#http('GET', 'system/device-mode')
+                return this.#objeto(r.cuerpo, r.status) as Record<string, string>
+            } catch (e) {
+                if (e instanceof RouterOSSolicitud || e instanceof RouterOSRespuesta) return null
+                throw e
+            }
+        })
+    }
+
+    /**
      * `POST /rest/ip/proxy/set` (`/ip proxy set`): solo lo que pide el corte por código (habilitar y el
      * puerto propio; `ajusteProxy`). Queda en `audit.red` como cualquier escritura.
      */

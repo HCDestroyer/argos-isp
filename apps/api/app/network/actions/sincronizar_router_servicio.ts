@@ -13,7 +13,10 @@ export interface ResultadoSincronizar {
     /** nada que corregir y el router respondió */
     ya_estaba_bien: boolean
     avisos: string[]
-    /** el router no respondió o rechazó un comando (en lenguaje simple); null si todo bien */
+    /**
+     * el router no respondió (`no_responde`, solo si es de red), rechazó un comando (`rechazado`: cuál y el
+     * texto de RouterOS) o su device-mode no permite el proxy de corte (`device_mode`); null si todo bien
+     */
     error: { motivo: MotivoApi; detalle: string } | null
 }
 
@@ -85,12 +88,21 @@ export default class SincronizarRouterServicio extends DomainAction<
         const cambios = aplicado.routers.flatMap((r) =>
             r.cambios.map((c) => ({ ...c, router_id: r.router_id })),
         )
+        // El error estructurado (tipo, código, status y comando): sin él, cualquier rechazo de RouterOS
+        // caía en «no responde» (bug v1.17.0 del PM con `invalid local port`).
         const fallo = aplicado.routers.find((r) => r.error !== null)
+        const proxy = aplicado.routers.flatMap((r) => r.errores).find((e) => e.operacion === 'proxy_corte')
         const error = fallo
             ? (({ motivo, detalle }) => ({ motivo, detalle }))(
-                  diagnosticarErrorRouterOS({ message: fallo.error! }),
+                  diagnosticarErrorRouterOS(
+                      fallo.fallo
+                          ? { ...fallo.fallo, message: fallo.fallo.mensaje }
+                          : { message: fallo.error!, tipo: 'solicitud' },
+                  ),
               )
-            : null
+            : proxy
+              ? { motivo: 'device_mode' as const, detalle: proxy.mensaje }
+              : null
         return {
             servicio_id: servicioId,
             router_id: Number(servicio.router_id),

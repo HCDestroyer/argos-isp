@@ -20,6 +20,7 @@ import { solicitarVelocidad } from '#network/sesiones/velocidad'
 import type { ControlVelocidad } from '#network/velocidad'
 import {
     aplicarCorte,
+    proxyCorteBloqueado,
     aplicarEstado,
     asegurarVelocidad,
     leerCorteRouter,
@@ -179,7 +180,9 @@ export default class MigrarControlRouterOS extends DomainAction<
                                     input.router_id,
                                     router,
                                     todos,
-                                    router.red.corte_identificacion === 'codigo',
+                                    // Con el device-mode sin proxy web, como en modo ip (igual que el reconciliador).
+                                    router.red.corte_identificacion === 'codigo' &&
+                                        !(await proxyCorteBloqueado(cliente)),
                                     t.trx,
                                 ),
                                 lecturaCorte.get('/ppp/profile') ?? [],

@@ -213,6 +213,18 @@ export class RouterOSFalso {
         'cache-on-disk': 'false',
     }
     /**
+     * `/system/device-mode` (`GET /rest/system/device-mode`). null = el menú no existe (RouterOS anterior a
+     * 7.13: 400 `no such command prefix`). Con `proxy: 'false'` (RouterOS 7.17+ en modo `home` o con el proxy
+     * quitado, bug v1.17.0 del PM) el proxy no escucha y toda regla de `/ip proxy access` con `local-port`
+     * se rechaza con `failure: invalid local port`, aunque el puerto esté en `/ip proxy port`.
+     */
+    deviceMode: Record<string, string> | null = { mode: 'advanced', proxy: 'true' }
+    /**
+     * Menús donde toda creación o edición (PUT, PATCH) responde 400 con este texto (`failure: …`): un comando
+     * que RouterOS rechaza por una regla que el falso no imita. Lecturas y borrados siguen funcionando.
+     */
+    readonly rechazos = new Map<RutaRouterOS, string>()
+    /**
      * Lo que ve el portal como IP de origen cuando el router hace `/tool/fetch output=user` con
      * `src-address` (diagnóstico `portal_ip_cliente`): recibe el `src-address` y la URL y devuelve el
      * cuerpo. null = responde `{"ip": "<src-address>"}` (sin NAT en medio).
@@ -386,6 +398,10 @@ export class RouterOSFalso {
         if (camino === '/ip/dns' && metodo === 'GET') {
             return this.#json(res, 200, this.dns)
         }
+        if (camino === '/system/device-mode' && metodo === 'GET') {
+            if (!this.deviceMode) return this.#error(res, 400, 'Bad Request', 'no such command prefix')
+            return this.#json(res, 200, this.deviceMode)
+        }
         if (camino === '/ip/proxy' && metodo === 'GET') {
             return this.#json(res, 200, this.proxy)
         }
@@ -524,6 +540,10 @@ export class RouterOSFalso {
         const tabla = this.tabla(ruta)
         const indice = id === null ? -1 : tabla.findIndex((o) => o['.id'] === id)
         if (id !== null && indice < 0) return this.#error(res, 404, 'Not Found', 'no such item')
+        const rechazo = this.rechazos.get(ruta)
+        if (rechazo && (metodo === 'PUT' || metodo === 'PATCH')) {
+            return this.#error(res, 400, 'Bad Request', rechazo)
+        }
 
         if (metodo === 'GET') {
             const ver = (o: ObjetoRouterOS): ObjetoRouterOS => {
@@ -612,11 +632,11 @@ export class RouterOSFalso {
             return `input does not match any value of kind`
         }
         // Como RouterOS (bug v1.16.0 del PM): el `local-port` de `/ip proxy access` tiene que estar en
-        // `/ip proxy port`, aunque el proxy esté apagado.
+        // `/ip proxy port`, aunque el proxy esté apagado. Y con el device-mode sin proxy (v1.17.0), nunca.
         if (
             ruta === '/ip/proxy/access' &&
             props['local-port'] &&
-            !puertosDe(this.proxy.port).includes(props['local-port'])
+            (!puertosDe(this.proxy.port).includes(props['local-port']) || this.deviceMode?.proxy === 'false')
         ) {
             return 'failure: invalid local port'
         }

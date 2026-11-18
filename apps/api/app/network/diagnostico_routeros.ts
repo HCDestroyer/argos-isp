@@ -1,4 +1,5 @@
 import { esErrorTls } from '#network/routeros/errores'
+import { MENSAJE_PROXY_DEVICE_MODE } from '#network/routeros/corte_router'
 
 /**
  * Traduce un error del cliente REST de RouterOS a un `motivo` y un `detalle` en lenguaje simple, con
@@ -20,6 +21,10 @@ export const MOTIVOS_API = [
     'politicas',
     'no_responde',
     'respuesta',
+    /** RouterOS respondió y rechazó un comando (400): el detalle dice cuál y el texto del router */
+    'rechazado',
+    /** El device-mode del router (RouterOS 7.17+) no permite una función que Argos usa (el proxy web) */
+    'device_mode',
 ] as const
 export type MotivoApi = (typeof MOTIVOS_API)[number]
 
@@ -32,9 +37,21 @@ export interface DiagnosticoRouterOS {
 
 export interface ErrorRouterOSLike {
     message: string
+    /** `tipo` del cliente (`inalcanzable`, `credenciales`, `solicitud`, `respuesta`) o `sin_credenciales` */
     tipo?: string
     codigo?: string | null
     status?: number | null
+    /** Comando que falló, estilo RouterOS (`ip/proxy/access add`) */
+    operacion?: string | null
+}
+
+/** Códigos de Node de un problema de red (el router no es alcanzable). */
+const CODIGOS_RED =
+    /\b(EHOSTUNREACH|ENETUNREACH|EHOSTDOWN|ENOTFOUND|EAI_AGAIN|ECONNRESET|EPIPE|ECONNABORTED)\b/
+
+/** Mensaje de un 400 de RouterOS (`Bad Request: failure: invalid local port`) sin el prefijo HTTP. */
+function textoRouter(mensaje: string): string {
+    return mensaje.replace(/^Bad Request: /, '')
 }
 
 /** IP o nombre del router sin puerto (`172.31.250.54:443` → `172.31.250.54`). */
@@ -81,6 +98,8 @@ export function diagnosticarErrorRouterOS(
         error_tecnico: tecnico,
     })
 
+    // Device-mode (RouterOS 7.17+): «not allowed by device-mode» no es un problema de políticas del usuario.
+    if (/device-mode/i.test(tecnico)) return resultado('device_mode', MENSAJE_PROXY_DEVICE_MODE)
     // RouterOS: sin la política `api` la REST responde «not allowed»; sin `rest-api`, 401 (A6, CHR 7.24.5)
     if (error.status === 403 || /not allowed|not enough permissions/i.test(tecnico)) {
         return resultado(
@@ -142,11 +161,31 @@ export function diagnosticarErrorRouterOS(
                 '(el script de conexión lo deja abierto solo por el túnel)',
         )
     }
-    if (error.tipo === 'respuesta' || error.tipo === 'solicitud') {
+    // El router respondió y rechazó un comando: se dice cuál y qué contestó, nunca «no responde».
+    if (error.tipo === 'solicitud') {
+        const comando = error.operacion ? `«${error.operacion}»` : 'un comando'
+        const rechazo = textoRouter(tecnico)
+        const pista = /invalid local port/i.test(rechazo)
+            ? ' Si el router es RouterOS 7.17 o más nuevo, revisa el device-mode (/system/device-mode/print): ' +
+              MENSAJE_PROXY_DEVICE_MODE
+            : ''
+        return resultado('rechazado', `RouterOS rechazó ${comando}: ${rechazo}.${pista}`)
+    }
+    if (error.tipo === 'respuesta') {
         return resultado('respuesta', 'El router respondió algo que la API REST no esperaba (¿RouterOS 7?)')
     }
-    return resultado(
-        'no_responde',
-        'El router no responde: está apagado, la IP o el host de la API son incorrectos o no hay ruta hasta él',
-    )
+    if (error.tipo === 'sin_credenciales') {
+        return resultado(
+            'sin_credenciales',
+            'Argos no tiene el usuario y la clave de la API REST de este router. Cárgalos en la ficha del router',
+        )
+    }
+    // «No responde» solo cuando es de red: el cliente lo marcó inalcanzable o Node dio un código de red.
+    if (error.tipo === 'inalcanzable' || CODIGOS_RED.test(texto)) {
+        return resultado(
+            'no_responde',
+            'El router no responde: está apagado, la IP o el host de la API son incorrectos o no hay ruta hasta él',
+        )
+    }
+    return resultado('respuesta', `Error al hablar con el router: ${textoRouter(tecnico)}`)
 }

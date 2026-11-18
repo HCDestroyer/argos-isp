@@ -10,7 +10,12 @@ import {
     routersConSesionesPpp,
 } from '#network/routeros/consultas'
 import SondearSesionesPpp, { type ResultadoSondearPpp } from '#network/sesiones/actions/sondear_sesiones_ppp'
-import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
+import {
+    fabricaPorDefecto,
+    routersPendientes,
+    type ErrorOperacion,
+    type OpcionesDispatcher,
+} from '#network/routeros/dispatcher'
 import { ejecutarCambioControl, type EntradaCambioControl } from '#network/routeros/cambio_control'
 import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions/sondear_routers'
 
@@ -24,7 +29,7 @@ import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions
  * | `sondear` | 5 min (`ROUTEROS_SONDEO_CADA_MS`, por defecto `AAA_INTERIM_SEGUNDOS`; 0 = apagado) | `GET /system/resource` a los routers con API sin contacto reciente (`Router.en_linea`) |
  * | `sesiones_ppp` | 1 min (`ROUTEROS_SESIONES_PPP_CADA_MS`; 0 = apagado) | Routers sin RADIUS: `/ppp/active` → abre y cierra `network.sesiones` (`origen = sondeo`, `contratos/pppoe-local.md` §6) |
  * | `cambiar_control` | por evento (`router.control_cambiado`) | Cambio de modo de control por lotes (`cambio_control.ts`); `jobId` = el evento |
- * | `reconciliar_router` | a pedido (`POST /routers/:id/reconciliar`) | Reconcilia un router (`motivo: manual`); `jobId` = `reconciliar-<router_id>`: mientras uno espera, otro pedido no encola otro |
+ * | `reconciliar_router` | a pedido (`POST /routers/:id/reconciliar`) | Reconcilia un router (`motivo: manual`); `jobId` = `reconciliar-<router_id>`: mientras uno espera, otro pedido no encola otro. Su resultado queda un día (`GET /routers/:id/reconciliaciones/:job_id`) |
  *
  * Lock: concurrencia 1 y un advisory lock de Postgres por job (si otra instancia lo tiene, el
  * disparo se omite); cada router además se serializa con el lock de las acciones. Los jobs solo
@@ -214,8 +219,8 @@ export function idJobReconciliar(routerId: number): string {
 /**
  * Encola la reconciliación manual de un router (`routers.reconciliar`). Mismo worker (concurrencia
  * 1) y mismo lock por router que la periódica. Si ya hay una esperando o en curso, no se encola
- * otra: devuelve la existente (`encolado: false`). El job se borra al terminar, así el siguiente
- * pedido vuelve a encolar.
+ * otra: devuelve la existente (`encolado: false`). El job terminado queda un día para consultar su
+ * estado (`estadoReconciliacion`); el siguiente pedido lo reemplaza.
  */
 export async function encolarReconciliacion(
     datos: DatosReconciliarManual,
@@ -227,8 +232,94 @@ export async function encolarReconciliacion(
         return { job_id: jobId, encolado: false }
     }
     if (existente) await existente.remove()
-    await colaCambios.add('reconciliar_router', datos, { jobId, removeOnComplete: true, removeOnFail: true })
+    // El job terminado se guarda un día (su estado lo lee `GET /routers/:id/reconciliaciones/:job_id`); el
+    // siguiente pedido del mismo router lo reemplaza (arriba). No es una caché: es el registro del job.
+    await colaCambios.add('reconciliar_router', datos, {
+        jobId,
+        removeOnComplete: { age: GUARDAR_RECONCILIACION_S },
+        removeOnFail: { age: GUARDAR_RECONCILIACION_S },
+    })
     return { job_id: jobId, encolado: true }
+}
+
+/** Segundos que se guarda una reconciliación manual terminada para consultar su estado. */
+const GUARDAR_RECONCILIACION_S = 24 * 3600
+
+export interface EstadoReconciliacion {
+    router_id: number
+    job_id: string
+    estado: 'en_espera' | 'en_curso' | 'completada' | 'fallida' | 'desconocida'
+    encolado_en: string | null
+    iniciado_en: string | null
+    terminado_en: string | null
+    /** Comandos que escribió en el router; null si no terminó */
+    cambios: number | null
+    errores: ErrorOperacion[]
+    error: string | null
+}
+
+const instante = (ms: number | undefined) => (ms ? new Date(ms).toISOString() : null)
+
+/**
+ * Todos los problemas parciales de una reconciliación en una lista: los pasos rechazados (`errores`) y
+ * los que la acción ya informaba aparte (reglas de oro de velocidad, portal sin IPv4, secrets).
+ */
+export function erroresDeReconciliacion(r: Partial<ResultadoReconciliar>): ErrorOperacion[] {
+    return [
+        ...(r.errores ?? []),
+        ...(r.errores_velocidad ?? []).map((mensaje) => ({ operacion: 'velocidad', mensaje })),
+        ...(r.error_portal ? [{ operacion: 'resolver portal', mensaje: r.error_portal }] : []),
+        ...(r.errores_secrets ?? []).map((mensaje) => ({ operacion: 'secrets ppp', mensaje })),
+    ]
+}
+
+/**
+ * Estado de una reconciliación manual (`routers.reconciliar`) leído de BullMQ: `getState`, `returnvalue`
+ * (`ResultadoReconciliar`), `failedReason` y los instantes del job. `desconocida` si el job ya no existe
+ * (purgado) o no es la reconciliación de este router: nunca 404 por eso.
+ *
+ * - `completada`: terminó; `errores` con los pasos que el router rechazó sin impedir lo demás.
+ * - `fallida`: no pudo ni leer el router (`error` de la acción: no responde, credenciales) o el job lanzó.
+ */
+export async function estadoReconciliacion(routerId: number, jobId: string): Promise<EstadoReconciliacion> {
+    colaCambios ??= new Queue(NOMBRE_COLA_ROUTEROS, { connection: conexion(), prefix: prefijo() })
+    const salida: EstadoReconciliacion = {
+        router_id: routerId,
+        job_id: jobId,
+        estado: 'desconocida',
+        encolado_en: null,
+        iniciado_en: null,
+        terminado_en: null,
+        cambios: null,
+        errores: [],
+        error: null,
+    }
+    if (jobId !== idJobReconciliar(routerId)) return salida
+    const job = await colaCambios.getJob(jobId)
+    const datos = job?.data as Partial<DatosReconciliarManual> | undefined
+    if (!job || job.name !== 'reconciliar_router' || datos?.router_id !== routerId) return salida
+    const estado = await job.getState()
+    salida.encolado_en = instante(job.timestamp)
+    salida.iniciado_en = instante(job.processedOn)
+    salida.terminado_en = instante(job.finishedOn)
+    if (estado === 'active') {
+        salida.estado = 'en_curso'
+    } else if (estado === 'completed') {
+        const r = (job.returnvalue ?? {}) as Partial<ResultadoReconciliar>
+        salida.cambios = r.correcciones?.length ?? 0
+        salida.errores = erroresDeReconciliacion(r)
+        salida.error = r.error ?? null
+        salida.estado = salida.error ? 'fallida' : 'completada'
+    } else if (estado === 'failed') {
+        salida.estado = 'fallida'
+        salida.error = job.failedReason || 'la reconciliación falló'
+    } else if (estado === 'unknown') {
+        salida.estado = 'desconocida'
+    } else {
+        // waiting, delayed, prioritized, waiting-children
+        salida.estado = 'en_espera'
+    }
+    return salida
 }
 
 /** Corre una reconciliación manual encolada, con el actor y el request id de quien la pidió. */
@@ -250,13 +341,18 @@ export async function cerrarColaCambios(): Promise<void> {
     colaCambios = null
 }
 
-export function crearWorkerRouterOS(opciones: { prefijo?: string } = {}) {
+/**
+ * Worker de la cola de routeros. `dispatcher` reemplaza la fábrica de clientes en la reconciliación manual
+ * (pruebas). El `returnvalue` de `reconciliar_router` es el `ResultadoReconciliar` (cambios y errores), que
+ * lee `estadoReconciliacion`.
+ */
+export function crearWorkerRouterOS(opciones: { prefijo?: string; dispatcher?: OpcionesDispatcher } = {}) {
     const procesar = (job: Job) =>
         job.name === 'cambiar_control'
             ? ejecutarCambioControl(job.data as EntradaCambioControl)
             : job.name === 'reconciliar_router'
-              ? ejecutarReconciliacionManual(job.data as DatosReconciliarManual)
-              : ejecutarCronRouterOS(job.name)
+              ? ejecutarReconciliacionManual(job.data as DatosReconciliarManual, opciones.dispatcher)
+              : ejecutarCronRouterOS(job.name, opciones.dispatcher)
     const worker = new Worker(NOMBRE_COLA_ROUTEROS, procesar, {
         connection: conexion(),
         prefix: prefijo(opciones.prefijo),

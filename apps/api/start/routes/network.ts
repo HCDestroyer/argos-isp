@@ -89,6 +89,7 @@ import {
     PeersWireguard,
     PruebaConexion,
     ReconciliacionEncolada,
+    ReconciliacionEstado,
     RegistroConexion,
     SincronizacionServicio,
 } from '#network/esquemas'
@@ -96,6 +97,7 @@ import ProbarConexion from '#network/conexion/actions/probar_conexion'
 import SincronizarRouterServicio from '#network/actions/sincronizar_router_servicio'
 import { exigirServicio } from '#core/acceso_empresa'
 import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
+import { estadoReconciliacion } from '#network/routeros/jobs'
 import { parsearAdmin } from '#network/conexion/config'
 import { verConexion } from '#network/conexion/consultas'
 import { listarPeersConRedes } from '#network/conexion/tunel_corte'
@@ -1007,6 +1009,29 @@ const conexion: Ruta[] = [
             const id = Number(params.id)
             exigirAlcance(ctx.alcance, { router: [id] })
             return new ReconciliarAhora().execute({ router_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/reconciliaciones/:job_id',
+        operacion: 'routersReconciliacionEstado',
+        resumen: 'Estado de una reconciliación encolada («Reconciliar ahora»)',
+        descripcion:
+            'Lee el job `job_id` (el que devolvió `POST /routers/:id/reconciliar`) en el worker de routeros: ' +
+            '`en_espera`, `en_curso`, `completada` (con `cambios` y los pasos rechazados en `errores`, p. ej. ' +
+            '`proxy_corte` si el device-mode no permite el proxy web), `fallida` (no pudo ni leer el router: ' +
+            '`error`) o `desconocida` (el job ya no existe —se guarda un día— o no es de este router). 404 solo ' +
+            'si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.reconciliar',
+        parametros: { job_id: { type: 'string', description: '`job_id` de `ReconciliacionEncolada`' } },
+        respuesta: { status: 200, descripcion: 'Estado de la reconciliación', esquema: ReconciliacionEstado },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const { job_id: jobId } = await v.jobReconciliacionValidator.validate({ job_id: params.job_id })
+            await verRouter(id)
+            return estadoReconciliacion(id, jobId)
         },
     }),
     definirRuta({

@@ -174,7 +174,7 @@ describe('control de velocidad por capas', () => {
         expect(enBody('reconciliar-grupo-corte')?.textContent).toContain('argosisp:top corte')
         expect(enBody('reconciliar-grupo-velocidad')?.textContent).toContain('argosisp:plan:2')
         enBody('reconciliar-confirmar')?.click()
-        await esperar(() => expect(enBody('reconciliar-encolado')?.textContent).toContain('Reconciliando RB-Centro'))
+        await esperar(() => expect(enBody('reconciliar-encolado')?.textContent).toContain('En cola…'))
         expect(bd.acciones.at(-1)).toMatchObject({ accion: 'routers.reconciliar' })
         const despues = await useControlVelocidad().vistaPreviaReconciliar(1)
         expect(despues.ok && despues.data.cambios).toEqual([])

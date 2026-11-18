@@ -11,7 +11,8 @@ import type { DiagnosticoCorte } from '~/types/controlVelocidad'
  * Identificación del cliente cortado (`contratos/corte-identificacion.md` §5 bis): `portal_ip_cliente`
  * en rojo (`portal_ve_otra_ip`) explica que hay NAT o un proxy en medio y ofrece «Editar router» para
  * pasarlo a «Por código» (lo abre el padre); `proxy_corte` (solo en modo código) se arregla con
- * «Reconciliar ahora».
+ * «Reconciliar ahora». `proxy_device_mode` (RouterOS 7.17+ sin proxy web) no es reconciliable: lleva los
+ * pasos en el router (`update proxy=yes` y confirmarlo con el botón o apagándolo antes de 5 minutos).
  *
  * Fase 2 (§5 ter.9): en modo IP `portal_ip_cliente` prueba el primer salto, el destino del NAT (la IP del
  * servidor en el túnel WireGuard, o `nat_url`). El `detalle` se muestra tal como llega. Si el router manda
@@ -46,6 +47,7 @@ const PASOS: Record<Chequeo['clave'], string> = {
     portal_en_router: 'La página de corte no está en el propio router',
     portal_ip_cliente: 'Qué IP ve la página de corte desde la red de clientes',
     proxy_corte: 'Proxy de corte del router (puerto 3346) con el código de cada suspendido',
+    proxy_device_mode: 'El device-mode permite el proxy web',
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {
@@ -70,6 +72,8 @@ interface Accion {
     editar: boolean
     /** Sustituye a la línea genérica de «Reconciliar ahora». */
     propia: boolean
+    /** Pasos numerados en el router (lo que «Reconciliar ahora» no puede hacer). */
+    pasos?: readonly string[]
 }
 
 /**
@@ -87,6 +91,13 @@ const ACCIONES: Partial<Record<NonNullable<Chequeo['codigo']>, Accion>> = {
         texto: '«Reconciliar ahora» pone la regla «argosisp:top corte por tunel sin NAT» antes del masquerade. Si después sigue en rojo, revisa que las redes de clientes de este router estén en Argos (pestaña Pools e IPs): el agente de WireGuard las agrega al peer del servidor. El comando de abajo repite la prueba desde el router.',
         editar: false,
         propia: true,
+    },
+    // RouterOS 7.17+ sin proxy web (A1): no es reconciliable, el cambio se confirma en el router mismo.
+    proxy_device_mode: {
+        texto: '«Reconciliar ahora» no lo arregla: el device-mode solo se cambia en el router.',
+        editar: false,
+        propia: true,
+        pasos: PASOS_DEVICE_MODE,
     },
 }
 
@@ -171,6 +182,19 @@ const fuera = computed(() => props.corte.suspendidos.fuera_de_lista)
                         />
                         <span>Qué hacer: {{ accion(chequeo)?.texto }}</span>
                     </p>
+                    <ol
+                        v-if="accion(chequeo)?.pasos"
+                        class="flex list-decimal flex-col gap-1 pl-5 text-xs text-default"
+                        :data-prueba="`corte-pasos-${chequeo.codigo}`"
+                    >
+                        <li
+                            v-for="pasoRouter in accion(chequeo)?.pasos"
+                            :key="pasoRouter"
+                            class="break-words [overflow-wrap:anywhere]"
+                        >
+                            {{ pasoRouter }}
+                        </li>
+                    </ol>
                     <UButton
                         v-if="accion(chequeo)?.editar && puede('routers.editar')"
                         label="Editar router"
