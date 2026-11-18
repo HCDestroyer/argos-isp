@@ -40,6 +40,7 @@ validador (`canjearEnlaceIrisValidator`: el de Horus más `code_verifier`); el c
 | `GET /integraciones/iris`                                          | `iris.ver`                                             | vista (secretos `***`, `requiere_reconectar`, 0.6.2)   |
 | `GET /integraciones/iris/estado`                                   | `iris.abrir` o el `atk_` de Iris                       | `{ activo, version_argos, contrato }` (botón «Ver en Iris»; Iris lee las versiones) |
 | `PUT /integraciones/iris/contrato`                                 | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_contrato`                               |
+| `PUT /integraciones/iris/sincronizacion`                           | `sso.emitir` (solo el `atk_` de Iris)                  | `iris.informar_sincronizacion` (0.8.0)                 |
 | `PUT /integraciones/iris`                                          | `iris.configurar`                                      | `iris.configurar` (con `version`)                      |
 | `POST /integraciones/iris/enlace`                                  | `iris.configurar`                                      | `iris.generar_enlace`                                  |
 | `GET /integraciones/iris/autorizar/vista-previa?iris=`             | `iris.configurar`                                      | lectura (sin auditoría): origen, `origen_conocido`, empresas |
@@ -187,6 +188,39 @@ el nuevo. Reglas:
   ni `canje_confirmado_en` (`estado_canje: null`, `canje_vence_en: null`) y sin reconexión pendiente;
   el barrido no lo vuelve a tomar. Iris usa entonces un `atk_` creado en el panel.
 - Prueba: `tests/core/iris_revocar_063.spec.ts`.
+
+## Conexión de un paso (contrato 0.8.0, §1.5 y §2.5; parte de A1)
+
+- **Host del receptor y origen aprobado** (`canjear_enlace_iris.ts`, `reglaReceptorIris` y
+  `WebhookInvalido` en `autorizacion.ts`): el host (sin puerto, sin distinguir mayúsculas) de
+  `webhook.url` debe ser el de `base_url`; y si el código nació del botón (tiene `code_challenge`),
+  `origen(base_url)` debe ser el `origen_iris` que aprobó el admin (`iris_enlaces`). Si no:
+  `422 urn:argosisp:problema:webhook_invalido` con `errors[0]` `{ field: "webhook.url", rule:
+  "mismo_host" }` o `{ field: "base_url", rule: "origen_aprobado" }`, y el código **queda gastado**
+  (`gastarCodigoIris`, como un `code_verifier` que no coincide): repetirlo responde `410`. Los
+  errores de formato (`422 validacion`) se revisan antes y no lo gastan. Un enlace de §1.3 no tiene
+  origen aprobado: solo se exige el mismo host.
+- **El botón enciende al confirmar** (columna `encender_al_confirmar`): un canje **directo** de un
+  código del botón queda apagado y marcado; la primera llamada autenticada de su `atk_`
+  (`iris.confirmar_canje`, también el cron si el guard no alcanzó) pone `activo = true` y quita la
+  marca (diff en `audit.cambios`, `encendido_al_confirmar` en la auditoría). Con el enlace (§1.3) y en
+  una reconexión `activo` no cambia. Si el admin decide `activo` a mano antes (`PUT
+  /integraciones/iris`), la marca se quita. Sin evento: no existe `iris.config_cambiada` (nadie
+  consume el estado del conector por evento; los envíos lo leen de la base).
+- **`PUT /integraciones/iris/sincronizacion`** (`actions/informar_sincronizacion_iris.ts`,
+  `iris.informar_sincronizacion`): Iris informa el avance de su primera sincronización. Solo su
+  `atk_` (`exigirTokenIris` en `token_iris.ts`, compartido con el PUT del contrato); funciona con el
+  conector apagado. Cuerpo: `sincronizacion_id` (UUID v7), `estado` (`en_curso` | `completa` |
+  `con_errores`), `iniciada_en`, `actualizada_en`, `etapas[]` (`recurso` ∈ empresas, zonas, planes,
+  routers, cuentas_bancarias, bancos, clientes, servicios, sin repetir; `estado` ∈ pendiente,
+  en_curso, completa, con_errores; `procesados`, `total` o null, `error` ≤ 300 o null,
+  `terminada_en` o null). Se guarda tal cual (más `recibida_en`) en `iris_conector.sincronizacion`
+  (jsonb) y sale en `GET /integraciones/iris` (`sincronizacion`, null si nunca). Misma
+  `sincronizacion_id` y mismo `actualizada_en`: 200 con lo guardado, sin escribir. `409
+  sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si la
+  `sincronizacion_id` es menor que la guardada (los UUID v7 se comparan como texto en minúsculas).
+  Una más nueva reemplaza. Respuesta `{ sincronizacion_id, estado, actualizada_en }`.
+- Migración `1794968994910_alter_iris_conector_080_table`. Pruebas: `tests/core/iris_080.spec.ts`.
 
 ## Pagos y atención (contrato 0.6.0, §1.1, §7.1, §7.5, §7.6; parte de A1)
 

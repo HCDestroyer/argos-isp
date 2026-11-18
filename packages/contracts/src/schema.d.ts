@@ -3868,6 +3868,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/iris/sincronizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Iris informa el avance de su primera sincronización (servidor a servidor)
+         * @description Contrato Iris 0.8.0 (§2.5). Solo con el token `atk_` del usuario técnico Iris, como `PUT /integraciones/iris/contrato` (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Permiso de ruta `sso.emitir`. Funciona con el conector apagado. Se guarda en el conector y sale en `GET /integraciones/iris` (`sincronizacion`). Idempotente: la misma `sincronizacion_id` con el mismo `actualizada_en` responde lo guardado. 409 `sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si `sincronizacion_id` es más vieja que la guardada (UUID v7). Iris lo manda solo al cambiar de etapa o de estado.
+         */
+        put: operations["irisInformarSincronizacion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/iris/sso/tickets": {
         parameters: {
             query?: never;
@@ -12945,6 +12965,8 @@ export interface components {
              * @description Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior sigue igual. null si no hay
              */
             reconexion_vence_en?: string | null;
+            /** @description Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización (`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado») */
+            sincronizacion?: components["schemas"]["SincronizacionIris"] | null;
             version: number;
         };
         ConexionRouter: {
@@ -19723,6 +19745,13 @@ export interface components {
                 potencia_dbm?: string;
             } | null;
             costo_override: components["schemas"]["Dinero"] | null;
+            /** @description Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 decimales (contrato Iris 0.8.0) */
+            precio_mensual?: components["schemas"]["Dinero"];
+            /**
+             * @description Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)
+             * @enum {string}
+             */
+            moneda?: "GTQ";
             excluir_firewall: boolean;
             ipv4: string | null;
             prefijo_enlace_v6: string | null;
@@ -19973,6 +20002,40 @@ export interface components {
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
+        };
+        SincronizacionIris: {
+            /** @description UUID v7 de Iris (en minúsculas) */
+            sincronizacion_id: string;
+            /** @enum {string} */
+            estado: "en_curso" | "completa" | "con_errores";
+            /** Format: date-time */
+            iniciada_en: string;
+            /** Format: date-time */
+            actualizada_en: string;
+            etapas: {
+                /** @enum {string} */
+                recurso: "empresas" | "zonas" | "planes" | "routers" | "cuentas_bancarias" | "bancos" | "clientes" | "servicios";
+                /** @enum {string} */
+                estado: "pendiente" | "en_curso" | "completa" | "con_errores";
+                procesados: number;
+                total: number | null;
+                /** @description Hasta 300 caracteres, sin datos de clientes */
+                error: string | null;
+                /** Format: date-time */
+                terminada_en: string | null;
+            }[];
+            /**
+             * Format: date-time
+             * @description Cuándo lo recibió Argos
+             */
+            recibida_en: string;
+        };
+        SincronizacionIrisGuardada: {
+            sincronizacion_id: string;
+            /** @enum {string} */
+            estado: "en_curso" | "completa" | "con_errores";
+            /** Format: date-time */
+            actualizada_en: string;
         };
         SincronizacionPlan: {
             plan_id: number;
@@ -25662,6 +25725,8 @@ export interface operations {
                 plan_id?: number;
                 /** @description true: con alguna factura vencida; false: sin ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description true: solo clientes con al menos un servicio no retirado (con estado_servicio, router_id o plan_id, ese mismo servicio). Por defecto false (contrato Iris 0.8.0) */
+                excluir_retirados?: boolean;
                 /** @description true: clientes con el NIT/CUI marcado inválido (migración de la localización fiscal) */
                 nit_cui_invalido?: boolean;
                 /** @description true: con alguna promesa de pago activa; false: sin ninguna */
@@ -36557,6 +36622,78 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisInformarSincronizacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description UUID v7 de la sincronización, generado por Iris */
+                    sincronizacion_id: string;
+                    /** @enum {string} */
+                    estado: "en_curso" | "completa" | "con_errores";
+                    /** Format: date-time */
+                    iniciada_en: string;
+                    /** Format: date-time */
+                    actualizada_en: string;
+                    etapas: {
+                        /** @enum {string} */
+                        recurso: "empresas" | "zonas" | "planes" | "routers" | "cuentas_bancarias" | "bancos" | "clientes" | "servicios";
+                        /** @enum {string} */
+                        estado: "pendiente" | "en_curso" | "completa" | "con_errores";
+                        procesados: number;
+                        total?: number | null;
+                        /** @description Hasta 300 caracteres, sin datos de clientes */
+                        error?: string | null;
+                        /** Format: date-time */
+                        terminada_en?: string | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Sincronización guardada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SincronizacionIrisGuardada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -59308,6 +59445,8 @@ export interface operations {
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description true: sin los servicios `retirado`. Por defecto false (contrato Iris 0.8.0) */
+                excluir_retirados?: boolean;
                 /** @description Tipo del plan del servicio: residencial, empresarial o dedicado */
                 tipo?: "residencial" | "empresarial" | "dedicado";
             };

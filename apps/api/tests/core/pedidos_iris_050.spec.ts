@@ -450,11 +450,8 @@ test.group('A15 · catalogo.cambiado', () => {
         ])
         const ctxPrecio = contextoPanel()
         await new EditarPlan().execute({ id: planId, version: plan.version + 1, precio: '199.00' }, ctxPrecio)
-        const eventosPrecio = await eventosDe(ctxPrecio.requestId)
-        assert.notInclude(
-            eventosPrecio.map((e) => e.evento),
-            'catalogo.cambiado',
-        )
+        // contrato Iris 0.8.0: el precio del plan sí avisa (`campos: ['precio']`)
+        assert.deepEqual(await camposCatalogo(ctxPrecio.requestId), [['precio']])
 
         const routerId = await crearRouterFila({ empresa_sugerida_id: 1 })
         const router = await verRouter(routerId)

@@ -2,6 +2,7 @@ import vine from '@vinejs/vine'
 import { TIPOS_DESTINO_IRIS } from '#integraciones/iris/actions/abrir_en_iris'
 import { FORMATO_SEMVER } from '#integraciones/iris/configuracion'
 import { METODOS_VERIFICACION } from '#core/actions/verificar_identidad_cliente'
+import { instanteIso } from '#shared/validadores'
 
 /**
  * Validadores del conector Iris (`contratos/iris.md` §1). El canje del enlace es el de Horus más el
@@ -165,5 +166,55 @@ export const verificarIdentidadValidator = vine.compile(
             .minLength(1)
             .maxLength(200)
             .meta({ description: 'Lo que dijo el cliente. Argos nunca lo devuelve y lo audita como `***`' }),
+    }),
+)
+
+/** Recursos de la primera sincronización de Iris (contrato 0.8.0, §2.5). */
+export const RECURSOS_SINCRONIZACION_IRIS = [
+    'empresas',
+    'zonas',
+    'planes',
+    'routers',
+    'cuentas_bancarias',
+    'bancos',
+    'clientes',
+    'servicios',
+] as const
+export const ESTADOS_SINCRONIZACION_IRIS = ['en_curso', 'completa', 'con_errores'] as const
+export const ESTADOS_ETAPA_SINCRONIZACION_IRIS = ['pendiente', 'en_curso', 'completa', 'con_errores'] as const
+
+/** UUID v7 (RFC 9562): versión 7 y variante 10xx. */
+export const FORMATO_UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** `PUT /integraciones/iris/sincronizacion` (con el token de Iris, contrato 0.8.0). */
+export const sincronizacionIrisValidator = vine.compile(
+    vine.object({
+        sincronizacion_id: vine
+            .string()
+            .trim()
+            .regex(FORMATO_UUID_V7)
+            .meta({ description: 'UUID v7 de la sincronización, generado por Iris' }),
+        estado: vine.enum(ESTADOS_SINCRONIZACION_IRIS),
+        iniciada_en: instanteIso(),
+        // cuándo cambió por última vez en Iris; menor que el guardado para la misma sincronización: 409
+        actualizada_en: instanteIso(),
+        etapas: vine
+            .array(
+                vine.object({
+                    recurso: vine.enum(RECURSOS_SINCRONIZACION_IRIS),
+                    estado: vine.enum(ESTADOS_ETAPA_SINCRONIZACION_IRIS),
+                    procesados: vine.number().withoutDecimals().min(0),
+                    total: vine.number().withoutDecimals().min(0).nullable(),
+                    error: vine
+                        .string()
+                        .trim()
+                        .maxLength(300)
+                        .nullable()
+                        .meta({ description: 'Hasta 300 caracteres, sin datos de clientes' }),
+                    terminada_en: instanteIso().nullable(),
+                }),
+            )
+            .maxLength(RECURSOS_SINCRONIZACION_IRIS.length)
+            .distinct('recurso'),
     }),
 )

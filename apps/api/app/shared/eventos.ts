@@ -260,8 +260,11 @@ interface PayloadAdicional {
     modalidad: ModalidadAdicional
 }
 
-/** Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers. */
-export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas'
+/**
+ * Campos de `catalogo.cambiado` (contrato Iris 0.5.0 §2.3); `coordenadas` solo en routers; `precio`
+ * solo en planes (contrato Iris 0.8.0: Iris relee `GET /servicios?plan_id=`).
+ */
+export type CampoCatalogoCambiado = 'nombre' | 'activo' | 'coordenadas' | 'precio'
 
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
@@ -319,6 +322,12 @@ export interface CatalogoEventos {
             | 'servidor_pppoe'
             /** cambió `user_ppp` o `pass_ppp` de un PPPoE que sigue PPPoE (nunca los valores; pedido del PM, 5 nov) */
             | 'credenciales'
+            /**
+             * cambió el precio efectivo (`precio_mensual`: `costo_override` o el plan, también al empezar o
+             * terminar un plan temporal con otro precio). Contrato Iris 0.8.0; sin valores. No cambia nada
+             * en la red: `coa` lo ignora y RouterOS no tiene nada que corregir
+             */
+            | 'precio'
         >
         empresa_anterior_id?: number
         motivo?: 'plan_temporal' | 'union_routers'

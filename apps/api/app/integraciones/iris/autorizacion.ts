@@ -64,6 +64,47 @@ export class CodigoInvalido extends Problema {
     }
 }
 
+/**
+ * 422 del canje (contrato Iris 0.8.0): el receptor de Iris no está en el host de `base_url`
+ * (`mismo_host`) o, con un código del botón (§1.4), `base_url` no es el origen de Iris que aprobó
+ * el admin (`origen_aprobado`). Como un `code_verifier` que no coincide, el código queda gastado.
+ */
+export class WebhookInvalido extends Problema {
+    constructor(
+        readonly enlaceId: number,
+        readonly regla: 'mismo_host' | 'origen_aprobado',
+        readonly gastar = true,
+    ) {
+        const detalle =
+            regla === 'mismo_host'
+                ? 'El receptor de webhooks de Iris debe estar en el mismo host que base_url; el código quedó gastado'
+                : 'base_url no es el origen de Iris que aprobó el administrador; el código quedó gastado'
+        super(422, 'webhook_invalido', 'Receptor de Iris inválido', detalle, [
+            regla === 'mismo_host'
+                ? { field: 'webhook.url', message: detalle, rule: 'mismo_host' }
+                : { field: 'base_url', message: detalle, rule: 'origen_aprobado' },
+        ])
+    }
+}
+
+/**
+ * Regla del canje (0.8.0) que el receptor y el origen no cumplen, o null si los cumplen. Se llama
+ * con datos que ya pasaron `validarDatosDeIris` (URLs válidas).
+ * - `mismo_host`: el host (sin puerto, en minúsculas) de `webhook.url` ≠ el de `base_url`.
+ * - `origen_aprobado`: el código nació del botón (`origenAprobado` no null) y el origen de
+ *   `base_url` ≠ el `origen_iris` guardado al autorizar.
+ */
+export function reglaReceptorIris(
+    baseUrl: string,
+    webhookUrl: string,
+    origenAprobado: string | null,
+): 'mismo_host' | 'origen_aprobado' | null {
+    const base = new URL(baseUrl)
+    if (new URL(webhookUrl).hostname.toLowerCase() !== base.hostname.toLowerCase()) return 'mismo_host'
+    if (origenAprobado !== null && base.origin !== origenAprobado) return 'origen_aprobado'
+    return null
+}
+
 // ── Origen de Iris ───────────────────────────────────────────────────────────────────────────
 
 /**

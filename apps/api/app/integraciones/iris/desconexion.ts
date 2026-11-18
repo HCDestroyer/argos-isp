@@ -42,6 +42,7 @@ export async function desconectarConectorIris(
         token_cifrado: null,
         webhook_salida_secreto_cifrado: null,
         webhook_entrada_secreto_cifrado: null,
+        encender_al_confirmar: false,
         desconectado_en: t.trx.knexRawQuery('now()'),
         motivo_desconexion: motivo,
     })
@@ -80,7 +81,9 @@ export async function descartarPendienteIris(
  *   (`url_base`, `iris_pat_`, receptor de Iris y su secreto, secreto del receptor de Argos,
  *   `contrato`, `receptor_argos`), pasa a `token_argos_id` el `atk_` nuevo, revoca el anterior y
  *   marca el canje confirmado. `activo` no cambia: la integración no se corta.
- * - **Canje directo sin confirmar** (`token_argos_id = atkId`): marca `canje_confirmado_en`.
+ * - **Canje directo sin confirmar** (`token_argos_id = atkId`): marca `canje_confirmado_en`. Si
+ *   nació del botón (§1.4, `encender_al_confirmar`), además enciende el conector (0.8.0). Con el
+ *   enlace (§1.3) `activo` no cambia.
  *
  * `cuando`: la hora del primer uso (`ultimo_uso`; el guard pasa now()). null si no tocaba nada.
  */
@@ -108,6 +111,7 @@ export async function confirmarCanjeIris(
             canje_confirmado_en: instante,
             desconectado_en: null,
             motivo_desconexion: null,
+            encender_al_confirmar: false,
             ...SIN_PENDIENTE_IRIS,
         })
         return 'reconectado'
@@ -118,7 +122,13 @@ export async function confirmarCanjeIris(
         !antes.canje_confirmado_en &&
         !antes.desconectado_en
     ) {
-        await guardarConectorIris(t, antes, { canje_confirmado_en: instante })
+        // 0.8.0: un canje directo del botón (§1.4) enciende el conector al confirmarse
+        const encender = antes.encender_al_confirmar === true
+        if (encender) t.anotarAuditoria({ encendido_al_confirmar: !antes.activo })
+        await guardarConectorIris(t, antes, {
+            canje_confirmado_en: instante,
+            ...(encender ? { activo: true, encender_al_confirmar: false } : {}),
+        })
         return 'confirmado'
     }
     return null

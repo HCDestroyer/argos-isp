@@ -16,7 +16,13 @@ import { usuarioIris } from '#core/integraciones_iris'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { ContextoAccion } from '#shared/contexto'
 import { urlPanel } from '#core/sso'
-import { CodigoInvalido, gastarCodigoIris, verifierCoincide } from '#integraciones/iris/autorizacion'
+import {
+    CodigoInvalido,
+    WebhookInvalido,
+    gastarCodigoIris,
+    reglaReceptorIris,
+    verifierCoincide,
+} from '#integraciones/iris/autorizacion'
 import {
     FORMATO_TOKEN_IRIS,
     RUTA_RECEPTOR_IRIS,
@@ -112,7 +118,13 @@ export async function empresasDelAlcance(
  *   vez); genera el secreto del receptor de Argos. El `atk_` anterior se revoca al momento solo si
  *   el conector no estaba en uso; si lo estaba, al confirmar el canje nuevo (0.6.3).
  * - El conector nuevo queda **apagado** hasta que un administrador lo encienda (en una reconexión,
- *   `activo` se conserva). Todo en una transacción.
+ *   `activo` se conserva). Todo en una transacción. Contrato 0.8.0: si el código nació del botón
+ *   (§1.4), el canje directo queda marcado (`encender_al_confirmar`) y se enciende al confirmarlo
+ *   (`iris.confirmar_canje`), no al canjear: si Iris rechaza el canje y lo revoca, nunca se encendió.
+ * - Contrato 0.8.0: el host de `webhook.url` debe ser el de `base_url` y, con un código del botón,
+ *   `origen(base_url)` el `origen_iris` aprobado. Si no, 422 `webhook_invalido` (`errors[0]` con
+ *   `rule` `mismo_host` o `origen_aprobado`) y el código queda gastado (410 si se repite). Los
+ *   errores de formato (422 `validacion`) no lo gastan.
  * - La MISMA petición repetida antes de que el enlace venza recibe la misma respuesta (guardada
  *   cifrada) sin emitir otro token; cualquier otra con un código usado → 410.
  * - Informa las empresas del alcance del token (`empresas[]` con `id`, `nombre` y `nit`, y
@@ -154,7 +166,11 @@ export default class CanjearEnlaceIris extends DomainAction<
         try {
             return await super.execute(input, ctx, opciones)
         } catch (error) {
-            if (error instanceof CodigoInvalido && error.gastar && !opciones.trx) {
+            if (
+                (error instanceof CodigoInvalido || error instanceof WebhookInvalido) &&
+                error.gastar &&
+                !opciones.trx
+            ) {
                 await gastarCodigoIris(error.enlaceId)
             }
             throw error
@@ -179,6 +195,7 @@ export default class CanjearEnlaceIris extends DomainAction<
                 'peticion_sha256',
                 'respuesta_cifrada',
                 'code_challenge',
+                'origen_iris',
                 'rechazado_en',
             )
             .first()) as FilaEnlaceIris | null
@@ -221,6 +238,17 @@ export default class CanjearEnlaceIris extends DomainAction<
 
         const errores = validarDatosDeIris(input)
         if (errores.length > 0) throw new ValidacionFallida(errores)
+        // 0.8.0: el receptor en el host de base_url y, con el botón, base_url = el origen aprobado.
+        // Los errores de formato (arriba) no gastan el código; estos sí.
+        const regla = reglaReceptorIris(
+            input.base_url,
+            input.webhook.url,
+            enlace.code_challenge ? (enlace.origen_iris ?? null) : null,
+        )
+        if (regla) {
+            t.anotarAuditoria({ webhook_invalido: regla })
+            throw new WebhookInvalido(Number(enlace.id), regla)
+        }
 
         let antes = await bloquearConectorIris(t)
         // 0.6.3: una reconexión pendiente anterior la reemplaza esta (se revoca su atk_)
@@ -267,6 +295,8 @@ export default class CanjearEnlaceIris extends DomainAction<
                 receptor_argos: input.receptor_argos ?? null,
                 // 0.6.3: pendiente de confirmar hasta el primer uso del atk_
                 canje_confirmado_en: null,
+                // 0.8.0: con el botón (§1.4) se enciende al confirmar; con el enlace (§1.3), no
+                encender_al_confirmar: Boolean(enlace.code_challenge),
                 desconectado_en: null,
                 motivo_desconexion: null,
             })
@@ -300,6 +330,8 @@ interface FilaEnlaceIris {
     peticion_sha256: string | null
     respuesta_cifrada: string | null
     code_challenge: string | null
+    /** origen de Iris aprobado con el botón (§1.4); null en un enlace de §1.3 */
+    origen_iris: string | null
     rechazado_en: Date | null
 }
 

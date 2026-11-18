@@ -247,7 +247,8 @@ export function exigirPlanCompatible(
 /**
  * Cambia `core.servicios.plan_id` de `de` a `a` por un plan temporal: diff del servicio, tramo del
  * historial de asignaciones, `servicio.config_cambiada` (`campos: ['plan']`, `motivo:
- * 'plan_temporal'`) y reescritura de `aaa:user:*` al confirmar. No toca IPs ni prefijos.
+ * 'plan_temporal'`; más `precio` si el precio efectivo cambia, contrato Iris 0.8.0) y reescritura de
+ * `aaa:user:*` al confirmar. No toca IPs ni prefijos.
  */
 export async function cambiarPlanPorTemporal(
     t: Transaccion,
@@ -261,6 +262,16 @@ export async function cambiarPlanPorTemporal(
     },
 ): Promise<void> {
     if (datos.de === datos.a) return
+    // contrato Iris 0.8.0: `precio` si el precio efectivo cambia (sin `costo_override` y con otro precio)
+    const { rows } = (await t.trx.rawQuery(
+        `SELECT coalesce(s.costo_override, p_de.precio)::numeric(14,2)::text AS antes,
+                coalesce(s.costo_override, p_a.precio)::numeric(14,2)::text AS despues
+           FROM core.servicios s, network.planes p_de, network.planes p_a
+          WHERE s.id = ? AND p_de.id = ? AND p_a.id = ?`,
+        [datos.servicioId, datos.de, datos.a],
+    )) as { rows: Array<{ antes: string; despues: string }> }
+    const precios = rows[0] ?? null
+    const cambiaPrecio = precios !== null && precios.antes !== precios.despues
     await t.trx
         .from('core.servicios')
         .where('id', datos.servicioId)
@@ -278,7 +289,7 @@ export async function cambiarPlanPorTemporal(
     await t.emit('servicio.config_cambiada', {
         servicio_id: datos.servicioId,
         empresa_id: datos.empresaId,
-        campos: ['plan'],
+        campos: cambiaPrecio ? ['plan', 'precio'] : ['plan'],
         motivo: 'plan_temporal',
         plan_temporal_id: datos.planTemporalId,
     })

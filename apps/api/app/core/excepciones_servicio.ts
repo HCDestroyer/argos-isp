@@ -118,6 +118,9 @@ export function paraAuditoriaServicio<T extends { excepciones?: Record<string, u
     // calculado de la red (`contratos/red-acceso.md` §2): no es un dato del servicio
     delete plano.local_address
     delete plano.local_address_derivado
+    // calculados del plan y del costo_override (contrato Iris 0.8.0): el diff ya trae plan_id y costo_override
+    delete plano.precio_mensual
+    delete plano.moneda
     for (const [campo, valor] of Object.entries(excepciones ?? {})) {
         plano[`excepcion_${campo}`] = valor
     }

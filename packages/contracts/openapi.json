@@ -8531,6 +8531,15 @@
             }
           },
           {
+            "name": "excluir_retirados",
+            "in": "query",
+            "required": false,
+            "description": "true: solo clientes con al menos un servicio no retirado (con estado_servicio, router_id o plan_id, ese mismo servicio). Por defecto false (contrato Iris 0.8.0)",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "nit_cui_invalido",
             "in": "query",
             "required": false,
@@ -28787,6 +28796,173 @@
           }
         },
         "x-permiso": "ip.resolver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/sincronizacion": {
+      "put": {
+        "operationId": "irisInformarSincronizacion",
+        "summary": "Iris informa el avance de su primera sincronización (servidor a servidor)",
+        "description": "Contrato Iris 0.8.0 (§2.5). Solo con el token `atk_` del usuario técnico Iris, como `PUT /integraciones/iris/contrato` (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Permiso de ruta `sso.emitir`. Funciona con el conector apagado. Se guarda en el conector y sale en `GET /integraciones/iris` (`sincronizacion`). Idempotente: la misma `sincronizacion_id` con el mismo `actualizada_en` responde lo guardado. 409 `sincronizacion_vieja` si `actualizada_en` es menor que el guardado para esa sincronización o si `sincronizacion_id` es más vieja que la guardada (UUID v7). Iris lo manda solo al cambiar de etapa o de estado.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sincronizacion_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "UUID v7 de la sincronización, generado por Iris"
+                  },
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "en_curso",
+                      "completa",
+                      "con_errores"
+                    ]
+                  },
+                  "iniciada_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "actualizada_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etapas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "recurso": {
+                          "type": "string",
+                          "enum": [
+                            "empresas",
+                            "zonas",
+                            "planes",
+                            "routers",
+                            "cuentas_bancarias",
+                            "bancos",
+                            "clientes",
+                            "servicios"
+                          ]
+                        },
+                        "estado": {
+                          "type": "string",
+                          "enum": [
+                            "pendiente",
+                            "en_curso",
+                            "completa",
+                            "con_errores"
+                          ]
+                        },
+                        "procesados": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "total": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 0
+                        },
+                        "error": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 300,
+                          "description": "Hasta 300 caracteres, sin datos de clientes"
+                        },
+                        "terminada_en": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "recurso",
+                        "estado",
+                        "procesados"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "sincronizacion_id",
+                  "estado",
+                  "iniciada_en",
+                  "actualizada_en",
+                  "etapas"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sincronización guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SincronizacionIrisGuardada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sso.emitir",
         "x-implementado": true
       }
     },
@@ -72247,6 +72423,15 @@
             }
           },
           {
+            "name": "excluir_retirados",
+            "in": "query",
+            "required": false,
+            "description": "true: sin los servicios `retirado`. Por defecto false (contrato Iris 0.8.0)",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "tipo",
             "in": "query",
             "required": false,
@@ -88910,6 +89095,17 @@
             ],
             "format": "date-time",
             "description": "Cuándo se descarta la reconexión pendiente si nadie la usa (24 h); el conector anterior sigue igual. null si no hay"
+          },
+          "sincronizacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SincronizacionIris"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contrato Iris 0.8.0: lo último que informó Iris de su primera sincronización (`PUT /integraciones/iris/sincronizacion`); null si nunca (el panel muestra «no informado»)"
           },
           "version": {
             "type": "integer",
@@ -117005,6 +117201,17 @@
               }
             ]
           },
+          "precio_mensual": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Precio mensual efectivo con el que Argos factura el servicio: `costo_override` o, sin él, el precio del plan vigente (un plan temporal activo cuenta: `plan_id` ya es el temporal). IVA incluido; sin adicionales, descuentos, mora, prorrateo ni cargos únicos. String con 2 decimales (contrato Iris 0.8.0)"
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "GTQ"
+            ],
+            "description": "Moneda de `precio_mensual`: siempre `GTQ` (los planes no tienen moneda)"
+          },
           "excluir_firewall": {
             "type": "boolean"
           },
@@ -117928,6 +118135,132 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
+          }
+        }
+      },
+      "SincronizacionIris": {
+        "type": "object",
+        "required": [
+          "sincronizacion_id",
+          "estado",
+          "iniciada_en",
+          "actualizada_en",
+          "etapas",
+          "recibida_en"
+        ],
+        "properties": {
+          "sincronizacion_id": {
+            "type": "string",
+            "description": "UUID v7 de Iris (en minúsculas)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "completa",
+              "con_errores"
+            ]
+          },
+          "iniciada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actualizada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "etapas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "recurso",
+                "estado",
+                "procesados",
+                "total",
+                "error",
+                "terminada_en"
+              ],
+              "properties": {
+                "recurso": {
+                  "type": "string",
+                  "enum": [
+                    "empresas",
+                    "zonas",
+                    "planes",
+                    "routers",
+                    "cuentas_bancarias",
+                    "bancos",
+                    "clientes",
+                    "servicios"
+                  ]
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "pendiente",
+                    "en_curso",
+                    "completa",
+                    "con_errores"
+                  ]
+                },
+                "procesados": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Hasta 300 caracteres, sin datos de clientes"
+                },
+                "terminada_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "recibida_en": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo lo recibió Argos"
+          }
+        }
+      },
+      "SincronizacionIrisGuardada": {
+        "type": "object",
+        "required": [
+          "sincronizacion_id",
+          "estado",
+          "actualizada_en"
+        ],
+        "properties": {
+          "sincronizacion_id": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "completa",
+              "con_errores"
+            ]
+          },
+          "actualizada_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

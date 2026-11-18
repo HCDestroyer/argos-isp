@@ -43,7 +43,8 @@ export function camposVelocidadCambiados(
  * emite evento. La respuesta trae `warnings[]` (`advertenciasPlan`).
  *
  * Renombrarlo, desactivarlo o reactivarlo emite `catalogo.cambiado` (`catalogo: 'plan'`, `campos`
- * con `nombre` y/o `activo`, `empresa_id: null`; contrato Iris 0.5.0, pedido A15);
+ * con `nombre` y/o `activo`, `empresa_id: null`; contrato Iris 0.5.0, pedido A15); cambiar su
+ * `precio` agrega `precio` (contrato Iris 0.8.0);
  * `plan.velocidad_cambiada` no lo cubre.
  */
 export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConAdvertencias> {
@@ -87,6 +88,8 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConA
         const camposCatalogo: CampoCatalogoCambiado[] = []
         if (despues.nombre !== antes.nombre) camposCatalogo.push('nombre')
         if (despues.activo !== antes.activo) camposCatalogo.push('activo')
+        // contrato Iris 0.8.0: cambia el precio efectivo de los servicios del plan sin `costo_override`
+        if (despues.precio !== antes.precio) camposCatalogo.push('precio')
         if (camposCatalogo.length > 0) {
             // los planes no son de una empresa: `empresa_id` siempre null (contrato Iris 0.5.0)
             await t.emit('catalogo.cambiado', {
