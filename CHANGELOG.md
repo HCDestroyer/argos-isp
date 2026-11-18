@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.0](https://github.com/HCDestroyer/argos-isp/compare/v1.17.0...v1.18.0) (2026-11-18)
+
+
+### Funcionalidades
+
+* **iris:** contrato 0.8.0 (A25–A28): reconexión sin personal, cuentas bancarias, precio del servicio y conexión de un paso ([#249](https://github.com/HCDestroyer/argos-isp/issues/249)) ([c224c4d](https://github.com/HCDestroyer/argos-isp/commit/c224c4d3273f400c69d2f3b39279953fddf052db))
+
 ## [1.17.0](https://github.com/HCDestroyer/argos-isp/compare/v1.16.0...v1.17.0) (2026-11-17)
 
 
