@@ -946,6 +946,40 @@ export function ajusteProxy(
     return { port: resto.join(',') }
 }
 
+/**
+ * Causa real de `failure: invalid local port` (bug v1.17.0 del PM): en RouterOS 7.17+ el `device-mode`
+ * puede no permitir el proxy web (`/ip proxy print` → `;;; inactivated, not allowed by device-mode`). El
+ * proxy queda «encendido» pero no escucha y RouterOS rechaza cualquier `local-port` en `/ip proxy access`.
+ * Solo se activa desde el router con confirmación física; ArgosIsp no puede hacerlo por la API.
+ */
+export const MENSAJE_PROXY_DEVICE_MODE =
+    'El device-mode del router no permite el proxy web. Actívalo con /system/device-mode/update proxy=yes ' +
+    'y confírmalo en el router (botón o apagado y encendido) dentro de 5 minutos.'
+
+export const COMANDOS_PROXY_DEVICE_MODE = [
+    '/system/device-mode/print',
+    '/system/device-mode/update proxy=yes',
+] as const
+
+const NO = new Set(['false', 'no'])
+
+/**
+ * ¿El router no deja usar el proxy web? Sí cuando `/system/device-mode` dice `proxy=no`, o cuando
+ * `/ip proxy` trae la marca de inactivo por device-mode (`inactivated` o el texto «not allowed by
+ * device-mode» en algún campo). Sin `device-mode` (RouterOS anterior a 7.13: null) o sin el campo
+ * `proxy` (anterior a 7.17) se trata como permitido.
+ */
+export function proxyBloqueadoPorDeviceMode(
+    deviceMode: Record<string, string | undefined> | null,
+    proxy: Record<string, unknown> | null,
+): boolean {
+    const permitido = deviceMode?.proxy
+    if (typeof permitido === 'string' && NO.has(permitido.toLowerCase())) return true
+    if (!proxy) return false
+    if (proxy.inactivated === 'true' || proxy.inactivated === true) return true
+    return Object.values(proxy).some((v) => typeof v === 'string' && /not allowed by device-mode/i.test(v))
+}
+
 /** Reglas de `/ip proxy access` de un servicio (`argosisp:servicio:<id>…`). */
 export function esAccesoDeServicio(o: { comment?: string }): boolean {
     return (o.comment ?? '').startsWith('argosisp:servicio:')
