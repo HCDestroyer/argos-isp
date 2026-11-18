@@ -197,10 +197,11 @@ export const rutasPromesas: RutasFixture = {
             facturas: cobertura.facturas.map(f => ({ ...f, saldo: f.monto, estado: 'vencida' })),
             estado,
             canal,
-            // Como la API: desde el panel siempre `promesa`, sin comprobante ni sistema de origen.
+            // Como la API: desde el panel siempre `promesa`, sin comprobante, sistema de origen ni motivo de reconexión.
             tipo: 'promesa',
             comprobante_id: null,
             sistema_origen: null,
+            motivo_reconexion: null,
             aprobada_por: null,
             resultado_evaluacion: evaluacion,
             version: 1,

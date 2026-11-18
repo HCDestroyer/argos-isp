@@ -13,7 +13,7 @@ function servicioDe(clienteId: number): Schema<'Servicio'> {
     return servicio
 }
 
-function promesa(id: number, clienteId: number, datos: Pick<Promesa, 'vence_en' | 'monto' | 'estado' | 'canal' | 'aprobada_por' | 'created_at'> & Partial<Pick<Promesa, 'tipo' | 'comprobante_id' | 'sistema_origen' | 'regla_cumplimiento'>>, resultado: Evaluacion): Promesa {
+function promesa(id: number, clienteId: number, datos: Pick<Promesa, 'vence_en' | 'monto' | 'estado' | 'canal' | 'aprobada_por' | 'created_at'> & Partial<Pick<Promesa, 'tipo' | 'comprobante_id' | 'sistema_origen' | 'motivo_reconexion' | 'regla_cumplimiento'>>, resultado: Evaluacion): Promesa {
     const servicio = servicioDe(clienteId)
     return {
         id,
@@ -24,10 +24,12 @@ function promesa(id: number, clienteId: number, datos: Pick<Promesa, 'vence_en' 
         // Anteriores al 29 oct: la migración de A3 las deja con la regla legada `monto` y sin facturas.
         regla_cumplimiento: 'monto',
         facturas: [],
-        // Como la API (contrato Iris 0.6.0): siempre trae el tipo; comprobante y origen, null fuera de Iris.
+        // Como la API (contrato Iris 0.6.0): siempre trae el tipo; comprobante, origen y motivo de
+        // reconexión, null fuera de Iris.
         tipo: 'promesa',
         comprobante_id: null,
         sistema_origen: null,
+        motivo_reconexion: null,
         ...datos,
         resultado_evaluacion: resultado,
         version: 1,
@@ -139,7 +141,7 @@ export const promesas: Promesa[] = [
             { regla: 'requiere_aprobacion', ok: true, valor: 'operador', limite: true, origen: 'operador', detalle: 'Las promesas del canal operador requieren aprobación de un supervisor' },
         ],
     })),
-    // Reconexión temporal que pidió el asistente de Iris con la boleta 5 (contrato Iris 0.6.0 §7.3).
+    // Reconexión temporal que pidió el asistente de Iris con la boleta 5, con la caja cerrada (contrato Iris 0.6.0 §7.3).
     promesa(5, 8, {
         vence_en: '2026-10-16T23:20:00.000Z',
         monto: '175.00',
@@ -148,6 +150,7 @@ export const promesas: Promesa[] = [
         tipo: 'reconexion_temporal',
         comprobante_id: 5,
         sistema_origen: 'iris',
+        motivo_reconexion: 'fuera_de_horario',
         regla_cumplimiento: 'facturas',
         aprobada_por: null,
         created_at: '2026-10-15T23:20:00.000Z',
@@ -169,6 +172,8 @@ export const promesas: Promesa[] = [
         tipo: 'reconexion_temporal',
         comprobante_id: 1,
         sistema_origen: 'iris',
+        // Horario hábil sin nadie de caja (A3, 17 nov 2026): mismas reglas que fuera de horario.
+        motivo_reconexion: 'sin_personal',
         regla_cumplimiento: 'facturas',
         aprobada_por: null,
         created_at: '2026-10-10T22:10:00.000Z',

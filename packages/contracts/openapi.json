@@ -108340,6 +108340,7 @@
           "monto",
           "estado",
           "canal",
+          "motivo_reconexion",
           "aprobada_por",
           "resultado_evaluacion",
           "version",
@@ -110435,7 +110436,8 @@
             "required": [
               "permitida",
               "max_por_periodo",
-              "horas_max"
+              "horas_max",
+              "vigencia"
             ],
             "properties": {
               "permitida": {

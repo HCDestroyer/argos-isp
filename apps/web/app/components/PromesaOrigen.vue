@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * De dónde viene una promesa (contrato Iris 0.6.0 §7.3 y §7.4): su tipo (promesa o reconexión
- * temporal), el canal (`ia`, `operador`…), si la pidió Iris (`sistema_origen`) y el comprobante
+ * temporal y su motivo), el canal (`ia`, `operador`…), si la pidió Iris (`sistema_origen`) y el comprobante
  * que la respalda. El motivo de una cancelada lo muestra `EvaluacionPromesa` (su `cierre`).
  */
 const props = defineProps<{
@@ -11,6 +11,8 @@ const props = defineProps<{
 const { enlace } = usePermisos()
 
 const tipo = computed(() => TIPOS_PROMESA[tipoPromesa(props.promesa)])
+/** Solo en una reconexión temporal: «Fuera de horario» o «Sin personal de caja». */
+const motivo = computed(() => (props.promesa.motivo_reconexion ? MOTIVOS_RECONEXION[props.promesa.motivo_reconexion] : null))
 </script>
 
 <template>
@@ -35,6 +37,16 @@ const tipo = computed(() => TIPOS_PROMESA[tipoPromesa(props.promesa)])
                 variant="subtle"
                 size="sm"
                 data-prueba="promesa-iris"
+            />
+            <UBadge
+                v-if="motivo"
+                :label="motivo.etiqueta"
+                :icon="motivo.icono"
+                :title="motivo.descripcion"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                data-prueba="promesa-motivo-reconexion"
             />
             <span class="text-xs text-muted">{{ CANALES_PROMESA[promesa.canal] }} <span class="font-mono">({{ promesa.canal }})</span></span>
         </div>

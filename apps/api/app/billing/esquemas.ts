@@ -69,31 +69,26 @@ export const ReglasPromesa = definirEsquema(
                 supervisor: limitesCanal,
             }),
             reconexion_temporal: {
-                ...objeto(
-                    {
-                        permitida: {
-                            ...booleano,
-                            description:
-                                'Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)',
-                        },
-                        max_por_periodo: {
-                            ...entero,
-                            description:
-                                'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
-                        },
-                        horas_max: {
-                            ...entero,
-                            description:
-                                'Duración desde que se crea (por defecto 24). Solo con vigencia horas',
-                        },
-                        vigencia: {
-                            ...enumerado(['horas', 'medianoche']),
-                            description:
-                                'horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta',
-                        },
+                ...objeto({
+                    permitida: {
+                        ...booleano,
+                        description: 'Apagada por defecto: cada empresa la activa (contrato Iris 0.6.0 §7.3)',
                     },
-                    ['vigencia'],
-                ),
+                    max_por_periodo: {
+                        ...entero,
+                        description:
+                            'Reconexiones temporales por periodo de facturación y servicio, aparte del cupo de promesas (cuentan en cualquier estado)',
+                    },
+                    horas_max: {
+                        ...entero,
+                        description: 'Duración desde que se crea (por defecto 24). Solo con vigencia horas',
+                    },
+                    vigencia: {
+                        ...enumerado(['horas', 'medianoche']),
+                        description:
+                            'horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta',
+                    },
+                }),
                 description:
                     'Reconexión temporal mientras caja revisa un comprobante pendiente que cubre todo lo vencido. Siempre viene en la respuesta',
             },
@@ -1003,7 +998,6 @@ export const Promesa = definirEsquema(
             'tipo',
             'comprobante_id',
             'sistema_origen',
-            'motivo_reconexion',
         ],
     ),
 )

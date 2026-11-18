@@ -17838,7 +17838,7 @@ export interface components {
              * @description Solo en una reconexión temporal: fuera_de_horario (caja cerrada) o sin_personal (horario hábil sin nadie de caja); null en las demás. Siempre viene
              * @enum {string|null}
              */
-            motivo_reconexion?: "fuera_de_horario" | "sin_personal" | null;
+            motivo_reconexion: "fuera_de_horario" | "sin_personal" | null;
             aprobada_por: number | null;
             /** @description Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md */
             resultado_evaluacion: components["schemas"]["EvaluacionPromesa"] | null;
@@ -18359,7 +18359,7 @@ export interface components {
                  * @description horas (por defecto): vence a horas_max de creada. medianoche: vence la siguiente medianoche de Guatemala (00:00 America/Guatemala, guardada en UTC); si faltan menos de 60 minutos, la del día siguiente. Siempre viene en la respuesta
                  * @enum {string}
                  */
-                vigencia?: "horas" | "medianoche";
+                vigencia: "horas" | "medianoche";
             };
         };
         RenglonCalculo: {

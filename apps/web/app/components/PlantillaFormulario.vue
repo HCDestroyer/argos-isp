@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 
 /**
  * Alta y edición de una plantilla de facturación (A3): ciclo, corte, mora, momento de certificar
@@ -77,6 +77,12 @@ const exigirCumplimiento = computed({
         estado.reglas_promesa.cumplimiento_minimo_pct = valor ? (estado.reglas_promesa.cumplimiento_minimo_pct ?? 80) : null
     },
 })
+
+const itemsVigencia: RadioGroupItem[] = VIGENCIAS_RECONEXION.map(valor => ({ label: ETIQUETAS_VIGENCIA_RECONEXION[valor].etiqueta, value: valor }))
+
+/** Con «Hasta la medianoche» la API no usa `horas_max`: se oculta (y se conserva su valor). */
+const porHoras = computed(() => estado.reglas_promesa.reconexion_temporal.vigencia === 'horas')
+const ayudaVigencia = computed(() => ETIQUETAS_VIGENCIA_RECONEXION[estado.reglas_promesa.reconexion_temporal.vigencia].descripcion)
 
 /** `UInputNumber` vacío llega como `undefined`/`NaN`: para la API es `null` (usa el general). */
 function numeroONulo(valor: number | null | undefined): number | null {
@@ -645,6 +651,19 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                             />
                         </UFormField>
                         <UFormField
+                            label="Vigencia"
+                            :help="ayudaVigencia"
+                            name="reglas_promesa.reconexion_temporal.vigencia"
+                        >
+                            <URadioGroup
+                                v-model="estado.reglas_promesa.reconexion_temporal.vigencia"
+                                :items="itemsVigencia"
+                                orientation="horizontal"
+                                data-prueba="plantilla-reconexion-vigencia"
+                            />
+                        </UFormField>
+                        <UFormField
+                            v-if="porHoras"
                             label="Duración máxima (horas)"
                             help="Desde que se crea; de 1 a 168."
                             name="reglas_promesa.reconexion_temporal.horas_max"

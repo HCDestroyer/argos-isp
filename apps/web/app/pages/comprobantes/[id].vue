@@ -244,7 +244,7 @@ onMounted(cargar)
                 color="warning"
                 variant="subtle"
                 icon="i-lucide-plug-zap"
-                title="Reconexión temporal activa"
+                :title="['Reconexión temporal activa', etiquetaMotivoReconexion(reconexion)].filter(Boolean).join(' · ')"
                 :description="`Iris reconectó el servicio ${reconexion.servicio_id} mientras se revisa este comprobante, hasta el ${formatearFechaHora(reconexion.vence_en)}. Rechazarlo vuelve a cortar el servicio a la hora de corte.`"
                 :actions="[{ label: 'Ver promesas', to: `/promesas?servicio=${reconexion.servicio_id}`, color: 'warning', variant: 'outline' }]"
                 data-prueba="aviso-reconexion"

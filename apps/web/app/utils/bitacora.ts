@@ -647,13 +647,20 @@ export function etiquetaActor(accion: Accion): string {
     return accion.actor_id === null ? base : `${base} #${accion.actor_id}`
 }
 
-/** `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. */
+/**
+ * `entrada.motivo` de las acciones que lo piden (suspender, anular…), o `null`. El de una reconexión
+ * temporal es un código (`fuera_de_horario`, `sin_personal`): se muestra en palabras.
+ */
 export function motivoAccion(accion: Accion): string | null {
     const { entrada } = accion
     if (typeof entrada !== 'object' || entrada === null || !('motivo' in entrada)) {
         return null
     }
-    return typeof entrada.motivo === 'string' && entrada.motivo.trim() ? entrada.motivo.trim() : null
+    const motivo = typeof entrada.motivo === 'string' ? entrada.motivo.trim() : ''
+    if (accion.accion === 'comprobantes.reconexion_temporal' && motivo in MOTIVOS_RECONEXION) {
+        return MOTIVOS_RECONEXION[motivo as keyof typeof MOTIVOS_RECONEXION].etiqueta
+    }
+    return motivo || null
 }
 
 /** `servicio 12`, o `null` si la acción no tiene entidad. */

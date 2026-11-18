@@ -4,7 +4,7 @@ import { entrar } from './ayudas'
 /**
  * Contrato Iris 0.6.0 en el panel (§6, §7, §9.2), en modo fixtures, a 1280 y 390 px: la cola de caja
  * con la boleta que llegó por Iris (lectura, conversación, reconexión temporal, rechazo con causa),
- * la reconexión temporal en la plantilla, las promesas con tipo y canal, el WhatsApp del cliente y
+ * la reconexión temporal en la plantilla (con su vigencia), las promesas con tipo, canal y motivo, el WhatsApp del cliente y
  * de la configuración, y la bitácora por conversación. Las capturas (claro y oscuro) quedan en
  * `test-results/capturas-iris-060/` (no se suben).
  */
@@ -89,6 +89,21 @@ test('plantilla: la reconexión temporal está apagada por defecto y se activa c
     await panel.locator('[data-prueba="plantilla-guardar"]').click()
     await expect(panel).toBeHidden()
     await expect(resumen).toHaveText('Reconexión temporal: hasta 1 por periodo · 12 h')
+
+    // Vigencia (A3, 17 nov 2026): «Hasta la medianoche» oculta las horas y explica cuándo vence.
+    await page.locator('[data-prueba="editar-plantilla-1"]').click()
+    await seccion.scrollIntoViewIfNeeded()
+    const vigencia = seccion.locator('[data-prueba="plantilla-reconexion-vigencia"]')
+    await expect(vigencia.getByRole('radio', { name: 'Por horas' })).toBeChecked()
+    await expect(campo(seccion, 'plantilla-reconexion-horas')).toBeVisible()
+    await vigencia.getByRole('radio', { name: 'Hasta la medianoche' }).click()
+    await expect(seccion.locator('[data-prueba="plantilla-reconexion-horas"]')).toHaveCount(0)
+    await expect(seccion).toContainText('Dura hasta la siguiente medianoche (hora de Guatemala); si falta menos de una hora, hasta la del día siguiente')
+    await sinDesborde(page)
+    await capturar(page, 'plantilla-medianoche')
+    await panel.locator('[data-prueba="plantilla-guardar"]').click()
+    await expect(panel).toBeHidden()
+    await expect(resumen).toHaveText('Reconexión temporal: hasta 1 por periodo · hasta la medianoche')
 })
 
 test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({ page }) => {
@@ -98,6 +113,10 @@ test('promesas: tipo, canal, comprobante y la cancelada con su motivo', async ({
     await expect(page.locator('[data-prueba="tipo-promesa"]')).toHaveCount(2)
     await expect(page.locator('[data-prueba="promesa-comprobante"]').filter({ hasText: 'Comprobante #5' })).toBeVisible()
     await expect(page.getByText('la reconexión temporal venció con el comprobante sin revisar').filter({ visible: true }).first()).toBeVisible()
+    // Motivo de la reconexión (A3, 17 nov 2026).
+    const motivos = page.locator('[data-prueba="promesa-motivo-reconexion"]').filter({ visible: true })
+    await expect(motivos.filter({ hasText: 'Fuera de horario' })).toBeVisible()
+    await expect(motivos.filter({ hasText: 'Sin personal de caja' })).toBeVisible()
     await sinDesborde(page)
     await capturar(page, 'promesas')
 })
