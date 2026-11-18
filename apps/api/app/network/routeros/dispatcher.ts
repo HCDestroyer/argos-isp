@@ -15,6 +15,7 @@ import { clienteDeRouter, type RouterApi } from '#network/routeros/router'
 import { contactoRouterOS } from '#network/sesiones/contacto'
 import { limpiarCredenciales } from '#network/sesiones/eventos_red'
 import { diferencias } from '#network/routeros/normalizar'
+import { ErrorRouterOS } from '#network/routeros/errores'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
 import type { RutaRouterOS } from '#network/routeros/cliente'
@@ -27,6 +28,8 @@ import {
     normalizarDireccion,
     ordenAccesoProxy,
     ordenDeseado,
+    proxyBloqueadoPorDeviceMode,
+    REGLA_NAT_PROXY,
     REGLA_PROXY_SIN_CODIGO,
     type EstadoCorte,
     type ResolverIPv4,
@@ -508,6 +511,59 @@ const FILTROS: readonly RutaRouterOS[] = ['/ip/firewall/filter', '/ipv6/firewall
 const NATS: readonly RutaRouterOS[] = ['/ip/firewall/nat', '/ipv6/firewall/nat']
 const PROXY_ACCESS = '/ip/proxy/access' as const
 
+/** Un comando o paso que el router rechazó sin impedir seguir con lo demás (`errores[]` de la reconciliación). */
+export interface ErrorOperacion {
+    operacion: string
+    mensaje: string
+}
+
+/**
+ * ¿El error deja seguir con lo demás? Sí cuando el router respondió y rechazó un comando (400, respuesta
+ * rara): `failure: invalid local port`, `already have such entry`… No cuando no responde o rechaza las
+ * credenciales: ahí no tiene sentido seguir escribiendo.
+ */
+export function esErrorParcial(error: unknown): error is ErrorRouterOS {
+    return error instanceof ErrorRouterOS && (error.tipo === 'solicitud' || error.tipo === 'respuesta')
+}
+
+/**
+ * Corre un paso; con `errores` (la reconciliación), un rechazo del router (`esErrorParcial`) se anota y
+ * devuelve false en lugar de lanzar. Sin `errores`, lanza como siempre. El comando ya quedó en `audit.red`.
+ */
+export async function intentarPaso(
+    errores: ErrorOperacion[] | undefined,
+    operacion: string,
+    paso: () => Promise<void>,
+): Promise<boolean> {
+    if (!errores) {
+        await paso()
+        return true
+    }
+    try {
+        await paso()
+        return true
+    } catch (error) {
+        if (!esErrorParcial(error)) throw error
+        errores.push({ operacion, mensaje: error.message })
+        return false
+    }
+}
+
+/**
+ * ¿El device-mode del router deja usar el proxy web (corte por código)? Lee `/system/device-mode` (si no
+ * existe, permitido) y `/ip proxy` (marca de inactivo). `proxyBloqueadoPorDeviceMode`.
+ */
+export async function proxyCorteBloqueado(cliente: ClienteRouterOS): Promise<boolean> {
+    const deviceMode = await cliente.leerDeviceMode()
+    let proxy: Record<string, string> | null = null
+    try {
+        proxy = await cliente.leerProxy()
+    } catch (error) {
+        if (!esErrorParcial(error)) throw error
+    }
+    return proxyBloqueadoPorDeviceMode(deviceMode, proxy)
+}
+
 /**
  * Deja el corte como pide `estado`, en orden seguro. Cada comando queda en `audit.red`.
  *
@@ -515,7 +571,9 @@ const PROXY_ACCESS = '/ip/proxy/access' as const
  *    (los saltos `argosisp:top` antes de FastTrack y de `accept established,related`).
  * 2. Modo código: el 3346 entra en `/ip proxy port` **sin encender** el proxy si estaba apagado
  *    (`ajustePuertoProxy`). RouterOS rechaza una regla de `/ip proxy access` con un `local-port` que no
- *    está ahí (`failure: invalid local port`, bug v1.16.0 del PM).
+ *    está ahí (`failure: invalid local port`, bug v1.16.0 del PM). Ese error también sale cuando el
+ *    device-mode no permite el proxy (v1.17.0): eso lo revisa quien llama (`proxyCorteBloqueado`) y pasa
+ *    el router a modo ip mientras tanto.
  * 3. `/ip proxy access`: la regla final (nunca un 3346 que reenvíe a internet) y las por servicio, antes
  *    que las del operador. Si el proxy ya era del operador y estaba encendido, entre 2 y 3 escucha en el
  *    3346 pero nadie llega: el `drop` de input ya está y el NAT al 3346 aún no.
@@ -523,78 +581,109 @@ const PROXY_ACCESS = '/ip/proxy/access' as const
  * 5. Lo que sobra, de afuera hacia adentro: el NAT, las reglas de `/ip proxy access`, el puerto (`ajusteProxy`:
  *    en código enciende el proxy; en ip quita el 3346 después de las reglas que lo usan) y al final los
  *    filtros (el `drop` de input es lo último en irse).
+ *
+ * `errores` (la reconciliación): un comando rechazado no aborta lo demás; se anota y se sigue con lo que no
+ * depende de él. En modo código, si falló algún filtro (el `drop` de input del 3346 o su orden) no se toca
+ * el proxy ni su NAT; si falló el puerto o la regla final, no se escribe el NAT al 3346 (el HTTP del
+ * suspendido nunca llega a un proxy sin sus reglas) ni se enciende el proxy.
  */
 export async function aplicarCorte(
     cliente: ClienteRouterOS,
     estado: EstadoCorte,
     lectura: LecturaCorte,
     ctx: ContextoRed,
+    errores?: ErrorOperacion[],
 ): Promise<Cambio[]> {
     const hechos: Cambio[] = []
     const plan = planCorte(estado, lectura)
     const codigo = estado.reglas.some((r) => r.ruta === PROXY_ACCESS)
     const cambio = (c: CambioCorte, accion: Cambio['accion']) =>
         hechos.push({ ruta: c.ruta, comment: c.clave, accion })
-    const escribir = async (de: (ruta: RutaRouterOS) => boolean) => {
+    const paso = (operacion: string, fn: () => Promise<void>) => intentarPaso(errores, operacion, fn)
+    /** Escribe lo que pide el plan; devuelve false si algo falló. */
+    const escribir = async (de: (ruta: RutaRouterOS) => boolean, omitir: Set<string> = new Set()) => {
+        let ok = true
         for (const c of plan.filter(
-            (x) => (x.accion === 'crear' || x.accion === 'actualizar') && de(x.ruta),
+            (x) => (x.accion === 'crear' || x.accion === 'actualizar') && de(x.ruta) && !omitir.has(x.clave),
         )) {
-            if (c.ruta === '/interface/list' || c.ruta === '/ppp/profile') {
-                await cliente.asegurarPor(c.ruta, { name: c.clave }, c.propiedades!, ctx)
-            } else if (c.accion === 'crear') {
-                await cliente.crear(c.ruta, c.propiedades!, ctx)
-            } else {
-                await cliente.actualizar(c.ruta, c.id!, c.propiedades!, ctx)
-            }
-            cambio(c, c.accion === 'crear' ? 'creado' : 'actualizado')
+            ok =
+                (await paso(`${c.ruta} ${c.accion} ${c.clave}`, async () => {
+                    if (c.ruta === '/interface/list' || c.ruta === '/ppp/profile') {
+                        await cliente.asegurarPor(c.ruta, { name: c.clave }, c.propiedades!, ctx)
+                    } else if (c.accion === 'crear') {
+                        await cliente.crear(c.ruta, c.propiedades!, ctx)
+                    } else {
+                        await cliente.actualizar(c.ruta, c.id!, c.propiedades!, ctx)
+                    }
+                    cambio(c, c.accion === 'crear' ? 'creado' : 'actualizado')
+                })) && ok
         }
+        return ok
     }
     // Orden: se vuelve a leer la tabla con las reglas nuevas (ya con su `.id`).
-    const ordenar = async (ruta: RutaOrdenada) => {
-        const reglas = estado.reglas.filter((r) => r.ruta === ruta)
-        const propias = estado.propias.get(ruta) ?? new Set<string>()
-        const deseadas = new Set(reglas.map((r) => r.comment))
-        const leida = await cliente.listar(ruta)
-        const tabla = leida.filter(
-            (o) =>
-                !(
-                    propias.has(o.comment ?? '') &&
-                    !deseadas.has(o.comment ?? '') &&
-                    !estado.conservar.has(o.comment ?? '')
-                ),
-        )
-        for (const m of movimientos(tabla, ordenDeseado(tabla, reglas))) {
-            await cliente.mover(ruta, m.id, m.destino, ctx)
-            hechos.push({
-                ruta,
-                comment: tabla.find((o) => o['.id'] === m.id)?.comment ?? m.id,
-                accion: 'movido',
-            })
-        }
-    }
+    const ordenar = (ruta: RutaOrdenada) =>
+        paso(`${ruta} ordenar`, async () => {
+            const reglas = estado.reglas.filter((r) => r.ruta === ruta)
+            const propias = estado.propias.get(ruta) ?? new Set<string>()
+            const deseadas = new Set(reglas.map((r) => r.comment))
+            const leida = await cliente.listar(ruta)
+            const tabla = leida.filter(
+                (o) =>
+                    !(
+                        propias.has(o.comment ?? '') &&
+                        !deseadas.has(o.comment ?? '') &&
+                        !estado.conservar.has(o.comment ?? '')
+                    ),
+            )
+            for (const m of movimientos(tabla, ordenDeseado(tabla, reglas))) {
+                await cliente.mover(ruta, m.id, m.destino, ctx)
+                hechos.push({
+                    ruta,
+                    comment: tabla.find((o) => o['.id'] === m.id)?.comment ?? m.id,
+                    accion: 'movido',
+                })
+            }
+        })
     const borrar = async (de: (ruta: RutaRouterOS) => boolean) => {
         for (const c of plan.filter((x) => x.accion === 'borrar' && de(x.ruta))) {
-            await cliente.borrarPorId(c.ruta, c.id!, ctx)
-            cambio(c, 'borrado')
+            await paso(`${c.ruta} borrar ${c.clave}`, async () => {
+                await cliente.borrarPorId(c.ruta, c.id!, ctx)
+                cambio(c, 'borrado')
+            })
         }
     }
     const esNat = (ruta: RutaRouterOS) => NATS.includes(ruta)
 
     // 1. Listas, perfil y filtros.
-    await escribir((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
-    for (const ruta of RUTAS_ORDENADAS) if (FILTROS.includes(ruta)) await ordenar(ruta)
-    // 2. El puerto del corte en el proxy, sin encenderlo.
-    if (codigo) hechos.push(...(await abrirPuertoProxy(cliente, ctx)))
+    let filtrosOk = await escribir((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
+    for (const ruta of RUTAS_ORDENADAS) {
+        if (FILTROS.includes(ruta)) filtrosOk = (await ordenar(ruta)) && filtrosOk
+    }
+    // 2. El puerto del corte en el proxy, sin encenderlo (solo con el `drop` de input ya en su lugar).
+    let proxyOk = !codigo || filtrosOk
+    if (codigo && proxyOk) {
+        proxyOk = await paso('/ip/proxy puerto del corte', async () => {
+            hechos.push(...(await abrirPuertoProxy(cliente, ctx)))
+        })
+    }
     // 3. Reglas de `/ip proxy access` y su orden (las del corte antes que las del operador).
-    await escribir((ruta) => ruta === PROXY_ACCESS)
-    if (codigo) hechos.push(...(await ordenarAccesoProxy(cliente, ctx)))
-    // 4. NAT.
-    await escribir(esNat)
+    if (proxyOk) proxyOk = await escribir((ruta) => ruta === PROXY_ACCESS)
+    if (codigo && proxyOk) {
+        proxyOk = await paso('/ip/proxy/access ordenar', async () => {
+            hechos.push(...(await ordenarAccesoProxy(cliente, ctx)))
+        })
+    }
+    // 4. NAT (sin el redirect al 3346 si el proxy no quedó listo).
+    await escribir(esNat, proxyOk ? new Set() : new Set([REGLA_NAT_PROXY]))
     for (const ruta of RUTAS_ORDENADAS) if (esNat(ruta)) await ordenar(ruta)
     // 5. Lo que sobra y el estado final del proxy.
     await borrar(esNat)
     await borrar((ruta) => ruta === PROXY_ACCESS)
-    hechos.push(...(await asegurarProxyCorte(cliente, codigo, ctx)))
+    if (proxyOk) {
+        await paso('/ip/proxy ajustar', async () => {
+            hechos.push(...(await asegurarProxyCorte(cliente, codigo, ctx)))
+        })
+    }
     await borrar((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
     return hechos
 }
