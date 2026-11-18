@@ -7372,7 +7372,7 @@ export interface paths {
         put?: never;
         /**
          * Asignar esta plantilla a los servicios vigentes sin plantilla (sin facturar hacia atrás)
-         * @description Asigna la plantilla al mismo conjunto de la vista previa (GET servicios-sin-plantilla). total_esperado = el total de la vista previa: si cambió, 409 total_cambiado y no asigna nada (vuelve a pedir la vista previa). El primer periodo facturado de cada servicio es el siguiente inicio de ciclo después de hoy, sin prorrateo ni periodos anteriores. Cada servicio deja su diff en audit.cambios; sin evento. 404 si no existe, 409 plantilla_retirada.
+         * @description Asigna la plantilla al mismo conjunto de la vista previa (GET servicios-sin-plantilla). total_esperado = el total de la vista previa: si cambió, 409 total_cambiado y no asigna nada (vuelve a pedir la vista previa). El primer periodo facturado de cada servicio es el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo), completo, sin prorrateo ni periodos anteriores. Cada servicio deja su diff en audit.cambios; sin evento. 404 si no existe, 409 plantilla_retirada.
          */
         post: operations["plantillasAsignarServiciosSinPlantilla"];
         delete?: never;
@@ -7410,7 +7410,7 @@ export interface paths {
         };
         /**
          * Vista previa: servicios vigentes sin plantilla que recibirían esta plantilla
-         * @description Solo lectura. Servicios activo, limitado y suspendido sin plantilla_facturacion_id (nunca retirados ni pendientes de instalación) de la empresa activa (X-Empresa-Id, o las del alcance del usuario) y del alcance router/zona del permiso. total va como total_esperado a POST asignar-servicios-sin-plantilla. facturar_desde: el primer periodo que se facturaría (siguiente inicio de ciclo después de hoy; nada hacia atrás). 404 si no existe, 409 plantilla_retirada.
+         * @description Solo lectura. Servicios activo, limitado y suspendido sin plantilla_facturacion_id (nunca retirados ni pendientes de instalación) de la empresa activa (X-Empresa-Id, o las del alcance del usuario) y del alcance router/zona del permiso. total va como total_esperado a POST asignar-servicios-sin-plantilla. facturar_desde: el primer periodo que se facturaría (primer inicio de ciclo de hoy en adelante, hoy mismo si hoy empieza un ciclo; nada hacia atrás). 404 si no existe, 409 plantilla_retirada.
          */
         get: operations["plantillasServiciosSinPlantilla"];
         put?: never;
@@ -19939,7 +19939,7 @@ export interface components {
             plan_nombre: string;
             /**
              * Format: date
-             * @description Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el siguiente inicio de ciclo (nada hacia atrás)
+             * @description Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo; nada hacia atrás)
              */
             facturar_desde: string;
         };

@@ -108,10 +108,11 @@ export function claveFactura(servicioId: number, periodo: string): string {
 
 /**
  * Primer periodo que se factura a un servicio que **recibe plantilla hoy** sin haberla tenido
- * (`plantillas.asignar_sin_plantilla`): el siguiente inicio de ciclo **después** de `hoy` (nunca el
- * que contiene a `hoy`, aunque empiece hoy), así no se factura nada hacia atrás ni se prorratea el
- * tramo ya corrido. Si el primer día facturable del servicio (`inicioServicio`) todavía no llegó, no
- * hay nada atrás: se factura desde él, como siempre.
+ * (`plantillas.asignar_sin_plantilla`): el primer inicio de ciclo **mayor o igual** a `hoy` (día de
+ * Guatemala; decisión del líder, 18 nov). Asignada el mismo día en que empieza un ciclo, ese ciclo se
+ * factura completo (no es hacia atrás y no se regala un mes); un día después, el ciclo siguiente.
+ * Nunca un periodo anterior ni el tramo ya corrido prorrateado. Si el primer día facturable del
+ * servicio (`inicioServicio`) todavía no llegó, no hay nada atrás: se factura desde él, como siempre.
  */
 export function primerPeriodoTrasAsignacion(
     config: ConfigCiclo,
@@ -120,7 +121,8 @@ export function primerPeriodoTrasAsignacion(
 ): string {
     if (inicioServicio > hoy) return inicioServicio
     const dia = diaDelCiclo(config, inicioServicio)
-    return siguienteInicio(inicioCicloQueContiene(hoy, dia), dia)
+    const actual = inicioCicloQueContiene(hoy, dia)
+    return actual === hoy ? hoy : siguienteInicio(actual, dia)
 }
 
 /** Los periodos que empiezan en `facturarDesde` o después (sin límite: todos). */

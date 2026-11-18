@@ -20,7 +20,7 @@ import { primerPeriodoTrasAsignacion } from '#billing/periodos'
  *   `pendiente_instalacion` todavía no (al activarse sigue sin plantilla y aparece aquí la próxima vez).
  * - Filtrado por la empresa activa (o las del alcance del usuario) y por el alcance de router/zona del
  *   permiso, como `GET /servicios`.
- * - Primer periodo facturado: el siguiente inicio de ciclo después del día de la asignación
+ * - Primer periodo facturado: el primer inicio de ciclo mayor o igual al día de la asignación
  *   (`primerPeriodoTrasAsignacion`), guardado en `billing.servicios_facturar_desde`.
  */
 

@@ -5,7 +5,7 @@ import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#
 import { crearClienteFila, crearEmpresaFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import { crearPlantillaFila, facturasDe, generar } from '#tests/billing/ayudas_billing'
 import { hoyGuatemala } from '#ledger/fechas'
-import { sumarDias } from '#billing/periodos'
+import { periodosDesde, periodosHasta, primerPeriodoTrasAsignacion, sumarDias } from '#billing/periodos'
 import { PLANTILLAS_FABRICA, sembrarPlantillas, sembrarPlantillasFabrica } from '#billing/plantillas_fabrica'
 import { plantillaPorDefectoId } from '#billing/plantillas'
 import EmitirFactura from '#billing/actions/emitir_factura'
@@ -17,8 +17,9 @@ import ActivarInstalacionServicio from '#core/actions/activar_instalacion_servic
  * «por defecto la de genera 1 vence 15, asigna a los existentes».
  */
 
-/** Primer día del mes siguiente a `hoy` (YYYY-MM-DD): el primer periodo de una plantilla de día 1. */
-function primeroDelMesSiguiente(hoy: string): string {
+/** Primer inicio de ciclo ≥ `hoy` de una plantilla de día 1 (YYYY-MM-DD). */
+function primerDiaUnoDesde(hoy: string): string {
+    if (hoy.endsWith('-01')) return hoy
     const [a, m] = hoy.split('-').map(Number) as [number, number]
     const siguiente = m === 12 ? { a: a + 1, m: 1 } : { a, m: m + 1 }
     return `${siguiente.a}-${String(siguiente.m).padStart(2, '0')}-01`
@@ -90,6 +91,42 @@ async function escenarioSinPlantilla() {
         enOtraEmpresa,
     }
 }
+
+test.group('Plantillas · primer periodo tras la asignación', () => {
+    const diaUno = { ciclo: 'dia_fijo' as const, dia: 1, prorrateo: true }
+    const diaCatorce = { ciclo: 'dia_fijo' as const, dia: 14, prorrateo: true }
+
+    test('asignado el mismo día del ciclo: ese ciclo, completo', ({ assert }) => {
+        assert.equal(primerPeriodoTrasAsignacion(diaUno, '2026-01-15', '2026-12-01'), '2026-12-01')
+        assert.equal(primerPeriodoTrasAsignacion(diaCatorce, '2026-01-15', '2026-11-14'), '2026-11-14')
+        // y el periodo que sale es completo (factor 1), no un prorrateo
+        const periodos = periodosDesde(periodosHasta(diaUno, '2026-01-15', '2026-12-01'), '2026-12-01')
+        assert.deepEqual(
+            periodos.map((p) => [p.periodo, p.factor]),
+            [['2026-12-01', '1']],
+        )
+    })
+
+    test('asignado un día después: el ciclo siguiente', ({ assert }) => {
+        assert.equal(primerPeriodoTrasAsignacion(diaUno, '2026-01-15', '2026-12-02'), '2027-01-01')
+        assert.equal(primerPeriodoTrasAsignacion(diaUno, '2026-01-15', '2026-11-18'), '2026-12-01')
+        assert.equal(primerPeriodoTrasAsignacion(diaCatorce, '2026-01-15', '2026-11-15'), '2026-12-14')
+        assert.equal(primerPeriodoTrasAsignacion(diaCatorce, '2026-01-15', '2026-11-13'), '2026-11-14')
+    })
+
+    test('nunca un periodo anterior a la asignación', ({ assert }) => {
+        for (const hoy of ['2026-11-30', '2026-12-01', '2026-12-02', '2027-02-28']) {
+            for (const config of [diaUno, diaCatorce]) {
+                const desde = primerPeriodoTrasAsignacion(config, '2026-01-15', hoy)
+                assert.isTrue(desde >= hoy, `${desde} es anterior a ${hoy}`)
+                const periodos = periodosDesde(periodosHasta(config, '2026-01-15', '2027-06-01'), desde)
+                assert.isTrue(periodos.every((p) => p.periodo >= hoy && p.factor === '1'))
+            }
+        }
+        // instalación futura: desde la instalación, como siempre
+        assert.equal(primerPeriodoTrasAsignacion(diaUno, '2026-12-20', '2026-12-02'), '2026-12-20')
+    })
+})
 
 test.group('Plantillas de fábrica · creación al actualizar', () => {
     test('el seed crea las tres con sus días y gracia, auditadas, y repetirlo no hace nada', async ({
@@ -210,7 +247,7 @@ test.group('Plantillas · asignar a servicios sin plantilla', (group) => {
         const e = await escenarioSinPlantilla()
         const plantilla = await plantillaPorNombre('Genera 1 · vence 15')
         const hoy = hoyGuatemala()
-        const desde = primeroDelMesSiguiente(hoy)
+        const desde = primerDiaUnoDesde(hoy)
 
         const previa = await estado(
             client
@@ -287,9 +324,10 @@ test.group('Plantillas · asignar a servicios sin plantilla', (group) => {
             .first()
         assert.exists(accion)
 
-        // Sin facturar hacia atrás: hasta hoy no hay nada que emitir, aunque se instaló en enero
-        const hastaHoy = await generar(e.activo, hoy)
-        assert.equal(hastaHoy.generadas, 0)
+        // Sin facturar hacia atrás: hasta el día anterior a `facturar_desde` no hay nada que emitir,
+        // aunque se instaló en enero
+        const antesDeDesde = await generar(e.activo, sumarDias(desde, -1))
+        assert.equal(antesDeDesde.generadas, 0)
         assert.lengthOf(await facturasDe(e.activo), 0)
         // un periodo anterior pedido directo tampoco se emite
         const anterior = await new EmitirFactura().execute(

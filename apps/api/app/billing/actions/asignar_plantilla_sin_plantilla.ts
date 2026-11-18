@@ -19,7 +19,7 @@ import {
  *   empresa activa (o las del alcance del usuario) y del alcance router/zona del permiso. No toca
  *   servicios con plantilla, ni `retirado`, ni `pendiente_instalacion`.
  * - **Sin facturar hacia atrás**: a cada servicio le guarda en `billing.servicios_facturar_desde` el
- *   siguiente inicio de ciclo después de hoy (`primerPeriodoTrasAsignacion`); `generarFacturas` y
+ *   primer inicio de ciclo mayor o igual a hoy en Guatemala (`primerPeriodoTrasAsignacion`); `generarFacturas` y
  *   `EmitirFactura` no emiten un periodo que empiece antes. Sin prorrateo del tramo ya corrido.
  * - `total_esperado`: el total de la vista previa. Si el conjunto cambió (otro servicio entró o salió)
  *   responde 409 `total_cambiado` y no asigna nada: el panel vuelve a pedir la vista previa.

@@ -6,7 +6,7 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
  * `plantillas.asignar_sin_plantilla` da plantilla a servicios vigentes que no tenían. Sin más,
  * `generarFacturas` («todo lo pendiente hasta ahora») emitiría todos los periodos desde la
  * instalación. Esta tabla guarda, por servicio, el primer periodo que se puede facturar: el
- * siguiente inicio de ciclo después de la asignación. `generarFacturas` y `EmitirFactura` no emiten
+ * primer inicio de ciclo mayor o igual al día de la asignación. `generarFacturas` y `EmitirFactura` no emiten
  * un periodo que empiece antes (`periodosDesde` de `#billing/periodos`).
  *
  * - Una fila por servicio (la asignación la crea; una asignación posterior solo la mueve hacia

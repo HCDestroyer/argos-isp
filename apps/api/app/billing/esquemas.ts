@@ -152,7 +152,7 @@ export const ServicioSinPlantilla = definirEsquema(
         facturar_desde: {
             ...fecha,
             description:
-                'Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el siguiente inicio de ciclo (nada hacia atrás)',
+                'Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el primer inicio de ciclo de hoy en adelante (hoy mismo si hoy empieza un ciclo; nada hacia atrás)',
         },
     }),
 )
