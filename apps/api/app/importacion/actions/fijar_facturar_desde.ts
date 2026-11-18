@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { facturarDesdeDe } from '#billing/asignacion_plantilla'
-import { primerPeriodoTrasAsignacion } from '#billing/periodos'
+import { primerPeriodoTrasAsignacion, sumarDias } from '#billing/periodos'
 
 export interface EntradaFijarFacturarDesde {
     servicio_id: number
@@ -58,7 +58,12 @@ export default class FijarFacturarDesde extends DomainAction<
             }
         }
 
-        const trasImportacion = primerPeriodoTrasAsignacion(config, servicio.inicio, hoyGuatemala())
+        // Estrictamente después de hoy: el ciclo que empieza el día de la importación lo cubre el sistema anterior.
+        const trasImportacion = primerPeriodoTrasAsignacion(
+            config,
+            servicio.inicio,
+            sumarDias(hoyGuatemala(), 1),
+        )
         const ultimo = (await t.trx
             .from('billing.facturas')
             .where('servicio_id', servicio.id)
@@ -67,7 +72,7 @@ export default class FijarFacturarDesde extends DomainAction<
             .first()) as { periodo: string | null } | null
         const ultimoPeriodo = ultimo?.periodo ?? null
         const trasUltimo = ultimoPeriodo
-            ? primerPeriodoTrasAsignacion(config, servicio.inicio, ultimoPeriodo)
+            ? primerPeriodoTrasAsignacion(config, servicio.inicio, sumarDias(ultimoPeriodo, 1))
             : null
         const calculado = trasUltimo && trasUltimo > trasImportacion ? trasUltimo : trasImportacion
 

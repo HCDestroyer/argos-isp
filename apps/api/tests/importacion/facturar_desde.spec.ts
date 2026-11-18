@@ -12,7 +12,13 @@ import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import { PLANTILLAS_FABRICA } from '#billing/plantillas_fabrica'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
-import { claveFactura, periodosDesde, periodosHasta, primerPeriodoTrasAsignacion } from '#billing/periodos'
+import {
+    claveFactura,
+    periodosDesde,
+    periodosHasta,
+    primerPeriodoTrasAsignacion,
+    sumarDias,
+} from '#billing/periodos'
 
 /**
  * Plantillas de fábrica (A3, 18 nov) e importador: sin `--plantilla`, los servicios entran con la
@@ -121,7 +127,10 @@ test.group('importacion · facturar desde (plantillas de fábrica)', () => {
                 assert.equal(s.origen, 'importacion', `servicio ${s.id} sin facturar_desde`)
                 const p = await periodosPendientes(trx, s.id, s.facturar_desde)
                 // mismo criterio que la asignación de A3 (ninguna factura importada posterior en el ejemplo)
-                assert.equal(s.facturar_desde, primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, hoy))
+                assert.equal(
+                    s.facturar_desde,
+                    primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, sumarDias(hoy, 1)),
+                )
                 assert.isTrue(s.facturar_desde! > hoy, `${s.facturar_desde} > ${hoy}`)
                 // generarFacturas no tendría nada que emitir hoy; sin facturar_desde, sí (los atrasados)
                 assert.deepEqual(p.conFiltro, [], `servicio ${s.id}`)
@@ -210,11 +219,11 @@ test.group('importacion · facturar desde (plantillas de fábrica)', () => {
             const id1001 = Number(importada.servicio_id)
 
             const p = await periodosPendientes(trx, id1001, s1001!.facturar_desde)
-            const base = primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, hoy)
+            const base = primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, sumarDias(hoy, 1))
             assert.equal(base, siguiente)
             assert.equal(
                 s1001!.facturar_desde,
-                primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, siguiente),
+                primerPeriodoTrasAsignacion(p.config, p.servicio.inicio, sumarDias(siguiente, 1)),
             )
             assert.isTrue(s1001!.facturar_desde > siguiente)
 
@@ -243,7 +252,10 @@ test.group('importacion · facturar desde (plantillas de fábrica)', () => {
             assert.isAbove(otros.length, 0)
             for (const s of otros) {
                 const q = await periodosPendientes(trx, s.id, s.facturar_desde)
-                assert.equal(s.facturar_desde, primerPeriodoTrasAsignacion(q.config, q.servicio.inicio, hoy))
+                assert.equal(
+                    s.facturar_desde,
+                    primerPeriodoTrasAsignacion(q.config, q.servicio.inicio, sumarDias(hoy, 1)),
+                )
             }
         } finally {
             await trx.rollback()

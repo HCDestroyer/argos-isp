@@ -193,6 +193,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'fiscal.editar_establecimiento': 'Establecimiento editado',
     'facturas.importar_pendiente': 'Aviso de cobro importado',
     'importacion.archivar': 'Filas del sistema anterior archivadas',
+    'importacion.fijar_facturar_desde': 'Inicio de facturación fijado al importar',
     'facturas.registrar_saldo_inicial': 'Saldo inicial registrado',
     'ipv6.crear': 'Bloque IPv6 creado',
     'ipv6.editar': 'Bloque o pool IPv6 editado',
