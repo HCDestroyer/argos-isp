@@ -1,7 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import type { ReconciliacionEstado } from '~/types/reconciliacion'
-import { diagnosticoCorte, vistaReconciliar } from './estrategias'
+import { MENSAJE_PROXY_DEVICE_MODE, diagnosticoCorte, vistaReconciliar } from './estrategias'
 import { bd, type PasoReconciliacion, type ReconciliacionFixture } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion } from '../comun'
 
@@ -213,7 +212,13 @@ export const rutasConexionRouters: RutasFixture = {
             { estado: 'en_curso', cambios: null, errores: [], error: null },
             vista.error
                 ? { estado: 'fallida', cambios: null, errores: [], error: vista.error }
-                : { estado: 'completada', cambios: vista.cambios.length + (vista.red_acceso?.length ?? 0), errores: [], error: null },
+                : {
+                        estado: 'completada',
+                        cambios: vista.cambios.length + (vista.red_acceso?.length ?? 0),
+                        // Device-mode sin proxy web (A1): lo demás se aplica y el proxy queda como error parcial.
+                        errores: bd.routersSinProxyWeb.includes(router.id) && router.corte_identificacion === 'codigo' ? [{ operacion: 'proxy_corte', mensaje: MENSAJE_PROXY_DEVICE_MODE }] : [],
+                        error: null,
+                    },
         ]
         bd.guionReconciliacion = null
         // El worker la aplica al momento en los fixtures: si termina, la vista previa y el corte quedan limpios.
@@ -225,7 +230,6 @@ export const rutasConexionRouters: RutasFixture = {
         return { status: 202, cuerpo: { router_id: router.id, job_id: trabajo.job_id, encolado } satisfies Schema<'ReconciliacionEncolada'> }
     }),
 
-    // TEMPORAL: la ruta aún no está en `packages/contracts` (`~/types/reconciliacion`).
     'GET /api/v1/routers/:id/reconciliaciones/:job_id': conPermiso('routers.reconciliar', (solicitud) => {
         const router = bd.routers.find(r => r.id === idDe(solicitud))
         if (!router) {
@@ -235,7 +239,7 @@ export const rutasConexionRouters: RutasFixture = {
         const trabajo = bd.reconciliaciones.find(r => r.router_id === router.id && r.job_id === jobId)
         if (!trabajo) {
             // La cola ya no tiene el trabajo (vencido o de otro reinicio): la API no inventa un resultado.
-            return { status: 200, cuerpo: { router_id: router.id, job_id: jobId, estado: 'desconocida', encolado_en: null, iniciado_en: null, terminado_en: null, cambios: null, errores: [], error: null } satisfies ReconciliacionEstado }
+            return { status: 200, cuerpo: { router_id: router.id, job_id: jobId, estado: 'desconocida', encolado_en: null, iniciado_en: null, terminado_en: null, cambios: null, errores: [], error: null } satisfies Schema<'ReconciliacionEstado'> }
         }
         const paso = trabajo.pasos[Math.min(trabajo.consultas, trabajo.pasos.length - 1)] ?? { estado: 'desconocida', cambios: null, errores: [], error: null }
         trabajo.consultas++
@@ -245,6 +249,6 @@ export const rutasConexionRouters: RutasFixture = {
         if (['completada', 'fallida'].includes(paso.estado) && !trabajo.terminado_en) {
             trabajo.terminado_en = ahora()
         }
-        return { status: 200, cuerpo: { router_id: router.id, job_id: trabajo.job_id, encolado_en: trabajo.encolado_en, iniciado_en: trabajo.iniciado_en, terminado_en: trabajo.terminado_en, ...paso } satisfies ReconciliacionEstado }
+        return { status: 200, cuerpo: { router_id: router.id, job_id: trabajo.job_id, encolado_en: trabajo.encolado_en, iniciado_en: trabajo.iniciado_en, terminado_en: trabajo.terminado_en, ...paso } satisfies Schema<'ReconciliacionEstado'> }
     }),
 }

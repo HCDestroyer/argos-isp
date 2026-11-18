@@ -2,7 +2,6 @@
 import type { Problem } from '@argosisp/contracts'
 import type { TableColumn } from '@nuxt/ui'
 import type { VistaPreviaReconciliar } from '~/types/controlVelocidad'
-import type { EstadoReconciliacion, ReconciliacionEstado } from '~/types/reconciliacion'
 
 /**
  * «Reconciliar ahora» con vista previa (`routers.reconciliar`, `contratos/control-velocidad.md` §9–§10):
@@ -267,9 +266,16 @@ async function reconciliar() {
                                     v-for="(fallo, indice) in erroresParciales"
                                     :key="indice"
                                     class="break-words [overflow-wrap:anywhere]"
+                                    :data-operacion="fallo.operacion"
                                     data-prueba="reconciliar-error-operacion"
                                 >
-                                    <span class="font-mono text-xs">{{ fallo.operacion }}</span> — {{ fallo.mensaje }}
+                                    <!-- `proxy_corte` (device-mode sin proxy web): el mensaje de la API ya dice qué hacer. -->
+                                    <template v-if="fallo.operacion === 'proxy_corte'">
+                                        {{ fallo.mensaje }}
+                                    </template>
+                                    <template v-else>
+                                        <span class="font-mono text-xs">{{ fallo.operacion }}</span> — {{ fallo.mensaje }}
+                                    </template>
                                 </li>
                             </ul>
                         </template>

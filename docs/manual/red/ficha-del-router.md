@@ -163,6 +163,8 @@ Al confirmar, el trabajo se encola y el worker de Argos lo aplica por la API del
 | Falló | Aviso rojo con el motivo (por ejemplo, el router no respondió) y «Reintentar» | «Reintentar» vuelve a leer el router y muestra otra vez la vista previa. |
 | Resultado desconocido | «No se pudo saber el resultado» | Revisa los eventos de red del router: ahí queda cada comando con la respuesta del equipo. |
 
+Si el router identifica por código y es RouterOS 7.17 o más nuevo, su device-mode puede no permitir el proxy web: la reconciliación termina con ese error y «Probar conexión» lo muestra en el paso «El device-mode permite el proxy web». No se arregla reconciliando: en el router ejecuta `/system/device-mode/update proxy=yes`, confírmalo antes de 5 minutos con el botón del router (o apagándolo y encendiéndolo) y luego reconcilia otra vez. Mientras tanto, Argos corta a los suspendidos de ese router como en «Identificación por IP».
+
 Si ya había una reconciliación pedida, no se encola otra: el modal lo dice y muestra en qué va esa. Puedes cerrar el modal en cualquier momento: el trabajo sigue en el worker, solo deja de mostrarse su avance. El resultado de cada comando queda siempre en los eventos de red del router.
 
 ## Avanzado

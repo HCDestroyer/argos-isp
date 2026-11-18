@@ -152,6 +152,14 @@ const resumen = computed(() => {
                                     />
                                 </span>
                             </div>
+                            <p
+                                v-if="chequeo.ok === false && tituloMotivoApi(chequeo.motivo)"
+                                class="text-sm font-medium text-error"
+                                :data-motivo="chequeo.motivo"
+                                data-prueba="motivo-chequeo"
+                            >
+                                {{ tituloMotivoApi(chequeo.motivo) }}
+                            </p>
                             <DetalleRouterOs
                                 :detalle="chequeo.detalle"
                                 :error-tecnico="errorTecnico(chequeo)"

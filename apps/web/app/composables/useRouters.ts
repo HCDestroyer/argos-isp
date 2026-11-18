@@ -1,5 +1,4 @@
 import type { Schema, paths } from '@argosisp/contracts'
-import { RUTA_ESTADO_RECONCILIACION, type ClienteReconciliaciones, type ReconciliacionEstado } from '~/types/reconciliacion'
 
 /** `Router` a secas choca con el tipo de vue-router. */
 export type RouterNas = Schema<'Router'>
@@ -27,6 +26,9 @@ export type ConexionRouter = Schema<'ConexionRouter'>
 export type PruebaConexion = Schema<'PruebaConexion'>
 export type ChequeoConexion = Schema<'ChequeoConexion'>
 export type ReconciliacionEncolada = Schema<'ReconciliacionEncolada'>
+/** `GET …/reconciliaciones/:job_id`: en qué va un trabajo de «Reconciliar ahora». */
+export type ReconciliacionEstado = Schema<'ReconciliacionEstado'>
+export type EstadoReconciliacion = ReconciliacionEstado['estado']
 export type OpcionesScript = NonNullable<paths['/api/v1/routers/{id}/script-conexion']['get']['parameters']['query']>
 /** `GET …/vista-previa-tipo-conexion` (`contratos/tipo-conexion-router.md` §3). */
 export type VistaPreviaTipoConexion = Schema<'VistaPreviaTipoConexion'>
@@ -140,9 +142,7 @@ export function useRouters() {
      * devolvió `reconciliar` (`en_espera`, `en_curso`, `completada`, `fallida` o `desconocida`).
      */
     function estadoReconciliacion(routerId: number, jobId: string): Promise<Resultado<ReconciliacionEstado>> {
-        // TEMPORAL: la ruta no está en `paths` todavía (`~/types/reconciliacion`).
-        const cliente = api as unknown as ClienteReconciliaciones
-        return resolver(cliente.GET(RUTA_ESTADO_RECONCILIACION, { params: { path: { id: routerId, job_id: jobId } } }))
+        return resolver(api.GET('/api/v1/routers/{id}/reconciliaciones/{job_id}', { params: { path: { id: routerId, job_id: jobId } } }))
     }
 
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {

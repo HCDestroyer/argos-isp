@@ -474,6 +474,10 @@ const PORTAL = 'https://portal.argos.test'
 const NAT_URL = 'http://203.0.113.10:80'
 /** `<IP del servidor en el túnel>:<PORTAL_CORTE_PUERTO>`, los valores por defecto (§5 ter.3). */
 const TUNEL_CORTE = 'http://10.255.0.1:8088'
+/** `MENSAJE_PROXY_DEVICE_MODE` de A1 (`routeros/corte_router.ts`): el texto de RouterOS 7.17+ sin proxy web. */
+export const MENSAJE_PROXY_DEVICE_MODE = 'El device-mode del router no permite el proxy web. Actívalo con /system/device-mode/update proxy=yes y confírmalo en el router (botón o apagado y encendido) dentro de 5 minutos.'
+const COMANDOS_PROXY_DEVICE_MODE = ['/system/device-mode/print', '/system/device-mode/update proxy=yes']
+const MIENTRAS_DEVICE_MODE = 'Mientras tanto Argos corta a los suspendidos de este router como en «Identificación por IP» (sin código).'
 
 /** Lo que «Reconciliar ahora» encontraría en el router, mientras no se haya reconciliado. */
 function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'] {
@@ -622,10 +626,22 @@ function chequeosIdentificacion(router: Router, reconciliado: boolean, suspendid
     if (router.corte_identificacion !== 'codigo') {
         return [ipCliente]
     }
+    // Como `chequeoDeviceMode` de A1: en modo código va siempre; sin proxy web no hay `proxy_corte`.
+    if (bd.routersSinProxyWeb.includes(router.id)) {
+        return [ipCliente, {
+            clave: 'proxy_device_mode',
+            ok: false,
+            codigo: 'proxy_device_mode',
+            detalle: `${MENSAJE_PROXY_DEVICE_MODE} Después de «update», presiona el botón del router (o apágalo y enciéndelo) antes de 5 minutos; si no, el cambio se descarta. Luego usa «Reconciliar ahora». ${MIENTRAS_DEVICE_MODE}`,
+            comandos: [...COMANDOS_PROXY_DEVICE_MODE],
+            reconciliar: false,
+        }]
+    }
+    const deviceMode: Chequeo = { clave: 'proxy_device_mode', ok: true, codigo: null, detalle: 'El device-mode del router permite el proxy web', comandos: [], reconciliar: false }
     const proxy: Chequeo = reconciliado || router.id === 2
         ? { clave: 'proxy_corte', ok: true, codigo: null, detalle: `El proxy de corte está activo (puerto 3346) y los ${suspendidos} suspendidos tienen su regla con código`, comandos: [], reconciliar: false }
         : { clave: 'proxy_corte', ok: false, codigo: 'proxy_corte', detalle: 'Identificación por código: el web proxy del router no está activo en el puerto 3346; falta la regla final del proxy (sin código). «Reconciliar ahora» lo corrige', comandos: ['/ip proxy print', '/ip proxy access print'], reconciliar: true }
-    return [ipCliente, proxy]
+    return [ipCliente, deviceMode, proxy]
 }
 
 function routerDe(solicitud: SolicitudFixture): Router | undefined {

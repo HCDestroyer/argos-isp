@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd, type PasoReconciliacion } from '~~/fixtures/bd'
+import { MENSAJE_PROXY_DEVICE_MODE } from '~~/fixtures/routers/estrategias'
 import { UApp } from '#components'
 import RouterReconciliarModal from '~/components/RouterReconciliarModal.vue'
-import type { ReconciliacionEstado } from '~/types/reconciliacion'
+import type { ReconciliacionEstado } from '~/composables/useRouters'
 import { esperar } from '../ayudas/esperar'
 
 /**
@@ -110,6 +111,21 @@ describe('reconciliar ahora: seguimiento del trabajo', () => {
             '/queue/simple argosisp:plan:2 — input does not match any value of target',
         ])
         expect(terminados).toHaveLength(1)
+    })
+
+    it('device-mode sin proxy web: el error `proxy_corte` se muestra con su mensaje tal cual', async () => {
+        const router = bd.routers.find(r => r.id === 1)!
+        router.corte_identificacion = 'codigo'
+        bd.routersSinProxyWeb = [1]
+        bd.guionReconciliacion = null
+        await abrir()
+        await confirmar()
+        await avanzar(2_000)
+        await avanzar(2_000)
+        await esperar(() => expect(enBody('reconciliar-resultado')?.dataset.estado).toBe('completada_con_errores'))
+        const fallo = document.body.querySelector<HTMLElement>('[data-prueba="reconciliar-error-operacion"][data-operacion="proxy_corte"]')
+        expect(fallo?.textContent?.trim()).toBe(MENSAJE_PROXY_DEVICE_MODE)
+        expect(enBody('reconciliar-resultado')?.textContent).toContain('lo demás sí se aplicó en el router')
     })
 
     it('fallida: muestra el error y «Reintentar» vuelve a la vista previa', async () => {
