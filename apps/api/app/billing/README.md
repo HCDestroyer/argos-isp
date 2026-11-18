@@ -275,6 +275,24 @@ Iris (chat o llamada, asistente de IA o persona) nunca registra un pago, una pro
 
 `POST /plantillas-facturacion/:id/retirar { version, motivo }` (`actions/retirar_plantilla.ts`): la plantilla sigue facturando a los servicios que ya la tienen (nada cambia para ellos; se puede seguir editando) y no se asigna a servicios nuevos ni se cambia un servicio a ella: el trigger `core.servicios_plantilla_vigente` (migración `1792829345501`) lo impide por cualquier camino (422 `restriccion`). No se retira la de por defecto (409 `plantilla_por_defecto`); una retirada responde 409 `plantilla_retirada`. Campos `retirada_en`, `retirada_por`, `motivo_retiro`; diff en `audit.cambios`; sin evento. No vuelve atrás.
 
+## Plantillas de fábrica (`plantillas_fabrica.ts`, decisión del PM del 18 nov)
+
+`database/seeders/plantillas_facturacion_seeder.ts` (lo corre `node ace db:seed`, que el servicio `migrate` ejecuta en cada actualización tras las migraciones) llama `sembrarPlantillasFabrica()`: crea por `CrearPlantilla` (actor sistema, canal `consola`, auditada) las que falten de «Genera 1 · vence 15» (`dia_fijo`, día 1, 14 de gracia), «Genera 14 · vence 29» (día 14, 15) y «Genera 1 · vence 5» (día 1, 4); el resto, los `VALORES_POR_DEFECTO`. Idempotente y con advisory lock: un nombre que ya existe no se duplica ni se modifica. «Genera 1 · vence 15» nace `por_defecto` solo si ninguna plantilla estaba marcada.
+
+## Asignar a servicios sin plantilla (`plantillas.asignar_sin_plantilla`)
+
+| Ruta                                                                                   | Qué hace                                                                                                              |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /plantillas-facturacion/:id/servicios-sin-plantilla`                              | Vista previa de solo lectura (`vistaPreviaSinPlantilla`, `asignacion_plantilla.ts`): `{ plantilla, total, por_estado, facturar_desde, muestra[] }` |
+| `POST /plantillas-facturacion/:id/asignar-servicios-sin-plantilla { total_esperado }` | `actions/asignar_plantilla_sin_plantilla.ts`, con `Idempotency-Key`                                                    |
+
+- Conjunto (`consultaSinPlantilla`): `activo`/`limitado`/`suspendido` con `plantilla_facturacion_id` null, de la empresa activa (o las del usuario) y del alcance router/zona. Nunca `retirado` ni `pendiente_instalacion`; nunca un servicio que ya tiene plantilla.
+- `total_esperado` distinto del conjunto actual → 409 `total_cambiado` sin asignar nada. Retirada → 409 `plantilla_retirada`.
+- Fila por fila: `plantilla_facturacion_id`, `version + 1`, diff en `audit.cambios` (`plantilla_facturacion_id`, `facturar_desde`). Sin evento (el catálogo no tiene uno para el cambio de plantilla).
+- **Sin facturar hacia atrás**: guarda en `billing.servicios_facturar_desde` el siguiente inicio de ciclo **después** del día de la asignación (`primerPeriodoTrasAsignacion` de `periodos.ts`, con la excepción `dia` del servicio; si su primer día facturable aún no llegó, ese día). `generarFacturas` descarta los periodos anteriores (`periodosDesde`) y `EmitirFactura` responde `motivo: antes_de_facturar_desde` si se le pide uno. El primer periodo es completo (empieza en un inicio de ciclo: sin prorrateo). Una asignación posterior solo mueve la fecha hacia adelante. Sin fila, el servicio factura como siempre.
+- Un `pendiente_instalacion` creado sin plantilla sigue sin plantilla al activarse (`servicios.activar_instalacion` no la asigna): no factura y aparece en esta vista previa.
+- Pruebas: `tests/billing/plantillas_fabrica.spec.ts`.
+
 ## Pasarela en línea (semana 2, `pasarelas/`)
 
 Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). Adaptadores: `falsa` (laboratorio) y `recurrente` (real, decisión del PM).

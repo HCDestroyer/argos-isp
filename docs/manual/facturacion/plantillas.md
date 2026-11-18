@@ -15,6 +15,7 @@ Para entender cómo se usan estas reglas en el día a día, lee [El ciclo de cob
 - **Ver:** permiso `plantillas.ver`. Lo traen los roles `admin`, `contabilidad`, `soporte` y `lectura`.
 - **Crear:** `plantillas.crear` (`admin`, `contabilidad`).
 - **Editar:** `plantillas.editar` (`admin`, `contabilidad`). Sin este permiso, el botón de cada fila es un ojo y la plantilla se abre en solo lectura.
+- **Asignar a servicios sin plantilla:** `plantillas.asignar_sin_plantilla` (`admin`, `contabilidad`).
 
 Se llega desde **Configuración → Plantillas**.
 
@@ -31,7 +32,23 @@ Una tabla con una fila por plantilla:
 
 En el teléfono, las columnas que no caben se muestran como líneas debajo del nombre.
 
-Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al menos una antes de dar de alta servicios o de importar clientes.
+Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al menos una antes de dar de alta servicios o de importar clientes. Desde la versión que trae las plantillas de fábrica esto ya no pasa: el sistema las crea solo al actualizar.
+
+## Plantillas de fábrica
+
+Al instalar o actualizar ArgosIsp, el sistema crea solo estas tres plantillas si todavía no existen:
+
+| Plantilla                | La factura sale | Vence                         |
+| ------------------------ | --------------- | ----------------------------- |
+| **Genera 1 · vence 15**  | el día 1        | el día 15 (14 días de gracia) |
+| **Genera 14 · vence 29** | el día 14       | el día 29 (15 días de gracia) |
+| **Genera 1 · vence 5**   | el día 1        | el día 5 (4 días de gracia)   |
+
+- Todo lo demás (corte con 1 factura vencida, hora de corte 08:00, sin mora, FEL al pagar, prorrateo del primer mes) es lo mismo que trae una plantilla nueva. Puedes editarlas como cualquier otra.
+- En febrero, «Genera 14 · vence 29» vence el 29 de febrero si el año es bisiesto; si no, el 1 de marzo.
+- **«Genera 1 · vence 15» queda como plantilla por defecto**, salvo que ya tuvieras otra marcada: en ese caso se respeta la tuya y la de fábrica se crea sin la estrella. Puedes marcarla después desde el formulario.
+- Si ya tenías una plantilla con alguno de esos nombres, no se duplica ni se cambia.
+- Que existan no cambia nada en tus servicios: cada uno sigue con la plantilla que tenía.
 
 ## Acciones
 
@@ -50,6 +67,19 @@ Si todavía no hay plantillas, verás «Todavía no hay plantillas»: crea al me
 ### Marcar la plantilla por defecto
 
 En el formulario, el interruptor «Plantilla por defecto». La reciben los servicios que se crean sin elegir plantilla. Solo puede haber una: marcar esta desmarca la anterior.
+
+### Asignar la plantilla a los servicios sin plantilla
+
+Sirve para los servicios que quedaron sin plantilla (por ejemplo, creados antes de que hubiera una por defecto). Mientras un servicio no tenga plantilla, **no se le factura**.
+
+- **Permiso:** `plantillas.asignar_sin_plantilla`
+- **Dónde:** en la plantilla que quieres asignar, el botón «Asignar a servicios sin plantilla».
+- **Antes de confirmar** ves cuántos servicios se van a afectar (activos, limitados y suspendidos), unos cuantos de ejemplo y **desde qué fecha se les empieza a facturar**. Solo cuentan los servicios de la empresa en la que estás trabajando y de las zonas o routers que te tocan.
+- **Qué pasa al confirmar:** esos servicios quedan con esta plantilla. Cada cambio queda en la bitácora del servicio.
+- **No se cobra nada hacia atrás.** La primera factura de cada servicio es la del **siguiente inicio de ciclo** después del día en que pulsas el botón, por el mes completo. Por ejemplo, con «Genera 1 · vence 15» asignada el 18 de noviembre, la primera factura es la del 1 de diciembre (vence el 15 de diciembre). Aunque el servicio esté instalado desde enero, no se le emite nada de enero a noviembre.
+- **No se tocan:** los servicios que ya tienen plantilla, los retirados y los pendientes de instalación. Un pendiente de instalación que se activa después sigue sin plantilla (salvo que la recibiera al venderse) y aparecerá en este conteo la próxima vez.
+- **Si el número cambió** entre que viste el conteo y pulsaste confirmar (alguien creó o retiró un servicio), no se asigna nada y vuelves a ver el conteo actualizado. Confirma de nuevo.
+- Una plantilla retirada no se puede asignar.
 
 ## Campos del formulario
 
@@ -124,6 +154,8 @@ La vigencia, como las demás reglas de promesa, se puede cambiar para un servici
 Solo se concede si el comprobante cubre todo lo vencido. Si caja lo rechaza, o vence sin revisarse, el servicio se vuelve a cortar a la hora de corte.
 
 ## Preguntas frecuentes y errores
+
+**Tengo servicios que no facturan.** Probablemente no tienen plantilla. Usa «Asignar a servicios sin plantilla» en la plantilla que corresponda: empiezan a facturar desde el siguiente ciclo, sin cobros atrasados.
 
 **¿Puedo borrar una plantilla?** No. Un servicio siempre tiene su plantilla, así que las plantillas no se borran.
 

@@ -3,7 +3,8 @@ import db from '@adonisjs/lucid/services/db'
 import type { ContextoAccion } from '#shared/contexto'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, inicioFacturacionSql } from '#billing/configuracion'
-import { claveFactura, periodosHasta } from '#billing/periodos'
+import { claveFactura, periodosDesde, periodosHasta } from '#billing/periodos'
+import { facturarDesdeSql } from '#billing/asignacion_plantilla'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { empresasDelProceso } from '#billing/empresa'
@@ -18,6 +19,8 @@ import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#b
  * calcula sus periodos desde el primer día facturable (`inicioFacturacionSql`: el día de
  * `instalado_en` si se activó desde pendiente; si no, la instalación o el alta) y llama `EmitirFactura` (una transacción
  * auditada por factura) para cada periodo ya iniciado que no tenga factura con su `clave_unica`.
+ * Un servicio que recibió plantilla por `plantillas.asignar_sin_plantilla` solo factura desde su
+ * `facturar_desde` (`billing.servicios_facturar_desde`): nada hacia atrás.
  * Correrla dos veces no duplica nada. Un servicio que falla no detiene la corrida: se cuenta en
  * `errores` y se registra en el log.
  *
@@ -59,6 +62,11 @@ interface FilaCandidato {
     plantilla_facturacion_id: number
     /** primer día facturable (`inicioFacturacionSql`) */
     inicio: string
+    /**
+     * primer periodo que se puede facturar si recibió plantilla por `plantillas.asignar_sin_plantilla`
+     * (`billing.servicios_facturar_desde`); null = desde `inicio`, como siempre
+     */
+    facturar_desde: string | null
 }
 
 export default class GenerarFacturas {
@@ -101,6 +109,7 @@ export default class GenerarFacturas {
                     'empresa_id',
                     'plantilla_facturacion_id',
                     db.raw(`to_char(${inicioFacturacionSql('core.servicios')}, 'YYYY-MM-DD') as inicio`),
+                    db.raw(`${facturarDesdeSql('core.servicios')} as facturar_desde`),
                 )) as FilaCandidato[]
             if (lote.length === 0) break
             cursor = lote.at(-1)!.id
@@ -163,7 +172,8 @@ export default class GenerarFacturas {
             plantilla_id: servicio.plantilla_facturacion_id,
         })
         if (!config) return
-        const periodos = periodosHasta(config, servicio.inicio, hasta)
+        // sin facturar hacia atrás: lo anterior a `facturar_desde` nunca se emite
+        const periodos = periodosDesde(periodosHasta(config, servicio.inicio, hasta), servicio.facturar_desde)
         for (const periodo of periodos) {
             if (existentes.has(claveFactura(servicio.id, periodo.periodo))) {
                 resultado.omitidas += 1

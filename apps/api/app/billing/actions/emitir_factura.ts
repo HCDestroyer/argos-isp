@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { facturarDesdeDe } from '#billing/asignacion_plantilla'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { aTexto, dec } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
@@ -74,7 +75,7 @@ export interface ResultadoEmitirFactura {
     /** el periodo quedó en cero y se registró como bonificación (nunca una factura de Q0) */
     bonificacion_id?: number | null
     creada: boolean
-    /** por qué no se creó (ya existía, sin plantilla, retirado, pendiente de instalación, monto cero) */
+    /** por qué no se creó (ya existía, sin plantilla, retirado, pendiente de instalación, monto cero, antes de `facturar_desde`) */
     motivo: string | null
 }
 
@@ -114,6 +115,11 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) return { factura_id: null, creada: false, motivo: 'sin_plantilla' }
+        // asignada por `plantillas.asignar_sin_plantilla`: nunca un periodo anterior a `facturar_desde`
+        const desde = await facturarDesdeDe(t.trx, servicio.id)
+        if (desde && input.periodo.periodo < desde) {
+            return { factura_id: null, creada: false, motivo: 'antes_de_facturar_desde' }
+        }
 
         const { periodo, fin, dias, dias_ciclo: diasCiclo } = input.periodo
         const factor = dec(input.periodo.factor)

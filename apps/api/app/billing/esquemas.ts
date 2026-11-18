@@ -137,6 +137,63 @@ export const PlantillaFacturacion = definirEsquema(
     ),
 )
 
+const porEstadoSinPlantilla = objeto({ activo: entero, limitado: entero, suspendido: entero })
+
+export const ServicioSinPlantilla = definirEsquema(
+    'ServicioSinPlantilla',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        empresa_id: id,
+        estado: enumerado(['activo', 'limitado', 'suspendido']),
+        user_ppp: nulable(texto),
+        plan_nombre: texto,
+        facturar_desde: {
+            ...fecha,
+            description:
+                'Primer periodo que se le facturaría con esta plantilla si se asigna hoy: el siguiente inicio de ciclo (nada hacia atrás)',
+        },
+    }),
+)
+
+export const VistaPreviaSinPlantilla = definirEsquema(
+    'VistaPreviaSinPlantilla',
+    objeto({
+        plantilla: objeto({
+            id,
+            nombre: texto,
+            ciclo: enumerado(['dia_fijo', 'aniversario']),
+            dia: nulable(entero),
+        }),
+        total: {
+            ...entero,
+            description:
+                'Servicios activo/limitado/suspendido sin plantilla de la empresa activa y el alcance; va como total_esperado al asignar',
+        },
+        por_estado: porEstadoSinPlantilla,
+        facturar_desde: {
+            ...nulable(fecha),
+            description:
+                'Primer periodo a facturar con la plantilla sin excepciones (dia_fijo); null en aniversario (ver muestra[].facturar_desde)',
+        },
+        muestra: { ...lista(ServicioSinPlantilla), description: 'Hasta 20 servicios, por id' },
+    }),
+)
+
+export const AsignacionSinPlantilla = definirEsquema(
+    'AsignacionSinPlantilla',
+    objeto({
+        plantilla_id: id,
+        asignados: entero,
+        por_estado: porEstadoSinPlantilla,
+        facturar_desde: {
+            ...lista(fecha),
+            description: 'Primeros periodos que se facturarán (distintos, ascendentes)',
+        },
+    }),
+)
+
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
     enumerado([
