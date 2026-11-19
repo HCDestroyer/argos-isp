@@ -230,6 +230,11 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     tipo?: TipoPlan
     /** sin los servicios `retirado` (contrato Iris 0.8.0) */
     excluir_retirados?: boolean
+    /**
+     * false: `q` busca solo por el nombre del cliente, sin IPv4, prefijo IPv6 ni user_ppp. Por
+     * defecto true (contrato Iris 0.8.1).
+     */
+    buscar_red?: boolean
 }
 
 /**
@@ -275,7 +280,8 @@ export async function listarServicios(
     }
     if (filtros.q) {
         const texto = filtros.q.trim()
-        if (isIP(texto)) {
+        const buscarRed = filtros.buscar_red ?? true
+        if (buscarRed && isIP(texto)) {
             consulta.where((w) =>
                 w
                     .whereExists((a) =>
@@ -295,16 +301,15 @@ export async function listarServicios(
             )
         } else {
             const patron = `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-            consulta.where((w) =>
-                w
-                    .whereILike('s.user_ppp', patron)
-                    .orWhereExists((c) =>
-                        c
-                            .from('core.clientes as c_q')
-                            .whereRaw('c_q.id = s.cliente_id')
-                            .whereILike('c_q.nombre', patron),
-                    ),
-            )
+            consulta.where((w) => {
+                if (buscarRed) w.orWhereILike('s.user_ppp', patron)
+                w.orWhereExists((c) =>
+                    c
+                        .from('core.clientes as c_q')
+                        .whereRaw('c_q.id = s.cliente_id')
+                        .whereILike('c_q.nombre', patron),
+                )
+            })
         }
     }
     filtrarPorAlcance(consulta, alcance, dimensionesServicio)

@@ -8477,6 +8477,16 @@
             }
           },
           {
+            "name": "buscar_red",
+            "in": "query",
+            "required": false,
+            "description": "false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo nombre, código, nombre fiscal, NIT/CUI, teléfono, móvil y correo. Por defecto true (contrato Iris 0.8.1)",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
             "name": "zona_id",
             "in": "query",
             "required": false,
@@ -73232,6 +73242,16 @@
             "schema": {
               "type": "string",
               "maxLength": 100
+            }
+          },
+          {
+            "name": "buscar_red",
+            "in": "query",
+            "required": false,
+            "description": "false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo por el nombre del cliente. Por defecto true (contrato Iris 0.8.1)",
+            "schema": {
+              "default": true,
+              "type": "boolean"
             }
           },
           {

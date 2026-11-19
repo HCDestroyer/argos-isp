@@ -177,6 +177,15 @@ export const listarClientesValidator = vine.compile(
             .maxLength(100)
             .optional()
             .meta({ description: 'Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP' }),
+        buscar_red: vine
+            .boolean()
+            .optional()
+            .meta({
+                description:
+                    'false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo nombre, código, ' +
+                    'nombre fiscal, NIT/CUI, teléfono, móvil y correo. Por defecto true (contrato Iris 0.8.1)',
+                default: true,
+            }),
         zona_id: idEntidad().optional(),
         estado_servicio: vine
             .enum(ESTADOS_SERVICIO)
@@ -541,6 +550,15 @@ export const listarServiciosValidator = vine.compile(
             .maxLength(100)
             .optional()
             .meta({ description: 'user_ppp, IP o nombre del cliente' }),
+        buscar_red: vine
+            .boolean()
+            .optional()
+            .meta({
+                description:
+                    'false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo por el nombre ' +
+                    'del cliente. Por defecto true (contrato Iris 0.8.1)',
+                default: true,
+            }),
         cliente_id: idEntidad().optional(),
         router_id: idEntidad().optional(),
         plan_id: idEntidad().optional(),

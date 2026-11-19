@@ -129,6 +129,8 @@ done
 
 `q` busca por nombre, código, NIT/CUI, teléfono, `user_ppp` o IP. La misma forma sirve para `/servicios`, `/facturas`, `/pagos` y el resto de listas.
 
+En `/clientes` y `/servicios`, `buscar_red=false` hace que `q` no coincida por datos de red (IPv4, prefijo IPv6, `user_ppp`): sirve para integraciones que ocultan la red a quien no tiene permiso para verla. Por defecto es `true`.
+
 ## Suspender y reactivar un servicio
 
 Permisos `servicios.suspender` y `servicios.reactivar`. El motivo es obligatorio (3 a 500 caracteres).
