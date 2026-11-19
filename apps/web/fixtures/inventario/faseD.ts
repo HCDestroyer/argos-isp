@@ -543,14 +543,31 @@ function tipoEditable(solicitud: SolicitudFixture): TipoProducto | RespuestaFixt
 
 /* Configuración */
 
-function configuracionDe(solicitud: SolicitudFixture): Schema<'ConfiguracionInventario'> {
-    const empresaId = empresaActivaDe(solicitud) ?? 1
+/**
+ * Empresa de la configuración como el middleware `empresa` de la API: `X-Empresa-Id` o la única del
+ * usuario. Con «Todas las empresas» (sin cabecera y con varias) no hay: la API responde 422
+ * `empresa_requerida`.
+ */
+function empresaDeConfiguracion(solicitud: SolicitudFixture): number | null {
+    const activa = empresaActivaDe(solicitud)
+    if (activa !== null) {
+        return activa
+    }
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    const suyas = usuario?.empresas ?? []
+    return suyas.length === 1 ? suyas[0]?.id ?? null : null
+}
+
+const EMPRESA_REQUERIDA_CONFIGURACION = 'La firma al recibir traslados se configura por empresa: elige una empresa en el selector o indica empresa_id'
+
+function configuracionDe(empresaId: number): Schema<'ConfiguracionInventario'> {
     return bd.inventarioFaseD.configuracion.find(c => c.empresa_id === empresaId) ?? { empresa_id: empresaId, traslado_firma_obligatoria: true, version: 0 }
 }
 
+/** Como `GET /inventario/ia/configuracion`: la de la empresa o, sin ella, la global; `?global=true` o sin empresa, la global. */
 function iaDe(solicitud: SolicitudFixture): Schema<'ConfiguracionIa'> | undefined {
-    const empresaId = empresaActivaDe(solicitud) ?? 1
-    return bd.inventarioFaseD.ia.find(c => c.empresa_id === empresaId) ?? bd.inventarioFaseD.ia.find(c => c.empresa_id === null)
+    const empresaId = solicitud.query.get('global') === 'true' ? null : empresaDeConfiguracion(solicitud)
+    return (empresaId === null ? undefined : bd.inventarioFaseD.ia.find(c => c.empresa_id === empresaId)) ?? bd.inventarioFaseD.ia.find(c => c.empresa_id === null)
 }
 
 /* Mi bodega (D.6) */
@@ -856,10 +873,17 @@ export const rutasInventarioFaseD: RutasFixture = {
     }),
 
     /* Configuración */
-    'GET /api/v1/inventario/configuracion': conPermiso('inventario.ver', solicitud => ({ status: 200, cuerpo: configuracionDe(solicitud) })),
+    'GET /api/v1/inventario/configuracion': conPermiso('inventario.ver', (solicitud) => {
+        const empresaId = empresaDeConfiguracion(solicitud)
+        return empresaId === null ? problemaTipado(422, 'empresa_requerida', 'Empresa requerida', EMPRESA_REQUERIDA_CONFIGURACION) : { status: 200, cuerpo: configuracionDe(empresaId) }
+    }),
     'POST /api/v1/inventario/configuracion': conPermiso('inventario.configurar', conIdempotencia((solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
-        const actual = configuracionDe(solicitud)
+        const empresaId = empresaDeConfiguracion(solicitud)
+        if (empresaId === null) {
+            return problemaTipado(422, 'empresa_requerida', 'Empresa requerida', EMPRESA_REQUERIDA_CONFIGURACION)
+        }
+        const actual = configuracionDe(empresaId)
         if (typeof cuerpo.traslado_firma_obligatoria !== 'boolean') {
             return datosInvalidos([{ field: 'traslado_firma_obligatoria', message: 'Sí o no', rule: 'boolean' }])
         }
@@ -877,7 +901,10 @@ export const rutasInventarioFaseD: RutasFixture = {
     }),
     'POST /api/v1/inventario/ia/configuracion': conPermiso('inventario.configurar_ia', conIdempotencia((solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
-        const empresaId = cuerpo.global === true ? null : (empresaActivaDe(solicitud) ?? 1)
+        const empresaId = cuerpo.global === true ? null : empresaDeConfiguracion(solicitud)
+        if (cuerpo.global !== true && empresaId === null) {
+            return problemaTipado(422, 'empresa_requerida', 'Empresa requerida', 'Elige una empresa en el selector, o guarda la configuración global (global: true)')
+        }
         if (empresaId === null && usuarioDe(solicitud)?.alcance_global !== true) {
             return sinAlcance('La IA global solo se configura con alcance global')
         }

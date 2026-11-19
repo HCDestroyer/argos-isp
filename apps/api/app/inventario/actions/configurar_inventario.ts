@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { ConflictoVersion, ValidacionFallida } from '#shared/errores'
+import { EmpresaRequerida, exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { ConflictoVersion } from '#shared/errores'
 import { configuracionInventario, type ConfiguracionInventario } from '#inventario/ordenes_traslado'
 
 /**
@@ -8,6 +8,10 @@ import { configuracionInventario, type ConfiguracionInventario } from '#inventar
  * la configuración del inventario de una empresa (`traslado_firma_obligatoria`). Sin fila, los valores
  * por defecto (`version` 0): la primera vez se manda `version: 0`. Con `audit.cambios`.
  */
+
+/** 422 `empresa_requerida` sin empresa activa («Todas las empresas»): la firma es de cada empresa. */
+export const DETALLE_EMPRESA_CONFIGURACION =
+    'La firma al recibir traslados se configura por empresa: elige una empresa en el selector o indica empresa_id'
 
 export interface EntradaConfigurarInventario {
     empresa_id?: number | null
@@ -26,11 +30,7 @@ export default class ConfigurarInventario extends DomainAction<
         t: Transaccion,
     ): Promise<ConfiguracionInventario> {
         const empresaId = input.empresa_id ?? t.ctx.empresaId ?? null
-        if (!empresaId) {
-            throw new ValidacionFallida([
-                { field: 'empresa_id', message: 'Indica la empresa', rule: 'required' },
-            ])
-        }
+        if (!empresaId) throw new EmpresaRequerida(DETALLE_EMPRESA_CONFIGURACION)
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3073, empresaId])

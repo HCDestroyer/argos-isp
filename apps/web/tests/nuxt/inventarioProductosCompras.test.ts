@@ -167,4 +167,36 @@ describe('configuración del inventario', () => {
         const cambiado = await config.guardar(false, 1, clave())
         expect(cambiado.ok && cambiado.data).toEqual({ empresa_id: 1, traslado_firma_obligatoria: false, version: 2 })
     })
+
+    it('con «Todas las empresas»: la firma pide elegir empresa (no «Error interno») y la IA es la global', async () => {
+        useEmpresaActiva().elegir('todas')
+        const config = useConfiguracionInventario()
+        const firma = await config.ver()
+        expect(!firma.ok && [firma.problema.status, codigoProblema(firma.problema)]).toEqual([422, 'empresa_requerida'])
+        const sinEmpresa = await config.guardarIa({ proveedor: 'anthropic', modelo: 'claude-opus-5-5', activo: true, version: 0 }, clave())
+        expect(!sinEmpresa.ok && codigoProblema(sinEmpresa.problema)).toBe('empresa_requerida')
+
+        const pagina = await mountSuspended(conApp(PaginaConfiguracion))
+        await esperar(() => expect(pagina.find('[data-prueba="config-firma-elige-empresa"]').text()).toContain('Elige una empresa'))
+        expect(pagina.find('[data-prueba="config-firma-obligatoria"]').exists()).toBe(false)
+        expect(pagina.text()).not.toContain('Error')
+        await esperar(() => expect(pagina.find('[data-prueba="config-ia-global"]').exists()).toBe(true))
+        await pagina.find('[data-prueba="config-ia-guardar"]').trigger('submit')
+        await esperar(() => expect(bd.inventarioFaseD.ia.find(c => c.empresa_id === null)?.modelo).toBe(PROVEEDORES_IA.anthropic.modelo))
+        expect(bd.inventarioFaseD.ia.some(c => c.empresa_id !== null)).toBe(false)
+        const global = await config.verIa(true)
+        expect(global.ok && global.data.empresa_id).toBeNull()
+    })
+
+    it('un 409 al guardar la firma se explica en palabras simples y relee la versión', async () => {
+        const pagina = await mountSuspended(conApp(PaginaConfiguracion))
+        await esperar(() => expect(pagina.find('[data-prueba="config-firma-obligatoria"]').exists()).toBe(true))
+        // otra persona la cambió mientras la pantalla estaba abierta
+        const actual = bd.inventarioFaseD.configuracion.find(c => c.empresa_id === 1)?.version ?? 0
+        const otra = await useConfiguracionInventario().guardar(false, actual, clave())
+        expect(otra.ok).toBe(true)
+        await pagina.find('[role="switch"]').trigger('click')
+        await esperar(() => expect(pagina.text()).toContain('Alguien más cambió esta configuración'))
+        expect(pagina.text()).toContain('Se permite la aceptación simple')
+    })
 })
