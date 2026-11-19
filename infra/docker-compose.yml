@@ -98,7 +98,7 @@ x-api-env: &api-env
   # producción no hay valores por defecto (infra/produccion/.env.example). Sin ellos, 422 servicio_incompleto.
   ROUTERS_MIKROTIK_DIR: ${ROUTERS_MIKROTIK_DIR:-/app/mikrotik}
   ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
-  ROUTERS_SERVICIO_SUSP_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+  ROUTERS_SERVICIO_SUSP_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-2M/2M}
   ROUTERS_SERVICIO_WAN_INTERFAZ: ${ROUTERS_SERVICIO_WAN_INTERFAZ:-ether1}
   # Sin valor por defecto: el ppp_local_v4 del script sale del gateway de las redes del router
   # (contratos/red-acceso.md §3). Solo la lee aún el corte (argos-dns, routeros/corte_router.ts).
@@ -447,7 +447,7 @@ services:
       ROUTEROS_TIMEOUT_MS: ${ROUTEROS_TIMEOUT_MS:-5000}
       ROUTEROS_REINTENTOS: ${ROUTEROS_REINTENTOS:-3}
       ROUTEROS_ESPERA_MS: ${ROUTEROS_ESPERA_MS:-500}
-      ROUTEROS_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      ROUTEROS_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-2M/2M}
       ROUTEROS_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
       ROUTEROS_DHCP_SERVIDOR: ${ROUTEROS_DHCP_SERVIDOR:-all}
@@ -593,7 +593,7 @@ services:
       # Misma clave que el servicio api (cifra pass_ppp y radius_secret, formato v1).
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}
       # Perfil de suspendido (verificado en RouterOS 7.24.5, ver infra/mikrotik/README.md)
-      AAA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      AAA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-2M/2M}
       AAA_SUSPENDIDO_GRUPO: ${AAA_SUSPENDIDO_GRUPO:-suspendido}
       AAA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
@@ -669,7 +669,7 @@ services:
       COA_REINTENTOS: ${COA_REINTENTOS:-3}
       # IP de origen de los CoA: la que el router tiene en /radius (túnel WireGuard o LAN)
       COA_ORIGEN_IP: ${COA_ORIGEN_IP:-}
-      COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-2M/2M}
       COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
       COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
       # Suspender sesiones con IPv6: coa (sin reconectar; IPv6 bloqueado con reset) o disconnect
