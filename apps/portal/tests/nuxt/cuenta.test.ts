@@ -108,7 +108,8 @@ describe('portal autenticado /cuenta', () => {
 describe('entrada con código /entrar', () => {
     it('pide código por NIT y entra con el código correcto', async () => {
         fijarSesionFixture(false)
-        const wrapper = await mountSuspended(PaginaEntrar)
+        window.history.replaceState({}, '', '/entrar?con=codigo')
+        const wrapper = await mountSuspended(PaginaEntrar, { route: '/entrar?con=codigo' })
         await wrapper.find('input').setValue('5769373-1')
         await wrapper.find('form').trigger('submit')
         await flushPromises()
@@ -126,7 +127,8 @@ describe('entrada con código /entrar', () => {
     })
 
     it('código incorrecto muestra el error de la API y no entra', async () => {
-        const wrapper = await mountSuspended(PaginaEntrar)
+        window.history.replaceState({}, '', '/entrar?con=codigo')
+        const wrapper = await mountSuspended(PaginaEntrar, { route: '/entrar?con=codigo' })
         await wrapper.find('input').setValue('5769373-1')
         await wrapper.find('form').trigger('submit')
         await flushPromises()

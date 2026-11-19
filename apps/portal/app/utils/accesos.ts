@@ -13,7 +13,7 @@ import type { RouteLocationRaw } from 'vue-router'
  * | Subir comprobante | hay cuentas de depósito y el servicio no está retirado | `RegistrarComprobante` exige la cuenta de destino |
  * | Datos de depósito | hay cuentas o instrucciones de pago | si no, el modal no tendría nada que mostrar |
  * | Prometer pago | `GET /portal/promesas/condiciones` dice `disponible` y sin pago previo | la API rechaza (409/422) fuera de esas condiciones |
- * | Facturas | siempre (con sesión: la sección; por IP: entrar con el código) | |
+ * | Facturas / Ver mi cuenta | siempre (con sesión: la sección; por IP: «Ver mi cuenta» abre la sesión del servicio identificado, `POST /portal/corte/sesion`) | |
  * | Vincular Telegram | con sesión, bot configurado (`disponible`) y aún sin vincular | |
  * | Contactar soporte | siempre | |
  *
@@ -36,8 +36,11 @@ export interface AccesoRapido {
     alcance: 'empresa' | 'cliente'
     /** Navega a esta ruta (enlace real: funciona con clic central, lector de pantalla y sin JS). */
     to?: RouteLocationRaw | string
-    /** O abre algo en la misma página (modal de promesa, comprobante, depósito, pago). */
-    accion?: 'pagar' | 'comprobante' | 'deposito' | 'promesa'
+    /**
+     * O abre algo en la misma página (modal de promesa, comprobante, depósito, pago), o `cuenta`:
+     * «Ver mi cuenta» de `/corte`, que abre la sesión del servicio identificado sin pedir nada.
+     */
+    accion?: 'pagar' | 'comprobante' | 'deposito' | 'promesa' | 'cuenta'
     externo?: boolean
 }
 
@@ -132,11 +135,11 @@ export function accesosRapidos(entrada: EntradaAccesos): AccesoRapido[] {
             }
         : {
                 id: 'facturas',
-                titulo: 'Mis facturas y pagos',
-                descripcion: 'Te enviamos un código para entrar',
-                icono: 'i-lucide-receipt',
+                titulo: 'Ver mi cuenta',
+                descripcion: 'Facturas, pagos y tus datos',
+                icono: 'i-lucide-user-round',
                 alcance: 'empresa',
-                to: '/entrar?por_ip=1',
+                accion: 'cuenta',
             })
     if (entrada.modo === 'sesion' && entrada.telegram?.disponible && !entrada.telegram.vinculado) {
         accesos.push({

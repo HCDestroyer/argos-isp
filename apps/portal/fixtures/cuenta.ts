@@ -25,7 +25,16 @@ export const SESION_FIXTURE: Schema<'PortalSesion'> = {
     cliente: { nombre_parcial: 'Juan P.' },
     expira_en: '2026-10-20T15:30:00.000Z',
     empresa_principal: MARCA_FIXTURE,
+    origen: 'codigo',
+    debe_cambiar_contrasena: false,
 }
+
+/** Documento del cliente de fixtures (`CONTACTO_FIXTURE.nit_cui`), para entrar con contraseña. */
+export const DOCUMENTO_FIXTURE = '12345679'
+/** Contraseña por defecto de la empresa en fixtures: entra y pide cambiarla. */
+export const CONTRASENA_DEFECTO_FIXTURE = 'Bienvenido2026'
+/** Contraseña propia del cliente en fixtures (hasta que la cambie). */
+export const CONTRASENA_PROPIA_FIXTURE = 'MiClave2026'
 
 export const CONTACTO_FIXTURE: Schema<'PortalContacto'> = {
     nombre: 'Juan Pérez López',

@@ -151,7 +151,7 @@ describe('/corte cuando la API no responde', () => {
 })
 
 describe('/corte con una IP que no se identifica', () => {
-    it('sin montos ni acciones de un servicio: entrar con NIT o usuario, depósito y contacto', async () => {
+    it('sin montos ni acciones de un servicio: entrar a la cuenta, depósito y contacto', async () => {
         const wrapper = await montarCorte('desconocido')
         expect(wrapper.text()).toContain('No pudimos identificar tu servicio')
         expect(wrapper.find('[data-testid="monto-adeudado"]').exists()).toBe(false)
@@ -161,7 +161,7 @@ describe('/corte con una IP que no se identifica', () => {
         for (const accion of ['Pagar en línea', 'Subir comprobante', 'Prometer pago', 'Mis facturas']) {
             expect(boton(wrapper, accion), accion).toBeUndefined()
         }
-        const entrar = boton(wrapper, 'Entrar con mi NIT o usuario')
+        const entrar = boton(wrapper, 'Entrar a mi cuenta')
         expect(entrar?.attributes('href')).toBe('/entrar')
         expect(boton(wrapper, 'Ver datos de depósito')).toBeDefined()
         expect(boton(wrapper, 'Llamar al 7765-4321')).toBeDefined()
