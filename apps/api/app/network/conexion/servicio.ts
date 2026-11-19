@@ -1,5 +1,6 @@
 import { ReglaNegocio, type ErrorCampo } from '#shared/errores'
 import { dnsDeDocumentacion } from '#network/conexion/dns'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 import type { RouterVista } from '#network/consultas/routers'
 
 /**
@@ -14,7 +15,7 @@ import type { RouterVista } from '#network/consultas/routers'
  *   `servicio_incompleto` (con varios gateways el `local-address` lo pone Argos por servidor PPPoE);
  * - `pppoe_interfaz`: `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES`;
  * - `susp_rate_limit`: `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` o `ROUTEROS_SUSPENDIDO_RATE_LIMIT`
- *   (256k/256k, el del perfil de corte);
+ *   (`RATE_LIMIT_SUSPENDIDO_DEFECTO`, 2M/2M, el del perfil de corte);
  * - `clientes_v6`, `walled_garden`, `dns_v4` y `dns_v6` pueden quedar vacíos. Sin `dns_v4` el script
  *   **no toca** los `servers` del DNS del router (usa los que ya tiene, más los dinámicos de la WAN) y
  *   solo asegura `allow-remote-requests=yes`, cerrado desde la WAN (`infra/mikrotik/README.md`, «DNS
@@ -132,7 +133,7 @@ export function valoresServicio(
             valor = router.interfaz_clientes ?? valor ?? leer('ROUTEROS_INTERFAZ_CLIENTES')
         }
         if (nombre === 'susp_rate_limit') {
-            valor = valor ?? leer('ROUTEROS_SUSPENDIDO_RATE_LIMIT') ?? '256k/256k'
+            valor = valor ?? leer('ROUTEROS_SUSPENDIDO_RATE_LIMIT') ?? RATE_LIMIT_SUSPENDIDO_DEFECTO
         }
         if (valor === null && PUEDEN_QUEDAR_VACIAS.has(nombre)) valor = ''
         if (valor === null) {

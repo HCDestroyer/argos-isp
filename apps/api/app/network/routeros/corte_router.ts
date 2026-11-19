@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import { isIPv4, isIPv6 } from 'node:net'
 import type { ObjetoRouterOS, Propiedades, RutaOrdenada, RutaRouterOS } from '#network/routeros/cliente'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 import { PERFIL_PPP_BASE, PROPIEDADES_PERFIL_BASE } from '#network/routeros/velocidad_router'
 import { esIpDocumentacion } from '#network/conexion/dns'
 
@@ -147,7 +148,8 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env, portal?: P
         clientes_v4: separar(leer('CLIENTES_V4')),
         clientes_v6: separar(leer('CLIENTES_V6')),
         susp_rate_limit:
-            leer('SUSP_RATE_LIMIT') ?? entorno.ROUTEROS_SUSPENDIDO_RATE_LIMIT?.trim() ?? '256k/256k',
+            leer('SUSP_RATE_LIMIT') ??
+            (entorno.ROUTEROS_SUSPENDIDO_RATE_LIMIT?.trim() || RATE_LIMIT_SUSPENDIDO_DEFECTO),
         address_list: entorno.ROUTEROS_SUSPENDIDO_ADDRESS_LIST?.trim() || 'suspendidos',
         perfil: entorno.AAA_SUSPENDIDO_GRUPO?.trim() || 'suspendido',
     }
