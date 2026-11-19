@@ -14,7 +14,8 @@ import type { COINCIDENCIAS_TELEFONO } from '#core/telefonos'
  * Lecturas de clientes y zonas. `buscarClientes` busca por nombre, código (`C-000455`) o código
  * externo (exactos), nombre fiscal, NIT/CUI,
  * teléfono o móvil, correo, user_ppp de alguno de sus servicios o una IP (IPv4 vigente o IPv6
- * dentro de un prefijo vigente).
+ * dentro de un prefijo vigente). Con `buscar_red=false` (contrato Iris 0.8.1) no compara contra
+ * datos de red: ni IPv4, ni prefijos IPv6, ni user_ppp.
  */
 
 export const COLUMNAS_CLIENTE = [
@@ -103,6 +104,11 @@ export interface FiltrosClientes extends OpcionesPaginacion {
      * Cada fila trae además `coincide_en[]`.
      */
     telefono?: string
+    /**
+     * false: `q` no coincide por datos de red del servicio (IPv4, prefijo IPv6, user_ppp). Por
+     * defecto true, el comportamiento de siempre (contrato Iris 0.8.1).
+     */
+    buscar_red?: boolean
 }
 
 /** Opciones de lectura que no son filtros del usuario. */
@@ -191,11 +197,17 @@ function escaparLike(texto: string): string {
 /** Búsqueda con forma de teléfono: `5512-3344`, `+502 7777 6655`, `(502) 2233.4455`. */
 const PARECE_TELEFONO = /^\+?[\d\s().-]+$/
 
-function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string, sinDocumento = false) {
+function aplicarBusqueda(
+    consulta: DatabaseQueryBuilderContract<any>,
+    q: string,
+    sinDocumento = false,
+    buscarRed = true,
+) {
     const texto = q.trim()
     if (texto === '') return
+    const esIp = isIP(texto) !== 0
 
-    if (isIP(texto)) {
+    if (esIp && buscarRed) {
         consulta.whereExists((s) =>
             s
                 .from('core.servicios as s_ip')
@@ -231,16 +243,19 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string,
             .orWhereILike('c.nombre_fiscal', patron)
             .orWhereILike('c.email', patron)
         if (!sinDocumento) w.orWhere('c.nit_cui', nit)
-        w.orWhereExists((s) =>
-            s
-                .from('core.servicios as s_q')
-                .whereRaw('s_q.cliente_id = c.id')
-                .whereILike('s_q.user_ppp', patron),
-        )
+        if (buscarRed) {
+            w.orWhereExists((s) =>
+                s
+                    .from('core.servicios as s_q')
+                    .whereRaw('s_q.cliente_id = c.id')
+                    .whereILike('s_q.user_ppp', patron),
+            )
+        }
         // Teléfono solo si la búsqueda tiene forma de teléfono (dígitos, espacios, guiones, `+`,
         // paréntesis o puntos). Con texto mezclado («Pagina1234abcd», un código, un correo) sus
         // dígitos sueltos encontraban clientes ajenos por su teléfono.
-        if (digitos.length >= 4 && PARECE_TELEFONO.test(texto)) {
+        // Una IP (`buscar_red=false`) no es un teléfono aunque tenga dígitos y puntos.
+        if (!esIp && digitos.length >= 4 && PARECE_TELEFONO.test(texto)) {
             // teléfonos guardados con espacios o guiones: se comparan solo los dígitos
             const tel = `%${digitos}%`
             w.orWhereRaw(`regexp_replace(coalesce(c.telefono, ''), '\\D', '', 'g') LIKE ?`, [tel]).orWhereRaw(
@@ -307,7 +322,7 @@ export async function buscarClientes(
     if (filtros.zona_id) consulta.where('c.zona_id', filtros.zona_id)
     if (filtros.responsable_pago_id) consulta.where('c.responsable_pago_id', filtros.responsable_pago_id)
     if (filtros.nit_cui_invalido !== undefined) consulta.where('c.nit_cui_invalido', filtros.nit_cui_invalido)
-    if (filtros.q) aplicarBusqueda(consulta, filtros.q, opciones.sinDocumento)
+    if (filtros.q) aplicarBusqueda(consulta, filtros.q, opciones.sinDocumento, filtros.buscar_red ?? true)
     if (filtros.telefono) aplicarTelefono(consulta, filtros.telefono, empresas)
     aplicarFiltrosAvanzados(consulta, filtros)
     filtrarPorAlcance(consulta, alcance, dimensionesCliente)

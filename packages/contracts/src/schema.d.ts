@@ -26174,6 +26174,8 @@ export interface operations {
                 empresas?: "todas";
                 /** @description Busca por nombre, código, NIT/CUI, teléfono, user_ppp o IP */
                 q?: string;
+                /** @description false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo nombre, código, nombre fiscal, NIT/CUI, teléfono, móvil y correo. Por defecto true (contrato Iris 0.8.1) */
+                buscar_red?: boolean;
                 zona_id?: number;
                 /** @description Clientes con al menos un servicio en este estado */
                 estado_servicio?: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
@@ -60448,6 +60450,8 @@ export interface operations {
                 empresas?: "todas";
                 /** @description user_ppp, IP o nombre del cliente */
                 q?: string;
+                /** @description false: `q` no coincide por datos de red (IPv4, prefijo IPv6, user_ppp); solo por el nombre del cliente. Por defecto true (contrato Iris 0.8.1) */
+                buscar_red?: boolean;
                 cliente_id?: number;
                 router_id?: number;
                 plan_id?: number;
