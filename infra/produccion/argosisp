@@ -319,6 +319,16 @@ avisos_dns() {
     echo "AVISO: DNS de documentación en el .env (${malas[*]}): no son resolutores reales. Déjalas vacías (el script no toca el DNS del router) o pon los de tu red y ejecuta argosisp levantar. En cada router que ya los tenga: /ip dns set servers=<tus resolutores> (infra/mikrotik/README.md, «DNS del router»)"
 }
 
+# Velocidad del suspendido: hasta la 1.19.0 el .env.example traía AAA_SUSPENDIDO_RATE_LIMIT=256k/256k y
+# con eso la página de corte tarda casi 2 minutos en cargar (el rate-limit frena también el portal; el
+# corte lo hace el firewall). Ni levantar ni actualizar tocan el .env del operador: solo avisan.
+avisos_rate_suspendido() {
+    local v
+    v="$(leer_env AAA_SUSPENDIDO_RATE_LIMIT)"
+    [ "$v" = 256k/256k ] || return 0
+    echo "AVISO: AAA_SUSPENDIDO_RATE_LIMIT=256k/256k en el .env: la página de corte tarda minutos en cargar porque ese límite también frena el portal (el corte lo hace el firewall). Bórrala del .env (vale 2M/2M) o pon otra velocidad, y ejecuta argosisp levantar (docs/runbooks/actualizacion.md, «Velocidad del suspendido»)"
+}
+
 # Identificación del cortado (contratos/corte-identificacion.md §5 bis): la API necesita saber qué IPs
 # son del propio servidor y de los proxies para no identificar a un cliente con ellas en /corte.
 avisos_portal_ips() {
@@ -875,6 +885,7 @@ cmd_estado() {
         estado_wireguard
         avisos_dns
         avisos_portal_ips
+        avisos_rate_suspendido
     fi
     local red
     red="$(diagnostico_red "$v" 2> /dev/null || true)"
@@ -897,9 +908,11 @@ cmd_levantar() {
     bloquear
     fijar_api_portal
     if ! es_nodo_portal; then
-        local dns
+        local dns velocidad
         dns="$(avisos_dns)"
         [ -z "$dns" ] || log "$dns"
+        velocidad="$(avisos_rate_suspendido)"
+        [ -z "$velocidad" ] || log "$velocidad"
     fi
     levantar_version "$(version_instalada)" || morir "la versión $(version_instalada) no quedó sana (argosisp logs)"
     log "ArgosIsp $(version_instalada) arriba y sano"

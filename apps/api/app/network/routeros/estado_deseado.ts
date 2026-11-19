@@ -9,7 +9,7 @@ import {
 } from '#network/estrategia_velocidad'
 import { listaPlan } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
-import { PUERTO_PROXY_CORTE } from '#network/routeros/corte_router'
+import { actionDataRedireccion, PUERTO_PROXY_CORTE } from '#network/routeros/corte_router'
 
 /**
  * Estado deseado en el router de un servicio sin PPPoE (`contratos/routeros.md`). Función pura:
@@ -260,8 +260,8 @@ export function targetsColaServicio(
 
 /**
  * Reglas de `/ip proxy access` de un suspendido en modo código: su IPv4 y sus prefijos IPv6 van a
- * `/corte?c=<código>` (HTTP 307 del proxy del router). PPPoE: las direcciones de su sesión abierta (o las
- * fijas); WISP: su IPv4 y sus prefijos delegados.
+ * `/corte?c=<código>` (HTTP 307 del proxy del router; `action-data` sin esquema, `actionDataRedireccion`).
+ * PPPoE: las direcciones de su sesión abierta (o las fijas); WISP: su IPv4 y sus prefijos delegados.
  */
 export function reglasAccesoProxy(servicio: ServicioRed): ObjetoDeseado[] {
     const url = servicio.url_corte_codigo
@@ -284,7 +284,8 @@ export function reglasAccesoProxy(servicio: ServicioRed): ObjetoDeseado[] {
             'local-port': PUERTO_PROXY_CORTE,
             'src-address': origen,
             action: 'redirect',
-            'action-data': url,
+            // Sin esquema: RouterOS antepone `http://` (`actionDataRedireccion`).
+            'action-data': actionDataRedireccion(url),
             disabled: 'no',
         },
     })

@@ -447,7 +447,7 @@ test('identificación por código (contratos/corte-identificacion.md §5 bis): m
         // regla final de /ip proxy access y su limpieza
         assert.match(
             t,
-            /\/ip proxy access add local-port=\$proxyCortePuerto action=redirect action-data=\$urlCorte comment="argosisp: corte proxy sin codigo"/,
+            /\/ip proxy access add local-port=\$proxyCortePuerto action=redirect action-data=\$urlCorteProxy comment="argosisp: corte proxy sin codigo"/,
             p,
         )
         // sin URL ni IPv4 del portal, la final niega: nunca un 3346 sin regla final
@@ -548,7 +548,7 @@ test('reimportar en modo código: el 3346 nunca queda abierto sin regla final ni
         )
         assert.ok(
             t.includes(
-                '/ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no',
+                '/ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorteProxy disabled=no',
             ),
             p,
         )
@@ -706,4 +706,61 @@ test('device-mode sin proxy web (RouterOS 7.17+, bug v1.17.0): el router en modo
     }
     // el script sin servicio no arma el corte: no revisa el device-mode
     for (const p of [PLANTILLAS[0], SIN_RADIUS[0]]) assert.doesNotMatch(leer(p), /device-mode get/, p)
+})
+
+/**
+ * Ejecuta en JS las líneas que arman urlCorteProxy, traducidas una a una (RouterOS: [:pick s a b] corta
+ * hasta el largo de s; [:len s]; = compara cadenas). Falla si aparece una forma que no sabe traducir.
+ */
+function urlProxyDe(texto, urlCorte) {
+    const lineas = texto.split('\n').map((l) => l.trim())
+    const inicio = lineas.indexOf(':local urlCorteProxy $urlCorte')
+    assert.ok(inicio > -1, 'falta :local urlCorteProxy $urlCorte')
+    const vars = { urlCorte, urlCorteProxy: urlCorte }
+    const valor = (expr) => {
+        let m = expr.match(/^\[:pick \$(\w+) (\d+) (\d+)\]$/)
+        if (m) return vars[m[1]].slice(Number(m[2]), Number(m[3]))
+        m = expr.match(/^\[:pick \$(\w+) (\d+) \[:len \$(\w+)\]\]$/)
+        if (m) return vars[m[1]].slice(Number(m[2]), vars[m[3]].length)
+        m = expr.match(/^"([^"\\]*)"$/)
+        if (m) return m[1]
+        throw new Error(`expresión no soportada: ${expr}`)
+    }
+    for (const l of lineas.slice(inicio + 1)) {
+        const m = l.match(/^:if \((.+) = ("[^"]*")\) do=\{ :set (\w+) (.+) \}$/)
+        if (!m) break
+        if (valor(m[1]) === valor(m[2])) vars[m[3]] = valor(m[4])
+    }
+    return vars.urlCorteProxy
+}
+
+test('modo código: action-data del proxy sin esquema (RouterOS antepone http://; bug http://https//…)', () => {
+    const CON_SERVICIO = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+    const casos = [
+        ['https://argos-portal.kns.gt/corte', 'argos-portal.kns.gt/corte'],
+        ['http://portal.miisp.example/corte', 'portal.miisp.example/corte'],
+        ['http://192.0.2.20:8088/corte', '192.0.2.20:8088/corte'],
+        ['portal.miisp.example:8443/corte', 'portal.miisp.example:8443/corte'],
+        ['https://portal.miisp.example/http://x', 'portal.miisp.example/http://x'],
+        ['', ''],
+    ]
+    for (const p of CON_SERVICIO) {
+        const t = leer(p)
+        for (const [url, esperado] of casos) assert.equal(urlProxyDe(t, url), esperado, `${p}: ${url}`)
+        // todo action-data de /ip proxy access usa la URL sin esquema; urlCorte sigue igual para lo demás
+        const conAccion = t.split('\n').filter((l) => /^\s*[^#\s].*action-data=/.test(l))
+        assert.ok(conAccion.length >= 2, p)
+        for (const l of conAccion) assert.match(l, /action-data=\$urlCorteProxy /, `${p}: ${l.trim()}`)
+        assert.ok(t.indexOf(':local urlCorteProxy $urlCorte') > t.indexOf(':set urlCorte ("http://" . $portalV4'), p)
+    }
+    // render: la plantilla se puede pegar (ASCII) y el valor de corte_url no cambia
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        const r = renderizar(leer(p), {
+            ...VALORES,
+            corte_identificacion: 'codigo',
+            corte_url: 'https://argos-portal.kns.gt/corte',
+        })
+        assert.match(r, /:local corteUrl "https:\/\/argos-portal.kns.gt\/corte"/)
+        assert.equal(urlProxyDe(r, 'https://argos-portal.kns.gt/corte'), 'argos-portal.kns.gt/corte')
+    }
 })

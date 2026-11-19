@@ -11,6 +11,7 @@ import { diagnosticoCorte, vistaPreviaReconciliar } from '#network/routeros/diag
 import { bitacoraRed, type OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { ENTRADA_SUSPENDIDOS } from '#network/routeros/corte_router'
 import type { ObjetoRouterOS, RutaRouterOS } from '#network/routeros/cliente'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 
 /**
  * Corte de nivel router (`contratos/control-velocidad.md` §10): el reconciliador deja en un router
@@ -107,7 +108,11 @@ test.group('RouterOS · corte de nivel router', (group) => {
         assert.isDefined(falso.tabla('/interface/list').find((o) => o.name === 'suspendidos'))
         assert.containsSubset(
             falso.tabla('/ppp/profile').find((o) => o.name === 'suspendido'),
-            { 'rate-limit': '256k/256k', 'address-list': 'suspendidos', 'interface-list': 'suspendidos' },
+            {
+                'rate-limit': RATE_LIMIT_SUSPENDIDO_DEFECTO,
+                'address-list': 'suspendidos',
+                'interface-list': 'suspendidos',
+            },
         )
         const lista4 = falso.tabla('/ip/firewall/address-list')
         assert.containsSubset(lista4, [

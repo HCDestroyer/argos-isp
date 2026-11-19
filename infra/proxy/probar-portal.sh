@@ -3,7 +3,8 @@
 #   - /corte por HTTP con cualquier Host (dst-nat de los suspendidos) llega al portal, sin redirigir;
 #   - /entrar y /cuenta por HTTP en el dominio del portal → 308 a HTTPS (en otro Host, no);
 #   - por HTTPS responde con HSTS y X-Forwarded-Proto https;
-#   - un X-Forwarded-For enviado por el cliente se descarta (el portal recibe la IP real).
+#   - un X-Forwarded-For enviado por el cliente se descarta (el portal recibe la IP real);
+#   - el JS del portal sale comprimido (zstd o gzip) por HTTP y por HTTPS.
 # Usa el binario `caddy` si existe (o CADDY=<ruta>); si no, la imagen caddy:2.10.0-alpine con red
 # del host. Necesita node y curl.
 #
@@ -28,6 +29,11 @@ trap limpiar EXIT
 cat >"$TMP/eco.mjs" <<'EOF'
 import http from 'node:http'
 http.createServer((q, r) => {
+    // JS del portal (más de 512 bytes, para que Caddy lo comprima)
+    if (q.url.startsWith('/_nuxt/')) {
+        r.setHeader('content-type', 'application/javascript')
+        return r.end('console.log("corte");\n'.repeat(200))
+    }
     r.setHeader('content-type', 'application/json')
     r.end(JSON.stringify({ url: q.url, host: q.headers.host, xff: q.headers['x-forwarded-for'] ?? null, proto: q.headers['x-forwarded-proto'] ?? null }))
 }).listen(Number(process.argv[2]), '127.0.0.1')
@@ -94,6 +100,12 @@ comprobar '/entrar por HTTPS llega al portal' '[[ "$r" == *" 200"* && "$r" == *"
 comprobar 'HTTPS con HSTS' '[[ "${r,,}" == *"strict-transport-security: max-age=300"* ]]'
 comprobar 'HTTPS con X-Forwarded-Proto https' '[[ "$r" == *"\"proto\":\"https\""* ]]'
 comprobar 'HTTPS descarta X-Forwarded-For del cliente' '[[ "$r" == *"\"xff\":\"127.0.0.1\""* ]]'
+
+# Compresión: /corte llega por el enlace lento del suspendido (1,2 MB de JS y CSS sin comprimir)
+r=$(curl -s -o /dev/null -D - -H 'Host: www.example.com' -H 'Accept-Encoding: zstd, gzip' "http://127.0.0.1:$HTTP/_nuxt/corte.js")
+comprobar 'JS de /corte por HTTP comprimido' '[[ "${r,,}" == *"content-encoding: zstd"* ]]'
+r=$(curl -sk -o /dev/null -D - --resolve "$DOMINIO:$HTTPS:127.0.0.1" -H 'Accept-Encoding: gzip' "https://$DOMINIO:$HTTPS/_nuxt/cuenta.js")
+comprobar 'JS del portal por HTTPS comprimido' '[[ "${r,,}" == *"content-encoding: gzip"* ]]'
 
 if ((fallas > 0)); then
     [[ -f "$TMP/caddy.log" ]] && tail -20 "$TMP/caddy.log" >&2

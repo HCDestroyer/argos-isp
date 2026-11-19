@@ -37,6 +37,9 @@
 	# (31536000) cuando todo funcione: con HSTS el navegador ya no acepta el portal sin un
 	# certificado válido. Sin includeSubDomains ni preload.
 	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:31536000}"
+	# Compresión (como infra/proxy/Caddyfile en la API y el panel): el JS y el CSS de /corte pesan
+	# 1,2 MB sin comprimir y ~344 KB con gzip
+	encode zstd gzip
 	import portal
 }
 
@@ -47,5 +50,6 @@ http:// {
 		path /entrar /entrar/* /cuenta /cuenta/*
 	}
 	redir @seguro https://{host}{uri} 308
+	encode zstd gzip
 	import portal
 }

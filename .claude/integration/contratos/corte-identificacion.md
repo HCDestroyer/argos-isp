@@ -216,6 +216,7 @@ Leyenda de mecanismos:
 - `src-address` acepta IPv4, rango, prefijo o prefijo IPv6.
 - `local-port`: «Proxy port the request arrived on… Useful when `port` in `/ip/proxy` lists several ports».
 - `action-data` se usa tal cual: **no hay variables** (no se puede poner la IP del cliente con una sola regla).
+- **`action-data` va sin esquema** (`host[:puerto]/ruta?consulta`). El manual no dice cómo trata el esquema (sus ejemplos traen `http://` y `https://`), pero en producción (bug v1.19.0 del PM, RouterOS 7.17+) el router lo lee como `host[:puerto]/ruta` y antepone `http://`: con `https://argos-portal.kns.gt/corte` el `Location` salía `http://https//argos-portal.kns.gt/corte` (host «https») y el cliente nunca llegaba a la página. Es el mismo síntoma que el foro de MikroTik reporta con `redirect-to="https://…"` (`forum.mikrotik.com/t/can-not-redirect-to-https-using-web-proxy-rule/119300`). Argos quita `http://` o `https://` (sin distinguir mayúsculas) al escribir: `actionDataRedireccion` en `corte_router.ts` y `$urlCorteProxy` en el script.
 - Modo transparente: `dstnat … action=redirect to-ports=<puerto>`. Solo HTTP: «it cannot take HTTPS connections in transparent mode».
 - Advierte del proxy abierto: hay que bloquear el puerto desde fuera de la LAN.
 - (En RouterOS 6 el campo era `redirect-to` con `action=deny`. Argos exige RouterOS 7 por la API REST.)
@@ -231,13 +232,13 @@ Leyenda de mecanismos:
 /ip firewall filter (input, arriba)
   add chain=input protocol=tcp dst-port=3346 connection-nat-state=!dstnat action=drop comment="argosisp:top proxy de corte solo redirigido"
 /ip proxy access (por servicio suspendido, en orden, antes de la final)
-  add local-port=3346 src-address=10.66.1.3 action=redirect action-data="https://portal.isp.gt/corte?c=K7M2QX9TB4RZA" comment="argosisp:servicio:1234"
+  add local-port=3346 src-address=10.66.1.3 action=redirect action-data="portal.isp.gt/corte?c=K7M2QX9TB4RZA" comment="argosisp:servicio:1234"
   add local-port=3346 src-address=2803:xxxx:10:300::/56 action=redirect action-data="…?c=K7M2QX9TB4RZA" comment="argosisp:servicio:1234:delegado"
 /ip proxy access (final, sin código)
-  add local-port=3346 action=redirect action-data="https://portal.isp.gt/corte" comment="argosisp: corte proxy sin codigo"
+  add local-port=3346 action=redirect action-data="portal.isp.gt/corte" comment="argosisp: corte proxy sin codigo"
 ```
 
-- El 307 lleva al dominio HTTPS: está en `argos-portal`, así que pasa por el masquerade y por NPM, **y da igual**, porque el código viaja en la URL.
+- El 307 lleva a `http://<dominio del portal>/corte?c=…` (el router antepone `http://`; nunca puede mandar a `https://`). El dominio está en `argos-portal`, así que el router no lo vuelve a mandar al proxy y pasa por el masquerade y por NPM, **y da igual**, porque el código viaja en la URL. Caddy sirve `/corte` por HTTP (sitio `http://`, `auto_https disable_redirects`); si un proxy delante (NPM con «Force SSL») o el HSTS del navegador lo pasa a HTTPS, es un salto más que conserva `?c=`.
 - El portal guarda el código en `sessionStorage` y en una cookie corta, y lo manda a `quien-soy`, `estado`, `promesas` y `comprobantes` (cabecera `X-Argos-Corte`).
 - La sonda del sistema recibe 307 → «Iniciar sesión en la red».
 
@@ -416,8 +417,8 @@ Leyenda de mecanismos:
 | NAT `argos-corte-nat` (IPv4 e IPv6) | `argosisp: corte-nat HTTP al proxy de corte` | `codigo`: `tcp dst-port=80 action=redirect to-ports=3346`. Reemplaza al `dst-nat` (`argosisp: corte-nat HTTP a /corte`). En IPv6 no hace falta la IPv6 del portal |
 | filter `input` (arriba) | `argosisp:top proxy de corte solo redirigido` | `codigo`: `tcp dst-port=3346 connection-nat-state=!dstnat action=drop` (no es un proxy abierto: solo entra lo que trajo el dst-nat de un suspendido) |
 | filter `argos-corte-in` | `argosisp: corte-in proxy de corte` | `codigo`: `tcp dst-port=3346 accept`, antes del `tcp-reset` |
-| `/ip proxy access` (final) | `argosisp: corte proxy sin codigo` | `codigo`, **siempre**: `local-port=3346 action=redirect action-data=<URL de /corte>` (sin código: el portal cae a la IP); sin URL del portal, `action=deny`. Nunca un 3346 sin regla final: el proxy reenviaría a internet lo que no tiene regla, y ese tráfico sale por `output`, sin pasar por `argos-corte` (hallazgo de A6) |
-| `/ip proxy access` (por servicio) | `argosisp:servicio:<id>` (IPv4) y `argosisp:servicio:<id>:enlace\|delegado\|delegado-2` (IPv6) | Solo un suspendido en un router `codigo` (también PPPoE: las direcciones de su sesión abierta, o las fijas): `local-port=3346 src-address=<ip o prefijo> action=redirect action-data=<URL de /corte>?c=<código>` |
+| `/ip proxy access` (final) | `argosisp: corte proxy sin codigo` | `codigo`, **siempre**: `local-port=3346 action=redirect action-data=<URL de /corte sin esquema>` (sin código: el portal cae a la IP); sin URL del portal, `action=deny`. Nunca un 3346 sin regla final: el proxy reenviaría a internet lo que no tiene regla, y ese tráfico sale por `output`, sin pasar por `argos-corte` (hallazgo de A6) |
+| `/ip proxy access` (por servicio) | `argosisp:servicio:<id>` (IPv4) y `argosisp:servicio:<id>:enlace\|delegado\|delegado-2` (IPv6) | Solo un suspendido en un router `codigo` (también PPPoE: las direcciones de su sesión abierta, o las fijas): `local-port=3346 src-address=<ip o prefijo> action=redirect action-data=<URL de /corte sin esquema>?c=<código>` |
 
 - **URL de `/corte`**: la de `PORTAL_URL_PUBLICA` (`urlCortePublica`) o, sin ella, el destino del NAT (`corte_url` en `ConfigCorte`).
 - **Orden** (`ordenAccesoProxy`): primero las reglas por servicio, luego la final y al final lo del operador (un `allow` suyo sin `local-port` ganaría en el 3346: la primera regla que coincide decide). Una regla nueva se mueve en el acto (`ordenarAccesoProxy`); el reconciliador ordena justo después de `aplicarCorte` y solo después enciende el proxy. El diagnóstico `proxy_corte` sale en rojo si falta la final, si su `action` no es la esperada o si hay reglas antes de las del corte.

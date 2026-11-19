@@ -85,6 +85,13 @@ function modoSuspensionIpv6(valor: string | undefined): ModoSuspensionIpv6 {
     throw new Error(`COA_SUSPENDER_CON_IPV6 inválido: ${valor} (coa | disconnect)`)
 }
 
+/**
+ * Velocidad del suspendido si `COA_SUSPENDIDO_RATE_LIMIT` falta o está vacía (igual que
+ * `RATE_LIMIT_SUSPENDIDO_DEFECTO` de apps/api). El corte lo hace el firewall; con 256k/256k la
+ * página de corte tardaba casi 2 minutos en cargar.
+ */
+export const RATE_LIMIT_SUSPENDIDO_DEFECTO = '2M/2M'
+
 export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return {
         port: numero(env.PORT, 3200),
@@ -127,7 +134,7 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             origen: env.COA_ORIGEN_IP || undefined,
         },
         suspendido: {
-            rateLimit: env.COA_SUSPENDIDO_RATE_LIMIT ?? '256k/256k',
+            rateLimit: env.COA_SUSPENDIDO_RATE_LIMIT?.trim() || RATE_LIMIT_SUSPENDIDO_DEFECTO,
             addressList: env.COA_SUSPENDIDO_ADDRESS_LIST ?? 'suspendidos',
             filterId: env.COA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',
         },

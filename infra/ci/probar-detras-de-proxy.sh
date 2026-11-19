@@ -23,7 +23,8 @@
 #     socket aunque mande XFF; en los tres dominios, el webhook y /corte por HTTP;
 #   - sin la variable (lo de siempre): nadie es de confianza, la API ve la IP del socket;
 #   - TLS sin SNI (a la IP del contenedor y al puerto publicado en 127.0.0.1): Caddy entrega el
-#     certificado de default_sni (DOMINIO_API, CA interna) y reparte por Host igual.
+#     certificado de default_sni (DOMINIO_API, CA interna) y reparte por Host igual;
+#   - el portal (HTTPS, /corte por HTTP y por el puerto dedicado) comprime con zstd o gzip.
 #
 #   infra/ci/probar-detras-de-proxy.sh     (necesita Docker y las imágenes caddy:2.10.0-alpine y
 #                                           node:22-alpine; las baja si faltan)
@@ -79,6 +80,11 @@ function ipApi(remota, xff) {
 
 for (const [puerto, servicio] of [[3333, 'api'], [3000, 'web'], [3001, 'portal']]) {
     http.createServer((q, r) => {
+        // Recurso estático del portal (el JS de /corte): más de 512 bytes para que Caddy lo comprima
+        if (q.url.startsWith('/_nuxt/')) {
+            r.setHeader('content-type', 'application/javascript')
+            return r.end(`console.log(${JSON.stringify(servicio)});\n`.repeat(200))
+        }
         r.setHeader('content-type', 'application/json')
         r.end(JSON.stringify({
             servicio,
@@ -111,7 +117,13 @@ const q = (esquema === 'https' ? https : http).request(opciones, (r) => {
     // Certificado que entregó Caddy (SAN) y si el ClientHello llevó SNI
     const cert = esquema === 'https' ? (r.socket.getPeerCertificate()?.subjectaltname ?? null) : null
     r.on('data', (d) => (cuerpo += d))
-    r.on('end', () => process.stdout.write(JSON.stringify({ status: r.statusCode, cert, ...JSON.parse(cuerpo || '{}') })))
+    // encoding: Content-Encoding de la respuesta (el cuerpo comprimido no se lee)
+    const encoding = r.headers['content-encoding'] ?? null
+    r.on('end', () => {
+        let eco = {}
+        try { eco = JSON.parse(cuerpo || '{}') } catch {}
+        process.stdout.write(JSON.stringify({ status: r.statusCode, cert, encoding, ...eco }))
+    })
 })
 q.on('error', (e) => { process.stdout.write(JSON.stringify({ error: e.message })); process.exit(0) })
 q.end()
@@ -233,6 +245,16 @@ comprobar '/corte por HTTP: X-Real-IP ignorado aunque venga de un proxy de la li
 r="$(cliente npm http "$CADDY_NPM" 8088 portal.localhost /corte no 'X-Forwarded-For: 198.51.100.7')"
 comprobar '/corte por el puerto dedicado llega al portal' "$r" servicio portal
 comprobar '/corte por el puerto dedicado: XFF ignorado aunque venga de un proxy de la lista' "$r" xff "$IP_NPM"
+
+# Compresión del portal: el JS de /corte llega por el enlace lento del suspendido (rate-limit del corte)
+r="$(cliente otra http "$CADDY_OTRA" 80 www.example.com /_nuxt/corte.js no 'Accept-Encoding: gzip')"
+comprobar '/corte por HTTP: JS con Content-Encoding gzip' "$r" encoding gzip
+r="$(cliente otra http "$CADDY_OTRA" 8088 portal.localhost /_nuxt/corte.js no 'Accept-Encoding: zstd, gzip')"
+comprobar '/corte por el puerto dedicado: JS con Content-Encoding zstd' "$r" encoding zstd
+r="$(cliente npm https "$CADDY_NPM" 443 portal.localhost /_nuxt/cuenta.js si 'Accept-Encoding: gzip')"
+comprobar 'Portal por HTTPS: JS con Content-Encoding gzip' "$r" encoding gzip
+r="$(cliente otra http "$CADDY_OTRA" 80 www.example.com /_nuxt/corte.js no)"
+comprobar '/corte sin Accept-Encoding: sin comprimir' "$r" encoding ""
 
 # ---------------------------------------------------------------------------
 echo "== sin ARGOSISP_PROXIES_CONFIABLES (comportamiento de siempre)"

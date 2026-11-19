@@ -102,6 +102,10 @@
 }
 
 {$DOMINIO_PORTAL} {
+	# Compresión como la API y el panel: el JS y el CSS de /corte pesan 1,2 MB sin comprimir y ~344 KB
+	# con gzip. Caddy no recomprime lo que ya trae Content-Encoding ni comprime PDF o imágenes (solo
+	# tipos de texto, JS y JSON de su lista por defecto).
+	encode zstd gzip
 	# Empezar corto (300) y subir a 31536000 cuando el certificado funcione (infra/proxy/README.md).
 	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:300}"
 	import portal
@@ -120,5 +124,7 @@ http://, :{$PORTAL_CORTE_PUERTO:8088} {
 	}
 	redir @portalSeguro https://{host}{uri} 308
 
+	# La página de corte llega por un enlace lento (rate-limit del suspendido): comprimida pesa ~4 veces menos
+	encode zstd gzip
 	import portal_corte
 }

@@ -19,7 +19,7 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 
 | Cambio                                                     | Paquete    | Atributos además de `User-Name` y `Acct-Session-Id` de la sesión                                                                                   |
 | ---------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `activo` o `limitado` → `suspendido`                       | CoA        | `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in`                                             |
+| `activo` o `limitado` → `suspendido`                       | CoA        | `Mikrotik-Rate-Limit = 2M/2M`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in`                                                 |
 | `activo` → `limitado`                                      | CoA        | `Mikrotik-Rate-Limit` = velocidad limitada del plan                                                                                                |
 | `limitado` → `activo`                                      | CoA        | `Mikrotik-Rate-Limit` del plan (o `rate_limit_override` del router)                                                                                |
 | `suspendido` → `activo` o `limitado` (reactivar)           | Disconnect | — (un CoA deja el IPv6 cortado; al reconectar `aaa` entrega el perfil normal)                                                                      |
@@ -33,6 +33,7 @@ Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Códi
 | velocidad o plan con el router en `arbol_pcq`              | —          | nada: sin cola por sesión, el dispatcher de RouterOS mueve sus direcciones entre las listas del plan                                               |
 | `sesion.desconexion_solicitada` (panel o API)              | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`                                               |
 
+- La velocidad del suspendido es `2M/2M` por defecto (`COA_SUSPENDIDO_RATE_LIMIT`; vacía = defecto): el corte lo hace el firewall, y con `256k/256k` la página de corte tardaba casi 2 minutos en cargar.
 - Con el modo de suspensión `desconectar` (por defecto) toda suspensión va por Disconnect; la fila `→ suspendido` de la tabla aplica con el modo `coa` (ver «Modo de suspensión»).
 - Con el modo `coa`, suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` manda el CoA de la tabla; `disconnect` (por defecto desde v1.9.1) manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).

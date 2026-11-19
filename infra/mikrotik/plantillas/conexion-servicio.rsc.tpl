@@ -496,6 +496,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     }
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    :local urlCorteProxy $urlCorte
+    :if ([:pick $urlCorteProxy 0 8] = "https://") do={ :set urlCorteProxy [:pick $urlCorteProxy 8 [:len $urlCorteProxy]] }
+    :if ([:pick $urlCorteProxy 0 7] = "http://") do={ :set urlCorteProxy [:pick $urlCorteProxy 7 [:len $urlCorteProxy]] }
     :local finales [/ip proxy access find where comment=$reglaProxyFinal]
     :local finalProxy
     :if ([:len $finales] > 0) do={
@@ -511,9 +514,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
         }
     } else={
         :if ([:typeof $finalProxy] = "nothing") do={
-            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorteProxy comment="argosisp: corte proxy sin codigo"]
         } else={
-            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorteProxy disabled=no
         }
     }
     :local destinoProxy

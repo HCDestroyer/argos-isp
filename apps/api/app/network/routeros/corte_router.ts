@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import { isIPv4, isIPv6 } from 'node:net'
 import type { ObjetoRouterOS, Propiedades, RutaOrdenada, RutaRouterOS } from '#network/routeros/cliente'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 import { PERFIL_PPP_BASE, PROPIEDADES_PERFIL_BASE } from '#network/routeros/velocidad_router'
 import { esIpDocumentacion } from '#network/conexion/dns'
 
@@ -147,7 +148,8 @@ export function configCorte(entorno: NodeJS.ProcessEnv = process.env, portal?: P
         clientes_v4: separar(leer('CLIENTES_V4')),
         clientes_v6: separar(leer('CLIENTES_V6')),
         susp_rate_limit:
-            leer('SUSP_RATE_LIMIT') ?? entorno.ROUTEROS_SUSPENDIDO_RATE_LIMIT?.trim() ?? '256k/256k',
+            leer('SUSP_RATE_LIMIT') ??
+            (entorno.ROUTEROS_SUSPENDIDO_RATE_LIMIT?.trim() || RATE_LIMIT_SUSPENDIDO_DEFECTO),
         address_list: entorno.ROUTEROS_SUSPENDIDO_ADDRESS_LIST?.trim() || 'suspendidos',
         perfil: entorno.AAA_SUSPENDIDO_GRUPO?.trim() || 'suspendido',
     }
@@ -620,7 +622,7 @@ function reglasProxy(config: ConfigCorte): { reglas: ReglaCorte[]; conservar: st
         ? {
               'local-port': PUERTO_PROXY_CORTE,
               action: 'redirect',
-              'action-data': config.corte_url,
+              'action-data': actionDataRedireccion(config.corte_url),
               disabled: 'no',
           }
         : { 'local-port': PUERTO_PROXY_CORTE, action: 'deny', disabled: 'no' }
@@ -628,6 +630,24 @@ function reglasProxy(config: ConfigCorte): { reglas: ReglaCorte[]; conservar: st
         reglas: [{ ruta: PROXY_ACCESS, comment: REGLA_PROXY_SIN_CODIGO, propiedades, arriba: false }],
         conservar: [],
     }
+}
+
+/**
+ * `action-data` de `/ip proxy access action=redirect`: la URL **sin esquema** (`host[:puerto]/ruta?consulta`).
+ * RouterOS (7.17+, bug v1.19.0 del PM) lee el valor como `host[:puerto]/ruta` y antepone `http://` al armar
+ * el `Location` del 307: con `https://portal/corte` el host queda `https`, el puerto vacío y la ruta
+ * `//portal/corte`, y el navegador recibe `http://https//portal/corte`. Sin esquema, el 307 lleva a
+ * `http://portal/corte`: la página de corte se sirve por HTTP (Caddy, sitio `http://`) y el dominio está
+ * en `argos-portal`, así que el router no lo vuelve a mandar al proxy. Quita `http://` o `https://` sin
+ * distinguir mayúsculas. El script del router (`infra/mikrotik`, `$urlCorteProxy`) hace lo mismo.
+ */
+export function actionDataRedireccion(url: string): string {
+    return url.trim().replace(/^https?:\/\//i, '')
+}
+
+/** ¿El `action-data` de una regla del proxy trae esquema (`https://…`)? RouterOS lo redirige mal. */
+export function actionDataConEsquema(valor: string | undefined): boolean {
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(valor?.trim() ?? '')
 }
 
 /** URL de `/corte` con el código del servicio (lo que pone su regla de `/ip proxy access`). */

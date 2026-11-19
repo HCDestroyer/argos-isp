@@ -81,7 +81,7 @@ export default await Env.create(new URL('../', import.meta.url), {
     ROUTEROS_TIMEOUT_MS: Env.schema.number.optional(),
     ROUTEROS_REINTENTOS: Env.schema.number.optional(),
     ROUTEROS_ESPERA_MS: Env.schema.number.optional(),
-    /** Velocidad y address-list del suspendido (las mismas que PPPoE: 256k/256k, suspendidos) */
+    /** Velocidad y address-list del suspendido (las mismas que PPPoE: 2M/2M por defecto, suspendidos) */
     ROUTEROS_SUSPENDIDO_RATE_LIMIT: Env.schema.string.optional(),
     ROUTEROS_SUSPENDIDO_ADDRESS_LIST: Env.schema.string.optional(),
     /** Interfaz del ARP estático (amarre IP-MAC) y servidor DHCP del lease si el router no los define */
