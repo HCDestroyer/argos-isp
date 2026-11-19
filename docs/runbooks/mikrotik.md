@@ -142,6 +142,31 @@ Arreglo (solo se puede desde el router, ArgosIsp no puede hacerlo por la API):
 
 Orden con que Argos arma el corte por código: el `drop` del 3346 en `input`, el puerto en el proxy (sin encenderlo), la regla `argosisp: corte proxy sin codigo`, el NAT al 3346 y al final enciende el proxy. Si un paso falla, no sigue con lo que depende de él (nunca un NAT al 3346 sin la regla final) y sí con lo demás.
 
+### La redirección sale como `http://https//…` o tarda en llegar a `/corte`
+
+En el corte por código, `action-data` de `/ip proxy access` va **sin esquema**: `portal.miisp.gt/corte?c=<código>`. RouterOS lo lee como `host[:puerto]/ruta` y le antepone `http://`; con la URL completa (`https://…`, ArgosIsp 1.19.0 o anterior) el navegador recibía `http://https//portal.miisp.gt/corte`, buscaba un host llamado «https» y nunca llegaba a la página. En las versiones posteriores a 1.19.0, Argos y el script escriben la URL sin esquema y «Reconciliar ahora» corrige las reglas viejas (Probar conexión → Corte, chequeo «proxy de corte», las marca en rojo mientras tanto).
+
+El 307 siempre lleva a `http://<dominio del portal>/corte`: el router no sabe redirigir a `https://`. Caddy de Argos sirve `/corte` por HTTP en el 80. Si delante hay Nginx Proxy Manager con «Force SSL» en el host del portal, o el navegador tiene HSTS del dominio, el salto a HTTPS es uno más y conserva `?c=`; no hay que quitarlo.
+
+Cómo medir cuánto tarda, de punta a punta (desde un cliente suspendido, con la hora de cada paso):
+
+1. **El router redirige bien y rápido.** Desde una PC detrás del cliente suspendido: `curl -s -o /dev/null -w '%{http_code} %{redirect_url} %{time_total}s\n' http://neverssl.com/`. Debe dar `307 http://portal.miisp.gt/corte?c=… 0.0xs`. Si `redirect_url` empieza con `http://https//`, el router tiene reglas viejas: «Reconciliar ahora». En el router: `/ip proxy access print where comment~"argosisp"` (ninguna `action-data` con `://`).
+2. **La página carga.** `curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' "<la redirect_url del paso 1>"`: 200 (o 301/308 a HTTPS si hay NPM con «Force SSL») en menos de un segundo.
+3. **Cuándo llegó la suspensión al router.** En la base, con el `servicio_id`:
+
+   ```sql
+   SELECT evento, created_at, publicado_en FROM audit.outbox
+    WHERE payload->>'servicio_id' = '<id>' ORDER BY id DESC LIMIT 5;      -- relay: publicado_en − created_at < 1 s
+   SELECT tipo, comando->>'ruta' AS ruta, ok, created_at FROM audit.red
+    WHERE servicio_id = <id> ORDER BY id DESC LIMIT 10;                   -- Disconnect/CoA y la regla del proxy
+   SELECT inicio, fin, causa_fin FROM network.sesiones
+    WHERE servicio_id = <id> ORDER BY id DESC LIMIT 3;                    -- cuándo reconectó el CPE
+   ```
+
+   Entre `servicio.estado_cambiado` y la fila de `audit.red` deben pasar segundos. Con «Modo de suspensión: desconectar» (el de fábrica), el cliente queda sin internet desde el Disconnect hasta que su CPE vuelve a marcar: la diferencia entre el `fin` de la sesión vieja y el `inicio` de la nueva es tiempo del CPE, no de Argos (hay equipos que esperan 30 a 60 s o más para volver a marcar).
+4. **La velocidad del suspendido.** La cola del suspendido (la que crea RADIUS con `Mikrotik-Rate-Limit`, la del perfil `suspendido` o la cola `argosisp-servicio-<id>` del WISP) limita **todo** su tráfico, también el que va al portal. La primera carga de `/corte` baja unos 1,2 MB sin comprimir: con `256k/256k` (el valor de fábrica hasta 1.19.0) son unos 40 s solo de descarga. Usa `AAA_SUSPENDIDO_RATE_LIMIT=2M/2M` (o más) en el `.env` del servidor y `sudo argosisp levantar`: lo leen `aaa`, `coa` y la API, y «Reconciliar ahora» cambia el perfil `suspendido` de cada router. Las sesiones ya suspendidas toman la velocidad nueva al reconectar. No abre nada: lo que corta es el firewall (solo DNS, portal y walled garden). En el router: `/queue simple print where name~"<pppoe-"` o `/ppp profile print where name=suspendido`.
+5. **El teléfono.** Android e iOS solo abren «Iniciar sesión en la red» cuando vuelven a probar la conexión (al reconectar el Wi-Fi o tras varios fallos); un sitio HTTPS escrito a mano recibe `tcp-reset` y muestra error, no la página. Para probar, abre una página `http://` (por ejemplo `http://neverssl.com`) o apaga y enciende el Wi-Fi del teléfono.
+
 ### DNS del router
 
 Los clientes y los suspendidos usan al router como DNS. Si `ROUTERS_SERVICIO_DNS_V4` está vacía (lo normal), el script no toca los DNS del router. Nunca pongas IPs de documentación (`192.0.2.x`, `198.51.100.x`, `203.0.113.x`, `2001:db8::`): la API se niega a generar el script con ellas. Las reglas del script cierran el puerto 53 desde la WAN en IPv4 e IPv6.

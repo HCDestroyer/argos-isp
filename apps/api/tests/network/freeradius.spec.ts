@@ -467,7 +467,7 @@ test.group('RADIUS de punta a punta con FreeRADIUS en Docker (tarea 10)', (group
             a.deepEqual(await radtest(suspendido.userPpp, suspendido.clave, metodo), {
                 tipo: 'Access-Accept',
                 atributos: {
-                    'Mikrotik-Rate-Limit': '256k/256k',
+                    'Mikrotik-Rate-Limit': '2M/2M',
                     'Mikrotik-Group': 'suspendido',
                     'Mikrotik-Address-List': 'suspendidos',
                     'Filter-Id': 'argos-corte.in',

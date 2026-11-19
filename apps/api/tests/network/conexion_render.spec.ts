@@ -19,6 +19,7 @@ import {
     REGLA_PROXY_SIN_CODIGO,
     ajustePuertoProxy,
     ajusteProxy,
+    actionDataRedireccion,
     configCorte,
     estadoCorteRouter,
     REGLA_NAT_HTTP,
@@ -214,7 +215,8 @@ test.group('Conexión de routers · render (espejo de render.test.mjs)', () => {
                 assert.isDefined(linea, `${ruta}: falta ${regla.ruta} ${regla.comment}`)
                 const valores = linea!
                     .replaceAll('$proxyCortePuerto', PUERTO_PROXY_CORTE)
-                    .replace(/action-data=\$urlCorte/, `action-data=${corteUrl}`)
+                    // El script quita el esquema (`$urlCorteProxy`, A6), igual que `actionDataRedireccion`
+                    .replace(/action-data=\$urlCorteProxy/, `action-data=${actionDataRedireccion(corteUrl)}`)
                 for (const [clave, valor] of Object.entries(regla.propiedades)) {
                     if (clave === 'disabled') continue
                     assert.include(

@@ -3,6 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { Transaccion } from '#shared/domain_action'
 import env from '#start/env'
 import { prefijoColas, redis } from '#shared/redis'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 import { claveDesdeTexto } from '#shared/cifrado'
 import type {
     Bitacora,
@@ -138,7 +139,7 @@ export const fabricaPorDefecto: FabricaClientes = (router, opciones = {}) =>
 
 export function perfilSuspendido(): PerfilSuspendidoRed {
     return {
-        rateLimit: env.get('ROUTEROS_SUSPENDIDO_RATE_LIMIT') ?? '256k/256k',
+        rateLimit: env.get('ROUTEROS_SUSPENDIDO_RATE_LIMIT') || RATE_LIMIT_SUSPENDIDO_DEFECTO,
         addressList: env.get('ROUTEROS_SUSPENDIDO_ADDRESS_LIST') ?? 'suspendidos',
         // El mismo perfil de corte que crea el reconciliador (`corte_router.ts`) y que manda `aaa`.
         perfil: process.env.AAA_SUSPENDIDO_GRUPO?.trim() || 'suspendido',

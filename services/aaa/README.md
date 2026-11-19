@@ -25,13 +25,15 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 | -------------------------- | ---- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `activo`                   | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `plan.rate_limit` (cadena completa de A1); `Mikrotik-Group` = `plan-<id>` con reuso > 1 en `simple`, si no `profile_ppp` |
 | `limitado`                 | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `plan.rate_limit_limitado`; `Mikrotik-Group` como en activo                                                              |
-| `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `256k/256k`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in`    |
+| `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `2M/2M`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in`        |
 | `retirado`                 | 401  | reject → Reject       | —                                                                                                                                                |
 | `pendiente_instalacion`    | 401  | reject → Reject       | — (`contratos/instalacion.md` §3; motivo en el log; al activarse, el siguiente authorize acepta)                                                 |
 | inexistente o lápida       | 404  | notfound → Reject     | —                                                                                                                                                |
 | Redis y respaldo sin datos | —    | modo degradado        | último perfil conocido: mismo estado y atributos que la última vez (ver "Modo degradado")                                                        |
 | … y sin perfil conocido    | 503  | fail → Reject         | —                                                                                                                                                |
 | `pass_ppp` no descifrable  | 500  | fail → Reject         | —                                                                                                                                                |
+
+La velocidad del suspendido es `2M/2M` por defecto (`AAA_SUSPENDIDO_RATE_LIMIT`; vacía = defecto): el corte lo hace el firewall, y con `256k/256k` la página de corte tardaba casi 2 minutos en cargar.
 
 Además, en todo Accept:
 

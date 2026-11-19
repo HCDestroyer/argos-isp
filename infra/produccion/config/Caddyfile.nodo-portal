@@ -49,6 +49,8 @@
 }
 
 {$DOMINIO_PORTAL} {
+	# Compresión como en el principal (config/Caddyfile): el JS y el CSS de /corte bajan ~4 veces menos
+	encode zstd gzip
 	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:300}"
 	import portal
 }
@@ -63,6 +65,7 @@ http://, :{$PORTAL_CORTE_PUERTO:8088} {
 	}
 	redir @portalSeguro https://{host}{uri} 308
 
+	encode zstd gzip
 	import portal
 }
 

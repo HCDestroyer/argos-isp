@@ -20,6 +20,8 @@ import {
     REGLA_PROXY_SIN_CODIGO,
     ajustePuertoProxy,
     ajusteProxy,
+    actionDataRedireccion,
+    configCorte,
     urlCorteConCodigo,
 } from '#network/routeros/corte_router'
 import AplicarRedServicio from '#network/routeros/actions/aplicar_red_servicio'
@@ -61,6 +63,8 @@ const ENTORNO = {
 }
 
 const URL_CORTE = 'https://portal.argosisp.example/corte'
+/** Lo que va en `action-data`: sin esquema (RouterOS antepone `http://`; bug v1.19.0 del PM). */
+const URL_CORTE_PROXY = 'portal.argosisp.example/corte'
 
 async function eventosDe(requestId: string): Promise<EventoEntrante[]> {
     const filas = await db.from('audit.outbox').where('request_id', requestId).orderBy('id')
@@ -207,8 +211,10 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
         )
         assert.deepEqual(
             acceso().map((o) => [o.comment, o['local-port'], o.action, o['action-data']]),
-            [[REGLA_PROXY_SIN_CODIGO, PUERTO_PROXY_CORTE, 'redirect', URL_CORTE]],
+            [[REGLA_PROXY_SIN_CODIGO, PUERTO_PROXY_CORTE, 'redirect', URL_CORTE_PROXY]],
         )
+        // El 307 que vería el navegador (como RouterOS: antepone `http://`) va a la página por HTTP
+        assert.equal(falso.redireccionProxy('10.10.0.99'), `http://${URL_CORTE_PROXY}`)
         // Segunda pasada: nada que corregir
         const otra = await reconciliar()
         assert.lengthOf(otra.correcciones, 0, JSON.stringify(otra.correcciones))
@@ -236,8 +242,10 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
             'local-port': PUERTO_PROXY_CORTE,
             'src-address': servicio.ipv4,
             action: 'redirect',
-            'action-data': urlCorteConCodigo(URL_CORTE, fila!.codigo),
+            'action-data': actionDataRedireccion(urlCorteConCodigo(URL_CORTE, fila!.codigo)),
         })
+        assert.notMatch(reglas[0]!['action-data']!, /^https?:/i)
+        assert.equal(falso.redireccionProxy(servicio.ipv4), `http://${URL_CORTE_PROXY}?c=${fila!.codigo}`)
 
         // El evento sale por outbox y nunca lleva el código
         const emitido = await db
@@ -412,7 +420,64 @@ test.group('RouterOS · corte por código (proxy del router)', (group) => {
         // Con URL otra vez, la misma regla pasa a redirigir
         process.env.PORTAL_URL_PUBLICA = ENTORNO.PORTAL_URL_PUBLICA
         await reconciliar()
-        assert.containsSubset(acceso()[0], { action: 'redirect', 'action-data': URL_CORTE })
+        assert.containsSubset(acceso()[0], { action: 'redirect', 'action-data': URL_CORTE_PROXY })
+    })
+
+    test('action-data sin esquema: sin distinguir mayúsculas y con puerto (unidad)', ({ assert }) => {
+        assert.equal(
+            actionDataRedireccion('https://portal.isp.gt/corte?c=K7M2'),
+            'portal.isp.gt/corte?c=K7M2',
+        )
+        assert.equal(actionDataRedireccion('HTTPS://portal.isp.gt/corte'), 'portal.isp.gt/corte')
+        assert.equal(actionDataRedireccion('Http://192.0.2.20:8088/corte'), '192.0.2.20:8088/corte')
+        assert.equal(actionDataRedireccion('portal.isp.gt/corte'), 'portal.isp.gt/corte')
+        // La URL que se pasa al script del router (`corte_url`) sale de `new URL`: esquema siempre en
+        // minúsculas, así que el `:pick … = "https://"` del .rsc (A6) la reconoce aunque se configure `HTTPS://`.
+        assert.equal(
+            configCorte({ PORTAL_URL_PUBLICA: 'HTTPS://Portal.ISP.gt' }).corte_url,
+            'https://portal.isp.gt/corte',
+        )
+    })
+
+    test('reglas viejas con esquema (v1.19.0): el diagnóstico lo detecta y «Reconciliar» las corrige una vez', async ({
+        client,
+        assert,
+    }) => {
+        await reconciliar()
+        const servicio = await crearWisp(client)
+        await entregar(await cambiarEstado(servicio.id, 'suspendido'))
+        const fila = (await codigoDe(servicio.id))!
+        // Como las dejó v1.19.0: la URL completa en `action-data`
+        for (const o of acceso()) {
+            o['action-data'] =
+                o.comment === REGLA_PROXY_SIN_CODIGO ? URL_CORTE : urlCorteConCodigo(URL_CORTE, fila.codigo)
+        }
+        // Lo que ve el cliente: el host «https» (el bug del PM)
+        assert.equal(
+            falso.redireccionProxy(servicio.ipv4),
+            `http://https//${URL_CORTE_PROXY}?c=${fila.codigo}`,
+        )
+        assert.equal(falso.redireccionProxy('10.10.0.99'), `http://https//${URL_CORTE_PROXY}`)
+
+        let d = await diagnosticoCorte(routerId, OPCIONES)
+        const chequeo = d.chequeos.find((c) => c.clave === 'proxy_corte')!
+        assert.isFalse(chequeo.ok)
+        assert.include(chequeo.detalle, '2 reglas tienen action-data con esquema')
+        assert.include(chequeo.detalle, 'http://https//')
+        assert.isTrue(chequeo.reconciliar)
+
+        const r = await reconciliar()
+        assert.isNull(r.error)
+        assert.deepEqual(
+            acceso().map((o) => o['action-data']),
+            [`${URL_CORTE_PROXY}?c=${fila.codigo}`, URL_CORTE_PROXY],
+        )
+        assert.equal(falso.redireccionProxy(servicio.ipv4), `http://${URL_CORTE_PROXY}?c=${fila.codigo}`)
+        // Y no vuelve a marcarlas en cada pasada
+        const otra = await reconciliar()
+        assert.lengthOf(otra.correcciones, 0, JSON.stringify(otra.correcciones))
+        d = await diagnosticoCorte(routerId, OPCIONES)
+        assert.isTrue(d.chequeos.find((c) => c.clave === 'proxy_corte')!.ok)
     })
 
     test('regla del operador antes de las del corte: se mueve detrás y el diagnóstico lo detecta', async ({

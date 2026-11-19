@@ -345,6 +345,27 @@ export class RouterOSFalso {
         return antes - quedan.length
     }
 
+    /**
+     * `Location` del 307 que daría el proxy de corte (`/ip proxy access action=redirect`) a un cliente con esa
+     * IP de origen, o null si ninguna regla del puerto lo redirige. Como RouterOS 7.17+ (bug v1.19.0 del PM):
+     * `action-data` se lee como `host[:puerto]/ruta` y se le antepone `http://`, así que un valor con esquema
+     * sale roto (`https://portal/corte` → `http://https//portal/corte`). La primera regla que coincide gana
+     * (`src-address` exacta, o sin `src-address`).
+     */
+    redireccionProxy(srcAddress: string, localPort = '3346'): string | null {
+        const regla = this.tabla('/ip/proxy/access').find(
+            (o) =>
+                o.disabled !== 'true' &&
+                (!o['local-port'] || o['local-port'] === localPort) &&
+                (!o['src-address'] || o['src-address'] === srcAddress),
+        )
+        if (!regla || regla.action !== 'redirect') return null
+        const datos = regla['action-data'] ?? ''
+        // host hasta `:` o `/`; tras `:`, el puerto hasta `/`; el resto es la ruta (tal cual).
+        const m = /^([^:/]*)(?::([^/]*))?(.*)$/.exec(datos)!
+        return `http://${m[1]}${m[2] ? `:${m[2]}` : ''}${m[3]}`
+    }
+
     /** Escrituras recibidas (PUT, PATCH, DELETE). */
     get escrituras(): PeticionRecibida[] {
         return this.peticiones.filter((p) => p.metodo !== 'GET')

@@ -323,7 +323,7 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         assert.deepEqual(paquete.atributos, {
             'User-Name': e.userPpp,
             'Acct-Session-Id': e.acctSessionId,
-            'Mikrotik-Rate-Limit': '256k/256k',
+            'Mikrotik-Rate-Limit': '2M/2M',
             'Mikrotik-Address-List': 'suspendidos',
             'Filter-Id': 'argos-corte.in',
         })

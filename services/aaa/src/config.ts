@@ -48,6 +48,13 @@ function numero(valor: string | undefined, porDefecto: number): number {
     return n
 }
 
+/**
+ * Velocidad del suspendido si `AAA_SUSPENDIDO_RATE_LIMIT` falta o está vacía (igual que
+ * `RATE_LIMIT_SUSPENDIDO_DEFECTO` de apps/api). El corte lo hace el firewall; con 256k/256k la
+ * página de corte tardaba casi 2 minutos en cargar.
+ */
+export const RATE_LIMIT_SUSPENDIDO_DEFECTO = '2M/2M'
+
 export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const respaldo = env.AAA_RESPALDO ?? 'api'
     if (respaldo !== 'api' && respaldo !== 'fixtures') throw new Error('AAA_RESPALDO debe ser api o fixtures')
@@ -79,7 +86,7 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             env.AAA_FIXTURES_RUTA ?? fileURLToPath(new URL('../fixtures/servicios.json', import.meta.url)),
         claveSecretos: env.AAA_PPP_KEY,
         suspendido: {
-            rateLimit: env.AAA_SUSPENDIDO_RATE_LIMIT ?? '256k/256k',
+            rateLimit: env.AAA_SUSPENDIDO_RATE_LIMIT?.trim() || RATE_LIMIT_SUSPENDIDO_DEFECTO,
             grupo: env.AAA_SUSPENDIDO_GRUPO ?? 'suspendido',
             addressList: env.AAA_SUSPENDIDO_ADDRESS_LIST ?? 'suspendidos',
             filterId: env.AAA_SUSPENDIDO_FILTER_ID ?? 'argos-corte.in',

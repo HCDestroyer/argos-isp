@@ -47,6 +47,16 @@ Cada corrida deja su registro en `/opt/argosisp/registros/actualizar-<fecha>.log
 - Desde la primera vez que se guarda, esas variables ya no se leen para el corte: cambiarlas en el `.env` no hace nada. Se cambia en el panel; ArgosIsp reconcilia todos los routers y `coa` lee el modo de la API (`GET /api/v1/internal/corte/configuracion`).
 - `PORTAL_CORTE_PUERTO` sigue siendo, además, el puerto en que escucha Caddy para `/corte` (8088 por defecto): eso es del servidor y se cambia en el `.env` con `sudo argosisp levantar`. Si lo cambias, pon el mismo puerto en el panel.
 
+## Velocidad del suspendido (después de la 1.19.0)
+
+- `AAA_SUSPENDIDO_RATE_LIMIT` limita **todo** el tráfico del suspendido, también el que va a la página de corte. Con el valor de antes (`256k/256k`) la página tardaba casi 2 minutos en cargar. El corte no depende de esa velocidad: lo hace el firewall del router (`argos-corte`). El valor por defecto pasa a `2M/2M` y el proxy comprime el portal (`encode zstd gzip`).
+- Si el `.env` **no** tiene `AAA_SUSPENDIDO_RATE_LIMIT` (lo normal: `instalar.sh` no la escribe), no hay que hacer nada: al actualizar vale `2M/2M`.
+- Si el `.env` la fija (por ejemplo, copiado del `.env.example` del laboratorio), ni `argosisp actualizar` ni `argosisp levantar` la cambian: es una decisión del operador. Con `256k/256k`, `sudo argosisp estado` y `sudo argosisp levantar` lo avisan. Para cambiarla a mano:
+    1. `sudo nano /opt/argosisp/.env`: borra la línea `AAA_SUSPENDIDO_RATE_LIMIT=256k/256k` (vale `2M/2M`) o pon la velocidad que quieras (`AAA_SUSPENDIDO_RATE_LIMIT=2M/2M`; formato `subida/bajada` de RouterOS).
+    2. `sudo argosisp levantar`: `aaa` y `coa` mandan la nueva velocidad en el Access-Accept y el CoA del suspendido, y la API reconcilia el perfil `suspendido` de cada router.
+    3. Las sesiones que ya estaban suspendidas conservan su cola hasta que se reconectan (o hasta el siguiente CoA). Para aplicarla de inmediato a un cliente, desconéctalo desde el panel o en el router (`/ppp active remove [find name=<usuario>]`).
+- Comprobar: con un cliente suspendido, `/queue simple print where name~"<usuario>"` muestra `max-limit=2M/2M` y la página de corte carga en segundos.
+
 ## Identificación del cortado (desde la 1.13.0)
 
 Contrato: `.claude/integration/contratos/corte-identificacion.md`. Cada router elige cómo sabe la página de corte qué cliente es:

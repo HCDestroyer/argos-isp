@@ -16,6 +16,7 @@ import { commentServicio, commentServicioV6 } from '#network/routeros/estado_des
 import { commentPlan, listaPlan, nombreGlobal, nombreNodo } from '#network/routeros/velocidad_router'
 import { leerVelocidad, limitesPadrePlan } from '#network/velocidad'
 import type { EventoEntrante } from '#shared/eventos_bus'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 
 /**
  * Control de velocidad en modo `arbol_pcq` (semana 2, tanda 2, tarea 3; `contratos/velocidad.md`,
@@ -240,7 +241,7 @@ test.group('RouterOS · velocidad en modo arbol_pcq', (group) => {
         assert.include(lista6('suspendidos'), s3.prefijo_delegado_v6!)
         const colaSuspendida = falso.conComment('/queue/simple', commentServicio(s3.id))
         assert.lengthOf(colaSuspendida, 1)
-        assert.isTrue(igual(colaSuspendida[0]!['max-limit'], '256k/256k'))
+        assert.isTrue(igual(colaSuspendida[0]!['max-limit'], RATE_LIMIT_SUSPENDIDO_DEFECTO))
         // 3 activos: ceil(60M / 4) = 15M, pero nunca bajo un MIR (20M); limit-at = Σ CIR = 15M
         assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], '20M'))
         assert.isTrue(igual(nodo(planId, 'bajada')!['max-limit'], `${await maxNodo(planId, 3)}k`))

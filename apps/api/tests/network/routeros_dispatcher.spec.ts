@@ -21,6 +21,7 @@ import { leerVelocidad, rateLimitServicio } from '#network/velocidad'
 import type { EventoEntrante } from '#shared/eventos_bus'
 import { recolectarMetricas, registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
+import { RATE_LIMIT_SUSPENDIDO_DEFECTO } from '#network/routeros/velocidad_suspendido'
 
 /**
  * Dispatcher WISP (semana 2, tarea 3; `contratos/routeros.md`) con Postgres real y el RouterOS
@@ -154,7 +155,10 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         assert.lengthOf(lista(servicio.id), 0)
 
         await entregar(await cambiarEstado(servicio.id, 'suspendido'))
-        assert.equal(normalizarValor(cola(servicio.id)[0]!['max-limit']), normalizarValor('256k/256k'))
+        assert.equal(
+            normalizarValor(cola(servicio.id)[0]!['max-limit']),
+            normalizarValor(RATE_LIMIT_SUSPENDIDO_DEFECTO),
+        )
         assert.lengthOf(lista(servicio.id), 1)
         assert.containsSubset(lista(servicio.id)[0], { list: 'suspendidos', address: servicio.ipv4 })
 
@@ -210,7 +214,10 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         await entregar(eventos)
         assert.equal(falso.escrituras.length, escrituras, 'ningún evento repetido o viejo escribe')
         assert.lengthOf(lista(servicio.id), 1)
-        assert.equal(normalizarValor(cola(servicio.id)[0]!['max-limit']), normalizarValor('256k/256k'))
+        assert.equal(
+            normalizarValor(cola(servicio.id)[0]!['max-limit']),
+            normalizarValor(RATE_LIMIT_SUSPENDIDO_DEFECTO),
+        )
     })
 
     test('dhcp_fija con amarre: lease y ARP; al cambiar a ip_estatica se borra el lease; al retirar, todo', async ({
@@ -376,7 +383,10 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         )
         assert.lengthOf(cola(a.servicio.id), 1)
         assert.lengthOf(lista(b.servicio.id), 1)
-        assert.equal(normalizarValor(cola(b.servicio.id)[0]!['max-limit']), normalizarValor('256k/256k'))
+        assert.equal(
+            normalizarValor(cola(b.servicio.id)[0]!['max-limit']),
+            normalizarValor(RATE_LIMIT_SUSPENDIDO_DEFECTO),
+        )
         assert.isTrue(
             falso.tabla('/queue/simple').some((o) => o.name === 'ajena'),
             'lo que no es de ArgosIsp no se toca',
@@ -459,7 +469,10 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         assert.isFalse(salida.omitido)
         assert.containsSubset(salida.resultado, [{ router_id: routerId, motivo: 'recuperado', error: null }])
         assert.lengthOf(lista(servicio.id), 1)
-        assert.equal(normalizarValor(cola(servicio.id)[0]!['max-limit']), normalizarValor('256k/256k'))
+        assert.equal(
+            normalizarValor(cola(servicio.id)[0]!['max-limit']),
+            normalizarValor(RATE_LIMIT_SUSPENDIDO_DEFECTO),
+        )
         assert.notInclude(await redis().smembers(clavePendientes()), String(routerId))
     })
 })
