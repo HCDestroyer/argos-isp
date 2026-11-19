@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import ServicioActivarInstalacionModal from '~/components/ServicioActivarInstalacionModal.vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import PaginaServicios from '~/pages/servicios/index.vue'
 import { esperar } from '../ayudas/esperar'
 

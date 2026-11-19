@@ -56,6 +56,7 @@ import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { codigosCorte, servicios } from './servicios/datos'
+import { facturacionServicios, type FacturacionServicioFixture } from './servicios/periodosDatos'
 import { eventosRed } from './red/datos'
 import { clasesQos, perfilesQos, type ClaseQosFixture, type PerfilQosFila } from './qos/datos'
 import { sesiones } from './sesiones/datos'
@@ -221,6 +222,8 @@ interface BaseFixtures {
     conteosInventario: Schema<'ConteoInventarioDetalle'>[]
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
+    /** Inicio de la facturación y `facturar_desde` por servicio (emisión manual de periodos, A3). */
+    facturacionServicios: Record<number, FacturacionServicioFixture>
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
     usuarios: Schema<'Usuario'>[]
     /** Roles del ACL con sus permisos (`GET /roles`). */
@@ -405,6 +408,7 @@ function inicial(): BaseFixtures {
         empresas,
         usuarios,
         planesTemporales: [],
+        facturacionServicios,
         nodosPortal,
         portalCorte: portalCorteInicial(),
         camposPersonalizados,

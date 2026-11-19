@@ -10,7 +10,7 @@ import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import PaginaCliente from '~/pages/clientes/[id]/index.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
 import PaginaEmpresas from '~/pages/configuracion/empresas.vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { esperar } from '../ayudas/esperar'
 import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 

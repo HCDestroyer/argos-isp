@@ -184,6 +184,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'facturas.confirmar_emision': 'Factura emitida al certificarse',
     'facturas.sustituir': 'Factura sustituida',
     'facturas.emitir_cargo_unico': 'Cargo único emitido',
+    'facturas.emitir_periodos': 'Facturas de periodos emitidas a mano',
     'conceptos_cargo.crear': 'Concepto de cargo creado',
     'conceptos_cargo.editar': 'Concepto de cargo editado',
     'motivos_sin_costo.crear': 'Motivo sin costo creado',

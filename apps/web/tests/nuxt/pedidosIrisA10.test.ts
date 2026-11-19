@@ -6,7 +6,7 @@ import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import ClienteFormulario from '~/components/ClienteFormulario.vue'
 import ServicioEditar from '~/components/ServicioEditar.vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**

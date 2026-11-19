@@ -7,7 +7,7 @@ import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import PaginaBonificacion from '~/pages/bonificaciones/[id].vue'
 import PaginaBonificaciones from '~/pages/bonificaciones/index.vue'
 import PaginaReporte from '~/pages/reportes/[reporte].vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 
 /**
  * Bonificaciones (A3, `a3/decisiones-pm`): nunca una factura de Q0. Un periodo regalado o un cargo

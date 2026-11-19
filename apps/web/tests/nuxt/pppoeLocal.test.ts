@@ -15,7 +15,7 @@ import ServicioAltaFormulario from '~/components/ServicioAltaFormulario.vue'
 import ServicioEditar from '~/components/ServicioEditar.vue'
 import ServicioSesiones from '~/components/ServicioSesiones.vue'
 import PaginaRouter from '~/pages/routers/[id].vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { UApp } from '#components'
 import { esperar } from '../ayudas/esperar'
 

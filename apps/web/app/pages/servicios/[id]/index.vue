@@ -113,6 +113,8 @@ function alCambiarEmpresa(actualizado: Servicio) {
 const simuladorAbierto = ref(false)
 /** Cargo único (A3): instalación, equipo…; con todo descontado queda como bonificación. */
 const puedeCargoUnico = computed(() => puede('facturas.emitir_cargo_unico') && puede('facturas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+/** Facturas de periodos a mano (A3): pago por adelantado o periodos que el cron no emitió; pantalla propia. */
+const puedeFacturasPeriodo = computed(() => puede('facturas.emitir_periodos') && puede('facturas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
 const cargoAbierto = ref(false)
 const periodosBonificados = useTemplateRef('periodosBonificados')
 
@@ -481,7 +483,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeSincronizarRouter"
+                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeFacturasPeriodo || puedeSincronizarRouter"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -519,6 +521,15 @@ onMounted(cargar)
                     variant="outline"
                     data-prueba="abrir-cargo-unico"
                     @click="cargoAbierto = true"
+                />
+                <UButton
+                    v-if="puedeFacturasPeriodo"
+                    :to="enlace(`/servicios/${servicio.id}/facturas-periodo`)"
+                    label="Emitir facturas de periodos"
+                    icon="i-lucide-calendar-plus"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-facturas-periodo"
                 />
                 <UButton
                     v-if="puedeSimular"
