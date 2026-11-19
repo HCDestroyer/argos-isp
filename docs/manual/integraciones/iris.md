@@ -33,11 +33,8 @@ También se ven la URL de Iris, cuándo se conectó por enlace y el id del conec
 **Contrato entre Argos e Iris:** la versión del contrato que habla este ArgosIsp (con `iris.abrir`) y la que informó Iris. Si Iris habla una anterior a la 0.8.0, o todavía no la informó, un aviso dice en palabras qué queda apagado:
 
 - Iris no se entera al momento cuando se crea o edita una cuenta bancaria; la ve en la próxima sincronización.
-- Iris no puede pedir una reconexión temporal porque no hay personal de caja (solo fuera de horario).
-- Iris no informa aquí el avance de su sincronización.
-- Iris no recibe el precio mensual del servicio ni los avisos de cambio de precio.
 
-Se encienden solas cuando Iris se actualiza y vuelve a informar su contrato.
+Es lo único que ArgosIsp apaga por la versión. El precio mensual del servicio, la reconexión sin personal de caja y el avance de la sincronización están disponibles para cualquier Iris: los usa cuando su versión ya los conoce. El aviso de cuentas bancarias se enciende solo cuando Iris se actualiza y vuelve a informar su contrato.
 
 **Sincronización informada por Iris:** lo que Iris dice que ya copió de ArgosIsp en su primera sincronización. Arriba, el estado general («En curso», «Completa» o «Con errores»), cuándo empezó y el último aviso de Iris. Debajo, una fila por recurso (empresas, zonas, planes, routers, bancos, cuentas bancarias, clientes y servicios) con cuántos lleva de cuántos («120 de 300»), su estado («Sin empezar», «En curso», «Completa», «Con errores»), el error que informó Iris y cuándo terminó. Las fechas van en hora de Guatemala. ArgosIsp no calcula nada de esto: lo muestra tal como llegó. Si Iris nunca lo informó, dice «Iris aún no ha informado la sincronización». «Actualizar» vuelve a leerlo.
 

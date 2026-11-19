@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises'
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
-import { empresasDeLaLista } from '#shared/empresa_activa'
+import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
 import { NoEncontrado, Problema, Prohibido, ValidacionFallida } from '#shared/errores'
 import { exigirAcceso } from '#billing/empresa'
 import { filaEmpresa } from '#core/empresas'
@@ -48,7 +48,9 @@ import CrearTraslado from '#inventario/actions/crear_traslado'
 import RecibirTraslado from '#inventario/actions/recibir_traslado'
 import CancelarTraslado from '#inventario/actions/cancelar_traslado'
 import AdjuntarDocumentoTraslado from '#inventario/actions/adjuntar_documento_traslado'
-import ConfigurarInventario from '#inventario/actions/configurar_inventario'
+import ConfigurarInventario, {
+    DETALLE_EMPRESA_CONFIGURACION,
+} from '#inventario/actions/configurar_inventario'
 
 /** Ver una orden: es de una empresa del usuario y ve su origen o su destino (tope por técnico). */
 async function exigirVerOrden(ctx: HttpContext, id: number) {
@@ -379,14 +381,12 @@ const rutas: Ruta[] = [
         etiqueta: 'inventario',
         permiso: 'inventario.ver',
         query: v.verConfiguracionInventarioValidator,
+        descripcion:
+            'Sin fila, los valores por defecto (version 0). Es por empresa: sin empresa activa ni empresa_id, 422 empresa_requerida.',
         respuesta: { status: 200, descripcion: 'Configuración', esquema: ConfiguracionInventario },
         handler: async (ctx, { query }) => {
             const empresaId = query.empresa_id ?? ctx.empresa?.activa ?? null
-            if (!empresaId) {
-                throw new ValidacionFallida([
-                    { field: 'empresa_id', rule: 'required', message: 'Indica la empresa' },
-                ])
-            }
+            if (!empresaId) throw new EmpresaRequerida(DETALLE_EMPRESA_CONFIGURACION)
             exigirAcceso(ctx, { empresa_id: empresaId })
             return configuracionInventario(empresaId)
         },

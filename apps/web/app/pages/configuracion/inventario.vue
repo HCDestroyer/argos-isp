@@ -8,6 +8,9 @@ import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
  *   permite la aceptación simple);
  * - la IA que lee facturas de compra en PDF o imagen (`inventario.configurar_ia`): proveedor, modelo,
  *   URL base y clave. La clave se escribe y nunca vuelve: solo se ve si hay una guardada.
+ *
+ * Con «Todas las empresas» la firma no se lee (es de cada empresa: se pide elegir una) y la IA que se
+ * ve y se guarda es la global (`global: true`). Los 409 y 422 se explican en palabras simples.
  */
 definePageMeta({ permiso: 'inventario.configurar' })
 
@@ -15,6 +18,24 @@ useHead({ title: 'Inventario · Configuración · ArgosIsp' })
 
 const toast = useToast()
 const { puede } = usePermisos()
+const { eleccion } = useEmpresaActiva()
+/** El selector está en «Todas las empresas» (solo con alcance global): no hay empresa activa. */
+const enTodas = computed(() => eleccion.value === 'todas')
+
+/** El problema de la API en palabras simples (409 de versión, 422 de empresa o de datos). */
+function problemaClaro(problema: Problem): Problem {
+    if (problema.status === 409) {
+        return { ...problema, title: 'Alguien más cambió esta configuración', detail: 'Ya se cargó la versión actual. Revísala y vuelve a guardar.' }
+    }
+    if (problema.status === 422 && codigoProblema(problema) === 'empresa_requerida') {
+        return { ...problema, title: 'Elige una empresa', detail: 'Esta configuración es de cada empresa: elige una en el selector de empresa de arriba.' }
+    }
+    if (problema.status === 422) {
+        const mensajes = (problema.errors ?? []).map(e => e.message).filter(Boolean)
+        return { ...problema, title: 'Revisa los datos', detail: mensajes.length ? mensajes.join('. ') : problema.detail }
+    }
+    return problema
+}
 
 /* Firma al recibir */
 const configuracion = shallowRef<ConfiguracionInventario | null>(null)
@@ -22,8 +43,16 @@ const problemaConfiguracion = ref<Problem | null>(null)
 const cargandoConfiguracion = ref(false)
 const guardandoFirma = ref(false)
 const problemaFirma = ref<Problem | null>(null)
+/** Sin empresa activa la firma no se puede leer ni guardar: se pide elegir una (no es un error). */
+const firmaPideEmpresa = computed(() => enTodas.value || (problemaConfiguracion.value !== null && codigoProblema(problemaConfiguracion.value) === 'empresa_requerida'))
 
 async function cargarConfiguracion() {
+    problemaFirma.value = null
+    if (enTodas.value) {
+        configuracion.value = null
+        problemaConfiguracion.value = null
+        return
+    }
     // `GET /inventario/configuracion` pide `inventario.ver` (todos los roles que configuran lo tienen).
     if (!puede('inventario.ver')) {
         problemaConfiguracion.value = { type: 'about:blank', title: 'Sin permiso', status: 403, detail: 'Falta el permiso inventario.ver.' }
@@ -45,7 +74,10 @@ async function cambiarFirma(valor: boolean) {
     const resultado = await useConfiguracionInventario().guardar(valor, configuracion.value.version, nuevaClaveIdempotencia())
     guardandoFirma.value = false
     if (!resultado.ok) {
-        problemaFirma.value = resultado.problema
+        if (resultado.problema.status === 409) {
+            await cargarConfiguracion()
+        }
+        problemaFirma.value = problemaClaro(resultado.problema)
         return
     }
     configuracion.value = resultado.data
@@ -77,7 +109,8 @@ async function cargarIa() {
         return
     }
     cargandoIa.value = true
-    const resultado = await useConfiguracionInventario().verIa()
+    problemaGuardarIa.value = null
+    const resultado = await useConfiguracionInventario().verIa(enTodas.value)
     cargandoIa.value = false
     sinIa.value = !resultado.ok && resultado.problema.status === 404
     ia.value = resultado.ok ? resultado.data : null
@@ -86,6 +119,12 @@ async function cargarIa() {
 }
 
 onMounted(() => {
+    void cargarConfiguracion()
+    void cargarIa()
+})
+
+// Cambiar de empresa en el selector relee las dos secciones.
+watch(eleccion, () => {
     void cargarConfiguracion()
     void cargarIa()
 })
@@ -108,17 +147,22 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
         url_base: d.url_base || null,
         activo: d.activo,
         version: ia.value?.version ?? 0,
+        // En «Todas las empresas» se guarda la global (la API la permite solo con alcance global).
+        ...(enTodas.value ? { global: true } : {}),
         // La clave solo viaja si se cambió: sin el campo se conserva, null la borra.
         ...(clave.value.accion === 'reemplazar' ? { api_key: clave.value.valor } : {}),
         ...(clave.value.accion === 'borrar' ? { api_key: null } : {}),
     }, nuevaClaveIdempotencia())
     guardandoIa.value = false
     if (!resultado.ok) {
+        if (resultado.problema.status === 409) {
+            await cargarIa()
+        }
         const errores = erroresDeFormulario(resultado.problema)
         if (errores.length) {
             formularioIa.value?.setErrors(errores)
         }
-        problemaGuardarIa.value = resultado.problema
+        problemaGuardarIa.value = problemaClaro(resultado.problema)
         return
     }
     ia.value = resultado.data
@@ -146,8 +190,17 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
                         </p>
                     </div>
                 </template>
+                <UAlert
+                    v-if="firmaPideEmpresa"
+                    color="info"
+                    variant="subtle"
+                    icon="i-lucide-building-2"
+                    title="Elige una empresa"
+                    description="La firma al recibir traslados es de cada empresa: elige una en el selector de empresa de arriba para verla o cambiarla."
+                    data-prueba="config-firma-elige-empresa"
+                />
                 <ProblemaAlerta
-                    v-if="problemaConfiguracion"
+                    v-else-if="problemaConfiguracion"
                     :problema="problemaConfiguracion"
                     :reintentar="cargarConfiguracion"
                     :reintentando="cargandoConfiguracion"
@@ -206,6 +259,15 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
                     @submit="guardarIa"
                 >
                     <UAlert
+                        v-if="enTodas"
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-globe"
+                        title="Configuración global"
+                        description="Con «Todas las empresas» se ve y se guarda la global: la usan las empresas que no tienen una propia."
+                        data-prueba="config-ia-global"
+                    />
+                    <UAlert
                         v-if="sinIa"
                         color="neutral"
                         variant="subtle"
@@ -215,7 +277,7 @@ async function guardarIa(evento: FormSubmitEvent<EntradaIa>) {
                         data-prueba="config-ia-sin"
                     />
                     <UAlert
-                        v-else-if="ia && ia.empresa_id === null"
+                        v-else-if="ia && ia.empresa_id === null && !enTodas"
                         color="info"
                         variant="subtle"
                         icon="i-lucide-globe"

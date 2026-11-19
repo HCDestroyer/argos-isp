@@ -15,12 +15,13 @@ export type EstadoConectorIrisPublico = Schema<'EstadoConectorIris'>
 /** Desde esta versión Argos manda a Iris lo nuevo de 0.8.0 (`conectorAdmite('0.8.0')` en la API). */
 export const CONTRATO_IRIS_080 = '0.8.0'
 
-/** Lo que un Iris anterior a 0.8.0 no recibe o no puede pedir, en palabras del manual. */
+/**
+ * Lo que Argos apaga de verdad para un Iris anterior a 0.8.0. Solo el webhook `cuenta_bancaria.cambiada`
+ * depende del contrato (`EVENTOS_DESDE_080` en la API); el precio del servicio, `sin_personal` y el avance de
+ * la sincronización Argos los ofrece a cualquier Iris, que los usa cuando su versión los conoce.
+ */
 export const FUNCIONES_DESDE_080: readonly string[] = [
     'Iris no se entera al momento cuando se crea o edita una cuenta bancaria; la ve en la próxima sincronización.',
-    'Iris no puede pedir una reconexión temporal porque no hay personal de caja (solo fuera de horario).',
-    'Iris no informa aquí el avance de su sincronización.',
-    'Iris no recibe el precio mensual del servicio ni los avisos de cambio de precio.',
 ]
 
 /** Compara dos versiones `mayor.menor.parche`; lo que no es número cuenta como 0. */

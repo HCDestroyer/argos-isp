@@ -4238,7 +4238,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Configuración del inventario de la empresa (firma obligatoria al recibir traslados) */
+        /**
+         * Configuración del inventario de la empresa (firma obligatoria al recibir traslados)
+         * @description Sin fila, los valores por defecto (version 0). Es por empresa: sin empresa activa ni empresa_id, 422 empresa_requerida.
+         */
         get: operations["inventarioConfiguracion"];
         put?: never;
         /**
