@@ -24,7 +24,7 @@ Por qué el cambio es obligatorio: la contraseña de la empresa la conocen todos
 
 ### Dónde se configura
 
-En el panel, en la configuración de la empresa, sección **Contraseña del portal**. Solo el administrador puede cambiarla (permiso `portal.configurar_contrasena_defecto`). El sistema nunca la vuelve a mostrar: guarda solo una huella cifrada. Si la olvidas, escribe una nueva.
+En el panel, en **Configuración → Contraseña del portal**, con la empresa elegida en el selector ([cómo se usa esa pantalla](./contrasena-del-portal.md)). Solo el administrador puede cambiarla (permiso `portal.configurar_contrasena_defecto`). El sistema nunca la vuelve a mostrar: guarda solo una huella cifrada. Si la olvidas, escribe una nueva.
 
 Si la empresa no tiene contraseña por defecto, los clientes que aún no eligieron la suya solo pueden entrar con código o con «Ver mi cuenta».
 
@@ -33,7 +33,7 @@ Si la empresa no tiene contraseña por defecto, los clientes que aún no eligier
 Tiene dos caminos:
 
 1. **Entrar con un código** (pestaña **Código** en **Entrar**) y, ya dentro, ir a **Cuenta** → «Cambiar contraseña». Para cambiarla le pide la actual: si no la recuerda, usa el camino 2.
-2. **Pedir a soporte que la restaure.** En la ficha del cliente, «Restaurar contraseña del portal» (permiso `clientes.restaurar_contrasena_portal`, lo tienen administrador y soporte). Desde ese momento entra otra vez con la contraseña de la empresa y el portal le pide elegir una nueva. Restaurar también cierra las sesiones del portal que tuviera abiertas.
+2. **Pedir a soporte que la restaure.** En la ficha del cliente, tarjeta **Portal del cliente**, botón «Restaurar contraseña por defecto» (permiso `clientes.restaurar_contrasena_portal`, lo tienen administrador y soporte). Desde ese momento entra otra vez con la contraseña de la empresa y el portal le pide elegir una nueva. Restaurar también cierra las sesiones del portal que tuviera abiertas; el aviso del panel dice cuántas. Ver [Ficha del cliente](../clientes-y-servicios/clientes.md#portal-del-cliente).
 
 ::: tip Al restaurar
 Dile al cliente la contraseña de la empresa por un canal seguro (en persona o por teléfono al número registrado). Si el panel avisa que la empresa no tiene contraseña por defecto, configúrala primero o pídele que entre con código.

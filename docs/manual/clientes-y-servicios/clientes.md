@@ -96,7 +96,7 @@ Arriba ves el nombre, si es Persona o Empresa, su número de cliente, su zona y 
 
 ### Pestañas
 
-- **Datos:** contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión. Debajo, el estado de WhatsApp (con `notificaciones.ver`) y el **responsable de pago**.
+- **Datos:** contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión. Debajo, el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**.
 - **Datos fiscales:** documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
 - **Servicios** (con `servicios.ver`): cada servicio con su usuario PPP, router, plan y precio (con «precio especial» si lo tiene), direcciones IP y estado. Con varias empresas, los servicios se agrupan por empresa.
 - **Estado de cuenta** (con `clientes.estado_cuenta`): facturas, pagos y notas de crédito. Ver [Cobros](../cobros/index.md).
@@ -109,6 +109,23 @@ En **Datos**, el campo Telegram dice «Vinculado» o «Sin vincular».
 
 - «Vincular» (`clientes.vincular_telegram`): pide al cliente que le escriba `/start` al bot de la empresa; el bot le responde con su chat id. Escribe ese número en «Chat id» y pulsa «Vincular».
 - «Quitar» (`clientes.desvincular_telegram`): deja de mandarle avisos por Telegram.
+
+### Portal del cliente
+
+En **Datos**, la tarjeta «Portal del cliente» dice cómo entra el cliente al portal con su número de documento:
+
+- **Contraseña propia**, con la fecha y hora del último cambio: la eligió él.
+- **Contraseña por defecto**: todavía entra con la contraseña de su empresa ([Contraseña del portal](../portal/contrasena-del-portal.md)); el portal le pedirá elegir una propia.
+- Si su empresa **no tiene contraseña por defecto**, un aviso dice que solo puede entrar con código (o con «Ver mi cuenta» desde la página de corte).
+
+«Restaurar contraseña por defecto» (`clientes.restaurar_contrasena_portal`, roles `admin` y `soporte`) sirve cuando el cliente olvidó la suya:
+
+1. Pulsa el botón. El diálogo explica que volverá a entrar con la contraseña de la empresa, que deberá elegir una nueva y que **se cerrarán sus sesiones del portal**. Si su empresa no tiene contraseña por defecto, también avisa que solo podrá entrar con código.
+2. Pulsa «Restaurar». El aviso dice cuántas sesiones del portal se cerraron y la tarjeta pasa a «Contraseña por defecto».
+
+Se puede repetir sin problema: si ya usaba la de la empresa, solo cierra las sesiones que tenga abiertas. Queda en la línea de tiempo como «Contraseña del portal restaurada a la de por defecto». Nunca se muestra ninguna contraseña.
+
+Sin el permiso ves el estado, pero no el botón.
 
 ### Responsable de pago
 
@@ -136,6 +153,8 @@ El teléfono y el móvil solo se validan si los cambiaste: un número viejo con 
 **«No se registró el permiso de WhatsApp».** El cliente sí se guardó, pero Iris no recibió el permiso. Pulsa «Reintentar» en el aviso.
 
 **No veo el botón «Nuevo cliente» o «Editar».** Te falta el permiso `clientes.crear` o `clientes.editar`. Pídeselo a un administrador.
+
+**La tarjeta «Portal del cliente» muestra un error con «Reintentar».** No se pudo leer cómo entra el cliente; pulsa «Reintentar». El resto de la ficha sigue funcionando.
 
 **«Cliente no encontrado».** El enlace apunta a un número de cliente que no existe.
 
