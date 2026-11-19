@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { z } from 'zod'
+import { z } from '~/lib/zod'
 
 /**
  * Entrada al portal, en dos pestañas:

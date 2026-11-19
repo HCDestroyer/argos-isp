@@ -37,6 +37,12 @@ export default defineNuxtConfig({
     ui: {
         // Sin @nuxt/fonts: nada de descargas a fonts.googleapis.com / fonts.gstatic.com.
         fonts: false,
+        // Solo el CSS de los componentes de Nuxt UI que el portal usa (no el de los 125): menos CSS en
+        // la primera carga de `/corte`. Un componente que solo se pinta de forma dinámica (`resolveComponent`)
+        // se agrega a mano a la lista.
+        experimental: {
+            componentDetection: true,
+        },
     },
 
     runtimeConfig: {
@@ -80,12 +86,31 @@ export default defineNuxtConfig({
 
     compatibilityDate: '2026-10-01',
 
+    // Peso de `/corte` (el suspendido navega con la velocidad limitada). Medición y reglas en
+    // `apps/portal/README.md` § Peso de la página de corte.
+    nitro: {
+        // `.gz` y `.br` junto a cada archivo de `public/` y `_nuxt/`: Nitro los sirve según
+        // `Accept-Encoding` (A6 agrega además `encode` en el Caddy).
+        compressPublicAssets: { gzip: true, brotli: true },
+    },
+
     typescript: {
         strict: true,
         typeCheck: false,
         // Pruebas contra el servidor de producción (entorno node, vitest.servidor.config.ts).
         nodeTsConfig: {
             include: ['../tests/servidor/**/*', '../vitest.servidor.config.ts'],
+        },
+    },
+
+    hooks: {
+        // Sin `<link rel="prefetch">` de los chunks diferidos: el navegador los bajaba igual en
+        // segundo plano y competían por el ancho de banda limitado de `/corte` (formularios, zod, los
+        // fixtures). Se descargan al usarse. Los `modulepreload` de la página se quedan.
+        'build:manifest': (manifest) => {
+            for (const recurso of Object.values(manifest)) {
+                recurso.prefetch = false
+            }
         },
     },
 

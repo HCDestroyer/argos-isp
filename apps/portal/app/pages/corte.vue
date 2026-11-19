@@ -44,6 +44,13 @@ const pendiente = computed(() => esPendienteInstalacion(corte.value?.estado))
 const verDeposito = ref(false)
 const verPromesa = ref(false)
 const verComprobante = ref(false)
+/** Modal ya abierto alguna vez: desde entonces queda montado (ver la plantilla). */
+const usado = reactive({ deposito: false, promesa: false, comprobante: false })
+watchEffect(() => {
+    usado.deposito ||= verDeposito.value
+    usado.promesa ||= verPromesa.value
+    usado.comprobante ||= verComprobante.value
+})
 
 /** Último comprobante enviado desde esta página: queda en revisión; al aprobarlo, el servicio vuelve. */
 const comprobante = ref<ComprobantePortal | null>(null)
@@ -510,12 +517,22 @@ async function actualizar() {
             </p>
         </template>
 
-        <CorteDatosDeposito v-model:open="verDeposito" />
-        <PromesaSolicitar
+        <!--
+            Los modales se descargan la primera vez que se abren (Lazy + v-if): el formulario, zod y
+            los componentes de fecha y archivo no van en la carga de /corte, que llega con la
+            velocidad limitada del suspendido. Después quedan montados para animar al cerrar.
+        -->
+        <LazyCorteDatosDeposito
+            v-if="usado.deposito"
+            v-model:open="verDeposito"
+        />
+        <LazyPromesaSolicitar
+            v-if="usado.promesa"
             v-model:open="verPromesa"
             @resultado="promesaResuelta"
         />
-        <ComprobanteSubir
+        <LazyComprobanteSubir
+            v-if="usado.comprobante"
             v-model:open="verComprobante"
             @enviado="comprobanteEnviado"
         />

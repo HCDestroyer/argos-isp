@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { z } from 'zod'
+import { z } from '~/lib/zod'
 
 /**
  * Cambiar la contraseña del portal (`POST /portal/contrasena`).

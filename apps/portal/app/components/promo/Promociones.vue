@@ -117,7 +117,8 @@ const idTitulo = `promociones-${props.lugar}`
             :anuncio="unico.anuncio"
             @clic="clic(unico.anuncio)"
         />
-        <PromoCarrusel
+        <!-- Lazy: el carrusel (embla) solo baja cuando hay dos o más promociones que mostrar. -->
+        <LazyPromoCarrusel
             v-else
             :items="items"
             :visible="visible"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { z } from 'zod'
+import { z } from '~/lib/zod'
 
 /**
  * Confirmar un canje: qué recibe, a qué servicio se aplica (si tiene varios en la empresa), cuántos

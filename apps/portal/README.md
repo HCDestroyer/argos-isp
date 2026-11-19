@@ -188,6 +188,55 @@ Contrato `.claude/integration/contratos/instalacion.md` §3: un servicio vendido
 | `/cuenta`: aviso «Tu instalación está pendiente» en la tarjeta del servicio con sus cargos pendientes (facturas pendientes de ese servicio: solo pueden ser cargos únicos); sin «Pedir promesa» ni aviso de reactivar | `app/components/cuenta/InicioEmpresa.vue`, `app/pages/cuenta.vue` |
 | Fixtures: `?fixture=pendiente` en `/corte` y `?cuenta=pendiente` en `/cuenta` | `fixtures/corte.ts`, `fixtures/cuenta.ts` |
 
+## Entrar con documento y contraseña, y «Ver mi cuenta» en `/corte`
+
+Pedido del PM. Contrato y reglas en `apps/api/app/portal/README.md` § Acceso con documento y contraseña;
+manual en `docs/manual/portal/acceso-con-contrasena.md`.
+
+- `/entrar`: pestañas **Documento y contraseña** (por defecto, `POST /portal/entrar`) y **Código** (la de
+  siempre; `?con=codigo`, y siempre con `?por_ip=1`). `?empresa=<id>` limita a esa empresa.
+- Si entró con la contraseña de la empresa (`debe_cambiar_contrasena`), va a `/cambiar-contrasena`; la API
+  responde 403 `cambio_contrasena_requerido` en todo lo demás y `/cuenta` lo trae de vuelta allí.
+- `/cambiar-contrasena`: pide la actual, la nueva y su confirmación. También desde **Cuenta**.
+- `/corte`: el acceso «Ver mi cuenta» (`data-testid="ver-mi-cuenta"`) llama `POST /portal/corte/sesion` y
+  pasa a `/cuenta`, sin pedir nada. Si la API ya no identifica la conexión, ofrece entrar con documento o código.
+- Fixtures: documento `12345679`, contraseña propia `MiClave2026`; `/entrar?contrasena=defecto` simula un
+  cliente que aún usa la de la empresa (`Bienvenido2026`).
+- Pruebas: `tests/nuxt/contrasena.test.ts` y `tests/e2e/acceso.spec.ts` (axe, claro y oscuro, 390 y 1280 px).
+
+## Peso de la página de corte
+
+Al suspendido se le limita la velocidad, así que lo que baja `/corte` importa. Medido con Chromium a 390 px
+contra el servidor de producción (`node .output/server/index.mjs`), sumando cada archivo del mismo origen
+(gzip 9 y brotli 11 calculados del archivo servido):
+
+| | Archivos | Sin comprimir | gzip | brotli |
+| --- | --- | --- | --- | --- |
+| Antes (v1.19.0) | 36 | 1 231 KB | 360 KB | 310 KB |
+| Ahora | 37 | 735 KB | 234 KB | 205 KB |
+
+Qué se hizo:
+
+- **`nitro.compressPublicAssets`** (gzip y brotli): `.gz` y `.br` junto a cada archivo de `_nuxt/` y `public/`;
+  Nitro los sirve según `Accept-Encoding`. El HTML es dinámico: lo comprime el Caddy (`encode`, A6).
+- **Fixtures fuera del bundle**: `plugins/api.ts` los importa de forma diferida y solo en modo fixtures
+  (antes ~150 KB iban en toda página de producción).
+- **Sin `prefetch` de chunks diferidos** (gancho `build:manifest` en `nuxt.config.ts`): el navegador ya no baja
+  en segundo plano formularios, zod ni fixtures mientras carga `/corte`.
+- **zod solo con los formularios**: `~/lib/zod` (con `jitless`, antes un plugin global) y los esquemas en
+  `utils/promesaEsquema.ts` y `utils/comprobanteEsquema.ts`; `utils/promesa.ts` y `utils/comprobante.ts`
+  (que `/corte` usa) ya no importan zod.
+- **Modales de `/corte` diferidos** (`LazyPromesaSolicitar`, `LazyComprobanteSubir`, `LazyCorteDatosDeposito`,
+  montados al abrirse la primera vez) y **carrusel de promociones diferido** (`LazyPromoCarrusel`: embla solo
+  con dos o más promociones).
+- **CSS solo de los componentes usados** (`ui.experimental.componentDetection`): 197 KB → 105 KB (27 → 16 KB gzip).
+- Iconos: el bundle de cliente lleva solo los lucide usados (~31 KB, 5 KB gzip); sin fuentes externas.
+
+Lo que queda (~165 KB gzip) es la base que toda página necesita para hidratar: Vue + Nuxt + Iconify
+(76 KB), router + `UApp` + toasts de reka (44 KB), tailwind-merge/variants de Nuxt UI (23 KB) y decimal.js
+(14 KB; la regla del repositorio lo pide para dinero). Bajar de ~150 KB exigiría una `/corte` sin Vue (HTML
+del servidor sin hidratar), que hoy no puede pedir promesas ni subir comprobantes.
+
 ## Mi cuenta: entrada con código (`/entrar`) y portal autenticado (`/cuenta`)
 
 | Pieza | Dónde |
