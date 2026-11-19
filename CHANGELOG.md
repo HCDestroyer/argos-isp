@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/HCDestroyer/argos-isp/compare/v1.20.0...v1.21.0) (2026-11-19)
+
+
+### Funcionalidades
+
+* **iris:** contrato 0.8.1 (A29): búsqueda sin datos de red con buscar_red ([#258](https://github.com/HCDestroyer/argos-isp/issues/258)) ([4bbd1ae](https://github.com/HCDestroyer/argos-isp/commit/4bbd1aec4c2585f0dfcc0fafc23226ce7b43caeb))
+
 ## [1.20.0](https://github.com/HCDestroyer/argos-isp/compare/v1.19.0...v1.20.0) (2026-11-19)
 
 
