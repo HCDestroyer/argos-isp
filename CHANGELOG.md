@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.20.0](https://github.com/HCDestroyer/argos-isp/compare/v1.19.0...v1.20.0) (2026-11-19)
+
+
+### Funcionalidades
+
+* **billing,portal:** facturas de periodo a mano y acceso al portal con documento y contraseña ([#257](https://github.com/HCDestroyer/argos-isp/issues/257)) ([1d2934f](https://github.com/HCDestroyer/argos-isp/commit/1d2934f8bf3edc6836c608241bc413f5945e484b))
+
+
+### Correcciones
+
+* **routeros:** página de corte sin «http://https//» y sin esperar 2 minutos ([#255](https://github.com/HCDestroyer/argos-isp/issues/255)) ([7ea2e61](https://github.com/HCDestroyer/argos-isp/commit/7ea2e61b1fb773df2fcf752ba22e2ab7e03df0c5))
+
 ## [1.19.0](https://github.com/HCDestroyer/argos-isp/compare/v1.18.1...v1.19.0) (2026-11-18)
 
 
