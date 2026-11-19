@@ -41,18 +41,18 @@ En `aaa`:
 
 ### Respuesta por estado
 
-| Estado del servicio      | HTTP | FreeRADIUS | Atributos                                                                                                                             |
-| ------------------------ | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `activo`                 | 200  | Accept     | `Mikrotik-Rate-Limit` = `plan.rate_limit`; `Mikrotik-Group` según la estrategia de velocidad                                          |
-| `limitado`               | 200  | Accept     | `Mikrotik-Rate-Limit` = `plan.rate_limit_limitado`; `Mikrotik-Group` como en activo                                                   |
-| `suspendido`             | 200  | Accept     | `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Group = suspendido`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
-| `pendiente_instalacion`  | 401  | Reject     | —                                                                                                                                     |
-| `retirado`               | 401  | Reject     | —                                                                                                                                     |
-| inexistente o lápida     | 404  | Reject     | —                                                                                                                                     |
-| `pass_ppp` no descifra   | 500  | Reject     | — (`AAA_PPP_KEY` distinta de la de la API)                                                                                            |
-| sin Redis, API ni perfil | 503  | Reject     | — (ver «Modo degradado»)                                                                                                              |
+| Estado del servicio      | HTTP | FreeRADIUS | Atributos                                                                                                                         |
+| ------------------------ | ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `activo`                 | 200  | Accept     | `Mikrotik-Rate-Limit` = `plan.rate_limit`; `Mikrotik-Group` según la estrategia de velocidad                                      |
+| `limitado`               | 200  | Accept     | `Mikrotik-Rate-Limit` = `plan.rate_limit_limitado`; `Mikrotik-Group` como en activo                                               |
+| `suspendido`             | 200  | Accept     | `Mikrotik-Rate-Limit = 2M/2M`, `Mikrotik-Group = suspendido`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
+| `pendiente_instalacion`  | 401  | Reject     | —                                                                                                                                 |
+| `retirado`               | 401  | Reject     | —                                                                                                                                 |
+| inexistente o lápida     | 404  | Reject     | —                                                                                                                                 |
+| `pass_ppp` no descifra   | 500  | Reject     | — (`AAA_PPP_KEY` distinta de la de la API)                                                                                        |
+| sin Redis, API ni perfil | 503  | Reject     | — (ver «Modo degradado»)                                                                                                          |
 
-El suspendido **se acepta** para que llegue a la página de corte, y conserva su IPv4 y sus prefijos: el portal lo identifica por la IP de la sesión. Los valores del perfil de corte salen de `AAA_SUSPENDIDO_RATE_LIMIT`, `AAA_SUSPENDIDO_GRUPO`, `AAA_SUSPENDIDO_ADDRESS_LIST` y `AAA_SUSPENDIDO_FILTER_ID`. En RouterOS 7.24.5, `Mikrotik-Group = suspendido` aplica al conectar el perfil de corte completo (address-list e interface-list en IPv4 e IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva.
+El suspendido **se acepta** para que llegue a la página de corte, y conserva su IPv4 y sus prefijos: el portal lo identifica por la IP de la sesión. Los valores del perfil de corte salen de `AAA_SUSPENDIDO_RATE_LIMIT`, `AAA_SUSPENDIDO_GRUPO`, `AAA_SUSPENDIDO_ADDRESS_LIST` y `AAA_SUSPENDIDO_FILTER_ID`. En RouterOS 7.24.5, `Mikrotik-Group = suspendido` aplica al conectar el perfil de corte completo (address-list e interface-list en IPv4 e IPv6); `Mikrotik-Address-List` y `Filter-Id` son los mismos atributos que `coa` usa para suspender una sesión viva. La velocidad del suspendido es `2M/2M` por defecto (`AAA_SUSPENDIDO_RATE_LIMIT` y `COA_SUSPENDIDO_RATE_LIMIT`; vacía = defecto): el corte lo hace el firewall, y con `256k/256k` la página de corte tardaba casi 2 minutos en cargar.
 
 Además, en todo Accept:
 
@@ -148,20 +148,20 @@ Cada router con RADIUS es un cliente de FreeRADIUS en `clients.d/router-<id>.con
 
 `coa` lee `argos:eventos` con el grupo `coa` (`XREADGROUP` + `XACK`, `XAUTOCLAIM` de lo que lleva 60 s sin confirmar). Por cada sesión abierta del servicio (`network.sesiones.fin IS NULL`, solo `origen = 'accounting'`) manda el paquete a la `nas_ip` **actual** del router de la sesión, puerto 3799, con el secret del router.
 
-| Cambio                                                             | Paquete                                       | Atributos además de `User-Name` y `Acct-Session-Id`                                                         |
-| ------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `activo` o `limitado` → `suspendido`                               | Disconnect por defecto; CoA con el modo `coa` | CoA: `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
-| `activo` → `limitado` y `limitado` → `activo`                      | CoA                                           | `Mikrotik-Rate-Limit` del estado nuevo                                                                      |
-| `suspendido` → `activo` o `limitado` (reactivar)                   | Disconnect                                    | — (un CoA deja el IPv6 cortado en 7.24.5; al reconectar `aaa` da el perfil normal)                          |
-| → `retirado`                                                       | Disconnect                                    | — (al reconectar `aaa` lo rechaza)                                                                          |
-| `pendiente_instalacion` → `activo`                                 | Disconnect                                    | — (normalmente no hay sesión)                                                                               |
-| config con `ips`, `prefijo_v6`, `router` o `credenciales`          | Disconnect                                    | — (al reconectar trae lo nuevo)                                                                             |
-| config con `router` y `motivo: union_routers`                      | nada                                          | —                                                                                                           |
-| config solo con `plan`                                             | CoA                                           | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido                                            |
-| config con `plan` y perfil del plan (`Mikrotik-Group = plan-<id>`) | Disconnect                                    | — (el perfil solo se asigna al conectar)                                                                    |
-| velocidad con `arbol_pcq`, `pcq_plan` o `cola_simple`              | nada                                          | — (lo aplica el dispatcher de RouterOS en las colas o listas del plan)                                      |
-| `sesion.velocidad_solicitada` (sincronizar plan)                   | CoA                                           | `Mikrotik-Rate-Limit` del evento, nunca Disconnect                                                          |
-| `sesion.desconexion_solicitada` (panel o API)                      | Disconnect                                    | — a esa sesión, si sigue abierta                                                                            |
+| Cambio                                                             | Paquete                                       | Atributos además de `User-Name` y `Acct-Session-Id`                                                     |
+| ------------------------------------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `activo` o `limitado` → `suspendido`                               | Disconnect por defecto; CoA con el modo `coa` | CoA: `Mikrotik-Rate-Limit = 2M/2M`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
+| `activo` → `limitado` y `limitado` → `activo`                      | CoA                                           | `Mikrotik-Rate-Limit` del estado nuevo                                                                  |
+| `suspendido` → `activo` o `limitado` (reactivar)                   | Disconnect                                    | — (un CoA deja el IPv6 cortado en 7.24.5; al reconectar `aaa` da el perfil normal)                      |
+| → `retirado`                                                       | Disconnect                                    | — (al reconectar `aaa` lo rechaza)                                                                      |
+| `pendiente_instalacion` → `activo`                                 | Disconnect                                    | — (normalmente no hay sesión)                                                                           |
+| config con `ips`, `prefijo_v6`, `router` o `credenciales`          | Disconnect                                    | — (al reconectar trae lo nuevo)                                                                         |
+| config con `router` y `motivo: union_routers`                      | nada                                          | —                                                                                                       |
+| config solo con `plan`                                             | CoA                                           | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido                                        |
+| config con `plan` y perfil del plan (`Mikrotik-Group = plan-<id>`) | Disconnect                                    | — (el perfil solo se asigna al conectar)                                                                |
+| velocidad con `arbol_pcq`, `pcq_plan` o `cola_simple`              | nada                                          | — (lo aplica el dispatcher de RouterOS en las colas o listas del plan)                                  |
+| `sesion.velocidad_solicitada` (sincronizar plan)                   | CoA                                           | `Mikrotik-Rate-Limit` del evento, nunca Disconnect                                                      |
+| `sesion.desconexion_solicitada` (panel o API)                      | Disconnect                                    | — a esa sesión, si sigue abierta                                                                        |
 
 - **Modo de suspensión:** sale de **Configuración → Portal de corte** (`modo_suspension`: `desconectar` o `coa`), que `coa` lee de `GET internal/corte/configuracion` al arrancar y relee con `portal.config_cambiada`. Si la API no responde al arrancar, vale `COA_SUSPENDER` del entorno (por defecto `disconnect`) y reintenta en segundo plano. Con `desconectar`, el CPE reconecta con el perfil `suspendido` y sus conexiones abiertas (incluidas las de FastTrack, que no pasan por el filtro) se cortan. Con `coa`, `COA_SUSPENDER_CON_IPV6` (por defecto `disconnect`) manda Disconnect a las sesiones con /64 o /56; las solo IPv4 van por CoA.
 - Un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual se ignora (llegó tarde). Sin sesión abierta no manda nada: el próximo login sale de `aaa` con el perfil correcto.
