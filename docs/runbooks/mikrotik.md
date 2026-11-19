@@ -164,8 +164,53 @@ Cómo medir cuánto tarda, de punta a punta (desde un cliente suspendido, con la
    ```
 
    Entre `servicio.estado_cambiado` y la fila de `audit.red` deben pasar segundos. Con «Modo de suspensión: desconectar» (el de fábrica), el cliente queda sin internet desde el Disconnect hasta que su CPE vuelve a marcar: la diferencia entre el `fin` de la sesión vieja y el `inicio` de la nueva es tiempo del CPE, no de Argos (hay equipos que esperan 30 a 60 s o más para volver a marcar).
-4. **La velocidad del suspendido.** La cola del suspendido (la que crea RADIUS con `Mikrotik-Rate-Limit`, la del perfil `suspendido` o la cola `argosisp-servicio-<id>` del WISP) limita **todo** su tráfico, también el que va al portal. La primera carga de `/corte` baja unos 1,2 MB sin comprimir: con `256k/256k` (el valor de fábrica hasta 1.19.0) son unos 40 s solo de descarga. Usa `AAA_SUSPENDIDO_RATE_LIMIT=2M/2M` (o más) en el `.env` del servidor y `sudo argosisp levantar`: lo leen `aaa`, `coa` y la API, y «Reconciliar ahora» cambia el perfil `suspendido` de cada router. Las sesiones ya suspendidas toman la velocidad nueva al reconectar. No abre nada: lo que corta es el firewall (solo DNS, portal y walled garden). En el router: `/queue simple print where name~"<pppoe-"` o `/ppp profile print where name=suspendido`.
+4. **La velocidad del suspendido.** La cola del suspendido (la que crea RADIUS con `Mikrotik-Rate-Limit`, la del perfil `suspendido` o la cola `argosisp-servicio-<id>` del WISP) limita su DNS y el walled garden. Desde la 1.22 la página de corte va **sin límite** ([Bypass del portal de corte](#bypass-del-portal-de-corte)); sin el bypass (router sin redes de clientes en Argos, o sesiones que entraron antes del ajuste) también limita el portal. La primera carga de `/corte` baja unos 1,2 MB sin comprimir: con `256k/256k` (el valor de fábrica hasta 1.19.0) son unos 40 s solo de descarga. Usa `AAA_SUSPENDIDO_RATE_LIMIT=2M/2M` (o más) en el `.env` del servidor y `sudo argosisp levantar`: lo leen `aaa`, `coa` y la API, y «Reconciliar ahora» cambia el perfil `suspendido` de cada router. Las sesiones ya suspendidas toman la velocidad nueva al reconectar. No abre nada: lo que corta es el firewall (solo DNS, portal y walled garden). En el router: `/queue simple print where name~"<pppoe-"` o `/ppp profile print where name=suspendido`.
 5. **El teléfono.** Android e iOS solo abren «Iniciar sesión en la red» cuando vuelven a probar la conexión (al reconectar el Wi-Fi o tras varios fallos); un sitio HTTPS escrito a mano recibe `tcp-reset` y muestra error, no la página. Para probar, abre una página `http://` (por ejemplo `http://neverssl.com`) o apaga y enciende el Wi-Fi del teléfono.
+
+### Bypass del portal de corte
+
+Pedido del PM: «si está suspendido la página de corte debe tener un bypass para que vaya rápido». El tráfico de un suspendido **hacia la página de corte** va sin límite de velocidad; lo demás (DNS, walled garden) sigue a la velocidad del suspendido y el firewall sigue cortando todo lo que no es DNS, portal o walled garden. El bypass no abre nada: solo quita el límite de lo que el firewall ya deja pasar, y solo hacia los destinos del portal.
+
+Lo deja el reconciliador en cada router con API («Reconciliar ahora»), con comentarios `argosisp:` (lo del operador no se toca):
+
+| Objeto | Qué hace |
+| --- | --- |
+| `/ip(v6) firewall address-list argos-bypass-portal` (`argosisp: bypass portal`) | IPv4 e IPv6 del portal, su FQDN, la IP del túnel (corte por WireGuard) y el host de la URL de corte de cada empresa. Nada más |
+| `/ip(v6) firewall mangle` `argosisp:top bypass portal …` (al inicio, `passthrough=yes`) | `mark-packet new-packet-mark=argosisp-bypass-portal` en `forward`: subida (`src-address-list` o `in-interface-list=suspendidos`, `dst-address-list=argos-bypass-portal`) y bajada (`src-address-list=argos-bypass-portal`, `dst-address-list` o `out-interface-list=suspendidos`). En modo código, además el proxy del router: `input` `dst-port=3346` y `output` `src-port=3346`, ambos con `connection-nat-state=dstnat` (solo lo que llegó por el NAT del corte) |
+| `/queue simple argosisp-bypass-portal` (`argosisp: bypass portal de corte`) | `max-limit=0/0` (sin límite), `packet-marks=argosisp-bypass-portal`, `target` = las redes de clientes del router (Pools e IPs: redes IPv4 y bloques IPv6). Primera cola estática |
+| `/queue simple argosisp-suspendidos` (`argosisp: ancla colas suspendidos`) | Ancla: `target=192.0.2.255/32` (nadie la tiene), justo después del bypass |
+| `/ppp profile suspendido` | `insert-queue-before=argosisp-suspendidos`: la cola dinámica de cada sesión suspendida (la de RADIUS o la del perfil) se inserta **entre** el bypass y el ancla, por delante de las colas del operador |
+
+Por qué así (RouterOS 7):
+
+- **Las colas simples se evalúan en orden y el paquete se queda en la primera que coincide** («A packet goes to the first queue whose target matches it and skips all following queues», [Simple queue](https://manual.mikrotik.com/docs/firewall-and-quality-of-service/queues/simple-queue/); «Simple queues have a strict order», [Queues](https://help.mikrotik.com/docs/spaces/ROS/pages/328088/Queues)). Por eso la cola sin límite va antes que la del suspendido.
+- **`target` cubre las dos direcciones** («Upload and download are seen from the target»; si el origen está en el target es subida, si el destino, bajada): con las redes de clientes en el `target`, la bajada del portal al cliente (lo que más pesa) cae en la misma cola.
+- **`dst` admite una sola dirección o red** («Destination address, network or interface», [/queue simple](https://manual.mikrotik.com/docs/cli-reference/queue/simple/)): el portal tiene IPv4, IPv6, FQDN y URL de corte, y el 3346 está en el propio router (con `dst` = el gateway, el DNS al router también quedaría sin límite). Por eso se usa `packet-marks` («limits the queue to packets that have one of the listed packet marks»; marcar en `prerouting` o `forward`) con una address-list, que admite nombres que resuelve el router.
+- **`max-limit=0` es sin límite** («`0` means no limit», [/queue simple](https://manual.mikrotik.com/docs/cli-reference/queue/simple/)).
+- **Colas dinámicas de PPP**: el perfil define dónde se insertan («Inserts new queue as the last, first, or before a specified queue», `insert-queue-before`, [PPP AAA](https://manual.mikrotik.com/docs/authentication-authorization-accounting/ppp-aaa/)).
+- **FastTrack**: «simple queues do not limit FastTracked connections». El tráfico del suspendido nunca llega a FastTrack: los saltos `argosisp:top corte …` van antes y `argos-corte` lo acepta o rechaza ahí.
+- **Árbol de colas (`arbol_pcq`)**: un suspendido no está en las listas `argosisp-plan-<id>`, así que el mangle del árbol no lo marca; con la marca del bypass tampoco cae en un nodo del árbol.
+- **Proxy de corte (3346)**: el proxy responde un 307 a `/corte?c=` (no reenvía): la página se carga después del portal directo, por `forward`. El tramo cliente ↔ proxy es `input`/`output` y pasa por la cola del cliente (target = su IP), por eso lleva su marca. Un tramo del router al portal (src = el router) no coincide con el `target` de ningún cliente.
+
+**Sin verificar en un router real** (hazlo en el laboratorio y anota el resultado):
+
+1. Que la cola dinámica de una sesión con `Mikrotik-Group=suspendido` y `Mikrotik-Rate-Limit` de RADIUS respete `insert-queue-before` del perfil (`/queue simple print` con un suspendido conectado: su `<pppoe-…>` entre `argosisp-bypass-portal` y `argosisp-suspendidos`).
+2. Que RouterOS acepte `insert-queue-before=<nombre>` por la API REST y no deje borrar el ancla mientras el perfil la nombra.
+3. La marca en `forward` para la subida: la ayuda vieja dice «It is necessary to mark packets before the simple queues (before global-in HTB queue) or else target's download limitation will not work. The only mangle chain before global-in is prerouting»; el manual de RouterOS 7 dice prerouting **o** forward. Prueba: `/queue simple print stats where name=argosisp-bypass-portal` sube en las dos direcciones al abrir `/corte` desde un suspendido. Si la bajada no cuenta, hay que mover las reglas de bajada a `prerouting` (en prerouting la respuesta del portal todavía tiene su IP de origen real).
+4. La marca en `input` del 3346 antes de la cola (la misma duda que el punto 3, para tráfico al router).
+5. Velocidad real: `/tool bandwidth-test` no sirve (no va al portal); mide la carga de `/corte` desde un suspendido con las herramientas del navegador.
+
+Sesiones que entraron antes del ajuste del perfil conservan su cola arriba (antes del bypass) hasta reconectar; **Probar conexión → Corte → «La página de corte va sin límite de velocidad (bypass)»** las lista con `/ppp active remove [find name=<usuario>]`. Con «Modo de suspensión: CoA» la sesión no reconecta al suspender y su cola queda donde estaba: el bypass le aplica desde que vuelva a conectar.
+
+En el router:
+
+```
+/ip firewall mangle print where comment~"bypass portal"
+/queue simple print where name~"argosisp-bypass|argosisp-suspendidos|<pppoe-"
+/queue simple print stats where name=argosisp-bypass-portal
+/ip firewall address-list print where list=argos-bypass-portal
+/ppp profile print where name=suspendido
+```
 
 ### DNS del router
 

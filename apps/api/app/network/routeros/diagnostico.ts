@@ -1,4 +1,5 @@
 import { request as httpRequest } from 'node:http'
+import { BlockList, isIPv6 } from 'node:net'
 import { configCorteVigente, corteUrlVigente } from '#network/routeros/corte_vigente'
 import { codigosAbiertos } from '#portal/codigos_corte'
 import { opcionesCorteRouter } from '#network/routeros/opciones_corte'
@@ -16,7 +17,14 @@ import { RouterSinCredenciales } from '#network/routeros/router'
 import { diferencias } from '#network/routeros/normalizar'
 import {
     clientesUsanDnsRouter,
+    COLA_ANCLA,
+    COLA_BYPASS,
+    COMMENT_COLA_BYPASS,
     ENTRADA_SUSPENDIDOS,
+    esObjetoBypass,
+    LISTA_BYPASS,
+    targetBypass,
+    type OpcionesCorte,
     estadoCorteRouter,
     normalizarDireccion,
     REGLA_NAT_HTTP,
@@ -283,6 +291,8 @@ export type ClaveChequeoCorte =
     | 'proxy_corte'
     /** Modo código: el device-mode del router (RouterOS 7.17+) permite el proxy web; no reconciliable */
     | 'proxy_device_mode'
+    /** El tráfico del suspendido al portal de corte va sin límite de velocidad (bypass) */
+    | 'bypass_portal'
 
 export type CodigoProblemaCorte =
     | 'sin_api'
@@ -310,6 +320,14 @@ export type CodigoProblemaCorte =
     | 'portal_ve_otra_ip_tunel'
     | 'proxy_corte'
     | 'proxy_device_mode'
+    /** Falta, difiere o está fuera de lugar algo del bypass del portal (mangle, colas, lista, perfil) */
+    | 'bypass_portal'
+    /** El router no tiene redes de clientes: la cola del bypass no tiene `target` */
+    | 'bypass_sin_redes'
+    /** Sesiones suspendidas con su cola dinámica antes del bypass (entraron antes del ajuste del perfil) */
+    | 'bypass_sesiones_antes'
+    /** Suspendidos con una IP fuera de las redes del router: el bypass no los toma */
+    | 'bypass_fuera_de_red'
 
 export interface ChequeoCorte {
     clave: ClaveChequeoCorte
@@ -482,7 +500,11 @@ function chequeoReglas(
     plan: CambioCorte[],
     lectura: LecturaCorte,
 ): ChequeoCorte {
-    const deReglas = plan.filter((c) => (RUTAS_ORDENADAS as readonly string[]).includes(c.ruta))
+    const deReglas = plan.filter(
+        (c) =>
+            (RUTAS_ORDENADAS as readonly string[]).includes(c.ruta) &&
+            !esObjetoBypass({ ruta: c.ruta, comment: c.clave }),
+    )
     const actual = (ruta: string, comment: string) =>
         (lectura.get(ruta as RutaRouterOS) ?? []).find((o) => o.comment === comment && o.dynamic !== 'true')
     const faltan = deReglas.filter((c) => c.accion === 'crear')
@@ -556,7 +578,8 @@ function chequeoReglas(
             true,
         )
     }
-    const total = corte.reglas.length + (config.portal_v4 ? 0 : natHttp ? 1 : 0)
+    const total =
+        corte.reglas.filter((r) => !esObjetoBypass(r)).length + (config.portal_v4 ? 0 : natHttp ? 1 : 0)
     return bien('reglas', `Las ${total} reglas de corte (filter y NAT) están, activas y en orden`)
 }
 
@@ -950,6 +973,133 @@ async function chequeoHost(
     )
 }
 
+/** ¿Alguna de las redes contiene la IP? */
+function enRedes(redes: string[], ip: string): boolean {
+    const fam = isIPv6(ip) ? 'ipv6' : 'ipv4'
+    const bloque = new BlockList()
+    for (const r of redes) {
+        const [red, largo] = r.split('/')
+        if (!red || isIPv6(red) !== (fam === 'ipv6')) continue
+        bloque.addSubnet(red, Number(largo ?? (fam === 'ipv6' ? 128 : 32)), fam)
+    }
+    return bloque.check(ip, fam)
+}
+
+/**
+ * Bypass del portal de corte (pedido del PM, v1.21): el tráfico de un suspendido hacia la página de corte
+ * (portal, URL de corte de la empresa y, en modo código, el proxy del router) va sin límite de velocidad;
+ * lo demás sigue con la del suspendido y el firewall corta igual. Verifica que estén el mangle de la marca,
+ * la cola sin límite antes de las de los suspendidos, el ancla y el perfil `suspendido` con
+ * `insert-queue-before`, que las sesiones suspendidas tengan su cola después del bypass y que sus IP caigan
+ * en el `target` de la cola.
+ */
+function chequeoBypass(
+    config: ConfigCorte,
+    opciones: OpcionesCorte,
+    plan: CambioCorte[],
+    lectura: LecturaCorte,
+    servicios: ServicioRed[],
+): ChequeoCorte {
+    const target = targetBypass(config, opciones)
+    if (target.length === 0) {
+        return mal(
+            'bypass_portal',
+            'bypass_sin_redes',
+            'El router no tiene redes de clientes en Argos (pestaña Pools e IPs): la cola sin límite del bypass no ' +
+                'sabe a quién tomar y la página de corte va a la velocidad del suspendido. Registra las redes y usa ' +
+                '«Reconciliar ahora»',
+            [],
+            false,
+        )
+    }
+    const perfil = (lectura.get('/ppp/profile') ?? []).find((p) => p.name === config.perfil)
+    const deBypass = plan.filter(
+        (c) =>
+            esObjetoBypass({ ruta: c.ruta, comment: c.clave }) ||
+            (c.ruta.endsWith('/address-list') && c.clave.startsWith(`${LISTA_BYPASS} `)),
+    )
+    const perfilSinAncla = perfil?.['insert-queue-before'] !== COLA_ANCLA
+    if (deBypass.length > 0 || perfilSinAncla) {
+        const comando = (c: CambioCorte) => {
+            if (c.accion === 'crear') return comandoAgregar(c.ruta, c.propiedades ?? {}, c.clave)
+            if (c.accion === 'mover') {
+                return `${rutaCli(c.ruta)} move ${buscar(c.clave)} destination=([find where dynamic=no]->0)`
+            }
+            const pares = Object.entries(c.propiedades ?? {})
+                .filter(([k]) => k !== 'comment')
+                .map(([k, v]) => `${k}=${valorCli(v)}`)
+            return `${rutaCli(c.ruta)} set ${buscar(c.clave)} ${pares.join(' ')}`
+        }
+        // Primero las colas (el perfil nombra al ancla), luego el perfil y después mangle y la lista.
+        const colasPrimero = deBypass.filter((c) => c.ruta === '/queue/simple')
+        const comandos = [
+            ...colasPrimero.map(comando),
+            ...(perfilSinAncla
+                ? [
+                      `/ppp profile set [find name=${valorCli(config.perfil)}] insert-queue-before=${COLA_ANCLA}`,
+                  ]
+                : []),
+            ...deBypass.filter((c) => c.ruta !== '/queue/simple').map(comando),
+        ]
+        const nombres = [
+            ...new Set([
+                ...deBypass.map((c) => c.clave),
+                ...(perfilSinAncla ? [`perfil ${config.perfil}`] : []),
+            ]),
+        ]
+        return mal(
+            'bypass_portal',
+            'bypass_portal',
+            `Falta, está distinto o fuera de lugar el bypass del portal (${lista(nombres)}): la página de corte va ` +
+                'a la velocidad del suspendido. Usa «Reconciliar ahora». El bypass solo quita el límite hacia el ' +
+                'portal; el corte del firewall no cambia',
+            comandos,
+            true,
+        )
+    }
+    // Colas dinámicas de sesiones suspendidas antes de la del bypass: entraron antes del ajuste del perfil.
+    const colas = lectura.get('/queue/simple') ?? []
+    const posicion = colas.findIndex((o) => o.comment === COMMENT_COLA_BYPASS && o.dynamic !== 'true')
+    const usuarios = new Set(
+        servicios
+            .filter((s) => s.estado === 'suspendido' && s.tipo_conexion === 'pppoe' && s.user_ppp)
+            .map((s) => s.user_ppp!),
+    )
+    const antes = colas
+        .slice(0, Math.max(posicion, 0))
+        .filter((o) => o.dynamic === 'true')
+        .map((o) => /^<pppoe-(.+)>$/.exec(o.name ?? '')?.[1])
+        .filter((u): u is string => !!u && usuarios.has(u))
+    if (antes.length > 0) {
+        return mal(
+            'bypass_portal',
+            'bypass_sesiones_antes',
+            `${antes.length} ${antes.length === 1 ? 'sesión suspendida tiene' : 'sesiones suspendidas tienen'} su cola ` +
+                `antes de la del bypass (${lista(antes)}): entraron antes de que el perfil «${config.perfil}» las ` +
+                'pusiera después. Al reconectar quedan en su lugar; desconéctalas para que sea ya',
+            antes.map((u) => `/ppp active remove [find name=${valorCli(u)}]`),
+            false,
+        )
+    }
+    const fuera = suspendidosConIp(servicios).filter((s) => !enRedes(target, s.ipv4))
+    if (fuera.length > 0) {
+        return mal(
+            'bypass_portal',
+            'bypass_fuera_de_red',
+            `${fuera.length} ${fuera.length === 1 ? 'suspendido tiene' : 'suspendidos tienen'} una IP fuera de las redes ` +
+                `del router (${lista(fuera.map((s) => s.ipv4))}): la cola del bypass no los toma y su página de corte va ` +
+                'a la velocidad del suspendido. Agrega esa red en Pools e IPs y usa «Reconciliar ahora»',
+            [],
+            false,
+        )
+    }
+    return bien(
+        'bypass_portal',
+        `El tráfico de los suspendidos al portal de corte va sin límite (cola «${COLA_BYPASS}» antes de las suyas); ` +
+            'DNS y walled garden siguen con la velocidad del suspendido y el firewall corta lo demás',
+    )
+}
+
 /** Suspendidos del router con su IPv4: la de la sesión abierta (PPPoE) o la asignada (WISP). */
 function suspendidosConIp(servicios: ServicioRed[]): SuspendidoFueraDeLista[] {
     return servicios
@@ -1292,6 +1442,7 @@ export async function diagnosticoCorte(
                     requestId,
                     opcionesCorte.tunel ?? null,
                 ),
+                chequeoBypass(config, opcionesCorte, plan, lectura, todos),
             )
             if (pideCodigo) salida.chequeos.push(chequeoDeviceMode(bloqueado))
             if (modoCodigo) {

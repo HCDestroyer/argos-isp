@@ -24,6 +24,8 @@ import { RUTAS_ORDENADAS, type Propiedades, type RutaOrdenada } from '#network/r
 import {
     ajustePuertoProxy,
     ajusteProxy,
+    COLA_ANCLA,
+    COMMENT_COLA_ANCLA,
     esAccesoDeServicio,
     movimientos,
     normalizarDireccion,
@@ -511,6 +513,9 @@ export function planCorte(estado: EstadoCorte, lectura: LecturaCorte): CambioCor
 const FILTROS: readonly RutaRouterOS[] = ['/ip/firewall/filter', '/ipv6/firewall/filter']
 const NATS: readonly RutaRouterOS[] = ['/ip/firewall/nat', '/ipv6/firewall/nat']
 const PROXY_ACCESS = '/ip/proxy/access' as const
+const MANGLES: readonly RutaRouterOS[] = ['/ip/firewall/mangle', '/ipv6/firewall/mangle']
+const COLAS = '/queue/simple' as const
+const esCola = (ruta: RutaRouterOS) => ruta === COLAS
 
 /** Un comando o paso que el router rechazó sin impedir seguir con lo demás (`errores[]` de la reconciliación). */
 export interface ErrorOperacion {
@@ -655,10 +660,25 @@ export async function aplicarCorte(
     }
     const esNat = (ruta: RutaRouterOS) => NATS.includes(ruta)
 
-    // 1. Listas, perfil y filtros.
-    let filtrosOk = await escribir((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS)
+    // 0. Colas del bypass del portal (el ancla, antes que el perfil `suspendido` que la nombra) y su lugar
+    //    al inicio de las colas simples. Si el ancla no quedó, el perfil se escribe sin `insert-queue-before`.
+    const colasOk = await escribir(esCola)
+    if (colasOk) await ordenar(COLAS)
+    const ancla = (lectura.get(COLAS) ?? []).some((o) => o.comment === COMMENT_COLA_ANCLA)
+    if (!colasOk && !ancla) {
+        for (const c of plan) {
+            if (c.ruta === '/ppp/profile' && c.propiedades?.['insert-queue-before'] === COLA_ANCLA) {
+                const resto = { ...c.propiedades }
+                delete resto['insert-queue-before']
+                c.propiedades = resto
+            }
+        }
+    }
+    // 1. Listas, perfil, filtros y el mangle del bypass.
+    let filtrosOk = await escribir((ruta) => !esNat(ruta) && ruta !== PROXY_ACCESS && !esCola(ruta))
     for (const ruta of RUTAS_ORDENADAS) {
         if (FILTROS.includes(ruta)) filtrosOk = (await ordenar(ruta)) && filtrosOk
+        if (MANGLES.includes(ruta)) await ordenar(ruta)
     }
     // 2. El puerto del corte en el proxy, sin encenderlo (solo con el `drop` de input ya en su lugar).
     let proxyOk = !codigo || filtrosOk

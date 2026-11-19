@@ -344,6 +344,23 @@ Causa del bug: `argos-corte` solo aceptaba DNS hacia `argos-dns` (el router y `R
 
 Cómo sabe el portal quién es el suspendido: por **código** (router con `corte_identificacion = codigo`: su web proxy, puerto 3346, redirige el HTTP del suspendido a `/corte?c=<código>` con una regla `/ip proxy access` por servicio) o por **IP** (solo sin NAT ni proxy en medio). En modo `codigo` el NAT de HTTP va al proxy del router (`argosisp: corte-nat HTTP al proxy de corte`) en lugar del dst-nat al portal. Contrato completo: `contratos/corte-identificacion.md`.
 
+### 10.9 · Bypass del portal de corte (pedido del PM, 19 nov: «si está suspendido la página de corte debe tener un bypass para que vaya rápido»)
+
+El tráfico de un suspendido hacia la página de corte va **sin límite de velocidad** en todos los modos de §1 (y con RADIUS o `api`); DNS y walled garden siguen con `RATE_LIMIT_SUSPENDIDO_DEFECTO` y el firewall corta igual (el bypass no cambia `argos-corte`). Lo escribe `estadoCorteRouter` (`reglasBypass`) y lo aplica `aplicarCorte`:
+
+| Objeto | Clave | Propiedades |
+| --- | --- | --- |
+| `/ip(v6)/firewall/address-list argos-bypass-portal` | `list` + `address`, comentario `argosisp: bypass portal` (grupo siempre administrado) | `portal_v4`, `portal_fqdn`, IP del túnel (solo IPv4), hosts de `url_corte`; IPv6: `portal_v6`, `portal_fqdn`, hosts de `url_corte` |
+| `/ip(v6)/firewall/mangle` | `comment` `argosisp:top bypass portal subida/bajada por address-list/interface-list`, y en modo código `… proxy de corte entrada/salida` | `action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes`; `forward` con `suspendidos` (address-list o interface-list) ↔ `argos-bypass-portal`; código: `input dst-port=3346` y `output src-port=3346` con `connection-nat-state=dstnat`. Al inicio de la tabla |
+| `/queue/simple argosisp-bypass-portal` | `comment = argosisp: bypass portal de corte` | `target` = redes IPv4 y bloques IPv6 del router (+ `ROUTERS_SERVICIO_CLIENTES_V4/V6`), `packet-marks=argosisp-bypass-portal`, `max-limit=0/0`, `limit-at=0/0`, `parent=none`. Primera cola estática; sin redes no existe (aviso) |
+| `/queue/simple argosisp-suspendidos` | `comment = argosisp: ancla colas suspendidos` | `target=192.0.2.255/32`, `max-limit=0/0`. Justo después del bypass; siempre |
+| `/ppp/profile suspendido` | `name` | `insert-queue-before=argosisp-suspendidos` (la cola dinámica de cada sesión suspendida queda entre el bypass y el ancla) |
+
+- Orden de `aplicarCorte`: colas (crear y `move`) → perfil y lo demás → mangle (`move`). Si el ancla no existe ni se pudo crear, el perfil se escribe sin `insert-queue-before`.
+- Diagnóstico: chequeo `bypass_portal` (`bypass_portal` reconciliable; `bypass_sin_redes`, `bypass_sesiones_antes` con `/ppp active remove`, `bypass_fuera_de_red`, no reconciliables).
+- Script (A6): mismos objetos y comentarios en `lab.rsc`, `lab-sin-radius.rsc` y `piezas/servicio-base.rsc` (pendiente en `a1.md`).
+- Fuentes y lo que falta verificar en el laboratorio: `docs/runbooks/mikrotik.md`, «Bypass del portal de corte».
+
 ## 11. Modo de velocidad único por router (decisión del PM, 2026-11-05)
 
 El modo de control de velocidad se decide **por router**: todos sus servicios siguen la misma lógica. Se quitan las excepciones por plan. Manda sobre §2, §4 y §9 donde choquen.

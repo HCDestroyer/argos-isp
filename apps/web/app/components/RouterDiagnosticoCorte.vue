@@ -48,6 +48,7 @@ const PASOS: Record<Chequeo['clave'], string> = {
     portal_ip_cliente: 'Qué IP ve la página de corte desde la red de clientes',
     proxy_corte: 'Proxy de corte del router (puerto 3346) con el código de cada suspendido',
     proxy_device_mode: 'El device-mode permite el proxy web',
+    bypass_portal: 'La página de corte va sin límite de velocidad (bypass)',
 }
 
 const ORIGENES: Record<NonNullable<DiagnosticoCorte['portal']['origen']>, string> = {

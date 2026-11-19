@@ -704,6 +704,19 @@ export async function redesV4DeRouter(
     return filas.map((f) => f.cidr)
 }
 
+/** Bloques IPv6 del router (`network.ipv6_bloques`): redes IPv6 de sus clientes (bypass del portal). */
+export async function redesV6DeRouter(
+    routerId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<string[]> {
+    const filas = (await cliente
+        .from('network.ipv6_bloques')
+        .where('router_id', routerId)
+        .orderBy('id')
+        .select(cliente.raw('prefijo::text AS prefijo'))) as Array<{ prefijo: string }>
+    return filas.map((f) => f.prefijo)
+}
+
 /** Estrategias en uso en el router: las suyas por tipo y las efectivas de sus servicios. */
 export function estrategiasEnUso(router: RouterVelocidad, servicios: ServicioRed[]): Estrategia[] {
     return [...Object.values(router.estrategias), ...servicios.map((s) => s.estrategia)]
