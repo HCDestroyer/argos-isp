@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { cifrar } from '#shared/cifrado'
-import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { EmpresaRequerida, exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { ConflictoVersion, Prohibido, ValidacionFallida } from '#shared/errores'
 import {
     configuracionIa,
@@ -45,9 +45,9 @@ export default class ConfigurarIa extends DomainAction<EntradaConfigurarIa, Conf
         } else {
             empresaId = input.empresa_id ?? t.ctx.empresaId ?? null
             if (!empresaId) {
-                throw new ValidacionFallida([
-                    { field: 'empresa_id', message: 'Indica la empresa', rule: 'required' },
-                ])
+                throw new EmpresaRequerida(
+                    'Elige una empresa en el selector, o guarda la configuración global (global: true)',
+                )
             }
             exigirAccesoEmpresa(t.ctx, empresaId)
             t.fijarEmpresa(empresaId)

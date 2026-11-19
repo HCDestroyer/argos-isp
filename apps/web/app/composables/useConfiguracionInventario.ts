@@ -22,12 +22,18 @@ export function useConfiguracionInventario() {
         return resolver(api.POST('/api/v1/inventario/configuracion', { params: { header: { 'Idempotency-Key': clave } }, body: { traslado_firma_obligatoria: trasladoFirmaObligatoria, version } }))
     }
 
-    /** `GET /inventario/ia/configuracion` (`inventario.configurar_ia`): la de la empresa o, sin ella, la global. */
-    function verIa(): Promise<Resultado<ConfiguracionIa>> {
-        return resolver(api.GET('/api/v1/inventario/ia/configuracion', { params: { query: {} } }))
+    /**
+     * `GET /inventario/ia/configuracion` (`inventario.configurar_ia`): la de la empresa o, sin ella, la
+     * global. Con `global` (panel en «Todas las empresas»), solo la global.
+     */
+    function verIa(global = false): Promise<Resultado<ConfiguracionIa>> {
+        return resolver(api.GET('/api/v1/inventario/ia/configuracion', { params: { query: global ? { global: true } : {} } }))
     }
 
-    /** `POST /inventario/ia/configuracion`: sin `api_key` se conserva la clave; `null` la borra. */
+    /**
+     * `POST /inventario/ia/configuracion`: sin `api_key` se conserva la clave; `null` la borra. Con
+     * `global: true` guarda la global (solo con alcance global de empresas).
+     */
     function guardarIa(cuerpo: CuerpoConfiguracionIa, clave: string): Promise<Resultado<ConfiguracionIa>> {
         return resolver(api.POST('/api/v1/inventario/ia/configuracion', { params: { header: { 'Idempotency-Key': clave } }, body: cuerpo }))
     }
