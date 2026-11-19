@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.1](https://github.com/HCDestroyer/argos-isp/compare/v1.22.0...v1.22.1) (2026-11-19)
+
+
+### Correcciones
+
+* **inventario,web:** permisos de argosisp_app en el inventario fase D y aviso real de Iris anterior a 0.8.0 ([#262](https://github.com/HCDestroyer/argos-isp/issues/262)) ([16f75a1](https://github.com/HCDestroyer/argos-isp/commit/16f75a138c0f101ca02d9dea17b41f61e83c0dd8))
+
 ## [1.22.0](https://github.com/HCDestroyer/argos-isp/compare/v1.21.0...v1.22.0) (2026-11-19)
 
 
