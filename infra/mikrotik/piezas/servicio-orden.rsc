@@ -35,3 +35,19 @@
     :foreach id in=[/ipv6 firewall nat find where comment~"^argosisp:top"] do={ /ipv6 firewall nat move $id destination=$destinoNat6 }
 }
 
+:local destinoMangle
+:foreach id in=[/ip firewall mangle find where dynamic=no] do={
+    :if ([:typeof $destinoMangle] = "nothing" && !([:tostr [/ip firewall mangle get $id comment]] ~ "^argosisp:top")) do={ :set destinoMangle $id }
+}
+:if ([:typeof $destinoMangle] != "nothing") do={
+    :foreach id in=[/ip firewall mangle find where comment~"^argosisp:top"] do={ /ip firewall mangle move $id destination=$destinoMangle }
+}
+
+:local destinoMangle6
+:foreach id in=[/ipv6 firewall mangle find where dynamic=no] do={
+    :if ([:typeof $destinoMangle6] = "nothing" && !([:tostr [/ipv6 firewall mangle get $id comment]] ~ "^argosisp:top")) do={ :set destinoMangle6 $id }
+}
+:if ([:typeof $destinoMangle6] != "nothing") do={
+    :foreach id in=[/ipv6 firewall mangle find where comment~"^argosisp:top"] do={ /ipv6 firewall mangle move $id destination=$destinoMangle6 }
+}
+

@@ -284,6 +284,11 @@ export interface OpcionesCorte {
     /** Redes IPv4 de clientes del router (`network.redes_ipv4`), para `argos-clientes` */
     redes_v4: string[]
     /**
+     * Bloques IPv6 del router (`network.ipv6_bloques`): con las redes IPv4 forman el `target` de la cola
+     * del bypass del portal (`reglasBypass`). Ausente = ninguno.
+     */
+    redes_v6?: string[]
+    /**
      * `local-address` del perfil de corte: el único gateway de las redes del router
      * (`localAddressCorte`). null/ausente = no se pone (nunca se copia el de `default`; uno que ya
      * tenga el perfil se respeta: lo puede haber puesto `lab.rsc`).
@@ -353,6 +358,163 @@ export const REGLA_DNS_TCP = 'argosisp: corte DNS tcp a cualquier resolver'
  * borra de los routers existentes. `corte DNS udp/tcp` solo aceptaba DNS hacia `argos-dns`.
  */
 export const REGLAS_RETIRADAS = ['argosisp: corte DNS udp', 'argosisp: corte DNS tcp'] as const
+
+/*
+|--------------------------------------------------------------------------
+| Bypass del portal de corte (pedido del PM, v1.21: «si está suspendido la página de corte debe tener un
+| bypass para que vaya rápido»)
+|--------------------------------------------------------------------------
+| El suspendido sigue cortado por el firewall (`argos-corte`); lo que cambia es la velocidad de lo que ya
+| deja pasar hacia el portal. Sin bypass, la cola del suspendido (dinámica de RADIUS o del perfil
+| `suspendido`, o la estática `argosisp-servicio-<id>` del WISP) limita también la página de corte a
+| `RATE_LIMIT_SUSPENDIDO_DEFECTO`. Con bypass:
+|
+| 1. Mangle (IPv4 e IPv6, al inicio, `passthrough=yes`) marca `argosisp-bypass-portal` solo el tráfico
+|    entre un suspendido (address-list o interface-list `suspendidos`, igual que los saltos de corte) y
+|    `argos-bypass-portal` (portal IPv4/IPv6/FQDN, IP del túnel y hosts de las URL de corte), en las dos
+|    direcciones, en `forward` (después del dst-nat: ve el destino real del HTTP redirigido). En modo
+|    código, también el 3346 del proxy del router: `input` (cliente → proxy) y `output` (respuesta del
+|    proxy al cliente), solo de conexiones que llegaron por el dst-nat del corte.
+| 2. Una cola simple sin límite (`max-limit=0/0`) con `packet-marks` = esa marca y `target` = las redes de
+|    clientes del router, **antes** de las colas de los suspendidos: las colas simples se evalúan en orden
+|    y el paquete se queda en la primera que coincide (manual de RouterOS 7, «Simple queue»).
+| 3. Una cola ancla (`argosisp-suspendidos`, `target=192.0.2.255/32`, no coincide con nadie) justo después,
+|    y el perfil `suspendido` con `insert-queue-before=argosisp-suspendidos`: la cola dinámica de cada
+|    sesión suspendida (RADIUS o perfil) se inserta entre el bypass y el ancla, por delante de las colas del
+|    operador como hasta hoy.
+|
+| La marca no da permiso a nada: el filtro decide igual (DNS, portal y walled garden aceptados, lo demás
+| rechazado). Solo los destinos del portal quedan sin límite; DNS y walled garden siguen con la velocidad
+| del suspendido. Detalle y fuentes: `docs/runbooks/mikrotik.md` («Bypass del portal de corte»).
+*/
+
+/** Address-list (IPv4 e IPv6) de los destinos del portal sin límite de velocidad. */
+export const LISTA_BYPASS = 'argos-bypass-portal'
+/** Comentario de las entradas de `argos-bypass-portal` (grupo siempre administrado). */
+export const COMMENT_LISTA_BYPASS = 'argosisp: bypass portal'
+/** Marca de paquete del bypass (mangle) que toma la cola sin límite. */
+export const MARCA_BYPASS = 'argosisp-bypass-portal'
+/** Cola simple sin límite del bypass. */
+export const COLA_BYPASS = 'argosisp-bypass-portal'
+export const COMMENT_COLA_BYPASS = 'argosisp: bypass portal de corte'
+/** Cola ancla: el perfil `suspendido` inserta sus colas dinámicas antes de ella (después del bypass). */
+export const COLA_ANCLA = 'argosisp-suspendidos'
+export const COMMENT_COLA_ANCLA = 'argosisp: ancla colas suspendidos'
+/** `target` de la cola ancla: dirección de documentación (RFC 5737) que ningún cliente tiene. */
+export const TARGET_ANCLA = `${ENTRADA_SUSPENDIDOS}/32`
+/** Prefijo de los comentarios de mangle del bypass. */
+export const PREFIJO_MANGLE_BYPASS = 'argosisp:top bypass portal'
+
+/** ¿Es un objeto del bypass del portal (mangle, colas o su address-list)? */
+export function esObjetoBypass(c: { ruta: string; comment: string }): boolean {
+    if (c.ruta === '/queue/simple') {
+        return c.comment === COMMENT_COLA_BYPASS || c.comment === COMMENT_COLA_ANCLA
+    }
+    if (c.ruta.endsWith('/firewall/mangle')) return c.comment.startsWith(PREFIJO_MANGLE_BYPASS)
+    if (c.ruta.endsWith('/address-list')) return c.comment === COMMENT_LISTA_BYPASS
+    return false
+}
+
+const MANGLE = '/ip/firewall/mangle'
+const MANGLE6 = '/ipv6/firewall/mangle'
+const COLAS = '/queue/simple'
+
+/** `target` de la cola del bypass: las redes de clientes del router (IPv4 e IPv6), sin repetir. */
+export function targetBypass(config: ConfigCorte, opciones: OpcionesCorte): string[] {
+    return [
+        ...new Set([
+            ...opciones.redes_v4,
+            ...config.clientes_v4,
+            ...(opciones.redes_v6 ?? []),
+            ...config.clientes_v6,
+        ]),
+    ]
+}
+
+/**
+ * Mangle y colas del bypass. Sin redes de clientes no hay `target`: no se crea la cola del bypass (ni su
+ * mangle, que sin cola no sirve) y queda un aviso; el ancla existe siempre porque el perfil `suspendido`
+ * la nombra.
+ */
+function reglasBypass(lista: string, target: string[], codigo: boolean): ReglaCorte[] {
+    const salida: ReglaCorte[] = [
+        {
+            ruta: COLAS,
+            comment: COMMENT_COLA_ANCLA,
+            propiedades: { name: COLA_ANCLA, target: TARGET_ANCLA, 'max-limit': '0/0', disabled: 'no' },
+            arriba: true,
+        },
+    ]
+    if (target.length === 0) return salida
+    salida.unshift({
+        ruta: COLAS,
+        comment: COMMENT_COLA_BYPASS,
+        propiedades: {
+            name: COLA_BYPASS,
+            target: target.join(','),
+            'packet-marks': MARCA_BYPASS,
+            'max-limit': '0/0',
+            'limit-at': '0/0',
+            parent: 'none',
+            disabled: 'no',
+        },
+        arriba: true,
+    })
+    const marca = {
+        action: 'mark-packet',
+        'new-packet-mark': MARCA_BYPASS,
+        passthrough: 'yes',
+        disabled: 'no',
+    }
+    for (const ruta of [MANGLE, MANGLE6] as const) {
+        const r = (sufijo: string, propiedades: Propiedades): ReglaCorte => ({
+            ruta,
+            comment: `${PREFIJO_MANGLE_BYPASS} ${sufijo}`,
+            propiedades: { ...propiedades, ...marca },
+            arriba: true,
+        })
+        salida.push(
+            r('subida por address-list', {
+                chain: 'forward',
+                'src-address-list': lista,
+                'dst-address-list': LISTA_BYPASS,
+            }),
+            r('subida por interface-list', {
+                chain: 'forward',
+                'in-interface-list': lista,
+                'dst-address-list': LISTA_BYPASS,
+            }),
+            r('bajada por address-list', {
+                chain: 'forward',
+                'src-address-list': LISTA_BYPASS,
+                'dst-address-list': lista,
+            }),
+            r('bajada por interface-list', {
+                chain: 'forward',
+                'src-address-list': LISTA_BYPASS,
+                'out-interface-list': lista,
+            }),
+        )
+        if (codigo) {
+            // Solo lo que llegó por el dst-nat del corte (`redirect` al 3346): el filtro ya descarta lo demás.
+            salida.push(
+                r('proxy de corte entrada', {
+                    chain: 'input',
+                    protocol: 'tcp',
+                    'dst-port': PUERTO_PROXY_CORTE,
+                    'connection-nat-state': 'dstnat',
+                }),
+                r('proxy de corte salida', {
+                    chain: 'output',
+                    protocol: 'tcp',
+                    'src-port': PUERTO_PROXY_CORTE,
+                    'connection-nat-state': 'dstnat',
+                }),
+            )
+        }
+    }
+    return salida
+}
 
 const FILTRO = '/ip/firewall/filter'
 const FILTRO6 = '/ipv6/firewall/filter'
@@ -668,6 +830,7 @@ function comentariosPropios(config: ConfigCorte): Map<RutaOrdenada, Set<string>>
         ...reglasNat(config.address_list, config, true, true).reglas,
         ...reglasNat(config.address_list, config, false, false, { ip: '0.0.0.0', puerto: 1 }).reglas,
         ...reglasProxy({ ...config, corte_url: config.corte_url ?? 'http://0.0.0.0/corte' }).reglas,
+        ...reglasBypass(config.address_list, ['0.0.0.0/0'], true),
     ]
     const salida = new Map<RutaOrdenada, Set<string>>()
     for (const regla of todas) {
@@ -721,6 +884,8 @@ export function estadoCorteRouter(
                 'rate-limit': config.susp_rate_limit,
                 'address-list': lista,
                 'interface-list': lista,
+                // Las colas dinámicas de los suspendidos, entre el bypass del portal y el ancla.
+                'insert-queue-before': COLA_ANCLA,
                 comment: 'argosisp: servicio suspendido',
             },
         },
@@ -780,6 +945,16 @@ export function estadoCorteRouter(
     agregar(v6, 'argos-walled', 'argosisp: walled garden', config.walled_garden)
     urlCorte(v6)
     agregar(v6, 'argos-clientes', 'argosisp: clientes IPv6', config.clientes_v6)
+    // Bypass del portal: los mismos destinos que `argos-portal` (IP, FQDN, túnel) y las URL de corte.
+    // Grupo siempre administrado: lo que sale de la configuración se borra.
+    const bypass = (ruta: EntradaListaCorte['ruta'], direcciones: Array<string | null>) => {
+        grupos.push({ ruta, list: LISTA_BYPASS, comment: COMMENT_LISTA_BYPASS })
+        for (const address of new Set(direcciones.filter((d): d is string => !!d))) {
+            entradas.push({ ruta, list: LISTA_BYPASS, address, comment: COMMENT_LISTA_BYPASS })
+        }
+    }
+    bypass(v4, [config.portal_v4, config.portal_fqdn, tunel?.ip ?? null, ...config.walled_url_corte])
+    bypass(v6, [config.portal_v6, config.portal_fqdn, ...config.walled_url_corte])
 
     const codigo = opciones.identificacion === 'codigo'
     const nat = reglasNat(lista, config, false, codigo, tunel)
@@ -816,6 +991,13 @@ export function estadoCorteRouter(
     if (!config.portal_fqdn && !config.portal_v4) {
         avisos.push('sin portal configurado: argos-portal queda vacía')
     }
+    const target = targetBypass(config, opciones)
+    if (target.length === 0) {
+        avisos.push(
+            'sin redes de clientes en el router (Pools e IPs, o ROUTERS_SERVICIO_CLIENTES_V4/V6): no se crea el bypass ' +
+                'del portal de corte y la página de corte va a la velocidad del suspendido',
+        )
+    }
     if (opciones.fasttrack && config.clientes_v4.length === 0 && opciones.redes_v4.length === 0) {
         avisos.push(
             'sin redes de clientes (ROUTERS_SERVICIO_CLIENTES_V4 o redes IPv4 del router): argos-clientes vacía',
@@ -831,6 +1013,7 @@ export function estadoCorteRouter(
             ...nat.reglas,
             ...nat6.reglas,
             ...proxy.reglas,
+            ...reglasBypass(lista, target, codigo),
         ],
         propias: comentariosPropios(config),
         conservar: new Set([...nat.conservar, ...proxy.conservar]),
@@ -906,6 +1089,7 @@ export function esCambioDeCorte(c: { ruta: string; comment: string }): boolean {
     ) {
         return true
     }
+    if (esObjetoBypass(c)) return true
     if (c.ruta === '/ppp/profile') return !c.comment.startsWith('argosisp:plan:')
     if (c.ruta === '/ip/proxy') return true
     if (c.ruta === PROXY_ACCESS) return !c.comment.startsWith('argosisp:servicio:')

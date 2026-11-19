@@ -83,10 +83,36 @@
 :if ([:len [/ppp profile find where name="suspendido"]] = 0) do={
     /ppp profile add name=suspendido comment="argosisp: servicio suspendido"
 }
+# Bypass del portal de corte (contratos/control-velocidad.md §10.9, runbook «Bypass del portal de
+# corte»): las colas simples se evalúan en orden y el paquete se queda en la primera que coincide.
+# Arriba de todo, la cola sin límite argosisp-bypass-portal (solo lo marcado por el mangle de la
+# sección 9 ter: tráfico entre un suspendido y argos-bypass-portal); justo debajo, el ancla
+# argosisp-suspendidos (target de documentación que nadie tiene). El perfil suspendido inserta la
+# cola dinámica de cada sesión antes del ancla, es decir, entre las dos. Se crean solo si faltan: el
+# target del bypass lo corrige el reconciliador (redes del router y bloques IPv6) y el script no lo
+# pisa; aquí solo se siembra clientesV4. El ancla no se borra nunca: el perfil la nombra.
+:put "argosisp: colas del bypass del portal de corte"
+:if ([:len [/queue simple find where name="argosisp-suspendidos"]] = 0) do={
+    /queue simple add name=argosisp-suspendidos target=192.0.2.255/32 max-limit=0/0 comment="argosisp: ancla colas suspendidos"
+}
+:if ([:len [/queue simple find where name="argosisp-bypass-portal"]] = 0) do={
+    /queue simple add name=argosisp-bypass-portal target=$clientesV4 packet-marks=argosisp-bypass-portal max-limit=0/0 limit-at=0/0 parent=none comment="argosisp: bypass portal de corte"
+}
+# Primero el ancla y después el bypass al inicio de las estáticas: queda bypass, ancla. Con la lista
+# de estáticas vacía (no pasa: el ancla ya existe) "->0" fallaría; mover un elemento antes de sí
+# mismo tampoco hace falta. Por eso cada move va en :do on-error y solo si no está ya en su sitio.
+:foreach nombreCola in={"argosisp-suspendidos";"argosisp-bypass-portal"} do={
+    :do {
+        :local cola ([/queue simple find where name=$nombreCola]->0)
+        :local primera ([/queue simple find where dynamic=no]->0)
+        :if ($cola != $primera) do={ /queue simple move $cola destination=$primera }
+    } on-error={ :put ("argosisp: AVISO no se pudo subir la cola " . $nombreCola . " al inicio: revisa /queue simple print") }
+}
+
 /ppp profile set [find where name="suspendido"] local-address=$pppLocalV4 remote-address=$poolV4 \
     remote-ipv6-prefix-pool=$poolV6Enlace dhcpv6-pd-pool=$poolV6Pd use-ipv6=yes \
     dns-server=$pppLocalV4 change-tcp-mss=yes rate-limit=$suspRateLimit \
-    address-list=suspendidos interface-list=suspendidos
+    address-list=suspendidos interface-list=suspendidos insert-queue-before=argosisp-suspendidos
 
 # ============================================================================
 # 5. PPPoE server

@@ -94249,9 +94249,10 @@
                     "portal_en_router",
                     "portal_ip_cliente",
                     "proxy_corte",
-                    "proxy_device_mode"
+                    "proxy_device_mode",
+                    "bypass_portal"
                   ],
-                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente (qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: el web proxy en el puerto 3346, la regla final y una por suspendido), proxy_device_mode (solo en modo código: el device-mode del router permite el proxy web; si no, paso físico en el router y no reconciliable)"
+                  "description": "lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), portal_http (`/tool/fetch` al destino real del NAT), sesiones_suspendidas (cada IP en la lista), fasttrack (saltos antes de FastTrack), perfil_suspendido, walled_garden, dns_router (`/ip dns`: servidores reales, no de documentación, y consultas remotas si los clientes lo usan), portal_host (el destino del NAT responde 302 a /corte con cualquier Host), portal_en_router (el destino del NAT no es una IP del propio router), portal_ip_cliente (qué IP ve el portal desde la red de clientes: si ve otra, hay NAT o un proxy en medio y la identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: el web proxy en el puerto 3346, la regla final y una por suspendido), proxy_device_mode (solo en modo código: el device-mode del router permite el proxy web; si no, paso físico en el router y no reconciliable), bypass_portal (el tráfico del suspendido a la página de corte va sin límite de velocidad: mangle de la marca, cola sin límite antes de las de los suspendidos y perfil `suspendido` con `insert-queue-before`; el firewall corta igual lo demás)"
                 },
                 "ok": {
                   "type": [
@@ -94289,7 +94290,11 @@
                     "portal_ve_otra_ip",
                     "portal_ve_otra_ip_tunel",
                     "proxy_corte",
-                    "proxy_device_mode"
+                    "proxy_device_mode",
+                    "bypass_portal",
+                    "bypass_sin_redes",
+                    "bypass_sesiones_antes",
+                    "bypass_fuera_de_red"
                   ],
                   "description": "null si salió bien"
                 },
@@ -94348,7 +94353,11 @@
                     "portal_ve_otra_ip",
                     "portal_ve_otra_ip_tunel",
                     "proxy_corte",
-                    "proxy_device_mode"
+                    "proxy_device_mode",
+                    "bypass_portal",
+                    "bypass_sin_redes",
+                    "bypass_sesiones_antes",
+                    "bypass_fuera_de_red"
                   ]
                 },
                 "mensaje": {

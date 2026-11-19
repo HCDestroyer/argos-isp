@@ -300,7 +300,7 @@ test.group('RouterOS · reglas de oro y verificación', (group) => {
             metricas
                 .find((m) => m.nombre === nombre)!
                 .muestras.find((x) => x.etiquetas?.router_id === String(routerId))
-        assert.equal(muestra('argosisp_routeros_colas_simples')!.valor, 2) // la del servicio y el padre
+        assert.equal(muestra('argosisp_routeros_colas_simples')!.valor, 4) // servicio, padre, bypass del portal y ancla
         assert.equal(muestra('argosisp_routeros_colas_arbol')!.valor, 0)
         assert.deepInclude(muestra('argosisp_routeros_control_velocidad'), { valor: 1 })
         assert.equal(muestra('argosisp_routeros_control_velocidad')!.etiquetas?.modo, 'simple')

@@ -1008,6 +1008,10 @@ const CODIGOS_CORTE = [
     'portal_ve_otra_ip_tunel',
     'proxy_corte',
     'proxy_device_mode',
+    'bypass_portal',
+    'bypass_sin_redes',
+    'bypass_sesiones_antes',
+    'bypass_fuera_de_red',
 ]
 
 const problemaEstrategia = objeto({
@@ -1224,6 +1228,7 @@ export const DiagnosticoCorte = definirEsquema(
                         'portal_ip_cliente',
                         'proxy_corte',
                         'proxy_device_mode',
+                        'bypass_portal',
                     ]),
                     description:
                         'lista_suspendidos (existe o no hace falta), reglas (filter y NAT activas y en orden), ' +
@@ -1236,7 +1241,9 @@ export const DiagnosticoCorte = definirEsquema(
                         'identificación por IP no funciona; `/api/v1/portal/eco-ip`), proxy_corte (solo en modo código: ' +
                         'el web proxy en el puerto 3346, la regla final y una por suspendido), proxy_device_mode (solo en modo ' +
                         'código: el device-mode del router permite el proxy web; si no, paso físico en el router y no ' +
-                        'reconciliable)',
+                        'reconciliable), bypass_portal (el tráfico del suspendido a la página de corte va sin límite de ' +
+                        'velocidad: mangle de la marca, cola sin límite antes de las de los suspendidos y perfil ' +
+                        '`suspendido` con `insert-queue-before`; el firewall corta igual lo demás)',
                 },
                 ok: { ...nulable(booleano), description: 'null: no se pudo comprobar' },
                 codigo: { ...nulable(enumerado(CODIGOS_CORTE)), description: 'null si salió bien' },

@@ -7,6 +7,7 @@ import { crearClienteFila, crearEscenarioRouter, crearPlanFila, routerConTipo } 
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
 import { RouterOSFalso } from '#network/routeros/falso'
+import { esObjetoBypass } from '#network/routeros/corte_router'
 import { clienteDeRouter } from '#network/routeros/router'
 import { normalizarValor } from '#network/routeros/normalizar'
 import { ConsumidorRouterOS } from '#network/routeros/consumidor'
@@ -143,7 +144,8 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
                     (o) =>
                         o.dynamic !== 'true' &&
                         o.name !== 'default' &&
-                        !(o.comment ?? '').startsWith('argosisp: '),
+                        !(o.comment ?? '').startsWith('argosisp: ') &&
+                        !esObjetoBypass({ ruta, comment: o.comment ?? '' }),
                 )
                 .map((o) => `${o.comment ?? o.name}|${o.parent ?? ''}|${o.list ?? ''}`)
                 .sort()
@@ -155,6 +157,8 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
     function sinHuerfanas(assert: any) {
         const simples = new Set(falso.tabla('/queue/simple').map((o) => o.name))
         for (const q of falso.tabla('/queue/simple')) {
+            // El bypass del portal y su ancla son del corte (nivel router), no de un modo de velocidad.
+            if (esObjetoBypass({ ruta: '/queue/simple', comment: q.comment ?? '' })) continue
             assert.match(q.comment ?? '', /^argosisp:(servicio|plan):\d+$/)
             if (q.parent && q.parent !== 'none') assert.isTrue(simples.has(q.parent), q.parent)
         }
@@ -221,7 +225,10 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
         assert.isFalse(await enTransicion(routerId))
         // Solo queda la cola del suspendido; ni padres ni perfiles; árbol, PCQ, mangle y listas
         assert.deepEqual(
-            falso.tabla('/queue/simple').map((o) => o.comment),
+            falso
+                .tabla('/queue/simple')
+                .map((o) => o.comment)
+                .filter((c) => !esObjetoBypass({ ruta: '/queue/simple', comment: c ?? '' })),
             [commentServicio(wisp[3]!.id)],
         )
         assert.lengthOf(falso.conComment('/ppp/profile', commentPlan(plan)), 0)
@@ -276,7 +283,12 @@ test.group('RouterOS · cambio de modo de control (simple ↔ arbol_pcq)', (grou
             '/ip/firewall/mangle',
             '/ipv6/firewall/mangle',
         ] as const) {
-            assert.lengthOf(falso.tabla(ruta), 0, ruta)
+            // Lo del árbol se fue; solo quedan las marcas del bypass del portal (corte, no velocidad).
+            assert.lengthOf(
+                falso.tabla(ruta).filter((o) => !esObjetoBypass({ ruta, comment: o.comment ?? '' })),
+                0,
+                ruta,
+            )
         }
     })
 

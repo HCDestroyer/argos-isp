@@ -12,7 +12,7 @@ import type { ClienteRouterOS, ContextoRed, ObjetoRouterOS, Propiedades } from '
 import { diferencias } from '#network/routeros/normalizar'
 import { localAddressSecret, type LocalAddress } from '#network/routeros/local_address'
 import { RouterOSSolicitud } from '#network/routeros/errores'
-import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
+import { COMMENT_COLA_ANCLA, configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
 import { perfilSuspendido } from '#network/routeros/dispatcher'
 import { idSesionSondeo } from '#network/sesiones/sesiones'
 import {
@@ -440,6 +440,10 @@ export async function asegurarPerfilCorte(
     const corte = estadoCorteRouter(configCorte(), { fasttrack: false, redes_v4: [] }, perfiles)
     const perfil = corte.nombrados.find((n) => n.ruta === '/ppp/profile')
     if (!perfil || perfiles.some((p) => p.name === perfil.name)) return []
+    // La cola ancla del bypass del portal va antes: el perfil la nombra en `insert-queue-before`.
+    for (const r of corte.reglas.filter((x) => x.comment === COMMENT_COLA_ANCLA)) {
+        await cliente.asegurar(r.ruta, r.comment, r.propiedades, ctx)
+    }
     for (const n of corte.nombrados) await cliente.asegurarPor(n.ruta, { name: n.name }, n.propiedades, ctx)
     return [{ ruta: '/ppp/profile', comment: perfil.name, accion: 'creado' }]
 }

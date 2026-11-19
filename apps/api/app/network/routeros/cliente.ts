@@ -51,13 +51,19 @@ export const RUTAS = [
 ] as const
 export type RutaRouterOS = (typeof RUTAS)[number]
 
-/** Menús con orden (las reglas): admiten `move`. */
+/**
+ * Menús con orden: admiten `move`. Mangle y colas simples entran por el bypass del portal de corte
+ * (`corte_router.ts`): sus marcas van al inicio de mangle y su cola antes de las de los suspendidos.
+ */
 export const RUTAS_ORDENADAS = [
     '/ip/firewall/filter',
     '/ip/firewall/nat',
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
     '/ip/proxy/access',
+    '/ip/firewall/mangle',
+    '/ipv6/firewall/mangle',
+    '/queue/simple',
 ] as const satisfies readonly RutaRouterOS[]
 export type RutaOrdenada = (typeof RUTAS_ORDENADAS)[number]
 

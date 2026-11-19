@@ -1,6 +1,6 @@
 import { createServer as crearHttp, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { createServer as crearHttps } from 'node:https'
-import type { AddressInfo } from 'node:net'
+import { BlockList, isIPv4, isIPv6, type AddressInfo } from 'node:net'
 import {
     RUTAS,
     RUTAS_LECTURA,
@@ -38,6 +38,31 @@ export interface OpcionesFalso {
     password?: string
     /** Certificado y clave en PEM para servir HTTPS */
     tls?: { cert: string; key: string }
+}
+
+/** Un paquete para `recorrer` (lo que mira el mangle y la cola simple). */
+export interface Paquete {
+    cadena: 'forward' | 'input' | 'output' | 'prerouting' | 'postrouting'
+    src: string
+    dst: string
+    /** Interfaz de entrada (p. ej. `<pppoe-juan>`) y de salida */
+    entrada?: string
+    salida?: string
+    protocolo?: 'tcp' | 'udp' | 'icmp'
+    puertoOrigen?: number
+    puertoDestino?: number
+    /** La conexión llegó por un dst-nat (`connection-nat-state=dstnat`) */
+    dstnat?: boolean
+}
+
+/** ¿`prefijo` (IP o red, IPv4 o IPv6) contiene `ip`? */
+function contiene(prefijo: string, ip: string): boolean {
+    const [red, largo] = prefijo.split('/')
+    const familia = isIPv6(ip) ? 'ipv6' : 'ipv4'
+    if (!red || (familia === 'ipv6') !== isIPv6(red)) return false
+    const bloque = new BlockList()
+    bloque.addSubnet(red, Number(largo ?? (familia === 'ipv6' ? 128 : 32)), familia)
+    return bloque.check(ip, familia)
 }
 
 const VELOCIDADES = new Set([
@@ -152,6 +177,9 @@ const ORDENADOS = new Set<RutaRouterOS>([
     '/ipv6/firewall/filter',
     '/ipv6/firewall/nat',
     '/ip/proxy/access',
+    '/ip/firewall/mangle',
+    '/ipv6/firewall/mangle',
+    '/queue/simple',
 ])
 
 /** Puertos de `/ip proxy` (`8080,3346`). */
@@ -364,6 +392,178 @@ export class RouterOSFalso {
         // host hasta `:` o `/`; tras `:`, el puerto hasta `/`; el resto es la ruta (tal cual).
         const m = /^([^:/]*)(?::([^/]*))?(.*)$/.exec(datos)!
         return `http://${m[1]}${m[2] ? `:${m[2]}` : ''}${m[3]}`
+    }
+
+    /*
+    | Sesiones PPP y recorrido de un paquete (bypass del portal de corte)
+    | Modelo mínimo de lo que hace RouterOS 7 con una sesión PPP y con un paquete, para probar en qué cola
+    | cae sin un router real. Lo que no modela, nunca coincide (el resultado es el peor caso para el bypass).
+    */
+
+    /** Interfaces PPP dinámicas en cada interface-list (lo que pone `interface-list` del perfil). */
+    readonly #interfacesEnLista = new Map<string, Set<string>>()
+    /** Lo que resuelve el DNS del router para las entradas por nombre de las address-lists. */
+    readonly dnsRouter = new Map<string, string[]>()
+
+    /**
+     * Una sesión PPPoE que entra con un perfil (el `Mikrotik-Group` de RADIUS o el del secret): `/ppp/active`,
+     * la entrada dinámica en su `address-list`, la interfaz `<pppoe-usuario>` en su `interface-list` y, si hay
+     * `rate-limit` (de RADIUS o del perfil), la cola dinámica con `target=<pppoe-usuario>` en el lugar que
+     * pide `insert-queue-before` del perfil (`first`, `bottom` o antes de esa cola). Sin valor, arriba de
+     * todo (lo que se ve en los routers sin el ajuste).
+     */
+    conectarPpp(sesion: { usuario: string; perfil: string; address: string; rateLimit?: string }): string {
+        const interfaz = `<pppoe-${sesion.usuario}>`
+        const perfil = this.tabla('/ppp/profile').find((p) => p.name === sesion.perfil)
+        const id = `*S${(this.#siguienteId++).toString(16).toUpperCase()}`
+        this.lectura('/ppp/active').push({
+            '.id': id,
+            name: sesion.usuario,
+            address: sesion.address,
+            service: 'pppoe',
+        })
+        if (perfil?.['address-list']) {
+            this.tabla('/ip/firewall/address-list').push({
+                '.id': `${id}L`,
+                list: perfil['address-list'],
+                address: sesion.address,
+                dynamic: 'true',
+                disabled: 'false',
+            })
+        }
+        if (perfil?.['interface-list']) {
+            const set = this.#interfacesEnLista.get(perfil['interface-list']) ?? new Set<string>()
+            set.add(interfaz)
+            this.#interfacesEnLista.set(perfil['interface-list'], set)
+        }
+        const rate = sesion.rateLimit ?? perfil?.['rate-limit']
+        if (rate) {
+            const [subida, bajada] = rate.split(' ')[0]!.split('/')
+            const cola: ObjetoRouterOS = {
+                '.id': `${id}Q`,
+                name: interfaz,
+                target: interfaz,
+                'max-limit': velocidad(`${subida}/${bajada ?? subida}`),
+                dynamic: 'true',
+                disabled: 'false',
+                ...(perfil?.['parent-queue'] ? { parent: perfil['parent-queue'] } : {}),
+            }
+            const colas = this.tabla('/queue/simple')
+            const antesDe = perfil?.['insert-queue-before'] ?? 'first'
+            const indice =
+                antesDe === 'bottom'
+                    ? colas.length
+                    : antesDe === 'first'
+                      ? 0
+                      : colas.findIndex((o) => o.name === antesDe)
+            colas.splice(indice < 0 ? 0 : indice, 0, cola)
+        }
+        return interfaz
+    }
+
+    /** ¿`direccion` está en la address-list `list`? (IP, red o nombre que resuelve `dnsRouter`) */
+    #enLista(ruta: '/ip/firewall/address-list' | '/ipv6/firewall/address-list', list: string, ip: string) {
+        return this.tabla(ruta).some((o) => {
+            if (o.list !== list || o.disabled === 'true') return false
+            const a = o.address ?? ''
+            if (!/[/:]/.test(a) && !isIPv4(a)) return (this.dnsRouter.get(a) ?? []).includes(ip)
+            return contiene(a, ip)
+        })
+    }
+
+    /**
+     * Recorre un paquete por el mangle (cadena `paquete.cadena`, IPv4 o IPv6 según la IP) y después por las
+     * colas simples en orden (gana la primera cuyo `target` coincide con el origen o el destino, con su
+     * `packet-marks` si tiene) y por el queue tree (nodo con esa `packet-mark`). Coincidencias que modela el
+     * mangle: cadena, `src/dst-address`, `src/dst-address-list`, `in/out-interface-list`, `protocol`,
+     * `src/dst-port`, `connection-nat-state`; otra propiedad = no coincide. Acciones: `mark-packet` (con
+     * `passthrough`), `accept` y `return` cortan.
+     */
+    recorrer(paquete: Paquete): {
+        marca: string | null
+        cola: ObjetoRouterOS | null
+        arbol: ObjetoRouterOS | null
+    } {
+        const v6 = isIPv6(paquete.src)
+        const mangle = this.tabla(v6 ? '/ipv6/firewall/mangle' : '/ip/firewall/mangle')
+        const listas = v6 ? '/ipv6/firewall/address-list' : '/ip/firewall/address-list'
+        const enInterfaz = (lista: string, interfaz: string | undefined) =>
+            !!interfaz && (this.#interfacesEnLista.get(lista)?.has(interfaz) ?? false)
+        const CONOCIDAS = new Set([
+            '.id',
+            'chain',
+            'action',
+            'comment',
+            'disabled',
+            'dynamic',
+            'invalid',
+            'passthrough',
+            'new-packet-mark',
+            'log',
+            'log-prefix',
+        ])
+        let marca: string | null = null
+        for (const r of mangle) {
+            if (r.disabled === 'true' || r.chain !== paquete.cadena) continue
+            let ok = true
+            for (const [k, v] of Object.entries(r)) {
+                if (CONOCIDAS.has(k) || v === undefined || v === '') continue
+                const coincide =
+                    k === 'src-address'
+                        ? contiene(v, paquete.src)
+                        : k === 'dst-address'
+                          ? contiene(v, paquete.dst)
+                          : k === 'src-address-list'
+                            ? this.#enLista(listas, v, paquete.src)
+                            : k === 'dst-address-list'
+                              ? this.#enLista(listas, v, paquete.dst)
+                              : k === 'in-interface-list'
+                                ? enInterfaz(v, paquete.entrada)
+                                : k === 'out-interface-list'
+                                  ? enInterfaz(v, paquete.salida)
+                                  : k === 'protocol'
+                                    ? v === (paquete.protocolo ?? 'tcp')
+                                    : k === 'dst-port'
+                                      ? v === String(paquete.puertoDestino ?? '')
+                                      : k === 'src-port'
+                                        ? v === String(paquete.puertoOrigen ?? '')
+                                        : k === 'connection-nat-state'
+                                          ? v === 'dstnat'
+                                              ? Boolean(paquete.dstnat)
+                                              : v === '!dstnat' && !paquete.dstnat
+                                          : false
+                if (!coincide) {
+                    ok = false
+                    break
+                }
+            }
+            if (!ok) continue
+            if (r.action === 'accept' || r.action === 'return') break
+            if (r.action === 'mark-packet') {
+                marca = r['new-packet-mark'] ?? null
+                if (r.passthrough === 'false') break
+            }
+        }
+        const deTarget = (o: ObjetoRouterOS) =>
+            (o.target ?? '').split(',').some((t) => {
+                if (t.startsWith('<') || !/[./:]/.test(t)) {
+                    return t === paquete.entrada || t === paquete.salida
+                }
+                return contiene(t, paquete.src) || contiene(t, paquete.dst)
+            })
+        const cola =
+            this.tabla('/queue/simple').find((o) => {
+                if (o.disabled === 'true' || !deTarget(o)) return false
+                const marcas = (o['packet-marks'] ?? '').split(',').filter(Boolean)
+                return marcas.length === 0 || (marca !== null && marcas.includes(marca))
+            }) ?? null
+        const arbol =
+            marca === null
+                ? null
+                : (this.tabla('/queue/tree').find(
+                      (o) => o.disabled !== 'true' && o['packet-mark'] === marca,
+                  ) ?? null)
+        return { marca, cola, arbol }
     }
 
     /** Escrituras recibidas (PUT, PATCH, DELETE). */
@@ -630,10 +830,19 @@ export class RouterOSFalso {
         if (ruta === '/ppp/profile' && props['queue-type'] && !tipoExiste(props['queue-type'])) {
             return `input does not match any value of queue-type`
         }
-        if (ruta.endsWith('/firewall/filter') || ruta.endsWith('/firewall/nat')) {
-            const lista = props['in-interface-list']
-            if (lista && !LISTAS_DE_FABRICA.has(lista) && !existe('/interface/list', lista)) {
-                return `input does not match any value of in-interface-list`
+        if (ruta.includes('/firewall/') && !ruta.endsWith('/address-list')) {
+            for (const campo of ['in-interface-list', 'out-interface-list']) {
+                const lista = props[campo]
+                if (lista && !LISTAS_DE_FABRICA.has(lista) && !existe('/interface/list', lista)) {
+                    return `input does not match any value of ${campo}`
+                }
+            }
+        }
+        // `insert-queue-before` de un perfil PPP: `first`, `bottom` o el nombre de una cola simple.
+        const antesDe = props['insert-queue-before']
+        if (ruta === '/ppp/profile' && antesDe && antesDe !== 'first' && antesDe !== 'bottom') {
+            if (!existe('/queue/simple', antesDe)) {
+                return `input does not match any value of insert-queue-before`
             }
         }
         if (
@@ -690,7 +899,11 @@ export class RouterOSFalso {
         if (!nombre) return null
         if (ruta === '/queue/simple') {
             if (this.tabla('/queue/simple').some((o) => o.parent === nombre)) return 'queue has children'
-            if (this.tabla('/ppp/profile').some((o) => o['parent-queue'] === nombre)) {
+            if (
+                this.tabla('/ppp/profile').some(
+                    (o) => o['parent-queue'] === nombre || o['insert-queue-before'] === nombre,
+                )
+            ) {
                 return 'queue is used by ppp profile'
             }
         }

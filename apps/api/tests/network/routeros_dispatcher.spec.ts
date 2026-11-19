@@ -403,13 +403,18 @@ test.group('RouterOS · dispatcher WISP', (group) => {
             ['*FFF2', '*FFF3'],
         )
         // Métrica de A6: colas simples del router (todas, también las ajenas) en /metrics
-        assert.equal(r.colas_simples, 3, 'lectura antes de corregir: b, la huérfana y la ajena')
+        // + el bypass del portal y su ancla (corte de nivel router, ya escritos antes de los servicios)
+        assert.equal(
+            r.colas_simples,
+            5,
+            'lectura antes de corregir: b, la huérfana, la ajena, bypass y ancla',
+        )
         // (otra prueba de /metrics puede haber reemplazado la sección: se registra igual que la API)
         registrarSeccionMetricas('routeros', leerMetricasRouterOS)
         const texto = await recolectarMetricas()
         assert.match(
             texto,
-            new RegExp(`argosisp_routeros_colas_simples\\{router_id="${routerId}",router="[^"]+"\\} 3`),
+            new RegExp(`argosisp_routeros_colas_simples\\{router_id="${routerId}",router="[^"]+"\\} 5`),
         )
         assert.match(
             texto,

@@ -1,7 +1,12 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { OpcionesCorte } from '#network/routeros/corte_router'
-import { estrategiasEnUso, redesV4DeRouter, type RouterDispatcher } from '#network/routeros/consultas'
+import {
+    estrategiasEnUso,
+    redesV4DeRouter,
+    redesV6DeRouter,
+    type RouterDispatcher,
+} from '#network/routeros/consultas'
 import type { ServicioRed } from '#network/routeros/estado_deseado'
 import { gatewaysDeRedes, localAddressCorte } from '#network/routeros/velocidad_router'
 import { pideFasttrack } from '#network/routeros/dispatcher'
@@ -23,6 +28,7 @@ export async function opcionesCorteRouter(
     return {
         fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, servicios)),
         redes_v4: await redesV4DeRouter(routerId, cliente),
+        redes_v6: await redesV6DeRouter(routerId, cliente),
         local_address: localAddressCorte(router.velocidad.redes_ipv4).gateway,
         gateways_v4: gatewaysDeRedes(router.velocidad.redes_ipv4),
         identificacion: modoCodigo ? 'codigo' : 'ip',
