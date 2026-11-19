@@ -137,6 +137,10 @@ export const PERMISOS = {
         'Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)',
     'facturas.emitir_cargo_unico':
         'Emitir una factura manual de cargo único (instalación, equipo, visita técnica…) desde el catálogo de conceptos',
+    'facturas.emitir_periodos':
+        'Emitir a mano facturas de periodos de un servicio: pago por adelantado (hasta 12 periodos futuros) o periodos que el cron no emitió',
+    'facturas.emitir_periodo_anterior':
+        'Emitir a mano un periodo anterior al facturar_desde del servicio, con motivo (junto con facturas.emitir_periodos)',
     'facturas.cargo_sin_costo':
         'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
     'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
@@ -415,6 +419,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'planes.ver',
             'facturas.ver',
             'facturas.emitir_cargo_unico',
+            // pedido del PM (19 nov): cobrar meses adelantados en caja; sin periodos anteriores
+            'facturas.emitir_periodos',
             'pagos.ver',
             'pagos.registrar',
             'cajas.ver',
@@ -581,6 +587,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.sustituir',
             'facturas.anular_nota_credito',
             'facturas.emitir_cargo_unico',
+            'facturas.emitir_periodos',
+            'facturas.emitir_periodo_anterior',
             'facturas.cargo_sin_costo',
             'facturas.configurar_motivos',
             'facturas.configurar_conceptos',

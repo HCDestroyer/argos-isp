@@ -83,6 +83,53 @@ Avisos que puedes ver en el detalle:
 
 ## Acciones
 
+### Emitir facturas de un servicio a mano (meses adelantados o meses que faltan)
+
+Normalmente el sistema emite solo la factura de cada mes. Esta acción sirve para dos casos:
+
+- **Pago por adelantado:** el cliente quiere dejar pagados los próximos meses desde ya.
+- **Meses que faltan:** el sistema no emitió la factura de un mes que ya pasó (por ejemplo, porque algo falló ese día).
+
+- **Permiso:** `facturas.emitir_periodos` (`admin`, `cajero`, `contabilidad`).
+- **Dónde:** en el servicio, «Emitir facturas de periodos». El panel muestra primero la lista de meses del servicio.
+
+**Qué ves antes de emitir.** Cada mes del servicio con su estado, su monto y su fecha de vencimiento:
+
+| Estado                      | Qué significa                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Emitida**                 | Ese mes ya tiene factura. No se vuelve a emitir.                                               |
+| **Bonificada**              | Ese mes quedó en cero (mes gratis, descuento del 100 %). No se emite.                          |
+| **Pendiente**               | Un mes que ya empezó y todavía no tiene factura. El sistema la emitiría en su próxima corrida. |
+| **Futuro**                  | Un mes que aún no empieza. Se puede emitir para cobrarlo por adelantado (hasta 12 meses).      |
+| **Antes de facturar desde** | Un mes anterior al día en que el servicio empezó a facturarse con su plantilla. Ver más abajo. |
+
+El monto es el mismo que tendría la factura normal: el precio del plan del servicio (o su precio especial), sus cargos fijos y adicionales, y el primer mes proporcional a los días si la plantilla lo indica. También ves el **saldo a favor** del cliente y cuánto de cada factura quedaría cubierto con él.
+
+**Qué pasa al emitir.** Eliges los meses (o «todos hasta» una fecha) y confirmas. El sistema emite las facturas en orden, del mes más antiguo al más nuevo, igual que si las hubiera emitido solo: mismas líneas, mismo asiento en el libro, mismo aviso al cliente y la misma certificación FEL. Si el cliente tiene **saldo a favor**, se aplica de una vez a esas facturas.
+
+- Un mes que ya tenía factura no se duplica: aparece como «omitido» con su motivo.
+- Cada factura vence en su fecha normal (inicio del mes más los días de gracia de la plantilla). Una factura de un mes futuro **no cuenta para limitar ni cortar** antes de esa fecha.
+- Un mes pasado que emites tarde y cuyo vencimiento ya pasó se marca como vencido en el próximo corte y cuenta para limitar o suspender, como cualquier factura vencida.
+- El precio es el de hoy. Si después cambias el plan, las facturas que ya emitiste por adelantado no cambian.
+
+::: tip Ejemplo: el cliente paga 3 meses adelantados
+Hoy es 19 de noviembre. El cliente tiene un plan de Q150 al mes, ya pagó noviembre y quiere dejar pagados diciembre, enero y febrero.
+
+1. En caja registras su pago de **Q450**. Como no tiene facturas pendientes, los Q450 quedan como **saldo a favor**.
+2. En el servicio abres «Emitir facturas de periodos». Ves diciembre, enero y febrero como «Futuro», de Q150 cada uno, y que el saldo a favor de Q450 los cubre.
+3. Eliges esos tres meses y confirmas. Se emiten las tres facturas y quedan **Pagadas** al momento; el saldo a favor queda en Q0.
+4. Cuando llega diciembre, el sistema ve que esa factura ya existe y no emite otra. El cliente no vuelve a deber hasta marzo.
+
+Puedes hacerlo también al revés: primero emitir los meses y después registrar el pago.
+:::
+
+**Meses anteriores a «facturar desde».** Cuando un servicio que no tenía plantilla la recibe, el sistema solo le factura desde el siguiente mes (nunca hacia atrás). Si de verdad hay que cobrar uno de esos meses anteriores:
+
+- Se necesita además el permiso `facturas.emitir_periodo_anterior` (`admin`, `contabilidad`; el cajero no lo tiene).
+- Hay que elegir ese mes uno por uno (la opción «todos hasta» nunca los incluye) y escribir el **motivo**, que queda guardado en la factura y en la bitácora.
+
+No se pueden emitir facturas de periodo a un servicio **retirado**, **pendiente de instalación** o **sin plantilla**.
+
 ### Aviso de cobro (PDF)
 
 - **Permiso:** `facturas.ver`.
@@ -138,6 +185,9 @@ Una factura anulada no vuelve a estar vigente. Nada se borra: la factura y su as
 | «La factura … tiene su ingreso diferido (…)»                                  | La factura tiene un diferido. Habla con contabilidad.                                          |
 | «… tiene recargos de mora certificados como nota de débito: anúlalos primero» | Anula primero los recargos de mora certificados.                                               |
 | «La anulación del DTE de la factura … ya se envió al certificador»            | Espera la respuesta de la SAT.                                                                 |
+| «Se pueden emitir hasta 12 periodos futuros…»                                 | Elige meses más cercanos; los siguientes podrás emitirlos más adelante.                        |
+| «…: anterior a facturar_desde (…); requiere el permiso…»                      | Pide a contabilidad o a un administrador que emita ese mes, con su motivo.                     |
+| «… no es el inicio de un periodo del servicio»                                | Elige los meses de la lista; las fechas deben ser el primer día de cada periodo.               |
 | «No se encontró el asiento de esta factura en el libro diario.»               | Una factura «Por certificar» todavía no tiene asiento. Si no es el caso, avisa a contabilidad. |
 
 ## Relacionado

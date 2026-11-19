@@ -54,6 +54,8 @@ import { simularPromesa } from '#billing/simulador_promesas'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
+import EmitirFacturasPeriodo from '#billing/actions/emitir_facturas_periodo'
+import { vistaPreviaPeriodos } from '#billing/periodos_facturables'
 import CrearConceptoCargo from '#billing/actions/crear_concepto_cargo'
 import EditarConceptoCargo from '#billing/actions/editar_concepto_cargo'
 import CrearMotivoSinCosto from '#billing/actions/crear_motivo_sin_costo'
@@ -152,6 +154,8 @@ import {
     PlantillaFacturacion,
     VistaPreviaSinPlantilla,
     AsignacionSinPlantilla,
+    PeriodosFacturables,
+    FacturasPeriodoEmitidas,
     Promesa,
     ResultadoGeneracion,
     CorridasFacturacion,
@@ -360,6 +364,57 @@ const facturas: Ruta[] = [
             return documento === 'factura'
                 ? { documento, factura: resultado, bonificacion: null }
                 : { documento, factura: null, bonificacion: resultado }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/periodos-facturables',
+        operacion: 'serviciosPeriodosFacturables',
+        resumen: 'Vista previa: periodos del servicio (emitidos, pendientes, futuros) con su monto',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.periodosFacturablesValidator,
+        descripcion:
+            'Solo lectura. Todos los periodos del servicio desde su primer día facturable hasta el 12.º periodo futuro (o hasta ?hasta=), ascendentes, con estado: emitida (factura_id), bonificada, pendiente (empieza hoy o antes y el cron la emitiría), futuro (pago adelantado) o antes_de_facturar_desde. monto: el total de la factura emitida o el que tendría emitida hoy (se emiten todas las no emitidas en orden en una transacción que se revierte: precio efectivo, prorrateo del primer periodo, conceptos recurrentes, adicionales y descuentos de lealtad); pagado: lo que el saldo a favor cubriría. Retirado, pendiente de instalación o sin plantilla: emitible false, motivo y periodos []. 404 si no existe; 422 maximo_periodos_futuros si hasta va más allá del último futuro permitido.',
+        respuesta: { status: 200, descripcion: 'Periodos del servicio', esquema: PeriodosFacturables },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return vistaPreviaPeriodos(db.connection(), id, ctx.contextoAccion(), { hasta: query.hasta })
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/facturas-periodo',
+        operacion: 'serviciosEmitirFacturasPeriodo',
+        resumen: 'Emitir a mano facturas de periodos del servicio (pago adelantado o periodos no emitidos)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.emitir_periodos',
+        cuerpo: v.emitirFacturasPeriodoValidator,
+        idempotente: true,
+        descripcion:
+            'Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_de_facturar_desde) y motivo (422 motivo_requerido). 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Facturas creadas y omitidas',
+            esquema: FacturasPeriodoEmitidas,
+        },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            const puedeAnterior = ctx.auth.user
+                ? Boolean(
+                      await alcanceDePermiso(
+                          ctx.auth.user.id,
+                          'facturas.emitir_periodo_anterior',
+                          alcancesDelToken(ctx),
+                      ),
+                  )
+                : false
+            return new EmitirFacturasPeriodo().execute(
+                { ...cuerpo, servicio_id: id, puede_emitir_anterior: puedeAnterior },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({
