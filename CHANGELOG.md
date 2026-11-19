@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.0](https://github.com/HCDestroyer/argos-isp/compare/v1.21.0...v1.22.0) (2026-11-19)
+
+
+### Funcionalidades
+
+* **routeros:** bypass de velocidad del suspendido hacia la página de corte ([#260](https://github.com/HCDestroyer/argos-isp/issues/260)) ([5db1437](https://github.com/HCDestroyer/argos-isp/commit/5db1437d538b3f43605f9e0db7259f7575982c37))
+
 ## [1.21.0](https://github.com/HCDestroyer/argos-isp/compare/v1.20.0...v1.21.0) (2026-11-19)
 
 
