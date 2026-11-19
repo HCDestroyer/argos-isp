@@ -44,7 +44,7 @@
 # Prefijos IPv6 de clientes (pools e IPAM): exclusión de FastTrack en IPv6
 :local clientesV6 {"2001:db8:100::/48";"2001:db8:101::/48";"2001:db8:200::/40";"2001:db8:300::/40"}
 # Rate-limit del perfil suspendido (rx/tx desde el router = subida/bajada del cliente)
-:local suspRateLimit "256k/256k"
+:local suspRateLimit "2M/2M"
 
 # --- IPv6 (nombres que A1 registra en planes_routers) ---
 # /64 de enlace por cliente (SLAAC en la interfaz PPP) → remote-ipv6-prefix-pool

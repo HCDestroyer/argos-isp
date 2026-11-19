@@ -287,6 +287,18 @@ sudo sed -i "s|^ROUTERS_SERVICIO_DNS_V4=.*|ROUTERS_SERVICIO_DNS_V4=|" "$DIR/.env
 estado="$(cli estado)"
 if grep -q 'DNS de documentación' <<< "$estado"; then fallar "argosisp estado avisa del DNS sin tenerlo"; fi
 
+# Velocidad del suspendido: la instalación nueva no fija AAA_SUSPENDIDO_RATE_LIMIT (vale el 2M/2M del
+# compose); un .env de antes con 256k/256k se respeta y argosisp estado avisa cómo cambiarlo
+if sudo grep -q '^AAA_SUSPENDIDO_RATE_LIMIT=' "$DIR/.env"; then fallar "instalar.sh fijó AAA_SUSPENDIDO_RATE_LIMIT en el .env"; fi
+echo 'AAA_SUSPENDIDO_RATE_LIMIT=256k/256k' | sudo tee -a "$DIR/.env" > /dev/null
+estado="$(cli estado)"
+grep -q 'AVISO: AAA_SUSPENDIDO_RATE_LIMIT=256k/256k en el .env' <<< "$estado" ||
+    fallar "argosisp estado no avisa de la velocidad del suspendido en 256k"
+sudo grep -q '^AAA_SUSPENDIDO_RATE_LIMIT=256k/256k$' "$DIR/.env" || fallar "argosisp estado cambió AAA_SUSPENDIDO_RATE_LIMIT del .env"
+sudo sed -i '/^AAA_SUSPENDIDO_RATE_LIMIT=/d' "$DIR/.env"
+estado="$(cli estado)"
+if grep -q 'AAA_SUSPENDIDO_RATE_LIMIT' <<< "$estado"; then fallar "argosisp estado avisa de la velocidad sin tenerla fijada"; fi
+
 # ---------------------------------------------------------------------------
 paso "actualizar $V1 → $V2 con COMPOSE_SUBNET_V4 cambiado en el .env ($SUBRED_V4_NUEVA, sin levantar)"
 echo "$V2" > "$FUENTE/estable"

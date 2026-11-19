@@ -105,7 +105,7 @@ Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, 
 | `pool_v4_rangos`                      | `ROUTERS_SERVICIO_POOL_V4_RANGOS`                                                              | `10.10.0.10-10.10.0.250`              | `.env`           |
 | `clientes_v4`                         | `ROUTERS_SERVICIO_CLIENTES_V4`                                                                 | `10.10.0.0/16`                        | `.env`           |
 | `clientes_v6` (puede ir vacía)        | `ROUTERS_SERVICIO_CLIENTES_V6`                                                                 | `2001:db8:100::/48,2001:db8:200::/40` | `.env`           |
-| `susp_rate_limit`                     | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`)          | `256k/256k`                           | derivada         |
+| `susp_rate_limit`                     | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`)          | `2M/2M`                               | derivada         |
 | `pool_v6_enlace_prefijo`              | `ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO`                                                      | `2001:db8:100::/48`                   | `.env`           |
 | `pool_v6_pd_prefijo`                  | `ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO`                                                          | `2001:db8:200::/40`                   | `.env`           |
 | `portal_v4`, `portal_v6`              | Configuración → Portal de corte (`core.portal_corte`); el entorno (`ROUTERS_SERVICIO_PORTAL_V4`, `_V6`) solo siembra | `192.0.2.20`, `2001:db8:ffff::20`     | panel            |
@@ -117,6 +117,8 @@ Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, 
 | `corte_url` (`corteUrl`; vacía en modo `ip`) | `/corte` de `PORTAL_URL_PUBLICA` o, sin ella, `http://<IPv4 del portal>:<puerto>/corte` (vacía: el script arma la del NAT con `portalV4`; sin ella, la regla final niega) | `http://portal.argosisp.example/corte` | derivada |
 
 En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio), **salvo los DNS**, que no tienen valor por defecto en ningún compose. En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+
+`susp_rate_limit` (`2M/2M` por defecto después de la 1.19.0; antes `256k/256k`) limita **todo** el tráfico del suspendido, también el que va al portal de corte: con 256k la página de corte tardaba casi dos minutos en cargar. Bajar la velocidad no corta nada; el corte lo hace el firewall (`argos-corte`). En un `.env` que ya fija `AAA_SUSPENDIDO_RATE_LIMIT=256k/256k`, `argosisp levantar` no lo cambia: ver `docs/runbooks/actualizacion.md`, «Velocidad del suspendido».
 
 ### Identificación del cortado: modo `ip` o `codigo`
 
@@ -217,7 +219,7 @@ Un router `api` no es cliente de FreeRADIUS: ArgosIsp crea un `/ppp secret` por 
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | PPPoE               | Servidor `argosisp` en `labIf`, perfil `default`, solo PAP/CHAP, MTU/MRU 1480, `one-session-per-host`                                                                                                                                               |
 | Perfil `default`    | `local-address`, pool IPv4 `argos-v4-pppoe`, `/64` de enlace desde `argos-v6-enlace` (`remote-ipv6-prefix-pool`), `/56` por DHCPv6-PD desde `argos-v6-pd` (`dhcpv6-pd-pool`), DNS = router, `change-tcp-mss`                                        |
-| Perfil `suspendido` | Igual que `default` más `rate-limit=256k/256k`, `address-list=suspendidos` (el router agrega la IPv4, el /64 y el /56 de la sesión a las listas `suspendidos` de IPv4 e IPv6) e `interface-list=suspendidos`                                        |
+| Perfil `suspendido` | Igual que `default` más `rate-limit=2M/2M`, `address-list=suspendidos` (el router agrega la IPv4, el /64 y el /56 de la sesión a las listas `suspendidos` de IPv4 e IPv6) e `interface-list=suspendidos`                                        |
 | RADIUS              | `/radius service=ppp timeout=1s src-address=...` (segunda entrada si `radiusAddr2` no está vacío), `/radius incoming accept=yes port=3799`, `/ppp aaa use-radius=yes accounting=yes interim-update=5m`                                              |
 | Corte IPv4          | Cadena `argos-corte`: DNS (`argos-dns`), portal (`argos-portal`), walled garden por FQDN (`argos-walled`), `tcp-reset` al resto de TCP y `icmp-admin-prohibited` a lo demás. NAT `argos-corte-nat`: TCP/80 → `portalV4:portalCortePuerto`           |
 | Corte IPv6          | Espejo del IPv4: DNS a cualquier resolver, portal y walled garden; con `portalV6`, NAT de TCP/80 a `/corte` (v1.9.1); `tcp-reset` y `icmp-admin-prohibited` al resto, nunca `drop`. Detalle en "Corte por IPv6" |
@@ -423,7 +425,7 @@ No existe un atributo RADIUS de MikroTik para una address-list IPv6 (el dicciona
 
 **Qué mandan `aaa` y `coa`:**
 
-- `aaa`, Access-Accept de un suspendido (sin cambios): `Mikrotik-Group = "suspendido"`, `Mikrotik-Rate-Limit = "256k/256k"`, `Mikrotik-Address-List = "suspendidos"`, `Filter-Id = "argos-corte.in"`, más su `Framed-IP-Address`, `Framed-IPv6-Prefix` (/64) y `Delegated-IPv6-Prefix` (/56) de siempre (A5 identifica al cliente por esas IPs).
+- `aaa`, Access-Accept de un suspendido (sin cambios): `Mikrotik-Group = "suspendido"`, `Mikrotik-Rate-Limit = "2M/2M"` (`AAA_SUSPENDIDO_RATE_LIMIT`), `Mikrotik-Address-List = "suspendidos"`, `Filter-Id = "argos-corte.in"`, más su `Framed-IP-Address`, `Framed-IPv6-Prefix` (/64) y `Delegated-IPv6-Prefix` (/56) de siempre (A5 identifica al cliente por esas IPs).
 - `coa`, al suspender una sesión viva:
     - `COA_SUSPENDER_CON_IPV6=coa` (por defecto, comportamiento del día 3): CoA con `Mikrotik-Rate-Limit`, `Mikrotik-Address-List` y `Filter-Id`. IPv4 aterriza en `/corte` sin reconectar; IPv6 queda bloqueado con reset.
     - `COA_SUSPENDER_CON_IPV6=disconnect`: si la sesión tiene /64 o /56 en `network.sesiones`, Disconnect-Request; el CPE reconecta en segundos y entra por la primera fila de la tabla (perfil `suspendido` completo en IPv4 e IPv6). Las sesiones solo IPv4 siguen por CoA. Queda en `audit.red` como `disconnect` con `razon` = `suspender: … (sesión con IPv6: reconecta con el perfil suspendido)`.
