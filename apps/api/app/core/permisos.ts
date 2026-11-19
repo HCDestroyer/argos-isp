@@ -16,6 +16,8 @@ export const PERMISOS = {
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
     'clientes.verificar_identidad':
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
+    'clientes.restaurar_contrasena_portal':
+        'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -345,6 +347,8 @@ export const PERMISOS = {
         'Ver la configuración del portal de corte (destino del NAT de los routers y modo de suspensión)',
     'portal_corte.configurar':
         'Configurar el portal de corte: IPv4/IPv6 y puerto a donde los routers redirigen a los suspendidos y modo de suspensión (desconectar o CoA); solo admin',
+    'portal.configurar_contrasena_defecto':
+        'Configurar la contraseña por defecto del portal del cliente de la empresa activa (solo se guarda el hash); solo admin',
     'nodos_portal.administrar':
         'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':
@@ -449,6 +453,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.desvincular_telegram',
             'clientes.asignar_responsable_pago',
             'clientes.quitar_responsable_pago',
+            'clientes.restaurar_contrasena_portal',
             'zonas.ver',
             'servicios.ver',
             'servicios.crear',

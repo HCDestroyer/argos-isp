@@ -192,6 +192,10 @@ export default await Env.create(new URL('../', import.meta.url), {
     PORTAL_CODIGO_MAX_HORA: Env.schema.number.optional(),
     PORTAL_SESION_INACTIVIDAD_S: Env.schema.number.optional(),
     PORTAL_SESION_MAX_S: Env.schema.number.optional(),
+    PORTAL_CONTRASENA_FALLOS_DOCUMENTO: Env.schema.number.optional(),
+    PORTAL_CONTRASENA_FALLOS_IP: Env.schema.number.optional(),
+    PORTAL_CONTRASENA_VENTANA_S: Env.schema.number.optional(),
+    PORTAL_SESION_CORTE_MAX_S: Env.schema.number.optional(),
     /** `Secure` de la cookie del portal: `auto` (HTTPS detectado) o `siempre` (`app/portal/acceso/sesion.ts`). */
     PORTAL_COOKIE_SEGURA: Env.schema.enum.optional(['auto', 'siempre'] as const),
     /** URL pública del portal para el retorno de la pasarela (`app/portal/pagos_en_linea.ts`). */

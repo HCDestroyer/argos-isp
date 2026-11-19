@@ -20,6 +20,9 @@ export interface SesionPortalVista {
     expira_en: string
     /** Empresa principal del cliente (marca y título del portal) */
     empresa_principal: MarcaEmpresa
+    origen: 'codigo' | 'contrasena' | 'corte'
+    /** entró con la contraseña por defecto: debe cambiarla antes de seguir */
+    debe_cambiar_contrasena: boolean
 }
 
 export interface ResultadoVerificacion {
@@ -129,6 +132,8 @@ export default class VerificarCodigoPortal extends DomainAction<
                     await empresaPrincipalDelCliente(Number(intento.cliente_id), t.trx),
                     t.trx,
                 ),
+                origen: 'codigo',
+                debe_cambiar_contrasena: false,
             },
         }
     }

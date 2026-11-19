@@ -9265,6 +9265,78 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/contrasena-portal": {
+      "get": {
+        "operationId": "clientesContrasenaPortalVer",
+        "summary": "Si el cliente tiene contraseña propia del portal o usa la por defecto (nunca la contraseña)",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteContrasenaPortal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/dependientes": {
       "get": {
         "operationId": "clientesDependientes",
@@ -10009,6 +10081,79 @@
           }
         },
         "x-permiso": "clientes.asignar_responsable_pago",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/restaurar-contrasena-portal": {
+      "post": {
+        "operationId": "clientesRestaurarContrasenaPortal",
+        "summary": "Restaura la contraseña del portal del cliente a la por defecto de su empresa",
+        "description": "Borra su contraseña propia (entra con la por defecto y el portal le pide cambiarla) y cierra sus sesiones del portal. Idempotente. Diff `portal_contrasena` (`***`) en audit.cambios. `defecto_configurada: false` avisa que su empresa no tiene contraseña por defecto (solo podrá entrar con código).",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restaurada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteContrasenaPortal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.restaurar_contrasena_portal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.restaurar_contrasena_portal",
         "x-implementado": true
       }
     },
@@ -20002,6 +20147,155 @@
           }
         },
         "x-permiso": "empresa.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/empresa/contrasena-portal": {
+      "get": {
+        "operationId": "empresaContrasenaPortalVer",
+        "summary": "Si la empresa activa tiene contraseña por defecto del portal (nunca la contraseña)",
+        "description": "Empresa activa (`X-Empresa-Id` o la única): 422 `empresa_requerida`, 403 `empresa_no_permitida`. `version` 0 = nunca se configuró.",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContrasenaDefecto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso empresa.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "empresa.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "empresaContrasenaPortalConfigurar",
+        "summary": "Configura la contraseña por defecto del portal de la empresa activa",
+        "description": "Con ella entran al portal (documento + contraseña) los clientes sin contraseña propia, y el portal les pide cambiarla. Solo se guarda el hash; la auditoría la registra como `***`. Empresa activa (`X-Empresa-Id` o la única): 422 `empresa_requerida`, 403 `empresa_no_permitida`. `version` 0 la crea, 409 si cambió. No toca a los clientes con contraseña propia ni cierra sesiones.",
+        "tags": [
+          "empresa"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contrasena": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída (0 si nunca se configuró); si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "contrasena",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configurada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContrasenaDefecto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso portal.configurar_contrasena_defecto; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "portal.configurar_contrasena_defecto",
         "x-implementado": true
       }
     },
@@ -57102,6 +57396,124 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/contrasena": {
+      "post": {
+        "operationId": "portalCambiarContrasena",
+        "summary": "El cliente cambia su contraseña del portal (pide la actual)",
+        "description": "La actual es la propia o, si no tiene, la por defecto de su empresa (422 en `contrasena_actual`). La nueva (8 a 128) no puede ser la por defecto ni el documento (422 en `contrasena_nueva`). Quita `debe_cambiar_contrasena` y cierra las demás sesiones del portal del cliente. Admite la sesión que debe cambiarla. Límite por documento (`PORTAL_CONTRASENA_FALLOS_DOCUMENTO`, 5 fallidos) y por IP o /64 (`PORTAL_CONTRASENA_FALLOS_IP`, 20) en `PORTAL_CONTRASENA_VENTANA_S` (900 s), en Postgres: 429 `demasiados_intentos` con `Retry-After`, sin decir cuál de los dos. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contrasena_actual": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "contrasena_nueva": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "contrasena_actual",
+                  "contrasena_nueva"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contraseña cambiada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalContrasenaCambiada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/corte/sesion": {
+      "post": {
+        "operationId": "portalSesionDesdeCorte",
+        "summary": "«Ver mi cuenta» en /corte: abre la sesión del cliente identificado, sin pedir nada",
+        "description": "Identifica igual que `GET /portal/quien-soy` (código de corte vigente o IP), en el momento. Por IP exige además que la IP esté en una sesión PPPoE vigente del servicio. Sesión corta (`PORTAL_SESION_CORTE_MAX_S`, 900 s) con alcance al cliente del servicio, `origen: corte`. Sin identificar: 422 `no_identificado`. Con un código de corte (`?c=` o cabecera `X-Argos-Corte`, lo pone el proxy del router en modo `codigo`, `contratos/corte-identificacion.md`) identifica por el código y no por la IP, y el límite se cuenta por código; un código que no existe o venció cuenta además en `PORTAL_LIMITE_CODIGOS_FALLIDOS` por IP. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Sesión abierta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSesion"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/cuenta": {
       "get": {
         "operationId": "portalCuenta",
@@ -57319,6 +57731,82 @@
           },
           "404": {
             "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/entrar": {
+      "post": {
+        "operationId": "portalEntrarConContrasena",
+        "summary": "Entra al portal con el documento y la contraseña (cookie httpOnly)",
+        "description": "Usuario = el documento del cliente (NIT, CUI o pasaporte; sin espacios ni guiones, en mayúsculas; `CF` no). Contraseña propia o, si no tiene, la por defecto de su empresa (`debe_cambiar_contrasena: true`: el resto del portal responde 403 `cambio_contrasena_requerido` hasta cambiarla). Un documento de varios clientes solo entra con una contraseña propia que coincida con uno. Con `empresa_id`, solo clientes con servicios en esa empresa. Cualquier fallo: 422 `credenciales_invalidas` con el mismo texto. Límite por documento (`PORTAL_CONTRASENA_FALLOS_DOCUMENTO`, 5 fallidos) y por IP o /64 (`PORTAL_CONTRASENA_FALLOS_IP`, 20) en `PORTAL_CONTRASENA_VENTANA_S` (900 s), en Postgres: 429 `demasiados_intentos` con `Retry-After`, sin decir cuál de los dos. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documento": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 30,
+                    "description": "NIT, CUI o pasaporte; se ignoran espacios, guiones y mayúsculas"
+                  },
+                  "contrasena": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Portal de una empresa: solo clientes con servicios en ella y su contraseña por defecto"
+                  }
+                },
+                "required": [
+                  "documento",
+                  "contrasena"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión abierta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSesion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -58589,6 +59077,54 @@
         "responses": {
           "204": {
             "description": "Sesión cerrada"
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sesion": {
+      "get": {
+        "operationId": "portalSesion",
+        "summary": "La sesión del portal: cómo se abrió y si debe cambiar la contraseña",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429). Responde también con `debe_cambiar_contrasena` (no da 403).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sesión vigente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSesion"
+                }
+              }
+            }
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
@@ -66305,6 +66841,7 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
@@ -66445,6 +66982,7 @@
                         "plantillas.editar",
                         "plantillas.retirar",
                         "plantillas.ver",
+                        "portal.configurar_contrasena_defecto",
                         "portal_corte.configurar",
                         "portal_corte.ver",
                         "productos.crear",
@@ -66687,6 +67225,7 @@
                         "clientes.editar",
                         "clientes.estado_cuenta",
                         "clientes.quitar_responsable_pago",
+                        "clientes.restaurar_contrasena_portal",
                         "clientes.ver",
                         "clientes.verificar_identidad",
                         "clientes.vincular_telegram",
@@ -66827,6 +67366,7 @@
                         "plantillas.editar",
                         "plantillas.retirar",
                         "plantillas.ver",
+                        "portal.configurar_contrasena_defecto",
                         "portal_corte.configurar",
                         "portal_corte.ver",
                         "productos.crear",
@@ -78764,6 +79304,7 @@
                             "clientes.editar",
                             "clientes.estado_cuenta",
                             "clientes.quitar_responsable_pago",
+                            "clientes.restaurar_contrasena_portal",
                             "clientes.ver",
                             "clientes.verificar_identidad",
                             "clientes.vincular_telegram",
@@ -78904,6 +79445,7 @@
                             "plantillas.editar",
                             "plantillas.retirar",
                             "plantillas.ver",
+                            "portal.configurar_contrasena_defecto",
                             "portal_corte.configurar",
                             "portal_corte.ver",
                             "productos.crear",
@@ -87690,6 +88232,42 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ClienteContrasenaPortal": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "propia",
+          "actualizada_en",
+          "defecto_configurada",
+          "sesiones_cerradas"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "propia": {
+            "type": "boolean",
+            "description": "El cliente eligió su contraseña; false = entra con la por defecto de su empresa"
+          },
+          "actualizada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "defecto_configurada": {
+            "type": "boolean",
+            "description": "Alguna de sus empresas tiene contraseña por defecto (si no y sin propia, solo entra con código)"
+          },
+          "sesiones_cerradas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Sesiones del portal que cerró la restauración (0 en la lectura)"
           }
         }
       },
@@ -102179,6 +102757,7 @@
           "clientes.editar",
           "clientes.estado_cuenta",
           "clientes.quitar_responsable_pago",
+          "clientes.restaurar_contrasena_portal",
           "clientes.ver",
           "clientes.verificar_identidad",
           "clientes.vincular_telegram",
@@ -102319,6 +102898,7 @@
           "plantillas.editar",
           "plantillas.retirar",
           "plantillas.ver",
+          "portal.configurar_contrasena_defecto",
           "portal_corte.configurar",
           "portal_corte.ver",
           "productos.crear",
@@ -102453,6 +103033,7 @@
           "Editar datos de clientes",
           "Ver el estado de cuenta de un cliente",
           "Quitar el responsable de pago de un cliente",
+          "Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)",
           "Ver y buscar clientes",
           "Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)",
           "Vincular el chat de Telegram de un cliente",
@@ -102593,6 +103174,7 @@
           "Editar plantillas de facturación",
           "Retirar una plantilla de facturación (sigue con sus servicios; no se asigna a nuevos)",
           "Ver plantillas de facturación",
+          "Configurar la contraseña por defecto del portal del cliente de la empresa activa (solo se guarda el hash); solo admin",
           "Configurar el portal de corte: IPv4/IPv6 y puerto a donde los routers redirigen a los suspendidos y modo de suspensión (desconectar o CoA); solo admin",
           "Ver la configuración del portal de corte (destino del NAT de los routers y modo de suspensión)",
           "Crear productos del inventario",
@@ -106556,6 +107138,55 @@
           }
         }
       },
+      "PortalContrasenaCambiada": {
+        "type": "object",
+        "required": [
+          "actualizada_en",
+          "sesiones_cerradas"
+        ],
+        "properties": {
+          "actualizada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sesiones_cerradas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Otras sesiones del portal que se cerraron"
+          }
+        }
+      },
+      "PortalContrasenaDefecto": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "configurada",
+          "actualizada_en",
+          "version"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "configurada": {
+            "type": "boolean",
+            "description": "Hay contraseña por defecto (nunca se devuelve ni su hash)"
+          },
+          "actualizada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0 si nunca se configuró; envíala al guardar (409 si cambió)"
+          }
+        }
+      },
       "PortalCorte": {
         "type": "object",
         "required": [
@@ -107804,7 +108435,9 @@
         "required": [
           "cliente",
           "expira_en",
-          "empresa_principal"
+          "empresa_principal",
+          "origen",
+          "debe_cambiar_contrasena"
         ],
         "properties": {
           "cliente": {
@@ -107829,6 +108462,19 @@
           "empresa_principal": {
             "$ref": "#/components/schemas/PortalMarcaEmpresa",
             "description": "Empresa con más servicios sin retirar del cliente (título y marca del portal)"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "codigo",
+              "contrasena",
+              "corte"
+            ],
+            "description": "Cómo se abrió: código al correo o Telegram, documento y contraseña, o «Ver mi cuenta» en /corte (sesión corta)"
+          },
+          "debe_cambiar_contrasena": {
+            "type": "boolean",
+            "description": "Entró con la contraseña por defecto de la empresa: hasta cambiarla (POST /portal/contrasena) el resto del portal responde 403 `cambio_contrasena_requerido`"
           }
         }
       },
@@ -116466,6 +117112,7 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.verificar_identidad",
               "clientes.vincular_telegram",
@@ -116606,6 +117253,7 @@
               "plantillas.editar",
               "plantillas.retirar",
               "plantillas.ver",
+              "portal.configurar_contrasena_defecto",
               "portal_corte.configurar",
               "portal_corte.ver",
               "productos.crear",
@@ -116747,6 +117395,7 @@
               "clientes.editar",
               "clientes.estado_cuenta",
               "clientes.quitar_responsable_pago",
+              "clientes.restaurar_contrasena_portal",
               "clientes.ver",
               "clientes.vincular_telegram",
               "facturas.emitir_cargo_unico",
