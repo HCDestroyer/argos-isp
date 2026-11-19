@@ -751,7 +751,10 @@ test('modo código: action-data del proxy sin esquema (RouterOS antepone http://
         const conAccion = t.split('\n').filter((l) => /^\s*[^#\s].*action-data=/.test(l))
         assert.ok(conAccion.length >= 2, p)
         for (const l of conAccion) assert.match(l, /action-data=\$urlCorteProxy /, `${p}: ${l.trim()}`)
-        assert.ok(t.indexOf(':local urlCorteProxy $urlCorte') > t.indexOf(':set urlCorte ("http://" . $portalV4'), p)
+        assert.ok(
+            t.indexOf(':local urlCorteProxy $urlCorte') > t.indexOf(':set urlCorte ("http://" . $portalV4'),
+            p,
+        )
     }
     // render: la plantilla se puede pegar (ASCII) y el valor de corte_url no cambia
     for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
@@ -762,5 +765,270 @@ test('modo código: action-data del proxy sin esquema (RouterOS antepone http://
         })
         assert.match(r, /:local corteUrl "https:\/\/argos-portal.kns.gt\/corte"/)
         assert.equal(urlProxyDe(r, 'https://argos-portal.kns.gt/corte'), 'argos-portal.kns.gt/corte')
+    }
+})
+
+// Bypass del portal de corte (contratos/control-velocidad.md §10.9, runbook «Bypass del portal de
+// corte»): lo mismo que reglasBypass y estadoCorteRouter en apps/api/app/network/routeros/corte_router.ts.
+const CON_SERVICIO_BYPASS = ['lab.rsc', 'lab-sin-radius.rsc', PLANTILLAS[1], SIN_RADIUS[1]]
+const CORTE_ROUTER = readFileSync(join(DIR, '../../apps/api/app/network/routeros/corte_router.ts'), 'utf8')
+const constanteTs = (nombre) => CORTE_ROUTER.match(new RegExp(`export const ${nombre} = '([^']+)'`))?.[1]
+/** Une las líneas con continuación (\ al final), como las lee RouterOS. */
+const unirContinuaciones = (t) => t.replace(/\\\n\s*/g, '')
+const MANGLE_FORWARD = [
+    ['subida por address-list', 'src-address-list=suspendidos dst-address-list=argos-bypass-portal'],
+    ['subida por interface-list', 'in-interface-list=suspendidos dst-address-list=argos-bypass-portal'],
+    ['bajada por address-list', 'src-address-list=argos-bypass-portal dst-address-list=suspendidos'],
+    ['bajada por interface-list', 'src-address-list=argos-bypass-portal out-interface-list=suspendidos'],
+]
+const MANGLE_PROXY = [
+    [
+        'proxy de corte entrada',
+        'chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=dstnat',
+    ],
+    [
+        'proxy de corte salida',
+        'chain=output protocol=tcp src-port=$proxyCortePuerto connection-nat-state=dstnat',
+    ],
+]
+const MARCA = 'action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes'
+
+test('bypass del portal: los nombres son los del reconciliador (corte_router.ts)', () => {
+    assert.equal(constanteTs('LISTA_BYPASS'), 'argos-bypass-portal')
+    assert.equal(constanteTs('COMMENT_LISTA_BYPASS'), 'argosisp: bypass portal')
+    assert.equal(constanteTs('MARCA_BYPASS'), 'argosisp-bypass-portal')
+    assert.equal(constanteTs('COLA_BYPASS'), 'argosisp-bypass-portal')
+    assert.equal(constanteTs('COMMENT_COLA_BYPASS'), 'argosisp: bypass portal de corte')
+    assert.equal(constanteTs('COLA_ANCLA'), 'argosisp-suspendidos')
+    assert.equal(constanteTs('COMMENT_COLA_ANCLA'), 'argosisp: ancla colas suspendidos')
+    assert.equal(constanteTs('ENTRADA_SUSPENDIDOS'), '192.0.2.255')
+    assert.equal(constanteTs('PREFIJO_MANGLE_BYPASS'), 'argosisp:top bypass portal')
+    // Los sufijos de los comentarios del mangle
+    for (const [sufijo] of [...MANGLE_FORWARD, ...MANGLE_PROXY]) {
+        assert.ok(CORTE_ROUTER.includes(`r('${sufijo}'`), sufijo)
+    }
+})
+
+test('bypass del portal: colas bypass y ancla primeras, creadas solo si faltan, antes del perfil suspendido', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const t = unirContinuaciones(leer(p))
+        const ancla =
+            ':if ([:len [/queue simple find where name="argosisp-suspendidos"]] = 0) do={\n' +
+            '    /queue simple add name=argosisp-suspendidos target=192.0.2.255/32 max-limit=0/0 comment="argosisp: ancla colas suspendidos"\n}'
+        const bypass =
+            ':if ([:len [/queue simple find where name="argosisp-bypass-portal"]] = 0) do={\n' +
+            '    /queue simple add name=argosisp-bypass-portal target=$clientesV4 packet-marks=argosisp-bypass-portal max-limit=0/0 limit-at=0/0 parent=none comment="argosisp: bypass portal de corte"\n}'
+        const iAncla = t.indexOf(ancla)
+        const iBypass = t.indexOf(bypass)
+        assert.ok(iAncla >= 0, `${p}: cola ancla`)
+        assert.ok(iBypass > iAncla, `${p}: cola del bypass`)
+        // Una sola vez cada una y nunca borradas (el perfil nombra el ancla)
+        assert.equal(t.split('/queue simple add name=argosisp-suspendidos ').length, 2, p)
+        assert.equal(t.split('/queue simple add name=argosisp-bypass-portal ').length, 2, p)
+        assert.doesNotMatch(t, /\/queue simple remove[^\n]*argosisp-(suspendidos|bypass-portal)/, p)
+        assert.doesNotMatch(t, /\/queue simple remove[^\n]*comment~/, p)
+        // Orden: primero se sube el ancla y después el bypass (queda bypass, ancla), con on-error
+        const mover =
+            ':foreach nombreCola in={"argosisp-suspendidos";"argosisp-bypass-portal"} do={\n' +
+            '    :do {\n' +
+            '        :local cola ([/queue simple find where name=$nombreCola]->0)\n' +
+            '        :local primera ([/queue simple find where dynamic=no]->0)\n' +
+            '        :if ($cola != $primera) do={ /queue simple move $cola destination=$primera }\n' +
+            '    } on-error={'
+        const iMover = t.indexOf(mover)
+        assert.ok(iMover > iBypass, `${p}: move de las colas`)
+        // El perfil suspendido, después, con insert-queue-before el ancla
+        const perfil = t
+            .split('\n')
+            .filter((l) => l.startsWith('/ppp profile set [find where name="suspendido"]'))
+        assert.equal(perfil.length, 1, p)
+        assert.match(perfil[0], / insert-queue-before=argosisp-suspendidos( |$)/, p)
+        assert.ok(t.indexOf(perfil[0]) > iMover, `${p}: el perfil va después de las colas`)
+        // El default no se toca (sus clientes activos siguen con las colas de siempre)
+        const def = t.split('\n').find((l) => l.startsWith('/ppp profile set [find where name="default"]'))
+        assert.doesNotMatch(def, /insert-queue-before/, p)
+    }
+})
+
+test('bypass del portal: address-list argos-bypass-portal IPv4 e IPv6 junto a argos-portal, sin duplicar', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const t = leer(p)
+        const v4 = ':foreach d in=($portalV4, $portalFqdn, $corteTunelIp, $corteHost) do={'
+        const v6 = ':foreach d in=($portalV6, $portalFqdn, $corteHost) do={'
+        for (const [fam, lista, despuesDe] of [
+            ['/ip', v4, '/ip firewall address-list add list=argos-portal address=$portalFqdn'],
+            ['/ipv6', v6, '/ipv6 firewall address-list add list=argos-portal address=$portalFqdn'],
+        ]) {
+            const i = t.indexOf(lista)
+            assert.ok(i > t.indexOf(despuesDe), `${p} ${fam}: lista del bypass junto a argos-portal`)
+            const bloque = t.slice(i, t.indexOf('\n}\n', i))
+            assert.ok(bloque.includes(':if ([:len $d] > 0) do={'), `${p} ${fam}: entradas vacías fuera`)
+            assert.ok(
+                bloque.includes(
+                    `:if ([:len [${fam} firewall address-list find where list=argos-bypass-portal address=$d]] = 0) do={`,
+                ),
+                `${p} ${fam}: sin duplicar`,
+            )
+            assert.ok(
+                bloque.includes(
+                    `${fam} firewall address-list add list=argos-bypass-portal address=$d comment="argosisp: bypass portal"`,
+                ),
+                `${p} ${fam}: comentario del reconciliador`,
+            )
+            assert.match(bloque, /\} on-error=\{\}/, `${p} ${fam}`)
+            // Solo esas entradas: nada más agrega a la lista
+            const adds = t.split('\n').filter((l) => /address-list add list=argos-bypass-portal/.test(l))
+            assert.equal(adds.length, 2, p)
+        }
+        // El host de la URL de corte: sin esquema, sin ruta, sin puerto (IPv6 entre corchetes)
+        const host = t.slice(t.indexOf(':local corteHost ""'), t.indexOf(v4))
+        assert.ok(host.includes(':local p [:find $resto "://"]'), p)
+        assert.ok(host.includes(':local fin [:find $resto "/"]'), p)
+        assert.ok(host.includes(':if ([:typeof $fin] = "num")'), p)
+        assert.ok(host.includes('"\\5B"') && host.includes('"\\5D"'), p)
+        assert.ok(host.includes(':set corteHost $resto'), p)
+    }
+})
+
+/** Reglas de mangle del bypass de una familia: [comentario, línea] (forma `add` suelta o con la ruta). */
+function mangleBypass(t, fam) {
+    const inicio = t.indexOf(
+        `${fam} firewall mangle remove [find where comment~"^argosisp:top bypass portal"]`,
+    )
+    assert.ok(inicio >= 0, `${fam}: borrado por comentario antes de crear`)
+    const fin = t.indexOf(fam === '/ip' ? '/ipv6 firewall mangle remove' : ':put "argosisp: WISP"', inicio)
+    return t
+        .slice(inicio, fin)
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.includes('comment="argosisp:top bypass portal'))
+        .map((l) => [l.match(/comment="argosisp:top bypass portal ([^"]+)"$/)[1], l])
+}
+
+test('bypass del portal: mangle IPv4 e IPv6 en forward, y en modo código el 3346 (input y output)', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const t = leer(p)
+        for (const fam of ['/ip', '/ipv6']) {
+            const reglas = mangleBypass(t, fam)
+            assert.deepEqual(
+                reglas.map(([c]) => c),
+                [...MANGLE_FORWARD, ...MANGLE_PROXY].map(([c]) => c),
+                `${p} ${fam}`,
+            )
+            for (const [sufijo, props] of MANGLE_FORWARD) {
+                const l = reglas.find(([c]) => c === sufijo)[1]
+                assert.equal(
+                    l,
+                    `add chain=forward ${props} ${MARCA} comment="argosisp:top bypass portal ${sufijo}"`,
+                    `${p} ${fam} ${sufijo}`,
+                )
+            }
+            for (const [sufijo, props] of MANGLE_PROXY) {
+                const l = reglas.find(([c]) => c === sufijo)[1]
+                assert.equal(
+                    l,
+                    `${fam} firewall mangle add ${props} ${MARCA} comment="argosisp:top bypass portal ${sufijo}"`,
+                    `${p} ${fam} ${sufijo}`,
+                )
+            }
+            // Las del 3346 solo en modo código, y después del device-mode (6 bis), que puede pasarlo a ip
+            const iCodigo = t.indexOf(
+                `:if ($corteIdentificacion = "codigo") do={\n    ${fam} firewall mangle add chain=input`,
+            )
+            assert.ok(iCodigo > 0, `${p} ${fam}: 3346 dentro de :if codigo`)
+            assert.ok(iCodigo > t.indexOf(':set corteIdentificacion "ip"'), `${p}: después del device-mode`)
+        }
+    }
+})
+
+test('bypass del portal: no le da internet al suspendido (solo marca, solo hacia o desde el portal)', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const t = leer(p)
+        for (const fam of ['/ip', '/ipv6']) {
+            for (const [sufijo, l] of mangleBypass(t, fam)) {
+                assert.match(
+                    l,
+                    / action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes /,
+                    sufijo,
+                )
+                assert.doesNotMatch(
+                    l,
+                    /action=(accept|jump|return|mark-connection|mark-routing|change)/,
+                    sufijo,
+                )
+                if (sufijo.startsWith('proxy')) {
+                    // El 3346 es el propio router, y solo lo que llegó por el dst-nat del corte
+                    assert.match(l, / connection-nat-state=dstnat /, sufijo)
+                } else {
+                    assert.match(l, /(src|dst)-address-list=argos-bypass-portal/, sufijo)
+                    assert.match(
+                        l,
+                        /(src-address-list|dst-address-list|in-interface-list|out-interface-list)=suspendidos/,
+                        sufijo,
+                    )
+                }
+            }
+        }
+        // La lista del bypass no aparece en el filtro ni en el NAT: el corte decide igual
+        for (const l of t.split('\n').filter((x) => x.includes('argos-bypass-portal') && !/^\s*#/.test(x))) {
+            assert.doesNotMatch(l, /firewall (filter|nat)/, `${p}: ${l}`)
+        }
+        // La cola del bypass solo toma lo marcado
+        assert.match(
+            t,
+            /name=argosisp-bypass-portal target=\$clientesV4 packet-marks=argosisp-bypass-portal /,
+            p,
+        )
+    }
+})
+
+test('bypass del portal: idempotente por comentario y al inicio de su tabla (sección 13)', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const t = leer(p)
+        for (const fam of ['/ip', '/ipv6']) {
+            // Cada comentario se crea una sola vez y después de borrar lo del bypass por comentario
+            const borrar = t.indexOf(
+                `${fam} firewall mangle remove [find where comment~"^argosisp:top bypass portal"]`,
+            )
+            for (const [sufijo] of [...MANGLE_FORWARD, ...MANGLE_PROXY]) {
+                const marca = `comment="argosisp:top bypass portal ${sufijo}"`
+                const lineas = mangleBypass(t, fam).filter(([c]) => c === sufijo)
+                assert.equal(lineas.length, 1, `${p} ${fam} ${sufijo}`)
+                assert.ok(t.indexOf(marca, borrar) > borrar, `${p} ${fam} ${sufijo}`)
+            }
+            // La limpieza general (sección 0) también las alcanza: "argosisp:top "
+            assert.match('argosisp:top bypass portal subida por address-list', /^argosisp(: |:top )/)
+            // Sección 13: las argosisp:top de mangle suben antes de la primera regla ajena
+            const v = fam === '/ip' ? 'destinoMangle' : 'destinoMangle6'
+            const subir = `:foreach id in=[${fam} firewall mangle find where comment~"^argosisp:top"] do={ ${fam} firewall mangle move $id destination=$${v} }`
+            const iSubir = t.indexOf(subir)
+            assert.ok(
+                iSubir > t.lastIndexOf('comment="argosisp:top bypass portal proxy de corte salida"'),
+                `${p} ${fam}`,
+            )
+            assert.ok(
+                t.indexOf(`:if ([:typeof $${v}] != "nothing") do={`) < iSubir,
+                `${p} ${fam}: sin destino no se mueve`,
+            )
+        }
+    }
+})
+
+test('bypass del portal: el código RouterOS va en ASCII', () => {
+    for (const p of CON_SERVICIO_BYPASS) {
+        const codigo = leer(p)
+            .split('\n')
+            .filter((l) => !/^\s*#/.test(l))
+            .filter((l) => /bypass|corteHost|nombreCola|destinoMangle|argosisp-suspendidos/.test(l))
+        assert.ok(codigo.length > 20, p)
+        for (const l of codigo) assert.doesNotMatch(l, /[^\x09\x0a\x0d\x20-\x7e]/, `${p}: ${l}`)
+    }
+    for (const p of [PLANTILLAS[1], SIN_RADIUS[1]]) {
+        for (const modo of ['ip', 'codigo']) {
+            const r = renderizar(leer(p), { ...VALORES, corte_identificacion: modo })
+            assert.doesNotMatch(r, /[^\x09\x0a\x0d\x20-\x7e]/, `${p} ${modo}`)
+            assert.equal(balance(r), null, `${p} ${modo}`)
+            assert.ok(r.includes('comment="argosisp:top bypass portal proxy de corte entrada"'), p)
+        }
     }
 })

@@ -120,6 +120,8 @@ En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los d
 
 `susp_rate_limit` (`2M/2M` por defecto después de la 1.19.0; antes `256k/256k`) limita **todo** el tráfico del suspendido, también el que va al portal de corte: con 256k la página de corte tardaba casi dos minutos en cargar. Bajar la velocidad no corta nada; el corte lo hace el firewall (`argos-corte`). En un `.env` que ya fija `AAA_SUSPENDIDO_RATE_LIMIT=256k/256k`, `argosisp levantar` no lo cambia: ver `docs/runbooks/actualizacion.md`, «Velocidad del suspendido».
 
+Desde la 1.22 la página de corte va **sin límite** aunque el cliente esté suspendido: ver «Bypass del portal de corte» más abajo.
+
 ### Identificación del cortado: modo `ip` o `codigo`
 
 Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 bis. Según `corteIdentificacion` (en `lab.rsc`, la variable de la cabecera; en el script de conexión, el modo del router en el panel):
@@ -152,6 +154,33 @@ Contrato: `.claude/integration/contratos/corte-identificacion.md` §5 bis. Segú
 Del lado del servidor, el peer del router acepta las mismas redes (`infra/wireguard/README.md`, «Corte por el túnel»).
 
 Son los mismos comentarios y propiedades que escribe el reconciliador (`apps/api/app/network/routeros/corte_router.ts`); `apps/api/tests/network/conexion_render.spec.ts` compara el script con su estado deseado. Cambiar de modo: en el panel (el reconciliador corrige el router en el acto); para `lab.rsc`, editar `corteIdentificacion` y `corteUrl` y reimportar. Pruebas pendientes en el equipo físico: `docs/laboratorio/portal-cautivo.md` §9.
+
+### Bypass del portal de corte
+
+Pedido del PM: la página de corte carga rápido aunque el cliente esté suspendido. El script deja lo mismo que el reconciliador (`contratos/control-velocidad.md` §10.9, runbook `docs/runbooks/mikrotik.md`, «Bypass del portal de corte»), con los mismos nombres y comentarios, en `lab.rsc`, `lab-sin-radius.rsc` y las plantillas con «incluir configuración de servicio»:
+
+| Pieza | Qué deja |
+| --- | --- |
+| `servicio-base.rsc` (sección 4) | Colas `argosisp-bypass-portal` (`target=$clientesV4 packet-marks=argosisp-bypass-portal max-limit=0/0 limit-at=0/0 parent=none`, `argosisp: bypass portal de corte`) y el ancla `argosisp-suspendidos` (`target=192.0.2.255/32 max-limit=0/0`, `argosisp: ancla colas suspendidos`), **creadas solo si faltan** y subidas al inicio de las colas estáticas (queda bypass, ancla; cada `move` en `:do on-error`). Después, el perfil `suspendido` con `insert-queue-before=argosisp-suspendidos`: la cola dinámica de cada suspendido queda entre las dos |
+| `servicio-firewall.rsc` (sección 7) | Address-list `argos-bypass-portal` (`argosisp: bypass portal`) junto a `argos-portal`: IPv4 con `portalV4`, `portalFqdn`, `corteTunelIp` (si hay túnel) y el host de `corteUrl`; IPv6 con `portalV6`, `portalFqdn` y el host de `corteUrl`. Sin entradas vacías ni repetidas (el host de la URL suele ser el FQDN) |
+| `servicio-firewall.rsc` (sección 9 ter) | Mangle IPv4 e IPv6 `argosisp:top bypass portal …` (`mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes`): en `forward`, subida y bajada, cada una por address-list y por interface-list `suspendidos`; en modo `codigo` (después de la revisión del device-mode), además `input dst-port=3346` y `output src-port=3346`, ambos con `connection-nat-state=dstnat`. Antes de crearlas se borran por comentario (idempotente) |
+| `servicio-orden.rsc` (sección 13) | Sube las `argosisp:top` de `/ip firewall mangle` y `/ipv6 firewall mangle` antes de la primera regla ajena |
+
+No le da internet al suspendido: la marca solo toca el tráfico entre `suspendidos` y `argos-bypass-portal` (o el 3346 que llegó por el NAT del corte), y la lista del bypass no aparece en ningún filtro ni NAT; `argos-corte` sigue decidiendo qué pasa. DNS y walled garden siguen a la velocidad del suspendido.
+
+El `target` de la cola del bypass lo corrige el reconciliador (redes del router y bloques IPv6); el script no lo pisa al reimportar, solo siembra `clientesV4` la primera vez. Las colas no llevan el prefijo de limpieza (`/queue simple` no se limpia) y el ancla no se borra nunca, porque el perfil la nombra. Sesiones que entraron antes del ajuste del perfil conservan su cola arriba hasta reconectar.
+
+```
+# [RouterOS] después de importar
+/queue simple print where name~"argosisp-bypass|argosisp-suspendidos|<pppoe-"
+/ppp profile print detail where name=suspendido
+/ip firewall mangle print where comment~"bypass portal"
+/ipv6 firewall mangle print where comment~"bypass portal"
+/ip firewall address-list print where list=argos-bypass-portal
+/queue simple print stats where name=argosisp-bypass-portal
+```
+
+Pendiente en el equipo físico: los cinco puntos «Sin verificar en un router real» del runbook (orden de la cola dinámica con `insert-queue-before`, el ancla por la API REST, la marca en `forward` para la bajada, la marca del 3346 en `input` y la velocidad real de `/corte`).
 
 ### DNS del router
 
@@ -219,7 +248,7 @@ Un router `api` no es cliente de FreeRADIUS: ArgosIsp crea un `/ppp secret` por 
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | PPPoE               | Servidor `argosisp` en `labIf`, perfil `default`, solo PAP/CHAP, MTU/MRU 1480, `one-session-per-host`                                                                                                                                               |
 | Perfil `default`    | `local-address`, pool IPv4 `argos-v4-pppoe`, `/64` de enlace desde `argos-v6-enlace` (`remote-ipv6-prefix-pool`), `/56` por DHCPv6-PD desde `argos-v6-pd` (`dhcpv6-pd-pool`), DNS = router, `change-tcp-mss`                                        |
-| Perfil `suspendido` | Igual que `default` más `rate-limit=2M/2M`, `address-list=suspendidos` (el router agrega la IPv4, el /64 y el /56 de la sesión a las listas `suspendidos` de IPv4 e IPv6) e `interface-list=suspendidos`                                        |
+| Perfil `suspendido` | Igual que `default` más `rate-limit=2M/2M`, `address-list=suspendidos` (el router agrega la IPv4, el /64 y el /56 de la sesión a las listas `suspendidos` de IPv4 e IPv6) e `interface-list=suspendidos`, `insert-queue-before=argosisp-suspendidos` (bypass del portal de corte) |
 | RADIUS              | `/radius service=ppp timeout=1s src-address=...` (segunda entrada si `radiusAddr2` no está vacío), `/radius incoming accept=yes port=3799`, `/ppp aaa use-radius=yes accounting=yes interim-update=5m`                                              |
 | Corte IPv4          | Cadena `argos-corte`: DNS (`argos-dns`), portal (`argos-portal`), walled garden por FQDN (`argos-walled`), `tcp-reset` al resto de TCP y `icmp-admin-prohibited` a lo demás. NAT `argos-corte-nat`: TCP/80 → `portalV4:portalCortePuerto`           |
 | Corte IPv6          | Espejo del IPv4: DNS a cualquier resolver, portal y walled garden; con `portalV6`, NAT de TCP/80 a `/corte` (v1.9.1); `tcp-reset` y `icmp-admin-prohibited` al resto, nunca `drop`. Detalle en "Corte por IPv6" |
@@ -231,7 +260,7 @@ Un router `api` no es cliente de FreeRADIUS: ArgosIsp crea un `/ppp secret` por 
 | `arbol_pcq`         | Ejemplo con el plan ficticio `0` (20M/10M, 1:4): padres globales, PCQ por plan con máscara /64 en IPv6, address-list `argosisp-plan-0` y mangle `mark-packet` sin `passthrough`, más el limitado                                                    |
 | API REST            | Grupo `argosisp-api` (`read,write,api,rest-api`), usuario `argosisp-api` restringido a `apiDesde`, certificado propio en `www-ssl` (TLS 1.2+), `www`, `api` y `api-ssl` apagados                                                                    |
 
-Las reglas de salto (`argosisp:top`) se colocan al inicio de `filter` y `nat` (IPv4 e IPv6), antes de fasttrack y de `accept established,related`, que de otro modo dejarían pasar al suspendido.
+Las reglas de salto (`argosisp:top`) se colocan al inicio de `filter`, `nat` y `mangle` (IPv4 e IPv6; en `mangle`, las del bypass del portal), antes de fasttrack y de `accept established,related`, que de otro modo dejarían pasar al suspendido.
 
 **Qué es de quién.** `lab.rsc` solo borra y recrea lo que lleva comentario `argosisp: …` (con espacio) o `argosisp:top …`. Lo que ArgosIsp crea por la API lleva `argosisp:servicio:<id>` o `argosisp:plan:<id>` (sin espacio; `contratos/routeros.md`) y el script **no lo toca** al reaplicarse (antes la limpieza borraba cualquier `argosisp…` de las address-lists, incluidas las entradas de `suspendidos` de los servicios WISP).
 

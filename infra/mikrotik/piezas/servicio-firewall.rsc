@@ -41,6 +41,35 @@
 :if ($corteTunelIp != "" && $corteIdentificacion != "codigo") do={
     /ip firewall address-list add list=argos-portal address=$corteTunelIp comment="argosisp: portal tunel"
 }
+# Bypass del portal de corte (sección 9 ter y colas de la sección 4): los mismos destinos que
+# argos-portal (IP, FQDN y, con túnel, la IP del servidor en el túnel) más el host de la URL de corte.
+# Solo destinos del portal: DNS y walled garden siguen a la velocidad del suspendido. Una entrada que
+# ya está (el host de la URL suele ser el FQDN del portal) no se repite.
+:local corteHost ""
+:if ($corteUrl != "") do={
+    :local resto $corteUrl
+    :local p [:find $resto "://"]
+    :if ([:typeof $p] = "num") do={ :set resto [:pick $resto ($p + 3) [:len $resto]] }
+    :local fin [:find $resto "/"]
+    :if ([:typeof $fin] = "num") do={ :set resto [:pick $resto 0 $fin] }
+    :if ([:pick $resto 0 1] = "\5B") do={
+        :local cierre [:find $resto "\5D"]
+        :if ([:typeof $cierre] = "num") do={ :set resto [:pick $resto 1 $cierre] }
+    } else={
+        :local dosPuntos [:find $resto ":"]
+        :if ([:typeof $dosPuntos] = "num") do={ :set resto [:pick $resto 0 $dosPuntos] }
+    }
+    :set corteHost $resto
+}
+:foreach d in=($portalV4, $portalFqdn, $corteTunelIp, $corteHost) do={
+    :if ([:len $d] > 0) do={
+        :do {
+            :if ([:len [/ip firewall address-list find where list=argos-bypass-portal address=$d]] = 0) do={
+                /ip firewall address-list add list=argos-bypass-portal address=$d comment="argosisp: bypass portal"
+            }
+        } on-error={}
+    }
+}
 /ip firewall address-list add list=argos-dns address=$pppLocalV4 comment="argosisp: DNS del router"
 :foreach d in=$dnsV4 do={ /ip firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
 # Los resolutores que el router ya usa (seccion 3); si coinciden con dnsV4 la entrada ya existe.
@@ -53,6 +82,17 @@
 
 /ipv6 firewall address-list add list=argos-portal address=$portalV6 comment="argosisp: portal IP"
 /ipv6 firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
+# Bypass del portal por IPv6: IP y FQDN del portal y el host de la URL de corte (una IPv4 escrita en
+# la URL no entra en la lista IPv6: on-error).
+:foreach d in=($portalV6, $portalFqdn, $corteHost) do={
+    :if ([:len $d] > 0) do={
+        :do {
+            :if ([:len [/ipv6 firewall address-list find where list=argos-bypass-portal address=$d]] = 0) do={
+                /ipv6 firewall address-list add list=argos-bypass-portal address=$d comment="argosisp: bypass portal"
+            }
+        } on-error={}
+    }
+}
 :foreach d in=$dnsV6 do={ /ipv6 firewall address-list add list=argos-dns address=$d comment="argosisp: DNS" }
 :foreach d in=$dnsRouterV6 do={ :do { /ipv6 firewall address-list add list=argos-dns address=$d comment="argosisp: DNS resolutor del router" } on-error={} }
 :foreach d in=$walledGarden do={ /ipv6 firewall address-list add list=argos-walled address=$d comment="argosisp: walled garden" }
@@ -362,6 +402,40 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     }
     /ip firewall filter remove [find where comment=$reglaProxyDrop]
     /ipv6 firewall filter remove [find where comment=$reglaProxyDrop]
+}
+
+# ============================================================================
+# 9 ter. Bypass del portal de corte: mangle (IPv4 e IPv6)
+# ============================================================================
+# Marca argosisp-bypass-portal (la toma la cola sin límite de la sección 4) SOLO el tráfico entre un
+# suspendido (address-list o interface-list suspendidos, igual que los saltos de corte) y
+# argos-bypass-portal, en las dos direcciones, en forward (después del dst-nat: ve el destino real del
+# HTTP redirigido). La marca no abre nada: el filtro argos-corte decide igual. En modo código, además el
+# proxy del router (3346): input (cliente -> proxy) y output (respuesta del proxy), solo de conexiones
+# que llegaron por el dst-nat del corte. Va después de la sección 6 bis: un device-mode sin proxy ya
+# dejó corteIdentificacion en "ip". Idempotente por comentario: se borra lo del bypass y se vuelve a
+# crear; la sección 13 las sube al inicio de su tabla ("argosisp:top"). Lo mismo que el reconciliador
+# (reglasBypass en corte_router.ts).
+:put "argosisp: bypass del portal de corte"
+/ip firewall mangle remove [find where comment~"^argosisp:top bypass portal"]
+/ip firewall mangle
+add chain=forward src-address-list=suspendidos dst-address-list=argos-bypass-portal action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal subida por address-list"
+add chain=forward in-interface-list=suspendidos dst-address-list=argos-bypass-portal action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal subida por interface-list"
+add chain=forward src-address-list=argos-bypass-portal dst-address-list=suspendidos action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal bajada por address-list"
+add chain=forward src-address-list=argos-bypass-portal out-interface-list=suspendidos action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal bajada por interface-list"
+:if ($corteIdentificacion = "codigo") do={
+    /ip firewall mangle add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=dstnat action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal proxy de corte entrada"
+    /ip firewall mangle add chain=output protocol=tcp src-port=$proxyCortePuerto connection-nat-state=dstnat action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal proxy de corte salida"
+}
+/ipv6 firewall mangle remove [find where comment~"^argosisp:top bypass portal"]
+/ipv6 firewall mangle
+add chain=forward src-address-list=suspendidos dst-address-list=argos-bypass-portal action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal subida por address-list"
+add chain=forward in-interface-list=suspendidos dst-address-list=argos-bypass-portal action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal subida por interface-list"
+add chain=forward src-address-list=argos-bypass-portal dst-address-list=suspendidos action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal bajada por address-list"
+add chain=forward src-address-list=argos-bypass-portal out-interface-list=suspendidos action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal bajada por interface-list"
+:if ($corteIdentificacion = "codigo") do={
+    /ipv6 firewall mangle add chain=input protocol=tcp dst-port=$proxyCortePuerto connection-nat-state=dstnat action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal proxy de corte entrada"
+    /ipv6 firewall mangle add chain=output protocol=tcp src-port=$proxyCortePuerto connection-nat-state=dstnat action=mark-packet new-packet-mark=argosisp-bypass-portal passthrough=yes comment="argosisp:top bypass portal proxy de corte salida"
 }
 
 # ============================================================================
