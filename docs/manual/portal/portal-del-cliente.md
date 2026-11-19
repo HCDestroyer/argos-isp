@@ -5,7 +5,7 @@ pageClass: capturas-movil
 
 # Portal del cliente
 
-El portal del cliente es la página donde tus clientes ven su servicio, entran con un código y hacen sus trámites desde el teléfono: pagar, subir un comprobante, pedir una promesa de pago, ver facturas y sorteos. Esta guía te sirve para acompañar al cliente por teléfono paso a paso.
+El portal del cliente es la página donde tus clientes ven su servicio, entran con su documento y contraseña (o con un código) y hacen sus trámites desde el teléfono: pagar, subir un comprobante, pedir una promesa de pago, ver facturas y sorteos. Esta guía te sirve para acompañar al cliente por teléfono paso a paso.
 
 Hay una guía con más capturas para el piloto en [Portal del cliente (piloto)](../../piloto/portal-cliente.md).
 
@@ -14,16 +14,16 @@ Hay una guía con más capturas para el piloto en [Portal del cliente (piloto)](
 La página de inicio del portal ofrece:
 
 - **Estado de mi servicio**: la [página de corte](./pagina-de-corte.md). Reconoce al cliente por su conexión, sin contraseña, y muestra solo su nombre parcial, el estado y los montos.
-- **Mi cuenta**: facturas, pagos y datos. Se entra con un código.
+- **Mi cuenta**: facturas, pagos y datos. Se entra con el documento y la contraseña, con un código o, desde la página de corte, con «Ver mi cuenta». Detalle en [Entrar con documento y contraseña](./acceso-con-contrasena.md).
 - **Contacto**: teléfonos, WhatsApp, correo, horario y dirección de la empresa.
 
 ## Entrar con código
 
-Para ver facturas, pagos y datos de contacto, el cliente siempre confirma que es el titular con un código de 6 dígitos.
+Es la forma de entrar sin contraseña: el cliente confirma que es el titular con un código de 6 dígitos.
 
 ![Entrar a mi cuenta con el código de 6 dígitos](/capturas/portal/07-entrar-codigo.png)
 
-1. Desde la página de corte toca «Mis facturas y pagos» y luego «Enviarme el código». O, desde **Entrar**, escribe su **NIT, CUI o usuario de conexión** (aparece en su aviso de cobro) y toca «Enviarme un código».
+1. En **Entrar**, toca la pestaña **Código** y escribe su **NIT, CUI o usuario de conexión** (aparece en su aviso de cobro) y toca «Enviarme un código».
 2. El código llega al **correo o Telegram registrado** en su ficha: por Telegram si es su canal preferido y lo tiene vinculado; si no, por correo. Nunca se manda a otro destino.
 3. Escribe los 6 dígitos y toca «Entrar».
 

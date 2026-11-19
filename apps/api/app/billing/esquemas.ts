@@ -17,6 +17,7 @@ import {
 import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
 import { NOMBRES_REGLA, REGLAS_CUMPLIMIENTO } from '#billing/promesas'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
+import { ESTADOS_PERIODO, MOTIVOS_NO_EMITIBLE } from '#billing/periodos_facturables'
 
 /** Enumerado que también admite null (null dentro de `enum`, como `regla` de EvaluacionPromesa). */
 function enumeradoNulable(valores: readonly string[]) {
@@ -1521,5 +1522,96 @@ export const ReconexionTemporal = definirEsquema(
                 description: 'Estado tras re-evaluar (activo, salvo que la hora de corte no aplique)',
             },
         }),
+    }),
+)
+
+export const PeriodoFacturable = definirEsquema(
+    'PeriodoFacturable',
+    objeto({
+        periodo: {
+            ...fecha,
+            description: 'Primer día del periodo (identifica la factura: servicio_id-periodo)',
+        },
+        hasta: { ...fecha, description: 'Último día del periodo' },
+        dias: entero,
+        dias_ciclo: entero,
+        factor: { type: 'string', description: 'dias / dias_ciclo con prorrateo; "1" sin él' },
+        prorrateado: booleano,
+        estado: {
+            ...enumerado(ESTADOS_PERIODO),
+            description:
+                'emitida (tiene factura), bonificada (quedó en cero), pendiente (el cron la emitiría hoy), futuro (pago adelantado), antes_de_facturar_desde (solo con facturas.emitir_periodo_anterior y motivo)',
+        },
+        vence_en: { ...fecha, description: 'El de la factura emitida, o periodo + dias_gracia' },
+        monto: {
+            ...nulable(Dinero),
+            description:
+                'Total de la factura emitida, o el que tendría emitida hoy (precio efectivo, prorrateo, conceptos, adicionales y descuentos); null si no se pudo calcular (ver error)',
+        },
+        pagado: {
+            ...nulable(Dinero),
+            description:
+                'Emitida: lo pagado. No emitida: lo que cubriría el saldo a favor si se emiten todas las anteriores en orden',
+        },
+        factura_id: nulable(id),
+        factura_estado: nulable(texto),
+        bonificacion_id: nulable(id),
+        sera_bonificacion: { ...booleano, description: 'Quedaría en cero: se registraría como bonificación' },
+        error: nulable(texto),
+    }),
+)
+
+export const PeriodosFacturables = definirEsquema(
+    'PeriodosFacturables',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        empresa_id: id,
+        estado_servicio: enumerado(ESTADOS_SERVICIO),
+        emitible: { ...booleano, description: 'false: retirado, pendiente de instalación o sin plantilla' },
+        motivo: enumeradoNulable(MOTIVOS_NO_EMITIBLE),
+        hoy: { ...fecha, description: 'Día de Guatemala con que se calcularon pendientes y futuros' },
+        facturar_desde: {
+            ...nulable(fecha),
+            description:
+                'Primer periodo que factura el cron (asignación de plantilla sin facturar atrás); null = desde el inicio',
+        },
+        maximo_futuros: { ...entero, description: 'Periodos futuros que se pueden emitir (12)' },
+        saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en la empresa del servicio' },
+        periodos: lista(PeriodoFacturable),
+    }),
+)
+
+export const FacturasPeriodoEmitidas = definirEsquema(
+    'FacturasPeriodoEmitidas',
+    objeto({
+        servicio_id: id,
+        cliente_id: id,
+        creadas: lista(
+            objeto({
+                periodo: fecha,
+                factura_id: id,
+                estado: {
+                    ...texto,
+                    description: 'emitida, parcial o pagada (saldo a favor), por_certificar (FEL)',
+                },
+                total: Dinero,
+                pagado: { ...Dinero, description: 'Lo que cubrió el saldo a favor al emitirla' },
+                vence_en: fecha,
+            }),
+        ),
+        bonificadas: lista(objeto({ periodo: fecha, bonificacion_id: id })),
+        omitidas: {
+            ...lista(
+                objeto({
+                    periodo: fecha,
+                    motivo: enumerado(['ya_emitida', 'bonificada']),
+                    factura_id: nulable(id),
+                    bonificacion_id: nulable(id),
+                }),
+            ),
+            description: 'Periodos pedidos que ya estaban ocupados: nunca se duplican',
+        },
+        saldo_a_favor: { ...Dinero, description: 'Saldo a favor que queda después de emitir' },
     }),
 )

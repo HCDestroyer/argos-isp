@@ -34,6 +34,9 @@ import {
     PortalPromesa,
     PortalPromesaSolicitada,
     PortalSesion,
+    PortalContrasenaCambiada,
+    PortalContrasenaDefecto,
+    ClienteContrasenaPortal,
     PortalSolicitudCodigo,
     PortalTelegram,
     PortalVinculoTelegram,
@@ -42,9 +45,23 @@ import {
     CodigoCorteServicio,
     QuienSoy,
 } from '#portal/esquemas'
-import { exigirServicio } from '#core/acceso_empresa'
+import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
+import EntrarConContrasena from '#portal/actions/entrar_con_contrasena'
+import AbrirSesionCorte from '#portal/actions/abrir_sesion_corte'
+import CambiarContrasenaPortal from '#portal/actions/cambiar_contrasena'
+import ConfigurarContrasenaDefecto, {
+    verContrasenaDefecto,
+} from '#portal/actions/configurar_contrasena_defecto'
+import RestaurarContrasenaPortal, {
+    verContrasenaPortalCliente,
+} from '#portal/actions/restaurar_contrasena_portal'
+import { DemasiadosIntentosPortal } from '#portal/acceso/contrasenas'
+import { nombreParcial } from '#portal/consultas'
 import {
     condicionesPromesaValidator,
+    cambiarContrasenaValidator,
+    configurarContrasenaDefectoValidator,
+    entrarConContrasenaValidator,
     configurarPortalCorteValidator,
     crearNodoPortalValidator,
     editarContactoValidator,
@@ -102,7 +119,7 @@ import ConfigurarPortalCorte from '#portal/actions/configurar_portal_corte'
 import { verPortalCorte } from '#portal/corte'
 import { leerEmpresa, verEmpresa } from '#portal/empresa'
 import { fuenteCuentasDeposito } from '#portal/cuentas_deposito'
-import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#portal/marca'
+import { empresaDelServicio, empresaPrincipalDelCliente, marcaDeEmpresa, urlLogoPortal } from '#portal/marca'
 import { leerDestinoCorte, resolverServicio } from '#portal/consultas'
 import { EMPRESA_PRINCIPAL, filaEmpresa, resolverEmpresaActiva } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
@@ -479,7 +496,7 @@ const autenticadas: Ruta[] = [
         respuesta: { status: 204, descripcion: 'Sesión cerrada' },
         handler: async (ctx) => {
             await ipDelCliente(ctx, 'salir')
-            const sesion = await exigirSesionPortal(ctx)
+            const sesion = await exigirSesionPortal(ctx, { permitirCambioPendiente: true })
             await new CerrarSesionPortal().execute(
                 { sesionId: sesion.id, clienteId: sesion.clienteId },
                 ctx.contextoCliente(sesion.clienteId),
@@ -1113,7 +1130,9 @@ async function empresaDeLaPeticion(
         await filaEmpresa(query.empresa_id)
         return query.empresa_id
     }
-    if (query.de === 'cliente') return empresaPrincipalDelCliente(await clienteDeLaSesion(ctx))
+    if (query.de === 'cliente') {
+        return empresaPrincipalDelCliente(await clienteDeLaSesion(ctx, { permitirCambioPendiente: true }))
+    }
     const servicioId = await resolverServicio(db.connection(), ip)
     const porIp = servicioId ? await empresaDelServicio(servicioId) : null
     if (porIp !== null) return porIp
@@ -1980,8 +1999,215 @@ const portalCorte: Ruta[] = [
     }),
 ]
 
+/**
+ * Entrada con documento y contraseña, «Ver mi cuenta» en `/corte` y contraseña por defecto
+ * (pedido del PM; `README.md` § Acceso con documento y contraseña).
+ */
+const SOBRE_LA_CONTRASENA =
+    'Límite por documento (`PORTAL_CONTRASENA_FALLOS_DOCUMENTO`, 5 fallidos) y por IP o /64 ' +
+    '(`PORTAL_CONTRASENA_FALLOS_IP`, 20) en `PORTAL_CONTRASENA_VENTANA_S` (900 s), en Postgres: 429 ' +
+    '`demasiados_intentos` con `Retry-After`, sin decir cuál de los dos.'
+
+const accesoContrasena: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/entrar',
+        operacion: 'portalEntrarConContrasena',
+        resumen: 'Entra al portal con el documento y la contraseña (cookie httpOnly)',
+        descripcion:
+            'Usuario = el documento del cliente (NIT, CUI o pasaporte; sin espacios ni guiones, en mayúsculas; `CF` ' +
+            'no). Contraseña propia o, si no tiene, la por defecto de su empresa (`debe_cambiar_contrasena: true`: ' +
+            'el resto del portal responde 403 `cambio_contrasena_requerido` hasta cambiarla). Un documento de ' +
+            'varios clientes solo entra con una contraseña propia que coincida con uno. Con `empresa_id`, solo ' +
+            'clientes con servicios en esa empresa. Cualquier fallo: 422 `credenciales_invalidas` con el mismo ' +
+            `texto. ${SOBRE_LA_CONTRASENA} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        antes: limitarAntesDeValidar('entrar'),
+        permiso: null,
+        cuerpo: entrarConContrasenaValidator,
+        respuesta: { status: 200, descripcion: 'Sesión abierta', esquema: PortalSesion },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'entrar')
+            try {
+                const { token, sesion } = await new EntrarConContrasena().execute(
+                    { ...cuerpo, ip },
+                    ctx.contextoAccion('portal'),
+                )
+                ponerCookieSesion(ctx, token)
+                return sesion
+            } catch (error) {
+                if (error instanceof DemasiadosIntentosPortal) {
+                    ctx.response.header('Retry-After', String(error.reintentarEnS))
+                }
+                throw error
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/corte/sesion',
+        operacion: 'portalSesionDesdeCorte',
+        resumen: '«Ver mi cuenta» en /corte: abre la sesión del cliente identificado, sin pedir nada',
+        descripcion:
+            'Identifica igual que `GET /portal/quien-soy` (código de corte vigente o IP), en el momento. Por IP exige ' +
+            'además que la IP esté en una sesión PPPoE vigente del servicio. Sesión corta ' +
+            '(`PORTAL_SESION_CORTE_MAX_S`, 900 s) con alcance al cliente del servicio, `origen: corte`. Sin ' +
+            `identificar: 422 \`no_identificado\`. ${SOBRE_EL_CODIGO} ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Sesión abierta', esquema: PortalSesion },
+        handler: async (ctx) => {
+            const origen = await origenDelCliente(ctx, 'corte-sesion')
+            const { token, sesion } = await new AbrirSesionCorte().execute(
+                origen,
+                ctx.contextoAccion('portal'),
+            )
+            ponerCookieSesion(ctx, token)
+            return sesion
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sesion',
+        operacion: 'portalSesion',
+        resumen: 'La sesión del portal: cómo se abrió y si debe cambiar la contraseña',
+        descripcion: `${SOBRE_LA_SESION} Responde también con \`debe_cambiar_contrasena\` (no da 403).`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Sesión vigente', esquema: PortalSesion },
+        handler: async (ctx) => {
+            await ipDelCliente(ctx, 'sesion')
+            const sesion = await exigirSesionPortal(ctx, { permitirCambioPendiente: true })
+            const cliente = (await db
+                .from('core.clientes')
+                .where('id', sesion.clienteId)
+                .select('nombre')
+                .firstOrFail()) as { nombre: string }
+            return {
+                cliente: { nombre_parcial: nombreParcial(cliente.nombre) },
+                expira_en: sesion.expiraEn.toISOString(),
+                empresa_principal: await marcaDeEmpresa(await empresaPrincipalDelCliente(sesion.clienteId)),
+                origen: sesion.origen,
+                debe_cambiar_contrasena: sesion.debeCambiarContrasena,
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/contrasena',
+        operacion: 'portalCambiarContrasena',
+        resumen: 'El cliente cambia su contraseña del portal (pide la actual)',
+        descripcion:
+            'La actual es la propia o, si no tiene, la por defecto de su empresa (422 en `contrasena_actual`). La ' +
+            'nueva (8 a 128) no puede ser la por defecto ni el documento (422 en `contrasena_nueva`). Quita ' +
+            '`debe_cambiar_contrasena` y cierra las demás sesiones del portal del cliente. Admite la sesión que ' +
+            `debe cambiarla. ${SOBRE_LA_CONTRASENA} ${SOBRE_LA_SESION}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        antes: limitarAntesDeValidar('contrasena'),
+        cuerpo: cambiarContrasenaValidator,
+        respuesta: { status: 200, descripcion: 'Contraseña cambiada', esquema: PortalContrasenaCambiada },
+        handler: async (ctx, { cuerpo }) => {
+            const ip = await ipDelCliente(ctx, 'contrasena')
+            const sesion = await exigirSesionPortal(ctx, { permitirCambioPendiente: true })
+            try {
+                return await new CambiarContrasenaPortal().execute(
+                    { ...cuerpo, clienteId: sesion.clienteId, sesionId: sesion.id, ip },
+                    ctx.contextoCliente(sesion.clienteId),
+                )
+            } catch (error) {
+                if (error instanceof DemasiadosIntentosPortal) {
+                    ctx.response.header('Retry-After', String(error.reintentarEnS))
+                }
+                throw error
+            }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/empresa/contrasena-portal',
+        operacion: 'empresaContrasenaPortalVer',
+        resumen: 'Si la empresa activa tiene contraseña por defecto del portal (nunca la contraseña)',
+        descripcion:
+            'Empresa activa (`X-Empresa-Id` o la única): 422 `empresa_requerida`, 403 `empresa_no_permitida`. ' +
+            '`version` 0 = nunca se configuró.',
+        etiqueta: 'empresa',
+        permiso: 'empresa.ver',
+        respuesta: { status: 200, descripcion: 'Estado', esquema: PortalContrasenaDefecto },
+        handler: async (ctx) =>
+            verContrasenaDefecto(db.connection(), await resolverEmpresaActiva(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/empresa/contrasena-portal',
+        operacion: 'empresaContrasenaPortalConfigurar',
+        resumen: 'Configura la contraseña por defecto del portal de la empresa activa',
+        descripcion:
+            'Con ella entran al portal (documento + contraseña) los clientes sin contraseña propia, y el portal les ' +
+            'pide cambiarla. Solo se guarda el hash; la auditoría la registra como `***`. Empresa activa ' +
+            '(`X-Empresa-Id` o la única): 422 `empresa_requerida`, 403 `empresa_no_permitida`. `version` 0 la crea, ' +
+            '409 si cambió. No toca a los clientes con contraseña propia ni cierra sesiones.',
+        etiqueta: 'empresa',
+        permiso: 'portal.configurar_contrasena_defecto',
+        versionada: true,
+        cuerpo: configurarContrasenaDefectoValidator,
+        respuesta: { status: 200, descripcion: 'Configurada', esquema: PortalContrasenaDefecto },
+        handler: async (ctx, { cuerpo }) =>
+            new ConfigurarContrasenaDefecto().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/contrasena-portal',
+        operacion: 'clientesContrasenaPortalVer',
+        resumen:
+            'Si el cliente tiene contraseña propia del portal o usa la por defecto (nunca la contraseña)',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        respuesta: { status: 200, descripcion: 'Estado', esquema: ClienteContrasenaPortal },
+        handler: async (ctx, { params }) => {
+            const clienteId = Number(params.id)
+            await exigirCliente(ctx, clienteId)
+            await filaCliente(clienteId)
+            return verContrasenaPortalCliente(db.connection(), clienteId)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/clientes/:id/restaurar-contrasena-portal',
+        operacion: 'clientesRestaurarContrasenaPortal',
+        resumen: 'Restaura la contraseña del portal del cliente a la por defecto de su empresa',
+        descripcion:
+            'Borra su contraseña propia (entra con la por defecto y el portal le pide cambiarla) y cierra sus sesiones ' +
+            'del portal. Idempotente. Diff `portal_contrasena` (`***`) en audit.cambios. `defecto_configurada: false` ' +
+            'avisa que su empresa no tiene contraseña por defecto (solo podrá entrar con código).',
+        etiqueta: 'clientes',
+        permiso: 'clientes.restaurar_contrasena_portal',
+        respuesta: { status: 200, descripcion: 'Restaurada', esquema: ClienteContrasenaPortal },
+        handler: async (ctx, { params }) => {
+            const clienteId = Number(params.id)
+            await exigirCliente(ctx, clienteId)
+            return new RestaurarContrasenaPortal().execute({ cliente_id: clienteId }, ctx.contextoAccion())
+        },
+    }),
+]
+
+/** 404 si el cliente no existe (lectura del panel). */
+async function filaCliente(clienteId: number): Promise<void> {
+    const fila = await db.from('core.clientes').where('id', clienteId).select('id').first()
+    if (!fila) throw new NoEncontrado(`El cliente ${clienteId} no existe`)
+}
+
 const portal: Ruta[] = [
     ...publicas,
+    ...accesoContrasena,
     ...autenticadas,
     ...telegram,
     ...whatsapp,

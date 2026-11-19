@@ -25,7 +25,7 @@ async function revisar(page: Page, nombre: string): Promise<void> {
 
 /** Entra con el código de los fixtures (`123456`) y espera la cuenta. */
 async function entrar(page: Page, cuenta: string | null): Promise<void> {
-    await page.goto(cuenta ? `/entrar?cuenta=${cuenta}` : '/entrar')
+    await page.goto(cuenta ? `/entrar?con=codigo&cuenta=${cuenta}` : '/entrar?con=codigo')
     await page.waitForLoadState('networkidle')
     await revisar(page, 'entrar')
     // Lo escrito antes de la hidratación se pierde: se reintenta hasta que aparezca el paso del código.

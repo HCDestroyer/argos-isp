@@ -49,6 +49,7 @@ import { implementacionesPlan } from './planes/implementaciones'
 import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } from './redAcceso/datos'
 import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
+import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
 import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
@@ -56,6 +57,7 @@ import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { conexionesRouter, ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { codigosCorte, servicios } from './servicios/datos'
+import { facturacionServicios, type FacturacionServicioFixture } from './servicios/periodosDatos'
 import { eventosRed } from './red/datos'
 import { clasesQos, perfilesQos, type ClaseQosFixture, type PerfilQosFila } from './qos/datos'
 import { sesiones } from './sesiones/datos'
@@ -209,6 +211,8 @@ interface BaseFixtures {
     nodosPortal: Schema<'NodoPortal'>[]
     /** Portal de corte global (A5): destino del NAT de los routers y modo de suspensión. */
     portalCorte: Schema<'PortalCorte'>
+    /** Contraseña del portal (A5): la por defecto por empresa y la propia de cada cliente, sin hashes. */
+    portalContrasenas: PortalContrasenasFixture
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
@@ -221,6 +225,8 @@ interface BaseFixtures {
     conteosInventario: Schema<'ConteoInventarioDetalle'>[]
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
+    /** Inicio de la facturación y `facturar_desde` por servicio (emisión manual de periodos, A3). */
+    facturacionServicios: Record<number, FacturacionServicioFixture>
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
     usuarios: Schema<'Usuario'>[]
     /** Roles del ACL con sus permisos (`GET /roles`). */
@@ -405,8 +411,10 @@ function inicial(): BaseFixtures {
         empresas,
         usuarios,
         planesTemporales: [],
+        facturacionServicios,
         nodosPortal,
         portalCorte: portalCorteInicial(),
+        portalContrasenas: portalContrasenasIniciales(),
         camposPersonalizados,
         productos: productosIniciales,
         bodegas: bodegasIniciales,

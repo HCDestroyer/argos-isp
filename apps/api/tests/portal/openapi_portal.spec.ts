@@ -35,6 +35,9 @@ const SOLO_SESION = [
     // contrato Iris 0.6.0 §6.4: avisos por WhatsApp
     'portalWhatsapp',
     'portalRegistrarWhatsapp',
+    // documento y contraseña: la sesión y el cambio de contraseña
+    'portalSesion',
+    'portalCambiarContrasena',
 ]
 
 type Operacion = {

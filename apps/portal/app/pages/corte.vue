@@ -44,6 +44,13 @@ const pendiente = computed(() => esPendienteInstalacion(corte.value?.estado))
 const verDeposito = ref(false)
 const verPromesa = ref(false)
 const verComprobante = ref(false)
+/** Modal ya abierto alguna vez: desde entonces queda montado (ver la plantilla). */
+const usado = reactive({ deposito: false, promesa: false, comprobante: false })
+watchEffect(() => {
+    usado.deposito ||= verDeposito.value
+    usado.promesa ||= verPromesa.value
+    usado.comprobante ||= verComprobante.value
+})
 
 /** Último comprobante enviado desde esta página: queda en revisión; al aprobarlo, el servicio vuelve. */
 const comprobante = ref<ComprobantePortal | null>(null)
@@ -253,8 +260,36 @@ const accesos = computed(() => {
     return identificado.value ? lista : lista.filter(acceso => acceso.id === 'deposito' || acceso.id === 'soporte')
 })
 
+/**
+ * «Ver mi cuenta» (pedido del PM: «Sí, directo»): la API vuelve a identificar el servicio por esta
+ * conexión o el código de corte y abre una sesión corta de su cliente. Si ya no lo identifica, se
+ * ofrece entrar con documento y contraseña o con un código.
+ */
+const acceso = useAccesoPortal()
+const abriendoCuenta = ref(false)
+const errorCuenta = ref<string | null>(null)
+async function verMiCuenta() {
+    if (sesion.activa.value) {
+        await navigateTo('/cuenta')
+        return
+    }
+    abriendoCuenta.value = true
+    errorCuenta.value = null
+    const resultado = await acceso.entrarDesdeCorte()
+    abriendoCuenta.value = false
+    if (!resultado.ok) {
+        errorCuenta.value = mensajeProblema(resultado.problema)
+        return
+    }
+    clearNuxtData('portal:cuenta')
+    await navigateTo('/cuenta')
+}
+
 function alAcceso(accion: NonNullable<AccesoRapido['accion']>) {
-    if (accion === 'deposito') {
+    if (accion === 'cuenta') {
+        void verMiCuenta()
+    }
+    else if (accion === 'deposito') {
         verDeposito.value = true
     }
     else if (accion === 'comprobante') {
@@ -398,7 +433,7 @@ async function actualizar() {
                 data-testid="corte-no-identificado"
             >
                 <UButton
-                    label="Entrar con mi NIT o usuario"
+                    label="Entrar a mi cuenta"
                     icon="i-lucide-log-in"
                     size="xl"
                     to="/entrar"
@@ -422,6 +457,29 @@ async function actualizar() {
                     @click="verDeposito = true"
                 />
             </template>
+
+            <UAlert
+                v-if="errorCuenta"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-user-x"
+                title="No pudimos abrir tu cuenta desde aquí"
+                :description="errorCuenta"
+                :actions="[{ label: 'Entrar con documento o código', icon: 'i-lucide-log-in', color: 'warning', variant: 'outline', to: '/entrar' }]"
+                data-testid="error-ver-mi-cuenta"
+            />
+            <div
+                v-if="abriendoCuenta"
+                class="flex items-center gap-2 text-sm text-muted"
+                role="status"
+            >
+                <UIcon
+                    name="i-lucide-loader-circle"
+                    class="size-4 animate-spin"
+                    aria-hidden="true"
+                />
+                Abriendo tu cuenta…
+            </div>
 
             <PortalAccesosRapidos
                 :accesos="accesos"
@@ -459,12 +517,22 @@ async function actualizar() {
             </p>
         </template>
 
-        <CorteDatosDeposito v-model:open="verDeposito" />
-        <PromesaSolicitar
+        <!--
+            Los modales se descargan la primera vez que se abren (Lazy + v-if): el formulario, zod y
+            los componentes de fecha y archivo no van en la carga de /corte, que llega con la
+            velocidad limitada del suspendido. Después quedan montados para animar al cerrar.
+        -->
+        <LazyCorteDatosDeposito
+            v-if="usado.deposito"
+            v-model:open="verDeposito"
+        />
+        <LazyPromesaSolicitar
+            v-if="usado.promesa"
             v-model:open="verPromesa"
             @resultado="promesaResuelta"
         />
-        <ComprobanteSubir
+        <LazyComprobanteSubir
+            v-if="usado.comprobante"
             v-model:open="verComprobante"
             @enviado="comprobanteEnviado"
         />

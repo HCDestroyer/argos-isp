@@ -421,6 +421,7 @@ onMounted(cargar)
                     :key="`${cliente.id}-${ediciones}`"
                     :cliente-id="cliente.id"
                 />
+                <ClientePortal :cliente-id="cliente.id" />
                 <ProblemaAlerta
                     v-if="problemaCatalogo"
                     :problema="problemaCatalogo"

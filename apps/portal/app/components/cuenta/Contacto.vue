@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
-import { z } from 'zod'
+import { z } from '~/lib/zod'
 
 /**
  * Datos de contacto y canal preferido. Nombre y NIT se muestran pero no se editan aquí (los cambia

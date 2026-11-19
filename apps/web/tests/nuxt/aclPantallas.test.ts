@@ -153,8 +153,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // Libros legales con folio (fase 6 PR D): leen los folios del libro (`libros.ver`, el de la página).
     'EmitirLibroModal.vue': { permisos: ['libros.emitir', 'libros.ver'], desde: ['pages/libros/index.vue'] },
     'HabilitacionLibroModal.vue': { permisos: ['libros.habilitar', 'libros.ver'], desde: ['pages/libros/habilitaciones.vue'] },
-    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id].vue', 'pages/clientes/[id]/index.vue'] },
-    'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id].vue'] },
+    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/clientes/[id]/index.vue'] },
+    'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id]/index.vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
     'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },
@@ -194,7 +194,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'LibroEstadoFinanciero.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LibroDiarios.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
-    'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
+    'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id]/index.vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
     // La ficha del plan solo edita; el alta ("Nuevo plan", `planes.crear`) está en la lista.
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue', 'pages/planes/[id].vue'], exentos: { 'pages/planes/[id].vue': ['planes.crear'] } },
@@ -207,11 +207,11 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'MotivoCortesiaModal.vue': { permisos: ['adicionales.crear_motivo'], desde: ['pages/adicionales/motivos.vue'] },
     'PlanIncluidos.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
     'PlanAdicionalesModal.vue': { permisos: ['planes.editar', 'adicionales.ver'], desde: ['components/PlanIncluidos.vue'] },
-    'ServicioAdicionales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioAdicionales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'PromesaAprobarModal.vue': { permisos: ['promesas.aprobar'], desde: ['pages/promesas/index.vue'] },
     'ReciboCobro.vue': { permisos: ['pagos.ver'], desde: ['pages/cobro/index.vue'] },
-    'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id].vue'] },
-    'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
+    'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id]/index.vue'] },
+    'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id]/index.vue', 'pages/promesas/index.vue'] },
     'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     // Núcleo de routers: el control de velocidad, la salud y la red de acceso van en la ficha (`routers.ver`) y el panel lateral.
@@ -244,13 +244,13 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // También desde «Probar conexión» (el diagnóstico de corte ofrece «Editar router» si el portal ve otra IP);
     // las dos se abren solo desde la lista y la ficha de routers, que exigen `routers.ver`.
     'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue', 'components/RouterPruebaConexionModal.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'], 'components/RouterPruebaConexionModal.vue': ['routers.ver'] } },
-    'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id]/index.vue'] },
     // Solo se monta con `puedeActivarInstalacion` (servicios.activar_instalacion); recarga con el servicios.ver de la página.
-    'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
-    'ServicioSincronizarRouterModal.vue': { permisos: ['servicios.sincronizar_router'], desde: ['pages/servicios/[id].vue'] },
-    'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
-    'ServicioSesiones.vue': { permisos: ['sesiones.ver'], desde: ['pages/servicios/[id].vue'] },
-    'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioSincronizarRouterModal.vue': { permisos: ['servicios.sincronizar_router'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioSesiones.vue': { permisos: ['sesiones.ver'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },
     'SorteoFormulario.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/index.vue', 'pages/lealtad/sorteos/[id].vue'] },
     'SorteoEjecutarModal.vue': { permisos: ['sorteos.ejecutar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
@@ -279,7 +279,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RouterAltaModal.vue': { permisos: ['routers.crear'], desde: ['pages/routers/index.vue'] },
     // Secciones de fichas: leen con el permiso de la ficha que las monta.
     // Eliminar sin historial (`contratos/eliminar.md`): cada ficha comprueba el suyo.
-    'EliminarRegistroModal.vue': { permisos: ['servicios.eliminar', 'routers.eliminar'], desde: ['pages/servicios/[id].vue', 'pages/routers/[id].vue'], exentos: { 'pages/servicios/[id].vue': ['routers.eliminar'], 'pages/routers/[id].vue': ['servicios.eliminar'] } },
+    'EliminarRegistroModal.vue': { permisos: ['servicios.eliminar', 'routers.eliminar'], desde: ['pages/servicios/[id]/index.vue', 'pages/routers/[id].vue'], exentos: { 'pages/servicios/[id]/index.vue': ['routers.eliminar'], 'pages/routers/[id].vue': ['servicios.eliminar'] } },
     'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
     // Control de velocidad por capas (`contratos/control-velocidad.md`, A2).
     // La matriz pide `routers.ver`: «Velocidad» solo se abre desde la lista de routers, que ya lo exige.
@@ -287,10 +287,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'SincronizarPlanModal.vue': { permisos: ['planes.sincronizar'], desde: ['components/PlanRouters.vue', 'pages/planes/[id].vue'] },
     // «Reconciliar ahora» con vista previa: desde el menú del router, «Velocidad» y el chequeo del corte de «Probar conexión».
     'RouterReconciliarModal.vue': { permisos: ['routers.reconciliar'], desde: ['components/RouterAcciones.vue', 'components/RouterControlVelocidad.vue', 'components/RouterRedAcceso.vue', 'components/RouterPruebaConexionModal.vue'] },
-    'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
-    'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
+    'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     // Código de corte (`contratos/corte-identificacion.md`): lee con el `servicios.ver` de la ficha.
-    'ServicioCodigoCorte.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioCodigoCorte.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },
     'CertificarLoteModal.vue': { permisos: ['fel.certificar'], desde: ['pages/dte/index.vue'] },
     'PremioLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/premios.vue'] },
@@ -298,7 +298,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ProductoFormulario.vue': { permisos: ['productos.crear', 'productos.editar', 'inventario.ver'], desde: ['pages/inventario/productos.vue'] },
     'TipoProductoFormulario.vue': { permisos: ['tipos_producto.crear', 'tipos_producto.editar'], desde: ['pages/inventario/tipos-producto.vue'] },
     'MovimientoInventarioModal.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/index.vue'] },
-    'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioEquipos.vue': { permisos: ['inventario.ver'], desde: ['pages/servicios/[id]/index.vue'] },
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
     'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
     'CanjeLealtadModal.vue': { permisos: ['lealtad.canjear', 'lealtad.ver'], desde: ['pages/lealtad/canjes.vue'] },
@@ -320,6 +320,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'TrasladoDocumentoModal.vue': { permisos: ['inventario.adjuntar_documento_traslado'], desde: ['pages/inventario/traslados/[id].vue'] },
     // Contrato Iris 0.6.0: el WhatsApp de la ficha con `notificaciones.ver`; rechazar con causa con `comprobantes.rechazar`.
     'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    // Contraseña del portal (A5): la tarjeta lee con el `clientes.ver` de la ficha; «Restaurar» lo comprueba con `puede()`.
+    'ClientePortal.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['pages/comprobantes/[id].vue'] },
     // Tipo de conexión por router (`contratos/tipo-conexion-router.md`): la sección de la ficha lee con el
     // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.

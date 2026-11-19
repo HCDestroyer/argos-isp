@@ -885,3 +885,29 @@ export const listarCatalogoCargoValidator = vine.compile(
         activo: vine.boolean().optional().meta({ description: 'Solo activos (true) o inactivos' }),
     }),
 )
+
+export const periodosFacturablesValidator = vine.compile(
+    vine.object({
+        hasta: fechaIso().optional().meta({
+            description:
+                'Solo los periodos que empiezan este día o antes; por defecto todos hasta el 12.º periodo futuro (422 maximo_periodos_futuros si va más allá)',
+        }),
+    }),
+)
+
+export const emitirFacturasPeriodoValidator = vine.compile(
+    vine.object({
+        periodos: vine.array(fechaIso()).minLength(1).maxLength(60).optional().meta({
+            description:
+                'Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo',
+        }),
+        hasta: fechaIso().optional().meta({
+            description:
+                'Emite todos los periodos no emitidos que empiezan este día o antes, desde facturar_desde (nunca los anteriores). Uno de periodos o hasta',
+        }),
+        motivo: motivo().nullable().optional().meta({
+            description:
+                'Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior a facturar_desde',
+        }),
+    }),
+)

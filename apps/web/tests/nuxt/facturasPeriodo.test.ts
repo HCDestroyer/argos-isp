@@ -1,0 +1,308 @@
+import { mountSuspended } from '@nuxt/test-utils/runtime'
+import type { VueWrapper } from '@vue/test-utils'
+import Decimal from 'decimal.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
+import { bd } from '~~/fixtures/bd'
+import PaginaFacturasPeriodo from '~/pages/servicios/[id]/facturas-periodo.vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
+import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
+
+const RUTA_VISTA = 'GET /api/v1/servicios/:id/periodos-facturables'
+const RUTA_EMITIR = 'POST /api/v1/servicios/:id/facturas-periodo'
+
+function periodo(datos: Partial<PeriodoFacturable> & Pick<PeriodoFacturable, 'periodo' | 'estado'>): PeriodoFacturable {
+    return {
+        hasta: datos.periodo.replace(/-01$/, '-30'),
+        dias: 30,
+        dias_ciclo: 30,
+        factor: '1',
+        prorrateado: false,
+        vence_en: datos.periodo.replace(/-01$/, '-06'),
+        monto: '150.00',
+        pagado: '0.00',
+        factura_id: null,
+        factura_estado: null,
+        bonificacion_id: null,
+        sera_bonificacion: false,
+        error: null,
+        ...datos,
+    }
+}
+
+/** Deja `monto` de saldo a favor al cliente (un pago sin aplicar). */
+function darSaldoAFavor(clienteId: number, monto: string) {
+    const base = bd.pagos.find(p => p.empresa_id === 1)
+    if (!base) {
+        throw new Error('sin pagos de referencia')
+    }
+    bd.pagos.push({ ...structuredClone(base), id: 9_000, cliente_id: clienteId, monto, aplicaciones: [], estado: 'registrado', empresa_id: 1 })
+}
+
+function filas(vista: VueWrapper) {
+    return vista.findAll('[data-prueba="lista-periodos"] li')
+}
+
+function estadoDe(vista: VueWrapper, inicio: string): string | undefined {
+    return vista.find(`[data-periodo="${inicio}"]`).attributes('data-estado')
+}
+
+async function marcar(vista: VueWrapper, inicio: string) {
+    await vista.find(`[data-prueba="marcar-${inicio}"] button, button[data-prueba="marcar-${inicio}"]`).trigger('click')
+}
+
+/**
+ * Emitir facturas de periodos a mano (A3, pedido del PM del 19 nov): estados, selección, «Adelantar
+ * N meses», resumen con saldo a favor, anteriores con su permiso y motivo, errores y no emitible.
+ * Hoy de los fixtures: 15 de octubre de 2026 (septiembre y octubre ya emitidos).
+ */
+describe('facturas de periodos', () => {
+    beforeEach(() => {
+        reiniciarFixtures()
+        fijarHoyFixtures()
+        sesionFixture('fixture-admin')
+        useUsuarioActual().value = meAdmin
+    })
+
+    afterEach(() => {
+        soltarReloj()
+        sesionFixture(null)
+        useUsuarioActual().value = null
+    })
+
+    it('cada estado con icono, texto y color; nunca primary', () => {
+        for (const presentacion of Object.values(ESTADOS_PERIODO)) {
+            expect(presentacion.etiqueta).not.toBe('')
+            expect(presentacion.icono).toMatch(/^i-lucide-/)
+            expect(presentacion.color).not.toBe('primary')
+        }
+        expect(Object.keys(ESTADOS_PERIODO).sort()).toEqual(['antes_de_facturar_desde', 'bonificada', 'emitida', 'futuro', 'pendiente'])
+        expect(Object.keys(MOTIVOS_NO_EMITIBLE).sort()).toEqual(['servicio_pendiente_instalacion', 'servicio_retirado', 'sin_plantilla'])
+    })
+
+    it('selección: solo pendientes y futuros con monto; anteriores con su permiso; adelantar N', () => {
+        const lista = [
+            periodo({ periodo: '2026-08-01', estado: 'antes_de_facturar_desde' }),
+            periodo({ periodo: '2026-09-01', estado: 'emitida', factura_id: 1 }),
+            periodo({ periodo: '2026-10-01', estado: 'pendiente' }),
+            periodo({ periodo: '2026-11-01', estado: 'futuro' }),
+            periodo({ periodo: '2026-12-01', estado: 'futuro', monto: null, error: 'Libro bloqueado' }),
+            periodo({ periodo: '2027-01-01', estado: 'futuro' }),
+            periodo({ periodo: '2027-02-01', estado: 'futuro' }),
+            periodo({ periodo: '2027-03-01', estado: 'bonificada', bonificacion_id: 3 }),
+        ]
+        const elegibles = (conAnteriores: boolean) => lista.filter(p => periodoElegible(p, conAnteriores)).map(p => p.periodo)
+        expect(elegibles(false)).toEqual(['2026-10-01', '2026-11-01', '2027-01-01', '2027-02-01'])
+        expect(elegibles(true)).toEqual(['2026-08-01', '2026-10-01', '2026-11-01', '2027-01-01', '2027-02-01'])
+
+        // Adelantar: los próximos N futuros con monto; lo pendiente marcado se queda, los demás futuros salen.
+        expect(adelantar(lista, ['2026-10-01', '2027-02-01'], 2)).toEqual(['2026-10-01', '2026-11-01', '2027-01-01'])
+        expect(adelantar(lista, [], 10)).toEqual(['2026-11-01', '2027-01-01', '2027-02-01'])
+    })
+
+    it('resumen: total, lo que cubre el saldo a favor y lo que queda; null si falta un monto', () => {
+        const lista = [
+            periodo({ periodo: '2026-11-01', estado: 'futuro' }),
+            periodo({ periodo: '2026-12-01', estado: 'futuro' }),
+            periodo({ periodo: '2027-01-01', estado: 'futuro', monto: null, error: 'x' }),
+        ]
+        const r = resumenEmision(lista, ['2026-11-01', '2026-12-01'], '200.00')
+        expect(r && [r.cantidad, r.total.toFixed(2), r.cubre.toFixed(2), r.porCobrar.toFixed(2)]).toEqual([2, '300.00', '200.00', '100.00'])
+        const sobra = resumenEmision(lista, ['2026-11-01'], '500.00')
+        expect(sobra && [sobra.cubre.toFixed(2), sobra.porCobrar.toFixed(2)]).toEqual(['150.00', '0.00'])
+        expect(resumenEmision(lista, ['2027-01-01'], '0.00')).toBeNull()
+        expect(cubiertoPorSaldo(periodo({ periodo: '2026-11-01', estado: 'futuro', pagado: '150.00' }))).toBe('150.00')
+        expect(cubiertoPorSaldo(periodo({ periodo: '2026-09-01', estado: 'emitida', factura_id: 1, pagado: '150.00' }))).toBeNull()
+    })
+
+    it('esquema: motivo obligatorio solo con anteriores; de 3 a 500; cuerpo ordenado', () => {
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: [], motivo: '' }).success).toBe(false)
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: '' }).success).toBe(true)
+        const sinMotivo = esquemaFacturasPeriodo(true).safeParse({ periodos: ['2026-08-01'], motivo: '  ' })
+        expect(sinMotivo.error?.issues.map(i => i.path.join('.'))).toEqual(['motivo'])
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: 'ab' }).success).toBe(false)
+        expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], motivo: 'x'.repeat(501) }).success).toBe(false)
+        const datos = esquemaFacturasPeriodo(true).parse({ periodos: ['2026-12-01', '2026-08-01'], motivo: ' Cobro acordado ' })
+        expect(cuerpoFacturasPeriodo(datos)).toEqual({ periodos: ['2026-08-01', '2026-12-01'], motivo: 'Cobro acordado' })
+        expect(cuerpoFacturasPeriodo({ periodos: ['2026-11-01'], motivo: '' })).toEqual({ periodos: ['2026-11-01'] })
+    })
+
+    it('errores de la emisión en llano por su regla', () => {
+        const p = problemaEmision({ type: 'urn:argosisp:problema:antes_de_facturar_desde', title: 'Regla de negocio', status: 422, errors: [{ field: 'periodos', message: 'x', rule: 'antes_de_facturar_desde' }] })
+        expect(p.title).toBe('No se emitieron las facturas')
+        expect(p.detail).toContain('Emitir periodo anterior')
+        expect(problemaEmision({ type: 'x', title: 'Otro', status: 422, errors: [{ field: 'motivo', message: 'x', rule: 'motivo_requerido' }] }).detail).toContain('motivo')
+        expect(problemaEmision({ type: 'about:blank', title: 'Error interno', status: 500 }).title).toBe('Error interno')
+        expect(avisoEmision({ servicio_id: 1, cliente_id: 1, creadas: [], bonificadas: [], omitidas: [], saldo_a_favor: '0.00' })).toBe('0 facturas emitidas')
+    })
+
+    it('vista previa: emitidas, futuros hasta 12 con vencimiento; hasta más allá del máximo es 422', async () => {
+        const r = await useFacturasPeriodo().periodos(1)
+        expect(r.ok).toBe(true)
+        if (!r.ok) {
+            return
+        }
+        expect(r.data).toMatchObject({ emitible: true, motivo: null, hoy: '2026-10-15', maximo_futuros: 12 })
+        expect(r.data.periodos.filter(p => p.estado === 'emitida').map(p => p.periodo)).toEqual(['2026-09-01', '2026-10-01'])
+        const futuros = r.data.periodos.filter(p => p.estado === 'futuro')
+        expect(futuros).toHaveLength(12)
+        expect(futuros[0]).toMatchObject({ periodo: '2026-11-01', hasta: '2026-11-30', monto: bd.servicios[0]?.precio_mensual })
+        const fuera = await useFacturasPeriodo().periodos(1, '2028-01-01')
+        expect(!fuera.ok && fuera.problema.errors?.[0]?.rule).toBe('maximo_periodos_futuros')
+    })
+
+    it('pantalla: estados visibles, solo se marcan pendientes y futuros; adelantar 3 y emitir', async () => {
+        // Octubre sin factura: pendiente (el cron la emitiría hoy).
+        bd.facturas = bd.facturas.filter(f => f.clave_unica !== '1-2026-10-01')
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        expect(estadoDe(vista, '2026-09-01')).toBe('emitida')
+        expect(estadoDe(vista, '2026-10-01')).toBe('pendiente')
+        expect(estadoDe(vista, '2026-11-01')).toBe('futuro')
+        expect(vista.find('[data-periodo="2026-09-01"]').text()).toContain('Emitida')
+        expect(vista.find('[data-periodo="2026-10-01"]').text()).toContain('Sin emitir')
+        expect(vista.find('[data-prueba="marcar-2026-09-01"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="marcar-2026-10-01"]').exists()).toBe(true)
+
+        await marcar(vista, '2026-10-01')
+        await vista.find('[data-prueba="adelantar"]').trigger('click')
+        const precio = bd.servicios[0]?.precio_mensual ?? '0'
+        await esperar(() => expect(vista.find('[data-prueba="emitir-periodos"]').text()).toContain('Emitir 4 facturas'))
+        expect(vista.find('[data-prueba="resumen-total"]').text()).toBe(formatearQuetzales(new Decimal(precio).times(4)))
+        expect(vista.find('[data-prueba="resumen-por-cobrar"]').text()).toBe(formatearQuetzales(new Decimal(precio).times(4)))
+
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-resultado"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="facturas-periodo-resultado"]').text()).toContain('4 facturas emitidas')
+        expect(vista.findAll('[data-creada]').map(c => c.attributes('data-creada'))).toEqual(['2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'])
+        await esperar(() => expect(estadoDe(vista, '2026-12-01')).toBe('emitida'))
+        expect(vista.find('[data-prueba="facturas-periodo-ver-facturas"]').attributes('href')).toContain('servicio=1')
+        expect(bd.facturas.filter(f => f.clave_unica === '1-2026-11-01')).toHaveLength(1)
+        vista.unmount()
+    })
+
+    it('saldo a favor: cada futuro dice cuánto cubre y el resumen lo descuenta', async () => {
+        const clienteId = bd.servicios[0]?.cliente_id ?? 1
+        const precio = new Decimal(bd.servicios[0]?.precio_mensual ?? '0')
+        darSaldoAFavor(clienteId, precio.times(2).toFixed(2))
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        expect(vista.find('[data-periodo="2026-11-01"] [data-prueba="cubierto-saldo"]').text()).toContain('cubierto por saldo a favor')
+        expect(vista.find('[data-periodo="2027-01-01"] [data-prueba="cubierto-saldo"]').exists()).toBe(false)
+        await vista.find('[data-prueba="adelantar"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="resumen-cubre"]').text()).toBe(formatearQuetzales(precio.times(2))))
+        expect(vista.find('[data-prueba="resumen-por-cobrar"]').text()).toBe(formatearQuetzales(precio))
+
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-resultado"]').exists()).toBe(true))
+        expect(vista.find('[data-creada="2026-11-01"]').text()).toContain('Pagada')
+        expect(vista.find('[data-creada="2027-01-01"]').text()).toContain('Emitida')
+        vista.unmount()
+    })
+
+    it('anteriores al inicio del cobro: con el permiso, motivo obligatorio y la excepción explicada', async () => {
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/9/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        expect(estadoDe(vista, '2026-08-01')).toBe('antes_de_facturar_desde')
+        expect(vista.find('[data-prueba="aviso-anterior"]').exists()).toBe(false)
+
+        await marcar(vista, '2026-08-01')
+        await esperar(() => expect(vista.find('[data-prueba="aviso-anterior"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="aviso-anterior"]').text()).toContain('no cobrar hacia atrás')
+        const antes = bd.facturas.length
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.text()).toContain('Obligatorio: emites un periodo anterior'))
+        expect(bd.facturas.length).toBe(antes)
+
+        await vista.find('[data-prueba="motivo-periodos"]').setValue('Acuerdo con el cliente por agosto')
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-creada="2026-08-01"]').exists()).toBe(true))
+        expect(bd.acciones.at(-1)).toMatchObject({ accion: 'facturas.emitir_periodos', entidad_id: 9 })
+        vista.unmount()
+    })
+
+    it('anteriores sin el permiso (cajero): se ven pero no se eligen; la API responde 422', async () => {
+        sesionFixture('fixture-cajero')
+        useUsuarioActual().value = meCajero
+        expect(meCajero.permisos).toContain('facturas.emitir_periodos')
+        expect(meCajero.permisos).not.toContain('facturas.emitir_periodo_anterior')
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/9/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        expect(vista.find('[data-prueba="marcar-2026-08-01"]').exists()).toBe(false)
+        expect(vista.find('[data-periodo="2026-08-01"]').text()).toContain('Emitir periodo anterior')
+        expect(vista.find('[data-prueba="marcar-2026-11-01"]').exists()).toBe(true)
+        vista.unmount()
+
+        const r = await useFacturasPeriodo().emitir(9, { periodos: ['2026-08-01'], motivo: 'Prueba' }, nuevaClaveIdempotencia())
+        expect(!r.ok && reglaEmision(r.problema)).toBe('antes_de_facturar_desde')
+    })
+
+    it('la emisión no duplica: lo ocupado va en omitidas; motivo_requerido sin motivo', async () => {
+        const r = await useFacturasPeriodo().emitir(1, { periodos: ['2026-10-01', '2026-11-01'] }, nuevaClaveIdempotencia())
+        expect(r.ok && r.data.omitidas).toEqual([{ periodo: '2026-10-01', motivo: 'ya_emitida', factura_id: expect.any(Number), bonificacion_id: null }])
+        expect(r.ok && r.data.creadas.map(c => c.periodo)).toEqual(['2026-11-01'])
+        const sinMotivo = await useFacturasPeriodo().emitir(9, { periodos: ['2026-07-01'] }, nuevaClaveIdempotencia())
+        expect(!sinMotivo.ok && reglaEmision(sinMotivo.problema)).toBe('motivo_requerido')
+    })
+
+    it('si la vista previa falla: error con Reintentar y sin totales', async () => {
+        simularFalla(RUTA_VISTA, 500)
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-problema"]').exists()).toBe(true))
+        expect(vista.text()).toContain('Reintentar')
+        expect(vista.find('[data-prueba="resumen-periodos"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="lista-periodos"]').exists()).toBe(false)
+
+        bd.fallas = {}
+        const boton = vista.findAll('button').find(b => b.text().includes('Reintentar'))
+        await boton?.trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="lista-periodos"]').exists()).toBe(true))
+        vista.unmount()
+    })
+
+    it('si la emisión falla: error visible con Reintentar, que repite con la misma clave', async () => {
+        simularFalla(RUTA_EMITIR, 500)
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(filas(vista).length).toBeGreaterThan(10))
+        await vista.find('[data-prueba="adelantar"]').trigger('click')
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-error-envio"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="facturas-periodo-resultado"]').exists()).toBe(false)
+
+        bd.fallas = {}
+        const boton = vista.find('[data-prueba="facturas-periodo-error-envio"]').findAll('button').find(b => b.text().includes('Reintentar'))
+        await boton?.trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-resultado"]').exists()).toBe(true))
+        expect(vista.findAll('[data-creada]')).toHaveLength(3)
+        vista.unmount()
+    })
+
+    it('no emitible: retirado y sin plantilla explican el motivo y no dejan emitir', async () => {
+        const retirado = bd.servicios.find(s => s.estado === 'retirado')
+        const sinPlantilla = bd.servicios.find(s => s.plantilla_facturacion_id === null && s.estado !== 'retirado')
+        for (const [servicio, texto] of [[retirado, 'retirado'], [sinPlantilla, 'plantilla de facturación']] as const) {
+            const vista = await mountSuspended(PaginaFacturasPeriodo, { route: `/servicios/${servicio?.id ?? 0}/facturas-periodo` })
+            await esperar(() => expect(vista.find('[data-prueba="facturas-periodo-no-emitible"]').exists()).toBe(true))
+            expect(vista.find('[data-prueba="facturas-periodo-no-emitible"]').text()).toContain(texto)
+            expect(vista.find('[data-prueba="emitir-periodos"]').exists()).toBe(false)
+            vista.unmount()
+        }
+        const r = await useFacturasPeriodo().emitir(retirado?.id ?? 0, { periodos: ['2026-11-01'] }, nuevaClaveIdempotencia())
+        expect(!r.ok && reglaEmision(r.problema)).toBe('servicio_retirado')
+    })
+
+    it('ficha del servicio: el botón lleva a la pantalla propia; no en un retirado', async () => {
+        const ficha = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
+        await esperar(() => expect(ficha.find('[data-prueba="abrir-facturas-periodo"]').exists()).toBe(true))
+        expect(ficha.find('[data-prueba="abrir-facturas-periodo"]').attributes('href')).toBe('/servicios/1/facturas-periodo')
+        ficha.unmount()
+
+        const retirado = bd.servicios.find(s => s.estado === 'retirado')
+        const otra = await mountSuspended(PaginaServicio, { route: `/servicios/${retirado?.id ?? 0}` })
+        await esperar(() => expect(otra.text()).toContain('Servicio retirado'))
+        expect(otra.find('[data-prueba="abrir-facturas-periodo"]').exists()).toBe(false)
+        otra.unmount()
+    })
+})

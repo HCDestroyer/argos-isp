@@ -100,6 +100,8 @@ describe('aviso del sorteo en el carrusel', () => {
         const wrapper = await montarCorte()
         const seccion = wrapper.find('[data-testid="promociones-pagina_corte"]')
         expect(seccion.find('h2').text()).toBe('Promociones y sorteos')
+        // El carrusel se carga diferido (LazyPromoCarrusel): se espera a que el módulo llegue.
+        await vi.waitFor(() => expect(seccion.findAll('article')).toHaveLength(2))
         const tarjetas = seccion.findAll('article')
         expect(tarjetas).toHaveLength(2)
         expect(tarjetas[0]!.attributes('data-testid')).toBe('aviso-sorteo')

@@ -68,6 +68,13 @@ export interface EntradaEmitirFactura {
     descuentos?: Array<{ concepto: string; monto: string }>
     /** motivo de la bonificación si los `descuentos` dejan el periodo en cero (por defecto «Promoción») */
     bonificacion?: { motivo_id: number; motivo_texto: string } | null
+    /**
+     * Emisión manual de un periodo (`facturas.emitir_periodos`, `POST /servicios/:id/facturas-periodo`):
+     * queda en `reglas_snapshot.emision_manual`. Con `antes_de_facturar_desde`, el periodo se emite
+     * aunque sea anterior al `facturar_desde` de la asignación (excepción explícita, con su motivo y el
+     * permiso `facturas.emitir_periodo_anterior`, que valida quien llama). El cron nunca la manda.
+     */
+    manual?: { motivo: string | null; antes_de_facturar_desde: boolean } | null
 }
 
 export interface ResultadoEmitirFactura {
@@ -117,7 +124,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         if (!config) return { factura_id: null, creada: false, motivo: 'sin_plantilla' }
         // asignada por `plantillas.asignar_sin_plantilla`: nunca un periodo anterior a `facturar_desde`
         const desde = await facturarDesdeDe(t.trx, servicio.id)
-        if (desde && input.periodo.periodo < desde) {
+        if (desde && input.periodo.periodo < desde && !input.manual?.antes_de_facturar_desde) {
             return { factura_id: null, creada: false, motivo: 'antes_de_facturar_desde' }
         }
 
@@ -185,6 +192,15 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             plan_id: servicio.plan_id,
             plan_nombre: servicio.plan_nombre,
             periodo: input.periodo,
+            ...(input.manual
+                ? {
+                      emision_manual: {
+                          motivo: input.manual.motivo,
+                          antes_de_facturar_desde: input.manual.antes_de_facturar_desde,
+                          facturar_desde: desde,
+                      },
+                  }
+                : {}),
         }
 
         if (totalesDe(conMonto).total.isZero()) {

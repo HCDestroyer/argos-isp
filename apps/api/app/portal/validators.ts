@@ -33,6 +33,46 @@ export const verificarCodigoValidator = vine.compile(
     }),
 )
 
+/** Contraseña nueva del portal (la de por defecto y la del cliente): 8 a 128 caracteres. */
+const contrasenaNueva = () => vine.string().minLength(8).maxLength(128)
+
+/** `POST /portal/entrar`: documento (NIT, CUI o pasaporte) y contraseña. */
+export const entrarConContrasenaValidator = vine.compile(
+    vine.object({
+        documento: vine
+            .string()
+            .trim()
+            .minLength(2)
+            .maxLength(30)
+            .meta({ description: 'NIT, CUI o pasaporte; se ignoran espacios, guiones y mayúsculas' }),
+        contrasena: vine.string().minLength(1).maxLength(128),
+        empresa_id: idEntidad().optional().meta({
+            description:
+                'Portal de una empresa: solo clientes con servicios en ella y su contraseña por defecto',
+        }),
+    }),
+)
+
+/** `POST /portal/contrasena`: el cliente cambia su contraseña (pide la actual). */
+export const cambiarContrasenaValidator = vine.compile(
+    vine.object({
+        contrasena_actual: vine.string().minLength(1).maxLength(128),
+        contrasena_nueva: contrasenaNueva(),
+    }),
+)
+
+/** `PUT /portal/contrasena-defecto` (panel): contraseña por defecto de la empresa activa. */
+export const configurarContrasenaDefectoValidator = vine.compile(
+    vine.object({
+        contrasena: contrasenaNueva(),
+        version: vine
+            .number()
+            .withoutDecimals()
+            .min(0)
+            .meta({ description: 'version leída (0 si nunca se configuró); si cambió responde 409' }),
+    }),
+)
+
 export const paginaPortalValidator = vine.compile(vine.object({ ...reglasPaginacion }))
 
 /** Teléfono guatemalteco o internacional: dígitos, espacios, guiones, paréntesis y `+`. */

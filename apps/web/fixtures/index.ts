@@ -54,6 +54,7 @@ import { rutasImplementacionesPlan } from './planes/implementaciones'
 import { rutasPlanes } from './planes/rutas'
 import { rutasNodosPortal } from './nodosPortal/rutas'
 import { rutasPortalCorte } from './portalCorte/rutas'
+import { rutasPortalContrasena } from './portalContrasena/rutas'
 import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
 import { rutasInventario } from './inventario/rutas'
 import { rutasInventarioFaseD } from './inventario/faseD'
@@ -74,6 +75,7 @@ import { rutasEliminacion } from './eliminacion'
 import { rutasAsignaciones } from './servicios/asignaciones'
 import { rutasPlanesTemporales } from './servicios/planesTemporales'
 import { rutasCodigoCorte } from './servicios/codigoCorte'
+import { rutasFacturasPeriodo } from './servicios/facturasPeriodo'
 import { rutasServicios } from './servicios/rutas'
 import { rutasSesiones } from './sesiones/rutas'
 import { rutasUsuarios } from './usuarios/rutas'
@@ -543,6 +545,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasNotificaciones,
     ...rutasWhatsapp,
     ...rutasZonas,
+    ...rutasPortalContrasena,
     ...rutasClientes,
     ...rutasServicios,
     ...rutasAsignaciones,
@@ -574,6 +577,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasUsuarios,
     ...rutasPlanesTemporales,
     ...rutasCodigoCorte,
+    ...rutasFacturasPeriodo,
     ...rutasImplementacionesPlan,
     ...rutasNodosPortal,
     ...rutasPortalCorte,

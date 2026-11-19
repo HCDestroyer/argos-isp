@@ -54,10 +54,10 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 ## Facturas (tarea 4)
 
-| Acción             | Archivo                       | Qué hace                                                                                                                                                                                                            |
-| ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Acción             | Archivo                       | Qué hace                                                                                                                                                                                                                                                                          |
+| ------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `facturas.generar` | `actions/generar_facturas.ts` | Cron y `POST /facturas/generar`. Todo lo pendiente hasta `hasta` (hoy por defecto), servicios `activo`/`limitado`/`suspendido` con plantilla, por lotes de 500. Repetirla no duplica. Pedida por un usuario recorre solo su empresa activa (o las de su alcance); el cron, todas. |
-| `facturas.emitir`  | `actions/emitir_factura.ts`   | Una factura de un periodo, en su transacción: `clave_unica = servicio_id-YYYY-MM-DD` con `ON CONFLICT DO NOTHING`, líneas, `reglas_snapshot`, asiento y `factura.emitida`. Aplica el anticipo del cliente si tiene. |
+| `facturas.emitir`  | `actions/emitir_factura.ts`   | Una factura de un periodo (la llaman el cron y `facturas.emitir_periodos`), en su transacción: `clave_unica = servicio_id-YYYY-MM-DD` con `ON CONFLICT DO NOTHING`, líneas, `reglas_snapshot`, asiento y `factura.emitida`. Aplica el anticipo del cliente si tiene.              |
 
 - Periodos (`periodos.ts`): `dia_fijo` empieza el `dia` de cada mes; `aniversario`, el día de instalación (29–31 → 28). El primer periodo va de la instalación (o del alta si no hay `fecha_instalacion`) al siguiente ciclo; con `prorrateo` se cobra `días / días del ciclo`, sin prorrateo el precio completo.
 - Líneas: plan al precio efectivo (`costo_override` o `planes.precio`) y conceptos recurrentes activos (> 0), ambos por el factor de prorrateo. IVA 12 % incluido, desglosado por línea (`lineaConIva`: `iva = total − total/1.12`, redondeo al final); `subtotal = total − Σ iva`.
@@ -111,6 +111,19 @@ Si el régimen vigente de la empresa en la fecha del documento es `pequeno_contr
 
 `actions/sustituir_factura.ts` (`facturas.sustituir`, `POST /facturas/:id/sustituir { motivo, cliente_fiscal? }`, contrato §10.9): para un dato mal emitido cuando el periodo ya está ocupado. Sin pagos (409 `sustitucion_no_permitida`). Sin DTE certificado anula la original; con DTE, la acredita con una NCRE por todo su saldo. Emite la nueva con las mismas líneas, periodo y vencimiento, `clave_unica = <clave>#s<n>` y el receptor corregido en su `reglas_snapshot`. `billing.sustituciones` (solo inserción) traza la relación; evento `factura.sustituida`.
 
+## Facturas de periodo a mano (`actions/emitir_facturas_periodo.ts`, `periodos_facturables.ts`)
+
+Pedido del PM (19 nov): «No puedo agregar facturas siguientes (pago por adelantado) ni agregar facturas a un servicio (por si falló el sistema o si bien lo quiero dejar pagado desde ya)». `facturas.emitir` no tenía ruta (solo la usa el cron); estas dos rutas la exponen por periodo.
+
+- **Vista previa** `GET /servicios/:id/periodos-facturables?hasta=` (`facturas.ver`, `PeriodosFacturables`): los periodos de `periodosHasta` (los del cron) desde el primer día facturable hasta el 12.º futuro (`MAXIMO_PERIODOS_FUTUROS`), con `estado` `emitida` (`factura_id`; si se sustituyó, la vigente), `bonificada`, `pendiente` (empieza hoy o antes), `futuro` o `antes_de_facturar_desde`, `vence_en` y `monto`. El monto de lo no emitido sale de correr `EmitirFactura` sobre todos los periodos libres, en orden, dentro de `simularEnTransaccion` (se revierte; ni auditoría ni eventos): mismo precio efectivo, prorrateo, conceptos, adicionales y descuentos de lealtad; `pagado` = lo que cubriría el saldo a favor. Retirado, pendiente de instalación o sin plantilla: `emitible: false`, `motivo` y `periodos: []`.
+- **Acción** `facturas.emitir_periodos` (`POST /servicios/:id/facturas-periodo` + `Idempotency-Key`, 200 `FacturasPeriodoEmitidas`): `{ periodos: [inicios] }` o `{ hasta }` (uno; 422 `periodos_o_hasta`) y `motivo` opcional. Bloquea al cliente, y emite cada periodo libre con `EmitirFactura` anidada, en orden ascendente y en una transacción: mismas líneas, asiento, `factura.emitida`, FEL según el modo, `clave_unica = servicio_id-periodo` y `reglas_snapshot.emision_manual = { motivo, antes_de_facturar_desde, facturar_desde }`. `contabilizarFactura` aplica el anticipo del cliente a cada una: un pago adelantado que quedó en Anticipos queda aplicado. Lo ocupado va en `omitidas` (`ya_emitida`, `bonificada`); nunca se duplica.
+- **Futuros:** hasta 12 (422 `maximo_periodos_futuros`), vencen en `periodo + dias_gracia`. El cron no los vuelve a emitir (su clave ya está) y el corte no los cuenta: `vencerFacturas` solo vence `vence_en < hoy` y `evaluarEstadoServicio` solo cuenta `vencida`. El precio es el del día de emisión.
+- **Pasados:** permitidos. Si su vencimiento ya pasó, el siguiente corte los vence y cuentan para limitar/cortar.
+- **Antes de `facturar_desde`** (asignación sin plantilla): solo por `periodos` (`hasta` nunca los toma), con `facturas.emitir_periodo_anterior` (la ruta lo pasa como `puede_emitir_anterior`; si no, 422 `antes_de_facturar_desde`) y `motivo` (422 `motivo_requerido`). Es la única excepción a «nunca hacia atrás», que sigue valiendo para el cron. `EmitirFactura` acepta `manual.antes_de_facturar_desde` solo de aquí.
+- 422 `servicio_retirado`, `servicio_pendiente_instalacion`, `sin_plantilla`, `periodo_invalido` (no es inicio de un periodo del servicio).
+- Permisos: `facturas.emitir_periodos` en `admin`, `cajero` y `contabilidad` (va con `facturas.emitir_cargo_unico` y `pagos.registrar`: el cajero cobra los meses adelantados en caja); `facturas.emitir_periodo_anterior` solo `admin` y `contabilidad` (va con `facturas.generar`, `facturas.sustituir` y `plantillas.asignar_sin_plantilla`: corrige el pasado). `soporte` no lo recibe: emite cargos únicos pero no cobra.
+- Pruebas: `tests/billing/facturas_periodo.spec.ts`.
+
 ## Cargo único manual (`actions/emitir_cargo_unico.ts`, `cargos_unicos.ts`)
 
 `facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico` + `Idempotency-Key`, 201 `FacturaDetalle`): factura de un cargo que no es de un periodo (instalación, equipo, visita técnica…).
@@ -146,10 +159,10 @@ Todas idempotentes por (`origen`, `clave_externa`) (repetir → `creada/creado: 
 
 ## Vencimiento y mora (tarea 5)
 
-| Acción                       | Archivo                      | Qué hace                                                                                                                                                  |
-| ---------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Acción                       | Archivo                      | Qué hace                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `facturas.vencer_pendientes` | `actions/vencer_facturas.ts` | Cron y `POST /facturas/vencer`. Todo lo pendiente hasta `hasta` (hoy por defecto), por lotes de 500. Pedida por un usuario, solo su empresa activa (o las de su alcance); el cron, todas. |
-| `facturas.vencer`            | `actions/vencer_factura.ts`  | Una factura de servicio `emitida`/`parcial` con `vence_en < hoy` → `vencida` (`vencida_en`), evento `factura.vencida`, y los recargos de mora pendientes. |
+| `facturas.vencer`            | `actions/vencer_factura.ts`  | Una factura de servicio `emitida`/`parcial` con `vence_en < hoy` → `vencida` (`vencida_en`), evento `factura.vencida`, y los recargos de mora pendientes.                                 |
 
 - Mora (`mora.ts`) según el `reglas_snapshot` de la factura: `fija` (`mora_valor` Q) o `porcentaje` (del total). Es una factura `tipo = 'mora'` con `factura_origen_id`, sin IVA, asiento `CxC / Recargos por mora` (`origen_tipo = 'mora'`); con `mora_con_iva` de la empresa (solo el contador lo activa) lleva IVA desglosado y, con FEL, es un aviso que se certifica como NDEB referida a su factura. Nace `vencida` (se debe ya) pero no cuenta para el corte.
 - `mora_recurrente`: un recargo más por cada mes cumplido después del vencimiento. Clave `mora-<factura>-<n>`: repetir no duplica.
@@ -192,10 +205,10 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 ## Pagos (tarea 8, versión de cobro rápido)
 
-| Acción            | Archivo                     | Permiso                               |
-| ----------------- | --------------------------- | ------------------------------------- |
-| `pagos.registrar` | `actions/registrar_pago.ts` | `POST /pagos` con `Idempotency-Key`   |
-| `pagos.anular`    | `actions/anular_pago.ts`    | `POST /pagos/:id/anular` con `motivo` |
+| Acción                    | Archivo                             | Permiso                                             |
+| ------------------------- | ----------------------------------- | --------------------------------------------------- |
+| `pagos.registrar`         | `actions/registrar_pago.ts`         | `POST /pagos` con `Idempotency-Key`                 |
+| `pagos.anular`            | `actions/anular_pago.ts`            | `POST /pagos/:id/anular` con `motivo`               |
 | `pagos.cerrar_diferencia` | `actions/cerrar_diferencia_pago.ts` | `POST /pagos/:id/cerrar-diferencia` (fase 4, §10.9) |
 
 - Métodos: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito` (`METODOS_PAGO` en `app/shared/eventos.ts`). Datos obligatorios (`DATOS_POR_METODO`, 422 con un error por campo; `no_aplica` si se mandan donde no corresponden):
@@ -254,13 +267,13 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 Iris (chat o llamada, asistente de IA o persona) nunca registra un pago, una promesa ni una reconexión: lo pide a Argos y Argos decide. Las rutas son las de siempre, con `cabecerasIris: true` (`POST /comprobantes`, `GET /comprobantes/:id`, `POST /comprobantes/:id/reconexion-temporal`, `POST /promesas`, `POST /promesas/simular`) o `'opcional'` (`GET /cuentas-bancarias`, `GET /bancos`, contrato 0.8.0: la primera sincronización no tiene conversación; si vienen se validan): con el token `atk_` de Iris el núcleo exige `X-Iris-Actor` y `X-Iris-Conversacion` (400 `cabecera_iris_requerida`), las deja en `ctx.iris`, audita con canal `ia` (asistente) o `api` (persona) y guarda `iris_actor`/`iris_conversacion` en `audit.acciones`. Billing (`iris.ts`) agrega el canal de la promesa (`ia` / `operador`, `esAsistenteIris`) y la `Idempotency-Key` obligatoria en `POST /promesas` de Iris (400 `idempotency_key_requerida`; `POST /comprobantes` y la reconexión la exigen a todos).
 
-| Acción | Ruta | Qué hace |
-| --- | --- | --- |
-| `comprobantes.registrar` | `POST /comprobantes` (multipart, `archivo`) | Comprobante `pendiente` en la cola de caja. Iris: canal `iris` con `leido_por` y `canal_contacto` (obligatorios), `confianza`, e `iris_actor`/`iris_conversacion` de `ctx.iris` para la cola de caja. Otro usuario: canal `panel`. Empresa = la de la cuenta (422 `empresa_no_coincide` si `empresa_id` difiere; 403 `empresa_no_permitida`). 409 `referencia_duplicada` |
+| Acción                             | Ruta                                                                                                    | Qué hace                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `comprobantes.registrar`           | `POST /comprobantes` (multipart, `archivo`)                                                             | Comprobante `pendiente` en la cola de caja. Iris: canal `iris` con `leido_por` y `canal_contacto` (obligatorios), `confianza`, e `iris_actor`/`iris_conversacion` de `ctx.iris` para la cola de caja. Otro usuario: canal `panel`. Empresa = la de la cuenta (422 `empresa_no_coincide` si `empresa_id` difiere; 403 `empresa_no_permitida`). 409 `referencia_duplicada`   |
 | `comprobantes.reconexion_temporal` | `POST /comprobantes/:id/reconexion-temporal { servicio_id?, motivo: fuera_de_horario \| sin_personal }` | Promesa `tipo = reconexion_temporal` ligada al comprobante (`actions/registrar_reconexion_temporal.ts`), con `motivo_reconexion` = el motivo (`sin_personal`: horario hábil sin nadie de caja; mismas reglas; el comprobante sigue pendiente en la cola). `evaluarEstadoServicio` reactiva (nunca un cambio directo). 201 `{ promesa_id, reconexion_id, hasta, servicio }` |
-| `comprobantes.rechazar` | `POST /comprobantes/:id/rechazar { motivo, causa? }` | `causa_rechazo` (`no_aparece`, `monto_distinto`, `ilegible`, `falta_dato`, `duplicado`, `otro`; por defecto `otro`). Cancela la reconexión ligada |
-| `promesas.crear` / simulador | `POST /promesas`, `POST /promesas/simular` | Canal desde `X-Iris-Actor` (`ia` / `operador`); `sistema_origen = iris`; `empresa_id` opcional (422 `empresa_no_coincide`) |
-| `promesas.cancelar_reconexion` | (interna, `RechazarComprobante`) | `actions/cancelar_reconexion_temporal.ts` |
+| `comprobantes.rechazar`            | `POST /comprobantes/:id/rechazar { motivo, causa? }`                                                    | `causa_rechazo` (`no_aparece`, `monto_distinto`, `ilegible`, `falta_dato`, `duplicado`, `otro`; por defecto `otro`). Cancela la reconexión ligada                                                                                                                                                                                                                          |
+| `promesas.crear` / simulador       | `POST /promesas`, `POST /promesas/simular`                                                              | Canal desde `X-Iris-Actor` (`ia` / `operador`); `sistema_origen = iris`; `empresa_id` opcional (422 `empresa_no_coincide`)                                                                                                                                                                                                                                                 |
+| `promesas.cancelar_reconexion`     | (interna, `RechazarComprobante`)                                                                        | `actions/cancelar_reconexion_temporal.ts`                                                                                                                                                                                                                                                                                                                                  |
 
 **Reconexión temporal** (política `reglas_promesa.reconexion_temporal`: `permitida` false, `max_por_periodo` 1, `horas_max` 24, `vigencia` `horas`; exceptuable por servicio con la excepción `reglas_promesa`). 422 `reconexion_no_permitida` con `errors[0].rule`, en este orden: `servicio_de_otro_cliente`, `comprobante_no_pendiente`, `no_habilitada`, `suspension_manual`, `promesa_abierta`, `servicio_no_cortado`, `cupo_agotado`, `comprobante_no_cubre`. El cupo cuenta las reconexiones creadas en el periodo de facturación en cualquier estado, y es **aparte** del de promesas (`max_por_periodo` de las normales cuenta solo `tipo = promesa`). La promesa cubre todo lo vencido (regla `facturas`) y vence según `vigencia` (`venceReconexionTemporal` en `reglas_promesa.ts`): `horas` → a `horas_max` de creada; `medianoche` → la siguiente medianoche de Guatemala (00:00 `America/Guatemala`, en UTC), o la del día siguiente si faltan menos de 60 minutos. Finales:
 
@@ -281,10 +294,10 @@ Iris (chat o llamada, asistente de IA o persona) nunca registra un pago, una pro
 
 ## Asignar a servicios sin plantilla (`plantillas.asignar_sin_plantilla`)
 
-| Ruta                                                                                   | Qué hace                                                                                                              |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `GET /plantillas-facturacion/:id/servicios-sin-plantilla`                              | Vista previa de solo lectura (`vistaPreviaSinPlantilla`, `asignacion_plantilla.ts`): `{ plantilla, total, por_estado, facturar_desde, muestra[] }` |
-| `POST /plantillas-facturacion/:id/asignar-servicios-sin-plantilla { total_esperado }` | `actions/asignar_plantilla_sin_plantilla.ts`, con `Idempotency-Key`                                                    |
+| Ruta                                                                                  | Qué hace                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /plantillas-facturacion/:id/servicios-sin-plantilla`                             | Vista previa de solo lectura (`vistaPreviaSinPlantilla`, `asignacion_plantilla.ts`): `{ plantilla, total, por_estado, facturar_desde, muestra[] }` |
+| `POST /plantillas-facturacion/:id/asignar-servicios-sin-plantilla { total_esperado }` | `actions/asignar_plantilla_sin_plantilla.ts`, con `Idempotency-Key`                                                                                |
 
 - Conjunto (`consultaSinPlantilla`): `activo`/`limitado`/`suspendido` con `plantilla_facturacion_id` null, de la empresa activa (o las del usuario) y del alcance router/zona. Nunca `retirado` ni `pendiente_instalacion`; nunca un servicio que ya tiene plantilla.
 - `total_esperado` distinto del conjunto actual → 409 `total_cambiado` sin asignar nada. Retirada → 409 `plantilla_retirada`.
@@ -331,7 +344,7 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 - Cumplida, según `regla_cumplimiento` (`avanceDePromesa`):
     - `facturas` (las creadas desde el 29 oct): **todas** sus facturas cubiertas quedaron saldadas (pagadas, o acreditadas/anuladas/castigadas). Un pago parcial no la cumple. Una factura que vence después de crearla no entra: la evalúa el corte normal tras cumplirse la promesa. `cierre` agrega `saldo_cubierto`.
     - `monto` (legado: abiertas al migrar e importadas): lo pagado a las facturas del servicio desde la creación llega a su monto, o el servicio ya no tiene deuda vencida.
-  Se revisa con cada `pago.registrado` y `nota_credito.emitida`, y otra vez al vencer. Al cumplirse: `promesa.cumplida` y re-evaluación (puede volver a limitar o cortar por lo que venció después).
+      Se revisa con cada `pago.registrado` y `nota_credito.emitida`, y otra vez al vencer. Al cumplirse: `promesa.cumplida` y re-evaluación (puede volver a limitar o cortar por lo que venció después).
 - Vencida sin cumplir → `incumplida`, `promesa.incumplida` y re-evaluación (corta con la hora de corte). Pendiente de aprobación vencida → `cancelada`.
 - Supervisor (`admin`, `contabilidad`): rechazar una `pendiente_aprobacion` → `rechazada`; cancelar una `activa` o `pendiente_aprobacion` → `cancelada` (si estaba activa, re-evaluación en la misma transacción: puede volver a cortarse). Motivo y quién en `resultado_evaluacion.cierre`; 409 `promesa_no_pendiente` en otro estado. Sin evento (el catálogo no tiene `promesa.rechazada` ni `promesa.cancelada`).
 
@@ -396,44 +409,46 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 
 ## Endpoints
 
-| Método   | Ruta                                              | Permiso                    |
-| -------- | ------------------------------------------------- | -------------------------- |
-| GET      | `/api/v1/plantillas-facturacion`                  | `plantillas.ver`           |
-| POST     | `/api/v1/plantillas-facturacion`                  | `plantillas.crear`         |
-| GET      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.ver`           |
-| PUT      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.editar`        |
-| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`        | `facturas.ver`             |
-| GET      | `/api/v1/bonificaciones`, `/api/v1/bonificaciones/:id` | `facturas.ver`        |
-| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
-| POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
-| POST     | `/api/v1/facturas/cargo-unico`                    | `facturas.emitir_cargo_unico` (Q0: + `facturas.cargo_sin_costo`) |
-| GET      | `/api/v1/conceptos-cargo`, `/api/v1/motivos-sin-costo` (y `/:id`) | `facturas.ver` |
-| POST/PUT | `/api/v1/conceptos-cargo[/:id]`                   | `facturas.configurar_conceptos` |
-| POST/PUT | `/api/v1/motivos-sin-costo[/:id]`                 | `facturas.configurar_motivos` |
-| GET      | `/api/v1/reportes/facturas-sin-costo`             | `reportes.ver`             |
-| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
-| GET      | `/api/v1/cobros/:id`                              | `pagos.ver`                |
-| POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |
-| POST     | `/api/v1/pagos/:id/anular`                        | `pagos.anular`             |
-| GET      | `/api/v1/promesas`                                | `promesas.ver`             |
-| POST     | `/api/v1/promesas`                                | `promesas.crear`           |
-| POST     | `/api/v1/promesas/:id/aprobar`                    | `promesas.aprobar`         |
-| POST     | `/api/v1/promesas/:id/rechazar`                   | `promesas.rechazar`        |
-| POST     | `/api/v1/promesas/:id/cancelar`                   | `promesas.cancelar`        |
-| GET      | `/api/v1/bancos`                                  | sesión (sin permiso)       |
-| GET      | `/api/v1/cuentas-bancarias`, `/:id`               | `cuentas_bancarias.ver`    |
-| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`                 | `cuentas_bancarias.editar` |
-| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`    | `comprobantes.ver`         |
-| POST     | `/api/v1/comprobantes/:id/aprobar`                | `comprobantes.aprobar`     |
-| POST     | `/api/v1/comprobantes/:id/rechazar`               | `comprobantes.rechazar`    |
-| GET      | `/api/v1/clientes/:id/estado-cuenta`              | `clientes.estado_cuenta`   |
-| POST     | `/api/v1/pasarela/cobros`                         | `pagos.registrar`          |
-| GET      | `/api/v1/pasarela/cobros`, `/:id`                 | `pagos.ver`                |
-| POST     | `/api/v1/pasarela/webhook/:proveedor`             | público (firma HMAC)       |
-| POST     | `/api/v1/pasarela/conciliar`                      | `facturas.generar`         |
-| GET      | `/api/v1/pasarela/conciliaciones`                 | `pagos.ver`                |
-| GET/POST | `/api/v1/pasarela/falsa/:cobro[/pagar]`           | público, solo laboratorio  |
-| GET      | `/api/v1/reportes/*`, `/api/v1/dashboard/resumen` | `reportes.ver`             |
+| Método   | Ruta                                                              | Permiso                                                                                          |
+| -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| GET      | `/api/v1/plantillas-facturacion`                                  | `plantillas.ver`                                                                                 |
+| POST     | `/api/v1/plantillas-facturacion`                                  | `plantillas.crear`                                                                               |
+| GET      | `/api/v1/plantillas-facturacion/:id`                              | `plantillas.ver`                                                                                 |
+| PUT      | `/api/v1/plantillas-facturacion/:id`                              | `plantillas.editar`                                                                              |
+| GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`                        | `facturas.ver`                                                                                   |
+| GET      | `/api/v1/bonificaciones`, `/api/v1/bonificaciones/:id`            | `facturas.ver`                                                                                   |
+| POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`                   | `facturas.generar`                                                                               |
+| POST     | `/api/v1/facturas/:id/anular`                                     | `facturas.anular`                                                                                |
+| POST     | `/api/v1/facturas/cargo-unico`                                    | `facturas.emitir_cargo_unico` (Q0: + `facturas.cargo_sin_costo`)                                 |
+| GET      | `/api/v1/servicios/:id/periodos-facturables`                      | `facturas.ver`                                                                                   |
+| POST     | `/api/v1/servicios/:id/facturas-periodo`                          | `facturas.emitir_periodos` (anteriores a `facturar_desde`: + `facturas.emitir_periodo_anterior`) |
+| GET      | `/api/v1/conceptos-cargo`, `/api/v1/motivos-sin-costo` (y `/:id`) | `facturas.ver`                                                                                   |
+| POST/PUT | `/api/v1/conceptos-cargo[/:id]`                                   | `facturas.configurar_conceptos`                                                                  |
+| POST/PUT | `/api/v1/motivos-sin-costo[/:id]`                                 | `facturas.configurar_motivos`                                                                    |
+| GET      | `/api/v1/reportes/facturas-sin-costo`                             | `reportes.ver`                                                                                   |
+| GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`                              | `pagos.ver`                                                                                      |
+| GET      | `/api/v1/cobros/:id`                                              | `pagos.ver`                                                                                      |
+| POST     | `/api/v1/pagos`                                                   | `pagos.registrar`                                                                                |
+| POST     | `/api/v1/pagos/:id/anular`                                        | `pagos.anular`                                                                                   |
+| GET      | `/api/v1/promesas`                                                | `promesas.ver`                                                                                   |
+| POST     | `/api/v1/promesas`                                                | `promesas.crear`                                                                                 |
+| POST     | `/api/v1/promesas/:id/aprobar`                                    | `promesas.aprobar`                                                                               |
+| POST     | `/api/v1/promesas/:id/rechazar`                                   | `promesas.rechazar`                                                                              |
+| POST     | `/api/v1/promesas/:id/cancelar`                                   | `promesas.cancelar`                                                                              |
+| GET      | `/api/v1/bancos`                                                  | sesión (sin permiso)                                                                             |
+| GET      | `/api/v1/cuentas-bancarias`, `/:id`                               | `cuentas_bancarias.ver`                                                                          |
+| POST/PUT | `/api/v1/cuentas-bancarias[/:id]`                                 | `cuentas_bancarias.editar`                                                                       |
+| GET      | `/api/v1/comprobantes`, `/:id`, `/:id/archivo`                    | `comprobantes.ver`                                                                               |
+| POST     | `/api/v1/comprobantes/:id/aprobar`                                | `comprobantes.aprobar`                                                                           |
+| POST     | `/api/v1/comprobantes/:id/rechazar`                               | `comprobantes.rechazar`                                                                          |
+| GET      | `/api/v1/clientes/:id/estado-cuenta`                              | `clientes.estado_cuenta`                                                                         |
+| POST     | `/api/v1/pasarela/cobros`                                         | `pagos.registrar`                                                                                |
+| GET      | `/api/v1/pasarela/cobros`, `/:id`                                 | `pagos.ver`                                                                                      |
+| POST     | `/api/v1/pasarela/webhook/:proveedor`                             | público (firma HMAC)                                                                             |
+| POST     | `/api/v1/pasarela/conciliar`                                      | `facturas.generar`                                                                               |
+| GET      | `/api/v1/pasarela/conciliaciones`                                 | `pagos.ver`                                                                                      |
+| GET/POST | `/api/v1/pasarela/falsa/:cobro[/pagar]`                           | público, solo laboratorio                                                                        |
+| GET      | `/api/v1/reportes/*`, `/api/v1/dashboard/resumen`                 | `reportes.ver`                                                                                   |
 
 ## Crons bajo un bloqueo del libro (fase 6)
 
@@ -446,4 +461,5 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 Emite: `libro.proceso_bloqueado` (crons bajo un bloqueo, arriba), `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `factura.sustituida`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`. Con FEL obligatoria y `certificar_al = emitir`, `factura.emitida` sale al certificarse la factura (contrato de localización fiscal §11.3).
 
 Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas; y pedir la certificación FEL de los avisos cubiertos, `ConsumidorFel`); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
+
 - **Fase 4, H16–H17** (contrato §18): estado `acreditada` (aviso cubierto entero por notas internas sin cobro; no se certifica); la recuperación de un castigo se parte en base `4.2.03` e IVA `2.1.11` (`ledger.recuperaciones_castigo`). El cargo interno H18 (`tipo = 'cargo'`) desapareció con la decisión B (diferencia como gasto).

@@ -16,6 +16,8 @@ export const PERMISOS = {
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
     'clientes.verificar_identidad':
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
+    'clientes.restaurar_contrasena_portal':
+        'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -137,6 +139,10 @@ export const PERMISOS = {
         'Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)',
     'facturas.emitir_cargo_unico':
         'Emitir una factura manual de cargo único (instalación, equipo, visita técnica…) desde el catálogo de conceptos',
+    'facturas.emitir_periodos':
+        'Emitir a mano facturas de periodos de un servicio: pago por adelantado (hasta 12 periodos futuros) o periodos que el cron no emitió',
+    'facturas.emitir_periodo_anterior':
+        'Emitir a mano un periodo anterior al facturar_desde del servicio, con motivo (junto con facturas.emitir_periodos)',
     'facturas.cargo_sin_costo':
         'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
     'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
@@ -345,6 +351,8 @@ export const PERMISOS = {
         'Ver la configuración del portal de corte (destino del NAT de los routers y modo de suspensión)',
     'portal_corte.configurar':
         'Configurar el portal de corte: IPv4/IPv6 y puerto a donde los routers redirigen a los suspendidos y modo de suspensión (desconectar o CoA); solo admin',
+    'portal.configurar_contrasena_defecto':
+        'Configurar la contraseña por defecto del portal del cliente de la empresa activa (solo se guarda el hash); solo admin',
     'nodos_portal.administrar':
         'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':
@@ -415,6 +423,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'planes.ver',
             'facturas.ver',
             'facturas.emitir_cargo_unico',
+            // pedido del PM (19 nov): cobrar meses adelantados en caja; sin periodos anteriores
+            'facturas.emitir_periodos',
             'pagos.ver',
             'pagos.registrar',
             'cajas.ver',
@@ -449,6 +459,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.desvincular_telegram',
             'clientes.asignar_responsable_pago',
             'clientes.quitar_responsable_pago',
+            'clientes.restaurar_contrasena_portal',
             'zonas.ver',
             'servicios.ver',
             'servicios.crear',
@@ -581,6 +592,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.sustituir',
             'facturas.anular_nota_credito',
             'facturas.emitir_cargo_unico',
+            'facturas.emitir_periodos',
+            'facturas.emitir_periodo_anterior',
             'facturas.cargo_sin_costo',
             'facturas.configurar_motivos',
             'facturas.configurar_conceptos',

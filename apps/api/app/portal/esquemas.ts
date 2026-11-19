@@ -215,6 +215,68 @@ export const PortalSesion = definirEsquema(
             ...PortalMarcaEmpresa,
             description: 'Empresa con más servicios sin retirar del cliente (título y marca del portal)',
         },
+        origen: {
+            ...enumerado(['codigo', 'contrasena', 'corte']),
+            description:
+                'Cómo se abrió: código al correo o Telegram, documento y contraseña, o «Ver mi cuenta» en /corte (sesión corta)',
+        },
+        debe_cambiar_contrasena: {
+            ...booleano,
+            description:
+                'Entró con la contraseña por defecto de la empresa: hasta cambiarla (POST /portal/contrasena) el resto ' +
+                'del portal responde 403 `cambio_contrasena_requerido`',
+        },
+    }),
+)
+
+export const PortalContrasenaCambiada = definirEsquema(
+    'PortalContrasenaCambiada',
+    objeto({
+        actualizada_en: instante,
+        sesiones_cerradas: {
+            ...entero,
+            minimum: 0,
+            description: 'Otras sesiones del portal que se cerraron',
+        },
+    }),
+)
+
+export const PortalContrasenaDefecto = definirEsquema(
+    'PortalContrasenaDefecto',
+    objeto({
+        empresa_id: id,
+        configurada: {
+            ...booleano,
+            description: 'Hay contraseña por defecto (nunca se devuelve ni su hash)',
+        },
+        actualizada_en: nulable(instante),
+        version: {
+            ...entero,
+            minimum: 0,
+            description: '0 si nunca se configuró; envíala al guardar (409 si cambió)',
+        },
+    }),
+)
+
+export const ClienteContrasenaPortal = definirEsquema(
+    'ClienteContrasenaPortal',
+    objeto({
+        cliente_id: id,
+        propia: {
+            ...booleano,
+            description: 'El cliente eligió su contraseña; false = entra con la por defecto de su empresa',
+        },
+        actualizada_en: nulable(instante),
+        defecto_configurada: {
+            ...booleano,
+            description:
+                'Alguna de sus empresas tiene contraseña por defecto (si no y sin propia, solo entra con código)',
+        },
+        sesiones_cerradas: {
+            ...entero,
+            minimum: 0,
+            description: 'Sesiones del portal que cerró la restauración (0 en la lectura)',
+        },
     }),
 )
 

@@ -5,7 +5,7 @@ import { meAdmin } from '~~/fixtures/auth/sesiones'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import PaginaCliente from '~/pages/clientes/[id]/index.vue'
 import PaginaPago from '~/pages/pagos/[id].vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { bd } from '~~/fixtures/bd'
 import { esperar } from '../ayudas/esperar'
 

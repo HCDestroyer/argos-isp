@@ -1,37 +1,10 @@
 import Decimal from 'decimal.js'
-import { z } from 'zod'
 import type { Schema } from '@argosisp/contracts'
 
 /** Formulario de promesa de pago (tarea 4): esquema, textos de límites e `Idempotency-Key`. */
 
 type Condiciones = Schema<'PortalCondicionesPromesa'>
 type FacturaCubierta = Schema<'FacturaCubierta'>
-
-const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
-
-/**
- * Espejo de `solicitarPromesaValidator` (apps/api/app/portal/validators.ts) más los límites que
- * mostró `GET /portal/promesas/condiciones` (de `limitesPromesa()` de A3): fecha dentro del plazo y,
- * si hay `pago_previo` (abono inicial o deuda vencida sobre el máximo), no se envía: la evaluación
- * de A3 la rechazaría. El cliente no escribe un monto: la promesa cubre todo lo vencido
- * (`contratos/promesas.md`, «Monto y cumplimiento»). Solo ayuda a corregir antes de enviar: la
- * decisión es del backend.
- */
-export function esquemaPromesa(
-    condiciones: Pick<Condiciones, 'fecha_minima' | 'fecha_maxima'> & Partial<Pick<Condiciones, 'pago_previo'>>,
-) {
-    const { fecha_minima: minima, fecha_maxima: maxima } = condiciones
-    const previo = condiciones.pago_previo && new Decimal(condiciones.pago_previo).greaterThan(0)
-        ? condiciones.pago_previo
-        : null
-    return z.object({
-        vence_el: z.string()
-            .regex(FECHA, 'Elige el día en que vas a pagar')
-            .refine(fecha => !minima || fecha >= minima, 'Esa fecha ya pasó: elige hoy o un día posterior')
-            .refine(fecha => !maxima || fecha <= maxima, `Elige una fecha hasta el ${formatearFecha(maxima)}`)
-            .refine(() => previo === null, `Primero paga ${formatearQuetzales(previo)}; después solicita la promesa`),
-    })
-}
 
 /** Lo que cubre la promesa: "Servicio de octubre 2026", "Recargo por mora" o "Cargo de octubre 2026". */
 export function conceptoCubierta(factura: Pick<FacturaCubierta, 'tipo' | 'periodo'>): string {
@@ -67,8 +40,6 @@ export function textoPagoPrevio(condiciones: Pick<Condiciones, 'deuda_maxima'>):
     partes.push('Paga en línea, en la oficina o por depósito y luego solicita la promesa: cubrirá lo que quede vencido.')
     return partes.join(' ')
 }
-
-export type DatosPromesa = z.output<ReturnType<typeof esquemaPromesa>>
 
 /**
  * Monto dentro de una frase: `Q 318.33` con espacio duro, para que la "Q" no quede sola al final

@@ -1,5 +1,3 @@
-import { rutasFixture } from '~~/fixtures'
-
 /**
  * Instancia única del cliente HTTP del portal; se consume con `useApi()`.
  *
@@ -18,7 +16,7 @@ export default defineNuxtPlugin(() => {
 
     const api = crearClientePortal({
         baseUrl: usarFixtures ? ORIGEN_FIXTURES : baseUrlApi(config.public.apiBase, config.apiBaseInternal),
-        fetch: usarFixtures ? crearFetchFixtures(rutasFixture, { demoraMs: import.meta.test ? 0 : 150 }) : undefined,
+        fetch: usarFixtures ? fetchFixturesPerezoso() : undefined,
         codigoCorte: () => codigo.value,
     })
 
@@ -32,4 +30,18 @@ function baseUrlApi(publica: string, interna: string | undefined): string {
         return publica
     }
     return import.meta.client ? window.location.origin : (interna ?? '')
+}
+
+/**
+ * Los fixtures (~150 KB) se cargan solo en modo fixtures y con la primera llamada: en producción el
+ * módulo nunca baja al navegador (antes iba en el bundle de toda página, `/corte` incluida).
+ */
+function fetchFixturesPerezoso(): typeof fetch {
+    let cargado: Promise<typeof fetch> | undefined
+    return async (entrada, init) => {
+        cargado ??= import('~~/fixtures').then(modulo =>
+            crearFetchFixtures(modulo.rutasFixture, { demoraMs: import.meta.test ? 0 : 150 }))
+        const fetchFixtures = await cargado
+        return fetchFixtures(entrada, init)
+    }
 }

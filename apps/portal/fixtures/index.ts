@@ -20,6 +20,9 @@ import {
     PAGOS_FIXTURE,
     PROMESAS_FIXTURE,
     SESION_FIXTURE,
+    CONTRASENA_DEFECTO_FIXTURE,
+    CONTRASENA_PROPIA_FIXTURE,
+    DOCUMENTO_FIXTURE,
     SOLICITUD_FIXTURE,
     SOLICITUD_POR_IP_FIXTURE,
 } from './cuenta'
@@ -150,7 +153,22 @@ function urlRetornoFixture(escenario: EscenarioPago): string {
 }
 
 /** Sesión del portal simulada. */
-const sesion = { abierta: false, contacto: { ...CONTACTO_FIXTURE } }
+const sesion = {
+    abierta: false,
+    contacto: { ...CONTACTO_FIXTURE },
+    origen: 'codigo' as Schema<'PortalSesion'>['origen'],
+    /** entró con la contraseña por defecto: todo lo demás responde 403 hasta cambiarla */
+    debeCambiar: false,
+    propia: CONTRASENA_PROPIA_FIXTURE as string | null,
+}
+
+function abrirSesion(origen: Schema<'PortalSesion'>['origen'], debeCambiar = false): RespuestaFixture {
+    sesion.abierta = true
+    sesion.origen = origen
+    sesion.debeCambiar = debeCambiar
+    cuentaDeLaUrl()
+    return { status: 200, cuerpo: { ...SESION_FIXTURE, origen, debe_cambiar_contrasena: debeCambiar } }
+}
 
 /**
  * Telegram en fixtures (contrato de A6): tras `POST /portal/telegram/vincular`, la segunda consulta de
@@ -171,6 +189,9 @@ const telegram = {
 export function fijarSesionFixture(abierta: boolean): void {
     sesion.abierta = abierta
     sesion.contacto = { ...CONTACTO_FIXTURE }
+    sesion.origen = 'codigo'
+    sesion.debeCambiar = false
+    sesion.propia = CONTRASENA_PROPIA_FIXTURE
     telegram.pendienteHasta = null
     telegram.consultas = 0
     telegram.vinculadas.clear()
@@ -296,11 +317,23 @@ const SIN_SESION = () => problema(
     401,
     'no_autenticado',
     'No autenticado',
-    'Entra con el código que te enviamos para ver esta información.',
+    'Entra a tu cuenta para ver esta información.',
+)
+
+const CAMBIO_REQUERIDO = () => problema(
+    403,
+    'cambio_contrasena_requerido',
+    'Cambia tu contraseña',
+    'Entraste con la contraseña que te dio la empresa. Elige una propia para seguir.',
 )
 
 function conSesion(responder: () => RespuestaFixture): () => RespuestaFixture {
-    return () => sesion.abierta ? responder() : SIN_SESION()
+    return () => !sesion.abierta ? SIN_SESION() : sesion.debeCambiar ? CAMBIO_REQUERIDO() : responder()
+}
+
+/** Pruebas: el cliente de fixtures ya usa la contraseña por defecto (`null`) o una propia. */
+export function fijarContrasenaFixture(propia: string | null): void {
+    sesion.propia = propia
 }
 
 function pagina<T>(data: T[]): { status: number, cuerpo: { data: T[], nextCursor: string | null } } {
@@ -671,13 +704,78 @@ const rutasBase: RutasFixture = {
         if (datos.codigo !== CODIGO_FIXTURE) {
             return problema(422, 'codigo_invalido', 'Código no válido', 'El código no es correcto. Te quedan 4 intentos.')
         }
-        sesion.abierta = true
         // `?cuenta=dos_empresas` de /entrar queda recordado para /cuenta (se navega sin la query).
-        cuentaDeLaUrl()
-        return { status: 200, cuerpo: SESION_FIXTURE }
+        return abrirSesion('codigo')
+    },
+    'POST /api/v1/portal/entrar': ({ cuerpo }) => {
+        const datos = (cuerpo ?? {}) as { documento?: string, contrasena?: string }
+        // `/entrar?contrasena=defecto` (desarrollo y e2e): el cliente aún usa la de la empresa.
+        const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('contrasena')
+        if (pedido === 'defecto' && sesion.propia === CONTRASENA_PROPIA_FIXTURE) {
+            sesion.propia = null
+        }
+        const documento = (datos.documento ?? '').replace(/[\s-]/g, '').toUpperCase()
+        if (documento === DOCUMENTO_FIXTURE) {
+            if (sesion.propia !== null && datos.contrasena === sesion.propia) {
+                return abrirSesion('contrasena')
+            }
+            if (sesion.propia === null && datos.contrasena === CONTRASENA_DEFECTO_FIXTURE) {
+                return abrirSesion('contrasena', true)
+            }
+        }
+        return problema(
+            422,
+            'credenciales_invalidas',
+            'Datos de acceso incorrectos',
+            'El documento o la contraseña no son correctos. Revisa y vuelve a intentar, o entra con un código.',
+        )
+    },
+    'POST /api/v1/portal/corte/sesion': () => {
+        if (!ESCENARIOS_CORTE[escenarioCorte()].identificado) {
+            return problema(
+                422,
+                'no_identificado',
+                'Regla de negocio',
+                'No pudimos confirmar tu conexión. Entra con tu documento y contraseña o pide un código.',
+            )
+        }
+        return abrirSesion('corte')
+    },
+    'GET /api/v1/portal/sesion': () => sesion.abierta
+        ? { status: 200, cuerpo: { ...SESION_FIXTURE, origen: sesion.origen, debe_cambiar_contrasena: sesion.debeCambiar } }
+        : SIN_SESION(),
+    'POST /api/v1/portal/contrasena': ({ cuerpo }) => {
+        if (!sesion.abierta) {
+            return SIN_SESION()
+        }
+        const datos = (cuerpo ?? {}) as { contrasena_actual?: string, contrasena_nueva?: string }
+        const actual = sesion.propia ?? CONTRASENA_DEFECTO_FIXTURE
+        const campo = (field: string, message: string): RespuestaFixture => ({
+            status: 422,
+            cuerpo: {
+                type: 'urn:argosisp:problema:validacion',
+                title: 'Datos inválidos',
+                status: 422,
+                detail: message,
+                errors: [{ field, message }],
+            } satisfies Problem,
+        })
+        if (datos.contrasena_actual !== actual) {
+            return campo('contrasena_actual', 'La contraseña actual no es correcta')
+        }
+        if (datos.contrasena_nueva === CONTRASENA_DEFECTO_FIXTURE) {
+            return campo('contrasena_nueva', 'Elige una contraseña distinta a la que te dio la empresa')
+        }
+        sesion.propia = datos.contrasena_nueva ?? null
+        sesion.debeCambiar = false
+        return {
+            status: 200,
+            cuerpo: { actualizada_en: '2026-10-20T15:00:00.000Z', sesiones_cerradas: 0 } satisfies Schema<'PortalContrasenaCambiada'>,
+        }
     },
     'POST /api/v1/portal/salir': () => {
         sesion.abierta = false
+        sesion.debeCambiar = false
         return { status: 204 }
     },
     'GET /api/v1/portal/cuenta': conSesion(() => cuentaFija.respuesta ?? cuentaDeLaUrl()

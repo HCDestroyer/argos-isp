@@ -12,7 +12,7 @@ import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
 import PaginaIris from '~/pages/configuracion/integraciones/iris.vue'
 import PaginaAutorizar from '~/pages/integraciones/iris/autorizar.vue'
 import PaginaPromesas from '~/pages/promesas/index.vue'
-import PaginaServicio from '~/pages/servicios/[id].vue'
+import PaginaServicio from '~/pages/servicios/[id]/index.vue'
 import { esperar } from '../ayudas/esperar'
 
 /**

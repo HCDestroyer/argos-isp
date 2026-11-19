@@ -114,9 +114,11 @@ describe('accesos rápidos: solo lo que la API aceptaría ahora', () => {
         expect(idsDe({ empresa: null, promesaDisponible: false, telegram: null })).toEqual(['facturas', 'soporte'])
     })
 
-    it('por IP, "Facturas" lleva a entrar con el código', () => {
+    it('por IP, "Ver mi cuenta" abre la sesión desde /corte (acción, no enlace al código)', () => {
         const facturas = accesosRapidos({ ...BASE, modo: 'ip' }).find(a => a.id === 'facturas')
-        expect(facturas?.to).toBe('/entrar?por_ip=1')
+        expect(facturas?.titulo).toBe('Ver mi cuenta')
+        expect(facturas?.accion).toBe('cuenta')
+        expect(facturas?.to).toBeUndefined()
     })
 
     it('soporte: teléfono de la empresa o /contacto', () => {
@@ -248,7 +250,7 @@ describe('/corte y la sesión', () => {
         const get = vi.spyOn(useApi(), 'GET')
         const wrapper = await montarCorte()
         expect((get.mock.calls as unknown as [string][]).some(([ruta]) => ruta === '/api/v1/portal/cuenta')).toBe(false)
-        expect(wrapper.find('[data-testid="ver-mi-cuenta"]').attributes('href')).toBe('/entrar?por_ip=1')
+        expect(wrapper.find('[data-testid="ver-mi-cuenta"]').text()).toContain('Ver mi cuenta')
         get.mockRestore()
     })
 
