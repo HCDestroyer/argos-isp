@@ -28,6 +28,7 @@ import {
     ordenAccesoProxy,
     revisarDnsRouter,
     urlCorteConCodigo,
+    actionDataConEsquema,
     urlNat,
     type CorteTunelRouter,
     type ConfigCorte,
@@ -1154,6 +1155,22 @@ async function chequeoProxyCorte(
         )
     } else if (final.action !== (corteUrl ? 'redirect' : 'deny')) {
         problemas.push(`la regla final del proxy de corte tiene action=${final.action ?? '?'}`)
+    }
+    // `action-data` con esquema (reglas escritas antes de v1.19.1): RouterOS antepone `http://` y el 307 sale
+    // como `http://https//<portal>/corte`; el navegador busca el host «https» y nunca llega a la página.
+    const conEsquema = acceso.filter(
+        (o) =>
+            o.action === 'redirect' &&
+            (o.comment === REGLA_PROXY_SIN_CODIGO || servicioDeComment(o.comment) !== null) &&
+            actionDataConEsquema(o['action-data']),
+    )
+    if (conEsquema.length > 0) {
+        const ejemplo = conEsquema[0]!['action-data']!
+        problemas.push(
+            `${conEsquema.length} ${conEsquema.length === 1 ? 'regla tiene' : 'reglas tienen'} action-data con ` +
+                `esquema (${ejemplo}): RouterOS antepone http:// y el cliente llega a ` +
+                `http://${ejemplo.replace(/^([a-z][a-z0-9+.-]*):\/\//i, '$1//')} en vez de la página de corte`,
+        )
     }
     // Las reglas del operador (sin `local-port`) no deben ganarle a las del corte en el puerto 3346.
     const actual = acceso.map((o) => o['.id'])
