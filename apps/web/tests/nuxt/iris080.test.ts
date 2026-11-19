@@ -180,7 +180,8 @@ describe('iris 0.8.0 · pantalla del conector', () => {
         const apagadas = vista.find('[data-prueba="funciones-apagadas-iris"]')
         expect(apagadas.text()).toContain('anterior a 0.8.0')
         expect(apagadas.text()).toContain('cuenta bancaria')
-        expect(apagadas.text()).toContain('no hay personal de caja')
+        expect(apagadas.text()).toContain('cuenta bancaria')
+        expect(apagadas.text()).not.toContain('precio mensual')
 
         expect(vista.find('[data-prueba="estado-sincronizacion-iris"]').text()).toBe('Con errores')
         const filas = vista.findAll('[data-recurso]')

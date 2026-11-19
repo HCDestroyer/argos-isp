@@ -597,7 +597,7 @@ onMounted(() => {
                         color="warning"
                         variant="subtle"
                         icon="i-lucide-power-off"
-                        :title="contratoIris === 'anterior' ? `Iris habla un contrato anterior a ${CONTRATO_IRIS_080}: algunas funciones quedan apagadas` : `Mientras Iris no informe su contrato, se trata como anterior a ${CONTRATO_IRIS_080}`"
+                        :title="contratoIris === 'anterior' ? `Iris habla un contrato anterior a ${CONTRATO_IRIS_080}: Iris no recibe al momento los cambios de cuentas bancarias` : `Mientras Iris no informe su contrato, se trata como anterior a ${CONTRATO_IRIS_080}`"
                         data-prueba="funciones-apagadas-iris"
                     >
                         <template #description>
@@ -610,7 +610,7 @@ onMounted(() => {
                                 </li>
                             </ul>
                             <p class="mt-2">
-                                Se encienden solas cuando Iris se actualiza y vuelve a informar su contrato.
+                                Se enciende sola cuando Iris se actualiza y vuelve a informar su contrato.
                             </p>
                         </template>
                     </UAlert>
