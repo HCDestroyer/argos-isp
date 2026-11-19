@@ -28,7 +28,7 @@ Desde ahí puede, con el botón principal y las tarjetas de acceso rápido:
 - **Subir comprobante** de un depósito o transferencia.
 - **Prometer pago** para reactivar ya y pagar después. Solo aparece si la promesa se puede pedir
   ahora (por ejemplo, no aparece si ya tiene una promesa abierta o si su plantilla exige un abono antes).
-- **Mis facturas y pagos**: entra con un código.
+- **Ver mi cuenta**: abre su cuenta sin pedir nada (la página ya reconoció su servicio).
 - **Contactar soporte**: llama al teléfono configurado en el panel.
 
 Las tarjetas muestran solo lo que el sistema aceptaría en ese momento: nunca se ofrece algo que luego
@@ -86,7 +86,7 @@ cuando el servicio vuelve.
 
 Telegram sirve para recibir avisos (factura, vencimiento, corte) y el código de acceso al portal.
 
-1. En la página de corte, **Mis facturas y pagos** (o entrar al portal y elegir **Entrar**).
+1. Entrar al portal, elegir **Entrar** y la pestaña **Código** (desde la página de corte basta «Ver mi cuenta»).
 2. Pide el código: le llega al correo registrado (o a Telegram, si ya lo tenía vinculado).
    Escribe los 6 dígitos.
 3. En **Mi cuenta** toca **Vincular Telegram** (en el inicio, o en **Cuenta** en la barra de abajo) y

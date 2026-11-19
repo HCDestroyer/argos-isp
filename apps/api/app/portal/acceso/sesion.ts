@@ -2,7 +2,7 @@ import { isIP } from 'node:net'
 import type { HttpContext } from '@adonisjs/core/http'
 import { configIpOrigen, listaConfiables, normalizarIp } from '#portal/ip_origen'
 import db from '@adonisjs/lucid/services/db'
-import { NoAutenticado } from '#shared/errores'
+import { NoAutenticado, Problema } from '#shared/errores'
 import { nodoDeLaPeticion } from '#portal/nodo_portal'
 import { COOKIE_SESION, PREFIJO_TOKEN, RUTA_COOKIE, configAcceso, hashToken } from '#portal/acceso/codigos'
 
@@ -18,6 +18,20 @@ import { COOKIE_SESION, PREFIJO_TOKEN, RUTA_COOKIE, configAcceso, hashToken } fr
 export interface SesionPortal {
     id: number
     clienteId: number
+    /** cómo se abrió: código al correo/Telegram, documento y contraseña, o «Ver mi cuenta» en `/corte` */
+    origen: 'codigo' | 'contrasena' | 'corte'
+    /** entró con la contraseña por defecto: solo puede cambiarla o salir */
+    debeCambiarContrasena: boolean
+    expiraEn: Date
+}
+
+export interface OpcionesSesion {
+    /**
+     * Admite la sesión que aún debe cambiar la contraseña por defecto (`POST /portal/contrasena`,
+     * `GET /portal/sesion`, `POST /portal/salir` y las rutas que solo eligen la marca). Las demás
+     * responden 403 `cambio_contrasena_requerido`.
+     */
+    permitirCambioPendiente?: boolean
 }
 
 export function tokenDeLaPeticion(ctx: HttpContext): string | null {
@@ -26,7 +40,10 @@ export function tokenDeLaPeticion(ctx: HttpContext): string | null {
 }
 
 /** Sesión vigente de la petición o 401 problem+json. Extiende su vigencia. */
-export async function exigirSesionPortal(ctx: HttpContext): Promise<SesionPortal> {
+export async function exigirSesionPortal(
+    ctx: HttpContext,
+    opciones: OpcionesSesion = {},
+): Promise<SesionPortal> {
     ctx.response.header('Cache-Control', 'no-store')
     const token = tokenDeLaPeticion(ctx)
     if (!token) throw new SesionPortalRequerida()
@@ -37,21 +54,54 @@ export async function exigirSesionPortal(ctx: HttpContext): Promise<SesionPortal
             SET ultimo_uso = now(),
                 expira_en = least(now() + make_interval(secs => ?), expira_max_en)
           WHERE token_hash = ? AND revocada_en IS NULL AND expira_en > now()
-          RETURNING id, cliente_id`,
+          RETURNING id, cliente_id, origen, debe_cambiar_contrasena, expira_en`,
         [sesionInactividadS, hashToken(token)],
     )
-    const fila = (resultado.rows as { id: number; cliente_id: number }[])[0]
+    const fila = (
+        resultado.rows as {
+            id: number
+            cliente_id: number
+            origen: SesionPortal['origen']
+            debe_cambiar_contrasena: boolean
+            expira_en: Date
+        }[]
+    )[0]
     if (!fila) {
         borrarCookieSesion(ctx)
-        throw new SesionPortalRequerida('Tu sesión del portal venció. Pide un código nuevo para entrar.')
+        throw new SesionPortalRequerida('Tu sesión del portal venció. Vuelve a entrar.')
     }
-    return { id: Number(fila.id), clienteId: Number(fila.cliente_id) }
+    const sesion: SesionPortal = {
+        id: Number(fila.id),
+        clienteId: Number(fila.cliente_id),
+        origen: fila.origen,
+        debeCambiarContrasena: fila.debe_cambiar_contrasena === true,
+        expiraEn: fila.expira_en,
+    }
+    if (sesion.debeCambiarContrasena && !opciones.permitirCambioPendiente) {
+        throw new CambioContrasenaRequerido()
+    }
+    return sesion
 }
 
-/** `clienteId` de la sesión vigente (401 si no hay). */
-export async function clienteDeLaSesion(ctx: HttpContext): Promise<number> {
-    const sesion = await exigirSesionPortal(ctx)
+/** `clienteId` de la sesión vigente (401 si no hay; 403 si debe cambiar la contraseña). */
+export async function clienteDeLaSesion(ctx: HttpContext, opciones: OpcionesSesion = {}): Promise<number> {
+    const sesion = await exigirSesionPortal(ctx, opciones)
     return sesion.clienteId
+}
+
+/**
+ * 403: la sesión se abrió con la contraseña por defecto y el cliente aún no la cambió. El portal
+ * lleva a `/cambiar-contrasena`.
+ */
+export class CambioContrasenaRequerido extends Problema {
+    constructor() {
+        super(
+            403,
+            'cambio_contrasena_requerido',
+            'Cambia tu contraseña',
+            'Entraste con la contraseña que te dio la empresa. Elige una propia para seguir.',
+        )
+    }
 }
 
 /**
@@ -61,7 +111,7 @@ export async function clienteDeLaSesion(ctx: HttpContext): Promise<number> {
 export async function clienteDeLaSesionSiHay(ctx: HttpContext): Promise<number | null> {
     if (!tokenDeLaPeticion(ctx)) return null
     try {
-        return await clienteDeLaSesion(ctx)
+        return await clienteDeLaSesion(ctx, { permitirCambioPendiente: true })
     } catch (error) {
         if (error instanceof SesionPortalRequerida) return null
         throw error
@@ -69,7 +119,7 @@ export async function clienteDeLaSesionSiHay(ctx: HttpContext): Promise<number |
 }
 
 export class SesionPortalRequerida extends NoAutenticado {
-    constructor(detalle = 'Entra con el código que te enviamos para ver esta información.') {
+    constructor(detalle = 'Entra a tu cuenta para ver esta información.') {
         super(detalle)
     }
 }

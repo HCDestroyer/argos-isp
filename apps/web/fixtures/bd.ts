@@ -49,6 +49,7 @@ import { implementacionesPlan } from './planes/implementaciones'
 import { redAccesoInicial, sembrarServidoresServicios, type RedAccesoFixtures } from './redAcceso/datos'
 import { nodosPortal } from './nodosPortal/datos'
 import { portalCorteInicial } from './portalCorte/datos'
+import { portalContrasenasIniciales, type PortalContrasenasFixture } from './portalContrasena/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales, type ProductoFixture } from './inventario/datos'
 import { faseDInicial, type InventarioFaseDFixtures } from './inventario/faseDDatos'
@@ -210,6 +211,8 @@ interface BaseFixtures {
     nodosPortal: Schema<'NodoPortal'>[]
     /** Portal de corte global (A5): destino del NAT de los routers y modo de suspensión. */
     portalCorte: Schema<'PortalCorte'>
+    /** Contraseña del portal (A5): la por defecto por empresa y la propia de cada cliente, sin hashes. */
+    portalContrasenas: PortalContrasenasFixture
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
@@ -411,6 +414,7 @@ function inicial(): BaseFixtures {
         facturacionServicios,
         nodosPortal,
         portalCorte: portalCorteInicial(),
+        portalContrasenas: portalContrasenasIniciales(),
         camposPersonalizados,
         productos: productosIniciales,
         bodegas: bodegasIniciales,

@@ -320,6 +320,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'TrasladoDocumentoModal.vue': { permisos: ['inventario.adjuntar_documento_traslado'], desde: ['pages/inventario/traslados/[id].vue'] },
     // Contrato Iris 0.6.0: el WhatsApp de la ficha con `notificaciones.ver`; rechazar con causa con `comprobantes.rechazar`.
     'ClienteWhatsapp.vue': { permisos: ['notificaciones.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    // Contraseña del portal (A5): la tarjeta lee con el `clientes.ver` de la ficha; «Restaurar» lo comprueba con `puede()`.
+    'ClientePortal.vue': { permisos: ['clientes.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ComprobanteRechazarModal.vue': { permisos: ['comprobantes.rechazar'], desde: ['pages/comprobantes/[id].vue'] },
     // Tipo de conexión por router (`contratos/tipo-conexion-router.md`): la sección de la ficha lee con el
     // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.

@@ -39,7 +39,7 @@ for (const tema of ['light', 'dark'] as const) {
             await capturar(page, 'corte-carrusel', info.project.name, nombreTema)
 
             // inicio de /cuenta (la sesión de los fixtures vive en memoria: se entra con el código)
-            await page.goto('/entrar')
+            await page.goto('/entrar?con=codigo')
             await expect(async () => {
                 await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
                 await page.getByRole('button', { name: 'Enviarme un código' }).click()
@@ -70,7 +70,7 @@ for (const tema of ['light', 'dark'] as const) {
             await page.goto('/sorteos/27')
             await page.getByTestId('verificacion').waitFor()
             await capturar(page, 'sorteos-publico', info.project.name, nombreTema)
-            await page.goto('/entrar')
+            await page.goto('/entrar?con=codigo')
             await expect(async () => {
                 await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
                 await page.getByRole('button', { name: 'Enviarme un código' }).click()
@@ -97,7 +97,7 @@ for (const tema of ['light', 'dark'] as const) {
             }, tema)
             const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
             // `?puntos=canje` se recuerda en la pestaña: programa visible y canje activo
-            await page.goto('/entrar?puntos=canje')
+            await page.goto('/entrar?con=codigo&puntos=canje')
             await expect(async () => {
                 await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
                 await page.getByRole('button', { name: 'Enviarme un código' }).click()
@@ -135,7 +135,7 @@ for (const tema of ['light', 'dark'] as const) {
                 }
             }, tema)
             const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
-            await page.goto('/entrar')
+            await page.goto('/entrar?con=codigo')
             await expect(async () => {
                 await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
                 await page.getByRole('button', { name: 'Enviarme un código' }).click()

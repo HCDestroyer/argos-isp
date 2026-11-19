@@ -43,7 +43,19 @@ watch(problema, (actual) => {
     if (actual && esSinSesion(actual)) {
         void navigateTo('/entrar')
     }
+    else if (actual && esCambioContrasenaRequerido(actual)) {
+        void navigateTo('/cambiar-contrasena')
+    }
 }, { immediate: true })
+
+/** Vuelve de `/cambiar-contrasena`: lo confirma una vez y limpia la URL. */
+const toast = useToast()
+onMounted(() => {
+    if (route.query.contrasena === 'cambiada') {
+        toast.add({ title: 'Guardamos tu nueva contraseña', color: 'success', icon: 'i-lucide-circle-check' })
+        void navigateTo({ query: { ...route.query, contrasena: undefined } }, { replace: true })
+    }
+})
 
 function contactoActualizado(contacto: ContactoPortal) {
     if (resultado.value?.ok) {
@@ -258,7 +270,7 @@ watch(() => route.hash, async (hash) => {
         </template>
 
         <UAlert
-            v-else-if="problema && !esSinSesion(problema)"
+            v-else-if="problema && !esSinSesion(problema) && !esCambioContrasenaRequerido(problema)"
             color="error"
             variant="subtle"
             icon="i-lucide-cloud-off"
@@ -502,6 +514,16 @@ watch(() => route.hash, async (hash) => {
                     <CuentaContacto
                         :contacto="cuenta.cliente"
                         @actualizado="contactoActualizado"
+                    />
+                    <UButton
+                        label="Cambiar contraseña"
+                        icon="i-lucide-key-round"
+                        color="neutral"
+                        variant="outline"
+                        size="lg"
+                        to="/cambiar-contrasena"
+                        block
+                        data-testid="ir-cambiar-contrasena"
                     />
                     <UButton
                         label="Ayuda y contacto"

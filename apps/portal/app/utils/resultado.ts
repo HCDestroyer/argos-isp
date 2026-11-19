@@ -81,6 +81,11 @@ export function esSinSesion(problema: Problem): boolean {
     return problema.status === 401
 }
 
+/** Entró con la contraseña por defecto y aún no la cambia (403): hay que ir a `/cambiar-contrasena`. */
+export function esCambioContrasenaRequerido(problema: Problem): boolean {
+    return problema.status === 403 && codigoProblema(problema) === 'cambio_contrasena_requerido'
+}
+
 /** Texto para el cliente: el `detail` de la API o, si no hay, su `title`. */
 export function mensajeProblema(problema: Problem): string {
     return problema.detail ?? problema.title

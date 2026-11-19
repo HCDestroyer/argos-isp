@@ -33,7 +33,7 @@ Si el portal reconoce su servicio, ve:
     - «Subir comprobante», si la empresa tiene cuentas para depósito.
     - «Ver datos de depósito»: las cuentas y las instrucciones de pago.
     - «Prometer pago», solo si su plantilla le permite pedir una promesa ahora.
-    - «Mis facturas y pagos»: lleva a entrar con un código.
+    - «Ver mi cuenta»: abre su cuenta (facturas, pagos y datos) sin pedirle nada, porque la página ya reconoció su servicio. Ver [Entrar con documento y contraseña](./acceso-con-contrasena.md#ver-mi-cuenta-desde-la-pagina-de-corte).
     - «Contactar soporte»: llama al teléfono configurado en el panel.
 
 Cómo hace el cliente cada cosa está en [Portal del cliente](./portal-del-cliente.md).

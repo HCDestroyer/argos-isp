@@ -70,6 +70,59 @@ Reglas:
   `pasarela.crear_cobro` siguen como `sistema` aun con la sesión porque A3 guarda `actor.id` en
   `registrado_por` / `creado_por` (`core.usuarios`); pasan a `cliente` cuando usen `usuarioDelActor`.
 
+### Acceso con documento y contraseña, y «Ver mi cuenta» en `/corte` (pedido del PM)
+
+El acceso por código sigue igual. Se suman dos entradas que abren la **misma** sesión (`core.portal_sesiones`,
+cookie `argos_portal`), con `origen` (`codigo` | `contrasena` | `corte`) y `debe_cambiar_contrasena`.
+
+| Endpoint | Acción / lectura | Qué hace |
+| --- | --- | --- |
+| `POST /api/v1/portal/entrar` (público, límite) | `actions/entrar_con_contrasena.ts` (`portal.entrar_con_contrasena`) | Documento + contraseña. 200 `PortalSesion` y cookie; 422 `credenciales_invalidas` (un solo texto); 429 `demasiados_intentos` |
+| `POST /api/v1/portal/corte/sesion` (público, límite) | `actions/abrir_sesion_corte.ts` (`portal.abrir_sesion_corte`) | «Ver mi cuenta»: sesión corta del cliente que `/corte` identificó, en el momento. 422 `no_identificado` |
+| `GET /api/v1/portal/sesion` | lectura | La sesión: `origen`, `debe_cambiar_contrasena`, `expira_en` (no da 403) |
+| `POST /api/v1/portal/contrasena` | `actions/cambiar_contrasena.ts` (`portal.cambiar_contrasena`) | Pide la actual; quita `debe_cambiar_contrasena` y cierra las demás sesiones del cliente |
+| `GET /api/v1/empresa/contrasena-portal` (`empresa.ver`) | `verContrasenaDefecto` | `PortalContrasenaDefecto`: `configurada`, `actualizada_en`, `version` de la empresa activa |
+| `PUT /api/v1/empresa/contrasena-portal` (`portal.configurar_contrasena_defecto`) | `actions/configurar_contrasena_defecto.ts` | La contraseña por defecto de la empresa activa; `version` 0 la crea, 409 si cambió |
+| `GET /api/v1/clientes/:id/contrasena-portal` (`clientes.ver`) | `verContrasenaPortalCliente` | `ClienteContrasenaPortal`: si tiene propia y si su empresa tiene por defecto |
+| `POST /api/v1/clientes/:id/restaurar-contrasena-portal` (`clientes.restaurar_contrasena_portal`) | `actions/restaurar_contrasena_portal.ts` | Borra la propia (vuelve a la por defecto) y cierra sus sesiones del portal |
+
+Reglas:
+
+- **Usuario = documento** (`core.clientes.nit_cui`): sin espacios ni guiones y en mayúsculas en los dos lados
+  (índice `clientes_documento_portal`). `CF` no es un documento.
+- **Contraseñas:** hash de Adonis (`hash.make`, scrypt). La propia en `core.portal_credenciales` (tabla aparte de
+  `core.clientes`: ninguna lectura del cliente la arrastra); la por defecto por empresa en
+  `core.portal_contrasenas_defecto`. En `audit.acciones` la entrada queda `***` (también el documento, que es
+  dato personal) y en `audit.cambios` los campos `portal_contrasena` / `portal_contrasena_defecto` siempre `***`.
+- **Cambio obligatorio.** Quien entra con la por defecto recibe `debe_cambiar_contrasena: true` y el resto de
+  rutas con sesión responde 403 `cambio_contrasena_requerido` (lo aplica `exigirSesionPortal`, no la
+  pantalla). Solo `GET /portal/sesion`, `POST /portal/contrasena`, `POST /portal/salir` y la marca
+  (`/portal/empresa?de=cliente`) la admiten. La nueva no puede ser la por defecto ni el documento.
+- **Documento repetido.** Con varios clientes con el mismo documento, la por defecto no entra (sería la misma
+  para todos y no dice quién es); entra quien tenga contraseña propia que coincida, si coincide uno solo. Esos
+  clientes ponen la suya entrando antes por código (usuario PPPoE) o con «Ver mi cuenta».
+- **Empresa del portal.** El portal de la instalación es uno para todas las empresas (el cliente no tiene
+  empresa; sus servicios sí). Sin `empresa_id`, el documento se busca en toda la instalación y la por defecto
+  vale la de cualquiera de las empresas de sus servicios sin retirar (o su principal). Con `empresa_id`
+  (`/entrar?empresa=<id>`, enlace del sitio de esa empresa) solo entran clientes con servicios en ella y con su
+  contraseña por defecto.
+- **Sin enumeración.** Documento inexistente, ambiguo, `CF`, sin contraseña configurada o contraseña errada dan
+  el mismo 422; si no hubo ninguna comparación se compara contra un hash señuelo (mismo tiempo).
+- **Límite** (`acceso/contrasenas.ts`, en Postgres para no depender de Redis): el intento se inserta antes de
+  verificar y fuera de la transacción. `PORTAL_CONTRASENA_FALLOS_DOCUMENTO` (5, desde el último acierto) por
+  HMAC del documento y `PORTAL_CONTRASENA_FALLOS_IP` (20) por IP o /64, en `PORTAL_CONTRASENA_VENTANA_S` (900).
+  Al pasarse, 429 sin verificar y sin decir cuál. El cambio de contraseña cuenta por `cliente:<id>`. Además
+  corre el límite general por IP de todas las rutas `/portal/*`.
+- **«Ver mi cuenta»** rehace la identificación de `/corte` en el momento: código de corte que resuelve ahora
+  (abierto o en la gracia) o IP de cliente que además esté en una sesión PPPoE **vigente** del servicio (una
+  asignación sin sesión no basta). Sesión `origen: corte`, con `servicio_id`, de `PORTAL_SESION_CORTE_MAX_S`
+  (900 s) como máximo. Actor `cliente`, canal `portal`; el código de corte queda `***`.
+- **Restaurar** es idempotente, cierra las sesiones abiertas y avisa con `defecto_configurada: false` si su
+  empresa no tiene contraseña por defecto (el cliente solo podría entrar con código).
+- **Eventos:** ninguno. Son credenciales de acceso, no hechos de negocio del catálogo; quedan en la auditoría.
+
+Pruebas: `tests/portal/acceso_contrasena.spec.ts`.
+
 ### PDF del aviso de cobro y plantillas de documentos (tarea 8)
 
 | Endpoint                                                      | Permiso                      | Qué hace                                                                                                                           |

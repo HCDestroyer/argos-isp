@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { z } from 'zod'
+import { z } from '~/lib/zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 
 /**
