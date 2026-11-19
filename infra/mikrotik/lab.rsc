@@ -657,6 +657,12 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
     # 3. Regla final: redirect a /corte (la URL pública o el destino del NAT) o deny.
     :local urlCorte $corteUrl
     :if ($urlCorte = "" && $portalV4 != "") do={ :set urlCorte ("http://" . $portalV4 . ":" . $portalCortePuerto . "/corte") }
+    # action-data de /ip proxy access va como host[:puerto]/ruta, sin esquema: RouterOS antepone
+    # "http://" (con la URL completa el redirect salia como http://https//host/corte). Se quita el
+    # prefijo http:// o https://; urlCorte queda intacta para lo demas.
+    :local urlCorteProxy $urlCorte
+    :if ([:pick $urlCorteProxy 0 8] = "https://") do={ :set urlCorteProxy [:pick $urlCorteProxy 8 [:len $urlCorteProxy]] }
+    :if ([:pick $urlCorteProxy 0 7] = "http://") do={ :set urlCorteProxy [:pick $urlCorteProxy 7 [:len $urlCorteProxy]] }
     # La de una corrida anterior se actualiza en su lugar (la limpieza no la borra); si hay repetidas,
     # queda una.
     :local finales [/ip proxy access find where comment=$reglaProxyFinal]
@@ -674,9 +680,9 @@ add chain=argos-activo action=return comment="argosisp: activo (Filter-Id neutro
         }
     } else={
         :if ([:typeof $finalProxy] = "nothing") do={
-            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorte comment="argosisp: corte proxy sin codigo"]
+            :set finalProxy [/ip proxy access add local-port=$proxyCortePuerto action=redirect action-data=$urlCorteProxy comment="argosisp: corte proxy sin codigo"]
         } else={
-            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorte disabled=no
+            /ip proxy access set $finalProxy local-port=$proxyCortePuerto action=redirect action-data=$urlCorteProxy disabled=no
         }
     }
     # Las del corte al inicio: las de servicio y luego la final, antes de la primera del operador.
