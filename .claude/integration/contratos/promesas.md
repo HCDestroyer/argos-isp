@@ -67,8 +67,8 @@ Misma forma que `resultado_evaluacion` más:
 - `reglas[]` con **todas** las reglas (no se detiene) y `aplica: false` en las que la configuración no exige (p. ej. `deuda_maxima` sin límite).
 - `resultado` y `regla`: exactamente lo que daría `POST /promesas` con los mismos datos.
 - `monto` y `facturas[]` (`FacturaCubierta`): el total vencido y las facturas que cubriría la promesa si se crea ahora.
-- `validaciones[]`: `{ campo, ok, regla, detalle }` con `vence_en` (`futuro`) y `servicio_id` (`promesa_abierta`). Desde el 29 oct ya no hay validaciones de `monto` (el enum conserva el valor por compatibilidad). Si alguna falla, `resultado_creacion = "error"` (crear respondería 422 o 409).
+- `validaciones[]`: `{ campo, ok, regla, detalle }` con `vence_en` (`futuro`) y `servicio_id` (`promesa_abierta`; con canal `portal`, también `suspension_manual`). Desde el 29 oct ya no hay validaciones de `monto` (el enum conserva el valor por compatibilidad). Si alguna falla, `resultado_creacion = "error"` (crear respondería 422 o 409).
 - `limites`: `habilitadas`, `permitido`, `requiere_aprobacion`, `plazo_max_dias`, `fecha_maxima` (último día en que puede vencer), `siguiente_facturacion`, `deuda_pendiente`, `deuda_vencida`, `deuda_maxima`, `abono_requerido`, `abono_pagado`, `max_por_periodo`, `en_periodo`, `monto_promesa` (total que cubriría) y `facturas` (las que cubriría).
-- `suspension_manual: true`: la promesa quedaría activa pero no reactivaría el servicio.
+- `suspension_manual: true`: con los canales del operador la promesa quedaría activa pero no reactivaría el servicio (solo `reactivar` quita la marca). Con canal `portal`, `POST /promesas` (y `POST /portal/promesas`) responde 422 `suspension_manual` sin guardar nada: el cliente nunca ve «aprobada» con el servicio cortado.
 
 No crea nada ni deja auditoría. Para el portal, `limitesPromesa(servicioId, canal)` de `#billing/simulador_promesas` devuelve solo `limites` (con `monto_promesa` y `facturas`).
