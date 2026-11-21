@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.2](https://github.com/HCDestroyer/argos-isp/compare/v1.22.1...v1.22.2) (2026-11-21)
+
+
+### Correcciones
+
+* **billing,portal:** el portal no aprueba una promesa sobre un servicio suspendido a mano ([#265](https://github.com/HCDestroyer/argos-isp/issues/265)) ([1330505](https://github.com/HCDestroyer/argos-isp/commit/1330505a713c0892461c2de2805ce0b5df505472))
+
 ## [1.22.1](https://github.com/HCDestroyer/argos-isp/compare/v1.22.0...v1.22.1) (2026-11-19)
 
 
