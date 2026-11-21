@@ -9,6 +9,7 @@
 export default defineAppConfig({
     ui: {
         colors: {
+            // Índigo de fábrica; el admin elige otro preset (`plugins/apariencia.ts`).
             primary: 'indigo',
             secondary: 'cyan',
             success: 'green',
@@ -29,7 +30,7 @@ export default defineAppConfig({
                     // indigo-400 bajaba de AA).
                     color: 'primary',
                     variant: 'solid',
-                    class: 'rounded-full shadow-[0_0_18px_var(--hf-glow-brand)] hover:bg-(--ui-color-primary-700) active:bg-(--ui-color-primary-700) dark:hover:bg-primary/90 dark:active:bg-primary/90',
+                    class: 'rounded-full shadow-[0_0_18px_var(--hf-glow-brand)] hover:bg-(--ax-primario-hover,var(--ui-color-primary-700)) active:bg-(--ax-primario-hover,var(--ui-color-primary-700)) dark:hover:bg-primary/90 dark:active:bg-primary/90',
                 },
                 {
                     // La acción secundaria junto a la primaria (Cancelar, Ver datos de depósito): la

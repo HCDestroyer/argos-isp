@@ -214,7 +214,7 @@ contra el servidor de producción (`node .output/server/index.mjs`), sumando cad
 | --- | --- | --- | --- | --- |
 | Antes (v1.19.0) | 36 | 1 231 KB | 360 KB | 310 KB |
 | v1.22.2 | 37 | 735 KB | 234 KB | 205 KB |
-| Rediseño índigo (sistema visual `--ax-*`) | 39 | 767 KB | 239 KB (+2,4 %) | 209 KB |
+| Rediseño índigo (sistema visual `--ax-*`, tema del admin, escritorio) | 39 | 770 KB | 240 KB (+2,7 %) | 210 KB |
 
 Qué se hizo:
 
@@ -347,8 +347,32 @@ comprobante» y vigila la reactivación como antes.
 ### Peso de `/corte`
 
 El sistema visual no agrega fuentes ni imágenes a `/corte` (pila de fuentes del sistema; Inter no se
-carga): 233,5 → 239,1 KB gzip (+2,4 %), por el CSS de los tokens y dos chunks chicos (pastilla de icono y
-tonos). Ver la tabla de «Peso de la página de corte».
+carga): 233,5 → 239,9 KB gzip (+2,7 %), por el CSS de los tokens, el tema del admin (solo variables
+CSS) y dos chunks chicos (pastilla de icono y tonos). Ver la tabla de «Peso de la página de corte».
+
+### Escritorio
+
+Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px: navegación superior (la barra
+inferior solo existe por debajo de 768 px), banner e indicadores arriba y rejillas por sección: inicio
+con servicios y accesos (2/3) y «Mis facturas» y «Mis pagos» al lado (1/3); «Pagar» con pagar y
+promesas a la izquierda, comprobantes y pagos a la derecha; «Facturas» con las notas de crédito al
+lado; «Cuenta» con los datos de contacto a un lado y avisos y sesión al otro; `/comprobante` con los
+pasos al lado del formulario. Las listas se acomodan al ancho de su columna (consulta de contenedor):
+tabla en una columna ancha, filas compactas en una angosta. Ningún texto dice para qué pantalla está
+pensado el portal. Pruebas: `tests/e2e/desborde.spec.ts` (390, 1280 y 1440 px).
+
+### Tema del admin (apariencia)
+
+`plugins/apariencia.ts` lee `GET /api/v1/apariencia/publica` (A6) en el servidor, con tope de 1,5 s, y
+aplica el preset (`indigo` de fábrica, `azul`, `violeta`, `esmeralda`, `naranja`, `rosa`, `pizarra`)
+cambiando la paleta primaria de Nuxt UI y las variables `--ax-primario-claro|hover|oscuro` en `<html>`
+(con `data-tema`). Todos los colores de marca (`--ax-*`, degradados, logo) salen de esas variables: en
+`/corte` no se agrega ningún archivo. Esmeralda y naranja usan el tono 700 en claro (AA con texto
+blanco); con hex de la API, esos. El eslogan y el fondo del panel del login (`/entrar`) salen de ahí si
+existen (el fondo solo del mismo origen, por la CSP); el logo sigue siendo el de Empresas.
+`modo_predeterminado` se aplica solo si el visitante no eligió claro u oscuro. Si la API falla: índigo.
+Fixtures: `?tema=<preset>` en la URL. Pruebas: `tests/nuxt/apariencia.test.ts`,
+`tests/servidor/portal.test.ts` («apariencia del admin») y axe con esmeralda y naranja.
 
 ## Inicio del cliente (dashboard móvil) y PWA
 

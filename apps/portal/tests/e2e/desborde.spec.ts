@@ -121,3 +121,51 @@ for (const tema of ['light', 'dark'] as const) {
         })
     })
 }
+
+/**
+ * Escritorio (1280 y 1440 px): la navegación de escritorio a la vista, sin la barra inferior; el
+ * contenido en rejilla (lo último a la derecha de los servicios), dentro de 1200 px y sin scroll
+ * horizontal. Igual en «Pagar», «Facturas», «Cuenta» y en la página del comprobante.
+ */
+for (const ancho of [1280, 1440]) {
+    test.describe(`escritorio ${ancho} px`, () => {
+        test.use({ viewport: { width: ancho, height: 900 } })
+
+        test('navegación de escritorio, sin barra inferior y en rejilla', async ({ page }, info) => {
+            test.skip(info.project.name !== 'escritorio', 'Solo en el proyecto de escritorio')
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await entrar(page)
+
+            await expect(page.getByTestId('navegacion-superior')).toBeVisible()
+            await expect(page.getByTestId('navegacion-inferior')).toBeHidden()
+
+            // Lo último va al lado de los servicios, no debajo.
+            const servicios = (await page.locator('[data-testid^="grupo-"]').first().boundingBox())!
+            const recientes = (await page.getByTestId('recientes').boundingBox())!
+            expect(recientes.x).toBeGreaterThan(servicios.x + servicios.width - 1)
+            expect(Math.abs(recientes.y - servicios.y)).toBeLessThan(40)
+
+            // Ancho cómodo: hasta 1200 px, centrado, sin scroll horizontal.
+            const banner = (await page.getByTestId('resumen-cuenta').boundingBox())!
+            expect(banner.width).toBeLessThanOrEqual(1200)
+            expect(banner.width).toBeGreaterThan(900)
+            const sobra = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(sobra).toBeLessThanOrEqual(0)
+
+            for (const [seccion, testid] of [['nav-pagar', 'seccion-pagar'], ['nav-facturas', 'seccion-facturas'], ['nav-cuenta', 'seccion-cuenta']] as const) {
+                await page.getByTestId('navegacion-superior').getByTestId(seccion).click()
+                await page.getByTestId(testid).waitFor()
+                await expect(page.getByTestId('navegacion-inferior')).toBeHidden()
+                const columnas = await page.getByTestId(testid).evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length)
+                expect(columnas, `${testid} en rejilla`).toBeGreaterThan(1)
+            }
+
+            await page.getByTestId('navegacion-superior').getByTestId('nav-pagar').click()
+            await page.getByTestId('cuenta-subir-comprobante').click()
+            await page.getByTestId('comprobante-formulario').waitFor()
+            const formulario = (await page.getByTestId('comprobante-formulario').boundingBox())!
+            const pasos = (await page.getByLabel('Cómo funciona').boundingBox())!
+            expect(pasos.x).toBeGreaterThan(formulario.x + formulario.width - 1)
+        })
+    })
+}

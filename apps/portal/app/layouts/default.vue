@@ -15,11 +15,11 @@ const anio = new Date().getFullYear()
 
 const auraLiviana = computed(() => route.path === '/corte')
 /**
- * Ancho del contenido: `/cuenta` (tablero con indicadores y listas que en escritorio son tablas) y
- * el login dividido (`/entrar`, `/cambiar-contrasena`) usan el ancho de escritorio; el resto, una
- * columna cómoda de leer en el teléfono y en la computadora.
+ * Ancho del contenido: `/cuenta` (tablero en rejilla con indicadores, listas que son tablas y una
+ * columna lateral), `/comprobante` y el login dividido (`/entrar`, `/cambiar-contrasena`) usan el
+ * ancho de escritorio (hasta 1200 px); el resto, una columna de lectura.
  */
-const anchoAmplio = computed(() => ['/cuenta', '/entrar', '/cambiar-contrasena'].includes(route.path))
+const anchoAmplio = computed(() => ['/cuenta', '/entrar', '/cambiar-contrasena', '/comprobante'].includes(route.path))
 /**
  * Navegación del cliente: con sesión confirmada (`useSesionPortal`), en `/cuenta` y en `/corte`.
  * Abajo en el teléfono, arriba del contenido en escritorio.
@@ -67,7 +67,7 @@ const mostrarProducto = computed(() => nombre.value !== 'ArgosIsp')
         <main class="relative flex-1 py-6 sm:py-10">
             <UContainer
                 class="entrada-pagina flex flex-col gap-4"
-                :class="anchoAmplio ? 'max-w-5xl' : 'max-w-xl'"
+                :class="anchoAmplio ? 'max-w-[75rem]' : 'max-w-xl'"
             >
                 <PortalNavegacion
                     v-if="conNavegacion"

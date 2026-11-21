@@ -264,3 +264,75 @@ for (const tema of ['light', 'dark'] as const) {
         })
     })
 }
+
+/** Entra con el código de los fixtures; `extra` se suma a la URL (p. ej. `&tema=esmeralda`). */
+async function entrarConCodigo(page: Page, extra = ''): Promise<void> {
+    await page.goto(`/entrar?con=codigo${extra}`)
+    await expect(async () => {
+        await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+        await page.getByRole('button', { name: 'Enviarme un código' }).click()
+        await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+    }).toPass({ timeout: 90_000 })
+    await page.locator('input').first().click()
+    await page.keyboard.type('123456')
+    await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
+}
+
+async function prepararTema(page: Page, tema: 'light' | 'dark') {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.addInitScript((t) => {
+        try {
+            localStorage.setItem('nuxt-color-mode', t)
+        }
+        catch {
+            // sin almacenamiento: el tema sale de prefers-color-scheme
+        }
+    }, tema)
+}
+
+/** `/cuenta` en escritorio (1280 y 1440 px): inicio, pagar, facturas y cuenta, claro y oscuro. */
+for (const ancho of [1280, 1440]) {
+    for (const tema of ['light', 'dark'] as const) {
+        test.describe(`capturas escritorio ${ancho} ${tema}`, () => {
+            test.skip(!DESTINO || !DESPUES, 'Solo con PW_CAPTURAS y PW_CAPTURAS_DESPUES')
+            test.use({ colorScheme: tema, deviceScaleFactor: 2, viewport: { width: ancho, height: 900 } })
+
+            test('cuenta en escritorio', async ({ page }, info) => {
+                test.skip(info.project.name !== 'escritorio', 'Solo en el proyecto de escritorio')
+                mkdirSync(DESTINO!, { recursive: true })
+                await prepararTema(page, tema)
+                const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+                await entrarConCodigo(page)
+                await page.getByTestId('recientes').waitFor()
+                await capturar(page, `rediseno-escritorio-inicio-${ancho}`, 'escritorio', nombreTema)
+                for (const [nav, seccion, nombre] of [['nav-pagar', 'seccion-pagar', 'pagar'], ['nav-facturas', 'seccion-facturas', 'facturas'], ['nav-cuenta', 'seccion-cuenta', 'cuenta']] as const) {
+                    await page.getByTestId('navegacion-superior').getByTestId(nav).click()
+                    await page.getByTestId(seccion).waitFor()
+                    await capturar(page, `rediseno-escritorio-${nombre}-${ancho}`, 'escritorio', nombreTema)
+                }
+            })
+        })
+    }
+}
+
+/** Otro preset del admin (esmeralda): `/corte`, `/entrar` y el inicio de `/cuenta`. */
+for (const tema of ['light', 'dark'] as const) {
+    test.describe(`capturas preset esmeralda ${tema}`, () => {
+        test.skip(!DESTINO || !DESPUES, 'Solo con PW_CAPTURAS y PW_CAPTURAS_DESPUES')
+        test.use({ colorScheme: tema, deviceScaleFactor: 2 })
+
+        test('portal en esmeralda', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await prepararTema(page, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/corte?tema=esmeralda')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await capturar(page, 'rediseno-esmeralda-corte', info.project.name, nombreTema)
+            await page.goto('/entrar?tema=esmeralda')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-esmeralda-entrar', info.project.name, nombreTema)
+            await entrarConCodigo(page, '&tema=esmeralda')
+            await capturar(page, 'rediseno-esmeralda-cuenta', info.project.name, nombreTema)
+        })
+    })
+}

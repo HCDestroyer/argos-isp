@@ -71,6 +71,19 @@ for (const tema of ['light', 'dark'] as const) {
             await revisar(page, 'contacto')
         })
 
+        test('otros presets del admin (esmeralda, naranja) sin violaciones de axe', async ({ page }) => {
+            // `?tema=` en fixtures: la apariencia pública con ese preset (los que usan el tono 700).
+            for (const preset of ['esmeralda', 'naranja'] as const) {
+                await page.goto(`/corte?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+                await expect(page.locator('html')).toHaveAttribute('data-tema', preset)
+                await revisar(page, `corte (${preset})`)
+                await page.goto(`/entrar?tema=${preset}`)
+                await page.getByRole('heading', { level: 1 }).first().waitFor()
+                await revisar(page, `entrar (${preset})`)
+            }
+        })
+
         test('políticas públicas (privacidad, términos, eliminar datos) sin violaciones de axe ni desborde', async ({ page }) => {
             for (const [ruta, titulo] of [
                 ['/privacidad', 'Política de privacidad'],

@@ -27,6 +27,14 @@ function enviado(comprobante: ComprobantePortal) {
 }
 
 useHead({ title: computed(() => `Subir comprobante · ${nombreEmpresa.value}`) })
+
+/** Los pasos, al lado del formulario en escritorio y debajo en pantallas angostas. */
+const PASOS = [
+    { icono: 'i-lucide-landmark', titulo: 'Paga en el banco', texto: 'Depósito, transferencia o ACH a una de nuestras cuentas.' },
+    { icono: 'i-lucide-camera', titulo: 'Toma la foto', texto: 'Que se lean el monto, la fecha y la referencia.' },
+    { icono: 'i-lucide-upload', titulo: 'Súbela aquí', texto: 'La revisamos con el estado de cuenta del banco.' },
+    { icono: 'i-lucide-wifi', titulo: 'Listo', texto: 'Al aprobarla se abona a tus facturas y, si estabas suspendido, vuelve tu servicio.' },
+] as const
 </script>
 
 <template>
@@ -54,13 +62,43 @@ useHead({ title: computed(() => `Subir comprobante · ${nombreEmpresa.value}`) }
                 </p>
             </div>
         </div>
-        <UCard>
-            <ComprobanteFormulario
-                :servicio-id="servicioId"
-                :empresa-id="empresaId"
-                @enviado="enviado"
-                @listo="navigateTo(volver)"
-            />
-        </UCard>
+        <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+            <UCard class="min-w-0 lg:col-span-2">
+                <ComprobanteFormulario
+                    :servicio-id="servicioId"
+                    :empresa-id="empresaId"
+                    @enviado="enviado"
+                    @listo="navigateTo(volver)"
+                />
+            </UCard>
+            <aside
+                class="ax-tarjeta flex flex-col gap-4 p-5"
+                aria-labelledby="comprobante-pasos"
+            >
+                <h2
+                    id="comprobante-pasos"
+                    class="flex items-center gap-1 font-semibold text-highlighted"
+                >
+                    Cómo funciona
+                    <PortalAyuda clave="comprobante" />
+                </h2>
+                <ol class="flex flex-col gap-4">
+                    <li
+                        v-for="(paso, indice) in PASOS"
+                        :key="paso.titulo"
+                        class="flex items-start gap-3"
+                    >
+                        <PortalPastilla
+                            :icono="paso.icono"
+                            tamano="sm"
+                        />
+                        <span class="min-w-0">
+                            <span class="block text-sm font-medium text-highlighted">{{ indice + 1 }}. {{ paso.titulo }}</span>
+                            <span class="block text-xs text-muted">{{ paso.texto }}</span>
+                        </span>
+                    </li>
+                </ol>
+            </aside>
+        </div>
     </div>
 </template>

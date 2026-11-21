@@ -4,7 +4,8 @@
  * de presentación). SVG en línea: sin petición extra en `/corte`.
  *
  * - `marca`: trazo blanco sobre el cuadro con el degradado de marca índigo-600 → cyan-700 con radio
- *   7/32 (igual en claro y oscuro; el trazo blanco pasa 3:1 en todo el recorrido).
+ *   7/32 (igual en claro y oscuro; el trazo blanco pasa 3:1 en todo el recorrido). Sigue el tema que
+ *   eligió el admin (variables CSS); el favicon y los íconos PWA son archivos y quedan en índigo.
  *   Tamaño mínimo 16 px. Es la misma figura que `public/favicon.svg`: si cambia una, cambia la otra.
  * - `linea`: solo trazos en `currentColor`, para tamaños grandes (p. ej. `text-primary`).
  *
@@ -40,10 +41,12 @@ const idDegradado = `argos-marca-${useId()}`
                     <stop
                         offset="0"
                         stop-color="#4f46e5"
+                        style="stop-color: var(--ax-primario-claro, var(--ui-color-primary-600, #4f46e5))"
                     />
                     <stop
                         offset="1"
                         stop-color="#0e7490"
+                        style="stop-color: var(--ui-color-secondary-700, #0e7490)"
                     />
                 </linearGradient>
             </defs>
