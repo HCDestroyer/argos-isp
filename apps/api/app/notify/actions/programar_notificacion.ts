@@ -17,7 +17,20 @@ import {
     pagoCubiertoPorComprobante,
     tercerosDelPago,
 } from '#notify/avisos_pago'
-import { cargarDestinatario, construirVariables, resolverCliente, type Variables } from '#notify/variables'
+import {
+    cargarDestinatario,
+    construirVariables,
+    resolverCliente,
+    type Destinatario,
+    type Variables,
+} from '#notify/variables'
+import {
+    EVENTOS_AVISO_TITULAR,
+    avisoAlTitular,
+    contactosConAvisos,
+    esAvisoDeCobro,
+    type ContactoAviso,
+} from '#notify/contactos'
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
@@ -103,7 +116,15 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
 
     protected async handle(input: EntradaProgramar, t: Transaccion): Promise<ResultadoProgramar> {
         // `lealtad.referido_calificado` va al referidor, no al referido (`lealtad.ts`)
-        const payload = payloadDelAviso(input.evento, input.payload)
+        let payload = payloadDelAviso(input.evento, input.payload)
+        let eventoAviso = input.evento
+        // Avisos al titular (`contactos.ts`): contacto agregado, servicio a su nombre, intento de recuperación
+        if ((EVENTOS_AVISO_TITULAR as readonly string[]).includes(input.evento)) {
+            const titular = await avisoAlTitular(t.trx, input.evento, payload)
+            if (!titular) return { clienteId: null, envios: [], encolar: [] }
+            eventoAviso = titular.evento
+            payload = titular.payload
+        }
         // Servicio eliminado (`contratos/eliminar.md`): nada que avisar sobre él
         if (await servicioEliminado(t.trx, input.evento, payload)) {
             return { clienteId: null, envios: [], encolar: [] }
@@ -123,7 +144,7 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
         // La activación de la instalación se avisa con la bienvenida (`instalacion.ts`)
-        const avisos: Aviso[] = [{ clienteId, evento: eventoDelAviso(input.evento, payload), payload }]
+        const avisos: Aviso[] = [{ clienteId, evento: eventoDelAviso(eventoAviso, payload), payload }]
         if (input.evento === 'pago.registrado') {
             for (const tercero of tercerosDelPago(input.payload, clienteId)) {
                 avisos.push({
@@ -147,6 +168,16 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                 t.fijarEntidad('cliente', clienteId)
             }
             envios.push(...programados)
+        }
+        // Avisos de cobro también a los contactos con `avisos` (contrato Iris 0.10.0 §3.5, A42)
+        const principalAviso = avisos[0]!
+        if (principal !== null && esAvisoDeCobro(principalAviso.evento, payload)) {
+            const servicioId = await this.servicioDelAviso(t, payload)
+            for (const contacto of await contactosConAvisos(t.trx, clienteId, servicioId)) {
+                envios.push(
+                    ...(await this.programarContacto(t, input.origen, principalAviso, contacto, ahora)),
+                )
+            }
         }
         return {
             clienteId: principal,
@@ -250,6 +281,81 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
                     canal: eleccion.canal,
                     destino: eleccion.destino,
                     variables: eleccion.variables,
+                    plantilla: eleccion.plantilla,
+                    requestId: t.ctx.requestId,
+                    omitido: eleccion.omitido,
+                    empresaId,
+                }),
+            )
+        }
+        return envios
+    }
+
+    private async servicioDelAviso(t: Transaccion, payload: Record<string, unknown>): Promise<number | null> {
+        const directo = Number(payload.servicio_id)
+        if (Number.isSafeInteger(directo) && directo > 0) return directo
+        const facturaId = Number(payload.factura_id)
+        if (!Number.isSafeInteger(facturaId) || facturaId <= 0) return null
+        const fila = (await t.trx
+            .from('billing.facturas')
+            .where('id', facturaId)
+            .select('servicio_id')
+            .first()) as {
+            servicio_id: number | null
+        } | null
+        return fila?.servicio_id ? Number(fila.servicio_id) : null
+    }
+
+    /**
+     * El aviso de cobro a un contacto del titular: por correo o Telegram, si el contacto tiene ese
+     * destino (WhatsApp no: lo reparte Iris con el permiso de cada número). Origen propio
+     * (`<origen>:contacto:<id>`, idempotente igual que el del titular), `cliente_id` del titular y
+     * `{{cliente.nombre}}` = el nombre del contacto; `{{titular.nombre}}` el del titular. Sin
+     * respaldo por correo hacia el titular (`EnviarNotificacion`).
+     */
+    private async programarContacto(
+        t: Transaccion,
+        origen: string,
+        aviso: Aviso,
+        contacto: ContactoAviso,
+        ahora: DateTime,
+    ): Promise<EnvioCreado[]> {
+        if (!contacto.email && !contacto.telegram_chat_id) return []
+        const plantillas = await plantillasActivas(t.trx, aviso.evento)
+        plantillas.delete('whatsapp')
+        if (plantillas.size === 0) return []
+        const origenContacto = `${origen}:contacto:${contacto.contacto_id}`
+        const existentes = await enviosExistentes(t.trx, origenContacto, aviso.clienteId)
+        if (existentes.length > 0) return existentes
+        const titular = await cargarDestinatario(t.trx, aviso.clienteId)
+        if (!titular) return []
+        const empresaId = await empresaDelEvento(t.trx, aviso.payload)
+        const config = await configPara(empresaId)
+        const destinatario: Destinatario = {
+            ...titular,
+            nombre: contacto.nombre,
+            email: contacto.email ?? null,
+            telegramChatId: contacto.telegram_chat_id ?? null,
+            canalPreferido: 'correo',
+            whatsapp: null,
+        }
+        const variables = await construirVariables(t.trx, aviso.evento, aviso.payload, destinatario, ahora)
+        variables.titular = { id: titular.clienteId, nombre: titular.nombre }
+        variables.contacto = {
+            id: contacto.contacto_id,
+            nombre: contacto.nombre,
+            relacion: contacto.relacion,
+        }
+        const envios: EnvioCreado[] = []
+        for (const eleccion of elegirCanales(destinatario, plantillas, config, aviso.evento)) {
+            envios.push(
+                await crearEnvio(t.trx, {
+                    origen: origenContacto,
+                    evento: aviso.evento,
+                    clienteId: aviso.clienteId,
+                    canal: eleccion.canal,
+                    destino: eleccion.destino,
+                    variables,
                     plantilla: eleccion.plantilla,
                     requestId: t.ctx.requestId,
                     omitido: eleccion.omitido,

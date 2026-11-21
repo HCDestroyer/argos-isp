@@ -4121,6 +4121,313 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bancos/cuentas-bancarias/{id}/mapeo-extracto": {
+      "get": {
+        "operationId": "bancosVerMapeoExtracto",
+        "summary": "Mapeo de columnas guardado para los estados de cuenta de una cuenta bancaria",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mapeo guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapeoExtractoGuardado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "bancosGuardarMapeoExtracto",
+        "summary": "Guardar el mapeo de columnas de los estados de cuenta de una cuenta bancaria",
+        "description": "Uno por cuenta bancaria; con version distinta a la guardada, 409 conflicto_version.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "formato": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[a-z0-9_]{1,40}$"
+                  },
+                  "mapeo": {
+                    "type": "object",
+                    "properties": {
+                      "hoja": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100
+                      },
+                      "fila_encabezado": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1
+                      },
+                      "fila_datos": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "columnas": {
+                        "type": "object",
+                        "properties": {
+                          "fecha": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "descripcion": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "referencia": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "debito": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "credito": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "monto": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 200
+                          },
+                          "saldo": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0,
+                            "maximum": 200
+                          }
+                        },
+                        "required": [
+                          "fecha",
+                          "descripcion"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "formato_fecha": {
+                        "type": "string",
+                        "enum": [
+                          "dmy",
+                          "mdy",
+                          "ymd"
+                        ]
+                      },
+                      "decimal": {
+                        "type": "string",
+                        "enum": [
+                          "punto",
+                          "coma"
+                        ]
+                      },
+                      "encabezados": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "maxItems": 200
+                      }
+                    },
+                    "required": [
+                      "fila_datos",
+                      "columnas",
+                      "formato_fecha",
+                      "decimal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "version": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "mapeo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mapeo guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapeoExtractoGuardado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.guardar_mapeo_extracto; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.guardar_mapeo_extracto",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bancos/depositos": {
       "get": {
         "operationId": "bancosDepositos",
@@ -4866,6 +5173,184 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bancos/extractos/archivo": {
+      "post": {
+        "operationId": "bancosImportarExtractoArchivo",
+        "summary": "Importar el estado de cuenta tal como lo descarga el banco",
+        "description": "Convierte el archivo con el adaptador del banco (o el mapeo confirmado) y llama a bancos.importar_extracto en la misma transacción (422 extracto_descuadrado, 422 extracto_no_encadena, 409 extracto_duplicado). Guarda el archivo original con su sha256 y, salvo guardar_mapeo=false, el mapeo para la cuenta. 422 formato_no_reconocido (confirmar con la vista previa), 422 extracto_con_errores (filas ilegibles), 422 saldos_requeridos. Emite banco.extracto_importado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cuenta_bancaria_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Cuenta bancaria propia del estado de cuenta"
+                  },
+                  "hoja": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "mapeo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "description": "MapeoExtracto en JSON (el confirmado en la vista previa)"
+                  },
+                  "saldo_inicial": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales"
+                  },
+                  "saldo_final": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales"
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "guardar_mapeo": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Guardar el mapeo para la cuenta (por defecto sí)"
+                  },
+                  "motivo_no_encadena": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Estado de cuenta del banco: .xlsx, .xls o .csv, hasta 10 MB"
+                  }
+                },
+                "required": [
+                  "cuenta_bancaria_id",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Extracto importado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractoDesdeArchivo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.importar_extracto_archivo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.importar_extracto_archivo",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bancos/extractos/lineas/{id}/registrar": {
       "post": {
         "operationId": "bancosRegistrarDesdeExtracto",
@@ -4996,6 +5481,142 @@
           }
         },
         "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos/vista-previa": {
+      "post": {
+        "operationId": "bancosVistaPreviaExtracto",
+        "summary": "Vista previa de un estado de cuenta del banco (no importa nada)",
+        "description": "Lee el archivo y detecta el banco (Banrural, Industrial, BAC, G&T, Promerica) y su fila de títulos. Usa, en orden: el mapeo enviado (confirmado en el panel), el guardado para la cuenta bancaria, el del banco reconocido o una sugerencia (requiere_confirmacion). Devuelve columnas con 3 filas de muestra, periodo, saldos, entradas, salidas, revisiones (cuadra, encadena, repetidos) y las primeras filas interpretadas. 422 archivo_no_legible, 422 mapeo_invalido.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cuenta_bancaria_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Cuenta bancaria propia del estado de cuenta"
+                  },
+                  "hoja": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "mapeo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "description": "MapeoExtracto en JSON (el confirmado en la vista previa)"
+                  },
+                  "saldo_inicial": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales"
+                  },
+                  "saldo_final": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales"
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Estado de cuenta del banco: .xlsx, .xls o .csv, hasta 10 MB"
+                  }
+                },
+                "required": [
+                  "cuenta_bancaria_id",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaExtracto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.importar_extracto_archivo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.importar_extracto_archivo",
         "x-implementado": true
       }
     },
@@ -31176,6 +31797,480 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/iris/prospectos": {
+      "get": {
+        "operationId": "irisProspectos",
+        "summary": "Prospectos registrados en Iris desde Argos (solo el vínculo)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "entrega",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "duplicado",
+                "rechazado",
+                "fallido"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de prospectos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProspectoIris"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "irisRegistrarProspecto",
+        "summary": "Registrar en Iris a alguien interesado en un servicio",
+        "description": "Contrato Iris 0.10.0 §3.6 (A44). Deja el pedido en la cola hacia Iris (Idempotency-Key argos:prospecto:<uuid>) y lo entrega al momento: entrega `enviado` con prospecto_id, numero y url_iris; `duplicado` (409 prospecto_duplicado de Iris, con url_iris); `rechazado` (422 de Iris: plan_no_permitido, telefonos_invalidos, cliente_no_valido); `pendiente` si Iris no respondió (iris:worker reintenta con la misma clave). 409 iris_no_disponible con el conector apagado o un Iris < 0.10.0. 422 telefonos_invalidos (sin repetir el número). Argos guarda solo el vínculo.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "origen": {
+                    "type": "string",
+                    "enum": [
+                      "oficina",
+                      "llamada",
+                      "whatsapp",
+                      "referido",
+                      "otro"
+                    ]
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "maxLength": 20,
+                          "description": "E.164: +50255123344"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "type": "boolean"
+                        },
+                        "nombre": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "relacion": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "titular",
+                                "familiar",
+                                "otro"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "numero",
+                        "whatsapp",
+                        "principal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  },
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial"
+                    ]
+                  },
+                  "direccion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "zona_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "coordenadas": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d+(\\.\\d+)?, ?-?\\d+(\\.\\d+)?$",
+                    "description": "Latitud y longitud: \"14.6349,-90.5069\""
+                  },
+                  "plan_interes_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "comentario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "cliente_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo si se eligió un cliente existente de la empresa"
+                  }
+                },
+                "required": [
+                  "origen",
+                  "nombre",
+                  "telefonos",
+                  "modo",
+                  "direccion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Prospecto registrado (o en cola)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectoIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/prospectos/{id}": {
+      "get": {
+        "operationId": "irisVerProspecto",
+        "summary": "Vínculo de un prospecto registrado en Iris",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prospecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectoIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/prospectos/disponible": {
+      "get": {
+        "operationId": "irisProspectosDisponible",
+        "summary": "¿Se puede registrar prospectos en Iris? (conector activo y contrato ≥ 0.10.0)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disponibilidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisponibilidadProspectosIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/iris/resolver": {
       "post": {
         "operationId": "irisResolver",
@@ -51751,6 +52846,14 @@
                     "type": "integer",
                     "minimum": 0,
                     "description": "Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`"
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\+[1-9]\\d{7,14}$",
+                    "description": "Número de un contacto del cliente (E.164; contrato Iris 0.10.0 §6.4): el permiso es de ese número. Sale solo a un Iris ≥ 0.10.0"
                   }
                 },
                 "required": [
@@ -69995,7 +71098,9 @@
                         "apariencia.subir_logo_login",
                         "apariencia.ver",
                         "bancos.conciliar",
+                        "bancos.guardar_mapeo_extracto",
                         "bancos.importar_extracto",
+                        "bancos.importar_extracto_archivo",
                         "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
@@ -70186,6 +71291,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
                         "qos.gestionar",
@@ -70404,7 +71510,9 @@
                         "apariencia.subir_logo_login",
                         "apariencia.ver",
                         "bancos.conciliar",
+                        "bancos.guardar_mapeo_extracto",
                         "bancos.importar_extracto",
+                        "bancos.importar_extracto_archivo",
                         "bancos.reatribuir_llegada",
                         "bancos.trasladar",
                         "bancos.ver",
@@ -70595,6 +71703,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
                         "qos.gestionar",
@@ -83789,7 +84898,9 @@
                             "apariencia.subir_logo_login",
                             "apariencia.ver",
                             "bancos.conciliar",
+                            "bancos.guardar_mapeo_extracto",
                             "bancos.importar_extracto",
+                            "bancos.importar_extracto_archivo",
                             "bancos.reatribuir_llegada",
                             "bancos.trasladar",
                             "bancos.ver",
@@ -83980,6 +85091,7 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "prospectos.registrar",
                             "proveedores.editar",
                             "proveedores.ver",
                             "qos.gestionar",
@@ -95976,9 +97088,16 @@
             "type": "string",
             "format": "date-time"
           },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de un contacto (E.164) o null = el permiso del cliente (contrato Iris 0.10.0 §6.4)"
+          },
           "idempotency_key": {
             "type": "string",
-            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)"
+            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<h>:<ocurrido_en>` (`<h>`: primeros 16 hex del sha256 del número E.164; el número solo va en el cuerpo)"
           },
           "entrega": {
             "type": "string",
@@ -99975,6 +101094,24 @@
           }
         }
       },
+      "DisponibilidadProspectosIris": {
+        "type": "object",
+        "required": [
+          "disponible",
+          "motivo"
+        ],
+        "properties": {
+          "disponible": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Dte": {
         "type": "object",
         "required": [
@@ -103622,6 +104759,74 @@
           }
         }
       },
+      "ExtractoDesdeArchivo": {
+        "type": "object",
+        "required": [
+          "extracto",
+          "archivo_id",
+          "sha256",
+          "formato",
+          "mapeo_guardado"
+        ],
+        "properties": {
+          "extracto": {
+            "$ref": "#/components/schemas/Extracto"
+          },
+          "archivo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "formato": {
+            "type": "object",
+            "required": [
+              "codigo",
+              "banco",
+              "reconocido",
+              "origen"
+            ],
+            "properties": {
+              "codigo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "banrural",
+                  "industrial",
+                  "bac",
+                  "gyt",
+                  "promerica"
+                ],
+                "description": "Banco reconocido"
+              },
+              "banco": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconocido": {
+                "type": "boolean"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "mapeo_guardado",
+                  "banco",
+                  "sugerencia"
+                ]
+              }
+            }
+          },
+          "mapeo_guardado": {
+            "type": "boolean"
+          }
+        }
+      },
       "Factura": {
         "type": "object",
         "required": [
@@ -106374,6 +107579,49 @@
           }
         }
       },
+      "LineaExtractoInterpretada": {
+        "type": "object",
+        "required": [
+          "fila",
+          "fecha",
+          "descripcion",
+          "referencia",
+          "monto",
+          "saldo"
+        ],
+        "properties": {
+          "fila": {
+            "type": "integer"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "+ entra, − sale"
+          },
+          "saldo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "LineaMayor": {
         "type": "object",
         "required": [
@@ -106832,6 +108080,167 @@
             "format": "date"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MapeoExtracto": {
+        "type": "object",
+        "required": [
+          "hoja",
+          "fila_encabezado",
+          "fila_datos",
+          "columnas",
+          "formato_fecha",
+          "decimal",
+          "encabezados"
+        ],
+        "properties": {
+          "hoja": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fila_encabezado": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Fila (desde 1) de los títulos; null sin títulos"
+          },
+          "fila_datos": {
+            "type": "integer",
+            "description": "Fila (desde 1) del primer movimiento"
+          },
+          "columnas": {
+            "type": "object",
+            "required": [
+              "fecha",
+              "descripcion",
+              "referencia",
+              "debito",
+              "credito",
+              "monto",
+              "saldo"
+            ],
+            "properties": {
+              "fecha": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "descripcion": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "referencia": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "debito": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "credito": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "monto": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "Monto con signo (+ entra, − sale) en vez de débito y crédito"
+              },
+              "saldo": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          },
+          "formato_fecha": {
+            "type": "string",
+            "enum": [
+              "dmy",
+              "mdy",
+              "ymd"
+            ]
+          },
+          "decimal": {
+            "type": "string",
+            "enum": [
+              "punto",
+              "coma"
+            ]
+          },
+          "encabezados": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Títulos normalizados: firma para reconocer el archivo"
+          }
+        }
+      },
+      "MapeoExtractoGuardado": {
+        "type": "object",
+        "required": [
+          "id",
+          "cuenta_bancaria_id",
+          "empresa_id",
+          "formato",
+          "mapeo",
+          "version",
+          "actualizado_por",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_bancaria_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "formato": {
+            "type": "string"
+          },
+          "mapeo": {
+            "$ref": "#/components/schemas/MapeoExtracto"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "actualizado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "updated_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -108420,7 +109829,9 @@
           "apariencia.subir_logo_login",
           "apariencia.ver",
           "bancos.conciliar",
+          "bancos.guardar_mapeo_extracto",
           "bancos.importar_extracto",
+          "bancos.importar_extracto_archivo",
           "bancos.reatribuir_llegada",
           "bancos.trasladar",
           "bancos.ver",
@@ -108611,6 +110022,7 @@
           "promesas.crear",
           "promesas.rechazar",
           "promesas.ver",
+          "prospectos.registrar",
           "proveedores.editar",
           "proveedores.ver",
           "qos.gestionar",
@@ -108721,7 +110133,9 @@
           "Subir el logo del inicio de sesión del panel y del portal",
           "Ver la apariencia de la instalación (tema, marca y archivos del inicio de sesión)",
           "Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas",
+          "Guardar el mapeo de columnas del estado de cuenta de una cuenta bancaria",
           "Importar extractos bancarios (solo inserción, con detección de duplicados)",
+          "Importar el estado de cuenta tal como lo descarga el banco (.xlsx, .xls o .csv) y ver su vista previa",
           "Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)",
           "Trasladar fondos entre cuentas bancarias propias de la empresa",
           "Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones",
@@ -108912,6 +110326,7 @@
           "Crear promesas de pago",
           "Rechazar promesas pendientes de aprobación",
           "Ver promesas de pago",
+          "Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)",
           "Crear y editar proveedores",
           "Ver proveedores",
           "Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router",
@@ -115948,6 +117363,152 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProspectoIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "registrado_por",
+          "origen",
+          "telefonos",
+          "entrega",
+          "intentos",
+          "ultimo_error",
+          "codigo_error",
+          "prospecto_id",
+          "numero",
+          "estado_iris",
+          "motivo_iris",
+          "asignado",
+          "url_iris",
+          "enviado_en",
+          "estado_cambiado_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "oficina",
+              "llamada",
+              "whatsapp",
+              "referido",
+              "otro"
+            ]
+          },
+          "telefonos": {
+            "type": "integer",
+            "description": "Cuántos números se enviaron (los números no se guardan)"
+          },
+          "entrega": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "duplicado",
+              "rechazado",
+              "fallido"
+            ],
+            "description": "pendiente: en la cola hacia Iris; duplicado: ya había un prospecto abierto con uno de los números (Iris sumó el pedido como actividad); rechazado: 422 de Iris (codigo_error)"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codigo_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "plan_no_permitido, telefonos_invalidos, cliente_no_valido, prospecto_duplicado…"
+          },
+          "prospecto_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Último estado informado por Iris (prospecto.estado_cambiado)"
+          },
+          "motivo_iris": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asignado": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Ya tiene vendedor en Iris"
+          },
+          "url_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Enlace plano al prospecto en Iris (el autologin se pide al abrirlo)"
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "estado_cambiado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -123357,7 +124918,9 @@
               "apariencia.subir_logo_login",
               "apariencia.ver",
               "bancos.conciliar",
+              "bancos.guardar_mapeo_extracto",
               "bancos.importar_extracto",
+              "bancos.importar_extracto_archivo",
               "bancos.reatribuir_llegada",
               "bancos.trasladar",
               "bancos.ver",
@@ -123548,6 +125111,7 @@
               "promesas.crear",
               "promesas.rechazar",
               "promesas.ver",
+              "prospectos.registrar",
               "proveedores.editar",
               "proveedores.ver",
               "qos.gestionar",
@@ -123673,6 +125237,7 @@
               "planes.ver",
               "promesas.crear",
               "promesas.ver",
+              "prospectos.registrar",
               "servicios.ver",
               "zonas.ver"
             ]
@@ -123710,6 +125275,7 @@
               "plantillas.ver",
               "promesas.crear",
               "promesas.ver",
+              "prospectos.registrar",
               "red.ver",
               "red_acceso.ver",
               "redes.ver",
@@ -123823,7 +125389,9 @@
               "activos.ver",
               "adicionales.ver",
               "bancos.conciliar",
+              "bancos.guardar_mapeo_extracto",
               "bancos.importar_extracto",
+              "bancos.importar_extracto_archivo",
               "bancos.reatribuir_llegada",
               "bancos.trasladar",
               "bancos.ver",
@@ -129278,6 +130846,387 @@
                 "terminar"
               ]
             }
+          }
+        }
+      },
+      "VistaPreviaExtracto": {
+        "type": "object",
+        "required": [
+          "archivo",
+          "cuenta",
+          "formato",
+          "requiere_confirmacion",
+          "mapeo",
+          "columnas",
+          "periodo",
+          "saldo_inicial",
+          "saldo_final",
+          "origen_saldos",
+          "entradas",
+          "salidas",
+          "lineas",
+          "ignoradas",
+          "invertido",
+          "revisiones",
+          "errores",
+          "filas"
+        ],
+        "properties": {
+          "archivo": {
+            "type": "object",
+            "required": [
+              "nombre",
+              "tipo",
+              "tamano",
+              "sha256",
+              "hojas",
+              "hoja"
+            ],
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "xlsx",
+                  "xls",
+                  "csv"
+                ]
+              },
+              "tamano": {
+                "type": "integer"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "hojas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "hoja": {
+                "type": "string"
+              }
+            }
+          },
+          "cuenta": {
+            "type": "object",
+            "required": [
+              "cuenta_bancaria_id",
+              "cuenta_id",
+              "codigo",
+              "nombre",
+              "empresa_id",
+              "banco"
+            ],
+            "properties": {
+              "cuenta_bancaria_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "cuenta_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "codigo": {
+                "type": "string"
+              },
+              "nombre": {
+                "type": "string"
+              },
+              "empresa_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "banco": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "formato": {
+            "type": "object",
+            "required": [
+              "codigo",
+              "banco",
+              "reconocido",
+              "origen"
+            ],
+            "properties": {
+              "codigo": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "banrural",
+                  "industrial",
+                  "bac",
+                  "gyt",
+                  "promerica"
+                ],
+                "description": "Banco reconocido"
+              },
+              "banco": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reconocido": {
+                "type": "boolean"
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "mapeo_guardado",
+                  "banco",
+                  "sugerencia"
+                ]
+              }
+            }
+          },
+          "requiere_confirmacion": {
+            "type": "boolean",
+            "description": "No se reconoció el banco: el panel confirma el mapeo"
+          },
+          "mapeo": {
+            "$ref": "#/components/schemas/MapeoExtracto"
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "indice",
+                "letra",
+                "encabezado",
+                "muestra",
+                "papel"
+              ],
+              "properties": {
+                "indice": {
+                  "type": "integer"
+                },
+                "letra": {
+                  "type": "string"
+                },
+                "encabezado": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "muestra": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": "Hasta 3 filas de muestra"
+                },
+                "papel": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "periodo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "desde",
+              "hasta"
+            ],
+            "properties": {
+              "desde": {
+                "type": "string",
+                "format": "date"
+              },
+              "hasta": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "saldo_inicial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "saldo_final": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "origen_saldos": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "etiquetas",
+              "columna_saldo",
+              "extracto_anterior",
+              "manual",
+              "calculado"
+            ]
+          },
+          "entradas": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "salidas": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "lineas": {
+            "type": "integer"
+          },
+          "ignoradas": {
+            "type": "integer"
+          },
+          "invertido": {
+            "type": "boolean"
+          },
+          "revisiones": {
+            "type": "object",
+            "required": [
+              "cuadra",
+              "encadena",
+              "repetidos"
+            ],
+            "properties": {
+              "cuadra": {
+                "type": "object",
+                "required": [
+                  "ok",
+                  "diferencia",
+                  "filas_saldo_no_encadena"
+                ],
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "diferencia": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "filas_saldo_no_encadena": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "encadena": {
+                "type": "object",
+                "required": [
+                  "ok",
+                  "extracto_anterior_id",
+                  "saldo_anterior"
+                ],
+                "properties": {
+                  "ok": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "extracto_anterior_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "saldo_anterior": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "repetidos": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "filas"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "filas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fila",
+                "campo",
+                "mensaje"
+              ],
+              "properties": {
+                "fila": {
+                  "type": "integer"
+                },
+                "campo": {
+                  "type": "string"
+                },
+                "mensaje": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineaExtractoInterpretada"
+            },
+            "description": "Primeras 10 líneas interpretadas"
           }
         }
       },

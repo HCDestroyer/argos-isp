@@ -208,6 +208,10 @@ export const PERMISOS = {
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
+    'bancos.importar_extracto_archivo':
+        'Importar el estado de cuenta tal como lo descarga el banco (.xlsx, .xls o .csv) y ver su vista previa',
+    'bancos.guardar_mapeo_extracto':
+        'Guardar el mapeo de columnas del estado de cuenta de una cuenta bancaria',
     'bancos.conciliar':
         'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
     'bancos.reatribuir_llegada':
@@ -236,6 +240,8 @@ export const PERMISOS = {
     'iris.configurar':
         'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
     'iris.abrir': 'Abrir un ticket, orden o prospecto en Iris sin volver a iniciar sesión',
+    'prospectos.registrar':
+        'Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)',
     'iris.generar_token':
         'Generar el token atk_ del usuario técnico Iris (permisos del contrato Iris §1.1); solo admin',
     'iris.revocar_token': 'Revocar un token del usuario técnico Iris',
@@ -489,6 +495,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'lealtad.ver',
             'lealtad.canjear',
             'inventario.ver',
+            'prospectos.registrar',
         ],
     },
     soporte: {
@@ -500,6 +507,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.crear',
             'clientes.editar',
             'notificaciones.registrar_consentimiento',
+            'prospectos.registrar',
             'clientes.estado_cuenta',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',
@@ -691,6 +699,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',
+            'bancos.importar_extracto_archivo',
+            'bancos.guardar_mapeo_extracto',
             'bancos.conciliar',
             'bancos.reatribuir_llegada',
             'cartera.provisionar',

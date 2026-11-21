@@ -568,6 +568,12 @@ export async function construirVariables(
     if (evento === 'bonificacion.registrada') {
         variables.bonificacion = await variablesBonificacion(cliente, payload)
     }
+    // Avisos al titular (`contactos.ts`): el contacto con sus números enmascarados y el equipo con la
+    // serie enmascarada; los arma `avisoAlTitular`, nunca con el número completo
+    if (payload.contacto && typeof payload.contacto === 'object') {
+        variables.contacto = payload.contacto as Variables
+    }
+    if (payload.equipo && typeof payload.equipo === 'object') variables.equipo = payload.equipo as Variables
 
     return variables
 }
