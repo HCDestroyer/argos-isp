@@ -1,4 +1,5 @@
 import vine from '@vinejs/vine'
+import { reglasPaginacion } from '#shared/paginacion'
 import { coordenadas, idEntidad, instanteIso, versionEsperada } from '#shared/validadores'
 
 /**
@@ -99,5 +100,57 @@ export const completarDatosValidator = vine.compile(
         version: versionOpcional(),
         origen_tipo: origenTipo(),
         origen_id: origenId(),
+    }),
+)
+
+/** Partes de texto de `POST /servicios/:id/cambiar-titular` (multipart): `datos` es el JSON del cambio. */
+export const cambiarTitularPartesValidator = vine.compile(
+    vine.object({
+        datos: vine.string().minLength(2).maxLength(10_000).meta({
+            description:
+                'JSON: { cliente: { nombre, documento_tipo, documento_numero, mayor_de_edad, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id }',
+        }),
+    }),
+)
+
+/** El JSON de la parte `datos` (§3.4.4). */
+export const cambiarTitularDatosValidator = vine.compile(
+    vine.object({
+        cliente: vine.object({
+            nombre: vine.string().trim().minLength(2).maxLength(200),
+            documento_tipo: vine.enum(['dpi', 'pasaporte'] as const),
+            documento_numero: vine.string().trim().minLength(5).maxLength(25),
+            mayor_de_edad: vine.boolean(),
+            telefono: vine.string().trim().minLength(8).maxLength(30),
+            whatsapp: vine.boolean().optional(),
+            email: vine.string().trim().email().nullable().optional(),
+            tipo_documento_fiscal: vine.enum(['cf', 'nit', 'cui'] as const).optional(),
+            nit_cui: vine.string().trim().maxLength(20).nullable().optional(),
+            relacion: vine
+                .enum(['titular', 'familiar', 'otro'] as const)
+                .nullable()
+                .optional(),
+        }),
+        identidad: vine.object({
+            coincide: vine.boolean(),
+            verificado_en: instanteIso(),
+            metodo: vine.enum(['foto_documento', 'revision_panel'] as const),
+        }),
+        motivo_codigo: vine.enum(['menor_de_edad', 'otro'] as const),
+        motivo: vine.string().trim().minLength(10).maxLength(500),
+        version: versionOpcional(),
+        origen_tipo: origenTipo(),
+        origen_id: origenId(),
+    }),
+)
+
+export const listarCambiosTitularValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        existente: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'true: los asignados a un cliente que ya existía' }),
+        posible_duplicado: vine.boolean().optional(),
     }),
 )

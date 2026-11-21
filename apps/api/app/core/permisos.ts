@@ -56,6 +56,8 @@ export const PERMISOS = {
         'Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)',
     'servicios.completar_datos':
         'Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio',
+    'servicios.cambiar_titular':
+        'Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -517,6 +519,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.cambiar_plan_pendiente',
             'clientes.registrar_identidad',
             'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -567,6 +570,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.cambiar_plan_pendiente',
             'clientes.registrar_identidad',
             'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',

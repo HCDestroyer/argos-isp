@@ -10,7 +10,7 @@
 */
 import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { definirEsquema, nulable, objeto, texto, instante } from '#shared/openapi/esquemas'
+import { definirEsquema, nulable, objeto, pagina, texto, instante } from '#shared/openapi/esquemas'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
 import { exigirServicio } from '#core/acceso_empresa'
 import { esTokenIris, exigirActorIris } from '#integraciones/iris/atencion'
@@ -18,6 +18,9 @@ import * as vi from '#core/validators_instalacion'
 import ReservarIpServicio from '#core/actions/reservar_ip_servicio'
 import CambiarPlanPendiente from '#core/actions/cambiar_plan_pendiente'
 import CompletarDatosServicio from '#core/actions/completar_datos_servicio'
+import { listarCambiosTitularIris } from '#core/consultas/titulares_iris'
+import { empresasDeLaLista } from '#shared/empresa_activa'
+import CambiarTitularServicio, { EvidenciaRequerida } from '#core/actions/cambiar_titular_servicio'
 import { Servicio } from '#core/esquemas'
 import RegistrarIdentidadCliente from '#core/actions/registrar_identidad_cliente'
 import VerIdentidadCliente from '#core/actions/ver_identidad_cliente'
@@ -88,7 +91,59 @@ function exigirNoIris(ctx: HttpContext) {
     if (esTokenIris(ctx)) throw new Prohibido('Iris no lee la identidad del titular')
 }
 
+const TitularCambiado = definirEsquema(
+    'TitularCambiado',
+    objeto({
+        servicio_id: idEsquema,
+        titular: objeto({
+            cliente_id: idEsquema,
+            existente: { ...booleano, description: 'El titular ya era cliente (documento y nombre iguales)' },
+        }),
+        posible_duplicado: {
+            ...booleano,
+            description:
+                'Otro cliente con el mismo nombre o teléfono y otro documento: lo revisa una persona de Argos',
+        },
+        identidad_id: idEsquema,
+        de_cliente_id: idEsquema,
+        de_cliente_eliminado: booleano,
+    }),
+)
+
+const CambioTitularIris = definirEsquema(
+    'CambioTitularIris',
+    objeto({
+        id: idEsquema,
+        servicio_id: idEsquema,
+        empresa_id: idEsquema,
+        de_cliente_id: idEsquema,
+        a_cliente_id: idEsquema,
+        existente: booleano,
+        posible_duplicado: booleano,
+        de_cliente_eliminado: booleano,
+        motivo_codigo: enumerado(['menor_de_edad', 'otro']),
+        origen_tipo: nulable(texto),
+        origen_id: nulable(texto),
+        ocurrido_en: instante,
+    }),
+)
+
 const instalacion: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/titulares-iris',
+        operacion: 'reportesTitularesIris',
+        resumen:
+            'Cambios de titular que llegaron por Iris (para revisar los asignados a un cliente existente)',
+        descripcion:
+            'Contrato Iris 0.10.0 (ajuste aj, decisión 9 del PM): `existente=true` lista los servicios que Iris asignó al ' +
+            'momento a un cliente que ya existía, para que caja o supervisión los revise. Filtrado por las empresas de la petición.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: vi.listarCambiosTitularValidator,
+        respuesta: { status: 200, descripcion: 'Cambios de titular', esquema: pagina(CambioTitularIris) },
+        handler: (ctx, { query }) => listarCambiosTitularIris(query, empresasDeLaLista(ctx.empresa)),
+    }),
     definirRuta({
         metodo: 'post',
         ruta: '/servicios/:id/reservar-ip',
@@ -161,6 +216,53 @@ const instalacion: Ruta[] = [
             await exigirServicio(ctx, id)
             return new CompletarDatosServicio().execute(
                 { ...cuerpo, id, desdeIris: iris },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/cambiar-titular',
+        operacion: 'serviciosCambiarTitular',
+        resumen: 'Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4)',
+        descripcion:
+            '`multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo ' +
+            'decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese ' +
+            'cliente (`existente: true`, aviso informativo); mismo documento y otro nombre → `422 titular_no_coincide`; si no, ' +
+            'un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, ' +
+            '`422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` ' +
+            'con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y ' +
+            '`cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.cambiar_titular',
+        cuerpo: vi.cambiarTitularPartesValidator,
+        multipart: {
+            archivos: {
+                frente: 'Foto del frente del documento del titular (JPEG o PNG, hasta 5 MB)',
+                reverso: 'Foto del reverso (opcional)',
+            },
+            archivosOpcionales: ['frente', 'reverso'],
+        },
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Titular cambiado', esquema: TitularCambiado },
+        handler: async (ctx, { cuerpo, params }) => {
+            const iris = desdeIris(ctx)
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            let json: unknown
+            try {
+                json = JSON.parse(cuerpo.datos)
+            } catch {
+                throw new ValidacionFallida([
+                    { field: 'datos', rule: 'json', message: 'datos debe ser un JSON' },
+                ])
+            }
+            const datos = await vi.cambiarTitularDatosValidator.validate(json)
+            const frente = await leerFoto(archivoUnico(ctx, 'frente'), 'frente')
+            if (!frente) throw new EvidenciaRequerida()
+            const reverso = await leerFoto(archivoUnico(ctx, 'reverso'), 'reverso')
+            return new CambiarTitularServicio().execute(
+                { ...datos, id, frente, reverso, desdeIris: iris },
                 ctx.contextoAccion(),
             )
         },
