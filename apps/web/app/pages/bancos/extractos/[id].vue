@@ -431,41 +431,43 @@ onMounted(cargar)
                     </h2>
                     <ul
                         class="min-h-0 flex-1 overflow-y-auto"
-                        role="listbox"
                         aria-label="Líneas del banco"
                         data-prueba="tabla-lineas"
                     >
                         <li
                             v-for="l in lineas"
                             :key="l.id"
-                            role="option"
-                            :aria-selected="lineaElegida === l.id"
-                            tabindex="0"
-                            class="flex cursor-pointer items-center gap-3 border-b border-(--ax-borde) border-l-3 px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            class="flex items-center gap-1 border-b border-(--ax-borde) border-l-3 pe-2"
                             :class="l.conciliada ? 'border-l-success bg-success/5' : lineaElegida === l.id ? 'border-l-primary bg-primary/5' : 'border-l-transparent hover:bg-(--ax-fila-hover)'"
                             :data-linea="l.id"
                             :data-conciliar="l.conciliada ? undefined : l.id"
-                            @click="elegirLinea(l)"
-                            @keydown.enter.prevent="elegirLinea(l)"
-                            @keydown.space.prevent="elegirLinea(l)"
                         >
-                            <UIcon
-                                :name="l.conciliada ? 'i-lucide-circle-check' : lineaElegida === l.id ? 'i-lucide-circle-dot' : 'i-lucide-circle'"
-                                class="size-5 shrink-0"
-                                :class="l.conciliada ? 'text-success' : lineaElegida === l.id ? 'text-primary' : 'text-dimmed'"
-                            />
-                            <span class="w-12 shrink-0 text-muted">{{ formatearFechaCorta(l.fecha) }}</span>
-                            <span class="min-w-0 flex-1">
-                                <span class="block truncate">{{ l.descripcion }}</span>
+                            <UButton
+                                color="neutral"
+                                variant="ghost"
+                                :aria-pressed="lineaElegida === l.id"
+                                class="min-w-0 flex-1 gap-3 rounded-none px-3 py-2.5 text-start text-sm font-normal text-default hover:bg-transparent"
+                                :data-elegir-linea="l.id"
+                                @click="elegirLinea(l)"
+                            >
+                                <UIcon
+                                    :name="l.conciliada ? 'i-lucide-circle-check' : lineaElegida === l.id ? 'i-lucide-circle-dot' : 'i-lucide-circle'"
+                                    class="size-5 shrink-0"
+                                    :class="l.conciliada ? 'text-success' : lineaElegida === l.id ? 'text-primary' : 'text-dimmed'"
+                                />
+                                <span class="w-12 shrink-0 text-muted">{{ formatearFechaCorta(l.fecha) }}</span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate">{{ l.descripcion }}</span>
+                                    <span
+                                        v-if="l.referencia"
+                                        class="block truncate text-xs text-muted"
+                                    >ref. {{ l.referencia }}</span>
+                                </span>
                                 <span
-                                    v-if="l.referencia"
-                                    class="block truncate text-xs text-muted"
-                                >ref. {{ l.referencia }}</span>
-                            </span>
-                            <span
-                                class="shrink-0 font-bold tabular-nums"
-                                :class="l.monto.startsWith('-') ? 'text-error' : 'text-highlighted'"
-                            >{{ l.monto.startsWith('-') ? `− ${formatearQuetzales(new Decimal(l.monto).abs())}` : formatearQuetzales(l.monto) }}</span>
+                                    class="shrink-0 font-bold tabular-nums"
+                                    :class="l.monto.startsWith('-') ? 'text-error' : 'text-highlighted'"
+                                >{{ l.monto.startsWith('-') ? `− ${formatearQuetzales(new Decimal(l.monto).abs())}` : formatearQuetzales(l.monto) }}</span>
+                            </UButton>
                             <UDropdownMenu
                                 v-if="accionesLinea(l).length"
                                 :items="accionesLinea(l)"
@@ -481,7 +483,6 @@ onMounted(cargar)
                                     :data-registrar="l.conciliada ? undefined : l.id"
                                     :data-deshacer="l.conciliada ? l.id : undefined"
                                     :data-reatribuir="l.conciliada && llegadaDe(l) && puede('bancos.reatribuir_llegada') ? l.id : undefined"
-                                    @click.stop
                                 />
                             </UDropdownMenu>
                         </li>
@@ -511,7 +512,7 @@ onMounted(cargar)
                         @click="conciliar"
                     >
                         <span class="font-bold">Conciliar</span>
-                        <span class="text-[0.6875rem] font-normal opacity-90">la pareja marcada</span>
+                        <span class="text-[0.6875rem] font-normal">la pareja marcada</span>
                     </UButton>
                     <UButton
                         v-if="puede('bancos.conciliar')"

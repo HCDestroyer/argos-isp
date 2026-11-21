@@ -62,8 +62,8 @@ test('depositar desde la caja y conciliarlo con el extracto', async ({ page }) =
     await expect(page.locator('[data-prueba="avance-conciliacion"]')).toHaveText('3 de 6')
 
     // La línea del depósito en efectivo de B-4471 (del día anterior): Argos propone su depósito.
-    const fila = page.getByRole('option').filter({ hasText: 'DEPOSITO EN EFECTIVO' })
-    await fila.click()
+    const fila = page.locator('[data-linea]').filter({ hasText: 'DEPOSITO EN EFECTIVO' })
+    await fila.locator('[data-elegir-linea]').click()
     await expect(page.locator('[data-partida="d1"]')).toHaveAttribute('aria-pressed', 'true')
     await page.locator('[data-prueba="conciliar"]').click()
     await expect(page.locator('[data-prueba="avance-conciliacion"]')).toHaveText('4 de 6')
