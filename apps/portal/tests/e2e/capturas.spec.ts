@@ -228,7 +228,7 @@ for (const tema of ['light', 'dark'] as const) {
             await page.screenshot({ path: join(DESTINO!, `rediseno-drawer-factura-${nombreTema}-${info.project.name}.png`) })
             await page.keyboard.press('Escape')
             // Subir comprobante: página propia (se navega con la SPA: la sesión vive en memoria).
-            await page.getByTestId('nav-pagar').filter({ visible: true }).first().click()
+            await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
             await page.getByTestId('cuenta-subir-comprobante').click()
             await page.getByTestId('comprobante-formulario').waitFor({ timeout: 30_000 })
             await capturar(page, 'rediseno-comprobante', info.project.name, nombreTema)
@@ -305,8 +305,13 @@ for (const ancho of [1280, 1440]) {
                 await entrarConCodigo(page)
                 await page.getByTestId('recientes').waitFor()
                 await capturar(page, `rediseno-escritorio-inicio-${ancho}`, 'escritorio', nombreTema)
-                for (const [nav, seccion, nombre] of [['nav-pagar', 'seccion-pagar', 'pagar'], ['nav-facturas', 'seccion-facturas', 'facturas'], ['nav-cuenta', 'seccion-cuenta', 'cuenta']] as const) {
-                    await page.getByTestId('navegacion-superior').getByTestId(nav).click()
+                for (const [nav, seccion, nombre] of [['nav-facturas', 'seccion-facturas', 'facturas'], ['pagar', 'seccion-pagar', 'pagar'], ['nav-cuenta', 'seccion-cuenta', 'cuenta']] as const) {
+                    if (nav === 'pagar') {
+                        await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+                    }
+                    else {
+                        await page.getByTestId('navegacion-lateral').getByTestId(nav).click()
+                    }
                     await page.getByTestId(seccion).waitFor()
                     await capturar(page, `rediseno-escritorio-${nombre}-${ancho}`, 'escritorio', nombreTema)
                 }

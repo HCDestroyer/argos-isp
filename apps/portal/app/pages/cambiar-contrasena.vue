@@ -163,15 +163,18 @@ async function salir() {
                         testid="campo-confirmacion"
                     />
                 </UFormField>
-                <UButton
-                    type="submit"
-                    label="Guardar contraseña"
-                    icon="i-lucide-check"
-                    size="xl"
-                    block
-                    :loading="enviando"
-                    data-testid="guardar-contrasena"
-                />
+                <!-- Acción principal, fija abajo en el teléfono. -->
+                <PortalBarraAccion>
+                    <UButton
+                        type="submit"
+                        label="Guardar contraseña"
+                        icon="i-lucide-check"
+                        size="xl"
+                        block
+                        :loading="enviando"
+                        data-testid="guardar-contrasena"
+                    />
+                </PortalBarraAccion>
             </UForm>
         </UCard>
 

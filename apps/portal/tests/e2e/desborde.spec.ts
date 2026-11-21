@@ -31,7 +31,7 @@ async function entrar(page: Page): Promise<void> {
     await page.locator('input').first().click()
     await page.keyboard.type('123456')
     await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
-    await page.getByTestId('indicadores').waitFor()
+    await page.getByTestId('servicio-cuenta').first().waitFor()
 }
 
 /** Textos (hojas con texto) dentro de `raiz` que se desbordan o se cortan con elipsis. */
@@ -81,7 +81,7 @@ for (const tema of ['light', 'dark'] as const) {
 
             const banner = page.getByTestId('resumen-cuenta')
             expect(await desbordados(banner), 'textos del banner recortados').toEqual([])
-            expect(await desbordados(page.getByTestId('indicadores')), 'textos de los indicadores recortados').toEqual([])
+            expect(await desbordados(page.getByTestId('servicio-cuenta').first()), 'textos del servicio recortados').toEqual([])
 
             // Ninguna pieza del banner se monta sobre otra.
             const piezas = ['banner-saludo', 'saldo-cuenta', 'banner-total-etiqueta', 'banner-vence', 'banner-estado', 'actualizar-cuenta', 'banner-pagar']
@@ -123,9 +123,9 @@ for (const tema of ['light', 'dark'] as const) {
 }
 
 /**
- * Escritorio (1280 y 1440 px): la navegación de escritorio a la vista, sin la barra inferior; el
+ * Escritorio (1280 y 1440 px): el menú lateral «isla» a la vista, sin la barra inferior; el
  * contenido en rejilla (lo último a la derecha de los servicios), dentro de 1200 px y sin scroll
- * horizontal. Igual en «Pagar», «Facturas», «Cuenta» y en la página del comprobante.
+ * horizontal. Igual en «Facturas y pagos» (sus dos pestañas), «Cuenta» y en la página del comprobante.
  */
 for (const ancho of [1280, 1440]) {
     test.describe(`escritorio ${ancho} px`, () => {
@@ -136,7 +136,7 @@ for (const ancho of [1280, 1440]) {
             await page.emulateMedia({ reducedMotion: 'reduce' })
             await entrar(page)
 
-            await expect(page.getByTestId('navegacion-superior')).toBeVisible()
+            await expect(page.getByTestId('navegacion-lateral')).toBeVisible()
             await expect(page.getByTestId('navegacion-inferior')).toBeHidden()
 
             // Lo último va al lado de los servicios, no debajo.
@@ -148,19 +148,26 @@ for (const ancho of [1280, 1440]) {
             // Ancho cómodo: hasta 1200 px, centrado, sin scroll horizontal.
             const banner = (await page.getByTestId('resumen-cuenta').boundingBox())!
             expect(banner.width).toBeLessThanOrEqual(1200)
-            expect(banner.width).toBeGreaterThan(900)
+            expect(banner.width).toBeGreaterThan(ancho === 1280 ? 850 : 900)
             const sobra = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
             expect(sobra).toBeLessThanOrEqual(0)
 
-            for (const [seccion, testid] of [['nav-pagar', 'seccion-pagar'], ['nav-facturas', 'seccion-facturas'], ['nav-cuenta', 'seccion-cuenta']] as const) {
-                await page.getByTestId('navegacion-superior').getByTestId(seccion).click()
+            const pestanaPagar = () => page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+            for (const [seccion, testid] of [['nav-facturas', 'seccion-facturas'], ['pagar', 'seccion-pagar'], ['nav-cuenta', 'seccion-cuenta']] as const) {
+                if (seccion === 'pagar') {
+                    await pestanaPagar()
+                }
+                else {
+                    await page.getByTestId('navegacion-lateral').getByTestId(seccion).click()
+                }
                 await page.getByTestId(testid).waitFor()
                 await expect(page.getByTestId('navegacion-inferior')).toBeHidden()
                 const columnas = await page.getByTestId(testid).evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length)
                 expect(columnas, `${testid} en rejilla`).toBeGreaterThan(1)
             }
 
-            await page.getByTestId('navegacion-superior').getByTestId('nav-pagar').click()
+            await page.getByTestId('navegacion-lateral').getByTestId('nav-facturas').click()
+            await pestanaPagar()
             await page.getByTestId('cuenta-subir-comprobante').click()
             await page.getByTestId('comprobante-formulario').waitFor()
             const formulario = (await page.getByTestId('comprobante-formulario').boundingBox())!

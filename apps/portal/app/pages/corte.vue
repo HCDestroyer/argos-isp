@@ -375,25 +375,38 @@ async function actualizar() {
         />
 
         <template v-else>
-            <div>
-                <p
-                    v-if="corte.nombre_parcial"
-                    class="text-sm text-muted"
+            <!-- Tarjeta del corte (tablero `Portal`): estado, título, el monto una sola vez y qué hacer. -->
+            <section
+                class="ax-tarjeta flex flex-col gap-4 p-5"
+                aria-labelledby="titulo-corte"
+                data-testid="corte-tarjeta"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <EstadoServicioBadge
+                        v-if="corte.estado"
+                        :estado="corte.estado"
+                    />
+                    <p
+                        v-if="corte.nombre_parcial"
+                        class="text-sm text-muted"
+                    >
+                        Hola, {{ corte.nombre_parcial }}
+                    </p>
+                </div>
+                <h1
+                    id="titulo-corte"
+                    class="text-2xl font-semibold tracking-[-0.02em] text-balance text-highlighted"
                 >
-                    Hola, {{ corte.nombre_parcial }}
-                </p>
-                <h1 class="mt-1 text-2xl font-semibold text-balance text-highlighted">
                     {{ mensaje.titulo }}
                 </h1>
-                <p class="mt-1 text-sm text-muted">
+                <CorteResumenDeuda
+                    v-if="identificado"
+                    :corte="corte"
+                />
+                <p class="text-sm text-muted">
                     {{ mensaje.descripcion }}
                 </p>
-            </div>
-
-            <CorteResumenDeuda
-                v-if="identificado"
-                :corte="corte"
-            />
+            </section>
 
             <CorteEstadoEnVivo
                 v-if="pagoId !== null"
@@ -432,9 +445,9 @@ async function actualizar() {
                 data-testid="promesa-pendiente-corte"
             />
 
-            <div
+            <!-- La acción principal, fija abajo en el teléfono. -->
+            <PortalBarraAccion
                 v-if="!identificado"
-                class="flex flex-col gap-2"
                 data-testid="corte-no-identificado"
             >
                 <UButton
@@ -447,9 +460,9 @@ async function actualizar() {
                 <p class="-mt-1 text-center text-xs text-muted">
                     Para pagar en línea, subir un comprobante o pedir una promesa de pago necesitamos saber cuál es tu servicio.
                 </p>
-            </div>
+            </PortalBarraAccion>
 
-            <template v-else-if="!retirado">
+            <PortalBarraAccion v-else-if="!retirado && (!pagoEnCamino || depositoPrincipal)">
                 <PagoEnLinea v-if="!pagoEnCamino" />
                 <!-- Sin pasarela, el depósito es la acción principal (un botón, no una tarjeta más). -->
                 <UButton
@@ -461,7 +474,7 @@ async function actualizar() {
                     data-testid="ver-deposito"
                     @click="verDeposito = true"
                 />
-            </template>
+            </PortalBarraAccion>
 
             <UAlert
                 v-if="errorCuenta"
@@ -489,6 +502,7 @@ async function actualizar() {
             <PortalAccesosRapidos
                 :accesos="accesos"
                 :testids="TESTIDS_CORTE"
+                forma="lista"
                 @accion="alAcceso"
             />
 

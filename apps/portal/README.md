@@ -292,7 +292,11 @@ cupo, historial o deuda se ofrece "Contactar a la oficina".
 
 Rediseño pedido por el PM: interfaz amigable, coherente y con iconos. Marca **índigo eléctrico** (primario
 `#4F46E5` en claro, `#818CF8` en oscuro) con el degradado índigo → cian como acento; fondo gris muy claro
-(`#F8F9FA`) o azul noche (`#0B0F1A`); tarjetas blancas de radio 12 px con borde de 1 px y casi sin sombra.
+(`#F7F8FC`) o azul noche (`#0B0F1A`); tarjetas «isla» blancas de radio 14 px con borde de 1 px y sombra
+suave, banner de 18 px y menú lateral de 22 px. Diseño aprobado: `.claude/diseno/` (tableros `Portal`,
+`NuevoPortal`, `PortalFacturas`, `PortalSoporte` y `PortalContactos`). El saldo va una sola vez por
+pantalla, en el banner. En el teléfono la acción principal de cada pantalla (pagar en `/corte`, enviar
+o guardar en los formularios) queda fija abajo (`PortalBarraAccion`).
 Se construye sobre Nuxt UI: tokens propios `--ax-*` (los mismos nombres que el panel), el `ui` de
 `app.config.ts` y componentes compartidos. Nunca colores crudos de Tailwind en los componentes.
 
@@ -352,11 +356,12 @@ CSS) y dos chunks chicos (pastilla de icono y tonos). Ver la tabla de «Peso de 
 
 ### Escritorio
 
-Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px: navegación superior (la barra
-inferior solo existe por debajo de 768 px), banner e indicadores arriba y rejillas por sección: inicio
-con servicios y accesos (2/3) y «Mis facturas» y «Mis pagos» al lado (1/3); «Pagar» con pagar y
-promesas a la izquierda, comprobantes y pagos a la derecha; «Facturas» con las notas de crédito al
-lado; «Cuenta» con los datos de contacto a un lado y avisos y sesión al otro; `/comprobante` con los
+Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px con el menú lateral «isla» a la
+izquierda (marca, secciones y tema; sin barra superior ni barra inferior), el banner arriba y rejillas
+por sección: inicio con servicios, accesos y «Solicitar un servicio» (2/3) y «Está a tu cargo», «Mis
+facturas» y «Mis pagos» al lado (1/3); «Facturas y pagos», una tarjeta con las pestañas segmentadas
+Facturas (con las notas de crédito al lado) y Pagar (pagar y promesas a la izquierda, comprobantes y
+pagos a la derecha); «Cuenta» con los datos de contacto a un lado y avisos y sesión al otro; `/comprobante` con los
 pasos al lado del formulario. Las listas se acomodan al ancho de su columna (consulta de contenedor):
 tabla en una columna ancha, filas compactas en una angosta. Ningún texto dice para qué pantalla está
 pensado el portal. Pruebas: `tests/e2e/desborde.spec.ts` (390, 1280 y 1440 px).

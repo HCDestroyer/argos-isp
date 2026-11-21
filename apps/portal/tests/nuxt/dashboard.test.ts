@@ -213,7 +213,7 @@ describe('/cuenta: inicio y secciones', () => {
 })
 
 describe('barra de navegación del cliente', () => {
-    it('sin sesión no aparece; con sesión, cuatro destinos de 44 px con la sección marcada', async () => {
+    it('sin sesión no aparece; con sesión, los destinos de 44 px con la sección marcada y el menú lateral', async () => {
         const sinSesion = await mountSuspended(Layout, { route: '/cuenta' })
         montados.push(sinSesion)
         expect(sinSesion.find('[data-testid="navegacion-inferior"]').exists()).toBe(false)
@@ -226,13 +226,17 @@ describe('barra de navegación del cliente', () => {
         expect(barra.exists()).toBe(true)
         expect(barra.classes()).toContain('pb-[env(safe-area-inset-bottom)]')
         const destinos = barra.findAll('a')
-        expect(destinos.map(d => d.text())).toEqual(['Inicio', 'Pagar', 'Facturas', 'Cuenta'])
+        expect(destinos.map(d => d.text())).toEqual(['Inicio', 'Facturas', 'Cuenta'])
         for (const destino of destinos) {
             expect(destino.classes()).toContain('min-h-14')
         }
         expect(barra.find('[data-testid="nav-facturas"]').attributes('aria-current')).toBe('page')
         expect(barra.find('[data-testid="nav-inicio"]').attributes('aria-current')).toBeUndefined()
-        expect(conSesion.find('[data-testid="navegacion-superior"]').exists()).toBe(true)
+        // Escritorio: menú lateral con los nombres largos y la misma sección marcada.
+        const lateral = conSesion.find('[data-testid="navegacion-lateral"]')
+        expect(lateral.exists()).toBe(true)
+        expect(lateral.findAll('li a').map(d => d.text())).toEqual(['Inicio', 'Facturas y pagos', 'Mi cuenta'])
+        expect(lateral.find('[data-testid="nav-facturas"]').attributes('aria-current')).toBe('page')
     })
 })
 
@@ -275,5 +279,14 @@ describe('/corte y la sesión', () => {
         fijarPromesaFixture('con_pago_previo')
         const wrapper = await montarCorte()
         expect(wrapper.find('[data-testid="solicitar-promesa"]').exists()).toBe(false)
+    })
+})
+
+describe('«Facturas y pagos»', () => {
+    it('«Pagar» es una pestaña de «Facturas y pagos» y marca esa misma sección', () => {
+        expect(seccionDeLaRuta('pagar')).toBe('pagar')
+        expect(seccionActiva({ path: '/cuenta', query: { seccion: 'pagar' } })).toBe('facturas')
+        expect(seccionActiva({ path: '/corte', query: {} })).toBeNull()
+        expect(seccionesVisibles(false, false).map(s => s.seccion)).toEqual(['inicio', 'facturas', 'cuenta'])
     })
 })

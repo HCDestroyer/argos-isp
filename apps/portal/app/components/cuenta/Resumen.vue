@@ -17,9 +17,12 @@ const props = withDefaults(defineProps<{
     destacado?: boolean
     /** La factura pendiente más urgente (`proximoVencimiento`): «vence el …» o «vencida desde …». */
     proxima?: { vence_en: string, vencida: boolean } | null
+    /** Facturas vencidas (`proximoVencimiento`): se dicen junto al vencimiento, no en otra tarjeta. */
+    vencidas?: number
 }>(), {
     destacado: false,
     proxima: null,
+    vencidas: 0,
 })
 
 const emit = defineEmits<{
@@ -70,6 +73,13 @@ const presentacion = computed(() => props.estado ? ESTADOS_SERVICIO[props.estado
                     data-testid="banner-vence"
                 >
                     {{ props.proxima.vencida ? 'Vencida desde el' : 'Por pagar · vence el' }} {{ formatearFecha(props.proxima.vence_en) }}
+                </p>
+                <p
+                    v-if="props.destacado && props.vencidas > 0"
+                    class="ax-banner-suave text-sm whitespace-nowrap"
+                    data-testid="banner-vencidas"
+                >
+                    {{ props.vencidas === 1 ? '1 factura vencida' : `${props.vencidas} facturas vencidas` }}
                 </p>
             </div>
             <div class="flex flex-col gap-3 sm:shrink-0 sm:items-end">

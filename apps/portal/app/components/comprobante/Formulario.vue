@@ -522,16 +522,19 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 </UFileUpload>
             </UFormField>
 
-            <UButton
-                type="submit"
-                label="Enviar comprobante"
-                icon="i-lucide-send"
-                size="xl"
-                block
-                :loading="enviando"
-                :disabled="reduciendo"
-                data-testid="comprobante-enviar"
-            />
+            <!-- Acción principal, fija abajo en el teléfono. -->
+            <PortalBarraAccion>
+                <UButton
+                    type="submit"
+                    label="Enviar comprobante"
+                    icon="i-lucide-send"
+                    size="xl"
+                    block
+                    :loading="enviando"
+                    :disabled="reduciendo"
+                    data-testid="comprobante-enviar"
+                />
+            </PortalBarraAccion>
         </UForm>
 
         <UModal

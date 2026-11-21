@@ -24,6 +24,17 @@ const { condiciones: leerCondiciones } = useSolicitudPromesa()
 const telegram = useTelegram()
 
 const seccion = computed(() => seccionDeLaRuta(route.query.seccion))
+const { disponible: soporteDisponible } = useSoporte()
+const { visible: puntosVisibles } = usePuntos()
+
+/** Pestañas segmentadas de «Facturas y pagos»: cada una es su `?seccion=` (Atrás vuelve a la anterior). */
+const PESTANAS_FACTURAS = [
+    { label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' },
+    { label: 'Pagar', value: 'pagar', icon: 'i-lucide-credit-card' },
+]
+function irAPestana(valor: string | number) {
+    void navigateTo(`/cuenta?seccion=${valor}`)
+}
 
 // Solo la primera carga muestra el esqueleto; una recarga (p. ej. tras vincular Telegram) no lo hace.
 const cargando = computed(() => !resultado.value && (status.value === 'idle' || status.value === 'pending'))
@@ -297,6 +308,7 @@ watch(() => route.hash, async (hash) => {
                 :actualizando="actualizando"
                 :destacado="seccion === 'inicio'"
                 :proxima="proxima ? proxima.factura : null"
+                :vencidas="proxima?.vencidas ?? 0"
                 @actualizar="actualizar"
             />
 
@@ -341,7 +353,17 @@ watch(() => route.hash, async (hash) => {
                         :actions="[{ label: 'Cómo reactivar mi servicio', icon: 'i-lucide-wifi', color: 'neutral', variant: 'outline', to: '/corte' }]"
                         data-testid="aviso-reactivar"
                     />
-                    <CuentaIndicadores :cuenta="cuenta" />
+                    <!--
+                        El saldo y el vencimiento van una sola vez, en el banner (pedido del PM); el
+                        servicio, en su tarjeta. Aquí solo los puntos, si el programa está visible.
+                    -->
+                    <div
+                        v-if="puntosVisibles"
+                        class="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3"
+                        data-testid="indicadores"
+                    >
+                        <PuntosResumen />
+                    </div>
                     <!-- Escritorio: servicios y accesos a la izquierda, lo último a la derecha. -->
                     <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
                         <div class="flex min-w-0 flex-col gap-6 lg:col-span-2">
@@ -356,6 +378,7 @@ watch(() => route.hash, async (hash) => {
                                 @accion="alAcceso(grupo, $event)"
                                 @pedir-promesa="pedirPromesa"
                             />
+                            <SoporteSolicitarServicio v-if="soporteDisponible" />
                         </div>
                         <aside
                             class="flex min-w-0 flex-col gap-6"
@@ -363,32 +386,59 @@ watch(() => route.hash, async (hash) => {
                         >
                             <CuentaACargo />
                             <CuentaRecientes :key="`recientes-${recargas}`" />
-                            <PuntosResumen />
                             <PromoPromociones lugar="portal_inicio" />
                         </aside>
                     </div>
                 </div>
 
-                <div
-                    v-else-if="seccion === 'pagar'"
-                    key="pagar"
-                    class="grid gap-6 lg:grid-cols-2 lg:items-start"
-                    data-testid="seccion-pagar"
+                <section
+                    v-else-if="seccion === 'pagar' || seccion === 'facturas'"
+                    key="facturas-y-pagos"
+                    class="ax-tarjeta flex flex-col gap-4 p-3 sm:p-5"
+                    aria-labelledby="titulo-facturas-y-pagos"
+                    data-testid="seccion-facturas-y-pagos"
                 >
-                    <!-- Escritorio: pagar y promesas a la izquierda; comprobantes y pagos a la derecha. -->
-                    <div class="flex min-w-0 flex-col gap-6">
-                        <section
-                            class="flex flex-col gap-3"
-                            aria-labelledby="titulo-pagar"
+                    <!-- «Facturas y pagos» (diseño aprobado): pestañas segmentadas dentro de la misma tarjeta. -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <PortalPastilla icono="i-lucide-receipt" />
+                        <h2
+                            id="titulo-facturas-y-pagos"
+                            class="min-w-0 flex-1 text-lg font-semibold text-highlighted"
                         >
-                            <h2
-                                id="titulo-pagar"
-                                class="text-lg font-semibold text-highlighted"
+                            Facturas y pagos
+                        </h2>
+                    </div>
+                    <UTabs
+                        :model-value="seccion"
+                        :items="PESTANAS_FACTURAS"
+                        :content="false"
+                        variant="pill"
+                        color="neutral"
+                        class="w-full"
+                        data-testid="pestanas-facturas"
+                        @update:model-value="irAPestana"
+                    />
+                    <div
+                        v-if="seccion === 'pagar'"
+                        class="ax-en-tarjeta grid gap-6 lg:grid-cols-2 lg:items-start"
+                        data-testid="seccion-pagar"
+                    >
+                        <!-- Escritorio: pagar y promesas a la izquierda; comprobantes y pagos a la derecha. -->
+                        <div class="flex min-w-0 flex-col gap-6">
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-pagar"
                             >
-                                Pagar
-                            </h2>
-                            <UCard v-if="servicioPago !== undefined">
-                                <div class="flex flex-col gap-3">
+                                <h3
+                                    id="titulo-pagar"
+                                    class="sr-only"
+                                >
+                                    Pagar
+                                </h3>
+                                <div
+                                    v-if="servicioPago !== undefined"
+                                    class="flex flex-col gap-3"
+                                >
                                     <UFormField
                                         v-if="opcionesPago.length > 1"
                                         label="¿Qué servicio quieres pagar en línea?"
@@ -407,93 +457,91 @@ watch(() => route.hash, async (hash) => {
                                         id-ayuda="pagar-en-linea-ayuda-cuenta"
                                     />
                                 </div>
-                            </UCard>
-                            <p
-                                v-else
-                                class="text-sm text-muted"
-                                data-testid="sin-saldo"
+                                <p
+                                    v-else
+                                    class="text-sm text-muted"
+                                    data-testid="sin-saldo"
+                                >
+                                    No tienes saldo pendiente.
+                                </p>
+                                <UButton
+                                    v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
+                                    :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
+                                    icon="i-lucide-landmark"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="lg"
+                                    block
+                                    data-testid="deposito-pagar"
+                                    @click="usarGrupo(grupoPago); verDeposito = true"
+                                />
+                            </section>
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-promesas"
                             >
-                                No tienes saldo pendiente.
-                            </p>
-                            <UButton
-                                v-if="empresaPago && (empresaPago.cuentas_deposito.length > 0 || empresaPago.instrucciones_pago)"
-                                :label="variasEmpresas && grupoPago ? `Datos de depósito de ${grupoPago.empresa.nombre_comercial}` : 'Ver datos de depósito'"
-                                icon="i-lucide-landmark"
-                                color="neutral"
-                                variant="outline"
-                                size="lg"
-                                block
-                                data-testid="deposito-pagar"
-                                @click="usarGrupo(grupoPago); verDeposito = true"
+                                <h3
+                                    id="titulo-promesas"
+                                    class="flex items-center gap-1 text-sm font-semibold text-highlighted"
+                                >
+                                    Promesas de pago
+                                    <PortalAyuda clave="promesa" />
+                                </h3>
+                                <CuentaPromesas :key="`promesas-${recargas}`" />
+                            </section>
+                        </div>
+                        <div class="flex min-w-0 flex-col gap-6">
+                            <CuentaComprobantes
+                                :key="`comprobantes-${recargas}`"
+                                :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
+                                :empresa-id="grupoPago?.empresa.id"
                             />
-                        </section>
-                        <section
-                            class="flex flex-col gap-3"
-                            aria-labelledby="titulo-promesas"
-                        >
-                            <h2
-                                id="titulo-promesas"
-                                class="flex items-center gap-1 text-sm font-semibold text-highlighted"
+                            <section
+                                class="flex flex-col gap-3"
+                                aria-labelledby="titulo-pagos"
                             >
-                                Promesas de pago
-                                <PortalAyuda clave="promesa" />
-                            </h2>
-                            <CuentaPromesas :key="`promesas-${recargas}`" />
-                        </section>
+                                <h3
+                                    id="titulo-pagos"
+                                    class="text-sm font-semibold text-highlighted"
+                                >
+                                    Pagos registrados
+                                </h3>
+                                <CuentaPagos :key="`pagos-${recargas}`" />
+                            </section>
+                        </div>
                     </div>
-                    <div class="flex min-w-0 flex-col gap-6">
-                        <CuentaComprobantes
-                            :key="`comprobantes-${recargas}`"
-                            :servicio-id="servicioParaComprobante(grupoPago?.servicios ?? [])"
-                            :empresa-id="grupoPago?.empresa.id"
-                        />
+                    <div
+                        v-else
+                        class="ax-en-tarjeta grid gap-6 lg:grid-cols-3 lg:items-start"
+                        data-testid="seccion-facturas"
+                    >
                         <section
-                            class="flex flex-col gap-3"
-                            aria-labelledby="titulo-pagos"
+                            class="flex min-w-0 flex-col gap-3 lg:col-span-2"
+                            aria-labelledby="titulo-facturas"
                         >
-                            <h2
-                                id="titulo-pagos"
+                            <h3
+                                id="titulo-facturas"
+                                class="sr-only"
+                            >
+                                Facturas
+                            </h3>
+                            <CuentaFacturas :key="`facturas-${recargas}`" />
+                        </section>
+                        <section
+                            class="flex min-w-0 flex-col gap-3"
+                            aria-labelledby="titulo-notas-credito"
+                            data-testid="seccion-notas-credito"
+                        >
+                            <h3
+                                id="titulo-notas-credito"
                                 class="text-sm font-semibold text-highlighted"
                             >
-                                Pagos registrados
-                            </h2>
-                            <CuentaPagos :key="`pagos-${recargas}`" />
+                                Notas de crédito
+                            </h3>
+                            <CuentaNotasCredito :key="`notas-${recargas}`" />
                         </section>
                     </div>
-                </div>
-
-                <div
-                    v-else-if="seccion === 'facturas'"
-                    key="facturas"
-                    class="grid gap-6 lg:grid-cols-3 lg:items-start"
-                    data-testid="seccion-facturas"
-                >
-                    <section
-                        class="flex min-w-0 flex-col gap-3 lg:col-span-2"
-                        aria-labelledby="titulo-facturas"
-                    >
-                        <h2
-                            id="titulo-facturas"
-                            class="text-lg font-semibold text-highlighted"
-                        >
-                            Facturas
-                        </h2>
-                        <CuentaFacturas :key="`facturas-${recargas}`" />
-                    </section>
-                    <section
-                        class="flex min-w-0 flex-col gap-3"
-                        aria-labelledby="titulo-notas-credito"
-                        data-testid="seccion-notas-credito"
-                    >
-                        <h2
-                            id="titulo-notas-credito"
-                            class="text-sm font-semibold text-highlighted"
-                        >
-                            Notas de crédito
-                        </h2>
-                        <CuentaNotasCredito :key="`notas-${recargas}`" />
-                    </section>
-                </div>
+                </section>
 
                 <SoporteSeccion
                     v-else-if="seccion === 'soporte'"
@@ -523,10 +571,24 @@ watch(() => route.hash, async (hash) => {
                     </h2>
                     <!-- Escritorio: datos de contacto a la izquierda; avisos y sesión a la derecha. -->
                     <div class="flex min-w-0 flex-col gap-4">
-                        <CuentaContacto
-                            :contacto="cuenta.cliente"
-                            @actualizado="contactoActualizado"
-                        />
+                        <section
+                            class="ax-tarjeta flex flex-col gap-4 p-4 sm:p-5"
+                            aria-labelledby="titulo-mis-datos"
+                        >
+                            <div class="flex items-center gap-3">
+                                <PortalPastilla icono="i-lucide-id-card" />
+                                <h3
+                                    id="titulo-mis-datos"
+                                    class="font-semibold text-highlighted"
+                                >
+                                    Mis datos
+                                </h3>
+                            </div>
+                            <CuentaContacto
+                                :contacto="cuenta.cliente"
+                                @actualizado="contactoActualizado"
+                            />
+                        </section>
                         <CuentaContactos :key="`contactos-${recargas}`" />
                     </div>
                     <div class="flex min-w-0 flex-col gap-4">
