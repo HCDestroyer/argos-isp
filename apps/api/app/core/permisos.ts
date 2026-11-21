@@ -329,6 +329,14 @@ export const PERMISOS = {
     'inventario.registrar_contacto_recuperacion':
         'Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)',
     // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
+    // contrato Iris 0.14.0 (§3.10, §4.5, §6.6): verificación de intentos y cambios, intentos anteriores a la
+    // verificación y vínculos de técnicos (el webhook y el worker corren como sistema)
+    'inventario.verificar_operacion_iris':
+        'Verificar con Iris los intentos de recuperación y los cambios con cobro propuesto (al abrir la declaración)',
+    'inventario.decidir_intento_recuperacion':
+        'Decidir si cuenta un intento de recuperación anterior a la verificación con Iris',
+    'inventario.sincronizar_vinculo_tecnico':
+        'Aplicar o conciliar con Iris el vínculo de un técnico con su usuario de Argos (solo inventario)',
     'inventario.sincronizar_cuadrilla':
         'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
     'tipos_producto.crear': 'Crear tipos de producto',

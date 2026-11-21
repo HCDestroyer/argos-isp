@@ -78,6 +78,10 @@ export const contratoIrisValidator = vine.compile(
                 'Argos (los del canje); false si no (conector canjeado antes de B1: el panel pide volver a ' +
                 'conectar). Omitido: se conserva el último informado',
         ),
+        vinculos_cargados: vine.number().withoutDecimals().min(0).max(1000000).nullable().optional().meta({
+            description:
+                'Contrato 0.14.0 §6.6 (N-1): Iris cierra la carga inicial de vínculos de técnicos (tecnico.argos_vinculado) con el número que envió. Hasta entonces, las peticiones con tecnico responden 409 vinculos_en_carga. Solo con contrato ≥ 0.14.0',
+        }),
     }),
 )
 

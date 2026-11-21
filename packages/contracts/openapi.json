@@ -31742,7 +31742,7 @@
       "put": {
         "operationId": "irisInformarContrato",
         "summary": "Iris informa la versión del contrato que habla (servidor a servidor)",
-        "description": "Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de 0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos). Contrato 0.6.2: `receptor_argos` opcional (false = Iris no tiene el receptor de Argos: `GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior.",
+        "description": "Contrato Iris 0.5.0 («Versión y compatibilidad»). Solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje). Guarda `contrato` (semver) en el conector: Argos solo envía los webhooks nuevos de 0.5.0 a un conector con contrato ≥ 0.5.0. Permiso `sso.emitir`, que el token de Iris ya tiene. Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos). Contrato 0.6.2: `receptor_argos` opcional (false = Iris no tiene el receptor de Argos: `GET /integraciones/iris` pasa a `requiere_reconectar: true`); omitido, se conserva el anterior. Contrato 0.14.0 (§3.3, §4.5): una versión menor que la última aceptada responde 409 contrato_regresivo (no se guarda y se avisa al admin; bajar exige un canje nuevo aprobado en el panel); una mayor que el `contrato` que habla Argos, 422 contrato_no_soportado (no se registra). Al pasar a ≥ 0.14.0 empieza la carga inicial de vínculos de técnicos, que Iris cierra con `vinculos_cargados` (§6.6, N-1).",
         "tags": [
           "integraciones"
         ],
@@ -31778,6 +31778,15 @@
                   "receptor_argos": {
                     "type": "boolean",
                     "description": "Contrato Iris 0.6.2: true si Iris tiene guardados la URL y el secreto del receptor de webhooks de Argos (los del canje); false si no (conector canjeado antes de B1: el panel pide volver a conectar). Omitido: se conserva el último informado"
+                  },
+                  "vinculos_cargados": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 1000000,
+                    "description": "Contrato 0.14.0 §6.6 (N-1): Iris cierra la carga inicial de vínculos de técnicos (tecnico.argos_vinculado) con el número que envió. Hasta entonces, las peticiones con tecnico responden 409 vinculos_en_carga. Solo con contrato ≥ 0.14.0"
                   }
                 },
                 "required": [
@@ -34321,12 +34330,15 @@
             "name": "estado",
             "in": "query",
             "required": false,
+            "description": "Sin estado, la cola sin los cobros por verificar ni los no verificados (Iris 0.14.0)",
             "schema": {
               "type": "string",
               "enum": [
                 "propuesto",
                 "aprobado",
-                "rechazado"
+                "rechazado",
+                "por_verificar",
+                "no_verificado"
               ]
             }
           },
@@ -34727,12 +34739,15 @@
             "name": "estado",
             "in": "query",
             "required": false,
+            "description": "Sin estado, la cola sin los cobros por verificar ni los no verificados (Iris 0.14.0)",
             "schema": {
               "type": "string",
               "enum": [
                 "propuesto",
                 "aprobado",
-                "rechazado"
+                "rechazado",
+                "por_verificar",
+                "no_verificado"
               ]
             }
           },
@@ -34946,6 +34961,15 @@
                     "minimum": 1,
                     "maximum": 10,
                     "description": "Iris 0.12.0 §3.10: técnicos distintos con intentos de recuperación para declarar un equipo no recuperado (2 de fábrica); sin él se conserva"
+                  },
+                  "iris_movimientos_diarios_alerta": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "description": "Iris 0.14.0 (T-12): movimientos al día de un técnico vinculado desde los que se avisa al admin (40 de fábrica); sin él se conserva"
                   },
                   "version": {
                     "type": "integer",
@@ -36445,6 +36469,136 @@
           }
         },
         "x-permiso": "inventario.configurar_ia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/intentos-recuperacion/{id}/decidir": {
+      "post": {
+        "operationId": "inventarioDecidirIntentoRecuperacion",
+        "summary": "Decidir un intento anterior a la verificación: cuenta (aceptar) o no (descartar)",
+        "description": "Contrato Iris 0.14.0 §4.5: un intento de un Iris < 0.14.0 (o registrado antes de la verificación) lo decide una persona. aceptar: cuenta para el mínimo y pasa la unidad a por recuperar si sigue en comodato (sin aviso al titular); descartar: no cuenta ni ocupa el cupo. 409 intento_ya_decidido si no está anterior.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aceptar": {
+                    "description": "true: cuenta para el mínimo; false: se descarta",
+                    "type": "boolean"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "aceptar",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intento decidido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionIntentoRecuperacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.decidir_intento_recuperacion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.decidir_intento_recuperacion",
         "x-implementado": true
       }
     },
@@ -39158,7 +39312,7 @@
       "post": {
         "operationId": "inventarioContactoRecuperacion",
         "summary": "Registrar un contacto con el cliente para recuperar el equipo",
-        "description": "A48: cuenta como alternativa al mínimo de técnicos distintos para declarar el equipo no recuperado. Solo una unidad en comodato o por recuperar (409 estado_unidad_cambiado).",
+        "description": "A48: cuenta como alternativa al mínimo de técnicos distintos para declarar el equipo no recuperado. Solo una unidad en comodato o por recuperar (409 estado_unidad_cambiado). Iris 0.14.0 (T-8): solo una persona en el panel; un token, un agente o el sistema, 403 contacto_solo_panel.",
         "tags": [
           "inventario"
         ],
@@ -39688,6 +39842,152 @@
         "x-implementado": true
       }
     },
+    "/api/v1/inventario/unidades/{id}/intentos-recuperacion": {
+      "get": {
+        "operationId": "inventarioIntentosRecuperacion",
+        "summary": "Intentos de recuperación de una unidad con su verificación con Iris (pantalla de declaración)",
+        "description": "Contrato Iris 0.14.0 §3.10: cada intento con su actor, foto, ubicación y verificación (no_aplica, pendiente con motivo, verificado, no_verificado con motivo, anterior, aceptado o descartado), si cuenta para el mínimo, y el aviso «la ubicación y la autoría las afirma Iris». Al abrir la pantalla se llama antes a POST …/intentos-recuperacion/verificar.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentosRecuperacionDeUnidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/intentos-recuperacion/verificar": {
+      "post": {
+        "operationId": "inventarioVerificarIntentosRecuperacion",
+        "summary": "Volver a verificar con Iris los intentos pendientes de una unidad (al abrir la declaración)",
+        "description": "Contrato Iris 0.14.0 §3.10 (R-03): consulta a Iris cada intento pendiente de la unidad (GET <iris>/…/intentos-recuperacion/verificacion) y aplica el resultado; un verificado pasa la unidad a por recuperar y avisa al titular (uno por servicio al día). Responde la lista como el GET.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentosRecuperacionDeUnidad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.verificar_operacion_iris; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.verificar_operacion_iris",
+        "x-implementado": true
+      }
+    },
     "/api/v1/inventario/unidades/{id}/marcar-reparada": {
       "post": {
         "operationId": "inventarioMarcarReparada",
@@ -39961,6 +40261,186 @@
           }
         },
         "x-permiso": "inventario.resolver_garantia",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/vinculos-tecnicos": {
+      "get": {
+        "operationId": "inventarioVinculosTecnicos",
+        "summary": "Vínculos de los técnicos de Iris con su usuario de Argos (vinculo_rechazado y su motivo)",
+        "description": "Contrato Iris 0.14.0 §6.6: llegan por los webhooks tecnico.argos_vinculado / tecnico.argos_desvinculado. Solo de inventario: nunca autorizan nada de pagos y atención (§7.7).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vinculado",
+                "rechazado",
+                "desvinculado"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vínculos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VinculoTecnicoIris"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/vinculos-tecnicos/conciliar": {
+      "post": {
+        "operationId": "inventarioConciliarVinculoTecnico",
+        "summary": "Conciliar con Iris el vínculo de un técnico (GET <iris>/…/tecnicos/:usuario_id)",
+        "description": "Contrato Iris 0.14.0 §6.6 (N-3): lee el técnico en Iris y lo aplica con las reglas del webhook (activo: false = desvinculado; vuelve a validar la misma versión). 404 de Iris: resultado no_encontrado, sin cambios.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "usuario_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                    "description": "Usuario de Iris del técnico"
+                  }
+                },
+                "required": [
+                  "empresa_id",
+                  "usuario_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConciliacionVinculoTecnico"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.sincronizar_vinculo_tecnico; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.sincronizar_vinculo_tecnico",
         "x-implementado": true
       }
     },
@@ -74808,6 +75288,7 @@
                         "inventario.contar",
                         "inventario.crear_traslado",
                         "inventario.dar_de_baja",
+                        "inventario.decidir_intento_recuperacion",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
                         "inventario.enviar_garantia",
@@ -74816,9 +75297,11 @@
                         "inventario.registrar_contacto_recuperacion",
                         "inventario.resolver_garantia",
                         "inventario.sincronizar_cuadrilla",
+                        "inventario.sincronizar_vinculo_tecnico",
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
+                        "inventario.verificar_operacion_iris",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -75231,6 +75714,7 @@
                         "inventario.contar",
                         "inventario.crear_traslado",
                         "inventario.dar_de_baja",
+                        "inventario.decidir_intento_recuperacion",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
                         "inventario.enviar_garantia",
@@ -75239,9 +75723,11 @@
                         "inventario.registrar_contacto_recuperacion",
                         "inventario.resolver_garantia",
                         "inventario.sincronizar_cuadrilla",
+                        "inventario.sincronizar_vinculo_tecnico",
                         "inventario.trasladar",
                         "inventario.ver",
                         "inventario.ver_unidad",
+                        "inventario.verificar_operacion_iris",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.editar",
@@ -85655,7 +86141,7 @@
       "post": {
         "operationId": "serviciosEquipoNoRecuperado",
         "summary": "No se pudo recuperar el equipo: registra un intento de recuperación (nunca declara la pérdida)",
-        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:no_recuperado:<orden_id>:<unidad_id>. intento_n lo calcula Argos; la unidad queda por recuperar (sin asiento). foto_ref (id opaco del adjunto de la orden) obligatoria con se_nego y equipo_perdido; ubicacion siempre (422). Uno por unidad al día: 429 demasiados_intentos. 409 unidad_no_es_del_servicio o estado_unidad_cambiado. Declarar la unidad no recuperada y cobrarla lo decide una persona (POST /inventario/unidades/:id/declarar-no-recuperada). Emite inventario.recuperacion_intentada (aviso al titular con la serie enmascarada). Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
+        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:no_recuperado:<orden_id>:<unidad_id> (0.14.0: iris:no_recuperado:<orden_id>:<unidad_id>:<intento_id>, obligatoria; la huella incluye X-Iris-Actor). intento_n lo calcula Argos. foto_ref (id opaco del adjunto de la orden) obligatoria con se_nego y equipo_perdido y, con un Iris ≥ 0.14.0, con cualquier motivo; ubicacion siempre (422). 0.14.0: el intento se verifica con Iris de servidor a servidor (verificacion: pendiente); hasta que Iris lo confirma no cambia la unidad, no avisa al titular ni cuenta para el mínimo. Con un Iris anterior queda anterior a la verificación (lo decide una persona); registrado en Argos, cuenta en el momento (la unidad queda por recuperar). Uno por unidad al día de Guatemala de la fecha: 429 demasiados_intentos (urn:argosisp:problema:demasiados_intentos, definitivo); un intento que Iris no confirma no ocupa el cupo, y si la verificación del que lo ocupa no es concluyente responde 503 verificacion_no_concluyente con Retry-After. 409 unidad_no_es_del_servicio o estado_unidad_cambiado. Declarar la unidad no recuperada y cobrarla lo decide una persona (POST /inventario/unidades/:id/declarar-no-recuperada). Emite inventario.recuperacion_intentada (aviso al titular con la serie enmascarada). Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
         "tags": [
           "inventario"
         ],
@@ -85720,7 +86206,7 @@
                       "null"
                     ],
                     "pattern": "^[A-Za-z0-9._:-]{1,128}$",
-                    "description": "Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido"
+                    "description": "Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido y, con un Iris ≥ 0.14.0, con cualquier motivo"
                   },
                   "ubicacion": {
                     "type": "object",
@@ -86085,7 +86571,7 @@
       "post": {
         "operationId": "serviciosCambiarEquipo",
         "summary": "Cambiar el equipo en comodato de un servicio: sale uno y entra otro en una sola transacción",
-        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:cambio:<orden_id>:<sale_unidad_id>. La que sale (en comodato en el servicio: 409 unidad_no_es_del_servicio, o estado_unidad_cambiado si ya no lo está) se devuelve a la bodega de la que entra (baja del activo sin resultado) y queda disponible (funciona), en revisión (revision, danado) o en garantía (garantia); nunca se da de baja aquí. La que entra (unidad_id, serie o mac) sale de la bodega personal del técnico o de una cuadrilla de la que es miembro (403 no_es_miembro, 409 unidad_en_otra_bodega, antes de mirar su estado) y debe estar disponible (409 estado_unidad_cambiado). funciona con motivo danado o garantia: 422. cobro_propuesto (sin monto) entra en la cola de cobros de equipo. Emite inventario.comodato_devuelto, inventario.comodato_asignado, inventario.equipo_cambiado e inventario.unidad_estado_cambiado. Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
+        "description": "Contrato Iris 0.12.0 §3.10 (A48), Idempotency-Key iris:cambio:<orden_id>:<sale_unidad_id> (0.14.0: iris:cambio:<orden_id>:<sale_unidad_id>:<operacion_id>; la huella incluye X-Iris-Actor). 0.14.0 (con un Iris ≥ 0.14.0): con cobro_propuesto, foto_ref obligatoria (422) y la clave se guarda para verificar el cambio con Iris; el cobro queda por_verificar (fuera de la cola) hasta que Iris lo confirma. Con tecnico, el actor debe tener vínculo conocido (403 actor_desconocido; 409 vinculos_en_carga mientras dura la carga inicial) y ser ese técnico (403 actor_no_coincide). La que sale (en comodato en el servicio: 409 unidad_no_es_del_servicio, o estado_unidad_cambiado si ya no lo está) se devuelve a la bodega de la que entra (baja del activo sin resultado) y queda disponible (funciona), en revisión (revision, danado) o en garantía (garantia); nunca se da de baja aquí. La que entra (unidad_id, serie o mac) sale de la bodega personal del técnico o de una cuadrilla de la que es miembro (403 no_es_miembro, 409 unidad_en_otra_bodega, antes de mirar su estado) y debe estar disponible (409 estado_unidad_cambiado). funciona con motivo danado o garantia: 422. cobro_propuesto (sin monto) entra en la cola de cobros de equipo. Emite inventario.comodato_devuelto, inventario.comodato_asignado, inventario.equipo_cambiado e inventario.unidad_estado_cambiado. Con el token de Iris: X-Iris-Actor usuario:<id> obligatoria (400 cabecera_iris_requerida; asistente_ia 403 actor_ia_no_permitido); el servicio debe estar en las empresas del token (403 empresa_no_permitida); fecha (hora del teléfono) con recibido_en_iris dentro de la ventana de 72 h (422 rule ventana). Un conflicto (409) no se reintenta: se concilia leyendo GET /servicios/:id/equipos.",
         "tags": [
           "inventario"
         ],
@@ -86211,6 +86697,14 @@
                     ],
                     "additionalProperties": false,
                     "description": "Sin monto: entra en la cola de cobros de equipo (inventario.cobrar_equipo)"
+                  },
+                  "foto_ref": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+                    "description": "Id opaco del adjunto de la orden en Iris; obligatoria con cobro_propuesto desde el contrato 0.14.0"
                   },
                   "nota": {
                     "type": [
@@ -89931,6 +90425,7 @@
                             "inventario.contar",
                             "inventario.crear_traslado",
                             "inventario.dar_de_baja",
+                            "inventario.decidir_intento_recuperacion",
                             "inventario.declarar_perdida_comodato",
                             "inventario.devolver_comodato",
                             "inventario.enviar_garantia",
@@ -89939,9 +90434,11 @@
                             "inventario.registrar_contacto_recuperacion",
                             "inventario.resolver_garantia",
                             "inventario.sincronizar_cuadrilla",
+                            "inventario.sincronizar_vinculo_tecnico",
                             "inventario.trasladar",
                             "inventario.ver",
                             "inventario.ver_unidad",
+                            "inventario.verificar_operacion_iris",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.editar",
@@ -97730,6 +98227,17 @@
             ],
             "minimum": 1,
             "description": "El cobro propuesto en la cola (sin monto)"
+          },
+          "cobro_verificacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pendiente",
+              "no_aplica"
+            ],
+            "description": "0.14.0: pendiente = el cobro propuesto espera la verificación de Iris y no está en la cola; null sin cobro"
           }
         }
       },
@@ -99770,8 +100278,11 @@
             "enum": [
               "propuesto",
               "aprobado",
-              "rechazado"
-            ]
+              "rechazado",
+              "por_verificar",
+              "no_verificado"
+            ],
+            "description": "por_verificar y no_verificado (0.14.0): cobro propuesto de un cambio que espera la verificación de Iris o que Iris no confirmó; no están en la cola"
           },
           "monto": {
             "anyOf": [
@@ -101064,6 +101575,48 @@
           }
         }
       },
+      "ConciliacionVinculoTecnico": {
+        "type": "object",
+        "required": [
+          "resultado",
+          "estado",
+          "ignorado",
+          "motivo"
+        ],
+        "properties": {
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aplicado",
+              "no_encontrado",
+              "error"
+            ]
+          },
+          "estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "vinculado",
+              "rechazado",
+              "desvinculado"
+            ]
+          },
+          "ignorado": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ConectorHorus": {
         "type": "object",
         "required": [
@@ -102011,6 +102564,10 @@
           "recuperacion_tecnicos_minimos": {
             "type": "integer",
             "description": "Técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica)"
+          },
+          "iris_movimientos_diarios_alerta": {
+            "type": "integer",
+            "description": "Iris 0.14.0: movimientos al día de un técnico vinculado desde los que se avisa al admin (40 de fábrica)"
           },
           "version": {
             "type": "integer",
@@ -104174,6 +104731,30 @@
               "GTQ",
               "USD"
             ]
+          }
+        }
+      },
+      "DecisionIntentoRecuperacion": {
+        "type": "object",
+        "required": [
+          "intento_id",
+          "verificacion",
+          "por_recuperar"
+        ],
+        "properties": {
+          "intento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "verificacion": {
+            "type": "string",
+            "enum": [
+              "aceptado",
+              "descartado"
+            ]
+          },
+          "por_recuperar": {
+            "type": "boolean"
           }
         }
       },
@@ -112654,6 +113235,226 @@
           "fecha": {
             "type": "string",
             "format": "date-time"
+          },
+          "verificacion": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "anterior",
+              "no_aplica"
+            ],
+            "description": "0.14.0: pendiente (se verifica con Iris; hasta entonces no cambia la unidad ni avisa), anterior (Iris < 0.14.0: lo decide una persona) o no_aplica (registrado en Argos)"
+          }
+        }
+      },
+      "IntentoRecuperacionVerificado": {
+        "type": "object",
+        "required": [
+          "id",
+          "servicio_id",
+          "intento_n",
+          "motivo",
+          "foto_ref",
+          "lat",
+          "lng",
+          "precision_m",
+          "nota",
+          "fecha",
+          "actor_tecnico",
+          "actor_tecnico_id",
+          "actor_tecnico_nombre",
+          "origen_externo_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "intento_n": {
+            "type": "integer"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "cliente_ausente",
+              "se_nego",
+              "equipo_perdido",
+              "otro"
+            ]
+          },
+          "foto_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del adjunto de la orden en Iris (se abre por autologin)"
+          },
+          "lat": {
+            "type": "string"
+          },
+          "lng": {
+            "type": "string"
+          },
+          "precision_m": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dia": {
+            "type": "string",
+            "format": "date",
+            "description": "Día de Guatemala de la fecha del intento (el del cupo)"
+          },
+          "actor_tecnico": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor_tecnico_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "actor_tecnico_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_externo_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "verificacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "verificacion": {
+            "type": "string",
+            "enum": [
+              "no_aplica",
+              "pendiente",
+              "verificado",
+              "no_verificado",
+              "anterior",
+              "aceptado",
+              "descartado"
+            ],
+            "description": "no_aplica (registrado en Argos), pendiente, verificado, no_verificado (con motivo), anterior (anterior a la verificación: lo decide una persona), aceptado o descartado"
+          },
+          "verificacion_motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "envio_en_curso, foto_pendiente, no_enviado_por_iris, no_coincide, foto_invalida, desconocido_en_iris, error_iris, timeout, sin_acceso, limitado, sin_conector o respuesta_invalida"
+          },
+          "verificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "verificacion_consultas": {
+            "type": "integer"
+          },
+          "verificacion_proxima_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "decidido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "decidido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_decision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuenta": {
+            "type": "boolean",
+            "description": "Cuenta para el mínimo de técnicos distintos"
+          },
+          "afirmado_por_iris": {
+            "type": "boolean",
+            "description": "La ubicación y la autoría las afirma Iris (Argos no las revalida)"
+          }
+        }
+      },
+      "IntentosRecuperacionDeUnidad": {
+        "type": "object",
+        "required": [
+          "unidad_id",
+          "aviso",
+          "tecnicos_minimos",
+          "tecnicos_que_cuentan",
+          "contactos",
+          "intentos"
+        ],
+        "properties": {
+          "unidad_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "aviso": {
+            "type": "string",
+            "description": "Texto fijo para la pantalla: la ubicación y la autoría las afirma Iris"
+          },
+          "tecnicos_minimos": {
+            "type": "integer"
+          },
+          "tecnicos_que_cuentan": {
+            "type": "integer"
+          },
+          "contactos": {
+            "type": "integer",
+            "description": "Contactos registrados por una persona en el panel de Argos"
+          },
+          "intentos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntentoRecuperacionVerificado"
+            }
           }
         }
       },
@@ -115853,6 +116654,7 @@
           "inventario.contar",
           "inventario.crear_traslado",
           "inventario.dar_de_baja",
+          "inventario.decidir_intento_recuperacion",
           "inventario.declarar_perdida_comodato",
           "inventario.devolver_comodato",
           "inventario.enviar_garantia",
@@ -115861,9 +116663,11 @@
           "inventario.registrar_contacto_recuperacion",
           "inventario.resolver_garantia",
           "inventario.sincronizar_cuadrilla",
+          "inventario.sincronizar_vinculo_tecnico",
           "inventario.trasladar",
           "inventario.ver",
           "inventario.ver_unidad",
+          "inventario.verificar_operacion_iris",
           "ip.resolver",
           "ipv6.crear",
           "ipv6.editar",
@@ -116168,6 +116972,7 @@
           "Capturar lo contado en un conteo físico abierto",
           "Enviar una orden de traslado (lo enviado queda en tránsito hasta que el destino lo recibe)",
           "Dar de baja existencias dañadas, robadas u obsoletas",
+          "Decidir si cuenta un intento de recuperación anterior a la verificación con Iris",
           "Declarar perdido un equipo en comodato (baja del activo a pérdida)",
           "Recibir de vuelta un equipo en comodato (baja del activo sin resultado)",
           "Enviar a garantía del proveedor una unidad en revisión (proveedor, RMA y vencimiento)",
@@ -116176,9 +116981,11 @@
           "Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)",
           "Resolver la garantía de una unidad: volvió reparada, reemplazada o rechazada",
           "Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)",
+          "Aplicar o conciliar con Iris el vínculo de un técnico con su usuario de Argos (solo inventario)",
           "Trasladar existencias entre bodegas o técnicos",
           "Ver productos, bodegas, existencias y el kardex",
           "Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor",
+          "Verificar con Iris los intentos de recuperación y los cambios con cobro propuesto (al abrir la declaración)",
           "Resolver una IP a su servicio",
           "Crear bloques y pools IPv6",
           "Editar bloques y pools IPv6",
@@ -118570,7 +119377,16 @@
             "type": "integer"
           },
           "tecnicos_distintos": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Técnicos distintos con intentos que cuentan"
+          },
+          "por_verificar": {
+            "type": "integer",
+            "description": "Intentos pendientes de verificar con Iris (0.14.0)"
+          },
+          "anteriores": {
+            "type": "integer",
+            "description": "Intentos anteriores a la verificación (los decide una persona)"
           },
           "contactos": {
             "type": "integer"
@@ -131833,6 +132649,7 @@
               "inventario.contar",
               "inventario.crear_traslado",
               "inventario.dar_de_baja",
+              "inventario.decidir_intento_recuperacion",
               "inventario.declarar_perdida_comodato",
               "inventario.devolver_comodato",
               "inventario.enviar_garantia",
@@ -131841,9 +132658,11 @@
               "inventario.registrar_contacto_recuperacion",
               "inventario.resolver_garantia",
               "inventario.sincronizar_cuadrilla",
+              "inventario.sincronizar_vinculo_tecnico",
               "inventario.trasladar",
               "inventario.ver",
               "inventario.ver_unidad",
+              "inventario.verificar_operacion_iris",
               "ip.resolver",
               "ipv6.crear",
               "ipv6.editar",
@@ -136770,101 +137589,7 @@
           "intentos": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": [
-                "id",
-                "servicio_id",
-                "intento_n",
-                "motivo",
-                "foto_ref",
-                "lat",
-                "lng",
-                "precision_m",
-                "nota",
-                "fecha",
-                "actor_tecnico",
-                "actor_tecnico_id",
-                "actor_tecnico_nombre",
-                "origen_externo_id",
-                "created_at"
-              ],
-              "properties": {
-                "id": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "servicio_id": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "intento_n": {
-                  "type": "integer"
-                },
-                "motivo": {
-                  "type": "string",
-                  "enum": [
-                    "cliente_ausente",
-                    "se_nego",
-                    "equipo_perdido",
-                    "otro"
-                  ]
-                },
-                "foto_ref": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "Id opaco del adjunto de la orden en Iris (se abre por autologin)"
-                },
-                "lat": {
-                  "type": "string"
-                },
-                "lng": {
-                  "type": "string"
-                },
-                "precision_m": {
-                  "type": "string"
-                },
-                "nota": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "fecha": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "actor_tecnico": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "actor_tecnico_id": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
-                  "minimum": 1
-                },
-                "actor_tecnico_nombre": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "origen_externo_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "created_at": {
-                  "type": "string",
-                  "format": "date-time"
-                }
-              }
+              "$ref": "#/components/schemas/IntentoRecuperacionVerificado"
             }
           },
           "contactos": {
@@ -138063,6 +138788,99 @@
             "format": "date-time"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "VinculoTecnicoIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "iris_usuario_id",
+          "iris_tecnico_id",
+          "id_externo",
+          "usuario_id",
+          "usuario_nombre",
+          "estado",
+          "motivo",
+          "version",
+          "origen",
+          "reevaluar_en",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "iris_usuario_id": {
+            "type": "string"
+          },
+          "iris_tecnico_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id_externo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "usuario_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vinculado",
+              "rechazado",
+              "desvinculado"
+            ],
+            "description": "rechazado = vinculo_rechazado (con su motivo)"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rechazo: usuario_inexistente, usuario_inactivo, no_es_tecnico, fuera_de_la_empresa, id_externo_en_uso; desvinculado: el de Iris (desactivado)"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "webhook",
+              "conciliacion"
+            ]
+          },
+          "reevaluar_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
             "type": "string",
             "format": "date-time"
           }
