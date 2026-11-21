@@ -66,12 +66,12 @@ function sinEvidencia(motivo: boolean, evidencia: boolean): Problema {
 
 /** «3 gestiones de cobro registradas (1 con adjunto); última: 2026-11-12». */
 export function textoEvidencia(g: ResumenGestiones): string {
-    const plural = g.total === 1 ? 'gestión de cobro registrada' : 'gestiones de cobro registradas'
+    const plural = g.cantidad === 1 ? 'gestión de cobro registrada' : 'gestiones de cobro registradas'
     const adjuntos = g.con_adjunto > 0 ? ` (${g.con_adjunto} con adjunto)` : ''
     const ultima = g.ultima
         ? `; última: ${DateTime.fromJSDate(new Date(g.ultima)).setZone(ZONA_NEGOCIO).toISODate()}`
         : ''
-    return `${g.total} ${plural}${adjuntos}${ultima}`
+    return `${g.cantidad} ${plural}${adjuntos}${ultima}`
 }
 
 export default class CastigarCartera extends DomainAction<EntradaCastigarCartera, CastigoVista> {
@@ -150,7 +150,7 @@ export default class CastigarCartera extends DomainAction<EntradaCastigarCartera
         // decisión del PM 8: las gestiones de cobro registradas son la evidencia; sin texto, se resume
         if (evidencia.length < 3) {
             const gestiones = await resumenGestiones(t.trx, clienteId, empresaId)
-            if (gestiones.total === 0) throw sinEvidencia(false, true)
+            if (gestiones.cantidad === 0) throw sinEvidencia(false, true)
             evidencia = textoEvidencia(gestiones)
         }
 

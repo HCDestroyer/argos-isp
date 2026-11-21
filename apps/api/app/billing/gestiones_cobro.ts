@@ -142,7 +142,7 @@ export async function listarGestionesCliente(
 
 /** Resumen para el castigo de cartera: lo registrado del cliente en la empresa hasta `hasta`. */
 export interface ResumenGestiones {
-    total: number
+    cantidad: number
     con_adjunto: number
     ultima: Date | null
     gestiones: Array<
@@ -179,7 +179,7 @@ export async function resumenGestiones(
         servicio_id: f.servicio_id === null ? null : Number(f.servicio_id),
     }))
     return {
-        total: gestiones.length,
+        cantidad: gestiones.length,
         con_adjunto: gestiones.filter((g) => g.tiene_adjunto).length,
         ultima: gestiones[0]?.ocurrido_en ?? null,
         gestiones,
