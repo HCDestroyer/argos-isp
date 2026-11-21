@@ -373,6 +373,16 @@
 .tono-marca {
     --tono: var(--ui-primary);
 }
+/* Tonos de estado (contadores de Clientes, franja de la ficha): verde, ámbar y rojo de Nuxt UI. */
+.tono-exito {
+    --tono: var(--ui-color-success-500);
+}
+.tono-aviso {
+    --tono: var(--ui-color-warning-500);
+}
+.tono-error {
+    --tono: var(--ui-color-error-500);
+}
 
 [class*='tono-'] {
     --tono-texto: color-mix(in oklab, var(--tono) var(--viz-proporcion-texto), var(--viz-mezcla-texto));
