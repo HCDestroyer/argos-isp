@@ -34,6 +34,7 @@ export default class NotifyWorker extends BaseCommand {
         const { crearWorkerCron, programarCronRecordatorios } = await import('#notify/recordatorios')
         const { programarCronParticiones } = await import('#notify/particiones')
         const { programarCronVigilancia } = await import('#notify/vigilancia')
+        const { programarCronAlmacenamiento } = await import('#monitoreo/cron_almacenamiento')
 
         // Configuración de canales del panel: siembra desde el entorno (una vez), carga y escucha
         // invalidaciones de otros procesos.
@@ -48,9 +49,10 @@ export default class NotifyWorker extends BaseCommand {
         if (colaCron) {
             await programarCronParticiones(colaCron)
             await programarCronVigilancia(colaCron)
+            await programarCronAlmacenamiento(colaCron)
             workers.push(crearWorkerCron(cola))
             this.logger.info(
-                `notify:worker con crons de recordatorios, particiones y vigilancia (${colaCron.name})`,
+                `notify:worker con crons de recordatorios, particiones, vigilancia y almacenamiento (${colaCron.name})`,
             )
         }
 
