@@ -1,3 +1,4 @@
+import { espiarApi } from './espiarApi'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -76,7 +77,7 @@ afterEach(() => {
 describe('botón "Pagar en línea"', () => {
     it('crea el cobro con Idempotency-Key y sale a la página de pago del proveedor', async () => {
         fijarPagoFixture('pagado')
-        const post = vi.spyOn(useApi(), 'POST')
+        const post = espiarApi('POST')
         const wrapper = await montarBoton()
         const pagar = wrapper.find('[data-testid="pagar-en-linea"]')
         expect(pagar.attributes('disabled')).toBeUndefined()
@@ -97,7 +98,7 @@ describe('botón "Pagar en línea"', () => {
 
     it('con sesión manda el servicio de /cuenta', async () => {
         fijarSesionFixture(true)
-        const post = vi.spyOn(useApi(), 'POST')
+        const post = espiarApi('POST')
         clearNuxtData(clave => clave.startsWith('portal:empresa'))
         const wrapper = await montar(PagoEnLinea, { props: { servicioId: 7 } })
         await esperar()
@@ -109,7 +110,7 @@ describe('botón "Pagar en línea"', () => {
 
     it('si la pasarela no responde muestra el error, no sale y el reintento lleva otra clave', async () => {
         fijarPagoFixture('sin_pasarela')
-        const post = vi.spyOn(useApi(), 'POST')
+        const post = espiarApi('POST')
         const wrapper = await montarBoton()
 
         await wrapper.find('[data-testid="pagar-en-linea"]').trigger('click')
@@ -179,7 +180,7 @@ describe('retorno /corte?pago=<id>', () => {
         expect(wrapper.find('[data-testid="servicio-reactivado"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="pagar-en-linea"]').exists()).toBe(true)
 
-        const get = vi.spyOn(useApi(), 'GET')
+        const get = espiarApi('GET')
         await cicloDe5s()
         // Ni el cobro ni el estado se siguen consultando: ya no hay reactivación que esperar.
         expect(get).not.toHaveBeenCalled()

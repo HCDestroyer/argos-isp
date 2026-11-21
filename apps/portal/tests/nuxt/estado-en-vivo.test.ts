@@ -1,3 +1,4 @@
+import { espiarApi } from './espiarApi'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -70,7 +71,7 @@ describe('useEstadoServicio', () => {
     it('consulta hasta ver activo y se detiene', async () => {
         usarEscenario('reactivacion')
         await useApi().GET('/api/v1/portal/quien-soy') // reinicia el contador del fixture
-        const espia = vi.spyOn(useApi(), 'GET')
+        const espia = espiarApi('GET')
         const { estado, wrapper } = await montarVigilancia({ intervaloMs: 20, duracionMs: 60_000 })
         relojFalso()
 
@@ -107,7 +108,7 @@ describe('useEstadoServicio', () => {
 
     it('vigilar dos veces no duplica las consultas', async () => {
         usarEscenario('suspendido')
-        const espia = vi.spyOn(useApi(), 'GET')
+        const espia = espiarApi('GET')
         const { estado, wrapper } = await montarVigilancia({ intervaloMs: 50, duracionMs: 10_000 })
         relojFalso()
 

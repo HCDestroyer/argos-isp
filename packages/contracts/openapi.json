@@ -24,6 +24,9 @@
       "name": "anuncios"
     },
     {
+      "name": "apariencia"
+    },
+    {
       "name": "auth"
     },
     {
@@ -2756,6 +2759,704 @@
           }
         },
         "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia": {
+      "get": {
+        "operationId": "aparienciaVer",
+        "summary": "Apariencia de la instalación (con el catálogo de temas)",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apariencia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "aparienciaEditar",
+        "summary": "Cambiar tema, modo predeterminado, nombre de marca o eslogan",
+        "description": "Lo que no viene no cambia. `version` desactualizada → 409. Sin cambios no sube la versión.",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída de la apariencia; si cambió responde 409"
+                  },
+                  "tema": {
+                    "type": "string",
+                    "enum": [
+                      "indigo",
+                      "azul",
+                      "violeta",
+                      "esmeralda",
+                      "naranja",
+                      "rosa",
+                      "pizarra"
+                    ],
+                    "description": "Preset de tema (`temas`)"
+                  },
+                  "modo_predeterminado": {
+                    "type": "string",
+                    "enum": [
+                      "sistema",
+                      "claro",
+                      "oscuro"
+                    ],
+                    "description": "Modo inicial de la interfaz: sistema, claro u oscuro"
+                  },
+                  "nombre_marca": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "eslogan": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120,
+                    "description": "Texto bajo la marca en el inicio de sesión; null o vacío = sin eslogan"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apariencia actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/archivos/{nombre}": {
+      "get": {
+        "operationId": "aparienciaArchivo",
+        "summary": "Logo o fondo vigente del inicio de sesión (público, con ETag)",
+        "description": "Sin login. `:nombre` es el de `logo_login_url` / `fondo_login_url`; otro nombre responde 404. `ETag` (sha256), `Cache-Control: public, max-age=31536000, immutable` (el nombre cambia con el contenido); con `If-None-Match` igual responde 304.",
+        "tags": [
+          "apariencia"
+        ],
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(logo|fondo)-login-[0-9a-f]{16}\\.(png|svg|jpg|webp)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/fondo-login": {
+      "post": {
+        "operationId": "aparienciaSubirFondoLogin",
+        "summary": "Subir el fondo del inicio de sesión",
+        "description": "`multipart/form-data` con el archivo `archivo` (PNG, JPEG, WebP o SVG, hasta 1.5 MB) y `version`. El tipo se decide por el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni referencias externas; con DOCTYPE, entidades o mal formado, 422 en `archivo`.",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída de la apariencia; si cambió responde 409"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG, JPEG, WebP o SVG, hasta 1.5 MB"
+                  }
+                },
+                "required": [
+                  "version",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apariencia con el archivo nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.subir_fondo_login; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.subir_fondo_login",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/fondo-login/quitar": {
+      "post": {
+        "operationId": "aparienciaQuitarFondoLogin",
+        "summary": "Quitar el fondo del inicio de sesión",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída de la apariencia; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apariencia sin el archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.quitar_fondo_login; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.quitar_fondo_login",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/logo-login": {
+      "post": {
+        "operationId": "aparienciaSubirLogoLogin",
+        "summary": "Subir el logo del inicio de sesión",
+        "description": "`multipart/form-data` con el archivo `archivo` (PNG o SVG, hasta 512 KB) y `version`. El tipo se decide por el contenido. El SVG se sanea: sin scripts, manejadores de eventos, estilos, `foreignObject` ni referencias externas; con DOCTYPE, entidades o mal formado, 422 en `archivo`.",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída de la apariencia; si cambió responde 409"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG o SVG, hasta 512 KB"
+                  }
+                },
+                "required": [
+                  "version",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apariencia con el archivo nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.subir_logo_login; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.subir_logo_login",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/logo-login/quitar": {
+      "post": {
+        "operationId": "aparienciaQuitarLogoLogin",
+        "summary": "Quitar el logo del inicio de sesión",
+        "tags": [
+          "apariencia"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída de la apariencia; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apariencia sin el archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Apariencia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso apariencia.quitar_logo_login; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "apariencia.quitar_logo_login",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/apariencia/publica": {
+      "get": {
+        "operationId": "aparienciaPublica",
+        "summary": "Apariencia pública (tema, marca y archivos del inicio de sesión)",
+        "description": "Sin login: la usan las pantallas de inicio de sesión del panel y del portal. `ETag` de la versión y `Cache-Control: no-cache`; con `If-None-Match` igual responde 304. El logo de cada empresa sigue en `GET /empresas/:id/logo`.",
+        "tags": [
+          "apariencia"
+        ],
+        "responses": {
+          "200": {
+            "description": "Apariencia pública",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AparienciaPublica"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          }
+        },
         "x-implementado": true
       }
     },
@@ -47582,6 +48283,161 @@
         "x-implementado": true
       }
     },
+    "/api/v1/me/accesos-rapidos": {
+      "get": {
+        "operationId": "meAccesosRapidos",
+        "summary": "Mis accesos rápidos del panel (o los sugeridos por mis roles)",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accesos rápidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccesosRapidos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "meEditarAccesosRapidos",
+        "summary": "Guardar mis accesos rápidos (null = volver a los predeterminados)",
+        "description": "Solo el propio usuario. Hasta 12 ids de sección, sin repetidos, con el patrón `^[a-z0-9]+(?:[-_.][a-z0-9]+)*$`. Con lista guardada y `version` desactualizada → 409.",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secciones": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "maxLength": 48,
+                      "pattern": "^[a-z0-9]+(?:[-_.][a-z0-9]+)*$"
+                    },
+                    "maxItems": 12,
+                    "uniqueItems": true,
+                    "description": "Ids de sección del panel en orden (hasta 12, sin repetidos); null = volver a los predeterminados por rol"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409. Omitida = último gana"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accesos rápidos guardados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccesosRapidos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/me/vinculaciones": {
       "get": {
         "operationId": "meVinculaciones",
@@ -67757,6 +68613,12 @@
                         "adicionales.ver",
                         "anuncios.administrar",
                         "anuncios.ver",
+                        "apariencia.editar",
+                        "apariencia.quitar_fondo_login",
+                        "apariencia.quitar_logo_login",
+                        "apariencia.subir_fondo_login",
+                        "apariencia.subir_logo_login",
+                        "apariencia.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -68002,6 +68864,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.recalcular_almacenamiento",
+                        "sistema.ver_almacenamiento",
+                        "sistema.ver_registro",
+                        "sistema.ver_salud",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -68148,6 +69014,12 @@
                         "adicionales.ver",
                         "anuncios.administrar",
                         "anuncios.ver",
+                        "apariencia.editar",
+                        "apariencia.quitar_fondo_login",
+                        "apariencia.quitar_logo_login",
+                        "apariencia.subir_fondo_login",
+                        "apariencia.subir_logo_login",
+                        "apariencia.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -68393,6 +69265,10 @@
                         "servidores_pppoe.eliminar",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sistema.recalcular_almacenamiento",
+                        "sistema.ver_almacenamiento",
+                        "sistema.ver_registro",
+                        "sistema.ver_salud",
                         "sorteos.ejecutar",
                         "sorteos.entregar",
                         "sorteos.exportar",
@@ -80196,6 +81072,318 @@
         "x-implementado": true
       }
     },
+    "/api/v1/sistema/almacenamiento": {
+      "get": {
+        "operationId": "sistemaAlmacenamiento",
+        "summary": "Qué se almacena y cuánto espacio ocupa",
+        "description": "`volumenes`: espacio de los discos leído en el momento. `medicion`: último cálculo guardado (carpetas, base de datos y Redis) con su `calculado_en`, o null si nunca se calculó. Se recalcula con el cron diario o con `POST /sistema/almacenamiento/recalcular`. Contrato `salud.md` §6.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Almacenamiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Almacenamiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_almacenamiento",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_almacenamiento",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/almacenamiento/recalcular": {
+      "post": {
+        "operationId": "sistemaRecalcularAlmacenamiento",
+        "summary": "Recalcular el almacenamiento ahora",
+        "description": "Recorre las carpetas con un límite de 15 s (lo que no alcance sale `parcial`), mide la base y Redis y guarda el resultado. Solo lee y suma: no borra nada. 409 `calculo_en_curso` si ya hay un cálculo corriendo.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Medición nueva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicionAlmacenamiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.recalcular_almacenamiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.recalcular_almacenamiento",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/registro": {
+      "get": {
+        "operationId": "sistemaRegistro",
+        "summary": "Registro del sistema: errores y avisos operativos recientes",
+        "description": "Errores de acciones, comandos de red fallidos, caídas de RADIUS, eventos del libro, avisos de disco y trabajos fallidos de las colas, del más nuevo al más viejo. Sin secretos. Contrato `salud.md` §3.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nivel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "error",
+                "advertencia",
+                "info"
+              ]
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "api",
+                "red",
+                "radius",
+                "coa",
+                "colas",
+                "contabilidad",
+                "almacenamiento"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "ISO 8601; por defecto hace 7 días, máximo 31",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 400
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página del registro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistroSistemaPagina"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_registro",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_registro",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/sistema/salud": {
+      "get": {
+        "operationId": "sistemaSalud",
+        "summary": "Salud del sistema: servicios, colas, RADIUS, routers, crons, respaldos y servidor",
+        "description": "Se calcula al pedirla (sin caché). Cada chequeo corre en paralelo con 1 s de límite: la ruta responde en ~2 s como mucho y un componente que no contesta sale `caido` o `desconocido`, nunca 500. Contrato `salud.md` §2.",
+        "tags": [
+          "sistema"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Salud del sistema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludSistema"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sistema.ver_salud",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sistema.ver_salud",
+        "x-implementado": true
+      }
+    },
     "/api/v1/telegram/webhook": {
       "post": {
         "operationId": "telegramWebhook",
@@ -80541,6 +81729,12 @@
                             "adicionales.ver",
                             "anuncios.administrar",
                             "anuncios.ver",
+                            "apariencia.editar",
+                            "apariencia.quitar_fondo_login",
+                            "apariencia.quitar_logo_login",
+                            "apariencia.subir_fondo_login",
+                            "apariencia.subir_logo_login",
+                            "apariencia.ver",
                             "bancos.conciliar",
                             "bancos.importar_extracto",
                             "bancos.reatribuir_llegada",
@@ -80786,6 +81980,10 @@
                             "servidores_pppoe.eliminar",
                             "sesiones.desconectar",
                             "sesiones.ver",
+                            "sistema.recalcular_almacenamiento",
+                            "sistema.ver_almacenamiento",
+                            "sistema.ver_registro",
+                            "sistema.ver_salud",
                             "sorteos.ejecutar",
                             "sorteos.entregar",
                             "sorteos.exportar",
@@ -82780,6 +83978,39 @@
           }
         }
       },
+      "AccesosRapidos": {
+        "type": "object",
+        "required": [
+          "secciones",
+          "predeterminados",
+          "maximo",
+          "version"
+        ],
+        "properties": {
+          "secciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids de sección del panel, en orden"
+          },
+          "predeterminados": {
+            "type": "boolean",
+            "description": "true: el usuario no guardó su lista y esta es la sugerida por sus roles"
+          },
+          "maximo": {
+            "type": "integer",
+            "description": "Máximo de accesos (12)"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null con predeterminados"
+          }
+        }
+      },
       "AccionAuditoria": {
         "type": "object",
         "required": [
@@ -83533,6 +84764,33 @@
           }
         }
       },
+      "Almacenamiento": {
+        "type": "object",
+        "required": [
+          "volumenes",
+          "medicion"
+        ],
+        "properties": {
+          "volumenes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumenAlmacenamiento"
+            },
+            "description": "Leídos en el momento de la petición"
+          },
+          "medicion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MedicionAlmacenamiento"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Último cálculo guardado (null si nunca)"
+          }
+        }
+      },
       "Anuncio": {
         "type": "object",
         "required": [
@@ -83714,6 +84972,168 @@
           }
         }
       },
+      "Apariencia": {
+        "type": "object",
+        "required": [
+          "tema",
+          "paleta",
+          "modo_predeterminado",
+          "nombre_marca",
+          "eslogan",
+          "logo_login_url",
+          "fondo_login_url",
+          "version",
+          "logo_login",
+          "fondo_login",
+          "temas",
+          "updated_at"
+        ],
+        "properties": {
+          "tema": {
+            "type": "string",
+            "enum": [
+              "indigo",
+              "azul",
+              "violeta",
+              "esmeralda",
+              "naranja",
+              "rosa",
+              "pizarra"
+            ]
+          },
+          "paleta": {
+            "$ref": "#/components/schemas/PaletaTema"
+          },
+          "modo_predeterminado": {
+            "type": "string",
+            "enum": [
+              "sistema",
+              "claro",
+              "oscuro"
+            ]
+          },
+          "nombre_marca": {
+            "type": "string"
+          },
+          "eslogan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_login_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ruta relativa a la API (`/api/v1/apariencia/archivos/…`); cambia con el contenido"
+          },
+          "fondo_login_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "logo_login": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArchivoApariencia"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fondo_login": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArchivoApariencia"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "temas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemaApariencia"
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AparienciaPublica": {
+        "type": "object",
+        "required": [
+          "tema",
+          "paleta",
+          "modo_predeterminado",
+          "nombre_marca",
+          "eslogan",
+          "logo_login_url",
+          "fondo_login_url",
+          "version"
+        ],
+        "properties": {
+          "tema": {
+            "type": "string",
+            "enum": [
+              "indigo",
+              "azul",
+              "violeta",
+              "esmeralda",
+              "naranja",
+              "rosa",
+              "pizarra"
+            ]
+          },
+          "paleta": {
+            "$ref": "#/components/schemas/PaletaTema"
+          },
+          "modo_predeterminado": {
+            "type": "string",
+            "enum": [
+              "sistema",
+              "claro",
+              "oscuro"
+            ]
+          },
+          "nombre_marca": {
+            "type": "string"
+          },
+          "eslogan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_login_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ruta relativa a la API (`/api/v1/apariencia/archivos/…`); cambia con el contenido"
+          },
+          "fondo_login_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "AplicacionPago": {
         "type": "object",
         "required": [
@@ -83763,6 +85183,36 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ArchivoApariencia": {
+        "type": "object",
+        "required": [
+          "url",
+          "tipo",
+          "tamano",
+          "etag"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/svg+xml",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "tamano": {
+            "type": "integer"
+          },
+          "etag": {
+            "type": "string",
+            "description": "sha256 del contenido"
           }
         }
       },
@@ -88462,6 +89912,86 @@
           }
         }
       },
+      "CategoriaAlmacenamiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "ruta",
+          "estado",
+          "bytes",
+          "archivos",
+          "crecimiento_30d_bytes",
+          "crecimiento_30d_archivos",
+          "mayor",
+          "aviso"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "comprobantes, logos, anuncios, inventario, libros, sorteos, respaldos"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "ruta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "completo",
+              "parcial",
+              "no_disponible"
+            ]
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "archivos": {
+            "type": "integer"
+          },
+          "crecimiento_30d_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "crecimiento_30d_archivos": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mayor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "nombre",
+              "bytes"
+            ],
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "bytes": {
+                "type": "integer"
+              }
+            }
+          },
+          "aviso": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "CategoriaEgreso": {
         "type": "object",
         "required": [
@@ -90005,6 +91535,76 @@
                 }
               }
             }
+          }
+        }
+      },
+      "ComponenteSalud": {
+        "type": "object",
+        "required": [
+          "id",
+          "grupo",
+          "nombre",
+          "estado",
+          "detalle",
+          "latencia_ms",
+          "desde",
+          "metricas"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Estable: api, postgres, redis, cola.<nombre>, outbox, aaa, coa, routers, cron.<x>, respaldos, host.<x>"
+          },
+          "grupo": {
+            "type": "string",
+            "enum": [
+              "nucleo",
+              "colas",
+              "eventos",
+              "red",
+              "procesos",
+              "host"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degradado",
+              "caido",
+              "desconocido"
+            ]
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Frase corta en español para mostrar tal cual"
+          },
+          "latencia_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "metricas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "number",
+                "string",
+                "null"
+              ]
+            },
+            "description": "Valores por componente (contrato salud.md §2.2)"
           }
         }
       },
@@ -97319,6 +98919,82 @@
           }
         }
       },
+      "EntradaRegistro": {
+        "type": "object",
+        "required": [
+          "id",
+          "momento",
+          "nivel",
+          "origen",
+          "titulo",
+          "detalle",
+          "entidad",
+          "request_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Estable: <fuente>:<id>"
+          },
+          "momento": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nivel": {
+            "type": "string",
+            "enum": [
+              "error",
+              "advertencia",
+              "info"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "api",
+              "red",
+              "radius",
+              "coa",
+              "colas",
+              "contabilidad",
+              "almacenamiento"
+            ]
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "detalle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entidad": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tipo",
+              "id"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "EntregaPoolIpv6": {
         "type": "object",
         "required": [
@@ -103063,6 +104739,153 @@
           }
         }
       },
+      "MedicionAlmacenamiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "calculado_en",
+          "duracion_ms",
+          "origen",
+          "parcial",
+          "categorias",
+          "base_datos",
+          "redis",
+          "volumen_datos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "calculado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duracion_ms": {
+            "type": "integer"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "cron"
+            ]
+          },
+          "parcial": {
+            "type": "boolean"
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoriaAlmacenamiento"
+            }
+          },
+          "base_datos": {
+            "type": "object",
+            "required": [
+              "tamano_bytes",
+              "por_schema",
+              "tablas_mayores",
+              "aviso"
+            ],
+            "properties": {
+              "tamano_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "bytes"
+              },
+              "por_schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "schema",
+                    "bytes"
+                  ],
+                  "properties": {
+                    "schema": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "tablas_mayores": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "schema",
+                    "tabla",
+                    "bytes"
+                  ],
+                  "properties": {
+                    "schema": {
+                      "type": "string"
+                    },
+                    "tabla": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "aviso": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "redis": {
+            "type": "object",
+            "required": [
+              "usada_bytes",
+              "pico_bytes",
+              "maxima_bytes",
+              "aviso"
+            ],
+            "properties": {
+              "usada_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "bytes"
+              },
+              "pico_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "bytes"
+              },
+              "maxima_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "bytes"
+              },
+              "aviso": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "volumen_datos": {
+            "$ref": "#/components/schemas/VolumenAlmacenamiento"
+          }
+        }
+      },
       "MetricasAnuncio": {
         "type": "object",
         "required": [
@@ -104195,6 +106018,12 @@
           "adicionales.ver",
           "anuncios.administrar",
           "anuncios.ver",
+          "apariencia.editar",
+          "apariencia.quitar_fondo_login",
+          "apariencia.quitar_logo_login",
+          "apariencia.subir_fondo_login",
+          "apariencia.subir_logo_login",
+          "apariencia.ver",
           "bancos.conciliar",
           "bancos.importar_extracto",
           "bancos.reatribuir_llegada",
@@ -104440,6 +106269,10 @@
           "servidores_pppoe.eliminar",
           "sesiones.desconectar",
           "sesiones.ver",
+          "sistema.recalcular_almacenamiento",
+          "sistema.ver_almacenamiento",
+          "sistema.ver_registro",
+          "sistema.ver_salud",
           "sorteos.ejecutar",
           "sorteos.entregar",
           "sorteos.exportar",
@@ -104478,6 +106311,12 @@
           "Ver el catálogo de servicios adicionales y los motivos de cortesía",
           "Crear, editar, publicar y archivar los anuncios del portal y la página de corte; solo admin",
           "Ver los anuncios del portal y sus métricas (vistas y clics)",
+          "Cambiar el tema, el modo predeterminado, el nombre de la marca y el eslogan",
+          "Quitar la imagen de fondo del inicio de sesión",
+          "Quitar el logo del inicio de sesión",
+          "Subir la imagen de fondo del inicio de sesión",
+          "Subir el logo del inicio de sesión del panel y del portal",
+          "Ver la apariencia de la instalación (tema, marca y archivos del inicio de sesión)",
           "Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas",
           "Importar extractos bancarios (solo inserción, con detección de duplicados)",
           "Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)",
@@ -104723,6 +106562,10 @@
           "Eliminar servidores PPPoE sin servicios",
           "Desconectar sesiones PPPoE",
           "Ver sesiones PPPoE",
+          "Recalcular el almacenamiento a pedido (solo lee y suma; no borra nada)",
+          "Ver qué se almacena y cuánto espacio ocupa: carpetas de archivos, base de datos, Redis y discos",
+          "Ver el registro del sistema: errores de acciones, comandos de red fallidos, caídas de RADIUS y trabajos fallidos",
+          "Ver la salud del sistema: base de datos, Redis, colas, RADIUS, routers, crons, respaldos y recursos del servidor",
           "Ejecutar un sorteo y cerrar su acta (con checklist legal completo)",
           "Registrar la entrega de un premio de sorteo o marcarlo no reclamado",
           "Exportar la lista de participantes de un sorteo (CSV o XLSX)",
@@ -106632,6 +108475,30 @@
           },
           "nombre": {
             "type": "string"
+          }
+        }
+      },
+      "PaletaTema": {
+        "type": "object",
+        "required": [
+          "color",
+          "claro",
+          "oscuro"
+        ],
+        "properties": {
+          "color": {
+            "type": "string",
+            "description": "Color de Nuxt UI para `ui.colors.primary` (indigo, blue…)"
+          },
+          "claro": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$",
+            "description": "Primario en modo claro (AA contra #FFFFFF)"
+          },
+          "oscuro": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$",
+            "description": "Primario en modo oscuro (AA contra #0B0F1A)"
           }
         }
       },
@@ -112880,6 +114747,27 @@
           }
         }
       },
+      "RegistroSistemaPagina": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntradaRegistro"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ReglaConciliacion": {
         "type": "object",
         "required": [
@@ -118958,6 +120846,12 @@
               "adicionales.ver",
               "anuncios.administrar",
               "anuncios.ver",
+              "apariencia.editar",
+              "apariencia.quitar_fondo_login",
+              "apariencia.quitar_logo_login",
+              "apariencia.subir_fondo_login",
+              "apariencia.subir_logo_login",
+              "apariencia.ver",
               "bancos.conciliar",
               "bancos.importar_extracto",
               "bancos.reatribuir_llegada",
@@ -119203,6 +121097,10 @@
               "servidores_pppoe.eliminar",
               "sesiones.desconectar",
               "sesiones.ver",
+              "sistema.recalcular_almacenamiento",
+              "sistema.ver_almacenamiento",
+              "sistema.ver_registro",
+              "sistema.ver_salud",
               "sorteos.ejecutar",
               "sorteos.entregar",
               "sorteos.exportar",
@@ -119537,6 +121435,7 @@
               "activos.ver",
               "adicionales.ver",
               "anuncios.ver",
+              "apariencia.ver",
               "bancos.ver",
               "bitacora.ver",
               "cajas.ver",
@@ -119842,6 +121741,38 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SaludSistema": {
+        "type": "object",
+        "required": [
+          "estado_general",
+          "generado_en",
+          "duracion_ms",
+          "componentes"
+        ],
+        "properties": {
+          "estado_general": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degradado",
+              "caido"
+            ]
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duracion_ms": {
+            "type": "integer"
+          },
+          "componentes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponenteSalud"
+            }
           }
         }
       },
@@ -122615,6 +124546,44 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "TemaApariencia": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "color",
+          "claro",
+          "oscuro"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "indigo",
+              "azul",
+              "violeta",
+              "esmeralda",
+              "naranja",
+              "rosa",
+              "pizarra"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "claro": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          },
+          "oscuro": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
           }
         }
       },
@@ -125697,6 +127666,80 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "VolumenAlmacenamiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "ruta",
+          "total_bytes",
+          "usado_bytes",
+          "libre_bytes",
+          "porcentaje_usado",
+          "estado",
+          "aviso"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "datos",
+              "base"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "ruta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "bytes"
+          },
+          "usado_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "bytes"
+          },
+          "libre_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "bytes"
+          },
+          "porcentaje_usado": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degradado",
+              "caido",
+              "desconocido"
+            ]
+          },
+          "aviso": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
