@@ -112,6 +112,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
 - Composables en `composables/`, un recurso por composable (`useClientes`, `useFacturas`).
 - Formularios con `UForm` + esquema `valibot` o `zod` espejo del validador del backend.
 - Modo claro y oscuro funcionando; revisar en 390px y 1280px.
+- **El diseño aprobado por el PM vive en `.claude/diseno/`** (tableros, decisiones y la herramienta para verlos en imagen). Panel y portal deben ser fieles a esos tableros: misma distribución, espaciado, componentes, textos y comportamiento. Si algo no puede hacerse igual, se avisa al líder para corregir el diseño; nunca se deja una diferencia callada.
 
 ### 11. Pruebas y Definition of Done
 

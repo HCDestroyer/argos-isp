@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Flujo 1 · Nuevo cliente y servicio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#EEF0F7}
+a{color:#4338CA}a:hover{color:#3730A3}
+.paso{flex:0 0 520px;display:flex;flex-direction:column;gap:12px}
+.n{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.n .k{width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,#4F46E5,#06B6D4);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+.tipo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4338CA;background:#EEF2FF;margin-left:auto;border-radius:999px;padding:3px 10px}
+.app{border:1px solid #E6E8F0;border-radius:16px;background:#F7F8FC;height:540px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(15,23,42,.08);position:relative}
+.top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid #E6E8F0;font-size:12px;color:#64748B}
+.body{padding:14px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
+.h{margin:0;font-size:18px;font-weight:700;color:#0F172A}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:12px;padding:12px}
+.st{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;margin-bottom:10px}
+.si{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:12px;font-weight:600;color:#334155}
+.f .in{border:1px solid #CBD5E1;border-radius:9px;padding:7px 10px;font-size:13px;color:#0F172A;background:#fff;display:flex;align-items:center;gap:6px}
+.f .ph{color:#94A3B8}
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 14px;font-weight:600;font-size:13px;border:0}
+.p{background:#4F46E5;color:#fff}.o{background:#fff;color:#334155;border:1px solid #E2E8F0}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600}
+.flecha{flex:0 0 56px;display:flex;align-items:center;justify-content:center;color:#4F46E5;padding-top:70px}
+.nota{font-size:13px;color:#475569;line-height:1.45}
+.ok{display:flex;gap:10px;align-items:flex-start;font-size:14px;padding:10px 12px;background:#fff;border:1px solid #E6E8F0;border-radius:12px}
+.ok span{width:22px;height:22px;border-radius:999px;background:#DCFCE7;color:#166534;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+</style>
+</helmet>
+<div style="width:2400px;height:760px;box-sizing:border-box;padding:26px 32px;display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;align-items:baseline;gap:14px"><h1 style="margin:0;font-size:26px">1 · Nuevo cliente y su servicio</h1><span class="nota">Recepción o ventas · 3 a 5 minutos · Si viene de Iris, ya llega como «Por instalar».</span></div>
+  <div style="display:flex;align-items:flex-start">
+
+    <div class="paso">
+      <div class="n"><span class="k">1</span>Clientes → «Nuevo cliente»<span class="tipo">Página</span></div>
+      <div class="app">
+        <div class="top">Clientes › <b style="color:#0F172A">Nuevo cliente</b></div>
+        <div class="body">
+          <h2 class="h">Nuevo cliente</h2>
+          <div class="card"><div class="st"><span class="si" style="background:#EEF2FF;color:#4F46E5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>Datos personales</div>
+            <div class="g2"><div class="f"><label>Nombre *</label><div class="in">José López</div></div><div class="f"><label>DPI / NIT *</label><div class="in">2547 89012 0101</div></div><div class="f"><label>Teléfono *</label><div class="in">5555-8890</div></div><div class="f"><label>Correo</label><div class="in"><span class="ph">opcional</span></div></div></div></div>
+          <div class="card"><div class="st"><span class="si" style="background:#CFFAFE;color:#0E7490"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 22s7-6 7-12a7 7 0 0 0-14 0c0 6 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg></span>Dirección</div>
+            <div class="g2"><div class="f"><label>Zona *</label><div class="in">Zona Norte <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div></div><div class="f"><label>Referencia</label><div class="in">Frente al parque</div></div></div>
+            <div style="margin-top:10px;height:62px;border-radius:9px;background:linear-gradient(135deg,#E0E7FF,#CFFAFE);display:flex;align-items:center;justify-content:center;font-size:12px;color:#3730A3;font-weight:600">Marcar ubicación en el mapa</div></div>
+          <div class="card" style="font-size:13px;color:#475569"><b style="color:#0F172A">Facturación:</b> nombre y NIT para la factura, o «Consumidor final».</div>
+          <div style="margin-top:auto;display:flex;justify-content:flex-end;gap:8px"><span class="btn o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Cancelar</span><span class="btn p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Guardar y agregar servicio</span></div>
+        </div>
+      </div>
+      <div class="nota">Si el DPI/NIT ya existe, avisa y ofrece abrir ese cliente: no se duplica.</div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k">2</span>«Agregar servicio»<span class="tipo">Página</span></div>
+      <div class="app">
+        <div class="top">Clientes › José López › <b style="color:#0F172A">Nuevo servicio</b></div>
+        <div class="body">
+          <h2 class="h">Nuevo servicio</h2>
+          <div class="card"><div class="st"><span class="si" style="background:#EEF2FF;color:#4F46E5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>Plan y cobro</div>
+            <div class="g2"><div class="f"><label>Plan *</label><div class="in">50 Mbps · Q 200.00</div></div><div class="f"><label>Precio especial</label><div class="in"><span class="ph">Q — usar el del plan</span></div></div><div class="f"><label>Plantilla de facturación * <span style="color:#94A3B8;cursor:help">ⓘ</span></label><div class="in">Se crea el 1 · vence el 5</div></div><div class="f"><label>Empresa que factura *</label><div class="in">Kns Telecom</div></div></div></div>
+          <div class="card"><div class="st"><span class="si" style="background:#CFFAFE;color:#0E7490"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 18h.01M10 18h.01"/></svg></span>Red</div>
+            <div class="g2"><div class="f"><label>Router *</label><div class="in">Router Norte</div></div><div class="f"><label>IP</label><div class="in">10.20.4.18 <span class="badge" style="margin-left:auto;background:#DCFCE7;color:#166534;padding:1px 7px">libre</span></div></div><div class="f"><label>Usuario PPPoE</label><div class="in">jlopez412</div></div><div class="f"><label>Contraseña</label><div class="in">••••••••<svg style="margin-left:auto;cursor:copy" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></div></div></div>
+            <div class="nota" style="margin-top:8px;font-size:12px">La forma de conexión (PPPoE, IP fija o DHCP) la toma del router.</div></div>
+          <div style="margin-top:auto;display:flex;justify-content:flex-end;gap:8px"><span class="btn o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Cancelar</span><span class="btn p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear servicio</span></div>
+        </div>
+      </div>
+      <div class="nota">Lo que se puede sugerir no se escribe: IP libre del router, usuario y contraseña.</div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k">3</span>Ficha del servicio<span class="tipo">Página</span></div>
+      <div class="app">
+        <div class="top">Clientes › José López › <b style="color:#0F172A">Servicio 50 Mbps</b></div>
+        <div class="body">
+          <div style="display:flex;gap:12px;align-items:center"><div style="width:46px;height:46px;border-radius:14px;background:#CFFAFE;color:#0E7490;display:flex;align-items:center;justify-content:center;font-weight:700">JL</div><div><div style="font-weight:700;font-size:16px">José López · 50 Mbps</div><div style="font-size:12px;color:#64748B">Router Norte · 10.20.4.18</div></div><span class="badge" style="margin-left:auto;background:#E0E7FF;color:#3730A3"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><circle cx="12" cy="12" r="5"/></svg>Por instalar</span></div>
+          <div class="g2"><div class="card" style="font-size:13px"><div style="color:#64748B;font-size:12px">Cobro</div><b>Q 200.00</b> · vence el 5</div><div class="card" style="font-size:13px"><div style="color:#64748B;font-size:12px">Acceso</div><b>jlopez412</b> · PPPoE</div></div>
+          <div class="card" style="background:#EEF2FF;border-color:#C7D2FE;font-size:13px;color:#3730A3"><b>Siguiente paso:</b> instalar y pulsar «Activar instalación». Mientras tanto no factura, no navega y no se corta.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Activar instalación</span><span class="btn o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.6 5.6L3 18l3 3 6.1-6.1a4 4 0 0 0 5.6-5.6l-2.5 2.5-2.8-.7-.7-2.8z"/></svg>Crear orden en Iris</span><span class="btn o">⋯</span></div>
+          <div class="card" style="margin-top:auto;font-size:12px;color:#64748B;display:flex;gap:8px;align-items:center"><span style="width:8px;height:8px;border-radius:999px;background:#4F46E5"></span>Servicio creado por Ana · hace 1 min</div>
+        </div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="40" height="24" viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h34M28 4l8 8-8 8"/></svg></div>
+
+    <div class="paso" style="flex-basis:420px">
+      <div class="n"><span class="k" style="background:#16A34A">✓</span>Queda listo</div>
+      <div class="ok"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Cliente creado, sin duplicados</div>
+      <div class="ok"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Servicio con plan, router, IP y usuario</div>
+      <div class="ok"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Plantilla asignada: sabe cuándo facturar y cuándo cortar</div>
+      <div class="ok"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>En «Por instalar», o «Activo» si ya funciona</div>
+      <div class="ok"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Todo en la bitácora: quién y cuándo</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2400,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

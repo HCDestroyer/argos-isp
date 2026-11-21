@@ -1,0 +1,664 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Clientes.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Clientes (tabla, menú contextual y vista rápida)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Configuracion.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Configuración agrupada",
+      "w": 1440,
+      "x": 0,
+      "y": 1420
+    },
+    "FlujoAlta.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "1 · Nuevo cliente y su servicio",
+      "w": 2400,
+      "x": 0,
+      "y": 0
+    },
+    "FlujoCierre.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "4 · Cortes, promesas y cierre del día",
+      "w": 2400,
+      "x": 0,
+      "y": 3300
+    },
+    "FlujoCobro.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "3 · Cobrar en caja",
+      "w": 2400,
+      "x": 0,
+      "y": 2200
+    },
+    "FlujoInstalacion.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "2 · Instalar y asignar (equipo, plantilla, activar)",
+      "w": 2400,
+      "x": 0,
+      "y": 1100
+    },
+    "Formularios.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Formulario en página y confirmación",
+      "w": 1440,
+      "x": 0,
+      "y": 2840
+    },
+    "IslasA.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas · Propuesta A: dos islas flotantes",
+      "w": 1440,
+      "x": 0,
+      "y": 4300
+    },
+    "IslasA1.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 1: título libre + una pastilla",
+      "w": 1440,
+      "x": 0,
+      "y": 5600
+    },
+    "IslasA2.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 2: dos pastillas",
+      "w": 1440,
+      "x": 1520,
+      "y": 5600
+    },
+    "IslasA3.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 3: barra dentro de la isla del contenido",
+      "w": 1440,
+      "x": 0,
+      "y": 6620
+    },
+    "IslasA4.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 4: sin barra, todo en el menú",
+      "w": 1440,
+      "x": 1520,
+      "y": 6620
+    },
+    "IslasA5.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · menú flotante expandido + encabezado de botones sueltos",
+      "w": 1440,
+      "x": 0,
+      "y": 7620
+    },
+    "IslasA6.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · menú flotante compacto + encabezado de botones sueltos",
+      "w": 1440,
+      "x": 1520,
+      "y": 7620
+    },
+    "IslasB.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas · Propuesta B: barra en islas y menú centrado",
+      "w": 1440,
+      "x": 1520,
+      "y": 4300
+    },
+    "Login.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "Panel · Inicio de sesión",
+      "w": 1440,
+      "x": 1520,
+      "y": 1420
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Inicio",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoAbrirCaja.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Abrir caja con fondo inicial (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 12820
+    },
+    "NuevoAlmacenamiento.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "page": "novedades",
+      "title": "Sistema · Almacenamiento",
+      "w": 1440,
+      "x": 1520,
+      "y": 1760
+    },
+    "NuevoAltaCliente.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Nuevo cliente y servicio · 3 pasos, progreso arriba, planes con buscador (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 9720
+    },
+    "NuevoAltaClienteMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Nuevo cliente · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 9720
+    },
+    "NuevoApariencia.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Configuración · Apariencia",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "NuevoBodegas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Bodegas y traslados · nuevo traslado (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "NuevoCajas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cajas · cierres, depósitos (boleta) y retiros (interactiva)",
+      "w": 1440,
+      "x": 2040,
+      "y": 11820
+    },
+    "NuevoCierreCaja.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cierre de caja · contar, revisar y cerrar (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 11820
+    },
+    "NuevoCierreCajaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cierre de caja · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 11820
+    },
+    "NuevoClienteFicha.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Ficha del cliente · franja compacta + pestañas segmentadas flotantes (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 8620
+    },
+    "NuevoClienteFichaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Ficha del cliente · teléfono (390 px, interactiva)",
+      "w": 390,
+      "x": 3040,
+      "y": 8620
+    },
+    "NuevoClientes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Clientes · lista con contadores, vista rápida y menú contextual",
+      "w": 1440,
+      "x": 0,
+      "y": 8620
+    },
+    "NuevoCobro.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cobrar tipo POS · cuentas en tarjetas, ticket con teclado y cambio (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 10820
+    },
+    "NuevoCobroMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cobrar tipo POS · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 10820
+    },
+    "NuevoConciliacion.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Conciliación bancaria · banco contra Argos (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 12820
+    },
+    "NuevoConteo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Conteo físico con diferencias valorizadas",
+      "w": 1440,
+      "x": 0,
+      "y": 1000
+    },
+    "NuevoImportarExtracto.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Importar estado de cuenta del banco (interactiva)",
+      "w": 1440,
+      "x": 3040,
+      "y": 12820
+    },
+    "NuevoInicio.dc.html": {
+      "expand": "fill",
+      "h": 1420,
+      "page": "novedades",
+      "title": "Inicio combinado: el de antes + salud, registro y accesos rápidos de un clic",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoInventario.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Inventario · existencias, equipos, kardex y por recuperar (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoMenuExpandido.dc.html": {
+      "h": 1080,
+      "page": "novedades",
+      "title": "Menú expandido · menú del usuario",
+      "w": 820,
+      "x": -900,
+      "y": 0
+    },
+    "NuevoMiBodega.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Mi bodega del técnico · teléfono",
+      "w": 390,
+      "x": 1520,
+      "y": 1000
+    },
+    "NuevoPortal.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "page": "novedades",
+      "title": "Portal del cliente en escritorio · tickets, solicitudes y WiFi",
+      "w": 1440,
+      "x": 0,
+      "y": 1760
+    },
+    "NuevoProspecto.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Registrar prospecto (va a ventas en Iris) · panel lateral",
+      "w": 1440,
+      "x": 2040,
+      "y": 9720
+    },
+    "NuevoTecnico.dc.html": {
+      "h": 760,
+      "page": "novedades",
+      "title": "Técnico en Iris → Argos activa todo solo",
+      "w": 2400,
+      "x": 0,
+      "y": 3100
+    },
+    "Oscuro.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "Modo oscuro · panel y portal",
+      "w": 1440,
+      "x": 1520,
+      "y": 4260
+    },
+    "Portal.dc.html": {
+      "h": 980,
+      "title": "Portal del cliente (teléfono)",
+      "w": 1400,
+      "x": 0,
+      "y": 4260
+    },
+    "RedAcceso.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "red",
+      "title": "6 · Red de acceso: OLT → puerto PON → VLAN → servidor PPPoE → red",
+      "w": 1440,
+      "x": 1520,
+      "y": 3600
+    },
+    "RedIps.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "red",
+      "title": "5 · Direcciones IP: ¿de quién es esta IP?, redes con mapa, IPv6 e IPs fijas y públicas (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 3600
+    },
+    "RedPlanForm.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "page": "red",
+      "title": "4 · Plan: formulario en página con «así queda» al lado",
+      "w": 1440,
+      "x": 1520,
+      "y": 2300
+    },
+    "RedPlanes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "4 · Planes: buscador, filtros por tipo y por router, vista rápida (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2300
+    },
+    "RedRouterFicha.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "red",
+      "title": "2 · Ficha del router: resumen, conexión, red e IPs, velocidad, servicios y bitácora (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 1100
+    },
+    "RedRouterFichaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "2 · Ficha del router · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 1100
+    },
+    "RedRouterNuevo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "3 · Conectar router: 4 pasos con el script para MikroTik y verificación en vivo (interactiva)",
+      "w": 1440,
+      "x": 2040,
+      "y": 0
+    },
+    "RedRouters.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "1 · Routers: estado en vivo, conexión, control, clientes y ocupación (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "RedRoutersMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "1 · Routers · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 0
+    },
+    "RedSesiones.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "7 · Conectados ahora: sesiones, caídas repetidas y activos sin conexión (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 4800
+    },
+    "RedSesionesMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "7 · Conectados ahora · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 4800
+    },
+    "Sistema.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Sistema visual Argos",
+      "w": 1440,
+      "x": 1520,
+      "y": 2840
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-21T03:10:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "novedades",
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "titulo",
+    "tituloDia",
+    "tituloNuevo",
+    "tituloIslas",
+    "tituloA",
+    "tituloRed"
+  ],
+  "notes": {
+    "titulo": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Propuesta de rediseño · índigo eléctrico",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloA": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Propuesta A elegida · 2 opciones de encabezado",
+      "w": 240,
+      "x": 0,
+      "y": 5300
+    },
+    "tituloDia": {
+      "kind": "title1",
+      "maxW": 2400,
+      "page": "dia",
+      "text": "El día a día en ArgosIsp · wireframes",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloIslas": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Menús como islas · 2 propuestas",
+      "w": 240,
+      "x": 0,
+      "y": 4000
+    },
+    "tituloNuevo": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Lo nuevo · propuesta para aprobar",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloRed": {
+      "kind": "title1",
+      "maxW": 3480,
+      "page": "red",
+      "text": "Red · routers, planes, IPs, red de acceso y conectados",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Clientes.dc.html",
+    "Configuracion.dc.html",
+    "Login.dc.html",
+    "Formularios.dc.html",
+    "Sistema.dc.html",
+    "Portal.dc.html",
+    "Oscuro.dc.html",
+    "FlujoAlta.dc.html",
+    "FlujoInstalacion.dc.html",
+    "FlujoCobro.dc.html",
+    "FlujoCierre.dc.html",
+    "NuevoInicio.dc.html",
+    "NuevoApariencia.dc.html",
+    "NuevoPortal.dc.html",
+    "NuevoTecnico.dc.html",
+    "NuevoAlmacenamiento.dc.html",
+    "NuevoMenuExpandido.dc.html",
+    "IslasA.dc.html",
+    "IslasB.dc.html",
+    "IslasA1.dc.html",
+    "IslasA2.dc.html",
+    "IslasA3.dc.html",
+    "IslasA4.dc.html",
+    "IslasA5.dc.html",
+    "IslasA6.dc.html",
+    "NuevoClientes.dc.html",
+    "NuevoClienteFicha.dc.html",
+    "NuevoClienteFichaMovil.dc.html",
+    "NuevoAltaCliente.dc.html",
+    "NuevoAltaClienteMovil.dc.html",
+    "NuevoProspecto.dc.html",
+    "NuevoCobro.dc.html",
+    "NuevoCobroMovil.dc.html",
+    "NuevoCierreCaja.dc.html",
+    "NuevoCierreCajaMovil.dc.html",
+    "NuevoCajas.dc.html",
+    "NuevoAbrirCaja.dc.html",
+    "NuevoConciliacion.dc.html",
+    "NuevoImportarExtracto.dc.html",
+    "NuevoInventario.dc.html",
+    "NuevoBodegas.dc.html",
+    "NuevoConteo.dc.html",
+    "NuevoMiBodega.dc.html",
+    "RedRouters.dc.html",
+    "RedRoutersMovil.dc.html",
+    "RedRouterNuevo.dc.html",
+    "RedRouterFicha.dc.html",
+    "RedRouterFichaMovil.dc.html",
+    "RedPlanes.dc.html",
+    "RedPlanForm.dc.html",
+    "RedIps.dc.html",
+    "RedAcceso.dc.html",
+    "RedSesiones.dc.html",
+    "RedSesionesMovil.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "propuesta",
+      "name": "Propuesta visual"
+    },
+    {
+      "id": "dia",
+      "name": "Día a día (wireframes)"
+    },
+    {
+      "id": "novedades",
+      "name": "Lo nuevo (propuesta)"
+    },
+    {
+      "id": "inventario",
+      "name": "Inventario y bodegas"
+    },
+    {
+      "id": "red",
+      "name": "Red: routers, planes e IPs"
+    }
+  ],
+  "title": "Rediseño ArgosIsp"
+}

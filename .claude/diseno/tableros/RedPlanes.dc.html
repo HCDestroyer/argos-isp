@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Red · Planes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+.cmdp{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#334155;background:#F1F5F9;border-radius:8px;padding:8px 10px;display:block;word-break:break-all;line-height:1.5}.ti{width:18px;height:18px;display:inline-block;flex:0 0 auto;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}.ti-casa{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2010.5%2012%203l9%207.5V20a1%201%200%200%201-1%201H4a1%201%200%200%201-1-1z%22/%3E%3C/svg%3E")}.ti-edif{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%2214%22%20height%3D%2218%22%20rx%3D%221%22/%3E%3Cpath%20d%3D%22M9%207h.01M15%207h.01M9%2011h.01M15%2011h.01M9%2015h.01M15%2015h.01%22/%3E%3C/svg%3E")}.ti-cable{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%209V5h4v4M5%209v3a3%203%200%200%200%203%203h8a3%203%200%200%201%203%203v3M16%2021h4%22/%3E%3C/svg%3E")}.ti-globo{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22/%3E%3Cpath%20d%3D%22M3%2012h18M12%203a14%2014%200%200%201%200%2018M12%203a14%2014%200%200%200%200%2018%22/%3E%3C/svg%3E")}.ti-router{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%223%22%20y%3D%2213%22%20width%3D%2218%22%20height%3D%227%22%20rx%3D%222%22/%3E%3Cpath%20d%3D%22M7%2017h.01M11%2017h.01M12%2013V9M8%206a6%206%200%200%201%208%200%22/%3E%3C/svg%3E")}</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Red › <b>Planes</b></div>
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+ <div><h1 class="h1">Planes</h1><div class="sub">8 planes en venta · 1,295 servicios</div></div>
+ <span style="flex:1"></span>
+ <button class="ib f" title="Ayuda: reuso, garantizado y ráfaga (manual)" style="width:40px;height:40px;border-radius:999px;cursor:help"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button>
+ <button class="btn o"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Prioridad (QoS)</button>
+ <button class="btn p" style="padding:11px 20px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nuevo plan</button>
+</div>
+<div style="display:flex;gap:12px;flex:1;min-height:0">
+<section class="isla" style="flex:1;min-width:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:12px 18px">
+  <span class="busca" style="width:170px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar plan…</span>
+  <div class="segb"><sc-for list="{{chips}}" as="c"><button class="ts {{c.cls}}" onClick="{{c.ir}}">{{c.nom}}<span class="c">{{c.n}}</span></button></sc-for></div>
+  <span style="flex:1"></span>
+  <button class="selp" style="padding:0 10px;{{rSt}}" onClick="{{alternarR}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 17h.01M11 17h.01M12 13V9M8 6a6 6 0 0 1 8 0"/></svg>{{rTxt}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+  <button class="selp" style="padding:0 10px;{{aSt}}" onClick="{{alternarA}}">{{aTxt}}</button>
+ </div>
+ <div class="lh" style="grid-template-columns:minmax(0,1.2fr) 125px 115px minmax(0,1.3fr) 70px 100px 24px"><span>Plan</span><span>Bajada / subida</span><span>Reuso · garantía</span><span>Dónde se ofrece</span><span>Clientes</span><span style="text-align:right">Precio</span><span></span></div>
+<div class="sc" style="flex:1">
+<sc-for list="{{filas}}" as="p"><div class="lr {{p.cls}}" style="grid-template-columns:minmax(0,1.2fr) 125px 115px minmax(0,1.3fr) 70px 100px 24px" onClick="{{p.ver}}">
+ <div style="display:flex;align-items:center;gap:10px"><span class="ico {{p.ic}}" style="width:34px;height:34px;border-radius:10px"><span class="ti ti-{{p.ico}}"></span></span><div style="min-width:0"><b class="el" style="display:block;font-size:14px">{{p.nom}}</b><div class="m2">{{p.tipoT}}<span style="display:{{p.vi}}"> · ya no se ofrece</span></div></div></div>
+ <div><b class="num">{{p.b}} / {{p.s}}</b> <span class="m2">Mbps</span></div>
+ <div class="num">{{p.reuso}} <span class="m2">· {{p.gar}}</span></div>
+ <div class="el" style="display:flex;align-items:center;gap:6px"><span class="ti ti-{{p.ri}}" style="width:15px;height:15px;color:{{p.rc}}"></span><span class="el">{{p.rout}}</span></div>
+ <div class="num"><b>{{p.cli}}</b></div>
+ <div class="num" style="text-align:right;font-weight:600">{{p.precio}}</div>
+ <span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+</div></sc-for>
+<div style="display:{{vacio}};padding:40px;text-align:center;color:#64748B;font-size:14px">Ningún plan con ese filtro. <button class="lnk" onClick="{{limpiar}}">Quitar filtros</button></div>
+</div>
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid #F1F5F9;font-size:12px;color:#64748B;flex:0 0 auto">{{cuenta}}<span style="flex:1"></span>Orden: más clientes primero</div>
+</section>
+<aside class="isla" style="width:330px;flex:0 0 auto;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="padding:16px 18px;border-bottom:1px solid #F1F5F9">
+  <div style="display:flex;align-items:center;gap:10px"><b style="font-size:18px;flex:1" class="el">{{s.nom}}</b><span class="b nf">{{s.tipoT}}</span></div>
+  <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><b style="font-size:26px" class="num">{{s.precio}}</b><span class="m2">al mes</span></div>
+ </div>
+ <div class="sc" style="flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+   <div class="kpi"><div class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>Bajada</div><b class="num">{{s.b}} <span style="font-size:13px;color:#64748B">Mbps</span></b></div>
+   <div class="kpi"><div class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Subida</div><b class="num">{{s.s}} <span style="font-size:13px;color:#64748B">Mbps</span></b></div>
+  </div>
+  <div>
+   <div class="kv" style="font-size:13px"><span>Reuso</span><b class="num">{{s.reuso}}</b></div>
+   <div class="kv" style="font-size:13px"><span>Garantizado</span><b class="num">{{s.gar}}</b></div>
+   <div class="kv" style="font-size:13px"><span>Limitado (mora)</span><b class="num">{{s.lim}} Mbps</b></div>
+   <div class="kv" style="font-size:13px"><span>Clientes</span><b class="num">{{s.cli}}</b></div>
+  </div>
+  <div><div class="sec" style="margin-bottom:6px">Así lo recibe el router</div><span class="cmdp">{{s.rl}}</span></div>
+  <div><div class="sec" style="margin-bottom:6px">Dónde se ofrece</div><div style="font-size:13px;display:flex;gap:8px;align-items:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 17h.01M11 17h.01M12 13V9M8 6a6 6 0 0 1 8 0"/></svg>{{s.rout}}</div>
+   <div class="av2 wa" style="margin-top:8px;padding:8px 10px;align-items:flex-start;display:{{s.vex}}"><div style="flex:1">En <b>MK Centro</b> tiene velocidad propia heredada.</div><button class="lnk">Unificar</button></div></div>
+ </div>
+ <div style="padding:12px 18px;border-top:1px solid #F1F5F9;display:flex;gap:8px"><button class="btn o" style="flex:1;justify-content:center" title="Aplica las velocidades a las sesiones abiertas"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-4L3 10M3 4v6h6M4 13a8 8 0 0 0 14 4l3-3M21 20v-6h-6"/></svg>Sincronizar</button><button class="btn p" style="flex:1;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Editar</button></div>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const ps = [{"id": 1, "nom": "Fibra 30", "tipo": "res", "tipoT": "Residencial", "ico": "casa", "b": "30", "s": "15", "reuso": "1:8", "gar": "12.5 %", "lim": "2 / 1", "rout": "Todos los routers", "rg": 1, "cli": "412", "precio": "Q 175.00", "act": 1, "rl": "15M/30M 18M/36M 12M/24M 16/16 8 1875k/3750k"}, {"id": 2, "nom": "Fibra 50", "tipo": "res", "tipoT": "Residencial", "ico": "casa", "b": "50", "s": "25", "reuso": "1:8", "gar": "12.5 %", "lim": "2 / 1", "rout": "Todos los routers", "rg": 1, "cli": "338", "precio": "Q 225.00", "act": 1, "rl": "25M/50M 30M/60M 20M/40M 16/16 8 3125k/6250k"}, {"id": 3, "nom": "Fibra 100", "tipo": "res", "tipoT": "Residencial", "ico": "casa", "b": "100", "s": "50", "reuso": "1:6", "gar": "16.7 %", "lim": "3 / 1", "rout": "Todos los routers", "rg": 1, "cli": "197", "precio": "Q 325.00", "act": 1, "rl": "50M/100M 60M/120M 40M/80M 16/16 8 8333k/16667k"}, {"id": 4, "nom": "Radio 10", "tipo": "res", "tipoT": "Residencial", "ico": "casa", "b": "10", "s": "3", "reuso": "1:10", "gar": "10 %", "lim": "1 / 0.5", "rout": "MK Torre San Juan, MK Zona 4", "rg": 0, "cli": "140", "precio": "Q 150.00", "act": 1, "rl": "3M/10M 0/0 0/0 0/0 8 300k/1000k"}, {"id": 5, "nom": "Pyme 100", "tipo": "emp", "tipoT": "Empresarial", "ico": "edif", "b": "100", "s": "100", "reuso": "1:4", "gar": "25 %", "lim": "5 / 5", "rout": "Todos los routers", "rg": 1, "cli": "61", "precio": "Q 650.00", "act": 1, "rl": "100M/100M 0/0 0/0 0/0 4 25M/25M"}, {"id": 6, "nom": "Pyme 200", "tipo": "emp", "tipoT": "Empresarial", "ico": "edif", "b": "200", "s": "200", "reuso": "1:4", "gar": "25 %", "lim": "5 / 5", "rout": "MK Centro, MK Sur", "rg": 0, "cli": "23", "precio": "Q 1,100.00", "act": 1, "rl": "200M/200M 0/0 0/0 0/0 4 50M/50M"}, {"id": 7, "nom": "Dedicado 200", "tipo": "ded", "tipoT": "Dedicado", "ico": "cable", "b": "200", "s": "200", "reuso": "1:1", "gar": "100 %", "lim": "—", "rout": "MK Centro", "rg": 0, "cli": "6", "precio": "Q 4,800.00", "act": 1, "rl": "200M/200M 0/0 0/0 0/0 1 200M/200M"}, {"id": 8, "nom": "Dedicado 500", "tipo": "ded", "tipoT": "Dedicado", "ico": "cable", "b": "500", "s": "500", "reuso": "1:1", "gar": "100 %", "lim": "—", "rout": "MK Centro", "rg": 0, "cli": "2", "precio": "Q 9,500.00", "act": 1, "rl": "500M/500M 0/0 0/0 0/0 1 500M/500M"}, {"id": 9, "nom": "Fibra 20 (2024)", "tipo": "res", "tipoT": "Residencial", "ico": "casa", "b": "20", "s": "10", "reuso": "1:8", "gar": "12.5 %", "lim": "2 / 1", "rout": "Todos los routers", "rg": 1, "cli": "116", "precio": "Q 150.00", "act": 0, "rl": "10M/20M 0/0 0/0 0/0 8 1250k/2500k"}];
+const st = this.state || {};
+const f = st.f || 'todos';
+const soloR = !!st.soloR;
+const inact = !!st.inact;
+const cnt = (t) => ps.filter((p) => (inact || p.act) && (t === 'todos' || p.tipo === t)).length;
+const lista = ps.filter((p) => (inact || p.act) && (f === 'todos' || p.tipo === f) && (!soloR || !p.rg));
+const sel = lista.find((p) => p.id === (st.sel || 1)) || lista[0] || ps[0];
+const filas = lista.map((p) => ({ ...p, cls: p.id === sel.id ? 'on' : '', ic: p.tipo === 'res' ? 'ne' : (p.tipo === 'emp' ? 'nf' : 'cy'), vi: p.act ? 'none' : 'inline', ri: p.rg ? 'globo' : 'router', rc: p.rg ? '#16A34A' : '#4338CA', ver: () => this.setState({ sel: p.id }) }));
+const chips = [['todos', 'Todos'], ['res', 'Residencial'], ['emp', 'Empresarial'], ['ded', 'Dedicado']].map(([id, nom]) => ({ id, nom, n: cnt(id), cls: id === f ? 'on' : '', ir: () => this.setState({ f: id }) }));
+const onSt = 'background:#EEF2FF;border-color:#4F46E5;color:#3730A3';
+return { filas, chips, s: { ...sel, vex: sel.id === 2 || sel.id === 5 ? 'flex' : 'none' }, vacio: filas.length ? 'none' : 'block',
+  cuenta: filas.length + ' planes',
+  rTxt: soloR ? 'Solo algunos routers' : 'Todos los routers', rSt: soloR ? onSt : '', alternarR: () => this.setState({ soloR: !soloR }),
+  aTxt: inact ? 'Todos' : 'En venta', aSt: inact ? onSt : '', alternarA: () => this.setState({ inact: !inact }),
+  limpiar: () => this.setState({ f: 'todos', soloR: false }) };
+}
+}
+</script>
+</body>
+</html>
