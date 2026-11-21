@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Finanzas · Compras, proveedores y activos fijos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.kt{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.kt .kl{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}.kt .kl .nuevo{margin-left:auto}
+.kt .kv{font-size:23px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kt .ks{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 7px}
+.dl.up{background:#DCFCE7;color:#166534}.dl.dn{background:#FEE2E2;color:#B91C1C}.dl.eq{background:#F1F5F9;color:#475569}
+.pan{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.06);border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;min-width:0;min-height:0}
+.ct{font-size:15px;font-weight:700;margin:0;line-height:1.3}
+.cs{font-size:12px;color:#64748B;margin-top:2px}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#475569}
+.lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.ax{font-size:11px;fill:#94A3B8;font-family:Inter,system-ui,sans-serif}
+.axv{font-size:11px;fill:#334155;font-weight:600;font-family:Inter,system-ui,sans-serif}
+.tb{width:100%;border-collapse:collapse;font-size:13px}
+.tb th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:8px 12px;background:#F8FAFC;position:sticky;top:0;white-space:nowrap}
+.tb td{padding:9px 12px;border-top:1px solid #F1F5F9;vertical-align:middle}
+.tb .r{text-align:right;font-variant-numeric:tabular-nums}
+.tb tr.tot td{font-weight:700;background:#F8FAFC;border-top:2px solid #E2E8F0}
+.tb tr.hv:hover td{background:#FAFAFF;cursor:pointer}
+.tb tr.act td{background:#F5F7FF}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}
+.stp{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#64748B;white-space:nowrap}
+.stp .n{width:26px;height:26px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.stp.hecho{color:#166534}.stp.hecho .n{background:#DCFCE7;color:#166534}
+.stp.act{color:#3730A3}.stp.act .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.stl{flex:1;height:2px;background:#E2E8F0;border-radius:2px;min-width:16px}.stl.hecho{background:#86EFAC}
+.chk{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid #F1F5F9;font-size:13px}
+.chk:first-child{border-top:0}
+.ci2{width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ci2.ok{background:#DCFCE7;color:#166534}.ci2.er{background:#FEE2E2;color:#B91C1C}.ci2.wa{background:#FEF3C7;color:#92400E}.ci2.ne{background:#F1F5F9;color:#64748B}
+.side{position:absolute;top:0;right:0;bottom:0;background:#fff;border-left:1px solid #E6E8F0;box-shadow:-20px 0 50px rgba(15,23,42,.14);display:flex;flex-direction:column;z-index:5}
+.cat{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;width:100%;text-align:left}
+.cat.on{background:#EEF2FF;color:#3730A3}
+.cat .c{margin-left:auto;font-size:11px;font-weight:700;color:#94A3B8}
+.rp{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13px}
+.rp:hover{background:#FAFAFF}
+.fav{color:#CBD5E1;display:inline-flex}.fav.on{color:#D97706}.fav.on svg{fill:#FBBF24}
+.mes{flex:1;border:1px solid #E6E8F0;border-radius:12px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#475569;background:#fff;min-width:0;cursor:pointer}
+.mes.cer{background:#F0FDF4;border-color:#BBF7D0;color:#166534}.mes.dur{background:#F1F5F9;border-color:#CBD5E1;color:#334155}.mes.act{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.15);color:#3730A3}.mes.fut{color:#CBD5E1;border-style:dashed}
+.hbar{display:flex;height:22px;gap:2px;border-radius:6px;overflow:hidden}
+.hbar i{display:block;height:100%}
+.av2 b{font-weight:700}
+.grp{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B}
+.grp .m2{font-weight:600;letter-spacing:0}
+.nsh>*{flex:0 0 auto}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Finanzas › <b>Compras y gastos</b></div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+ <div><h1 class="h1">Compras y gastos</h1><div class="sub">Redes del Valle, S.A. · 38 compras en noviembre · Q 164,280</div></div>
+ <span style="flex:1"></span><span class="selp" style="height:40px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"/></svg>Redes del Valle, S.A.<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><button class="ib f" title="Ayuda: cómo registrar una compra y a dónde va cada línea (manual)" style="width:40px;height:40px;border-radius:999px;cursor:help"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button>
+ <button class="btn o"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18L12 4zM5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/></svg>Pagar a proveedor</button>
+ <button class="btn o"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar a mano</button>
+ <button class="btn p" style="padding:11px 20px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>Cargar factura</button>
+</div>
+<section class="isla" style="flex:1;min-height:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;flex-wrap:wrap">
+  <div class="segb"><sc-for list="{{tabs}}" as="t"><button class="ts {{t.cls}}" onClick="{{t.ir}}">{{t.nom}}<span class="c {{t.cc}}">{{t.n}}</span></button></sc-for></div>
+  <span style="flex:1"></span>
+  <span class="busca" style="width:280px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Proveedor, NIT o número de factura…</span>
+  <span class="selp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>Estado: todas<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+ </div>
+ <div style="flex:1;min-height:0;display:{{d1}};flex-direction:column"><div style="display:grid;grid-template-columns:minmax(0,1fr) 360px;flex:1;min-height:0">
+ <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid #EEF0F5">
+  <div class="lh" style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span>Fecha</span><span>Proveedor y documento</span><span>Concepto y destino</span><span style="text-align:right">Total (Q)</span><span>Condición</span><span>Estado</span><span></span></div>
+  <div class="sc" style="flex:1"><div class="lr on" style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">20 nov</span><div><b class="el" style="display:block">Fibras y Cables, S.A.</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FACT 3B1F-88213</span> · NIT 2291004-6</div></div><div><span class="el" style="display:block">Bienes · 24 ONU y 2 bobinas</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Inventario</span></div></div><b class="num r">18,760.00</b><span class="m2">Crédito 30 días</span><div><span class="b wa"><span class="dot" style="background:currentColor"></span>Por pagar</span><div class="m2 el" style="margin-top:2px">vence 20 dic</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div><div class="lr " style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">19 nov</span><div><b class="el" style="display:block">Tigo Business</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FACT 77AC-10442</span> · NIT 508132-K</div></div><div><span class="el" style="display:block">Servicio · ancho de banda nov</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Gasto</span></div></div><b class="num r">42,000.00</b><span class="m2">Crédito 15 días</span><div><span class="b wa"><span class="dot" style="background:currentColor"></span>Por pagar</span><div class="m2 el" style="margin-top:2px">vence 4 dic</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div><div class="lr " style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">18 nov</span><div><b class="el" style="display:block">Energuate</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FACT 0D4E-55120</span> · NIT 1498822-0</div></div><div><span class="el" style="display:block">Servicio · energía de nodos</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Gasto</span></div></div><b class="num r">3,418.60</b><span class="m2">Contado</span><div><span class="b ok"><span class="dot" style="background:currentColor"></span>Pagada</span><div class="m2 el" style="margin-top:2px">banco · 18 nov</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div><div class="lr " style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">15 nov</span><div><b class="el" style="display:block">Taller El Buen Poste</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FPEQ 5512-00391</span> · NIT 880023-1</div></div><div><span class="el" style="display:block">Servicio · postes zona Norte</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Gasto</span></div></div><b class="num r">2,400.00</b><span class="m2">Contado</span><div><span class="b ok"><span class="dot" style="background:currentColor"></span>Pagada</span><div class="m2 el" style="margin-top:2px">caja 1 · egreso E-0412</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div><div class="lr " style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">14 nov</span><div><b class="el" style="display:block">Dist. de Torres GT</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FACT 91B0-33008</span> · NIT 3345091-2</div></div><div><span class="el" style="display:block">Activo · torre de 24 m</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Activo fijo</span></div></div><b class="num r">31,500.00</b><span class="m2">Crédito 30 días</span><div><span class="b er"><span class="dot" style="background:currentColor"></span>Vencida</span><div class="m2 el" style="margin-top:2px">venció 14 nov · 7 días</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div><div class="lr " style="grid-template-columns:62px minmax(0,1.3fr) minmax(0,1.2fr) 100px 110px 150px 30px"><span class="m2">12 nov</span><div><b class="el" style="display:block">Seguros del País</b><div class="m2 el"><span class="mono" style="font-size:11.5px">FACT 2C19-70411</span> · NIT 120045-5</div></div><div><span class="el" style="display:block">Seguro anual de equipo</span><div><span class="b ne" style="font-size:11px;padding:1px 8px">Diferido</span></div></div><b class="num r">9,600.00</b><span class="m2">Contado</span><div><span class="b ok"><span class="dot" style="background:currentColor"></span>Pagada</span><div class="m2 el" style="margin-top:2px">se reparte en 12 meses</div></div><button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div></div>
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid #F1F5F9;font-size:12px;color:#64748B"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Una compra no se edita: se anula con su reverso y se registra de nuevo. El crédito de IVA vale 2 meses.<span style="flex:1"></span>6 de 38 en noviembre</div>
+ </div>
+ <div class="sc" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+  <div><h2 class="ct">Debes Q 106,860; Q 31,500 ya vencieron</h2><div class="cs">Cuentas por pagar por antigüedad · cuadra con proveedores (2.1.03)</div>
+   <div style="margin:10px 0 6px"><div class="hbar" style="height:22px"><i style="width:70.52%;background:#CBD5E1" title="75,360"></i><i style="width:29.48%;background:#FDBA74" title="31,500"></i></div></div><table class="tb"><tr><td><span class="sw" style="background:#CBD5E1"></span>&nbsp; Por vencer</td><td class="r">Q 75,360</td></tr><tr><td><span class="sw" style="background:#FDBA74"></span>&nbsp; 1–30 días</td><td class="r">Q 31,500</td></tr><tr><td><span class="sw" style="background:#F97316"></span>&nbsp; 31–60</td><td class="r">Q 0</td></tr><tr><td><span class="sw" style="background:#C2410C"></span>&nbsp; 61–90</td><td class="r">Q 0</td></tr><tr><td><span class="sw" style="background:#7C2D12"></span>&nbsp; Más de 90</td><td class="r">Q 0</td></tr></table></div>
+  <div class="card" style="padding:12px;border-style:dashed;border-color:#C7D2FE;background:#F5F7FF"><div style="display:flex;gap:10px;align-items:center"><span class="ico nf"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg></span><div style="flex:1"><b style="font-size:13px">2 borradores por revisar</b><div class="m2">Leídos del XML o la foto de la factura; tú confirmas antes de que toquen el libro</div></div></div>
+   <div class="kv" style="margin-top:8px"><span>Claro · FACT 55E1-0092 <span class="b ok" style="font-size:11px">XML</span></span><b class="num">Q 6,120.00</b></div><div class="kv"><span>Ferretería Ixchel <span class="b wa" style="font-size:11px">foto · revisar NIT</span></span><b class="num">Q 842.50</b></div></div>
+  <div class="av2 wa" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><div><b>Consejo:</b> la compra a Taller El Buen Poste pasa de Q 2,500 sin retención registrada. <button class="lnk" style="font-size:12px">Ver</button></div></div>
+ </div>
+</div></div>
+ <div class="sc" style="flex:1;display:{{d2}}"><table class="tb"><tr><th>Proveedor</th><th>Categoría</th><th class="r">Saldo (Q)</th><th>Próximo vencimiento</th><th></th></tr><tr class="hv"><td><b>Tigo Business</b><div class="m2">NIT 508132-K</div></td><td>Ancho de banda</td><td class="r"><b>42,000.00</b></td><td><span class="b wa">4 dic</span></td><td class="r"><button class="lnk" style="font-size:12px">Estado de cuenta</button></td></tr><tr class="hv"><td><b>Fibras y Cables, S.A.</b><div class="m2">NIT 2291004-6</div></td><td>Equipo y fibra</td><td class="r"><b>33,360.00</b></td><td><span class="b wa">20 dic</span></td><td class="r"><button class="lnk" style="font-size:12px">Estado de cuenta</button></td></tr><tr class="hv"><td><b>Dist. de Torres GT</b><div class="m2">NIT 3345091-2</div></td><td>Infraestructura</td><td class="r"><b>31,500.00</b></td><td><span class="b er">vencido 7 días</span></td><td class="r"><button class="lnk" style="font-size:12px">Estado de cuenta</button></td></tr><tr class="hv"><td><b>Energuate</b><div class="m2">NIT 1498822-0</div></td><td>Energía</td><td class="r"><b>0.00</b></td><td><span class="b ok">—</span></td><td class="r"><button class="lnk" style="font-size:12px">Estado de cuenta</button></td></tr><tr class="hv"><td><b>Seguros del País</b><div class="m2">NIT 120045-5</div></td><td>Seguros</td><td class="r"><b>0.00</b></td><td><span class="b ok">—</span></td><td class="r"><button class="lnk" style="font-size:12px">Estado de cuenta</button></td></tr></table></div>
+ <div style="flex:1;min-height:0;display:{{d3}};flex-direction:column">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5"><span class="ci2 ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span><div style="flex:1"><b style="font-size:13px">Depreciación de octubre registrada · Q 6,318.40</b><div class="m2">Método lineal · la de noviembre se registra sola al terminar el mes</div></div><button class="btn o" style="padding:7px 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Alta de activo</button><button class="btn o" style="padding:7px 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>Dar de baja</button></div>
+  <div class="sc" style="flex:1"><table class="tb"><tr><th>Activo</th><th>Clase</th><th>Alta</th><th class="r">Costo (Q)</th><th class="r">Tasa</th><th>Depreciado</th><th class="r">Valor en libros (Q)</th></tr><tr class="hv"><td><b>Torre de 24 m · Nodo San Juan</b><div class="m2 mono" style="font-size:11.5px">A-000214</div></td><td>Torres y antenas</td><td class="m2">14 nov 2026</td><td class="r">31,500.00</td><td class="r">10 %</td><td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><span class="bar" style="flex:1"><i style="width:0%;background:#4F46E5"></i></span><span class="num m2" style="width:34px;text-align:right">0 %</span></div></td><td class="r"><b>31,500.00</b></td></tr><tr class="hv"><td><b>OLT Huawei MA5608T · Nodo Centro</b><div class="m2 mono" style="font-size:11.5px">A-000102</div></td><td>Equipo de red</td><td class="m2">3 mar 2025</td><td class="r">48,200.00</td><td class="r">20 %</td><td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><span class="bar" style="flex:1"><i style="width:32%;background:#4F46E5"></i></span><span class="num m2" style="width:34px;text-align:right">32 %</span></div></td><td class="r"><b>32,936.70</b></td></tr><tr class="hv"><td><b>Pick-up Toyota Hilux 2022</b><div class="m2 mono" style="font-size:11.5px">A-000031</div></td><td>Vehículos</td><td class="m2">12 ene 2023</td><td class="r">185,000.00</td><td class="r">20 %</td><td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><span class="bar" style="flex:1"><i style="width:77%;background:#4F46E5"></i></span><span class="num m2" style="width:34px;text-align:right">77 %</span></div></td><td class="r"><b>43,166.70</b></td></tr><tr class="hv"><td><b>ONU en comodato · 1,120 unidades</b><div class="m2 mono" style="font-size:11.5px">A-COM</div></td><td>Equipo en clientes</td><td class="m2">varias</td><td class="r">212,800.00</td><td class="r">20 %</td><td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><span class="bar" style="flex:1"><i style="width:42%;background:#4F46E5"></i></span><span class="num m2" style="width:34px;text-align:right">42 %</span></div></td><td class="r"><b>124,390.00</b></td></tr><tr class="hv"><td><b>Planta eléctrica 10 kVA</b><div class="m2 mono" style="font-size:11.5px">A-000077</div></td><td>Maquinaria</td><td class="m2">20 jun 2024</td><td class="r">22,400.00</td><td class="r">20 %</td><td style="width:170px"><div style="display:flex;align-items:center;gap:8px"><span class="bar" style="flex:1"><i style="width:47%;background:#4F46E5"></i></span><span class="num m2" style="width:34px;text-align:right">47 %</span></div></td><td class="r"><b>11,946.70</b></td></tr><tr class="tot"><td colspan="3">214 activos</td><td class="r">1,284,300.00</td><td></td><td></td><td class="r">812,640.00</td></tr></table></div>
+ </div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {}; const t = st.t || 'compras';
+const tabs = [['compras', 'Compras', 38, ''], ['borr', 'Borradores', 2, 'rj'], ['prov', 'Proveedores', 27, ''], ['pagos', 'Pagos', 19, ''], ['activos', 'Activos fijos', 214, ''], ['dif', 'Diferidos', 9, '']].map(([id, nom, n, cc]) => ({ id, nom, n, cc, cls: id === t ? 'on' : '', ir: () => this.setState({ t: id }) }));
+const g = (t === 'prov' || t === 'pagos') ? 2 : (t === 'activos' || t === 'dif') ? 3 : 1;
+return { tabs, d1: g === 1 ? 'flex' : 'none', d2: g === 2 ? 'block' : 'none', d3: g === 3 ? 'flex' : 'none' };
+}
+}
+</script>
+</body>
+</html>
