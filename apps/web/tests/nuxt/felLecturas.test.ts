@@ -8,7 +8,7 @@ import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import LibroCierres from '~/components/LibroCierres.vue'
 import LibroDiarios from '~/components/LibroDiarios.vue'
-import PaginaAviso from '~/pages/configuracion/aviso-cobro.vue'
+import PaginaEditor from '~/pages/configuracion/plantillas-documentos/[id].vue'
 import PaginaFel from '~/pages/configuracion/fel.vue'
 import PaginaDteDetalle from '~/pages/dte/[id].vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
@@ -193,8 +193,9 @@ describe('FEL · lecturas nuevas', () => {
     })
 
     it('el editor: pestaña de nota de crédito, aviso por bloque FEL faltante, comparar y restaurar la de fábrica', async () => {
-        bd.plantillaNotaCredito = { ...bd.plantillaNotaCredito, version: 2, html: '<h1>{{empresa.nombre}}</h1>\n{{nota.lineas}}\n' }
-        const vista = await mountSuspended(conApp(PaginaAviso), { route: '/configuracion/aviso-cobro?tipo=nota_credito' })
+        // la «Carta» de la nota de crédito (id 3) editada sin el bloque FEL
+        bd.plantillasDocumentos[2] = { ...bd.plantillasDocumentos[2]!, version: 2, de_fabrica: false, html: '<h1>{{empresa.nombre}}</h1>\n{{nota.lineas}}\n' }
+        const vista = await mountSuspended(conApp(PaginaEditor), { route: '/configuracion/plantillas-documentos/3' })
         await esperar(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="falta-bloque-fel"]').text()).toContain('nota.fel_uuid')
         const insertar = vista.find('[data-prueba="falta-bloque-fel"]').findAll('button').find(b => b.text().includes('Insertar bloque FEL'))

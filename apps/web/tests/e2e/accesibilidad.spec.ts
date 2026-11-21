@@ -25,6 +25,10 @@ const PANTALLAS = [
     ['sugerencias por zona y router', '/configuracion/empresas?tab=sugerencias'],
     ['usuarios', '/usuarios'],
     ['notificaciones', '/configuracion/notificaciones'],
+    // Varias plantillas por documento (carta y POS 80 mm).
+    ['plantillas de documentos', '/configuracion/aviso-cobro?tipo=recibo_cobro'],
+    ['nueva plantilla de documento', '/configuracion/plantillas-documentos/nueva?tipo=recibo_cobro&copiar=5'],
+    ['editor de plantilla POS', '/configuracion/plantillas-documentos/5'],
     ['portal de corte', '/configuracion/portal-corte'],
     ['notificaciones de una empresa', '/configuracion/notificaciones?empresa=2'],
     ['servicio de otra empresa', '/servicios/4'],

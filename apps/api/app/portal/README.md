@@ -185,6 +185,49 @@ bordes) y `sin-borde`. `style` admite `text-align`, `font-weight`, `font-style`,
 (`#rgb`). Imágenes, CSS externo y scripts se ignoran. Página carta con márgenes de 48 pt; las tablas
 largas siguen en otra página.
 
+### Varias plantillas por documento y POS 80 mm (pedido del PM)
+
+Cada tipo de documento (`aviso_cobro`, `nota_credito` y `recibo_cobro`) tiene **varias plantillas** en
+`core.plantillas_documentos`, cada una con `nombre` (único por tipo), `formato` (`carta` o `pos_80`),
+`activa` y `predeterminada` (una por tipo, índice único parcial; nunca inactiva). `html` NULL = la de
+fábrica de su tipo y formato, que sigue a la versión instalada hasta que alguien la edita.
+
+- **Predeterminada**: la que usan el portal, el correo y cualquier proceso automático. Sin ninguna
+  guardada, la de fábrica en carta (`id` null, `version` 0).
+- **Al imprimir desde el panel** se puede elegir otra activa del mismo tipo con `?plantilla_id=`
+  (otro tipo, inexistente o desactivada: 422 en `plantilla_id`).
+- **Migración** `1795226874225`: la fila que ya tenía cada tipo queda como predeterminada «Carta»; los
+  tipos sin fila reciben su «Carta» de fábrica, y el aviso y el recibo su «POS 80 mm» de fábrica.
+- **POS 80 mm** (`html_a_pdf.ts`, `formato: 'pos_80'`): 80 mm de ancho, márgenes de 3 mm, letra base de
+  8 pt (los encabezados escalan con ella), todo en negro y sin fondos (la térmica no imprime grises). El
+  alto sale del contenido: se dibuja una vez en una página de 200 pulgadas para medir y otra con el alto
+  exacto, así la impresora corta donde termina. El tamaño lo pone el `formato` de la plantilla, no el
+  HTML (`<style>` y `@page` se ignoran).
+- **Recibo de cobro** (`recibo_cobro`, `documentos/variables_recibo.ts`): datos de `verCobro` (A3,
+  `GET /cobros/:id`), una sección por empresa (`{{#secciones}}` con `empresa.*`, `pago.*`,
+  `{{#aplicaciones}}` y anticipo); `{{empresa.*}}` fuera de las secciones es la primera empresa.
+  Variables: `cobro.numero`, `cobro.fecha`, `cobro.metodo`, `cobro.total`, `cobro.cajero`,
+  `cobro.empresas`, `{{#cobro.varias_empresas}}`, `cliente.nombre`, `cliente.nit`, `generado`.
+
+| Endpoint                                                | Permiso                    | Qué hace                                                                                         |
+| ------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/plantillas-documentos?tipo=&activa=`       | `documentos.ver`           | Lista sin HTML, predeterminada primero (`{ data, nextCursor: null }`: son pocas)                 |
+| `POST /api/v1/plantillas-documentos`                    | `documentos.crear`         | Acción `documentos.crear`: desde la de fábrica del formato, copiando otra (`copiar_de_id`) o con HTML |
+| `GET /api/v1/plantillas-documentos/:id`                 | `documentos.ver`           | Con HTML y variables                                                                             |
+| `PUT /api/v1/plantillas-documentos/:id`                 | `documentos.editar`        | Nombre, formato y HTML (`html: null` = volver a la de fábrica); 409 por `version`                |
+| `POST /api/v1/plantillas-documentos/:id/predeterminar`  | `documentos.predeterminar` | La anterior deja de serlo; 422 `plantilla_inactiva`                                              |
+| `POST /api/v1/plantillas-documentos/:id/desactivar`     | `documentos.desactivar`    | Nunca la predeterminada (422 `plantilla_predeterminada`)                                         |
+| `POST /api/v1/plantillas-documentos/:id/activar`        | `documentos.activar`       | Vuelve a ofrecerla al imprimir                                                                   |
+| `GET /api/v1/documentos/recibo-cobro/:cobroId`          | `pagos.ver`                | PDF del recibo de un cobro (solo las secciones de las empresas del usuario; 403 si ninguna)      |
+
+Las rutas anteriores siguen igual: `GET/PUT /documentos/plantillas/:tipo` operan sobre la
+predeterminada (versión 0 = guardar la de fábrica como «Carta»), `…/fabrica` acepta `?formato=` y
+`…/vista-previa` acepta `formato` en el cuerpo. `GET /documentos/aviso-cobro/:facturaId`,
+`/documentos/nota-credito/:notaId` y `/documentos/recibo-cobro/:cobroId` aceptan `?plantilla_id=`.
+Todas las acciones auditan el diff por campo (entidad `plantilla_documento`). **Eventos:** ninguno (una
+plantilla no es un hecho de negocio del catálogo; el PDF se genera al pedirlo). `documentos.ver` pasa a
+`cajero`, `soporte` y `contabilidad` para que elijan con qué plantilla imprimir.
+
 ### Configuración de empresa (tarea 9)
 
 | Endpoint                     | Permiso                  | Qué hace                                                                                                                                                                                                                                     |
@@ -561,6 +604,10 @@ con destino enmascarado y 422, intentos agotados, vencido/usado/reemplazado, lí
 caído (503 sin código guardado), 401 sin sesión, datos solo del cliente de la sesión (factura ajena 404),
 salir y sesión vencida, extensión hasta el máximo, edición de contacto con auditoría, 409 y 422.
 
+`tests/portal/plantillas_documentos.spec.ts`: migración (conserva la guardada como predeterminada),
+varias por tipo, una sola predeterminada, no desactivar la predeterminada, imprimir con y sin
+`plantilla_id` (otro tipo o desactivada: 422), PDF de 80 mm con alto según contenido, recibo de un
+cobro de dos empresas (y de un usuario de una sola) y lectura con `SET LOCAL ROLE argosisp_app`.
 `tests/portal/documentos.spec.ts`: HTML a PDF (tildes, tablas, listas, salto de página), escape de
 datos, PDF del portal con datos, montos y fechas de Guatemala, factura ajena 404 y sin sesión 401, FEL,
 PDF del panel con y sin `facturas.ver`, plantilla editable (versión 0, diff, 409, el PDF usa la nueva),

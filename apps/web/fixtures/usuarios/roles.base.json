@@ -37,7 +37,8 @@
             "promesas.ver",
             "servicios.ver",
             "zonas.ver",
-            "comprobantes.registrar"
+            "comprobantes.registrar",
+            "documentos.ver"
         ]
     },
     {
@@ -90,7 +91,8 @@
             "sesiones.ver",
             "sorteos.ver",
             "zonas.ver",
-            "notificaciones.registrar_consentimiento"
+            "notificaciones.registrar_consentimiento",
+            "documentos.ver"
         ]
     },
     {
@@ -253,7 +255,8 @@
             "sorteos.publicar",
             "sorteos.ver",
             "zonas.ver",
-            "comprobantes.registrar"
+            "comprobantes.registrar",
+            "documentos.ver"
         ]
     },
     {

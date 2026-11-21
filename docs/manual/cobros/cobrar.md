@@ -63,7 +63,15 @@ Abre tu caja (ver [Caja](./caja.md)). Si no la abriste, al elegir «Efectivo en 
 - Se registra el asiento en el libro y el sistema vuelve a evaluar cada servicio. Si ya no debe lo suficiente para estar limitado o suspendido, **vuelve a activo al instante**. Si sigue cortado, el panel dice por qué («Sigue suspendido: …»).
 - Si la reactivación tarda más de 30 segundos verás «El servicio no se ha reactivado»: puede que aún deba avisos vencidos; revisa la ficha del servicio.
 - Si las notificaciones están configuradas, el cliente recibe el aviso del pago.
-- Aparece el **recibo** con «Imprimir» y «Nuevo cobro».
+- Aparece el **recibo** con «Imprimir», «Recibo en PDF» y «Nuevo cobro».
+
+### Imprimir el recibo en PDF (carta o impresora POS)
+
+- **Permiso:** `pagos.ver`; para elegir la plantilla, `documentos.ver` (lo tienen `cajero`, `soporte`, `contabilidad`, `lectura` y `admin`).
+- **Dónde:** botón «Recibo en PDF», debajo del recibo.
+- **Qué pasa:** abre el recibo en PDF en otra pestaña, con la plantilla **predeterminada** del recibo de cobro; desde ahí lo imprimes. La flecha de al lado (**Imprimir con…**) muestra las otras plantillas activas, por ejemplo **«POS 80 mm»** para la impresora térmica de rollo: el PDF sale de 80 mm de ancho y del largo justo del recibo. Si el cobro fue de varias empresas, el recibo trae una sección por empresa.
+- «Imprimir» sigue imprimiendo el recibo que ves en pantalla, como antes.
+- Las plantillas se crean y se eligen en **Configuración → Plantillas de documentos** ([ver](../portal/plantillas-de-documentos.md)).
 
 ### Cobrar facturas de varios clientes (responsable de pago)
 

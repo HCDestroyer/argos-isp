@@ -69,30 +69,18 @@ function alCambiarNcre() {
 /* PDF de la nota (`GET /documentos/nota-credito/:notaId`, el mismo del portal). */
 const generandoPdf = ref(false)
 
-async function abrirPdf() {
+/** Con la plantilla predeterminada o con la elegida en «Imprimir con…». */
+async function abrirNotaPdf(plantillaId: number | null = null) {
     if (!nota.value || generandoPdf.value) {
         return
     }
-    const ventana = window.open('', '_blank')
+    const id = nota.value.id
     generandoPdf.value = true
-    const resultado = await useDocumentos().notaCredito(nota.value.id)
+    const problema = await abrirPdf(() => useDocumentos().notaCredito(id, plantillaId), `nota-credito-${id}.pdf`)
     generandoPdf.value = false
-    if (!resultado.ok) {
-        ventana?.close()
-        toast.add({ title: 'No se pudo generar el PDF', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
-        return
+    if (problema) {
+        toast.add({ title: 'No se pudo generar el PDF', description: problema.detail ?? problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
     }
-    const url = URL.createObjectURL(resultado.data)
-    if (ventana) {
-        ventana.location.href = url
-    }
-    else {
-        const enlace = document.createElement('a')
-        enlace.href = url
-        enlace.download = `nota-credito-${nota.value.id}.pdf`
-        enlace.click()
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 function anular(motivo: string, clave: string) {
@@ -183,14 +171,12 @@ onMounted(cargar)
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <UButton
-                        :label="nota.fel_estado === 'certificado' ? 'NCRE (PDF)' : 'Nota (PDF)'"
-                        icon="i-lucide-file-down"
-                        color="neutral"
-                        variant="outline"
-                        :loading="generandoPdf"
+                    <ImprimirConPlantilla
+                        tipo="nota_credito"
+                        :etiqueta="nota.fel_estado === 'certificado' ? 'NCRE (PDF)' : 'Nota (PDF)'"
+                        :generando="generandoPdf"
                         data-prueba="nota-pdf"
-                        @click="abrirPdf"
+                        @imprimir="abrirNotaPdf"
                     />
                     <UButton
                         v-if="puedeAnular"

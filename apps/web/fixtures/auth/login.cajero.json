@@ -17,6 +17,7 @@
       "planes.ver",
       "facturas.ver",
       "pagos.ver",
+      "documentos.ver",
       "pagos.registrar",
       "cajas.ver",
       "cajas.abrir",

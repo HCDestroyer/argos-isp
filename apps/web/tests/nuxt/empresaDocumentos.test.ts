@@ -2,7 +2,7 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
-import PaginaAviso from '~/pages/configuracion/aviso-cobro.vue'
+import PaginaEditor from '~/pages/configuracion/plantillas-documentos/[id].vue'
 import PaginaEmpresa from '~/pages/configuracion/empresa.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
 import { esperar } from '../ayudas/esperar'
@@ -48,7 +48,8 @@ describe('empresa y plantilla del aviso de cobro', () => {
     })
 
     it('plantilla: 422 con triple bigote o sección sin cerrar, vista previa en PDF y 409 por versión', async () => {
-        const triple = await useDocumentos().guardarPlantilla('<p>{{{cliente.nombre}}}</p>', 0)
+        // la predeterminada del aviso que deja la migración: «Carta» de fábrica, versión 1
+        const triple = await useDocumentos().guardarPlantilla('<p>{{{cliente.nombre}}}</p>', 1)
         expect(!triple.ok && triple.problema.errors?.[0]?.field).toBe('html')
 
         const abierta = await useDocumentos().vistaPrevia('<p>{{#factura.fel}}FEL</p>')
@@ -57,14 +58,15 @@ describe('empresa y plantilla del aviso de cobro', () => {
         const vista = await useDocumentos().vistaPrevia('<h1>{{empresa.nombre}}</h1>')
         expect(vista.ok && vista.data.type).toBe('application/pdf')
 
-        const guardada = await useDocumentos().guardarPlantilla('<h1>{{empresa.nombre}}</h1>', 0)
-        expect(guardada.ok && guardada.data.version).toBe(1)
-        const vieja = await useDocumentos().guardarPlantilla('<h1>Otra</h1>', 0)
+        const guardada = await useDocumentos().guardarPlantilla('<h1>{{empresa.nombre}}</h1>', 1)
+        expect(guardada.ok && guardada.data.version).toBe(2)
+        expect(guardada.ok && guardada.data.de_fabrica).toBe(false)
+        const vieja = await useDocumentos().guardarPlantilla('<h1>Otra</h1>', 1)
         expect(!vieja.ok && vieja.problema.status).toBe(409)
     })
 
     it('el editor lista las variables de la API y las inserta en el HTML', async () => {
-        const vista = await mountSuspended(PaginaAviso)
+        const vista = await mountSuspended(PaginaEditor, { route: '/configuracion/plantillas-documentos/1' })
         await esperar(() => expect(vista.find('[data-variable="cliente.nombre"]').exists()).toBe(true))
         const area = vista.get<HTMLTextAreaElement>('textarea')
         await area.setValue('')

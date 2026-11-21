@@ -424,7 +424,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/configuracion/aviso-cobro': {
         titulo: 'Plantillas de documentos',
-        resumen: 'Aquí editas cómo se ve el PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL) y el de la nota de crédito. Es el PDF que el cliente descarga en su portal y el que se ve desde el panel. La plantilla es HTML con variables que Argos llena con los datos de cada documento.',
+        resumen: 'Aquí decides cómo se ven los PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL), del recibo de cobro de la caja y de la nota de crédito. Cada plantilla es HTML con variables que Argos llena con los datos de cada documento.',
         pagina: 'portal/plantillas-de-documentos',
         ancla: null,
         temas: [
@@ -573,6 +573,32 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         titulo: 'Configuración de notificaciones',
         resumen: 'Aquí conectas los canales por los que ArgosIsp avisa a tus clientes y a tu equipo: el servidor de correo, el bot de Telegram y WhatsApp (por Iris). También decides qué tipos de aviso se mandan. Lo que configures aquí rige desde que guardas, sin reiniciar nada.',
         pagina: 'notificaciones/configuracion',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
+    '/configuracion/plantillas-documentos/[id]': {
+        titulo: 'Plantillas de documentos',
+        resumen: 'Aquí decides cómo se ven los PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL), del recibo de cobro de la caja y de la nota de crédito. Cada plantilla es HTML con variables que Argos llena con los datos de cada documento.',
+        pagina: 'portal/plantillas-de-documentos',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué ves',
+            'Acciones',
+            'Preguntas frecuentes y errores',
+            'Relacionado',
+        ],
+    },
+    '/configuracion/plantillas-documentos/nueva': {
+        titulo: 'Plantillas de documentos',
+        resumen: 'Aquí decides cómo se ven los PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL), del recibo de cobro de la caja y de la nota de crédito. Cada plantilla es HTML con variables que Argos llena con los datos de cada documento.',
+        pagina: 'portal/plantillas-de-documentos',
         ancla: null,
         temas: [
             'Quién la usa',
