@@ -3,6 +3,7 @@ import { actualizarConVersion, verificarVersion } from '#shared/version'
 import { columnasCliente, type DatosCliente, type DocumentoAnterior } from '#core/actions/crear_cliente'
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { CAMPOS_CLIENTE_ACTUALIZADO } from '#shared/eventos'
+import { numerosPersona, revalidarVinculos } from '#core/contactos'
 
 export interface EntradaEditarCliente extends DatosCliente {
     id: number
@@ -35,11 +36,31 @@ export default class EditarCliente extends DomainAction<EntradaEditarCliente, Cl
         // 409 antes de validar: los teléfonos se validan contra lo guardado en esa versión
         verificarVersion('core.clientes', id, antes.version, version)
         const columnas = await columnasCliente(t, datos, antes as unknown as DocumentoAnterior)
+        const numerosAntes = await numerosPersona(id, t.trx)
+        // Iris 0.10.0 §3.4.6 y §3.8: un número que cambia deja de estar verificado; si lo escribe el
+        // personal de Argos ya cuenta como registrado
+        const cambiaNumero: Array<'telefono' | 'movil'> = []
+        for (const campo of ['telefono', 'movil'] as const) {
+            if (columnas[campo] !== undefined && columnas[campo] !== antes[campo]) {
+                columnas[`${campo}_verificado_en`] = null
+                cambiaNumero.push(campo)
+            }
+        }
+        if (cambiaNumero.length > 0) {
+            columnas.campos_sin_confirmar = t.trx.knexRawQuery(
+                'array(SELECT x FROM unnest(campos_sin_confirmar) x WHERE x <> ALL(CAST(? AS text[])))',
+                [`{${cambiaNumero.join(',')}}`],
+            )
+        }
         await actualizarConVersion(t.trx, 'core.clientes', id, version, columnas)
         const despues = await verCliente(id, t.trx)
         await t.registrarCambios({ tipo: 'cliente', id }, antes, despues)
         const campos = CAMPOS_CLIENTE_ACTUALIZADO.filter((campo) => antes[campo] !== despues[campo])
         if (campos.length > 0) await t.emit('cliente.actualizado', { cliente_id: id, campos })
+        // §3.8 (ajuste am): los vínculos de contactos de otros clientes que eran esta persona por su número
+        if (cambiaNumero.length > 0 && numerosAntes) {
+            await revalidarVinculos(t, { personaId: id, antes: numerosAntes })
+        }
         return despues
     }
 }

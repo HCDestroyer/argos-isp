@@ -18,6 +18,10 @@ export const PERMISOS = {
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
     'clientes.restaurar_contrasena_portal':
         'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
+    'contactos.buscar':
+        'Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)',
+    'contactos.gestionar':
+        'Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -438,6 +442,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         descripcion: 'Cobro en caja: pagos, turnos y promesas',
         permisos: [
             'clientes.ver',
+            // caja: cuentas a cargo de un contacto (contrato Iris 0.10.1 §3.8)
+            'contactos.buscar',
             'clientes.estado_cuenta',
             'clientes.asignar_responsable_pago',
             'clientes.quitar_responsable_pago',
@@ -477,6 +483,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         descripcion: 'Atención al cliente y gestión de servicios',
         permisos: [
             'clientes.ver',
+            'contactos.buscar',
+            'contactos.gestionar',
             'clientes.crear',
             'clientes.editar',
             'notificaciones.registrar_consentimiento',

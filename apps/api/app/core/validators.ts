@@ -26,6 +26,7 @@ import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 import { FORMATO_TELEFONO } from '#core/telefonos'
+import { telefonosAdicionales } from '#core/validators_contactos'
 
 /*
 |--------------------------------------------------------------------------
@@ -145,6 +146,7 @@ const camposCliente = {
 export const crearClienteValidator = vine.compile(
     vine.object({
         ...camposCliente,
+        telefonos_adicionales: telefonosAdicionales(),
         codigo_referido: vine
             .string()
             .trim()

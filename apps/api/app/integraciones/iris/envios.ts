@@ -84,6 +84,9 @@ export const EVENTOS_A_IRIS = [
     'promesa.incumplida',
     'promesa.cancelada',
     'cuenta_bancaria.cambiada',
+    'cliente.contactos_cambiados',
+    'cliente.identidad_registrada',
+    'servicio.titular_cambiado',
 ] as const
 
 /** Eventos que nacieron con el contrato Iris 0.5.0: solo a conectores con contrato ≥ 0.5.0. */
@@ -116,10 +119,18 @@ export const EVENTOS_DESDE_080 = ['cuenta_bancaria.cambiada'] as const satisfies
 /** Versión mínima del contrato para `EVENTOS_DESDE_080`. */
 export const CONTRATO_EVENTOS_080 = '0.8.0'
 
-/** Versión mínima propia de este módulo (0.5.0 y 0.8.0); la de 0.6.0 la decide A1. */
+/** Eventos que nacieron con el contrato Iris 0.10.0 (§3.4 y §3.5): solo a conectores con contrato ≥ 0.10.0. */
+export const EVENTOS_DESDE_0100 = [
+    'cliente.contactos_cambiados',
+    'cliente.identidad_registrada',
+    'servicio.titular_cambiado',
+] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
+
+/** Versión mínima propia de este módulo (0.5.0, 0.8.0 y 0.10.0); la de 0.6.0 la decide A1. */
 function contratoMinimoEnvio(evento: string): string | null {
     if ((EVENTOS_DESDE_050 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_050
     if ((EVENTOS_DESDE_080 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_080
+    if ((EVENTOS_DESDE_0100 as readonly string[]).includes(evento)) return CONTRATO_EVENTOS_0100
     return contratoMinimoEventoIris(evento)
 }
 
@@ -261,6 +272,10 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
     }
 
+    if (evento === 'cliente.contactos_cambiados' || evento === 'cliente.identidad_registrada') {
+        return payloadClienteIris(evento, p)
+    }
+
     if (evento === 'inventario.equipo_por_recuperar') {
         const unidadId = entero(p.unidad_id)
         const servicioId = entero(p.servicio_id)
@@ -391,6 +406,23 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                 },
                 empresas,
             }
+        case 'servicio.titular_cambiado':
+            // nunca documento ni identidad; el texto del motivo queda en la auditoría de Argos
+            return {
+                payload: {
+                    servicio_id: servicioId,
+                    empresa_id: empresaId,
+                    de_cliente_id: entero(p.de_cliente_id),
+                    a_cliente_id: entero(p.a_cliente_id),
+                    existente: p.existente === true,
+                    posible_duplicado: p.posible_duplicado === true,
+                    de_cliente_eliminado: p.de_cliente_eliminado === true,
+                    motivo_codigo: texto(p.motivo_codigo),
+                    origen_tipo: texto(p.origen_tipo),
+                    origen_id: texto(p.origen_id),
+                },
+                empresas,
+            }
         case 'servicio.caidas_repetidas': {
             const causas: Record<string, number> = {}
             if (p.causas && typeof p.causas === 'object' && !Array.isArray(p.causas)) {
@@ -416,6 +448,52 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
         default:
             return null
+    }
+}
+
+const CAMPOS_CONTACTO_IRIS = [
+    'nombre',
+    'relacion',
+    'servicios',
+    'permisos',
+    'telefonos',
+    'persona_cliente_id',
+]
+
+/**
+ * `cliente.contactos_cambiados` y `cliente.identidad_registrada` (0.10.0, §2.3): lista cerrada, sin
+ * números, documentos ni fotos. El alcance es la empresa del evento (o las de los servicios del
+ * cliente si viene null).
+ */
+async function payloadClienteIris(evento: string, p: Payload): Promise<WebhookIris | null> {
+    const clienteId = entero(p.cliente_id)
+    if (!clienteId) return null
+    const empresaEvento = entero(p.empresa_id)
+    const empresas = empresaEvento ? [empresaEvento] : await empresasDelCliente(clienteId)
+    const empresaId = empresas[0] ?? null
+    if (evento === 'cliente.identidad_registrada') {
+        return {
+            payload: {
+                cliente_id: clienteId,
+                empresa_id: empresaId,
+                documento_tipo: unoDe(p.documento_tipo, ['dpi', 'pasaporte'] as const),
+                metodo: unoDe(p.metodo, ['foto_documento', 'revision_panel'] as const),
+            },
+            empresas,
+        }
+    }
+    return {
+        payload: {
+            cliente_id: clienteId,
+            empresa_id: empresaId,
+            contacto_id: entero(p.contacto_id),
+            accion: unoDe(p.accion, ['creado', 'editado', 'quitado'] as const),
+            campos: textos(p.campos).filter((c) => CAMPOS_CONTACTO_IRIS.includes(c)),
+            persona_cliente_id: entero(p.persona_cliente_id),
+        },
+        // un cliente sin servicios lo ve cualquier empresa (como `GET /clientes`)
+        empresas,
+        compartido: empresas.length === 0,
     }
 }
 

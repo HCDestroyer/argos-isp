@@ -64,6 +64,9 @@ export const PERMISOS_IRIS_CONTRATO = [
     // operador de Iris (`X-Iris-Actor: usuario:<id>`), que también necesita el permiso
     'comprobantes.aprobar',
     'comprobantes.rechazar',
+    // contactos del cliente (contrato 0.10.0 §3.5, A42)
+    'contactos.buscar',
+    'contactos.gestionar',
 ] as const
 
 /** Permisos que el contrato 0.7.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
