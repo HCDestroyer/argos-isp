@@ -15384,6 +15384,8 @@ export interface components {
         };
         EstadoCuenta: {
             cliente_id: number;
+            /** @description Con `?servicio_id=`: el estado de cuenta es solo de ese servicio (saldo = suma de sus movimientos; saldo a favor 0.00, porque es del cliente); null = todo el cliente */
+            servicio_id?: number | null;
             /** @description Suma del auxiliar CxC del cliente (positivo = debe) */
             saldo: components["schemas"]["Dinero"];
             /** @description Anticipos del cliente sin aplicar (se aplican a las próximas facturas) */
@@ -27973,6 +27975,8 @@ export interface operations {
             query?: {
                 /** @description Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance */
                 empresa_id?: number;
+                /** @description Solo el saldo, las facturas y la parte de cada movimiento de ese servicio del cliente (sin el desglose de los otros); 404 si el servicio no es del cliente */
+                servicio_id?: number;
             };
             header?: never;
             path: {

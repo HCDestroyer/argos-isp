@@ -1755,7 +1755,11 @@ const estadoCuenta: Ruta[] = [
         handler: async (ctx, { params, query }) => {
             const id = Number(params.id)
             await exigirCliente(ctx, id)
-            return leerEstadoCuenta(id, empresasEstadoCuenta(ctx, query.empresa_id))
+            return leerEstadoCuenta(
+                id,
+                empresasEstadoCuenta(ctx, query.empresa_id),
+                query.servicio_id ?? null,
+            )
         },
     }),
 ]
