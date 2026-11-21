@@ -55,6 +55,16 @@ async function confirmar(evento: FormSubmitEvent<DatosMotivo>) {
         :description="etiquetaServicio(servicio)"
         :dismissible="!enviando"
     >
+        <template
+            v-if="accion"
+            #title
+        >
+            <ModalTitulo
+                :texto="accion.confirmar"
+                :icono="accion.icono"
+                :tipo="accion.color === 'error' ? 'peligro' : accion.color === 'warning' ? 'advertencia' : 'info'"
+            />
+        </template>
         <template #body>
             <UForm
                 v-if="accion"
@@ -116,7 +126,7 @@ async function confirmar(evento: FormSubmitEvent<DatosMotivo>) {
                 <UButton
                     label="Cancelar"
                     color="neutral"
-                    variant="ghost"
+                    variant="outline"
                     :disabled="enviando"
                     @click="abierto = false"
                 />

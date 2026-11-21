@@ -25,8 +25,9 @@
  */
 :root,
 .light {
-    --ui-primary: var(--ui-color-primary-700);
-    --ui-secondary: var(--ui-color-secondary-600);
+    /* Índigo eléctrico (decisión del PM): 600 en claro (#4f46e5, 6,3:1 sobre blanco). */
+    --ui-primary: var(--ui-color-primary-600);
+    --ui-secondary: var(--ui-color-secondary-700);
     /* Estados un tono más oscuros: también pasan 4,5:1 sobre su propio fondo tintado (badges y
          alertas "subtle", color/10), no solo sobre blanco. */
     --ui-success: var(--ui-color-success-800);
@@ -49,11 +50,11 @@
     --ui-error: var(--ui-color-error-400);
     --ui-text-muted: var(--ui-color-neutral-400);
     --ui-text-dimmed: var(--ui-color-neutral-400);
-    /* Sin negro puro (§7.8): base azul noche muy oscura, elevaciones algo más claras. */
-    --ui-bg: #0b1014;
-    --ui-bg-muted: #10151b;
-    --ui-bg-elevated: #1a2029;
-    --ui-border: #232a33;
+    /* Sin negro puro (§7.8): base azul noche (#0b0f1a), elevaciones algo más claras y frías. */
+    --ui-bg: #0b0f1a;
+    --ui-bg-muted: #0f1424;
+    --ui-bg-elevated: #182036;
+    --ui-border: #222b40;
 }
 
 /*
@@ -69,22 +70,45 @@
     --hf-glass-edge: rgb(255 255 255 / 0.7);
     /* Opaca en claro: el aura teñiría el fondo y bajaría el contraste de los badges (AA). */
     --hf-card: #ffffff;
-    --hf-aura-1: rgb(20 184 166 / 0.12);
-    --hf-aura-2: rgb(99 102 241 / 0.09);
+    --hf-aura-1: rgb(79 70 229 / 0.1);
+    --hf-aura-2: rgb(6 182 212 / 0.08);
     --hf-glow-brand: transparent;
     --hf-glow-crit: rgb(220 38 38 / 0.12);
     --hf-radius-card: 0.875rem;
 }
 
 .dark {
-    --hf-glass: rgb(16 21 27 / 0.62);
-    --hf-glass-strong: rgb(16 21 27 / 0.86);
+    --hf-glass: rgb(15 20 36 / 0.62);
+    --hf-glass-strong: rgb(15 20 36 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.06);
-    --hf-card: rgb(20 25 32 / 0.86);
-    --hf-aura-1: rgb(20 184 166 / 0.2);
-    --hf-aura-2: rgb(99 102 241 / 0.16);
-    --hf-glow-brand: rgb(45 212 191 / 0.45);
+    --hf-card: rgb(19 25 42 / 0.86);
+    --hf-aura-1: rgb(99 102 241 / 0.22);
+    --hf-aura-2: rgb(6 182 212 / 0.14);
+    --hf-glow-brand: rgb(129 140 248 / 0.45);
     --hf-glow-crit: rgb(255 107 120 / 0.26);
+}
+
+/*
+ * Sistema visual Argos (`docs/sistema-visual.md`): tokens propios `--ax-*` sobre los de Nuxt UI.
+ * Página gris muy clara con tarjetas blancas de borde fino y radio 14 px, casi sin sombra; dentro de
+ * una tarjeta, un panel interno gris suave (mini gráficas, pares etiqueta/valor). En oscuro, lo
+ * mismo con el azul noche.
+ */
+:root,
+.light {
+    --ax-fondo: #f7f8fc;
+    --ax-borde: #e6e8f0;
+    --ax-panel: #f3f4fa;
+    --ax-fila-hover: rgb(79 70 229 / 0.035);
+    --ax-radio: 0.875rem;
+    --ax-sombra: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.dark {
+    --ax-fondo: #0b0f1a;
+    --ax-borde: #222b40;
+    --ax-panel: #111729;
+    --ax-fila-hover: rgb(129 140 248 / 0.06);
 }
 
 @layer base {
@@ -94,7 +118,80 @@
     }
 
     body {
-        @apply bg-default text-default antialiased;
+        @apply text-default antialiased;
+        background-color: var(--ax-fondo);
+    }
+
+    /*
+     * Cursores según el lugar o la acción (sistema visual Argos). Nuxt UI ya pone `pointer` en
+     * botones y enlaces; aquí lo que falta, en orden de especificidad creciente.
+     */
+    a[href],
+    summary,
+    label[for],
+    [role='button']:not([aria-disabled='true']),
+    [role='tab'],
+    [role='option'],
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [data-clicable] {
+        cursor: pointer;
+    }
+
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']),
+    textarea,
+    [contenteditable='true'] {
+        cursor: text;
+    }
+
+    :disabled,
+    [aria-disabled='true'],
+    [data-disabled] {
+        cursor: not-allowed;
+    }
+
+    [data-ayuda],
+    abbr[title] {
+        cursor: help;
+    }
+
+    [data-menu-contextual] {
+        cursor: context-menu;
+    }
+
+    [data-menu-contextual] a[href],
+    [data-menu-contextual] [role='button'],
+    [data-menu-contextual] button {
+        cursor: pointer;
+    }
+
+    [data-copiar] {
+        cursor: copy;
+    }
+
+    [data-ampliar] {
+        cursor: zoom-in;
+    }
+
+    [draggable='true'],
+    [data-arrastrable] {
+        cursor: grab;
+    }
+
+    [draggable='true']:active,
+    [data-arrastrable]:active {
+        cursor: grabbing;
+    }
+
+    [data-redimensionar] {
+        cursor: col-resize;
+    }
+
+    [aria-busy='true'] {
+        cursor: progress;
     }
 
     /* Cifras tabulares por defecto en datos (§13.3). */
@@ -211,16 +308,64 @@
     box-shadow: inset 0 1px 0 var(--hf-glass-edge);
 }
 
-/* Ranura 1 de la paleta categórica (utils/paletaGraficas.ts): barras de magnitud. */
+/*
+ * Paleta categórica (utils/paletaGraficas.ts) como variables, para las tarjetas KPI (pastilla,
+ * mini barras y tendencia) y las barras de magnitud. `--viz-n-texto` es el mismo tono oscurecido
+ * (claro) o aclarado (oscuro) para que el texto pase 4,5:1.
+ */
 :root,
 .light {
     --viz-1: #2a78d6;
+    --viz-2: #eb6834;
+    --viz-3: #1baf7a;
+    --viz-4: #eda100;
+    --viz-5: #e87ba4;
+    --viz-mezcla-texto: #000;
+    --viz-proporcion-texto: 55%;
     --viz-track: var(--ui-color-neutral-100);
 }
 
 .dark {
     --viz-1: #3987e5;
-    --viz-track: #1e252e;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-5: #d55181;
+    --viz-mezcla-texto: #fff;
+    --viz-proporcion-texto: 62%;
+    --viz-track: #1c2438;
+}
+
+.tono-1 {
+    --tono: var(--viz-1);
+}
+.tono-2 {
+    --tono: var(--viz-2);
+}
+.tono-3 {
+    --tono: var(--viz-3);
+}
+.tono-4 {
+    --tono: var(--viz-4);
+}
+.tono-5 {
+    --tono: var(--viz-5);
+}
+.tono-marca {
+    --tono: var(--ui-primary);
+}
+
+[class*='tono-'] {
+    --tono-texto: color-mix(in oklab, var(--tono) var(--viz-proporcion-texto), var(--viz-mezcla-texto));
+}
+
+.texto-tono {
+    color: var(--tono-texto);
+}
+
+.pastilla-tono {
+    color: var(--tono-texto);
+    background-color: color-mix(in oklab, var(--tono) 13%, transparent);
 }
 
 .widget-state {
@@ -440,10 +585,105 @@
  * ArgosIsp. Lo que el panel agrega sobre el tema de la skill, con sus mismos tokens.
  */
 
-/* Marca (LogoArgos): recuadro teal 700 en ambos temas, trazo blanco (`marca-y-escritura.md`). */
+/*
+ * Marca (LogoArgos): recuadro con el degradado índigo → cian en ambos temas, trazo blanco.
+ * El degradado de marca es solo acento puntual (logo, encabezado del menú, tarjeta destacada del
+ * tablero, gráficos de portada): nunca de fondo bajo texto (contraste AA).
+ */
 :root {
-    --argos-marca-fondo: var(--ui-color-primary-700);
+    --argos-marca-1: #4f46e5;
+    --argos-marca-2: #06b6d4;
+    --argos-marca-fondo: var(--argos-marca-1);
     --argos-marca-trazo: #fff;
+    --argos-degradado: linear-gradient(135deg, var(--argos-marca-1), var(--argos-marca-2));
+}
+
+/* Barra lateral: borde derecho discontinuo y sutil. */
+.lateral-argos {
+    border-inline-end: 1px dashed var(--ax-borde);
+}
+
+/* Filete de marca: línea de 2 px con el degradado (encabezado del menú, tarjeta destacada). */
+.filete-marca {
+    position: relative;
+}
+
+.filete-marca::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    border-radius: inherit;
+    background: var(--argos-degradado);
+    pointer-events: none;
+}
+
+/*
+ * Tarjeta destacada del tablero: tinte muy suave del degradado sobre la tarjeta (el texto queda
+ * sobre un fondo casi blanco o casi noche: el contraste no cambia) y filete de marca arriba.
+ */
+.tarjeta-destacada {
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--argos-marca-1) 7%, transparent),
+        color-mix(in oklab, var(--argos-marca-2) 5%, transparent)
+    );
+    overflow: hidden;
+}
+
+.dark .tarjeta-destacada {
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--argos-marca-1) 16%, transparent),
+        color-mix(in oklab, var(--argos-marca-2) 8%, transparent)
+    );
+}
+
+/*
+ * Bienvenida del inicio: el degradado de marca (índigo → cian) como fondo, con el índigo sostenido
+ * en la zona del texto (blanco sobre #4f46e5 pasa 6,3:1) y el cian solo a la derecha.
+ */
+.bienvenida {
+    background-image: linear-gradient(110deg, var(--argos-marca-1) 0%, var(--argos-marca-1) 42%, var(--argos-marca-2) 100%);
+    box-shadow: 0 10px 30px -12px rgb(79 70 229 / 0.45);
+}
+
+/* Pastilla de icono de los indicadores: color del tono, fondo al 12 %. */
+.pastilla-icono {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.625rem;
+    background-color: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+/* Microinteracción de tarjetas enlazadas: se elevan 1 px y marcan el borde (sin movimiento con reduce). */
+.tarjeta-interactiva {
+    transition:
+        transform 0.18s ease-out,
+        box-shadow 0.18s ease-out;
+}
+
+.tarjeta-interactiva:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-primary) 45%, var(--ui-border)),
+        0 8px 24px rgb(15 23 42 / 0.08);
+}
+
+.dark .tarjeta-interactiva:hover {
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-primary) 45%, var(--ui-border)),
+        0 12px 32px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tarjeta-interactiva:hover {
+        transform: none;
+    }
 }
 
 /* Halo al pasar el puntero sobre la acción primaria (26 px, `movimiento-y-luz.md`). */

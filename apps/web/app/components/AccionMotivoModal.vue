@@ -68,6 +68,13 @@ async function enviar(evento: FormSubmitEvent<DatosMotivo>) {
         :description="descripcion"
         :dismissible="!enviando"
     >
+        <template #title>
+            <ModalTitulo
+                :texto="titulo"
+                :icono="icono"
+                :tipo="color === 'error' ? 'peligro' : color === 'warning' ? 'advertencia' : 'info'"
+            />
+        </template>
         <template #body>
             <UForm
                 :id="idFormulario"
@@ -79,7 +86,7 @@ async function enviar(evento: FormSubmitEvent<DatosMotivo>) {
                 <UAlert
                     :color="color === 'error' ? 'error' : 'neutral'"
                     variant="subtle"
-                    :icon="icono"
+                    icon="i-lucide-info"
                     :description="efecto"
                 />
 
@@ -110,7 +117,7 @@ async function enviar(evento: FormSubmitEvent<DatosMotivo>) {
                 <UButton
                     label="Cancelar"
                     color="neutral"
-                    variant="ghost"
+                    variant="outline"
                     :disabled="enviando"
                     @click="abierto = false"
                 />

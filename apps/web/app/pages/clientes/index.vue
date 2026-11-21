@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SelectItem, TableColumn } from '@nuxt/ui'
+import { h } from 'vue'
 
 definePageMeta({ permiso: 'clientes.ver' })
 
@@ -7,7 +8,7 @@ useHead({ title: 'Clientes · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { puede, destinoPermitido } = usePermisos()
+const { puede } = usePermisos()
 const clientesApi = useClientes()
 
 /** Valor de los `USelect` para "sin filtro" (Reka UI no admite `''` como valor de un ítem). */
@@ -81,8 +82,45 @@ const columnas = computed<TableColumn<Cliente>[]>(() => {
         base.push({ accessorKey: 'zona_id', header: 'Zona', meta: SOLO_ANCHO })
     }
     base.push({ accessorKey: 'created_at', header: 'Alta', meta: SOLO_ESCRITORIO })
+    base.push({ id: 'acciones', header: () => h('span', { class: 'sr-only' }, 'Acciones'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } })
     return base
 })
+
+/*
+ * Acciones de cada fila (iconos con tooltip y menú contextual con clic derecho) y vista rápida
+ * lateral (maestro-detalle): clic en la fila fuera del nombre.
+ */
+const vistaAbierta = ref(false)
+const vistaCliente = shallowRef<Cliente | null>(null)
+
+function abrirVista(cliente: Cliente) {
+    vistaCliente.value = cliente
+    vistaAbierta.value = true
+}
+
+function accionesCliente(cliente: Cliente): AccionFila[] {
+    const acciones: AccionFila[] = [
+        { etiqueta: 'Vista rápida', icono: 'i-lucide-panel-right-open', alElegir: () => abrirVista(cliente), grupo: 'Ver' },
+        { etiqueta: 'Abrir ficha del cliente', icono: 'i-lucide-arrow-up-right', to: `/clientes/${cliente.id}`, soloMenu: true, grupo: 'Ver' },
+        { etiqueta: 'Estado de cuenta', icono: 'i-lucide-receipt-text', to: `/clientes/${cliente.id}?tab=cuenta`, soloMenu: true, grupo: 'Ver' },
+    ]
+    if (puede('pagos.registrar')) {
+        acciones.push({ etiqueta: 'Cobrar a este cliente', icono: 'i-lucide-hand-coins', to: `/cobro?cliente=${cliente.id}`, grupo: 'Cobro' })
+    }
+    if (puede('clientes.editar')) {
+        acciones.push({ etiqueta: 'Editar datos del cliente', icono: 'i-lucide-pencil', to: `/clientes/${cliente.id}/editar`, grupo: 'Cliente' })
+    }
+    if (puede('servicios.crear')) {
+        acciones.push({ etiqueta: 'Agregar servicio', icono: 'i-lucide-plus', to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`, soloMenu: true, grupo: 'Cliente' })
+    }
+    return acciones
+}
+
+const menuFila = useMenuFila(accionesCliente)
+
+function alElegirFila(_evento: Event, fila: { original: Cliente }) {
+    abrirVista(fila.original)
+}
 
 async function aplicarFiltros() {
     await router.replace({ query: queryFiltrosClientes(filtros) })
@@ -128,23 +166,6 @@ onMounted(async () => {
         planes.value = resultadoPlanes.data.data
     }
 })
-
-/** Alta de cliente en un panel lateral; al guardar se abre su ficha. */
-const altaAbierta = ref(false)
-const toastAlta = useToast()
-
-async function alCrearCliente(nuevo: Cliente) {
-    toastAlta.add({
-        title: 'Cliente creado',
-        description: nuevo.nombre,
-        color: 'success',
-        icon: 'i-lucide-circle-check',
-        actions: puede('servicios.crear')
-            ? [{ label: 'Agregar servicio', to: `/clientes/${nuevo.id}?tab=servicios&nuevo_servicio=1`, color: 'neutral', variant: 'outline' }]
-            : undefined,
-    })
-    await navigateTo(destinoPermitido(`/clientes/${nuevo.id}`))
-}
 </script>
 
 <template>
@@ -156,13 +177,12 @@ async function alCrearCliente(nuevo: Cliente) {
         <template #acciones>
             <UButton
                 v-if="puede('clientes.crear')"
+                to="/clientes/nuevo"
                 icon="i-lucide-user-plus"
                 label="Nuevo cliente"
                 class="glow-brand"
-                :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo cliente"
                 data-prueba="nuevo-cliente"
-                @click="altaAbierta = true"
             />
         </template>
 
@@ -241,6 +261,13 @@ async function alCrearCliente(nuevo: Cliente) {
                         />
                     </template>
                 </UButton>
+                <p class="ms-auto hidden items-center gap-1.5 text-xs text-muted lg:flex">
+                    <UIcon
+                        name="i-lucide-mouse-pointer-click"
+                        class="size-4"
+                    />
+                    Clic en una fila: vista rápida · clic derecho: más acciones
+                </p>
                 <UBadge
                     v-if="activos"
                     :label="activos === 1 ? '1 filtro activo' : `${activos} filtros activos`"
@@ -329,73 +356,85 @@ async function alCrearCliente(nuevo: Cliente) {
             />
 
             <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    sticky
-                    class="flex-1"
-                    :ui="{
-                        td: 'py-3',
-                    }"
-                >
-                    <template #nombre-cell="{ row }">
-                        <div class="flex min-w-40 flex-col">
-                            <ULink
-                                :to="`/clientes/${row.original.id}`"
-                                class="font-medium text-highlighted hover:text-primary"
-                            >
-                                {{ row.original.nombre }}
-                            </ULink>
-                            <span class="flex items-center gap-1.5 text-xs text-muted">
-                                <UBadge
-                                    v-if="row.original.tipo === 'empresa'"
-                                    label="Empresa"
-                                    color="neutral"
-                                    variant="outline"
-                                    size="sm"
-                                />
-                                <span class="truncate">{{ row.original.email ?? 'Sin correo' }}</span>
-                            </span>
-                            <span
-                                v-if="row.original.nit_cui"
-                                class="font-mono text-xs text-muted sm:hidden"
-                            >NIT {{ row.original.nit_cui }}</span>
-                        </div>
-                    </template>
+                <UContextMenu :items="menuFila.items.value">
+                    <UTable
+                        :data="lista.filas.value"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        sticky
+                        class="flex-1"
+                        data-menu-contextual
+                        @select="alElegirFila"
+                        @contextmenu="menuFila.alContextmenu"
+                    >
+                        <template #nombre-cell="{ row }">
+                            <div class="flex min-w-48 items-center gap-3">
+                                <AvatarIniciales :nombre="row.original.nombre" />
+                                <div class="flex min-w-0 flex-col">
+                                    <ULink
+                                        :to="`/clientes/${row.original.id}`"
+                                        class="font-semibold text-highlighted hover:text-primary"
+                                    >
+                                        {{ row.original.nombre }}
+                                    </ULink>
+                                    <span class="flex items-center gap-1.5 text-xs text-muted">
+                                        <UBadge
+                                            v-if="row.original.tipo === 'empresa'"
+                                            label="Empresa"
+                                            color="neutral"
+                                            variant="outline"
+                                            size="sm"
+                                        />
+                                        <span class="truncate">{{ row.original.email ?? 'Sin correo' }}</span>
+                                    </span>
+                                    <span
+                                        v-if="row.original.nit_cui"
+                                        class="font-mono text-xs text-muted sm:hidden"
+                                    >NIT {{ row.original.nit_cui }}</span>
+                                </div>
+                            </div>
+                        </template>
 
-                    <template #nit_cui-cell="{ row }">
-                        <span class="font-mono text-sm">{{ row.original.nit_cui ?? '—' }}</span>
-                    </template>
+                        <template #acciones-cell="{ row }">
+                            <AccionesFila
+                                :acciones="accionesCliente(row.original)"
+                                :nombre="row.original.nombre"
+                            />
+                        </template>
 
-                    <template #telefono-cell="{ row }">
-                        <div class="flex flex-col text-sm">
-                            <span>{{ row.original.telefono ?? '—' }}</span>
-                            <span
-                                v-if="row.original.movil"
-                                class="text-xs text-muted"
-                            >{{ row.original.movil }}</span>
-                        </div>
-                    </template>
+                        <template #nit_cui-cell="{ row }">
+                            <span class="font-mono text-sm">{{ row.original.nit_cui ?? '—' }}</span>
+                        </template>
 
-                    <template #zona_id-cell="{ row }">
-                        {{ row.original.zona_id ? (nombresZona.get(row.original.zona_id) ?? `Zona ${row.original.zona_id}`) : '—' }}
-                    </template>
+                        <template #telefono-cell="{ row }">
+                            <div class="flex flex-col text-sm">
+                                <span>{{ row.original.telefono ?? '—' }}</span>
+                                <span
+                                    v-if="row.original.movil"
+                                    class="text-xs text-muted"
+                                >{{ row.original.movil }}</span>
+                            </div>
+                        </template>
 
-                    <template #created_at-cell="{ row }">
-                        <span class="whitespace-nowrap text-sm text-muted">{{ formatearFecha(row.original.created_at) }}</span>
-                    </template>
+                        <template #zona_id-cell="{ row }">
+                            {{ row.original.zona_id ? (nombresZona.get(row.original.zona_id) ?? `Zona ${row.original.zona_id}`) : '—' }}
+                        </template>
 
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-search-x"
-                            :title="hayFiltros ? 'Ningún cliente coincide' : 'Todavía no hay clientes'"
-                            :description="hayFiltros ? 'Prueba con otra búsqueda o quita algún filtro.' : undefined"
-                            :actions="hayFiltros ? [{ label: 'Limpiar filtros', icon: 'i-lucide-filter-x', color: 'neutral', variant: 'subtle', onClick: limpiarFiltros }] : undefined"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
+                        <template #created_at-cell="{ row }">
+                            <span class="whitespace-nowrap text-sm text-muted">{{ formatearFecha(row.original.created_at) }}</span>
+                        </template>
+
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-search-x"
+                                :title="hayFiltros ? 'Ningún cliente coincide' : 'Todavía no hay clientes'"
+                                :description="hayFiltros ? 'Prueba con otra búsqueda o quita algún filtro.' : undefined"
+                                :actions="hayFiltros ? [{ label: 'Limpiar filtros', icon: 'i-lucide-filter-x', color: 'neutral', variant: 'subtle', onClick: limpiarFiltros }] : undefined"
+                                variant="naked"
+                            />
+                        </template>
+                    </UTable>
+                </UContextMenu>
 
                 <PaginacionCursor
                     :pagina="lista.pagina.value"
@@ -408,10 +447,10 @@ async function alCrearCliente(nuevo: Cliente) {
                 />
             </template>
         </div>
-        <ClienteSlideover
-            v-if="puede('clientes.crear')"
-            v-model:open="altaAbierta"
-            @guardado="alCrearCliente"
+        <ClienteVistaRapida
+            v-model:open="vistaAbierta"
+            :cliente="vistaCliente"
+            :nombre-zona="vistaCliente?.zona_id ? (nombresZona.get(vistaCliente.zona_id) ?? null) : null"
         />
     </PanelPagina>
 </template>
