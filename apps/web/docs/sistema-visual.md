@@ -185,3 +185,22 @@ pruebas de axe (`tests/e2e/accesibilidad.spec.ts`) recorren las pantallas princi
 - **Alta** (NuevoAltaCliente): tarjeta centrada con el progreso de 3 pasos; `ClienteFormulario`
   con `con-servicio` y `ServicioAltaFormulario` con `pasos-externos`.
 - Tonos de estado para pastillas: `tono-exito`, `tono-aviso`, `tono-error` (además de `tono-marca`).
+
+## Operación, facturas y cuenta (fase 3 del rediseño)
+
+- **Lista + detalle a la derecha** (OperComprobantes, OperPromesas, OperFacturas, OperBitacora,
+  OperUsuarios): tarjeta de la lista con `OperPestanas` (segmentadas, dentro de la tarjeta),
+  buscador y «Más filtros»; la fila abierta lleva el filete índigo (`metaFilaElegida`,
+  `utils/operacion.ts`) y su detalle va en `OperPanelLateral` (encabezado, cuerpo que se desplaza
+  y pie con las acciones). En el teléfono la fila abre la pantalla del elemento o un panel lateral
+  a pantalla completa.
+- **Comprobantes** (decisión 13): `ComprobanteRevision` junta foto (visor oscuro con ampliar,
+  girar y descargar), lo declarado, a qué se aplicaría y la decisión; al decidir pasa al siguiente.
+  Con menos dinero dice «Queda como abono: faltan Q …» (decisión 14).
+- **Factura:** franja con número, estado, saldo y acciones; pestañas Líneas y pagos, Factura
+  electrónica e Historial; `FacturaImpresion` con Carta o POS 80 mm y la vista previa real del PDF.
+- **Bitácora** (decisión 25): el texto en español y, debajo, siempre el nombre técnico en mono.
+- **Login** (OperLogin): fondo de la marca a todo lo ancho y la tarjeta a la derecha; en el
+  teléfono, la tarjeta sobre una franja de color.
+- **Lealtad:** `LealtadPestanas` (Programa y premios, Canjes, Referidos) con el interruptor del
+  programa; **Usuarios:** `UsuariosNavegacion` segmentada.
