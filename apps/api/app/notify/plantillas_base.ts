@@ -580,5 +580,31 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
             '{{^bonificacion.es_cargo}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}}{{#bonificacion.periodo}} de {{bonificacion.periodo}}{{/bonificacion.periodo}} no tiene costo ({{bonificacion.origen_texto}}){{/bonificacion.es_cargo}}' +
             '{{#bonificacion.bruto_q}}: te bonificamos {{bonificacion.bruto_q}}{{/bonificacion.bruto_q}}. Por eso no recibirás factura por este concepto.',
     ),
+    // Avisos al titular (contrato Iris 0.10.0 §3.5 y §3.4.4, 0.12.0 §3.10): por sus datos
+    // registrados, con el número o la serie enmascarados
+    ...ambos(
+        'contacto.agregado',
+        'Se agregó un contacto a tu cuenta',
+        'Agregamos a {{contacto.nombre}}{{#contacto.relacion}} ({{contacto.relacion}}){{/contacto.relacion}} como contacto de tu cuenta{{#contacto.telefono}}, con el número {{contacto.telefono}}{{/contacto.telefono}}. ' +
+            'Si no lo autorizaste, comunícate con nosotros para quitarlo.',
+    ),
+    ...ambos(
+        'contacto.telefono_agregado',
+        'Cambió un número de contacto de tu cuenta',
+        'El contacto {{contacto.nombre}} de tu cuenta ahora tiene los números {{contacto.telefonos}}. ' +
+            'Si no lo autorizaste, comunícate con nosotros.',
+    ),
+    ...ambos(
+        'servicio.asignado_a_tu_nombre',
+        'Se agregó un servicio a tu nombre',
+        'Se agregó un servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}}{{#servicio.direccion}} en {{servicio.direccion}}{{/servicio.direccion}} a tu nombre. ' +
+            'Si no fuiste tú, comunícate con nosotros.',
+    ),
+    ...ambos(
+        'equipo.intento_recuperacion',
+        'Intentamos recuperar tu equipo',
+        'Intentamos recuperar el equipo {{equipo.serie}}{{#servicio.direccion}} en {{servicio.direccion}}{{/servicio.direccion}}. ' +
+            'Si ya lo entregaste, comunícate con nosotros.',
+    ),
     ...PLANTILLAS_WHATSAPP,
 ]

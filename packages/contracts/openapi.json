@@ -51604,6 +51604,14 @@
                     "type": "integer",
                     "minimum": 0,
                     "description": "Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`"
+                  },
+                  "telefono": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\+[1-9]\\d{7,14}$",
+                    "description": "Número de un contacto del cliente (E.164; contrato Iris 0.10.0 §6.4): el permiso es de ese número. Sale solo a un Iris ≥ 0.10.0"
                   }
                 },
                 "required": [
@@ -94948,9 +94956,16 @@
             "type": "string",
             "format": "date-time"
           },
+          "telefono": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de un contacto (E.164) o null = el permiso del cliente (contrato Iris 0.10.0 §6.4)"
+          },
           "idempotency_key": {
             "type": "string",
-            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)"
+            "description": "`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<telefono>:<ocurrido_en>`"
           },
           "entrega": {
             "type": "string",

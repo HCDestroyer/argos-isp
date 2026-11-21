@@ -14033,7 +14033,9 @@ export interface components {
             origen: "argos_panel" | "argos_portal";
             /** Format: date-time */
             ocurrido_en: string;
-            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4) */
+            /** @description Número de un contacto (E.164) o null = el permiso del cliente (contrato Iris 0.10.0 §6.4) */
+            telefono?: string | null;
+            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<telefono>:<ocurrido_en>` */
             idempotency_key: string;
             /**
              * @description `pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`
@@ -50437,6 +50439,8 @@ export interface operations {
                     estado: "acepta" | "baja";
                     /** @description Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida` */
                     empresa_id?: number;
+                    /** @description Número de un contacto del cliente (E.164; contrato Iris 0.10.0 §6.4): el permiso es de ese número. Sale solo a un Iris ≥ 0.10.0 */
+                    telefono?: string | null;
                 };
             };
         };

@@ -224,34 +224,42 @@ const entrega = enumerado(['pendiente', 'enviado', 'fallido'])
 
 export const ConsentimientoWhatsapp = definirEsquema(
     'ConsentimientoWhatsapp',
-    objeto({
-        id,
-        empresa_id: { ...id, description: 'Empresa del permiso de contacto (obligatoria en Iris)' },
-        cliente_id: id,
-        canal: enumerado(['whatsapp']),
-        estado: enumerado(['acepta', 'baja']),
-        origen: enumerado(['argos_panel', 'argos_portal']),
-        ocurrido_en: instante,
-        idempotency_key: {
-            type: 'string',
-            description:
-                '`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4)',
+    objeto(
+        {
+            id,
+            empresa_id: { ...id, description: 'Empresa del permiso de contacto (obligatoria en Iris)' },
+            cliente_id: id,
+            canal: enumerado(['whatsapp']),
+            estado: enumerado(['acepta', 'baja']),
+            origen: enumerado(['argos_panel', 'argos_portal']),
+            ocurrido_en: instante,
+            telefono: {
+                ...nulable(texto),
+                description:
+                    'Número de un contacto (E.164) o null = el permiso del cliente (contrato Iris 0.10.0 §6.4)',
+            },
+            idempotency_key: {
+                type: 'string',
+                description:
+                    '`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<telefono>:<ocurrido_en>`',
+            },
+            entrega: {
+                ...entrega,
+                description:
+                    '`pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`',
+            },
+            intentos: entero,
+            ultimo_error: nulable(texto),
+            enviado_en: nulable(instante),
+            consentimiento_id: { ...nulable(texto), description: 'Id del registro en Iris (al entregarse)' },
+            estado_vigente: {
+                ...nulable(enumerado(['acepta', 'baja'])),
+                description:
+                    'Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)',
+            },
         },
-        entrega: {
-            ...entrega,
-            description:
-                '`pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`',
-        },
-        intentos: entero,
-        ultimo_error: nulable(texto),
-        enviado_en: nulable(instante),
-        consentimiento_id: { ...nulable(texto), description: 'Id del registro en Iris (al entregarse)' },
-        estado_vigente: {
-            ...nulable(enumerado(['acepta', 'baja'])),
-            description:
-                'Estado que quedó vigente en Iris; puede diferir de `estado` (una baja dada en el chat manda)',
-        },
-    }),
+        ['telefono'],
+    ),
 )
 
 export const WhatsappCliente = definirEsquema(

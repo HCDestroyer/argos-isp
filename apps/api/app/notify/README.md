@@ -77,6 +77,37 @@ Argos no habla con Meta: el canal `whatsapp` pide el aviso a Iris (`POST <iris>/
 - **Lo que nace en Iris no se avisa** (§7, decisión del PM 9.2.2), por ningún canal: comprobantes con `canal = iris` y el pago que nace de ellos, promesas y reconexiones pedidas por Iris y la reactivación que provocan. La marca es `origen: 'iris'` en el payload, que pone A3 (`whatsapp.ts`, `nacioEnIris`).
 - Pruebas: `tests/notify/whatsapp_iris.spec.ts` (Iris simulado con un servidor HTTP local).
 
+## Contactos del cliente y avisos al titular (contrato Iris 0.10.0 §3.5, 0.12.0 §3.10)
+
+Los contactos son de A1 (`core.contactos_cliente`, A42). notify **no lee la tabla**: usa la interfaz
+`ProveedorContactos` de `contactos.ts` (`contactosDe(cliente_id)`, `contacto(contacto_id)`), que A1
+registra con `fijarProveedorContactos` al arrancar. Sin proveedor no hay contactos y todo sigue igual.
+
+- **Avisos de cobro a contactos** (`factura.vencida`, `recordatorio.*` y `servicio.estado_cambiado`
+  por facturas vencidas; `esAvisoDeCobro`): además del titular, a cada contacto no titular con
+  `permisos.avisos` cuyo `servicios[]` incluye el servicio del aviso (o `null`). Por correo o
+  Telegram solo si el contacto tiene ese destino (`email`, `telegram_chat_id`); origen propio
+  `outbox:<id>:contacto:<contacto_id>` (idempotente), `cliente_id` del titular,
+  `{{cliente.nombre}}` = el contacto y `{{titular.nombre}}`. Sin respaldo al correo del titular.
+  **WhatsApp no**: Iris ≥ 0.10.0 reparte las plantillas de cobro a los contactos con `avisos` desde
+  su caché, con el permiso de cada número (§3.5); Argos nunca manda números en el aviso.
+- **Permiso de WhatsApp por número** (§6.4): `RegistrarConsentimientoWhatsapp` y
+  `POST /notificaciones/consentimientos` aceptan `telefono` (E.164). Clave
+  `argos:consentimiento:<empresa>:<cliente>:whatsapp:<telefono>:<ocurrido_en>`, cuerpo con
+  `telefono`; sale solo a un Iris ≥ 0.10.0 (antes espera sin gastar intentos) y no cambia el estado
+  de contacto del cliente (`notify.contacto_iris`). Queda en la línea de tiempo con el número
+  enmascarado (`avisos_whatsapp_numero`).
+- **Avisos al titular** por sus canales registrados (correo y Telegram; plantillas nuevas en
+  `plantillas_base.ts`):
+    - `cliente.contactos_cambiados` con `accion: creado` → `contacto.agregado`; `editado` con
+      `telefonos` en `campos[]` → `contacto.telefono_agregado`. Variables `contacto.nombre`,
+      `contacto.relacion`, `contacto.telefono` y `contacto.telefonos`, **enmascarados**
+      (`+502 ****-3344`). Un contacto quitado o un cambio sin números no avisa.
+    - `servicio.titular_cambiado` con `existente: true` (A39, decisión 9 del PM) →
+      `servicio.asignado_a_tu_nombre` al `a_cliente_id`.
+    - `inventario.recuperacion_intentada` (A48; evento que esperamos de A1/A3, ver `a6.md`) →
+      `equipo.intento_recuperacion` con `equipo.serie` enmascarada (`…1A2B`) y `equipo.intento`.
+
 ## Bot de Telegram (semana 2)
 
 Contrato completo en `.claude/integration/contratos/telegram.md`.

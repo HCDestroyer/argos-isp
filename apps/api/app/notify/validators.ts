@@ -265,5 +265,15 @@ export const registrarConsentimientoValidator = vine.compile(
             description:
                 'Empresa del permiso (Iris la exige). Por defecto: la activa (`X-Empresa-Id`), la única de los servicios del cliente o la única de la instalación; si no, 422 `empresa_requerida`',
         }),
+        telefono: vine
+            .string()
+            .trim()
+            .regex(/^\+[1-9]\d{7,14}$/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Número de un contacto del cliente (E.164; contrato Iris 0.10.0 §6.4): el permiso es de ese número. Sale solo a un Iris ≥ 0.10.0',
+            }),
     }),
 )
