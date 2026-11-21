@@ -5,7 +5,8 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
  *
  * `notify.consentimientos_iris.telefono` (E.164, opcional): el número de un contacto del cliente. Con
  * él, la marca va a Iris con `telefono` y la clave lleva el número
- * (`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<telefono>:<ocurrido_en>`): dos números
+ * (`argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<h>:<ocurrido_en>`, `<h>` = 16 hex del sha256
+ * del número; nunca el número en claro): dos números
  * del mismo cliente en el mismo instante son dos permisos. No toca `notify.contacto_iris` (el estado
  * del cliente). Sale solo a un Iris con contrato ≥ 0.10.0.
  */

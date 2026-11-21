@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { cifrar } from '#shared/cifrado'
@@ -272,8 +273,20 @@ test.group('notify · contactos del cliente', (group) => {
         )
         assert.equal(
             r.idempotency_key,
-            `argos:consentimiento:1:${clienteId}:whatsapp:+50244556677:2026-11-21T15:00:00.000Z`,
+            `argos:consentimiento:1:${clienteId}:whatsapp:${createHash('sha256').update('+50244556677').digest('hex').slice(0, 16)}:2026-11-21T15:00:00.000Z`,
         )
+        assert.notInclude(r.idempotency_key, '44556677')
+        // El número no queda en claro en la auditoría
+        const auditadas = await db
+            .from('audit.acciones')
+            .where('accion', 'notificaciones.registrar_consentimiento')
+            .where('entidad_id', clienteId)
+        assert.isNotEmpty(auditadas)
+        for (const a of auditadas) assert.notInclude(JSON.stringify(a), '44556677')
+        const cambios = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'cliente', entidad_id: clienteId })
+        for (const c of cambios) assert.notInclude(JSON.stringify(c), '44556677')
         assert.equal(r.telefono, '+50244556677')
         // No cambia el estado de contacto del cliente
         assert.isNull(await db.from('notify.contacto_iris').where('cliente_id', clienteId).first())

@@ -47,6 +47,9 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
 > {
     readonly nombre = 'notificaciones.registrar_consentimiento'
 
+    /** El número de un contacto no queda en claro en la auditoría (va enmascarado en `audit.cambios`). */
+    protected readonly camposEntradaOcultos = ['telefono']
+
     protected async handle(input: EntradaConsentimiento, t: Transaccion): Promise<VistaConsentimiento> {
         const cliente = await t.trx.from('core.clientes').where('id', input.cliente_id).select('id').first()
         if (!cliente) throw new NoEncontrado(`El cliente ${input.cliente_id} no existe`)

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -6,6 +7,7 @@ import { REINTENTOS_S } from '#integraciones/webhooks_salientes'
 import { estadoConectorWhatsapp, type EstadoWhatsapp } from '#notify/whatsapp'
 import { configPara } from '#notify/configuracion'
 import { esTransitorioIris } from '#notify/idempotencia_iris'
+import { enmascararTelefono } from '#notify/contactos'
 
 /**
  * Permisos de contacto por WhatsApp hacia Iris (contrato Iris 0.6.0 §6.4). La acción
@@ -33,10 +35,16 @@ export function claveConsentimiento(
     ocurridoEn: string,
     telefono: string | null = null,
 ): string {
-    // Por número (0.10.0, A42): el número entra en la clave (dos números a la vez son dos permisos)
+    // Por número (0.10.0, A42; clave acordada con Iris para el contrato 0.12.1): dos números a la vez
+    // son dos permisos, pero el número nunca va en claro en la clave, solo su huella
     return telefono
-        ? `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${telefono}:${ocurridoEn}`
+        ? `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${huellaTelefono(telefono)}:${ocurridoEn}`
         : `argos:consentimiento:${empresaId}:${clienteId}:${canal}:${ocurridoEn}`
+}
+
+/** Primeros 16 caracteres hexadecimales del sha256 del número en E.164 (clave del permiso por número). */
+export function huellaTelefono(telefono: string): string {
+    return createHash('sha256').update(telefono, 'utf8').digest('hex').slice(0, 16)
 }
 
 /** Contrato desde el que Iris acepta `telefono` en el permiso de contacto (§6.4, A42). */
@@ -267,6 +275,8 @@ export async function entregarConsentimientosIris(
             resultado.enviados++
             continue
         }
+        // Si Iris repite el número en su error, no queda en claro ni en la fila ni en el log
+        if (datos.telefono) error = error.replaceAll(datos.telefono, enmascararTelefono(datos.telefono))
         const espera = REINTENTOS_S[intento - 1]
         const definitivo = !reintentable || espera === undefined
         await db

@@ -14035,7 +14035,7 @@ export interface components {
             ocurrido_en: string;
             /** @description Número de un contacto (E.164) o null = el permiso del cliente (contrato Iris 0.10.0 §6.4) */
             telefono?: string | null;
-            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<telefono>:<ocurrido_en>` */
+            /** @description `argos:consentimiento:<empresa_id>:<cliente_id>:whatsapp:<ocurrido_en>` (contrato Iris §6.4); con número, `…:whatsapp:<h>:<ocurrido_en>` (`<h>`: primeros 16 hex del sha256 del número E.164; el número solo va en el cuerpo) */
             idempotency_key: string;
             /**
              * @description `pendiente`: en la cola hacia Iris (sale al activarse el conector); `enviado`; `fallido`
