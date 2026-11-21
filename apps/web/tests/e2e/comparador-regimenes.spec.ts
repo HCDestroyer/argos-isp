@@ -1,14 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Comparador de regímenes (A3, fase 8 PR B) en modo fixtures, en escritorio y teléfono. Hoy es el
  * 15/10/2026 (meses leídos: octubre 2025 a septiembre 2026). ArgosNet: el régimen opcional pagaría
  * Q3,099.46 menos (m = 29.80 %, m* = 20.00 %). Fibra del Sur: sobre utilidades pagaría menos.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('aviso, tabla con m y m*, sin aplicar; el crecimiento recalcula la proyección y se valida', async ({ page }) => {
     await fijarHoyFixtures(page)

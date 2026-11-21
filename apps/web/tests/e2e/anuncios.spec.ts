@@ -1,17 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
-
-/**
- * Anuncios del portal (A5) en modo fixtures, en escritorio y teléfono:
- *
- * 1. Con «Todas» no se crea (cada anuncio es de una empresa); con ArgosNet: borrador con la vista
- *    previa al día, imagen con texto alternativo y publicar.
- * 2. Publicar un archivado ya vencido muestra el 422 `anuncio_vencido` con su título.
- * 3. Métricas del anuncio publicado: vistas, clics y tasa.
- */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, ir } from './ayudas'
 
 test('crear un anuncio con vista previa, imagen y publicarlo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')

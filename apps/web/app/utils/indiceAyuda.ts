@@ -1189,7 +1189,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
     },
     '/perfil': {
         titulo: 'Mi cuenta',
-        resumen: 'Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu nombre (abajo en la barra lateral) → Mi cuenta.',
+        resumen: 'Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu usuario (arriba a la derecha, tu nombre) → Mi cuenta.',
         pagina: 'general/perfil',
         ancla: null,
         temas: [
@@ -1197,7 +1197,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Qué ves',
             'Acciones',
             'Tu sesión',
-            'Otras opciones del menú de tu nombre',
+            'Otras opciones del menú de tu usuario',
             'Preguntas frecuentes y errores',
             'Relacionado',
         ],

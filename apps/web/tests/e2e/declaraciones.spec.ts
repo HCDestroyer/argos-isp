@@ -1,14 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Declaraciones de IVA (A3, fase 7 PR B) en modo fixtures, en escritorio y teléfono. Hoy es el
  * 15/10/2026: el mes por declarar es septiembre (IVA a pagar Q534.00). Agosto v2 se presentó tarde
  * (02/10, vencía el 30/09) y sigue sin pagar: su pago lleva mora y multa.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('calcular septiembre, revisar con confirmación, marcar presentada y pagar; agosto con mora y multa', async ({ page }) => {
     await fijarHoyFixtures(page)

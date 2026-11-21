@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Calendario fiscal y feriados (A3, fase 7 PR A) en modo fixtures, en escritorio y teléfono. Hoy es el
@@ -7,9 +7,6 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * caía el sábado 10/10 y corrió al lunes 12/10) y retenciones de IVA de septiembre al 21/10. La tabla
  * de feriados arranca vacía: con el 20/10 como feriado, las de IVA corren al 22/10.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('mes con vencidas en rojo y el día corrido; un feriado recalcula el vencimiento; lista con su motivo', async ({ page }) => {
     await fijarHoyFixtures(page)

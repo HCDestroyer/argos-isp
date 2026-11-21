@@ -1,14 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
-
-/**
- * FEL (fase 3 de A3) en el panel, en modo fixtures: ArgosNet (empresa 1) tiene la FEL obligatoria
- * con el certificador falso; Fibra del Sur (2), desactivada. El worker se simula: un DTE en cola
- * se certifica en ~1.5 s y una anulación pendiente se confirma igual.
- */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Abre la factura de un DTE rechazado desde la cola. La lista sin filtro ya trae un NCRE rechazado

@@ -6,7 +6,7 @@ pantallas:
 
 # Mi cuenta
 
-Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu nombre (abajo en la barra lateral) → **Mi cuenta**.
+Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu usuario (arriba a la derecha, tu nombre) → **Mi cuenta**.
 
 ## Quién la usa
 
@@ -45,9 +45,11 @@ Una cuenta se vincula sola la primera vez que abres ArgosIsp desde Horus («Ver 
 Hoy **Mi cuenta** no tiene cambio de contraseña, verificación en dos pasos (MFA) ni lista de sesiones abiertas. Si necesitas una contraseña nueva, pídela a un administrador.
 :::
 
-## Otras opciones del menú de tu nombre
+## Otras opciones del menú de tu usuario
 
-- **Apariencia:** Claro, Oscuro o Sistema (sigue el modo de tu teléfono o computadora).
+- **Empresa:** si trabajas con varias, cuál está activa (o «Todas las empresas»).
+- **Tema:** Claro, Oscuro o Sistema (sigue el modo de tu teléfono o computadora).
+- **Ayuda y atajos:** los atajos de teclado y el manual de la pantalla donde estás.
 - **Qué cambió:** las novedades de la versión instalada. Cuando ArgosIsp se actualiza, la primera vez que entras aparece un aviso «ArgosIsp se actualizó a la versión …» con el mismo botón.
 - **Cerrar sesión.**
 

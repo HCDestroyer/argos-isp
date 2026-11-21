@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Tablero fiscal (A3, fase 8 PR A) en modo fixtures, en escritorio y teléfono. Hoy es el jueves
@@ -7,9 +7,6 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * aplica, retenciones de ISR de agosto y septiembre vencidas y libros atrasados. Fibra del Sur: ISR e
  * ISO que no aplican y FEL obligatoria desactivada. Con «Todas», una sección por empresa.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; enlaces al calendario y a libros', async ({ page }) => {
     await fijarHoyFixtures(page)

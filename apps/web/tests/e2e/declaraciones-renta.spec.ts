@@ -1,14 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Fase 7 PR C en modo fixtures, en escritorio y teléfono. Hoy es el 15/10/2026. ArgosNet: ISR anual 2025
  * presentado y pagado (sus notas piden confirmar criterios con el contador), IVA de julio pagado,
  * ejercicio 2024 cerrado y 2025 abierto.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('ISR trimestral por trimestre, anular un pago y registrar otro, ajustes y el cierre anual desde la declaración', async ({ page }) => {
     await fijarHoyFixtures(page)

@@ -1,14 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir } from './ayudas'
+import { expect, test } from '@playwright/test'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Consejos fiscales en el tablero (A3, fase 8 PR C) en modo fixtures, en escritorio y teléfono. Hoy es el
  * 15/10/2026. ArgosNet: aplican «El otro régimen pagaría menos según la simulación» y «Emita los libros
  * atrasados» del tablero y «Depreciación por debajo del máximo legal» (PR D). Ocultar solo para mí lo quita de la vista y «Ver ocultos» lo devuelve con su marca.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y mostrar', async ({ page }) => {
     await fijarHoyFixtures(page)

@@ -53,7 +53,7 @@ test('el cajero tiene una sola empresa: no ve el selector', async ({ page }) => 
     await ir(page, 'Cobrar', /\/cobro/)
     await expect(empresaActiva(page)).toHaveCount(0)
     await page.locator('[data-prueba="menu-usuario"]').click()
-    await expect(page.getByRole('menuitem', { name: /^Empresa:/ })).toHaveCount(0)
+    await expect(page.getByRole('menuitemcheckbox', { name: /Todas las empresas|ArgosNet/ })).toHaveCount(0)
 })
 
 test('cobro repartido: un pago por empresa y el recibo con una sección por empresa', async ({ page }) => {

@@ -1,14 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Pantallas de la fase 5 (A3, contrato fiscal §19) en modo fixtures, en escritorio y teléfono. Hoy es el
  * 15/10/2026. ArgosNet: Servicios de Limpieza Ramírez con la limpieza de octubre al crédito (retención de
  * ISR Q150, abono de Q1,000, saldo Q2,210) y el egreso 2 de EEGSA (Q1,850.40) sin compra.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    await elegirEmpresa(page, nombre)
-}
 
 function aviso(page: Page, texto: string) {
     return page.getByLabel('Notifications (F8)').getByText(texto)

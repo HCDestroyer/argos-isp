@@ -74,7 +74,6 @@ async function esperarQuieto(elemento: Locator): Promise<void> {
 /** Elige la empresa activa desde el menú del usuario (barra superior). */
 export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
     await page.locator('[data-prueba="menu-usuario"]').click()
-    await page.getByRole('menuitem', { name: /^Empresa:/ }).click()
     await page.getByRole('menuitemcheckbox', { name: nombre }).click()
     await expect(empresaActiva(page)).toContainText(nombre)
 }

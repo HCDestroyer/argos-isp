@@ -39,7 +39,7 @@ test('menú compacto (rail): un icono por área con su menú flotante, por tecla
     await page.keyboard.press('Enter')
     const flotante = page.locator('[data-prueba="menu-area-dia"]')
     await expect(flotante).toBeVisible()
-    await expect(area).toHaveAttribute('aria-expanded', 'true')
+    await expect(area).toHaveAttribute('data-state', 'open')
     await page.keyboard.press('Escape')
     await expect(flotante).toBeHidden()
     await area.click()

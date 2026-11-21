@@ -53,44 +53,62 @@ Los tokens `--ax-*` tienen **los mismos nombres y valores que el portal** (`apps
 `copy` (`[data-copiar]`); `zoom-in` (`[data-ampliar]`); `grab`/`grabbing` en lo arrastrable;
 `col-resize` (`[data-redimensionar]`); `progress` mientras algo procesa (`aria-busy`).
 
-## Menú lateral
+## Layout «islas»
 
-`utils/navegacion.ts` (`GRUPOS_PANEL`): cada grupo tiene un `bloque` (encabezado en versalitas, no
-clicable, con divisor) y puede tener `subgrupos` (más de ~7 secciones se dividen).
+El menú lateral es una isla flotante (separada 16 px del borde, radio 22 px, vidrio con
+desenfoque y sombra suave sobre el aura); el encabezado son pastillas de vidrio. Con
+`prefers-reduced-transparency` todo pasa a sólido y sin desenfoque. El encabezado tiene dos
+variantes, a la espera de la decisión del PM: `DISENO_ENCABEZADO` en `utils/diseno.ts`
+(`dos-pastillas` = IslasA2, `una-pastilla` = IslasA1); cambiar la constante es todo.
 
-1. Arriba: logo con el degradado, filete de marca y tarjeta de usuario (avatar, nombre, rol, menú).
-2. **Inicio**.
-3. **Día a día** (suelto, siempre a la vista): Cobrar, Caja, Clientes, Servicios, Promesas, Comprobantes.
-4. **Gestión**: Facturación · Red · Inventario (Movimientos / Catálogos y kardex) · Clientes y lealtad.
-5. **Administración**: Finanzas (Egresos, Cartera, Bancos / Compras) · Contabilidad y fiscal · Reportes.
-6. **Sistema**: Configuración (Toda la configuración; Empresa y fiscal; Facturación y cobro; Red y
-   portal; Usuarios y acceso; Notificaciones e integraciones).
+## Menú lateral (`layouts/default.vue`, `utils/navegacion.ts`)
 
-Solo el grupo (y subgrupo) de la página actual abre por defecto. El ítem activo lleva fondo del
-primario al 10 % y texto primario; las secciones dentro de un grupo llevan viñeta de punto y su
-descripción en tooltip. Contadores en pastilla del primario. En el menú compacto los subgrupos se
-aplanan en el popover. Buscador Ctrl/Cmd+K con todas las secciones permitidas.
+Dos modos que elige cada usuario (`useMenuCompacto`, recordado; el botón ‹/› del propio menú y el
+de plegar del encabezado lo alternan):
+
+- **Compacto (rail, de fábrica):** un icono con etiqueta corta (`GrupoSecciones.corta`) por área:
+  Inicio, Día a día, Facturas, Red, Inventario, Lealtad, Finanzas, Contable, Reportes y, abajo,
+  Ajustes. El área de la página se resalta y lleva un punto si algo suyo tiene pendientes. Al
+  tocarla (o Enter) se abre a su derecha un menú flotante (`MenuArea`) con sus secciones agrupadas
+  con separadores, iconos y contadores (Comprobantes 4, Caja «Abierta»); flechas, Tab, Enter y Esc.
+- **Expandido (~260 px):** Inicio y cada área como acordeón (solo la de la página abierta), con
+  subgrupos dentro cuando pasan de ~7 secciones, viñeta de punto y la descripción en tooltip.
+
+En el teléfono el menú es el panel lateral (drawer) en modo expandido. El buscador Ctrl/Cmd+K
+encuentra todas las secciones permitidas.
+
+## Encabezado liviano (`PanelPagina`)
+
+- **Izquierda:** plegar el menú, el buscador «Buscar…» (Ctrl K) y los accesos rápidos.
+- **Derecha (solo):** la caja (icono con punto verde abierta o gris cerrada; su menú dice la caja,
+  desde cuándo, el fondo inicial, «Ir a la caja» y «Cerrar caja…» o «Abrir caja…», cada uno con su
+  permiso; nunca montos en el icono), el estado del sistema (icono con punto si hay aviso, con
+  `sistema.ver_salud`), los avisos y el usuario (avatar, nombre, rol y empresa activa; dentro:
+  empresa, tema, Mi cuenta, Ayuda y atajos, Qué cambió y, aparte en rojo, Cerrar sesión).
+- **Página de una sección:** migas, título grande con el **?** del manual, descripción y acciones.
+- **Ficha o subpágina:** título en la barra; en el cuerpo, migas y las acciones a la derecha.
+
+## Inicio
+
+Bienvenida (degradado con texto, saludo, avisos y dos acciones) → 4 KPI con mini gráfica y
+tendencia → Últimos pagos (2/3) | Accesos rápidos (1/3) → Salud del sistema (2/3) | Registro del
+sistema (1/3), estos dos solo con sus permisos → servicios por estado y gráficas de 12 meses.
+
+## Sistema y apariencia
+
+- `/sistema/salud`, `/sistema/registro` y `/sistema/almacenamiento` (Configuración → Sistema y
+  apariencia), con sus permisos `sistema.*`; errores con «Reintentar», nunca cifras inventadas.
+- `/configuracion/apariencia`: tema (presets validados AA por la API), modo predeterminado, marca,
+  eslogan, logo y fondo del login. `useTemaApariencia` lo aplica al arrancar (también en el login,
+  sin sesión): `appConfig.ui.colors.primary`, el primario exacto por modo y los `--ax-*` derivados.
 
 ## Accesos rápidos
 
-Botón del rayo en la barra superior de todas las pantallas (`AccesosRapidosBoton`): los accesos del
-usuario agrupados por área, con su atajo **Alt+1…9**, y «Personalizar» (`AccesosRapidosEditor`,
-panel lateral: hasta 12, arrastrar con cursor `grab` o flechas). El inicio muestra los mismos
-accesos. De fábrica, los del rol (iguales a los de la API, `contratos/accesos-rapidos.md` §2).
-`useAccesosRapidos` es el único punto de lectura y escritura: hoy en `localStorage` por usuario,
-y pasa a `GET/PUT /api/v1/me/accesos-rapidos` cuando esté en `packages/contracts`.
-
-## Estructura de página (`PanelPagina`)
-
-- Barra superior de vidrio: plegar menú, buscador «Buscar…» con Ctrl K, empresa, caja, campana de
-  avisos (comprobantes por verificar), tema, avatar con el menú de la cuenta.
-- **Página de una sección del menú**: migas, título grande (28 px, negrita) con el **?** de ayuda,
-  la descripción de la sección y las acciones a la derecha.
-- **Ficha o subpágina**: título en la barra superior; en el cuerpo, las migas hasta su sección y las acciones de la pantalla a la derecha.
-- **Ayuda contextual** (`AyudaBoton`): panel lateral con el resumen de la pantalla del manual
-  (`utils/indiceAyuda.ts`, generado de `docs/manual/**` y su frontmatter `pantallas:` con
-  `pnpm --filter @argosisp/web ayuda:indice`; una prueba falla si quedó desfasado) y «Ver manual
-  completo».
+En el encabezado, a un clic: los 2 primeros accesos del usuario (icono + etiqueta; en el teléfono
+solo el icono) y «Más» (rayo) con el resto por área, contadores, atajos **Alt+1…9** y «Personalizar
+mis accesos» (panel lateral: hasta 12, arrastrar o flechas, «Usar los de mi rol»). El inicio muestra
+los mismos. `GET/PUT /api/v1/me/accesos-rapidos` (`useAccesosRapidos`); sin lista guardada, los del
+rol; sin permiso, el acceso no aparece.
 
 ## Componentes compartidos
 

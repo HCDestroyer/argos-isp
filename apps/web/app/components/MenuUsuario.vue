@@ -69,24 +69,24 @@ const items = computed<DropdownMenuItem[][]>(() => [
         label: usuario.value?.nombre ?? '',
         description: usuario.value?.email,
     }],
-    [...(conSelector.value
-        ? [{
-                label: `Empresa: ${empresaActiva.value ?? 'elige una'}`,
-                icon: 'i-lucide-building-2',
-                children: [
-                    ...(alcanceGlobal.value
-                        ? [{ label: 'Todas las empresas', icon: 'i-lucide-layers', type: 'checkbox' as const, checked: eleccion.value === 'todas', onSelect: () => elegir('todas') }]
-                        : []),
-                    ...empresas.value.map(empresa => ({
-                        label: empresa.nombre_comercial,
-                        description: empresa.nit ? `NIT ${empresa.nit}` : undefined,
-                        type: 'checkbox' as const,
-                        checked: eleccion.value === empresa.id,
-                        onSelect: () => elegir(empresa.id),
-                    })),
-                ],
-            }]
-        : []), {
+    // Empresa activa (con más de una): opciones a la vista, sin submenú (en el teléfono un submenú
+    // se sale de la pantalla).
+    ...(conSelector.value
+        ? [[
+                { type: 'label' as const, label: 'Empresa', icon: 'i-lucide-building-2' },
+                ...(alcanceGlobal.value
+                    ? [{ label: 'Todas las empresas', icon: 'i-lucide-layers', type: 'checkbox' as const, checked: eleccion.value === 'todas', onSelect: () => elegir('todas') }]
+                    : []),
+                ...empresas.value.map(empresa => ({
+                    label: empresa.nombre_comercial,
+                    description: empresa.nit ? `NIT ${empresa.nit}` : undefined,
+                    type: 'checkbox' as const,
+                    checked: eleccion.value === empresa.id,
+                    onSelect: () => elegir(empresa.id),
+                })),
+            ]]
+        : []),
+    [{
         label: 'Tema',
         icon: 'i-lucide-sun-moon',
         children: [

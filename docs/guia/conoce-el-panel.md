@@ -10,21 +10,18 @@ El panel es la página donde trabaja el personal del ISP. Funciona en la computa
 
 ## El menú
 
-A la izquierda, en la computadora; en el teléfono se abre con el botón de tres rayas de arriba. Va ordenado por lo que más se usa en el día a día, en bloques con un título en mayúsculas pequeñas:
+A la izquierda, como una isla. Tiene dos formas y cada persona elige la suya (el panel la recuerda): el botón **‹ / ›** del propio menú o el de plegar en la barra de arriba la cambian.
 
-- Arriba, **tu nombre y tu rol**: abre el menú de tu cuenta (**Mi cuenta**, **Apariencia**, **Qué cambió** y **Cerrar sesión**, ver [Mi cuenta](../manual/general/perfil.md)).
-- **Inicio**. Al cajero lo lleva a su **Caja**.
-- **Día a día**, siempre a la vista: **Cobrar**, **Caja**, **Clientes**, **Servicios**, **Promesas** y **Comprobantes**.
-- **Gestión**: **Facturación** (facturas, pagos, notas de crédito, bonificaciones, cola de DTE y conciliación de la pasarela), **Red** (routers, planes, prioridad QoS, adicionales y migración de router), **Inventario** (en dos partes: **Movimientos** y **Catálogos y kardex**) y **Clientes y lealtad** (lealtad, premios, canjes, sorteos y anuncios).
-- **Administración**: **Finanzas** (egresos, cartera y, en sus propios subgrupos, **Bancos** y **Compras**), **Contabilidad y fiscal** (libro, bloqueos, libros legales, tablero y calendario fiscal, declaraciones y comparador de regímenes) y **Reportes** (reportes y bitácora).
-- **Sistema**: **Configuración**, en cinco partes: **Empresa y fiscal**, **Facturación y cobro**, **Red y portal**, **Usuarios y acceso** y **Notificaciones e integraciones**. **Toda la configuración** abre una página con todas sus opciones por categoría y un buscador.
-- Cada grupo se abre y se cierra con su flecha; el de la pantalla donde estás se abre solo. Si dejas el puntero sobre una sección, aparece su descripción.
-- Un número en una pastilla junto a una sección avisa que hay algo pendiente. Por ejemplo, junto a **Comprobantes**, los que esperan verificación.
-- El botón de la barra de arriba con un cuadro y una flecha deja el menú **compacto**, solo con iconos. El panel lo recuerda para tu usuario.
+- **Compacto** (la de fábrica): un icono con su nombre corto por área: **Inicio**, **Día a día**, **Facturas**, **Red**, **Inventario**, **Lealtad**, **Finanzas**, **Contable**, **Reportes** y, abajo, **Ajustes**. Al tocar un área se abre a su lado un menú con sus secciones agrupadas y sus contadores (por ejemplo, **Comprobantes 4** o **Caja Abierta**). Se recorre también con el teclado: Tab, flechas, Enter y Esc.
+- **Expandido**: los nombres completos, con cada área como un grupo que se abre y se cierra; el del área donde estás se abre solo. Si dejas el puntero sobre una sección, aparece su descripción.
+- Un punto junto a un área, o un número junto a una sección, avisa que hay algo pendiente.
+- En el teléfono el menú se abre con el botón de tres rayas de arriba, con los nombres completos.
+
+Las áreas: **Día a día** (Cobrar, Caja, Clientes, Servicios, Promesas, Comprobantes), **Facturación** (facturas, pagos, notas de crédito, bonificaciones, cola de DTE, conciliación de la pasarela), **Red** (routers, planes, prioridad QoS, adicionales, migración de router), **Inventario** (Movimientos y Catálogos y kardex), **Clientes y lealtad**, **Finanzas** (egresos, cartera, Bancos y Compras), **Contabilidad y fiscal**, **Reportes** (reportes y bitácora) y **Configuración** (Empresa y fiscal, Facturación y cobro, Red y portal, Usuarios y acceso, Sistema y apariencia, Notificaciones e integraciones; **Toda la configuración** las muestra en una página con buscador).
 
 ## Accesos rápidos
 
-El botón del **rayo**, arriba a la izquierda de cada pantalla, abre tus accesos rápidos agrupados por área. Los nueve primeros se abren también con **Alt + 1** a **Alt + 9**. Con **Personalizar** eliges hasta 12 y los ordenas (arrastrando o con las flechas). El **Inicio** muestra los mismos. Si nunca los cambiaste, ves los de tu rol (por ejemplo, el cajero: Cobrar, Caja, Clientes y Comprobantes).
+En la barra de arriba, a un clic: tus dos primeros accesos y **Más** (el rayo) con el resto, sus contadores y sus atajos **Alt + 1** a **Alt + 9**. **Personalizar mis accesos** elige hasta 12 y los ordena; **Usar los de mi rol** vuelve a los de fábrica (por ejemplo, el cajero: Cobrar, Caja, Clientes y Comprobantes). El **Inicio** muestra los mismos.
 
 ## El buscador
 
@@ -42,18 +39,16 @@ En **Clientes** y **Servicios**, un clic en la fila (fuera del nombre) abre la *
 
 ## La barra de arriba
 
-A la derecha:
+Liviana, en pastillas: a la izquierda el buscador y los accesos rápidos; a la derecha solo:
 
-- **El selector de empresa**, si trabajas con varias (ver abajo).
-- **El acceso a la caja**, si tienes caja: dice «Caja abierta» en verde o «Caja cerrada», y te lleva a **Caja**.
-- **La campana de avisos**: el número son los comprobantes por verificar; te lleva a **Comprobantes**.
-- **Ayuda** en las fichas (en las pantallas del menú, el **?** va junto al título).
-- **El botón de sol o luna** para pasar a modo claro u oscuro.
-- **Tu avatar**, con el mismo menú de tu cuenta.
+- **La caja** (si tienes `cajas.ver`): un icono de billetera con un punto verde si tu caja está abierta o gris si está cerrada. Al tocarlo dice qué caja y desde cuándo está abierta, con el fondo inicial, y ofrece **Ir a la caja** y **Cerrar caja…** o **Abrir caja…** (según tus permisos).
+- **El estado del sistema** (solo administradores): un icono con un punto si algo del servidor hay que revisar; lleva a **Salud del sistema**.
+- **La campana de avisos**: el número son los comprobantes por verificar.
+- **Tu usuario**: tu nombre, tu rol y la empresa activa. Su menú tiene la **Empresa** (si trabajas con varias), el **Tema** (claro, oscuro o como el equipo), **Mi cuenta**, **Ayuda y atajos**, **Qué cambió** y, aparte, **Cerrar sesión**.
 
 ## La empresa activa
 
-Si tu usuario trabaja con varias empresas (varios NIT), arriba aparece el selector de empresa. En el teléfono va en su propia fila, debajo de la barra.
+Si tu usuario trabaja con varias empresas (varios NIT), la eliges en el menú de tu usuario (arriba a la derecha) → **Empresa**; la activa se ve bajo tu nombre.
 
 - Todo lo que ves y creas es de la empresa elegida: clientes, servicios, facturas, cajas, anuncios.
 - **«Todas las empresas»** muestra todo junto (el consolidado). Solo aparece si tu usuario tiene alcance sobre todas. Algunas cosas no se pueden crear así, como un anuncio: el panel te pide elegir una empresa.
@@ -83,11 +78,11 @@ Si necesitas un permiso, pídelo a un administrador con el nombre exacto que te 
 
 ## Modo claro y oscuro
 
-El botón de sol o luna de la barra cambia el modo. También en el menú de tu nombre → **Apariencia**: **Claro**, **Oscuro** o **Sistema** (sigue el de tu teléfono o computadora).
+En el menú de tu usuario → **Tema**: **Claro**, **Oscuro** o **Sistema** (sigue el de tu teléfono o computadora). El color del panel y el modo de fábrica los elige el administrador en **Configuración → Sistema y apariencia → Apariencia**.
 
 ## El botón Ayuda
 
-Cada pantalla tiene su ayuda: el **?** junto al título (en las fichas, **Ayuda** en la barra de arriba). Abre un panel a la derecha con el resumen de esa pantalla tomado de este manual y la lista de temas que explica; **Ver manual completo** abre la página en otra pestaña. Si la pantalla todavía no tiene su resumen, el botón abre directamente el manual.
+Cada pantalla tiene su ayuda: el **?** junto al título (en las fichas, en el menú de tu usuario → **Ayuda y atajos**, que también lista los atajos de teclado). Abre un panel a la derecha con el resumen de esa pantalla tomado de este manual y la lista de temas que explica; **Ver manual completo** abre la página en otra pestaña. Si la pantalla todavía no tiene su resumen, el botón abre directamente el manual.
 
 ## Fechas y montos
 
