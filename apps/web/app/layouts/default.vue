@@ -241,7 +241,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             mode="modal"
             :menu="{ title: 'Menú', description: 'Todas las secciones del panel y el buscador' }"
             toggle-side="right"
-            :toggle="{ color: 'neutral', variant: 'ghost', class: 'boton-flotante boton-circulo', title: 'Cerrar el menú' }"
+            :toggle="{ color: 'neutral', variant: 'ghost', class: 'boton-flotante boton-circulo' }"
             class="glass-material lateral-argos"
             :ui="{
                 header: 'h-auto flex-row items-center gap-3 px-4 pt-[max(0.875rem,env(safe-area-inset-top))] pb-1.5 lg:flex-col lg:items-stretch lg:px-3 lg:pt-3.5',
