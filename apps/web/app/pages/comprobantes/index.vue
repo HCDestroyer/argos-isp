@@ -299,7 +299,7 @@ onMounted(async () => {
         icono="i-lucide-file-check-2"
         descripcion="Depósitos y transferencias que mandan los clientes por el portal, por Iris o que registra el equipo"
     >
-        <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+        <div class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
             <!-- La cola. -->
             <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-11rem)]">
                 <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">

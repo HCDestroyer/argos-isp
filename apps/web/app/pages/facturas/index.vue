@@ -109,8 +109,8 @@ watch(lista.filas, filas => void nombres.cargar(filas.map(f => f.cliente_id)))
 const columnas: TableColumn<Factura>[] = [
     { accessorKey: 'cliente_id', header: 'Cliente y servicio' },
     { accessorKey: 'id', header: 'Número', meta: SOLO_ANCHO },
-    { accessorKey: 'periodo', header: 'Concepto', meta: { class: { th: 'max-xl:hidden', td: 'max-xl:hidden' } } },
-    { accessorKey: 'vence_en', header: 'Vence', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'periodo', header: 'Concepto', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
+    { accessorKey: 'vence_en', header: 'Vence', meta: { class: { th: 'max-xl:hidden', td: 'max-xl:hidden' } } },
     { accessorKey: 'total', header: 'Total', meta: { class: { th: 'text-right max-sm:hidden', td: 'text-right max-sm:hidden' } } },
     { id: 'pendiente', header: 'Saldo', meta: { class: { th: 'text-right', td: 'text-right' } } },
     { accessorKey: 'estado', header: 'Estado', meta: { class: { th: 'max-sm:hidden', td: 'max-sm:hidden' } } },
@@ -285,7 +285,7 @@ onMounted(async () => {
                 @hecho="lista.recargar()"
             />
             <UButton
-                v-if="servicioId !== TODOS && puede('facturas.emitir_periodo_anterior')"
+                v-if="servicioId !== TODOS && puede('facturas.emitir_periodos')"
                 :to="`/servicios/${servicioId}/facturas-periodo`"
                 label="Emitir por periodo"
                 icon="i-lucide-calendar"
@@ -306,7 +306,7 @@ onMounted(async () => {
             />
         </template>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
             <ProblemaAlerta
                 v-if="problemaGenerar"
                 :problema="problemaGenerar"
@@ -314,7 +314,7 @@ onMounted(async () => {
                 :reintentando="generando"
             />
 
-            <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,21rem)]">
+            <div class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]">
                 <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-11rem)]">
                     <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
                         <OperPestanas

@@ -308,7 +308,7 @@ onMounted(cargar)
 
         <div
             v-else-if="factura"
-            class="flex min-h-0 flex-1 flex-col gap-4"
+            class="flex flex-col gap-4 lg:min-h-0 lg:flex-1"
         >
             <!-- Franja: número, estado, saldo y acciones. -->
             <header
@@ -480,7 +480,7 @@ onMounted(cargar)
                 data-prueba="nota-reactivacion"
             />
 
-            <div class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+            <div class="grid gap-4 lg:min-h-0 lg:flex-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
                 <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
                     <div class="flex items-center justify-between gap-2 border-b border-(--ax-borde) p-3 sm:p-4">
                         <OperPestanas

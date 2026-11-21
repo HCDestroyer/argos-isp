@@ -158,7 +158,7 @@ watch(lista.filas, filas => void nombres.cargar(filas.map(p => p.cliente_id)))
 
 const columnas: TableColumn<Promesa>[] = [
     { accessorKey: 'servicio_id', header: 'Servicio' },
-    { accessorKey: 'tipo', header: 'Tipo', meta: { class: { th: 'max-xl:hidden', td: 'max-xl:hidden' } } },
+    { accessorKey: 'tipo', header: 'Tipo', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
     { accessorKey: 'canal', header: 'Quién la pidió', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
     { accessorKey: 'monto', header: 'Cubre', meta: { class: { th: 'text-right max-sm:hidden', td: 'text-right max-sm:hidden' } } },
     { accessorKey: 'vence_en', header: 'Vence', meta: { class: { th: 'max-sm:hidden', td: 'max-sm:hidden' } } },
@@ -471,7 +471,7 @@ onMounted(async () => {
             />
         </template>
 
-        <div class="flex min-h-0 flex-1 flex-col gap-4">
+        <div class="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
             <!-- Contadores. -->
             <div
                 class="grid grid-cols-2 gap-3 xl:grid-cols-4"
@@ -515,7 +515,7 @@ onMounted(async () => {
                 />
             </div>
 
-            <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <div class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
                 <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-17rem)]">
                     <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
                         <OperPestanas

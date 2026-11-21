@@ -219,7 +219,7 @@ function alGuardar(guardado: Rol) {
 
         <div
             v-else
-            class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)_minmax(0,20rem)]"
+            class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,18rem)]"
         >
             <!-- Roles. -->
             <section
@@ -395,7 +395,7 @@ function alGuardar(guardado: Rol) {
             <!-- Alcance. -->
             <section
                 v-if="rol"
-                class="surface-card flex min-h-0 flex-col overflow-hidden rounded-[1.375rem] lg:col-span-2 2xl:col-span-1 2xl:max-h-[calc(100dvh-11rem)]"
+                class="surface-card flex min-h-0 flex-col overflow-hidden rounded-[1.375rem] lg:col-span-2 xl:col-span-1 xl:max-h-[calc(100dvh-11rem)]"
                 aria-labelledby="titulo-alcance"
             >
                 <header class="flex items-start gap-3 border-b border-(--ax-borde) p-4">

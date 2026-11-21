@@ -196,7 +196,7 @@ function nombreEstadoPlantilla(plantilla: PlantillaFacturacion): { etiqueta: str
 
         <div
             v-else
-            class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
+            class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
         >
             <!-- Plantillas. -->
             <section

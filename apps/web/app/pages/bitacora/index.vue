@@ -193,9 +193,9 @@ const lista = computed(() => (pestana.value === 'cambios' ? listaCambios : pesta
 const columnasAcciones: TableColumn<AccionAuditoria>[] = [
     { accessorKey: 'created_at', header: 'Hora', meta: SOLO_ANCHO },
     { accessorKey: 'actor_id', header: 'Quién', meta: { class: { th: 'max-md:hidden', td: 'max-md:hidden' } } },
-    { accessorKey: 'canal', header: 'Desde', meta: { class: { th: 'max-xl:hidden', td: 'max-xl:hidden' } } },
+    { accessorKey: 'canal', header: 'Desde', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
     { accessorKey: 'accion', header: 'Qué hizo' },
-    { accessorKey: 'entidad_tipo', header: 'Sobre qué', meta: SOLO_ESCRITORIO },
+    { accessorKey: 'entidad_tipo', header: 'Sobre qué', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
     { accessorKey: 'resultado', header: 'Resultado' },
 ]
 
@@ -385,7 +385,7 @@ onMounted(async () => {
             />
         </template>
 
-        <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <div class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
             <section class="surface-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.375rem] lg:max-h-[calc(100dvh-11rem)]">
                 <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -637,7 +637,7 @@ onMounted(async () => {
                                         class="max-w-56 truncate font-mono text-xs text-muted"
                                         data-prueba="accion-tecnica"
                                     >{{ row.original.accion }}</span>
-                                    <span class="text-xs text-muted md:hidden">{{ etiquetaActor(row.original) }} · {{ etiquetaCanal(row.original.canal) }}</span>
+                                    <span class="text-xs text-muted 2xl:hidden"><span class="md:hidden">{{ etiquetaActor(row.original) }} · </span>{{ etiquetaCanal(row.original.canal) }}<template v-if="etiquetaEntidad(row.original)"> · {{ etiquetaEntidad(row.original) }}</template></span>
                                     <span class="text-xs text-muted sm:hidden">{{ horaFila(row.original.created_at) }}</span>
                                     <ULink
                                         v-if="row.original.iris_conversacion"
