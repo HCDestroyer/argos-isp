@@ -254,7 +254,7 @@ test.group('billing · servicio pendiente de instalación', () => {
     test('3. un servicio nacido activo sigue facturando desde su fecha de instalación (retroactiva) como siempre', async ({
         assert,
     }) => {
-        const plantillaId = await crearPlantillaFila()
+        const plantillaId = await crearPlantillaFila({ prorrateo: true })
         const servicioId = await crearServicioFila({
             cliente_id: await crearClienteFila(),
             plan_id: await crearPlanFila({ precio: '150.00' }),

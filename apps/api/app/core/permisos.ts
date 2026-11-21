@@ -142,7 +142,9 @@ export const PERMISOS = {
     'facturas.emitir_periodos':
         'Emitir a mano facturas de periodos de un servicio: pago por adelantado (hasta 12 periodos futuros) o periodos que el cron no emitió',
     'facturas.emitir_periodo_anterior':
-        'Emitir a mano un periodo anterior al facturar_desde del servicio, con motivo (junto con facturas.emitir_periodos)',
+        'Emitir a mano un periodo anterior al inicio del servicio (hasta 24) o a su facturar_desde, con motivo (junto con facturas.emitir_periodos)',
+    'facturas.editar_monto_periodo':
+        'Cambiar el total calculado de una factura de periodo emitida a mano, con motivo (junto con facturas.emitir_periodos)',
     'facturas.cargo_sin_costo':
         'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
     'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
@@ -605,6 +607,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.emitir_cargo_unico',
             'facturas.emitir_periodos',
             'facturas.emitir_periodo_anterior',
+            'facturas.editar_monto_periodo',
             'facturas.cargo_sin_costo',
             'facturas.configurar_motivos',
             'facturas.configurar_conceptos',

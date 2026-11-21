@@ -218,7 +218,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                         <USwitch
                             v-model="estado.prorrateo"
                             label="Prorratear el primer periodo"
-                            description="Cobra solo los días desde la instalación hasta el primer corte."
+                            description="Desactivado (lo normal): la factura cobra el precio completo del servicio desde el primer mes. Activado: la primera factura cobra solo los días desde la instalación hasta el primer corte."
                             class="sm:col-span-2"
                         />
                     </div>

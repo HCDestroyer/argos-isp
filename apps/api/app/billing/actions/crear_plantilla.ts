@@ -34,7 +34,9 @@ export interface EntradaCrearPlantilla {
 }
 
 export const VALORES_POR_DEFECTO = {
-    prorrateo: true,
+    // pedido del PM (21 nov): una plantilla nueva cobra el mes completo desde la primera factura; las
+    // existentes conservan su valor (el cron respeta el «Prorrateo» de cada plantilla)
+    prorrateo: false,
     dias_gracia: 0,
     facturas_para_limitar: 1,
     facturas_para_cortar: 1,

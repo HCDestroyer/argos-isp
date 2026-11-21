@@ -144,8 +144,8 @@ test.group('Plantillas de fábrica · creación al actualizar', () => {
                 ciclo: 'dia_fijo',
                 dia: e.dia,
                 dias_gracia: e.dias_gracia,
-                // valores por defecto de CrearPlantilla
-                prorrateo: true,
+                // valores por defecto de CrearPlantilla (sin prorrateo desde el 21 nov)
+                prorrateo: false,
                 facturas_para_limitar: 1,
                 facturas_para_cortar: 1,
                 mora_tipo: 'ninguna',
