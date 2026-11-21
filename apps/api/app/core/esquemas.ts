@@ -488,6 +488,10 @@ export const Servicio = definirEsquema(
                 description: 'Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>`',
             },
             coordenadas: nulable(texto),
+            precision_m: {
+                ...nulable({ type: 'number' }),
+                description: 'Precisión del GPS de las coordenadas en metros (Iris 0.10.0 §3.4.6)',
+            },
             fecha_instalacion: nulable(fecha),
             instalado_en: {
                 ...nulable(instante),
@@ -604,6 +608,7 @@ export const Servicio = definirEsquema(
             'warnings',
             'codigo',
             'nombre',
+            'precision_m',
             'referencia',
             'contacto_nombre',
             'contacto_telefono',

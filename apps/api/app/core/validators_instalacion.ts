@@ -1,5 +1,5 @@
 import vine from '@vinejs/vine'
-import { idEntidad, instanteIso, versionEsperada } from '#shared/validadores'
+import { coordenadas, idEntidad, instanteIso, versionEsperada } from '#shared/validadores'
 
 /**
  * Validadores de «De la venta a la instalación» (contrato Iris 0.10.0 §3.4). `version` es opcional
@@ -69,5 +69,35 @@ export const registrarIdentidadValidator = vine.compile(
         }),
         origen_tipo: origenTipo().optional(),
         origen_id: origenId().optional(),
+    }),
+)
+
+export const completarDatosValidator = vine.compile(
+    vine.object({
+        cliente: vine
+            .object({
+                nombre: vine.string().trim().minLength(2).maxLength(200).optional().meta({
+                    description: 'Solo con identidad_id: el nombre como aparece en el documento',
+                }),
+                telefono: vine.string().trim().maxLength(30).optional(),
+                whatsapp: vine.boolean().optional(),
+                email: vine.string().trim().email().optional(),
+                tipo_documento_fiscal: vine.enum(['cf', 'nit', 'cui'] as const).optional(),
+                nit_cui: vine.string().trim().maxLength(20).nullable().optional(),
+                relacion: vine.enum(['titular', 'familiar', 'otro'] as const).optional(),
+            })
+            .optional(),
+        servicio: vine
+            .object({
+                direccion: vine.string().trim().minLength(1).maxLength(300).optional(),
+                referencia: vine.string().trim().maxLength(300).optional(),
+                coordenadas: coordenadas().optional(),
+                precision_m: vine.number().min(0).max(100000).optional(),
+            })
+            .optional(),
+        identidad_id: idEntidad().optional(),
+        version: versionOpcional(),
+        origen_tipo: origenTipo(),
+        origen_id: origenId(),
     }),
 )

@@ -56,6 +56,8 @@ export interface ServicioVista {
     contacto_nombre: string | null
     contacto_telefono: string | null
     coordenadas: string | null
+    /** precisión del GPS de las coordenadas, en metros (Iris 0.10.0 §3.4.6), o null */
+    precision_m: number | null
     fecha_instalacion: string | null
     /** activación de la instalación (inicio de facturación); null mientras está pendiente */
     instalado_en: string | null
@@ -153,6 +155,7 @@ function columnas(cliente: QueryClientContract) {
         's.contacto_nombre',
         's.contacto_telefono',
         's.coordenadas',
+        cliente.raw('s.precision_m::float8 AS precision_m'),
         cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
         's.instalado_en',
         's.planta',

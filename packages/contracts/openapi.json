@@ -70103,6 +70103,7 @@
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_plan_pendiente",
                         "servicios.cancelar_plan_temporal",
+                        "servicios.completar_datos",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -70510,6 +70511,7 @@
                         "servicios.cambiar_empresa",
                         "servicios.cambiar_plan_pendiente",
                         "servicios.cancelar_plan_temporal",
+                        "servicios.completar_datos",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
@@ -79053,6 +79055,220 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/completar-datos": {
+      "post": {
+        "operationId": "serviciosCompletarDatos",
+        "summary": "Completar los datos del titular y del lugar antes de activar (contrato Iris 0.10.0 §3.4.6)",
+        "description": "Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`) y para el cliente de ese servicio. Del cliente solo llena vacíos (`422 campo_ya_registrado`); el `nombre` se corrige solo con `identidad_id` de su identidad vigente. Cliente con historial: sin `telefono`, `movil`, `email`, `nombre`, `tipo_documento_fiscal` ni `nit_cui` (`422 cliente_con_historial`). Del servicio corrige dirección, referencia, coordenadas y `precision_m`. Teléfono y correo agregados no cuentan como registrados hasta que el titular los confirme. Emite `cliente.actualizado` y `servicio.datos_cambiados`. Iris: `Idempotency-Key = iris:datos:<orden_id>:<n>` y `X-Iris-Actor`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente": {
+                    "type": "object",
+                    "properties": {
+                      "nombre": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 200,
+                        "description": "Solo con identidad_id: el nombre como aparece en el documento"
+                      },
+                      "telefono": {
+                        "type": "string",
+                        "maxLength": 30
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "tipo_documento_fiscal": {
+                        "type": "string",
+                        "enum": [
+                          "cf",
+                          "nit",
+                          "cui"
+                        ]
+                      },
+                      "nit_cui": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 20
+                      },
+                      "relacion": {
+                        "type": "string",
+                        "enum": [
+                          "titular",
+                          "familiar",
+                          "otro"
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "servicio": {
+                    "type": "object",
+                    "properties": {
+                      "direccion": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "referencia": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "coordenadas": {
+                        "type": "string",
+                        "pattern": "^-?\\d+(\\.\\d+)?, ?-?\\d+(\\.\\d+)?$",
+                        "description": "Latitud y longitud: \"14.6349,-90.5069\""
+                      },
+                      "precision_m": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "identidad_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Opcional (§3.4): si viene y no coincide, 409 conflicto_version"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  }
+                },
+                "required": [
+                  "origen_tipo",
+                  "origen_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.completar_datos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.completar_datos",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/configuracion-efectiva": {
       "get": {
         "operationId": "serviciosConfiguracionEfectiva",
@@ -83543,6 +83759,7 @@
                             "servicios.cambiar_empresa",
                             "servicios.cambiar_plan_pendiente",
                             "servicios.cancelar_plan_temporal",
+                            "servicios.completar_datos",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
@@ -108101,6 +108318,7 @@
           "servicios.cambiar_empresa",
           "servicios.cambiar_plan_pendiente",
           "servicios.cancelar_plan_temporal",
+          "servicios.completar_datos",
           "servicios.crear",
           "servicios.desconectar",
           "servicios.editar",
@@ -108400,6 +108618,7 @@
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
           "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
           "Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)",
+          "Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio",
           "Crear servicios",
           "Desconectar la sesión PPPoE de un servicio",
           "Editar servicios (plan, router, IPs, datos)",
@@ -123018,6 +123237,7 @@
               "servicios.cambiar_empresa",
               "servicios.cambiar_plan_pendiente",
               "servicios.cancelar_plan_temporal",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
@@ -123150,6 +123370,7 @@
               "servicios.agregar_adicional",
               "servicios.cambiar_plan_pendiente",
               "servicios.cancelar_plan_temporal",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
@@ -123220,6 +123441,7 @@
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
               "servicios.cambiar_plan_pendiente",
+              "servicios.completar_datos",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",
@@ -124083,6 +124305,13 @@
               "string",
               "null"
             ]
+          },
+          "precision_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Precisión del GPS de las coordenadas en metros (Iris 0.10.0 §3.4.6)"
           },
           "fecha_instalacion": {
             "type": [

@@ -54,6 +54,8 @@ export const PERMISOS = {
         'Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)',
     'servicios.cambiar_plan_pendiente':
         'Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)',
+    'servicios.completar_datos':
+        'Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -514,6 +516,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.reservar_ip',
             'servicios.cambiar_plan_pendiente',
             'clientes.registrar_identidad',
+            'servicios.completar_datos',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -563,6 +566,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.reservar_ip',
             'servicios.cambiar_plan_pendiente',
             'clientes.registrar_identidad',
+            'servicios.completar_datos',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',

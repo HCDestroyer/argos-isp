@@ -17,6 +17,7 @@ import { esTokenIris, exigirActorIris } from '#integraciones/iris/atencion'
 import * as vi from '#core/validators_instalacion'
 import ReservarIpServicio from '#core/actions/reservar_ip_servicio'
 import CambiarPlanPendiente from '#core/actions/cambiar_plan_pendiente'
+import CompletarDatosServicio from '#core/actions/completar_datos_servicio'
 import { Servicio } from '#core/esquemas'
 import RegistrarIdentidadCliente from '#core/actions/registrar_identidad_cliente'
 import VerIdentidadCliente from '#core/actions/ver_identidad_cliente'
@@ -132,6 +133,33 @@ const instalacion: Ruta[] = [
             const id = Number(params.id)
             await exigirServicio(ctx, id)
             return new CambiarPlanPendiente().execute(
+                { ...cuerpo, id, desdeIris: iris },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/completar-datos',
+        operacion: 'serviciosCompletarDatos',
+        resumen: 'Completar los datos del titular y del lugar antes de activar (contrato Iris 0.10.0 §3.4.6)',
+        descripcion:
+            'Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`) y para el cliente de ese servicio. Del cliente solo ' +
+            'llena vacíos (`422 campo_ya_registrado`); el `nombre` se corrige solo con `identidad_id` de su identidad vigente. ' +
+            'Cliente con historial: sin `telefono`, `movil`, `email`, `nombre`, `tipo_documento_fiscal` ni `nit_cui` ' +
+            '(`422 cliente_con_historial`). Del servicio corrige dirección, referencia, coordenadas y `precision_m`. Teléfono y ' +
+            'correo agregados no cuentan como registrados hasta que el titular los confirme. Emite `cliente.actualizado` y ' +
+            '`servicio.datos_cambiados`. Iris: `Idempotency-Key = iris:datos:<orden_id>:<n>` y `X-Iris-Actor`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.completar_datos',
+        cuerpo: vi.completarDatosValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Servicio', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const iris = desdeIris(ctx)
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new CompletarDatosServicio().execute(
                 { ...cuerpo, id, desdeIris: iris },
                 ctx.contextoAccion(),
             )
