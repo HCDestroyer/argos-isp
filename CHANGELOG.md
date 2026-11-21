@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.23.0](https://github.com/HCDestroyer/argos-isp/compare/v1.22.2...v1.23.0) (2026-11-21)
+
+
+### Funcionalidades
+
+* **billing,web:** facturas antes del inicio, sin prorrateo (también el cron), monto editable y tramo inicial ([#267](https://github.com/HCDestroyer/argos-isp/issues/267)) ([2247c3a](https://github.com/HCDestroyer/argos-isp/commit/2247c3a03473f606173be1e922a0bf38dcbbb1f3))
+* **portal,web:** varias plantillas por documento, formato POS 80 mm y recibo de cobro en PDF ([#268](https://github.com/HCDestroyer/argos-isp/issues/268)) ([da9f4e6](https://github.com/HCDestroyer/argos-isp/commit/da9f4e6b21ca17da9a1383d3d358e024f40beb1d))
+
 ## [1.22.2](https://github.com/HCDestroyer/argos-isp/compare/v1.22.1...v1.22.2) (2026-11-21)
 
 
