@@ -229,4 +229,28 @@ test.group('billing · simulador de promesas', () => {
             422,
         )
     })
+
+    test('suspensión manual: con canal portal la creación sería error (suspension_manual); con operador, no', async ({
+        assert,
+    }) => {
+        const datos = await servicioCortado()
+        await db.from('core.servicios').where('id', datos.servicioId).update({
+            suspension_manual: true,
+            suspension_manual_motivo: 'fraude',
+            suspension_manual_en: new Date(),
+        })
+        const base = { servicio_id: datos.servicioId, vence_en: diasDespues(2), ahora: AHORA_PROMESAS }
+        const portal = await simularPromesa({ ...base, canal: 'portal' })
+        assert.isTrue(portal.suspension_manual)
+        assert.equal(portal.resultado_creacion, 'error')
+        assert.include(
+            portal.validaciones.find((v) => v.regla === 'suspension_manual'),
+            { ok: false, campo: 'servicio_id' },
+        )
+        const operador = await simularPromesa({ ...base, canal: 'operador' })
+        assert.isTrue(operador.suspension_manual)
+        assert.notEqual(operador.resultado_creacion, 'error')
+        assert.isUndefined(operador.validaciones.find((v) => v.regla === 'suspension_manual'))
+        assert.equal(await cuentaPromesas(datos.servicioId), 0)
+    })
 })

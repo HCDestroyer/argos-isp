@@ -39,10 +39,14 @@ import type { EstadoServicio } from '#shared/eventos'
  * saldadas. Sin nada vencido se rechaza por `sin_deuda`. El abono inicial (`abono_inicial_pct`)
  * se sigue exigiendo antes de prometer. `monto` en la entrada es obsoleto y se ignora.
  *
- * `reglas_snapshot` guarda las reglas con que se evaluó. Una suspensión manual se respeta: la
- * promesa queda activa pero el servicio sigue suspendido hasta que un operador lo reactive.
- * Errores (no se guarda nada): servicio retirado o sin plantilla (422), ya tiene una promesa
- * activa o pendiente (409), `vence_en` en el pasado (422). No genera asientos.
+ * `reglas_snapshot` guarda las reglas con que se evaluó. Una suspensión manual se respeta: con los
+ * canales del operador la promesa queda activa pero el servicio sigue suspendido hasta que un
+ * operador lo reactive (el simulador lo avisa con `suspension_manual`). Con canal `portal` el
+ * cliente no puede quitarla: 422 `suspension_manual` sin guardar nada (como la reconexión
+ * temporal), para que el portal nunca responda «aprobada» con el servicio cortado.
+ * Errores (no se guarda nada): servicio retirado o sin plantilla (422), suspendido a mano desde el
+ * portal (422), ya tiene una promesa activa o pendiente (409), `vence_en` en el pasado (422). No
+ * genera asientos.
  */
 
 export interface EntradaCrearPromesa {
@@ -80,6 +84,17 @@ export function servicioTrasPromesa(r: ResultadoEvaluarEstado): ServicioTrasProm
 export interface ResultadoCrearPromesa extends PromesaVista {
     /** cómo quedó el servicio (solo si la promesa quedó activa) */
     servicio?: ServicioTrasPromesa
+}
+
+/** 422 `suspension_manual`: el cliente pide desde el portal una promesa que no lo reactivaría. */
+export class SuspendidoAManoPortal extends ReglaNegocio {
+    constructor(servicioId: number) {
+        super(
+            `El servicio ${servicioId} lo suspendió un operador: una promesa del portal no lo reactiva`,
+            'suspension_manual',
+            [{ field: 'servicio_id', message: 'Suspendido a mano', rule: 'suspension_manual' }],
+        )
+    }
 }
 
 const ESTADO_POR_RESULTADO: Record<ResultadoEvaluacion['resultado'], EstadoPromesa> = {
@@ -132,6 +147,10 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
         // sin instalar no hay deuda de servicio que prometer ni corte que evitar (`contratos/instalacion.md` §3)
         if (servicio.estado === 'pendiente_instalacion') {
             throw new ServicioPendienteInstalacion('crear una promesa de pago sobre')
+        }
+        // la promesa no quita una suspensión manual (`evaluarEstadoServicio`): el cliente no la pide
+        if (servicio.suspension_manual && input.canal === 'portal') {
+            throw new SuspendidoAManoPortal(servicio.id)
         }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) {

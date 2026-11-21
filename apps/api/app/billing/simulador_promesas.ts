@@ -177,6 +177,17 @@ export async function simularPromesa(
             ? `Vence el ${hoyGuatemala(venceEn)} (en ${diasEntre(hoyGuatemala(ahora), hoyGuatemala(venceEn))} días)`
             : 'La promesa debe vencer en el futuro',
     })
+    if (entrada.canal === 'portal') {
+        // igual que `CrearPromesaPago`: desde el portal no se promete sobre una suspensión manual
+        validaciones.push({
+            campo: 'servicio_id',
+            ok: !servicio.suspension_manual,
+            regla: 'suspension_manual',
+            detalle: servicio.suspension_manual
+                ? 'Lo suspendió un operador: una promesa del portal no lo reactiva'
+                : 'No está suspendido a mano',
+        })
+    }
     const abierta = await cliente
         .from('billing.promesas')
         .where('servicio_id', servicio.id)

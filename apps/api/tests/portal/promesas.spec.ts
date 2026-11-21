@@ -4,7 +4,8 @@ import type { ApiClient } from '@japa/api-client'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, unico } from '#tests/ayudas'
-import { crearRouterFila } from '#tests/core/fabricas'
+import { crearEscenarioRouter, crearRouterFila } from '#tests/core/fabricas'
+import SuspenderServicio from '#core/actions/suspender_servicio'
 import { escenario, estadoServicio, generar } from '#tests/billing/ayudas_billing'
 import { EnviadorFalso, cookieDeSesion, nitAleatorio, usarEnviadorCodigo } from '#tests/portal/ayudas_portal'
 import { aTexto, dec } from '#ledger/dinero'
@@ -639,5 +640,109 @@ test.group('Portal: motivo de la promesa en palabras del cliente', () => {
         }
         const aprobada = { ...evaluacion('plazo_max_dias', 3), resultado: 'aprobada' } as ResultadoEvaluacion
         assert.isFalse(esCorregible(aprobada))
+    })
+})
+
+/**
+ * Reporte del PM (1.22.x): «pido promesa desde el portal, lo indica, pero no me quita de cortados».
+ * Router de IP estática (sin PPPoE): el portal identifica por la IPv4 asignada. El corte automático
+ * sale con la promesa; una suspensión manual (botón «Suspender» del panel) no la quita ninguna
+ * promesa, así que el portal no puede ofrecerla ni responder «aprobada».
+ */
+test.group('Portal: promesa en un servicio de IP estática', (group) => {
+    group.each.setup(() => {
+        const previo = Object.fromEntries(VARIABLES.map((v) => [v, process.env[v]]))
+        process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
+        process.env.PORTAL_REDIS_PREFIJO = unico('prueba-promesas-estatica')
+        delete process.env.PORTAL_LIMITE_PETICIONES
+        return () => {
+            for (const variable of VARIABLES) {
+                if (previo[variable] === undefined) delete process.env[variable]
+                else process.env[variable] = previo[variable]
+            }
+        }
+    })
+
+    /** Servicio `ip_estatica` con facturas vencidas y su IPv4 asignada; aún sin evaluar (activo). */
+    async function conDeudaEstatica() {
+        const { routerId, base } = await crearEscenarioRouter({ tipo_conexion: 'ip_estatica' })
+        const datos = await escenario({
+            fecha_instalacion: dia(-75),
+            plantilla: {
+                hora_corte: '00:00',
+                reglas_promesa: JSON.stringify(
+                    normalizarReglasPromesa({ no_exceder_siguiente_facturacion: false }),
+                ),
+            },
+            servicio: { router_id: routerId },
+        })
+        // sin PPPoE, el servicio necesita su IPv4 en la misma transacción (restricción diferida)
+        const red = await db.from('network.redes_ipv4').where('router_id', routerId).select('id').first()
+        const ip = `${base}.20`
+        await db.transaction(async (trx) => {
+            await trx
+                .table('network.ipv4_asignaciones')
+                .insert({ servicio_id: datos.servicioId, red_id: red.id, ip: `${ip}/32` })
+            await trx
+                .from('core.servicios')
+                .where('id', datos.servicioId)
+                .update({ tipo_conexion: 'ip_estatica', user_ppp: null, pass_ppp: null })
+        })
+        await generar(datos.servicioId, dia(0))
+        await new VencerFacturas().execute({ servicio_id: datos.servicioId, hasta: dia(0) }, contextoPrueba())
+        return { ...datos, ip }
+    }
+
+    test('cortado por facturas: la promesa aprobada lo deja activo (sale de «Cortados»)', async ({
+        client,
+        assert,
+    }) => {
+        const s = await conDeudaEstatica()
+        await new EvaluarEstadoServicio().execute({ servicio_id: s.servicioId }, contextoPrueba())
+        assert.equal(await estadoServicio(s.servicioId), 'suspendido')
+
+        const respuesta = await estado(
+            client
+                .post('/api/v1/portal/promesas')
+                .header('X-Forwarded-For', s.ip)
+                .json({ vence_el: dia(2) }),
+            201,
+        )
+        assert.equal(respuesta.body().resultado, 'aprobada')
+        assert.equal(respuesta.body().servicio_estado, 'activo')
+        assert.equal(await estadoServicio(s.servicioId), 'activo')
+    })
+
+    test('suspendido a mano: el portal no ofrece la promesa ni responde «aprobada» con el servicio cortado', async ({
+        client,
+        assert,
+    }) => {
+        const s = await conDeudaEstatica()
+        await new SuspenderServicio().execute(
+            { id: s.servicioId, motivo: 'corte desde el panel' },
+            contextoPrueba(),
+        )
+        assert.equal(await estadoServicio(s.servicioId), 'suspendido')
+
+        const condiciones = await estado(
+            client.get('/api/v1/portal/promesas/condiciones').header('X-Forwarded-For', s.ip),
+            200,
+        )
+        assert.isFalse(condiciones.body().disponible)
+        assert.include(condiciones.body().motivo, 'suspendido por un asesor')
+
+        const respuesta = await estado(
+            client
+                .post('/api/v1/portal/promesas')
+                .header('X-Forwarded-For', s.ip)
+                .json({ vence_el: dia(2) }),
+            422,
+        )
+        assert.equal(respuesta.body().type, 'urn:argosisp:problema:suspension_manual')
+        assert.include(respuesta.body().detail, 'suspendido por un asesor')
+        // nada guardado: ni promesa «activa» que gaste el cupo ni aviso de promesa creada
+        const promesas = await db.from('billing.promesas').where('servicio_id', s.servicioId).count('* as n')
+        assert.equal(Number(promesas[0].n), 0)
+        assert.equal(await estadoServicio(s.servicioId), 'suspendido')
     })
 })
