@@ -46,7 +46,7 @@ describe('semana 3 (2.ª tanda) · tarea 4: datos de importación visibles', () 
         vista.unmount()
 
         const otro = await mountSuspended(PaginaCliente, { route: '/clientes/1' })
-        await esperar(() => expect(otro.text()).toContain('Cliente #1'))
+        await esperar(() => expect(otro.text()).toContain('C-000001'))
         expect(otro.find('[data-prueba="cliente-importado"]').exists()).toBe(false)
         otro.unmount()
     })
