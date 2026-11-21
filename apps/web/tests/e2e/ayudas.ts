@@ -118,3 +118,13 @@ export async function ir(page: Page, seccion: string, url: RegExp): Promise<void
 export async function pestanaRouter(page: Page, nombre: string): Promise<void> {
     await page.locator('[data-prueba="pestanas-router"]').getByRole('tab', { name: nombre }).click()
 }
+
+/** Ficha del cliente: abre «Datos del cliente» (ícono de persona en la franja o «Datos» en el teléfono). */
+export async function verDatosCliente(page: Page): Promise<void> {
+    const datos = page.locator('[data-prueba="datos-cliente"]')
+    if (await datos.isVisible()) {
+        return
+    }
+    await page.locator('[data-prueba="ver-datos-cliente"]:visible, [data-prueba="ver-datos-cliente-movil"]:visible').first().click()
+    await expect(datos).toBeVisible()
+}

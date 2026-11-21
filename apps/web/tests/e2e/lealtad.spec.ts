@@ -35,7 +35,7 @@ test('regla con vista previa y desactivar el programa', async ({ page }) => {
 test('ajustar puntos desde la ficha del cliente', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes/)
-    await page.getByPlaceholder('Nombre, NIT, teléfono, usuario PPP o IP').fill('Juan Carlos')
+    await page.getByPlaceholder('Nombre, NIT, teléfono o IP').fill('Juan Carlos')
     await page.getByRole('link', { name: 'Juan Carlos Ramírez', exact: true }).click()
     await page.getByRole('tab', { name: /Puntos/ }).click()
     await expect(page.locator('[data-prueba="saldo-puntos"]')).toContainText('230 pts')

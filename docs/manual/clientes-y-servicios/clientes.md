@@ -23,21 +23,24 @@ Abre **Clientes** en el menú.
 
 ### Qué ves
 
-| Columna   | Qué muestra                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| Cliente   | Nombre (enlace a la ficha), la marca «Empresa» si es una empresa y su correo (o «Sin correo»). |
-| NIT / CUI | El documento fiscal.                                                                           |
-| Teléfono  | Teléfono y, debajo, el móvil.                                                                  |
-| Zona      | Solo si tienes `zonas.ver`.                                                                    |
-| Alta      | Fecha en que se creó.                                                                          |
+| Columna   | Qué muestra                                                                                |
+| --------- | ------------------------------------------------------------------------------------------ |
+| Cliente   | Nombre (enlace a la ficha), su código (`C-000412`) y la marca «Empresa» si es una empresa. |
+| Teléfono  | Teléfono y, debajo, el móvil.                                                              |
+| Zona      | Solo si tienes `zonas.ver`.                                                                |
+| NIT / CUI | El documento fiscal.                                                                       |
+| Alta      | Fecha en que se creó.                                                                      |
 
-En el teléfono algunas columnas se esconden y el NIT aparece debajo del nombre.
+Al final de cada fila, «Cobrar» (con `pagos.registrar`) y el botón «⋯» con las mismas acciones del clic derecho. En el teléfono algunas columnas se esconden y el teléfono aparece debajo del nombre.
+
+Un clic en la fila (fuera del nombre) abre la **vista rápida**: una tarjeta que flota a la derecha sin tapar la lista, con el estado (el del servicio más atrasado y sus facturas vencidas), el saldo, cuántos servicios tiene, el teléfono, cada servicio con su IP y la zona. Abajo, «Cobrar Q …», «Promesa» (si tiene varios servicios, pregunta de cuál) y «Abrir ficha». Se cierra con Esc o con la ×.
 
 ### Buscar y filtrar
 
 - **Buscador:** escribe nombre, NIT, teléfono, usuario PPP o IP. La lista se actualiza sola mientras escribes.
-- **Accesos rápidos:** «Todos», «Cortados» (servicios suspendidos) y «Con deuda» (algún aviso de cobro vencido).
-- **Filtros:** estado del servicio, zona, router y plan (cada lista aparece solo si tienes permiso para verla), y los interruptores «Con deuda vencida», «Con promesa activa» y «NIT o CUI por corregir». En el teléfono, los filtros se abren con el botón «Filtros», que muestra cuántos tienes puestos.
+- **Contadores** (arriba): «Al día» (sin facturas vencidas), «Con deuda» (alguna vencida), «Suspendidos» y «Con promesa». Un clic filtra la lista; otro clic lo quita. Todavía no muestran cuántos clientes hay en cada uno.
+- **Pestañas de la lista:** «Todos», «Al día», «Con deuda» y «Suspendidos», los mismos filtros.
+- **Más filtros:** estado del servicio, zona, router y plan (cada lista aparece solo si tienes permiso para verla), y los interruptores «Con deuda vencida», «Con promesa activa» y «NIT o CUI por corregir». El botón muestra cuántos tienes puestos.
 - «Limpiar» quita la búsqueda y todos los filtros.
 
 Los filtros quedan en la dirección de la página: si la copias y la compartes, la otra persona ve la misma lista.
@@ -45,8 +48,10 @@ Los filtros quedan en la dirección de la página: si la copias y la compartes, 
 ## Crear un cliente
 
 - **Permiso:** `clientes.crear`
-- **Dónde:** botón «Nuevo cliente» en la lista. Se abre un panel lateral; también existe la página **Clientes → Nuevo cliente** con el mismo formulario.
-- **Qué pasa:** solo el nombre es obligatorio, lo demás se completa después. Al pulsar «Crear cliente» se abre su ficha y aparece el aviso «Cliente creado». Si tienes `servicios.crear`, el aviso trae el botón «Agregar servicio» para seguir con el alta del servicio.
+- **Dónde:** botón «Nuevo cliente» en la lista. Se abre el alta en **3 pasos** (Cliente, Servicio y Cobro), con el progreso arriba.
+- **Paso 1, Cliente:** solo el nombre es obligatorio, lo demás se completa después. «Siguiente: servicio» crea el cliente y sigue con su servicio (con `servicios.crear`); «Crear cliente sin servicio» lo crea y abre su ficha.
+- **Pasos 2 y 3, Servicio y Cobro:** el [alta de servicio](alta-de-servicio.md) con el cliente ya elegido: router, plan, red y PPPoE; después instalación, plantilla de facturación y el resumen. Al crear el servicio se abre la ficha del cliente en «Servicios». Si cierras el alta con la ×, el cliente ya creado queda en su ficha.
+- «Registrar prospecto» (para quien solo está interesado) se activa cuando la API lo publique.
 
 Un doble clic o un reintento por mala señal no crea dos clientes.
 
@@ -82,37 +87,46 @@ Un doble clic o un reintento por mala señal no crea dos clientes.
 
 Haz clic en el nombre del cliente en la lista.
 
-Arriba ves el nombre, si es Persona o Empresa, su número de cliente, su zona y la fecha de alta. Si otro cliente paga por él, aparece «Paga: …» con el enlace. Si vino de una importación (por ejemplo de Mikrowisp), lo dice en letra pequeña.
+Arriba, en una franja: el nombre con el estado (el de su servicio más atrasado), su código, teléfono y zona, y tres contadores: **Saldo** (en rojo si debe, con las facturas vencidas), **Próximo vencimiento** y **Servicios** (por estado, con lo que paga al mes). Si otro cliente paga por él, aparece «Paga: …» con el enlace. Si vino de una importación (por ejemplo de Mikrowisp), lo dice en letra pequeña. Al bajar, la franja se queda arriba y se reduce a nombre, estado, saldo y «Cobrar». En el teléfono, abajo quedan fijos «Promesa» y «Cobrar Q …».
 
 ### Botones de la ficha
 
-| Botón            | Permiso                                        | Qué hace                                                                                    |
-| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| «Cobrar»         | `pagos.registrar`                              | Abre la caja con el cliente ya elegido.                                                     |
-| «Nuevo servicio» | `servicios.crear`                              | Abre el [alta de servicio](alta-de-servicio.md) en un panel lateral, sin salir de la ficha. |
-| «Cargo único»    | `facturas.emitir_cargo_unico` y `facturas.ver` | Factura algo que no es la mensualidad (venta de equipo, visita técnica).                    |
-| «Editar»         | `clientes.editar`                              | Abre el formulario del cliente en un panel lateral.                                         |
-| «Ver en Horus»   | `horus.abrir`                                  | Abre el cliente en Horus Flow, si la integración está activa.                               |
+| Botón                  | Permiso                                        | Qué hace                                                                                    |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| «Cobrar»               | `pagos.registrar`                              | Abre la caja con el cliente ya elegido.                                                     |
+| Mano (Promesa de pago) | `promesas.crear`                               | Promesa para un servicio; con varios, pregunta de cuál.                                     |
+| Recibo (Cargo único)   | `facturas.emitir_cargo_unico` y `facturas.ver` | Factura algo que no es la mensualidad (venta de equipo, visita técnica).                    |
+| Más (Nuevo servicio)   | `servicios.crear`                              | Abre el [alta de servicio](alta-de-servicio.md) en un panel lateral, sin salir de la ficha. |
+| Persona (Datos)        |                                                | Abre o cierra los datos del cliente y los fiscales, con «Editar» (`clientes.editar`).       |
+| «⋯»                    |                                                | Editar y Estado de cuenta.                                                                  |
+
+### Datos del cliente
+
+Con el ícono de persona de la franja («Datos» en el teléfono): contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión; el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**; y los **datos fiscales**: documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
 
 ### Pestañas
 
-- **Datos:** contacto, canal preferido, Telegram, zona, dirección, coordenadas (con enlace al mapa), referencia, los datos adicionales y la última edición con su número de versión. Debajo, el estado de WhatsApp (con `notificaciones.ver`), el **portal del cliente** y el **responsable de pago**.
-- **Datos fiscales:** documento, país, retención, nombre y dirección fiscal. Si el NIT o CUI no pasó la validación, verás «NIT o CUI por corregir»: corrígelo en «Editar», porque la factura FEL lo exige válido. Sin NIT, los avisos salen a nombre de Consumidor Final (CF).
+Las pestañas van dentro de la misma tarjeta que su contenido:
+
+- **Resumen:** si un servicio está suspendido o limitado, el aviso con «Cobrar» y «Promesa»; los contadores de saldo pendiente, próximo vencimiento, pagado en el año y cliente desde; sus servicios y la actividad reciente.
 - **Servicios** (con `servicios.ver`): cada servicio con su usuario PPP, router, plan y precio (con «precio especial» si lo tiene), direcciones IP y estado. Con varias empresas, los servicios se agrupan por empresa.
-- **Estado de cuenta** (con `clientes.estado_cuenta`): facturas, pagos y notas de crédito. Ver [Cobros](../cobros/index.md).
+- **Contactos** (con `contactos.buscar`): «A cargo de sus servicios», con el titular primero (sus números adicionales) y cada contacto con su relación, números (y si tiene WhatsApp), a qué servicios aplica y qué puede hacer (Consulta, Fallas, Paga, Avisos); «Agregar contacto» y quitar uno con `contactos.gestionar`. Debajo, «Está a cargo de»: servicios de otros clientes que esta persona tiene a cargo.
+- **Facturación** (con `clientes.estado_cuenta`): facturas, pagos y notas de crédito, con el número de vencidas en la pestaña. Ver [Cobros](../cobros/index.md).
+- **Pagos** (con `pagos.ver`) y **Promesas** (con `promesas.ver`) del cliente.
 - **Puntos** (con `lealtad.ver`): el programa de lealtad.
-- **Línea de tiempo** (con `bitacora.ver`): todo lo que le pasó al cliente y a sus servicios, facturas, pagos y promesas.
+- **Soporte** y **Documentos:** se mostrarán cuando la API los entregue.
+- **Bitácora** (con `bitacora.ver`): todo lo que le pasó al cliente y a sus servicios, facturas, pagos y promesas.
 
 ### Telegram
 
-En **Datos**, el campo Telegram dice «Vinculado» o «Sin vincular».
+En los datos del cliente, el campo Telegram dice «Vinculado» o «Sin vincular».
 
 - «Vincular» (`clientes.vincular_telegram`): pide al cliente que le escriba `/start` al bot de la empresa; el bot le responde con su chat id. Escribe ese número en «Chat id» y pulsa «Vincular».
 - «Quitar» (`clientes.desvincular_telegram`): deja de mandarle avisos por Telegram.
 
 ### Portal del cliente
 
-En **Datos**, la tarjeta «Portal del cliente» dice cómo entra el cliente al portal con su número de documento:
+En los datos del cliente, la tarjeta «Portal del cliente» dice cómo entra el cliente al portal con su número de documento:
 
 - **Contraseña propia**, con la fecha y hora del último cambio: la eligió él.
 - **Contraseña por defecto**: todavía entra con la contraseña de su empresa ([Contraseña del portal](../portal/contrasena-del-portal.md)); el portal le pedirá elegir una propia.
