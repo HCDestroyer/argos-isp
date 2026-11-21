@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, verDatosCliente } from './ayudas'
+import { elegirRouter, entrar, verDatosCliente } from './ayudas'
 
 /**
  * Rediseño, fase 2 (tableros NuevoClientes, NuevoClienteFicha y NuevoAltaCliente): contadores que
@@ -41,13 +41,37 @@ test('lista: los contadores filtran y la vista rápida flota con saldo y Cobrar'
     await expect(vista).toBeHidden()
 })
 
-test('ficha: franja con saldo, pestañas en la tarjeta, Contactos sin inventar y datos con el ícono', async ({ page }) => {
+test('ficha: saldo una sola vez en la franja, acciones en la misma fila, Contactos sin inventar y datos desde Más', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/clientes/2')
     const franja = page.locator('[data-prueba="franja-cliente"]')
     await expect(franja.getByRole('heading', { level: 1, name: 'Juan Carlos Ramírez' })).toBeVisible()
-    await expect(franja.locator('[data-prueba="franja-saldo"]')).toHaveText('Q 300.00')
-    await expect(page.locator('[data-prueba="aviso-corte"]')).toContainText('suspendido')
+    const aviso = page.locator('[data-prueba="aviso-corte"]')
+    await expect(aviso).toContainText('suspendido')
+    // El saldo vive solo en la franja (contador y «Cobrar Q …»); el aviso y el Resumen no lo repiten.
+    await expect(aviso).not.toContainText('Q ')
+    await expect(aviso.getByRole('link', { name: /Cobrar/ })).toHaveCount(0)
+    await expect(page.locator('[data-prueba="cliente-resumen"]')).not.toContainText('Saldo pendiente')
+    await expect(page.locator('[data-prueba="cliente-resumen"]')).not.toContainText('Próximo vencimiento')
+    if (page.viewportSize()!.width >= 640) {
+        await expect(franja.locator('[data-prueba="franja-saldo"]')).toHaveText('Q 300.00')
+        await expect(franja.locator('[data-prueba="franja-cobrar"]')).toHaveText('Cobrar Q 300.00')
+        // Una sola fila: las acciones a la altura del nombre, no debajo de los contadores.
+        const nombre = await franja.getByRole('heading', { level: 1 }).boundingBox()
+        const cobrar = await franja.locator('[data-prueba="franja-cobrar"]').boundingBox()
+        expect(Math.abs((cobrar!.y + cobrar!.height / 2) - (nombre!.y + nombre!.height / 2))).toBeLessThan(40)
+    }
+    else {
+        // Teléfono: el saldo sale una sola vez, en la barra de abajo.
+        await expect(franja.locator('[data-prueba="franja-saldo"]')).toBeHidden()
+        await expect(franja.locator('[data-prueba="franja-vencidas"]')).toHaveText('2')
+    }
+    // «Más» junta Promesa, Cargo único, Nuevo servicio, datos y edición.
+    await page.locator('[data-prueba="mas-cliente"]:visible').click()
+    for (const nombre of ['Promesa de pago', 'Cargo único', 'Nuevo servicio', 'Ver datos del cliente', 'Editar cliente']) {
+        await expect(page.getByRole('menuitem', { name: nombre })).toBeVisible()
+    }
+    await page.keyboard.press('Escape')
 
     const pestanas = page.locator('[data-prueba="pestanas-cliente"]')
     // Contactos (A1, #281): el titular primero, sus contactos con permisos y agregar uno.
@@ -101,3 +125,40 @@ test('alta en 3 pasos: el cliente se crea y sigue al servicio con el progreso ar
         await expect(alta).toContainText('Paso 2 de 3 · Servicio')
     }
 })
+
+test('alta, paso Servicio: router con buscador e IP automática, por red o escrita con «Ocupada por»', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/clientes/nuevo')
+    const alta = page.locator('[data-prueba="alta-cliente"]')
+    await page.getByLabel('Nombre', { exact: true }).fill('Rosa Router Pruebas')
+    await page.getByLabel('Teléfono').fill('5512 7799')
+    await page.locator('[data-prueba="alta-siguiente"]').click()
+
+    // Con pocos routers, todos salen como accesos rápidos; el buscador dice las IP libres de cada uno.
+    await expect(alta.locator('[data-prueba="routers-sugeridos"]')).toContainText('RB-Centro')
+    await elegirRouter(page, 'RB-Centro')
+    await expect(alta.locator('[data-prueba="selector-router"]')).toContainText('libres')
+    await alta.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
+
+    // IP: Automática de fábrica; el resumen lo dice.
+    const ip = alta.locator('[data-prueba="alta-ip"]')
+    await expect(ip.locator('[data-prueba="ip-automatica"]')).toContainText('La siguiente IP libre de las redes de RB-Centro')
+    await expect(alta.locator('[data-prueba="linea-resumen-ip"]')).toContainText('Automática')
+
+    // Elegir red: las redes con su ocupación; el resumen nombra la red.
+    await ip.getByRole('tab', { name: 'Elegir red' }).click()
+    await expect(ip.locator('[data-prueba="redes-ip"]')).toContainText('de 254 libres')
+    await expect(alta.locator('[data-prueba="linea-resumen-ip"]')).toContainText('Fijas del centro')
+
+    // Escribir IP: la de otro servicio sale «Ocupada por S-…» antes de guardar; una libre, «Libre».
+    await ip.getByRole('tab', { name: 'Escribir IP' }).click()
+    const campo = ip.locator('input[data-prueba="ipv4-fija-ip"], [data-prueba="ipv4-fija-ip"] input').first()
+    await campo.fill('100.64.10.12')
+    await expect(ip.locator('[data-prueba="ip-ocupada"]')).toContainText('Ocupada por S-000002')
+    await campo.fill('100.64.10.240')
+    await expect(ip.locator('[data-prueba="ip-libre"]')).toBeVisible()
+    await expect(alta.locator('[data-prueba="linea-resumen-ip"]')).toContainText('100.64.10.240')
+    await campo.fill('192.168.50.4')
+    await expect(ip).toContainText('No es de ninguna red de RB-Centro')
+})
+

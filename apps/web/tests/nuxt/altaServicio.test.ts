@@ -45,10 +45,10 @@ describe('esquemaServicio (espejo de crearServicioValidator)', () => {
         expect(cuerpo).toMatchObject({ cliente_id: 14, router_id: 1, plan_id: 2, mac: null, costo_override: null, ipv6_modo: 'radius_servicio' })
     })
 
-    it('IP fija exige red e IPv4 válida', () => {
+    it('IP fija exige una IPv4 válida; la red la deduce el alta de la IP', () => {
         const resultado = esquemaServicio.safeParse({ ...entradaValida(), asignacion: 'fija', ipv4: '100.64' })
-        const campos = resultado.error?.issues.map(issue => issue.path.join('.'))
-        expect(campos).toEqual(expect.arrayContaining(['ipv4', 'red_id']))
+        expect(resultado.error?.issues.map(issue => issue.path.join('.'))).toEqual(['ipv4'])
+        expect(esquemaServicio.safeParse({ ...entradaValida(), asignacion: 'fija', ipv4: '100.64.10.200' }).success).toBe(true)
 
         const valida = esquemaServicio.parse({ ...entradaValida(), asignacion: 'fija', red_id: 1, ipv4: '100.64.10.200' })
         expect(cuerpoServicio(valida).ipv4).toBe('100.64.10.200')
