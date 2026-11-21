@@ -18,6 +18,7 @@ import {
     EVENTOS_A_IRIS,
     EVENTOS_DESDE_060,
     EVENTOS_DESDE_080,
+    EVENTOS_DESDE_0100,
     entregarPendientesIris,
     fijarFetchEnviosIris,
     registrarEnvioIris,
@@ -29,7 +30,10 @@ import { INTENTOS_MAXIMOS, idWebhook } from '#integraciones/webhooks_salientes'
  * 0.8.0 en `iris_webhooks_080.spec.ts`).
  */
 const EVENTOS_HASTA_050 = EVENTOS_A_IRIS.filter(
-    (e) => !([...EVENTOS_DESDE_060, ...EVENTOS_DESDE_080] as readonly string[]).includes(e),
+    (e) =>
+        !([...EVENTOS_DESDE_060, ...EVENTOS_DESDE_080, ...EVENTOS_DESDE_0100] as readonly string[]).includes(
+            e,
+        ),
 )
 
 /**

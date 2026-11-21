@@ -1260,6 +1260,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{id}/a-cargo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Servicios de otros clientes que esta persona tiene a cargo (contrato Iris 0.10.1 §3.8)
+         * @description «Está a cargo de»: los contactos de otros clientes vinculados a este (`persona_cliente_id`). Con el token de Iris exige `X-Iris-Actor` y tiene los límites de `GET /contactos/buscar`.
+         */
+        get: operations["clientesACargo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{id}/contactos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Contactos del cliente con sus teléfonos (el titular primero)
+         * @description Lo que la ficha muestra como «A cargo de sus servicios». Del titular, sus números registrados son `telefono` y `movil` del cliente; en `telefonos` lleva solo los adicionales. Con el token de Iris exige `X-Iris-Actor` y tiene los límites de `GET /contactos/buscar`.
+         */
+        get: operations["clientesContactos"];
+        put?: never;
+        /**
+         * Crear un contacto del cliente
+         * @description Con relación, servicios (null = todos), permisos (todos encendidos por defecto) y números E.164 (uno principal). `relacion: titular` → `422 contacto_titular_no_permitido`. Con el token de Iris: `X-Iris-Actor` obligatoria y nunca `asistente_ia` (`403 actor_ia_no_permitido`). Emite `cliente.contactos_cambiados` (sin números). `Idempotency-Key` obligatoria.
+         */
+        post: operations["clientesCrearContacto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{id}/contrasena-portal": {
         parameters: {
             query?: never;
@@ -1326,6 +1370,50 @@ export interface paths {
          * @description Multiempresa: una sección por empresa (`empresas[]`, con su marca, saldo, saldo a favor, facturas y movimientos) dentro del alcance del usuario; `saldo` y `saldo_a_favor` de la raíz son el total, solo informativo. Con `empresa_id`, solo esa empresa (403 si no está en el alcance).
          */
         get: operations["clientesEstadoCuenta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{id}/identidad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver la identidad del titular: vigente y anterior (cada vista queda auditada)
+         * @description Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).
+         */
+        get: operations["clientesVerIdentidad"];
+        put?: never;
+        /**
+         * Registrar la identidad del titular (contrato Iris 0.10.0 §3.4.3)
+         * @description `multipart/form-data`: `frente` (obligatoria) y `reverso` (opcional), JPEG o PNG hasta 5 MB (`413 tamano_excedido`, `422 mime_no_permitido`), y los campos de texto. `mayor_de_edad` y `coincide` deben ser true. Se guarda cifrada en reposo como versión nueva (solo quedan la vigente y la anterior). Desde Iris: `X-Iris-Actor`, nunca el asistente, solo para el cliente de un servicio pendiente de Iris (`422 cliente_sin_instalacion`, `403 servicio_no_de_iris`), `Idempotency-Key = iris:identidad:<orden_id>:<toma>`. Cliente con historial: documento y nombre deben coincidir (`422 titular_no_coincide`). Nunca escribe `nit_cui`. Emite `cliente.identidad_registrada` sin número ni foto. El `detail` y los `errors[]` nunca repiten el valor recibido.
+         */
+        post: operations["clientesRegistrarIdentidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{id}/identidad/{identidadId}/{parte}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver una foto del documento del titular (cada vista queda auditada)
+         * @description `parte` = `frente` o `reverso`. Solo con `clientes.ver_identidad`; nunca con el token de Iris (403).
+         */
+        get: operations["clientesVerFotoIdentidad"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1946,6 +2034,50 @@ export interface paths {
         };
         /** Constancias de retención recibidas de clientes y emitidas a proveedores */
         get: operations["constanciasListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contactos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Editar un contacto del cliente
+         * @description Con `version` (`409 conflicto_version`). Desde Iris, cualquier `PUT` sobre el contacto titular responde `422 contacto_titular_no_permitido`. Cambiar los números revalida el vínculo `persona_cliente_id`. `Idempotency-Key` obligatoria.
+         */
+        put: operations["contactosEditar"];
+        post?: never;
+        /**
+         * Quitar un contacto del cliente
+         * @description Con `version`. El titular no se quita (`422 contacto_titular`; desde Iris, `422 contacto_titular_no_permitido`). Rompe su vínculo `persona_cliente_id`. `Idempotency-Key` obligatoria.
+         */
+        delete: operations["contactosQuitar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contactos/buscar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * De quién es un número de teléfono (contrato Iris 0.10.0 §3.5)
+         * @description `telefono` en E.164. Una fila por cliente y contacto: el titular (el número es su `telefono` o `movil`; `adicional: true` si es uno de sus números adicionales, que Iris trata como no verificado) o un contacto (`a_cargo: true`). Solo clientes dentro del alcance de empresas. Nunca devuelve otros números ni documentos. Con el token de Iris exige `X-Iris-Actor`. Límite: 60 por minuto por token y 20 por actor (`429 demasiadas_busquedas` con `Retry-After`). Cada búsqueda queda auditada con el número enmascarado.
+         */
+        get: operations["contactosBuscar"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9460,6 +9592,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/titulares-iris": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cambios de titular que llegaron por Iris (para revisar los asignados a un cliente existente)
+         * @description Contrato Iris 0.10.0 (ajuste aj, decisión 9 del PM): `existente=true` lista los servicios que Iris asignó al momento a un cliente que ya existía, para que caja o supervisión los revise. Filtrado por las empresas de la petición.
+         */
+        get: operations["reportesTitularesIris"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles": {
         parameters: {
             query?: never;
@@ -10449,6 +10601,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/cambiar-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el plan de un servicio pendiente de instalación (contrato Iris 0.10.0 §3.4.5)
+         * @description Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`), a un plan de `GET /planes?router_id=&modo=` (activo, del mismo modo y asignado a todos los routers o al del servicio; si no, `422 plan_no_permitido`). Sin factura ni prorrateo. `version` opcional (`409 conflicto_version`). Emite `servicio.config_cambiada` con `plan` y `precio` y la orden en `origen_tipo`/`origen_id`. Iris: `Idempotency-Key = iris:plan:<orden_id>:<cambio_id>`, `X-Iris-Actor` y solo servicios de Iris.
+         */
+        post: operations["serviciosCambiarPlanPendiente"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/cambiar-titular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar el titular de un servicio pendiente (contrato Iris 0.10.0 §3.4.4)
+         * @description `multipart/form-data`: la parte `datos` (JSON) y las fotos `frente` y `reverso?` de A41. Quién es el titular lo decide Argos (nunca se manda `cliente_id`): mismo documento y nombre normalizado en la empresa del servicio → ese cliente (`existente: true`, aviso informativo); mismo documento y otro nombre → `422 titular_no_coincide`; si no, un cliente nuevo. Solo en pendiente (`422 servicio_no_pendiente`); sin `frente` o sin `coincide`, `422 evidencia_requerida`; 2 cambios por servicio y 10 por empresa y actor al día (`429 demasiados_cambios_titular` con `Retry-After`). El cliente anterior sin servicios ni movimientos se elimina. Emite `servicio.titular_cambiado` y `cliente.identidad_registrada`. Iris: `Idempotency-Key = iris:titular:<orden_id>:<cambio_id>` y `X-Iris-Actor`.
+         */
+        post: operations["serviciosCambiarTitular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/codigo-corte": {
         parameters: {
             query?: never;
@@ -10463,6 +10655,26 @@ export interface paths {
         get: operations["servicioCodigoCorte"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/completar-datos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Completar los datos del titular y del lugar antes de activar (contrato Iris 0.10.0 §3.4.6)
+         * @description Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`) y para el cliente de ese servicio. Del cliente solo llena vacíos (`422 campo_ya_registrado`); el `nombre` se corrige solo con `identidad_id` de su identidad vigente. Cliente con historial: sin `telefono`, `movil`, `email`, `nombre`, `tipo_documento_fiscal` ni `nit_cui` (`422 cliente_con_historial`). Del servicio corrige dirección, referencia, coordenadas y `precision_m`. Teléfono y correo agregados no cuentan como registrados hasta que el titular los confirme. Emite `cliente.actualizado` y `servicio.datos_cambiados`. Iris: `Idempotency-Key = iris:datos:<orden_id>:<n>` y `X-Iris-Actor`.
+         */
+        post: operations["serviciosCompletarDatos"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10770,6 +10982,26 @@ export interface paths {
         put?: never;
         /** Reactivar servicio (desde suspendido o limitado, queda activo) */
         post: operations["serviciosReactivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/reservar-ip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reservar en sitio la IP de un servicio pendiente (contrato Iris 0.10.0 §3.4.1)
+         * @description Para IP fija o amarre IP-MAC, cuando el equipo necesita la IP antes de activar (con PPPoE no hace falta). Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`). Una segunda llamada devuelve la misma reserva. Sin IP libre: `422 sin_ip_disponible`. La activación la usa; se libera al retirar y vence a los 30 días sin activar. Iris: `Idempotency-Key = iris:reservar_ip:<orden_id>:<router_id>`, `X-Iris-Actor` y solo servicios de Iris (`403 servicio_no_de_iris`).
+         */
+        post: operations["serviciosReservarIp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12684,6 +12916,22 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        CambioTitularIris: {
+            id: number;
+            servicio_id: number;
+            empresa_id: number;
+            de_cliente_id: number;
+            a_cliente_id: number;
+            existente: boolean;
+            posible_duplicado: boolean;
+            de_cliente_eliminado: boolean;
+            /** @enum {string} */
+            motivo_codigo: "menor_de_edad" | "otro";
+            origen_tipo: string | null;
+            origen_id: string | null;
+            /** Format: date-time */
+            ocurrido_en: string;
+        };
         CampoPersonalizado: {
             id: number;
             /** @description Clave en `Cliente.campos_personalizados`; no cambia */
@@ -14057,6 +14305,44 @@ export interface components {
                 producto_id: number;
                 monto: components["schemas"]["Dinero"];
             }[];
+        };
+        ContactoCliente: {
+            contacto_id: number;
+            cliente_id: number;
+            empresa_id: number | null;
+            nombre: string;
+            /** @enum {string} */
+            relacion: "titular" | "familiar" | "inquilino" | "empleado" | "otro";
+            es_titular: boolean;
+            /** @description Servicios del cliente a los que aplica; null = todos */
+            servicios: number[] | null;
+            permisos: components["schemas"]["PermisosContacto"];
+            /** @description En el titular, solo los adicionales: sus números registrados son `telefono` y `movil` del cliente */
+            telefonos: components["schemas"]["TelefonoContacto"][];
+            /** @description Otro cliente que es esta persona (A46) */
+            persona_cliente_id: number | null;
+            /** @enum {string} */
+            origen: "argos" | "iris" | "portal";
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ContactoEncontrado: {
+            cliente_id: number;
+            empresa_id: number | null;
+            contacto_id: number;
+            nombre: string;
+            /** @enum {string} */
+            relacion: "titular" | "familiar" | "inquilino" | "empleado" | "otro";
+            es_titular: boolean;
+            /** @description El número es un adicional del titular (no verificado) */
+            adicional: boolean;
+            /** @description El número no es del titular (0.10.1, §3.8) */
+            a_cargo: boolean;
+            servicios: number[] | null;
+            permisos: components["schemas"]["PermisosContacto"];
         };
         ConteoInventario: {
             id: number;
@@ -16247,6 +16533,31 @@ export interface components {
                 resumen: string | null;
             }[];
         };
+        IdentidadCliente: {
+            identidad_id: number;
+            version: number;
+            vigente: boolean;
+            /** @enum {string} */
+            documento_tipo: "dpi" | "pasaporte";
+            documento_numero: string;
+            /** @description Como aparece en el documento */
+            nombre: string;
+            /** @enum {string} */
+            metodo: "foto_documento" | "revision_panel";
+            /** @description false: cliente con historial sin documento; no vale para verificar hasta que el titular la confirme */
+            confirmada: boolean;
+            /** Format: date-time */
+            verificado_en: string;
+            tiene_reverso: boolean;
+            origen_tipo: string | null;
+            origen_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IdentidadRegistrada: {
+            identidad_id: number;
+            version: number;
+        };
         ImpuestoFiscal: {
             id: number;
             pais: string;
@@ -17012,7 +17323,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -17689,6 +18000,12 @@ export interface components {
             nombre: components["schemas"]["NombrePermiso"];
             descripcion: string | null;
         };
+        PermisosContacto: {
+            consultar: boolean;
+            reportar: boolean;
+            pagar: boolean;
+            avisos: boolean;
+        };
         Plan: {
             id: number;
             nombre: string;
@@ -17719,6 +18036,13 @@ export interface components {
              * @enum {string}
              */
             tipo: "residencial" | "empresarial" | "dedicado";
+            /**
+             * @description Contrato Iris 0.10.0 (A40): residencial, o empresarial para los tipos empresarial y dedicado
+             * @enum {string}
+             */
+            modo?: "residencial" | "empresarial";
+            /** @description Routers con implementación propia del plan; con `global` vale en todos (A40) */
+            routers?: number[];
             global: boolean;
             activo: boolean;
             /** @description Control optimista: envíala al editar */
@@ -17785,6 +18109,13 @@ export interface components {
              * @enum {string}
              */
             tipo: "residencial" | "empresarial" | "dedicado";
+            /**
+             * @description Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado
+             * @enum {string}
+             */
+            modo?: "residencial" | "empresarial";
+            /** @description Routers con implementación propia del plan (A40) */
+            routers?: number[];
         };
         PlanRouter: {
             id: number;
@@ -20138,6 +20469,17 @@ export interface components {
             /** Format: date-time */
             marcado_en: string | null;
         };
+        ReservaIp: {
+            ipv4: string | null;
+            /** @description Prefijo IPv6 delegado reservado (o null) */
+            prefijo_v6: string | null;
+            prefijo_enlace_v6: string | null;
+            /**
+             * Format: date-time
+             * @description Si no se activa antes, la reserva se libera (30 días); null si la IP no es una reserva en sitio
+             */
+            vence_en: string | null;
+        };
         ResolucionIp: {
             servicio_id: number;
             cliente_id: number;
@@ -20741,6 +21083,10 @@ export interface components {
         };
         Servicio: {
             id: number;
+            /** @description Código del servicio (`S-000412`): automático, único e inmutable (contrato Iris 0.10.0 §3.7). Es el «número de servicio» con que el cliente se identifica */
+            codigo?: string;
+            /** @description Nombre opcional del servicio (hasta 60: «Casa», «Negocio»); texto del cliente */
+            nombre?: string | null;
             cliente_id: number;
             /** @description Empresa (NIT) que factura el servicio */
             empresa_id: number;
@@ -20771,6 +21117,8 @@ export interface components {
             /** @description Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>` */
             contacto_telefono?: string | null;
             coordenadas: string | null;
+            /** @description Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6) */
+            precision_m?: number | null;
             /** Format: date */
             fecha_instalacion: string | null;
             /**
@@ -21390,6 +21738,14 @@ export interface components {
                 nombre: string;
             }[];
         };
+        TelefonoContacto: {
+            /** @description E.164 (`+50255123344`) */
+            numero: string;
+            whatsapp: boolean;
+            principal: boolean;
+            /** @description Número adicional del titular: no cuenta como registrado (contacto no verificado) */
+            adicional: boolean;
+        };
         TelegramWebhookRespuesta: {
             ok: boolean;
         };
@@ -21436,6 +21792,19 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        TitularCambiado: {
+            servicio_id: number;
+            titular: {
+                cliente_id: number;
+                /** @description El titular ya era cliente (documento y nombre iguales) */
+                existente: boolean;
+            };
+            /** @description Otro cliente con el mismo nombre o teléfono y otro documento: lo revisa una persona de Argos */
+            posible_duplicado: boolean;
+            identidad_id: number;
+            de_cliente_id: number;
+            de_cliente_eliminado: boolean;
         };
         TokenApi: {
             id: number;
@@ -27412,6 +27781,12 @@ export interface operations {
                     canal_preferido?: "correo" | "telegram" | "whatsapp";
                     /** @description Código del cliente en el sistema anterior (importador); no reemplaza a `codigo` */
                     codigo_externo?: string | null;
+                    /** @description Números adicionales del titular (contrato Iris 0.10.0 §3.2, hasta 4, E.164): van a su contacto titular y no cuentan como registrados */
+                    telefonos_adicionales?: {
+                        /** @description E.164 */
+                        numero: string;
+                        whatsapp?: boolean;
+                    }[];
                     /** @description Código de referido de otro cliente (programa de lealtad, 8 caracteres). 422 `referido_invalido` si no existe o el referidor tiene el mismo NIT o CUI */
                     codigo_referido?: string | null;
                 };
@@ -27607,6 +27982,236 @@ export interface operations {
                 };
             };
             /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesACargo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contactos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ContactoCliente"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.buscar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesContactos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contactos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ContactoCliente"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.buscar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesCrearContacto: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre: string;
+                    /**
+                     * @description `titular` no se admite (422 contacto_titular_no_permitido): el titular es el cliente
+                     * @enum {string}
+                     */
+                    relacion: "titular" | "familiar" | "inquilino" | "empleado" | "otro";
+                    /** @description Servicios del cliente a los que aplica; null o ausente = todos */
+                    servicios?: number[] | null;
+                    /** @description consultar (saldo, estado, facturas), reportar (tickets), pagar (comprobantes y promesas), avisos (avisos de cobro). Los que no vienen, encendidos */
+                    permisos?: {
+                        consultar?: boolean;
+                        reportar?: boolean;
+                        pagar?: boolean;
+                        avisos?: boolean;
+                    };
+                    telefonos: {
+                        /** @description E.164 (`+50255123344`); también 8 dígitos de Guatemala. Se guarda en E.164 */
+                        numero: string;
+                        whatsapp?: boolean;
+                        /** @description Exactamente uno por contacto (con un solo número, ese es el principal) */
+                        principal?: boolean;
+                    }[];
+                    /** @description Otro cliente de la misma empresa que es esta persona (A46). Desde Iris solo se vincula si un número del contacto es el teléfono verificado de ese cliente; si no, queda suelto */
+                    persona_cliente_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactoCliente"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -27863,6 +28468,214 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesVerIdentidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identidades */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["IdentidadCliente"][];
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.ver_identidad */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesRegistrarIdentidad: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @enum {string} */
+                    documento_tipo: "dpi" | "pasaporte";
+                    /** @description DPI: 13 dígitos con departamento y municipio. Pasaporte: 5 a 20 letras o dígitos */
+                    documento_numero: string;
+                    /** @description Como aparece en el documento */
+                    nombre: string;
+                    /** @description Debe ser true (sin fecha de nacimiento) */
+                    mayor_de_edad: boolean;
+                    /** @description true: el técnico comprobó que la foto es de quien está presente */
+                    coincide: boolean;
+                    /** Format: date-time */
+                    verificado_en: string;
+                    /**
+                     * @description foto_documento (el técnico en sitio) o revision_panel (un supervisor revisa la foto tomada en sitio)
+                     * @enum {string}
+                     */
+                    metodo: "foto_documento" | "revision_panel";
+                    /** @description Sistema y documento que lo pide: `iris_orden` */
+                    origen_tipo?: string;
+                    /** @description Id de la orden de Iris */
+                    origen_id?: string;
+                    /**
+                     * Format: binary
+                     * @description Foto del frente del documento (JPEG o PNG, hasta 5 MB)
+                     */
+                    frente: string;
+                    /**
+                     * Format: binary
+                     * @description Foto del reverso (opcional)
+                     */
+                    reverso?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Identidad registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentidadRegistrada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.registrar_identidad; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clientesVerFotoIdentidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                identidadId: number;
+                parte: "frente" | "reverso";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Foto (JPEG o PNG) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso clientes.ver_identidad */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -30821,6 +31634,259 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    contactosEditar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    /** @enum {string} */
+                    relacion?: "titular" | "familiar" | "inquilino" | "empleado" | "otro";
+                    /** @description Servicios del cliente a los que aplica; null o ausente = todos */
+                    servicios?: number[] | null;
+                    /** @description consultar (saldo, estado, facturas), reportar (tickets), pagar (comprobantes y promesas), avisos (avisos de cobro). Los que no vienen, encendidos */
+                    permisos?: {
+                        consultar?: boolean;
+                        reportar?: boolean;
+                        pagar?: boolean;
+                        avisos?: boolean;
+                    };
+                    /** @description Reemplaza la lista completa. En el contacto titular, solo números adicionales (hasta 4, sin principal) */
+                    telefonos?: {
+                        /** @description E.164 (`+50255123344`); también 8 dígitos de Guatemala. Se guarda en E.164 */
+                        numero: string;
+                        whatsapp?: boolean;
+                        /** @description Exactamente uno por contacto (con un solo número, ese es el principal) */
+                        principal?: boolean;
+                    }[];
+                    /** @description Otro cliente de la misma empresa que es esta persona (A46). Desde Iris solo se vincula si un número del contacto es el teléfono verificado de ese cliente; si no, queda suelto */
+                    persona_cliente_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactoCliente"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    contactosQuitar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Contacto quitado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactoCliente"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    contactosBuscar: {
+        parameters: {
+            query: {
+                /** @description Número en E.164 (`+50255123344`) */
+                telefono: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coincidencias */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactoEncontrado"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso contactos.buscar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -51631,6 +52697,8 @@ export interface operations {
                 activo?: boolean;
                 router_id?: number;
                 tipo?: "residencial" | "empresarial" | "dedicado";
+                /** @description Contrato Iris 0.10.0 (A40): solo los planes aplicables a ese modo, activos y (con router_id) asignados a todos los routers o a ese router. empresarial incluye dedicado */
+                modo?: "residencial" | "empresarial";
             };
             header?: never;
             path?: never;
@@ -59099,6 +60167,64 @@ export interface operations {
             };
         };
     };
+    reportesTitularesIris: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description true: los asignados a un cliente que ya existía */
+                existente?: boolean;
+                posible_duplicado?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cambios de titular */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CambioTitularIris"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     rolesListar: {
         parameters: {
             query?: never;
@@ -59149,7 +60275,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -59207,7 +60333,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -62318,6 +63444,8 @@ export interface operations {
                     /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
+                    /** @description Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda */
+                    nombre?: string | null;
                     direccion?: string | null;
                     /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
                     referencia?: string | null;
@@ -62501,6 +63629,8 @@ export interface operations {
                     /** @description Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con credenciales (nunca el valor; en audit.cambios queda ***) */
                     pass_ppp?: string;
                     mac?: string | null;
+                    /** @description Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda */
+                    nombre?: string | null;
                     direccion?: string | null;
                     /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
                     referencia?: string | null;
@@ -63383,6 +64513,179 @@ export interface operations {
             };
         };
     };
+    serviciosCambiarPlanPendiente: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    plan_id: number;
+                    /** @enum {string} */
+                    motivo: "mas_velocidad" | "menos_velocidad" | "otro";
+                    /** @description Obligatorio con motivo otro; queda solo en la auditoría */
+                    motivo_texto?: string;
+                    /** @description Opcional (§3.4): si viene y no coincide, 409 conflicto_version */
+                    version?: number;
+                    /** @description Sistema y documento que lo pide: `iris_orden` */
+                    origen_tipo: string;
+                    /** @description Id de la orden de Iris */
+                    origen_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Servicio con el plan nuevo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Servicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.cambiar_plan_pendiente; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosCambiarTitular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description JSON: { cliente: { nombre, documento_tipo, documento_numero, mayor_de_edad, telefono, whatsapp, email?, tipo_documento_fiscal?, nit_cui?, relacion? }, identidad: { coincide, verificado_en, metodo }, motivo_codigo, motivo, version?, origen_tipo, origen_id } */
+                    datos: string;
+                    /**
+                     * Format: binary
+                     * @description Foto del frente del documento del titular (JPEG o PNG, hasta 5 MB)
+                     */
+                    frente?: string;
+                    /**
+                     * Format: binary
+                     * @description Foto del reverso (opcional)
+                     */
+                    reverso?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Titular cambiado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TitularCambiado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.cambiar_titular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     servicioCodigoCorte: {
         parameters: {
             query?: never;
@@ -63423,6 +64726,108 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosCompletarDatos: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente?: {
+                        /** @description Solo con identidad_id: el nombre como aparece en el documento */
+                        nombre?: string;
+                        telefono?: string;
+                        whatsapp?: boolean;
+                        /** Format: email */
+                        email?: string;
+                        /** @enum {string} */
+                        tipo_documento_fiscal?: "cf" | "nit" | "cui";
+                        nit_cui?: string | null;
+                        /** @enum {string} */
+                        relacion?: "titular" | "familiar" | "otro";
+                    };
+                    servicio?: {
+                        direccion?: string;
+                        referencia?: string;
+                        /** @description Latitud y longitud: "14.6349,-90.5069" */
+                        coordenadas?: string;
+                        precision_m?: number;
+                    };
+                    identidad_id?: number;
+                    /** @description Opcional (§3.4): si viene y no coincide, 409 conflicto_version */
+                    version?: number;
+                    /** @description Sistema y documento que lo pide: `iris_orden` */
+                    origen_tipo: string;
+                    /** @description Id de la orden de Iris */
+                    origen_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Servicio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Servicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.completar_datos; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -64726,6 +66131,87 @@ export interface operations {
             };
         };
     };
+    serviciosReservarIp: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Router final; si es otro, el servicio pasa a él antes de reservar (el plan debe estar asignado) */
+                    router_id?: number;
+                    /** @description Sistema y documento que lo pide: `iris_orden` */
+                    origen_tipo: string;
+                    /** @description Id de la orden de Iris */
+                    origen_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Reserva */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservaIp"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.reservar_ip; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     serviciosRetirar: {
         parameters: {
             query?: never;
@@ -65764,7 +67250,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "apariencia.editar" | "apariencia.quitar_fondo_login" | "apariencia.quitar_logo_login" | "apariencia.subir_fondo_login" | "apariencia.subir_logo_login" | "apariencia.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.registrar_identidad" | "clientes.restaurar_contrasena_portal" | "clientes.ver" | "clientes.ver_identidad" | "clientes.verificar_identidad" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.cargar_borrador" | "compras.confirmar_borrador" | "compras.descartar_borrador" | "compras.editar_borrador" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.reconexion_temporal" | "comprobantes.registrar" | "comprobantes.ver" | "contactos.buscar" | "contactos.gestionar" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.activar" | "documentos.crear" | "documentos.desactivar" | "documentos.editar" | "documentos.predeterminar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.editar_monto_periodo" | "facturas.emitir_cargo_unico" | "facturas.emitir_periodo_anterior" | "facturas.emitir_periodos" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.adjuntar_documento_traslado" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cancelar_traslado" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.configurar" | "inventario.configurar_ia" | "inventario.consumir" | "inventario.contar" | "inventario.crear_traslado" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.recibir_traslado" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.editar" | "ipv6.migrar" | "ipv6.ver" | "iris.abrir" | "iris.configurar" | "iris.generar_token" | "iris.revocar_token" | "iris.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.registrar_consentimiento" | "notificaciones.ver" | "olts.crear" | "olts.editar" | "olts.eliminar" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.sincronizar" | "planes.ver" | "plantillas.asignar_sin_plantilla" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "portal.configurar_contrasena_defecto" | "portal_corte.configurar" | "portal_corte.ver" | "productos.crear" | "productos.crear_lote" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "qos.gestionar" | "qos.ver" | "red.ver" | "red_acceso.adoptar" | "red_acceso.descubrir" | "red_acceso.tomar_control" | "red_acceso.ver" | "redes.crear" | "redes.editar" | "redes.migrar" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.cambiar_tipo_conexion" | "routers.conexion_clave" | "routers.crear" | "routers.editar" | "routers.eliminar" | "routers.generar_script" | "routers.marcar_migrado" | "routers.probar_conexion" | "routers.reconciliar" | "routers.rotar_conexion" | "routers.unificar_control_velocidad" | "routers.unir" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cambiar_plan_pendiente" | "servicios.cambiar_titular" | "servicios.cancelar_plan_temporal" | "servicios.completar_datos" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.eliminar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.reservar_ip" | "servicios.retirar" | "servicios.sincronizar_router" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "servidores_pppoe.crear" | "servidores_pppoe.editar" | "servidores_pppoe.eliminar" | "sesiones.desconectar" | "sesiones.ver" | "sistema.recalcular_almacenamiento" | "sistema.ver_almacenamiento" | "sistema.ver_registro" | "sistema.ver_salud" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tipos_producto.crear" | "tipos_producto.desactivar" | "tipos_producto.editar" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "vlans.crear" | "vlans.editar" | "vlans.eliminar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
