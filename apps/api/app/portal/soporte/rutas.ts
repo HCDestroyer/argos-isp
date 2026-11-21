@@ -153,8 +153,8 @@ const soporte: Ruta[] = [
                 disponible: null,
                 sin_iris: null,
                 apagado: 'El soporte en línea no está disponible ahora. Intenta de nuevo más tarde.',
-                version: 'El soporte en línea aún no está disponible. Intenta de nuevo más tarde.',
-                sin_token: 'El soporte en línea aún no está disponible. Intenta de nuevo más tarde.',
+                version: 'El soporte en línea no está disponible por ahora. Intenta de nuevo más tarde.',
+                sin_token: 'El soporte en línea no está disponible por ahora. Intenta de nuevo más tarde.',
                 sin_respuesta: 'No pudimos contactar al equipo de soporte. Intenta de nuevo en unos minutos.',
             }
             return {
