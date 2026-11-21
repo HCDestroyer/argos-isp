@@ -196,7 +196,9 @@ export default class CompletarDatosServicio extends DomainAction<EntradaCompleta
         const lugar = input.servicio ?? {}
         const columnasServicio: Record<string, unknown> = {}
         for (const campo of ['direccion', 'referencia', 'coordenadas', 'precision_m'] as const) {
-            if (lugar[campo] !== undefined) columnasServicio[campo] = lugar[campo]
+            if (lugar[campo] === undefined) continue
+            // metros enteros (la precisión del GPS no necesita decimales)
+            columnasServicio[campo] = campo === 'precision_m' ? Math.round(lugar.precision_m!) : lugar[campo]
         }
         if (Object.keys(columnasServicio).length > 0) {
             await t.trx

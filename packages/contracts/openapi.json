@@ -112024,6 +112024,22 @@
               "dedicado"
             ],
             "description": "Tipo del plan (residencial, empresarial, dedicado)"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial"
+            ],
+            "description": "Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Routers con implementación propia del plan (A40)"
           }
         }
       },
@@ -124643,10 +124659,10 @@
           },
           "precision_m": {
             "type": [
-              "number",
+              "integer",
               "null"
             ],
-            "description": "Precisión del GPS de las coordenadas en metros (Iris 0.10.0 §3.4.6)"
+            "description": "Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6)"
           },
           "fecha_instalacion": {
             "type": [

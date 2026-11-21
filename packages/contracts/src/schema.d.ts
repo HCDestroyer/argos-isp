@@ -18109,6 +18109,13 @@ export interface components {
              * @enum {string}
              */
             tipo: "residencial" | "empresarial" | "dedicado";
+            /**
+             * @description Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado
+             * @enum {string}
+             */
+            modo?: "residencial" | "empresarial";
+            /** @description Routers con implementación propia del plan (A40) */
+            routers?: number[];
         };
         PlanRouter: {
             id: number;
@@ -21110,7 +21117,7 @@ export interface components {
             /** @description Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>` */
             contacto_telefono?: string | null;
             coordenadas: string | null;
-            /** @description Precisión del GPS de las coordenadas en metros (Iris 0.10.0 §3.4.6) */
+            /** @description Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6) */
             precision_m?: number | null;
             /** Format: date */
             fecha_instalacion: string | null;

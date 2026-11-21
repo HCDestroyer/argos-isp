@@ -8,7 +8,7 @@ export default class extends BaseSchema {
     async up() {
         this.schema.raw(`
             ALTER TABLE core.servicios
-                ADD COLUMN precision_m numeric(8, 1) CHECK (precision_m IS NULL OR (precision_m >= 0 AND precision_m <= 100000));
+                ADD COLUMN precision_m integer CHECK (precision_m IS NULL OR (precision_m >= 0 AND precision_m <= 100000));
         `)
     }
 

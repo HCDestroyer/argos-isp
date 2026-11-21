@@ -282,7 +282,12 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 ipv6_duid: input.ipv6_duid ?? null,
                 servidor_pppoe_id: servidor?.id ?? null,
                 ...(input.estado_inicial === 'pendiente_instalacion'
-                    ? { estado: 'pendiente_instalacion', instalado_en: null }
+                    ? {
+                          estado: 'pendiente_instalacion',
+                          instalado_en: null,
+                          // A38: sin IP pedida a mano, la activación la asigna
+                          ip_al_activar: !(input.ipv4 || input.red_ipv4_id || input.prefijo_delegado_v6),
+                      }
                     : {}),
             })
             .returning('id')) as Array<{ id: number }>

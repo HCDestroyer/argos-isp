@@ -78,7 +78,11 @@ export default class ReservarIpServicio extends DomainAction<EntradaReservarIp, 
         await t.trx
             .from('core.servicios')
             .where('id', input.id)
-            .update({ ip_reservada_en: t.trx.knexRawQuery('now()'), updated_at: t.trx.knexRawQuery('now()') })
+            .update({
+                ip_reservada_en: t.trx.knexRawQuery('now()'),
+                ip_al_activar: false,
+                updated_at: t.trx.knexRawQuery('now()'),
+            })
         await registrarTramo(t.trx, input.id, 'reserva_ip')
         await t.registrarCambios(
             { tipo: 'servicio', id: input.id },

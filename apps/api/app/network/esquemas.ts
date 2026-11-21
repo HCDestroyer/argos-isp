@@ -641,48 +641,57 @@ export const PlanRouter = definirEsquema(
 /** Plan con su configuración efectiva en un router (plantilla + `planes_routers`). */
 export const PlanEfectivo = definirEsquema(
     'PlanEfectivo',
-    objeto({
-        id,
-        nombre: texto,
-        precio: Dinero,
-        bajada_kbps: entero,
-        subida_kbps: entero,
-        bajada_limitada_kbps: entero,
-        subida_limitada_kbps: entero,
-        reuso: { ...entero, description: 'Reuso efectivo en el router' },
-        ...velocidadPlan,
-        dual_stack: enumerado(['ambos', 'v4', 'v6']),
-        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-        global: booleano,
-        activo: booleano,
-        ...auditable,
-        router_id: id,
-        implementacion: nulable(PlanRouter),
-        rate_limit: {
-            type: 'string',
-            description:
-                'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            precio: Dinero,
+            bajada_kbps: entero,
+            subida_kbps: entero,
+            bajada_limitada_kbps: entero,
+            subida_limitada_kbps: entero,
+            reuso: { ...entero, description: 'Reuso efectivo en el router' },
+            ...velocidadPlan,
+            dual_stack: enumerado(['ambos', 'v4', 'v6']),
+            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+            global: booleano,
+            activo: booleano,
+            ...auditable,
+            router_id: id,
+            implementacion: nulable(PlanRouter),
+            rate_limit: {
+                type: 'string',
+                description:
+                    'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
+            },
+            rate_limit_limitado: {
+                type: 'string',
+                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+            },
+            profile_ppp: nulable(texto),
+            pool_ipv4: nulable(texto),
+            pool_ipv6_enlace: nulable(texto),
+            pool_ipv6_delegacion: nulable(texto),
+            local_address: {
+                ...nulable(texto),
+                deprecated: true,
+                description:
+                    'Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)',
+            },
+            no_crear_reglas: booleano,
+            tipo: {
+                ...enumerado(TIPOS_PLAN),
+                description: 'Tipo del plan (residencial, empresarial, dedicado)',
+            },
+            modo: {
+                ...enumerado(['residencial', 'empresarial']),
+                description:
+                    'Contrato Iris 0.10.0 (A40): residencial, o empresarial para empresarial y dedicado',
+            },
+            routers: { ...lista(id), description: 'Routers con implementación propia del plan (A40)' },
         },
-        rate_limit_limitado: {
-            type: 'string',
-            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
-        },
-        profile_ppp: nulable(texto),
-        pool_ipv4: nulable(texto),
-        pool_ipv6_enlace: nulable(texto),
-        pool_ipv6_delegacion: nulable(texto),
-        local_address: {
-            ...nulable(texto),
-            deprecated: true,
-            description:
-                'Obsoleto: no se usa; el local-address sale del gateway de la red IPv4 (contratos/red-acceso.md §2)',
-        },
-        no_crear_reglas: booleano,
-        tipo: {
-            ...enumerado(TIPOS_PLAN),
-            description: 'Tipo del plan (residencial, empresarial, dedicado)',
-        },
-    }),
+        ['modo', 'routers'],
+    ),
 )
 
 export const Sesion = definirEsquema(

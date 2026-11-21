@@ -155,7 +155,7 @@ function columnas(cliente: QueryClientContract) {
         's.contacto_nombre',
         's.contacto_telefono',
         's.coordenadas',
-        cliente.raw('s.precision_m::float8 AS precision_m'),
+        's.precision_m',
         cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
         's.instalado_en',
         's.planta',

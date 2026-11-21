@@ -41,7 +41,7 @@ export default class VencerReservaIp extends DomainAction<EntradaVencerReservaIp
         await t.trx
             .from('core.servicios')
             .where('id', input.id)
-            .update({ ip_reservada_en: null, updated_at: t.trx.knexRawQuery('now()') })
+            .update({ ip_reservada_en: null, ip_al_activar: true, updated_at: t.trx.knexRawQuery('now()') })
         await registrarTramo(t.trx, input.id, 'reserva_ip_vencida')
         await t.registrarCambios({ tipo: 'servicio', id: input.id }, antes, {
             ipv4: null,

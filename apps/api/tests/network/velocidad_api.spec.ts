@@ -261,6 +261,11 @@ test.group('Velocidad · excepción por router', () => {
                     campos: ['rafaga_subida_kbps', 'prioridad'],
                 },
             },
+            // un router nuevo para el plan (contrato Iris 0.10.0, A40)
+            {
+                evento: 'catalogo.cambiado',
+                payload: { catalogo: 'plan', id: planId, empresa_id: null, campos: ['routers'] },
+            },
         ])
 
         // ráfaga de la excepción ≤ MIR del plan: 422 por campo

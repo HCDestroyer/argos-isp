@@ -129,7 +129,14 @@ export default class ActivarInstalacionServicio extends DomainAction<
             )
         }
         // A38: el pendiente sin reserva recibe aquí su IPv4 y sus prefijos (422 sin_ip_disponible)
-        const asignar = !(await tieneAsignaciones(t.trx, input.id))
+        const marca = (await t.trx
+            .from('core.servicios')
+            .where('id', input.id)
+            .select('ip_al_activar')
+            .first()) as {
+            ip_al_activar: boolean
+        }
+        const asignar = marca.ip_al_activar && !(await tieneAsignaciones(t.trx, input.id))
         const asignaciones = asignar ? await asignarIpPendiente(t.trx, servicio) : null
         // Alcance de §3.4: la orden queda registrada para un servicio que ya era de Iris
         if (input.origen_tipo && input.origen_id && (await esServicioDeIris(t.trx, input.id))) {
@@ -147,6 +154,7 @@ export default class ActivarInstalacionServicio extends DomainAction<
             .update({
                 estado: 'activo',
                 ip_reservada_en: null,
+                ip_al_activar: false,
                 instalado_en: t.trx.knexRawQuery(instalado, [efectivo.toISOString()]),
                 ...(input.planta ? { planta: JSON.stringify(normalizarPlanta(input.planta)) } : {}),
                 ...(fila.fecha_instalacion === null

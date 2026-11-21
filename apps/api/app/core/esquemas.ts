@@ -489,8 +489,8 @@ export const Servicio = definirEsquema(
             },
             coordenadas: nulable(texto),
             precision_m: {
-                ...nulable({ type: 'number' }),
-                description: 'Precisión del GPS de las coordenadas en metros (Iris 0.10.0 §3.4.6)',
+                ...nulable({ type: 'integer' }),
+                description: 'Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6)',
             },
             fecha_instalacion: nulable(fecha),
             instalado_en: {

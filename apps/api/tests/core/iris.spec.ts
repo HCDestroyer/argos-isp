@@ -228,7 +228,7 @@ test.group('integraciones · iris', (group) => {
             client
                 .post(`${BASE}/resolver`)
                 .bearerToken(token)
-                .json({ ips: [s.ipv4, '203.0.113.250'] }),
+                .json({ ips: [activo.body().ipv4, '203.0.113.250'] }),
             200,
         )
         assert.equal(resuelto.body().resultados[0].servicio_id, s.id)

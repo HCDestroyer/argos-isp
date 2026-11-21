@@ -65,7 +65,7 @@ test.group('Completar datos en la instalación (A43)', () => {
             200,
         )
         assert.equal(r.body().direccion, '3a calle 4-50')
-        assert.equal(r.body().precision_m, 8.5)
+        assert.equal(r.body().precision_m, 9)
         const cliente = await db.from('core.clientes').where('id', clienteId).first()
         assert.equal(cliente.telefono, `+502 ${telefono.slice(4, 8)}-${telefono.slice(8)}`)
         assert.equal(cliente.canal_preferido, 'whatsapp')
