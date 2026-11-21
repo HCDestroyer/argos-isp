@@ -367,6 +367,7 @@ async function enviar(evento: FormSubmitEvent<SalidaNuevaOrden>) {
                 <UButton
                     v-if="puedeVer"
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     to="/inventario/traslados"

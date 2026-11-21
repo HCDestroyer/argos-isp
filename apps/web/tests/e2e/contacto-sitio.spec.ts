@@ -10,9 +10,11 @@ test('alta de cliente con referencia y de su servicio con contacto en sitio', as
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
 
-    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
-    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
-    await expect(altaCliente).toBeVisible()
+    // Desde el rediseño el alta de cliente es una página propia (formulario largo).
+    await page.getByRole('link', { name: 'Nuevo cliente' }).first().click()
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
+    const altaCliente = page.locator('#dashboard-panel-cliente-nuevo')
+    await expect(altaCliente.getByRole('button', { name: 'Crear cliente' })).toBeVisible()
     await altaCliente.getByLabel('Nombre', { exact: true }).fill('Julia Referencia Pruebas')
     await altaCliente.getByLabel('Referencia', { exact: true }).fill('Casa verde frente a la iglesia')
 

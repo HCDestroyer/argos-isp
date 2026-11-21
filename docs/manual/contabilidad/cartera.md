@@ -8,7 +8,7 @@ pantallas:
 
 La estimación para cuentas incobrables y el castigo de facturas que ya no se van a cobrar.
 
-Está en **Contabilidad → Cartera**.
+Está en **Finanzas → Cartera**.
 
 ## Quién la usa
 

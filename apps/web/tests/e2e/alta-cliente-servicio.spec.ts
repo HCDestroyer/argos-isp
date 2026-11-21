@@ -10,9 +10,11 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
 
-    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
-    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
-    await expect(altaCliente).toBeVisible()
+    // Desde el rediseño el alta de cliente es una página propia (formulario largo).
+    await page.getByRole('link', { name: 'Nuevo cliente' }).first().click()
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
+    const altaCliente = page.locator('#dashboard-panel-cliente-nuevo')
+    await expect(altaCliente.getByRole('button', { name: 'Crear cliente' })).toBeVisible()
     await page.getByLabel('Nombre', { exact: true }).fill('Lucía Fernanda Pruebas')
     await page.getByLabel('Teléfono').fill('5555-1234')
     await page.getByRole('button', { name: 'Crear cliente' }).click()

@@ -6,7 +6,7 @@ pantallas:
 
 # Mi cuenta
 
-Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu nombre (abajo en la barra lateral) → **Mi cuenta**.
+Tus datos de usuario y las cuentas de otros sistemas vinculadas a la tuya. Se abre desde el menú de tu usuario (arriba a la derecha, tu nombre) → **Mi cuenta**.
 
 ## Quién la usa
 
@@ -16,7 +16,7 @@ Cualquier usuario con sesión. No pide permiso: cada quien ve solo su propia cue
 
 ### Mis datos
 
-Tu **Nombre**, tu **Correo** y tus **Roles** (por ejemplo, `cajero` o `soporte`). Estos datos no se cambian aquí: los cambia un administrador en **Configuración → Usuarios**.
+Tu **Nombre**, tu **Correo** y tus **Roles** (por ejemplo, `cajero` o `soporte`). Estos datos no se cambian aquí: los cambia un administrador en **Configuración → Usuarios y acceso → Usuarios**.
 
 ### Cuentas vinculadas
 
@@ -31,7 +31,7 @@ Una cuenta se vincula sola la primera vez que abres ArgosIsp desde Horus («Ver 
 - **Permiso:** ninguno; solo las tuyas.
 - **Dónde:** botón «Quitar» en la fila de la cuenta vinculada.
 - **Qué pasa:** pide confirmación («Quitar vinculación»). Al confirmar, esa cuenta ya no abre ArgosIsp sin contraseña; la próxima vez que entres desde ese sistema te pedirá la contraseña. Se puede volver a vincular entrando desde Horus e iniciando sesión.
-- El administrador puede quitar las de todos desde **Configuración → Integraciones**.
+- El administrador puede quitar las de todos desde **Configuración → Notificaciones e integraciones → Integraciones**.
 
 ## Tu sesión
 
@@ -45,16 +45,18 @@ Una cuenta se vincula sola la primera vez que abres ArgosIsp desde Horus («Ver 
 Hoy **Mi cuenta** no tiene cambio de contraseña, verificación en dos pasos (MFA) ni lista de sesiones abiertas. Si necesitas una contraseña nueva, pídela a un administrador.
 :::
 
-## Otras opciones del menú de tu nombre
+## Otras opciones del menú de tu usuario
 
-- **Apariencia:** Claro, Oscuro o Sistema (sigue el modo de tu teléfono o computadora).
+- **Empresa:** si trabajas con varias, cuál está activa (o «Todas las empresas»).
+- **Tema:** Claro, Oscuro o Sistema (sigue el modo de tu teléfono o computadora).
+- **Ayuda y atajos:** los atajos de teclado y el manual de la pantalla donde estás.
 - **Qué cambió:** las novedades de la versión instalada. Cuando ArgosIsp se actualiza, la primera vez que entras aparece un aviso «ArgosIsp se actualizó a la versión …» con el mismo botón.
 - **Cerrar sesión.**
 
 ## Preguntas frecuentes y errores
 
 - **Aviso de error con «Reintentar» en Cuentas vinculadas.** No se pudo leer la lista. Reintenta; tus datos de arriba no cambian.
-- **«No me deja cambiar mi correo».** Lo cambia un administrador en **Configuración → Usuarios**.
+- **«No me deja cambiar mi correo».** Lo cambia un administrador en **Configuración → Usuarios y acceso → Usuarios**.
 
 ## Relacionado
 

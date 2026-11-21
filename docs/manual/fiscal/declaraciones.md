@@ -10,7 +10,7 @@ pantallas:
 
 Los borradores de IVA, pequeño contribuyente, ISR, ISO y retenciones, calculados desde los documentos y el libro del periodo. Revisar registra la liquidación; después registras que se presentó y que se pagó.
 
-Está en **Contabilidad → Declaraciones**.
+Está en **Contabilidad y fiscal → Declaraciones**.
 
 ::: warning ArgosIsp no presenta nada a la SAT
 La declaración se presenta en Declaraguate. Aquí solo queda el borrador, la liquidación en el libro, la constancia de que se presentó y el pago.

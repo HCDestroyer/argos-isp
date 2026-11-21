@@ -149,6 +149,7 @@ function aNotaCredito() {
                 <UButton
                     v-else
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     @click="abierto = false"

@@ -25,8 +25,9 @@
  */
 :root,
 .light {
-    --ui-primary: var(--ui-color-primary-700);
-    --ui-secondary: var(--ui-color-secondary-600);
+    /* Índigo eléctrico (decisión del PM): 600 en claro (#4f46e5, 6,3:1 sobre blanco). */
+    --ui-primary: var(--ui-color-primary-600);
+    --ui-secondary: var(--ui-color-secondary-700);
     /* Estados un tono más oscuros: también pasan 4,5:1 sobre su propio fondo tintado (badges y
          alertas "subtle", color/10), no solo sobre blanco. */
     --ui-success: var(--ui-color-success-800);
@@ -34,7 +35,8 @@
     --ui-warning: var(--ui-color-warning-800);
     --ui-error: var(--ui-color-error-700);
     --ui-text-muted: var(--ui-color-neutral-600);
-    --ui-text-dimmed: var(--ui-color-neutral-500);
+    /* Slate 500 queda justo bajo 4,5:1 sobre los fondos grises (#f8f9fa): un punto más oscuro. */
+    --ui-text-dimmed: color-mix(in oklab, var(--ui-color-neutral-500) 45%, var(--ui-color-neutral-600));
     /* Fondo claro suavizado para la estructura; el contenido va sobre blanco (HIG dark-mode). */
     --ui-bg-muted: var(--ui-color-neutral-50);
     --ui-radius: 0.375rem;
@@ -49,11 +51,11 @@
     --ui-error: var(--ui-color-error-400);
     --ui-text-muted: var(--ui-color-neutral-400);
     --ui-text-dimmed: var(--ui-color-neutral-400);
-    /* Sin negro puro (§7.8): base azul noche muy oscura, elevaciones algo más claras. */
-    --ui-bg: #0b1014;
-    --ui-bg-muted: #10151b;
-    --ui-bg-elevated: #1a2029;
-    --ui-border: #232a33;
+    /* Sin negro puro (§7.8): base azul noche (#0b0f1a), elevaciones algo más claras y frías. */
+    --ui-bg: #0b0f1a;
+    --ui-bg-muted: #0f1424;
+    --ui-bg-elevated: #182036;
+    --ui-border: #222a40;
 }
 
 /*
@@ -68,23 +70,64 @@
     --hf-glass-strong: rgb(255 255 255 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.7);
     /* Opaca en claro: el aura teñiría el fondo y bajaría el contraste de los badges (AA). */
-    --hf-card: #ffffff;
-    --hf-aura-1: rgb(20 184 166 / 0.12);
-    --hf-aura-2: rgb(99 102 241 / 0.09);
+    --hf-card: var(--ax-tarjeta);
+    --hf-aura-1: rgb(79 70 229 / 0.1);
+    --hf-aura-2: rgb(6 182 212 / 0.08);
     --hf-glow-brand: transparent;
     --hf-glow-crit: rgb(220 38 38 / 0.12);
-    --hf-radius-card: 0.875rem;
+    --hf-radius-card: var(--ax-radio);
 }
 
 .dark {
-    --hf-glass: rgb(16 21 27 / 0.62);
-    --hf-glass-strong: rgb(16 21 27 / 0.86);
+    --hf-glass: rgb(15 20 36 / 0.62);
+    --hf-glass-strong: rgb(15 20 36 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.06);
-    --hf-card: rgb(20 25 32 / 0.86);
-    --hf-aura-1: rgb(20 184 166 / 0.2);
-    --hf-aura-2: rgb(99 102 241 / 0.16);
-    --hf-glow-brand: rgb(45 212 191 / 0.45);
+    --hf-card: var(--ax-tarjeta);
+    --hf-aura-1: rgb(99 102 241 / 0.22);
+    --hf-aura-2: rgb(6 182 212 / 0.14);
+    --hf-glow-brand: rgb(129 140 248 / 0.45);
     --hf-glow-crit: rgb(255 107 120 / 0.26);
+}
+
+/*
+ * Sistema visual Argos (`docs/sistema-visual.md`): tokens propios `--ax-*` sobre los de Nuxt UI.
+ * Página gris muy clara con tarjetas blancas de borde fino y radio 14 px, casi sin sombra; dentro de
+ * una tarjeta, un panel interno gris suave (mini gráficas, pares etiqueta/valor). En oscuro, lo
+ * mismo con el azul noche.
+ */
+:root,
+.light {
+    /* Mismos nombres y valores que el portal (apps/portal, «Sistema visual»). */
+    --ax-fondo: #f8f9fa;
+    --ax-tarjeta: #ffffff;
+    --ax-borde: #e7eaee;
+    --ax-radio: 0.75rem;
+    --ax-radio-modal: 1rem;
+    --ax-sombra: 0 1px 2px rgb(16 24 40 / 0.04);
+    --ax-sombra-flotante: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 2px 6px rgb(16 24 40 / 0.06);
+    --ax-marca-1: #4f46e5;
+    --ax-marca-2: #06b6d4;
+    --ax-gradiente: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+    /* Con texto blanco encima: termina en cyan-700, así el blanco pasa 4,5:1 en todo el recorrido. */
+    --ax-gradiente-texto: linear-gradient(120deg, #4f46e5 0%, #4338ca 45%, #0e7490 100%);
+    --ax-tinte: linear-gradient(135deg, rgb(79 70 229 / 0.1), rgb(6 182 212 / 0.1));
+    --ax-cabecera-tabla: #f8f9fa;
+    --ax-fila-hover: #f8f9fb;
+    /* Propio del panel: panel interno de tarjetas (mini gráficas, métricas). */
+    --ax-panel: #f3f5f7;
+}
+
+.dark {
+    --ax-fondo: #0b0f1a;
+    --ax-tarjeta: #121828;
+    --ax-borde: #222a40;
+    --ax-sombra: 0 1px 2px rgb(0 0 0 / 0.3);
+    --ax-sombra-flotante: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+    --ax-gradiente: linear-gradient(135deg, #818cf8 0%, #22d3ee 100%);
+    --ax-tinte: linear-gradient(135deg, rgb(129 140 248 / 0.16), rgb(34 211 238 / 0.1));
+    --ax-cabecera-tabla: #0f1424;
+    --ax-fila-hover: #161c2e;
+    --ax-panel: #0f1424;
 }
 
 @layer base {
@@ -94,7 +137,80 @@
     }
 
     body {
-        @apply bg-default text-default antialiased;
+        @apply text-default antialiased;
+        background-color: var(--ax-fondo);
+    }
+
+    /*
+     * Cursores según el lugar o la acción (sistema visual Argos). Nuxt UI ya pone `pointer` en
+     * botones y enlaces; aquí lo que falta, en orden de especificidad creciente.
+     */
+    a[href],
+    summary,
+    label[for],
+    [role='button']:not([aria-disabled='true']),
+    [role='tab'],
+    [role='option'],
+    [role='menuitem'],
+    [role='menuitemcheckbox'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [data-clicable] {
+        cursor: pointer;
+    }
+
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']),
+    textarea,
+    [contenteditable='true'] {
+        cursor: text;
+    }
+
+    :disabled,
+    [aria-disabled='true'],
+    [data-disabled] {
+        cursor: not-allowed;
+    }
+
+    [data-ayuda],
+    abbr[title] {
+        cursor: help;
+    }
+
+    [data-menu-contextual] {
+        cursor: context-menu;
+    }
+
+    [data-menu-contextual] a[href],
+    [data-menu-contextual] [role='button'],
+    [data-menu-contextual] button {
+        cursor: pointer;
+    }
+
+    [data-copiar] {
+        cursor: copy;
+    }
+
+    [data-ampliar] {
+        cursor: zoom-in;
+    }
+
+    [draggable='true'],
+    [data-arrastrable] {
+        cursor: grab;
+    }
+
+    [draggable='true']:active,
+    [data-arrastrable]:active {
+        cursor: grabbing;
+    }
+
+    [data-redimensionar] {
+        cursor: col-resize;
+    }
+
+    [aria-busy='true'] {
+        cursor: progress;
     }
 
     /* Cifras tabulares por defecto en datos (§13.3). */
@@ -211,16 +327,64 @@
     box-shadow: inset 0 1px 0 var(--hf-glass-edge);
 }
 
-/* Ranura 1 de la paleta categórica (utils/paletaGraficas.ts): barras de magnitud. */
+/*
+ * Paleta categórica (utils/paletaGraficas.ts) como variables, para las tarjetas KPI (pastilla,
+ * mini barras y tendencia) y las barras de magnitud. `--viz-n-texto` es el mismo tono oscurecido
+ * (claro) o aclarado (oscuro) para que el texto pase 4,5:1.
+ */
 :root,
 .light {
     --viz-1: #2a78d6;
+    --viz-2: #eb6834;
+    --viz-3: #1baf7a;
+    --viz-4: #eda100;
+    --viz-5: #e87ba4;
+    --viz-mezcla-texto: #000;
+    --viz-proporcion-texto: 55%;
     --viz-track: var(--ui-color-neutral-100);
 }
 
 .dark {
     --viz-1: #3987e5;
-    --viz-track: #1e252e;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-5: #d55181;
+    --viz-mezcla-texto: #fff;
+    --viz-proporcion-texto: 62%;
+    --viz-track: #1c2438;
+}
+
+.tono-1 {
+    --tono: var(--viz-1);
+}
+.tono-2 {
+    --tono: var(--viz-2);
+}
+.tono-3 {
+    --tono: var(--viz-3);
+}
+.tono-4 {
+    --tono: var(--viz-4);
+}
+.tono-5 {
+    --tono: var(--viz-5);
+}
+.tono-marca {
+    --tono: var(--ui-primary);
+}
+
+[class*='tono-'] {
+    --tono-texto: color-mix(in oklab, var(--tono) var(--viz-proporcion-texto), var(--viz-mezcla-texto));
+}
+
+.texto-tono {
+    color: var(--tono-texto);
+}
+
+.pastilla-tono {
+    color: var(--tono-texto);
+    background-color: color-mix(in oklab, var(--tono) 13%, transparent);
 }
 
 .widget-state {
@@ -440,10 +604,278 @@
  * ArgosIsp. Lo que el panel agrega sobre el tema de la skill, con sus mismos tokens.
  */
 
-/* Marca (LogoArgos): recuadro teal 700 en ambos temas, trazo blanco (`marca-y-escritura.md`). */
+/*
+ * Marca (LogoArgos): recuadro con el degradado índigo → cian en ambos temas, trazo blanco.
+ * El degradado de marca es solo acento puntual (logo, encabezado del menú, tarjeta destacada del
+ * tablero, gráficos de portada): nunca de fondo bajo texto (contraste AA).
+ */
 :root {
-    --argos-marca-fondo: var(--ui-color-primary-700);
+    /* Alias del panel sobre los tokens compartidos con el portal. */
+    --argos-marca-1: var(--ax-marca-1);
+    --argos-marca-2: var(--ax-marca-2);
+    --argos-marca-fondo: var(--argos-marca-1);
     --argos-marca-trazo: #fff;
+    --argos-degradado: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+}
+
+/*
+ * Layout «islas» (decisión del PM, propuesta A): el menú lateral flota separado 16 px del borde,
+ * con radio 22 px, vidrio claro con desenfoque y sombra suave sobre el aura; el encabezado son
+ * pastillas de vidrio. Con menos transparencia: sólido y sin desenfoque (más abajo).
+ */
+.lateral-argos {
+    border: 0;
+}
+
+@media (min-width: 1024px) {
+    /* `z-index`: el círculo de expandir y compactar sale 14 px sobre el borde y queda encima del panel. */
+    .lateral-argos {
+        z-index: 10;
+        margin: 1rem 0 1rem 1rem;
+        height: calc(100dvh - 2rem);
+        border-radius: 1.375rem;
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 18px 40px -18px rgb(30 27 75 / 0.28);
+    }
+
+    .dark .lateral-argos {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 18px 40px -12px rgb(0 0 0 / 0.6);
+    }
+}
+
+/*
+ * Botón flotante del encabezado (diseño final, IslasA5/A6): cada control flota suelto, sin barra ni
+ * pastilla que los agrupe: fondo de tarjeta, borde fino y sombra corta. En `@layer components` para
+ * que el hover de la variante (`hover:bg-elevated`) gane. `boton-circulo`: los de solo icono (Más,
+ * caja, sistema, avisos, cuenta); `boton-pastilla`: los de icono y texto (Buscar, accesos).
+ */
+@layer components {
+    .boton-flotante {
+        background-color: var(--ax-tarjeta);
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 18px -8px rgb(15 23 42 / 0.16);
+    }
+
+    .dark .boton-flotante {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 6px 16px -8px rgb(0 0 0 / 0.6);
+    }
+}
+
+/*
+ * Fuera de la capa (ganan a las utilidades del botón): medidas, y el color de Cobrar y de la cuenta,
+ * que no cambia al pasar el puntero (el diseño solo los eleva 1 px).
+ */
+/* Medidas de IslasA5: 42 px de alto, iconos de 18 px en los círculos y 16 px en las pastillas. */
+.boton-circulo {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9999px;
+}
+
+.boton-pastilla {
+    height: 2.25rem;
+    gap: 0.4375rem;
+    padding-inline: 1rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+}
+
+@media (min-width: 64rem) {
+    .boton-circulo {
+        width: 2.625rem;
+        height: 2.625rem;
+    }
+
+    .boton-pastilla {
+        height: 2.625rem;
+    }
+}
+
+/* Acceso rápido: círculo con el icono en el teléfono, pastilla con etiqueta desde `md`. */
+.boton-acceso {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.boton-acceso [data-slot='leadingIcon'] {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+@media (min-width: 48rem) {
+    .boton-acceso {
+        width: auto;
+        gap: 0.4375rem;
+        padding-inline: 1rem;
+    }
+
+    .boton-acceso [data-slot='leadingIcon'] {
+        width: 1rem;
+        height: 1rem;
+    }
+}
+
+@media (min-width: 64rem) {
+    .boton-acceso {
+        height: 2.625rem;
+    }
+}
+
+.boton-circulo [data-slot='leadingIcon'] {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.boton-pastilla [data-slot='leadingIcon'] {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Cobrar (IslasA5): verde claro con borde verde, el único acceso con color propio. */
+.boton-exito {
+    background-color: var(--ui-color-success-100);
+    color: var(--ui-color-success-800);
+    box-shadow:
+        0 0 0 1px var(--ui-color-success-200),
+        0 6px 16px -10px rgb(30 27 75 / 0.35);
+}
+
+.dark .boton-exito {
+    background-color: color-mix(in oklab, var(--ui-color-success-400) 16%, transparent);
+    color: var(--ui-color-success-300);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-color-success-400) 35%, transparent),
+        0 6px 16px -8px rgb(0 0 0 / 0.6);
+}
+
+/* Tu cuenta (IslasA5): círculo índigo claro con las iniciales. */
+.boton-cuenta {
+    background-color: var(--ui-color-primary-100);
+    color: var(--ui-color-primary-700);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    box-shadow:
+        0 0 0 1px var(--ui-color-primary-200),
+        0 6px 16px -10px rgb(30 27 75 / 0.35);
+}
+
+.dark .boton-cuenta {
+    background-color: color-mix(in oklab, var(--ui-color-primary-400) 20%, transparent);
+    color: var(--ui-color-primary-200);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-color-primary-400) 35%, transparent),
+        0 6px 16px -8px rgb(0 0 0 / 0.6);
+}
+
+.boton-flotante {
+    transition-property: color, background-color, box-shadow, transform;
+    transition-duration: 0.15s;
+}
+
+.boton-flotante:hover {
+    transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boton-flotante:hover {
+        transform: none;
+    }
+}
+
+/* Filete de marca: línea de 2 px con el degradado (encabezado del menú, tarjeta destacada). */
+.filete-marca {
+    position: relative;
+}
+
+.filete-marca::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    border-radius: inherit;
+    background: var(--argos-degradado);
+    pointer-events: none;
+}
+
+/*
+ * Tarjeta destacada del tablero: tinte muy suave del degradado sobre la tarjeta (el texto queda
+ * sobre un fondo casi blanco o casi noche: el contraste no cambia) y filete de marca arriba.
+ */
+.tarjeta-destacada {
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--argos-marca-1) 7%, transparent),
+        color-mix(in oklab, var(--argos-marca-2) 5%, transparent)
+    );
+    overflow: hidden;
+}
+
+.dark .tarjeta-destacada {
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--argos-marca-1) 16%, transparent),
+        color-mix(in oklab, var(--argos-marca-2) 8%, transparent)
+    );
+}
+
+/*
+ * Bienvenida del inicio y panel de marca del login: `--ax-gradiente-texto` (índigo → cyan-700), el
+ * único degradado con texto blanco encima (4,5:1 en todo el recorrido), igual que el portal.
+ */
+.bienvenida {
+    background-image: var(--ax-gradiente-texto);
+    box-shadow: 0 10px 30px -12px rgb(79 70 229 / 0.45);
+}
+
+/* Pastilla de icono de los indicadores: color del tono, fondo al 12 %. */
+.pastilla-icono {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.625rem;
+    background-color: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+/* Microinteracción de tarjetas enlazadas: se elevan 1 px y marcan el borde (sin movimiento con reduce). */
+.tarjeta-interactiva {
+    transition:
+        transform 0.18s ease-out,
+        box-shadow 0.18s ease-out;
+}
+
+.tarjeta-interactiva:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-primary) 45%, var(--ui-border)),
+        0 8px 24px rgb(15 23 42 / 0.08);
+}
+
+.dark .tarjeta-interactiva:hover {
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--ui-primary) 45%, var(--ui-border)),
+        0 12px 32px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tarjeta-interactiva:hover {
+        transform: none;
+    }
 }
 
 /* Halo al pasar el puntero sobre la acción primaria (26 px, `movimiento-y-luz.md`). */

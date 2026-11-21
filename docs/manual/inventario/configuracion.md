@@ -8,7 +8,7 @@ pantallas:
 
 Dos ajustes de la empresa activa: si recibir una orden de traslado exige firma, y la inteligencia artificial que lee las facturas de compra en PDF o imagen.
 
-Menú: **Configuración → Inventario**.
+Menú: **Configuración → Red y portal → Inventario**.
 
 ## Quién la usa
 

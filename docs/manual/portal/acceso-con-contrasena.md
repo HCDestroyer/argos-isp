@@ -24,7 +24,7 @@ Por qué el cambio es obligatorio: la contraseña de la empresa la conocen todos
 
 ### Dónde se configura
 
-En el panel, en **Configuración → Contraseña del portal**, con la empresa elegida en el selector ([cómo se usa esa pantalla](./contrasena-del-portal.md)). Solo el administrador puede cambiarla (permiso `portal.configurar_contrasena_defecto`). El sistema nunca la vuelve a mostrar: guarda solo una huella cifrada. Si la olvidas, escribe una nueva.
+En el panel, en **Configuración → Red y portal → Contraseña del portal**, con la empresa elegida en el selector ([cómo se usa esa pantalla](./contrasena-del-portal.md)). Solo el administrador puede cambiarla (permiso `portal.configurar_contrasena_defecto`). El sistema nunca la vuelve a mostrar: guarda solo una huella cifrada. Si la olvidas, escribe una nueva.
 
 Si la empresa no tiene contraseña por defecto, los clientes que aún no eligieron la suya solo pueden entrar con código o con «Ver mi cuenta».
 

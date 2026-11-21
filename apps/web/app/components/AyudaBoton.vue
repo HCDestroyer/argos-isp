@@ -1,40 +1,123 @@
 <script setup lang="ts">
 /**
- * Botón «Ayuda» de la barra superior (contrato `documentacion.md` §6): abre en otra pestaña la
- * página del manual que explica la pantalla actual. La clave sale de la ruta de Nuxt
- * (`claveAyudaDeRuta`) y el sitio de `runtimeConfig.public.docsUrl` (`NUXT_PUBLIC_DOCS_URL`).
- * En la barra superior se muestra desde `sm` (en el teléfono la barra no tiene espacio y taparía el
- * botón del menú); en el teléfono va en el menú lateral con `con-etiqueta`.
- * No usa `UTooltip`: va en la barra de todas las pantallas y las pruebas montan cada pantalla
- * sola, sin el proveedor de tooltips de `UApp`.
+ * Ayuda contextual (contrato `documentacion.md` §6 y sistema visual Argos): el botón «Ayuda» abre
+ * un panel lateral con el resumen de la pantalla actual tomado del manual (`INDICE_AYUDA`, generado
+ * de `docs/manual` por `herramientas/indiceAyuda.mjs`) y el enlace «Ver manual completo», que abre
+ * en otra pestaña `<docsUrl>/ayuda/?pantalla=<clave>`. Sin resumen para la pantalla, el botón va
+ * directo al manual.
+ * No usa `UTooltip`: va en todas las pantallas y las pruebas las montan sin el proveedor de `UApp`.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     /** Con la etiqueta siempre visible (menú lateral del teléfono). */
     conEtiqueta?: boolean
-}>()
+    /** Solo el icono (junto al título de la página). */
+    soloIcono?: boolean
+}>(), {
+    conEtiqueta: false,
+    soloIcono: false,
+})
 
 const route = useRoute()
 const config = useRuntimeConfig()
 
 const clave = computed(() => claveAyudaDeRuta(route.matched))
 const url = computed(() => clave.value ? urlAyuda(String(config.public.docsUrl), clave.value) : null)
+const entrada = computed(() => (clave.value ? INDICE_AYUDA[clave.value] ?? null : null))
+const abierto = ref(false)
+
+const boton = computed(() => ({
+    label: props.soloIcono ? undefined : 'Ayuda',
+    icon: 'i-lucide-circle-help',
+    color: 'neutral' as const,
+    variant: 'ghost' as const,
+    block: props.conEtiqueta,
+    class: props.conEtiqueta ? 'justify-start cursor-help' : 'cursor-help',
+    ui: { label: props.conEtiqueta ? '' : 'hidden md:inline' },
+}))
 </script>
 
 <template>
-    <UButton
-        v-if="url"
-        :to="url"
-        target="_blank"
-        rel="noopener"
-        label="Ayuda"
-        icon="i-lucide-circle-help"
-        color="neutral"
-        variant="ghost"
-        title="Ayuda de esta pantalla"
-        aria-label="Ayuda de esta pantalla (se abre en otra pestaña)"
-        :block="props.conEtiqueta"
-        :class="props.conEtiqueta ? 'justify-start' : undefined"
-        :ui="{ label: props.conEtiqueta ? '' : 'hidden md:inline' }"
-        data-prueba="boton-ayuda"
-    />
+    <!-- Un solo nodo raíz: la clase del padre (`hidden sm:inline-flex`) se aplica aquí. -->
+    <div v-if="url">
+        <UButton
+            v-if="entrada"
+            v-bind="boton"
+            title="Ayuda de esta pantalla"
+            aria-label="Ayuda de esta pantalla"
+            aria-haspopup="dialog"
+            data-ayuda
+            data-prueba="boton-ayuda"
+            @click="abierto = true"
+        />
+        <UButton
+            v-else
+            v-bind="boton"
+            :to="url"
+            target="_blank"
+            rel="noopener"
+            title="Ayuda de esta pantalla"
+            aria-label="Ayuda de esta pantalla (se abre en otra pestaña)"
+            data-ayuda
+            data-prueba="boton-ayuda"
+        />
+        <USlideover
+            v-if="entrada"
+            v-model:open="abierto"
+            :title="entrada.titulo"
+            description="Ayuda de esta pantalla, del manual de ArgosIsp"
+            :ui="{ content: 'max-w-md', body: 'flex flex-col gap-5' }"
+        >
+            <template #body>
+                <div
+                    class="flex items-start gap-3 rounded-(--ax-radio) bg-(--ax-panel) p-4"
+                    data-prueba="ayuda-resumen"
+                >
+                    <span class="pastilla-icono tono-marca pastilla-tono">
+                        <UIcon
+                            name="i-lucide-book-open"
+                            class="size-5"
+                        />
+                    </span>
+                    <p class="text-sm text-default">
+                        {{ entrada.resumen }}
+                    </p>
+                </div>
+                <section
+                    v-if="entrada.temas.length"
+                    class="flex flex-col gap-2"
+                    aria-labelledby="ayuda-temas"
+                >
+                    <h3
+                        id="ayuda-temas"
+                        class="text-xs font-semibold tracking-[0.04em] text-muted uppercase"
+                    >
+                        En el manual
+                    </h3>
+                    <ul class="flex flex-col gap-1.5 text-sm">
+                        <li
+                            v-for="tema in entrada.temas"
+                            :key="tema"
+                            class="flex items-center gap-2"
+                        >
+                            <UIcon
+                                name="i-lucide-dot"
+                                class="size-4 shrink-0 text-primary"
+                            />
+                            {{ tema }}
+                        </li>
+                    </ul>
+                </section>
+                <UButton
+                    :to="url"
+                    target="_blank"
+                    rel="noopener"
+                    label="Ver manual completo"
+                    trailing-icon="i-lucide-external-link"
+                    block
+                    aria-label="Ver manual completo (se abre en otra pestaña)"
+                    data-prueba="ayuda-manual"
+                />
+            </template>
+        </USlideover>
+    </div>
 </template>

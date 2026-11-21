@@ -1416,6 +1416,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
             <UButton
                 v-else
                 label="Cancelar"
+                :icon="ICONOS.cancelar"
                 color="neutral"
                 variant="ghost"
                 :disabled="enviando"
