@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { elegirEmpresa, empresaActiva, entrar, fijarHoyFixtures, ir } from './ayudas'
+import { accionServicio, elegirEmpresa, empresaActiva, entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Multiempresa con fixtures de dos empresas: ArgosNet (1) y Fibra del Sur (2, las sucursales de los
@@ -27,7 +27,7 @@ test('cambiar la empresa de un servicio con saldo explica qué hacer', async ({ 
     await page.getByRole('link', { name: 'comercial.el3-b', exact: true }).click()
     await expect(page).toHaveURL(/\/servicios\/4/)
     await expect(page.locator('[data-prueba="empresa-servicio"]')).toContainText('Fibra del Sur')
-    await page.locator('[data-prueba="abrir-cambiar-empresa"]').click()
+    await accionServicio(page, 'Cambiar empresa')
     const modal = page.getByRole('dialog')
     await modal.getByLabel('Motivo').fill('El cliente se mudó a la zona centro')
     await modal.locator('[data-prueba="confirmar-cambiar-empresa"]').click()

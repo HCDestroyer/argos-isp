@@ -12,9 +12,16 @@ import type { EstrategiasRouter, MatrizControlVelocidad, VistaPreviaEstrategia }
  * 3. Aplicar: `POST /routers/:id/cambiar-estrategia-velocidad` con `version`; 409 recarga.
  * Permiso: `routers.cambiar_control_velocidad` (quien lo abre lo comprobó).
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     router: RouterNas
-}>()
+    /**
+     * Estrategias ya editadas en la ficha (pestaña Velocidad del rediseño): el modal abre directo en
+     * «Revisar» con su vista previa; «Atrás» deja volver a editarlas aquí.
+     */
+    propuesta?: EstrategiasRouter | null
+}>(), {
+    propuesta: null,
+})
 
 const abierto = defineModel<boolean>('open', { default: false })
 
@@ -51,7 +58,7 @@ watch(abierto, (valor) => {
     if (!valor) {
         return
     }
-    estrategias.value = estrategiasDeRouter(props.router)
+    estrategias.value = props.propuesta ? clonarEstrategia(props.propuesta) : estrategiasDeRouter(props.router)
     paso.value = 'editar'
     vista.value = null
     problema.value = null
@@ -61,6 +68,9 @@ watch(abierto, (valor) => {
     confirmaReconectar.value = false
     avanzadas.value = false
     void cargarMatriz()
+    if (props.propuesta) {
+        void revisar()
+    }
 }, { immediate: true })
 
 function recibirProblema(recibido: Problem) {

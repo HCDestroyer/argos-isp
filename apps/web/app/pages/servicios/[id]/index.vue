@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
+import type { DropdownMenuItem, TableColumn, TabsItem } from '@nuxt/ui'
+import type Decimal from 'decimal.js'
 
+/**
+ * Ficha del servicio (tableros OperServicioFicha y OperServicioFichaMovil): franja con el código y
+ * el nombre del servicio, su estado y lo que debe (el saldo una sola vez), y las acciones en una
+ * sola fila: Cobrar, la acción de estado principal y el resto en «Más». Debajo, una tarjeta con
+ * pestañas segmentadas: Resumen (sesión en vivo, equipo en comodato con «Cambiar equipo», tráfico
+ * en Horus y caídas, plan, adicionales y contacto), Red y equipo, Facturas, Contactos, Bitácora y
+ * Portal de corte. En el teléfono, «Más», Promesa y «Cobrar Q …» quedan fijos abajo. La pestaña
+ * elegida va en `?pestana=`.
+ */
 definePageMeta({ permiso: 'servicios.ver' })
 
 const route = useRoute()
@@ -325,6 +336,150 @@ function alEliminar() {
  */
 const precio = computed(() => servicio.value?.precio_mensual ?? null)
 
+/* Pestañas (tablero OperServicioFicha). */
+const PESTANAS_SERVICIO = ['resumen', 'red', 'facturas', 'contactos', 'bitacora', 'corte'] as const
+type PestanaServicio = typeof PESTANAS_SERVICIO[number]
+
+const pestana = computed<PestanaServicio>({
+    get: () => {
+        const valor = route.query.pestana
+        return typeof valor === 'string' && (PESTANAS_SERVICIO as readonly string[]).includes(valor) ? valor as PestanaServicio : 'resumen'
+    },
+    set: (valor) => {
+        void navigateTo({ query: { ...route.query, pestana: valor === 'resumen' ? undefined : valor } }, { replace: true })
+    },
+})
+
+const pestanas = computed<TabsItem[]>(() => [
+    { label: 'Resumen', value: 'resumen', icon: 'i-lucide-house' },
+    { label: 'Red y equipo', value: 'red', icon: 'i-lucide-network' },
+    ...(puede('facturas.ver') ? [{ label: 'Facturas', value: 'facturas', icon: 'i-lucide-receipt' }] : []),
+    ...(puede('clientes.ver') ? [{ label: 'Contactos', value: 'contactos', icon: 'i-lucide-users' }] : []),
+    ...(puede('bitacora.ver') ? [{ label: 'Bitácora', value: 'bitacora', icon: 'i-lucide-history' }] : []),
+    { label: 'Portal de corte', value: 'corte', icon: 'i-lucide-octagon-pause' },
+])
+
+/* Lo que debe este servicio: facturas pendientes del estado de cuenta del cliente (una sola vez, en la franja). */
+const facturasPendientes = shallowRef<Factura[] | null>(null)
+const problemaCuenta = ref<Problem | null>(null)
+
+async function cargarCuenta() {
+    const actual = servicio.value
+    if (!actual || !puede('clientes.estado_cuenta')) {
+        return
+    }
+    const resultado = await useClientes().estadoCuenta(actual.cliente_id)
+    facturasPendientes.value = resultado.ok ? resultado.data.facturas_pendientes.filter(f => f.servicio_id === actual.id) : null
+    problemaCuenta.value = resultado.ok ? null : resultado.problema
+}
+
+const saldo = computed<Decimal | null>(() => (facturasPendientes.value ? resumenPendiente(facturasPendientes.value, hoyGuatemala()).pendiente : null))
+const debe = computed(() => saldo.value !== null && saldo.value.gt(0))
+const proximaFactura = computed(() => (facturasPendientes.value ?? []).map(f => f.vence_en).sort()[0] ?? null)
+
+/* Equipo en comodato (`inventario.ver`). */
+const equipos = shallowRef<EquipoServicio[] | null>(null)
+const problemaEquipos = ref<Problem | null>(null)
+const cambiarEquipoAbierto = ref(false)
+
+async function cargarEquipos() {
+    if (!puede('inventario.ver')) {
+        return
+    }
+    const resultado = await useEquiposServicio().listar(servicioId.value)
+    equipos.value = resultado.ok ? resultado.data : null
+    problemaEquipos.value = resultado.ok ? null : resultado.problema
+}
+
+function alCambiarEquipo() {
+    void cargarEquipos()
+    void lineaTiempo.value?.recargar()
+}
+
+/* Caídas de los últimos 7 días: sesiones que terminaron (del historial real, no un estimado). */
+const sesionesSemana = shallowRef<Sesion[] | null>(null)
+async function cargarCaidas() {
+    if (!puede('sesiones.ver') || !conPppoe.value) {
+        return
+    }
+    const desde = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const resultado = await useSesiones().listar({ servicio_id: servicioId.value, desde, limit: 100 })
+    sesionesSemana.value = resultado.ok ? resultado.data.data : null
+}
+const caidas = computed(() => (sesionesSemana.value ?? []).filter(s => s.fin !== null).sort((a, b) => (b.fin ?? '').localeCompare(a.fin ?? '')))
+
+/* Facturas del servicio (pestaña Facturas). */
+const facturasServicio = usePaginacionCursor(cursor => useFacturas().listar({ servicio_id: servicioId.value, limit: 25 }, cursor))
+watch(pestana, (valor) => {
+    if (valor === 'facturas' && puede('facturas.ver') && !facturasServicio.filas.value.length) {
+        void facturasServicio.recargar()
+    }
+}, { immediate: true })
+const columnasFacturas: TableColumn<Factura>[] = [
+    { accessorKey: 'periodo', header: 'Periodo' },
+    { accessorKey: 'vence_en', header: 'Vence', meta: SOLO_ANCHO },
+    { accessorKey: 'total', header: 'Total', meta: { class: { th: 'text-end', td: 'text-end' } } },
+    { accessorKey: 'estado', header: 'Estado' },
+]
+
+/* Servicios del cliente (Contactos: a cargo de sus servicios). */
+const serviciosCliente = shallowRef<Servicio[] | null>(null)
+async function cargarServiciosCliente() {
+    const actual = servicio.value
+    if (!actual) {
+        return
+    }
+    const resultado = await useServicios().listar({ cliente_id: actual.cliente_id, limit: 50 })
+    serviciosCliente.value = resultado.ok ? resultado.data.data : null
+}
+watch(pestana, (valor) => {
+    if (valor === 'contactos' && !serviciosCliente.value) {
+        void cargarServiciosCliente()
+    }
+}, { immediate: true })
+
+watch(servicio, (actual, anterior) => {
+    if (actual && actual.id !== anterior?.id) {
+        void cargarCuenta()
+        void cargarEquipos()
+        void cargarCaidas()
+    }
+})
+
+/* Acciones en una sola fila: Cobrar, la principal de estado y el resto en «Más». */
+const accionPrincipal = computed(() => accionesEstado.value[0] ?? null)
+
+const itemsMas = computed<DropdownMenuItem[][]>(() => {
+    const actual = servicio.value
+    if (!actual) {
+        return []
+    }
+    const estado: DropdownMenuItem[] = [
+        ...(puedeActivarInstalacion.value && accionPrincipal.value ? [{ label: 'Activar instalación', icon: 'i-lucide-hard-hat', onSelect: () => { activarAbierto.value = true } }] : []),
+        ...accionesEstado.value.slice(1).map(a => ({ label: a.etiqueta, icon: a.icono, onSelect: () => abrirAccion(a) })),
+        ...(puedeEditar.value ? [{ label: 'Cambiar plan', icon: 'i-lucide-arrow-right-left', onSelect: () => { editando.value = true } }] : []),
+    ]
+    const cobro: DropdownMenuItem[] = [
+        ...(puedePromesa.value ? [{ label: 'Promesa de pago', icon: 'i-lucide-hand', onSelect: abrirPromesa }] : []),
+        ...(puedeSimular.value ? [{ label: 'Simular promesa', icon: 'i-lucide-flask-conical', onSelect: () => { simuladorAbierto.value = true } }] : []),
+        ...(puedeCargoUnico.value ? [{ label: 'Cargo único', icon: 'i-lucide-receipt', onSelect: () => { cargoAbierto.value = true } }] : []),
+        ...(puedeFacturasPeriodo.value ? [{ label: 'Emitir facturas de periodos', icon: 'i-lucide-calendar-plus', to: enlace(`/servicios/${actual.id}/facturas-periodo`) }] : []),
+    ]
+    const red: DropdownMenuItem[] = [
+        ...accionesRed.value.map(a => ({ label: a.etiqueta, icon: a.icono, onSelect: () => abrirAccion(a) })),
+        ...(puedeSincronizarRouter.value ? [{ label: 'Sincronizar con el router', icon: 'i-lucide-refresh-cw', onSelect: () => { sincronizarRouterAbierto.value = true } }] : []),
+        ...(puedeEditar.value ? [{ label: 'Editar servicio', icon: ICONOS.editar, onSelect: () => { editando.value = true } }] : []),
+        ...(puedeCambiarEmpresa.value ? [{ label: 'Cambiar empresa', icon: 'i-lucide-building-2', onSelect: () => { cambiarEmpresaAbierto.value = true } }] : []),
+    ]
+    const baja: DropdownMenuItem[] = [
+        ...accionesDestructivas.value.map(a => ({ label: a.etiqueta, icon: a.icono, color: 'error' as const, onSelect: () => abrirAccion(a) })),
+        ...(puedeEliminar.value && eliminable.value?.eliminable ? [{ label: 'Eliminar', icon: ICONOS.eliminar, color: 'error' as const, onSelect: () => { eliminarAbierto.value = true } }] : []),
+    ]
+    return [estado, cobro, red, baja].filter(grupo => grupo.length)
+})
+
+const enlaceCobro = computed(() => (servicio.value ? `/cobro?cliente=${servicio.value.cliente_id}` : '/cobro'))
+
 watch(servicioId, cargar)
 onMounted(cargar)
 </script>
@@ -334,39 +489,14 @@ onMounted(cargar)
         id="servicio"
         :titulo="servicio ? etiquetaServicio(servicio) : 'Servicio'"
         icono="i-lucide-wifi"
+        encabezado-propio
     >
-        <template #acciones>
-            <VerEnHorusBoton
-                v-if="servicio"
-                tipo="servicio"
-                :id-externo="servicio.id"
-            />
-            <UButton
-                v-if="puedeEditar"
-                label="Editar"
-                icon="i-lucide-pencil"
-                color="neutral"
-                variant="outline"
-                data-prueba="editar-servicio"
-                @click="editando = true"
-            />
-            <UButton
-                to="/servicios"
-                icon="i-lucide-arrow-left"
-                label="Servicios"
-                color="neutral"
-                variant="ghost"
-                class="hidden sm:inline-flex"
-            />
-        </template>
-
         <div
             v-if="cargando && !servicio"
             class="flex flex-col gap-4"
         >
-            <USkeleton class="h-8 w-64" />
-            <USkeleton class="h-10 w-full" />
-            <USkeleton class="h-48 w-full" />
+            <USkeleton class="h-24 w-full rounded-[1.375rem]" />
+            <USkeleton class="h-96 w-full rounded-[1.375rem]" />
         </div>
 
         <UEmpty
@@ -386,67 +516,185 @@ onMounted(cargar)
 
         <div
             v-else-if="servicio"
-            class="flex flex-col gap-6"
+            class="flex flex-col gap-4"
         >
-            <div class="flex flex-col gap-1">
-                <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="break-all font-mono text-xl font-semibold text-highlighted">
-                        {{ etiquetaServicio(servicio) }}
-                    </h2>
-                    <EstadoServicioBadge :estado="servicio.estado" />
-                    <TipoPlanBadge
-                        :tipo="servicio.plan_tipo"
-                        data-prueba="tipo-plan-servicio"
+            <!-- Franja (tablero OperServicioFicha): código, nombre, estado, lo que debe y las acciones en una fila. -->
+            <header
+                class="surface-card flex flex-col gap-3 rounded-[1.375rem] p-4 lg:flex-row lg:items-center lg:justify-between sm:px-5"
+                aria-label="Servicio"
+                data-prueba="franja-servicio"
+            >
+                <div class="flex min-w-0 items-center gap-3">
+                    <span
+                        class="pastilla-icono pastilla-tono size-12 shrink-0 rounded-2xl"
+                        :class="servicio.estado === 'activo' ? 'tono-exito' : servicio.estado === 'limitado' ? 'tono-aviso' : servicio.estado === 'suspendido' ? 'tono-error' : 'tono-marca'"
+                    >
+                        <UIcon
+                            name="i-lucide-wifi"
+                            class="size-6"
+                        />
+                    </span>
+                    <div class="flex min-w-0 flex-col gap-1">
+                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <span
+                                class="rounded-lg bg-(--ax-panel) px-2 py-0.5 font-mono text-sm font-semibold text-highlighted ring-1 ring-(--ax-borde)"
+                                data-prueba="codigo-servicio"
+                            >{{ servicio.codigo }}</span>
+                            <h1 class="truncate text-xl font-bold tracking-[-0.02em] text-highlighted">
+                                {{ servicio.nombre || nombrePlan(servicio) }}
+                            </h1>
+                            <UButton
+                                v-if="puedeEditar"
+                                :icon="ICONOS.editar"
+                                color="neutral"
+                                variant="ghost"
+                                size="xs"
+                                class="rounded-full"
+                                aria-label="Editar servicio"
+                                title="Editar servicio"
+                                data-prueba="editar-servicio"
+                                @click="editando = true"
+                            />
+                            <EstadoServicioBadge
+                                :estado="servicio.estado"
+                                class="rounded-full"
+                            />
+                            <UBadge
+                                v-if="servicio.promesa_activa"
+                                :label="promesas.find(p => p.estado === 'activa') ? `Promesa hasta el ${formatearFechaCorta(promesas.find(p => p.estado === 'activa')!.vence_en)}` : PROMESA_ACTIVA.etiqueta"
+                                icon="i-lucide-hand"
+                                color="primary"
+                                variant="soft"
+                                class="rounded-full"
+                            />
+                            <SuspensionManualBadge :servicio="servicio" />
+                            <UBadge
+                                v-if="variasEmpresas"
+                                :label="nombreEmpresa(servicio.empresa_id)"
+                                icon="i-lucide-building-2"
+                                color="neutral"
+                                variant="outline"
+                                class="rounded-full"
+                                data-prueba="empresa-servicio"
+                            />
+                        </div>
+                        <p class="flex flex-wrap items-center gap-x-1 text-[0.8125rem] text-muted">
+                            <ULink
+                                :to="enlace(`/clientes/${servicio.cliente_id}`)"
+                                class="text-default underline underline-offset-2 hover:text-primary"
+                            >{{ nombreCliente(servicio) }}</ULink>
+                            <span>· {{ nombrePlan(servicio) }}</span>
+                            <span data-prueba="tipo-conexion">· {{ TIPOS_CONEXION[tipoConexionDe(servicio)].corta }} en {{ nombreRouter(servicio) }}</span>
+                            <TipoPlanBadge
+                                :tipo="servicio.plan_tipo"
+                                class="hidden"
+                                data-prueba="tipo-plan-servicio"
+                            />
+                            <span
+                                v-if="servicio.direccion"
+                                class="hidden lg:inline"
+                            >· {{ servicio.direccion }}</span>
+                            <span v-if="servicio.instalado_en">· desde {{ formatearMesAnio(servicio.instalado_en) }}</span>
+                        </p>
+                        <p
+                            v-if="origen"
+                            class="flex items-center gap-1.5 text-xs text-dimmed"
+                            data-prueba="servicio-importado"
+                        >
+                            <UIcon
+                                name="i-lucide-import"
+                                class="size-3.5 shrink-0"
+                            />
+                            {{ textoImportado(origen) }}
+                        </p>
+                    </div>
+                </div>
+                <div
+                    class="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap"
+                    role="group"
+                    aria-label="Acciones del servicio"
+                    data-prueba="acciones-servicio"
+                >
+                    <div
+                        v-if="puede('clientes.estado_cuenta')"
+                        class="me-2 flex flex-col items-end"
+                        data-prueba="saldo-servicio"
+                    >
+                        <span class="text-xs text-muted">Debe este servicio</span>
+                        <span
+                            v-if="saldo !== null"
+                            class="text-xl font-bold tabular-nums"
+                            :class="debe ? 'text-error' : 'text-success'"
+                        >{{ debe ? formatearQuetzales(saldo) : 'Al día' }}</span>
+                        <UButton
+                            v-else-if="problemaCuenta"
+                            label="No se pudo leer · Reintentar"
+                            variant="link"
+                            size="xs"
+                            class="px-0"
+                            @click="cargarCuenta"
+                        />
+                        <USkeleton
+                            v-else
+                            class="h-6 w-24"
+                        />
+                    </div>
+                    <UButton
+                        v-if="puede('pagos.registrar') && debe"
+                        :to="enlaceCobro"
+                        label="Cobrar"
+                        :icon="ICONOS.cobrar"
+                        color="success"
+                        size="lg"
+                        class="hidden rounded-full sm:inline-flex"
+                        data-prueba="cobrar-servicio"
                     />
-                    <UBadge
-                        :label="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
-                        :icon="TIPOS_CONEXION[tipoConexionDe(servicio)].icono"
-                        color="neutral"
+                    <UButton
+                        v-if="puedeActivarInstalacion"
+                        label="Activar instalación"
+                        icon="i-lucide-hard-hat"
+                        color="success"
                         variant="outline"
-                        data-prueba="tipo-conexion"
+                        size="lg"
+                        class="rounded-full"
+                        data-prueba="abrir-activar-instalacion"
+                        @click="activarAbierto = true"
                     />
-                    <UBadge
-                        v-if="servicio.promesa_activa"
-                        :label="PROMESA_ACTIVA.etiqueta"
-                        :icon="PROMESA_ACTIVA.icono"
-                        :color="PROMESA_ACTIVA.color"
+                    <UButton
+                        v-else-if="accionPrincipal"
+                        :label="accionPrincipal.etiqueta"
+                        :icon="accionPrincipal.icono"
+                        :color="accionPrincipal.color === 'success' ? 'success' : 'neutral'"
                         variant="outline"
+                        size="lg"
+                        class="hidden rounded-full sm:inline-flex"
+                        :data-prueba="`accion-${accionPrincipal.accion}`"
+                        @click="abrirAccion(accionPrincipal)"
                     />
-                    <SuspensionManualBadge :servicio="servicio" />
-                    <UBadge
-                        v-if="variasEmpresas"
-                        :label="nombreEmpresa(servicio.empresa_id)"
-                        icon="i-lucide-building-2"
-                        color="neutral"
-                        variant="outline"
-                        data-prueba="empresa-servicio"
+                    <UDropdownMenu
+                        v-if="itemsMas.length"
+                        :items="itemsMas"
+                        :content="{ align: 'end' }"
+                    >
+                        <UButton
+                            icon="i-lucide-ellipsis"
+                            color="neutral"
+                            variant="ghost"
+                            size="lg"
+                            class="boton-flotante boton-circulo hidden sm:inline-flex"
+                            aria-label="Más acciones del servicio"
+                            data-prueba="mas-acciones-servicio"
+                        />
+                    </UDropdownMenu>
+                    <VerEnHorusBoton
+                        tipo="servicio"
+                        :id-externo="servicio.id"
+                        size="sm"
+                        variant="ghost"
+                        class="hidden xl:inline-flex"
                     />
                 </div>
-                <p class="text-sm text-muted">
-                    Servicio #{{ servicio.id }} ·
-                    <ULink
-                        :to="enlace(`/clientes/${servicio.cliente_id}`)"
-                        class="text-default underline underline-offset-2 hover:text-primary"
-                    >
-                        {{ nombreCliente(servicio) }}
-                    </ULink>
-                    <template v-if="nombreZona(servicio)">
-                        · {{ nombreZona(servicio) }}
-                    </template>
-                    · versión {{ servicio.version }}
-                </p>
-                <p
-                    v-if="origen"
-                    class="flex items-center gap-1.5 text-xs text-dimmed"
-                    data-prueba="servicio-importado"
-                >
-                    <UIcon
-                        name="i-lucide-import"
-                        class="size-3.5 shrink-0"
-                    />
-                    {{ textoImportado(origen) }}
-                </p>
-            </div>
+            </header>
 
             <UAlert
                 v-if="servicio.suspension_manual"
@@ -489,182 +737,25 @@ onMounted(cargar)
                 </template>
             </UAlert>
 
-            <div
-                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico || puedeFacturasPeriodo || puedeSincronizarRouter"
-                class="flex flex-col gap-3 surface-card p-4 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-6"
-                role="group"
-                aria-label="Acciones del servicio"
-                data-prueba="acciones-servicio"
-            >
-                <div
-                    v-if="puedeActivarInstalacion || accionesEstado.length"
-                    class="flex flex-col gap-1.5"
-                    role="group"
-                    aria-labelledby="acciones-estado"
-                >
-                    <span
-                        id="acciones-estado"
-                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
-                    >Estado</span>
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            v-if="puedeActivarInstalacion"
-                            label="Activar instalación"
-                            icon="i-lucide-hard-hat"
-                            color="success"
-                            data-prueba="abrir-activar-instalacion"
-                            @click="activarAbierto = true"
-                        />
-                        <UButton
-                            v-for="accion in accionesEstado"
-                            :key="accion.accion"
-                            :label="accion.etiqueta"
-                            :icon="accion.icono"
-                            :color="accion.color"
-                            variant="soft"
-                            @click="abrirAccion(accion)"
-                        />
-                    </div>
-                </div>
-                <div
-                    v-if="puedePromesa || puedeCargoUnico || puedeFacturasPeriodo || puedeSimular"
-                    class="flex flex-col gap-1.5"
-                    role="group"
-                    aria-labelledby="acciones-cobro"
-                >
-                    <span
-                        id="acciones-cobro"
-                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
-                    >Cobro</span>
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            v-if="puedePromesa"
-                            label="Promesa de pago"
-                            icon="i-lucide-calendar-clock"
-                            color="neutral"
-                            variant="outline"
-                            @click="abrirPromesa"
-                        />
-                        <UButton
-                            v-if="puedeCargoUnico"
-                            label="Cargo único"
-                            icon="i-lucide-receipt"
-                            color="neutral"
-                            variant="outline"
-                            data-prueba="abrir-cargo-unico"
-                            @click="cargoAbierto = true"
-                        />
-                        <UButton
-                            v-if="puedeFacturasPeriodo"
-                            :to="enlace(`/servicios/${servicio.id}/facturas-periodo`)"
-                            label="Emitir facturas de periodos"
-                            icon="i-lucide-calendar-plus"
-                            color="neutral"
-                            variant="outline"
-                            data-prueba="abrir-facturas-periodo"
-                        />
-                        <UButton
-                            v-if="puedeSimular"
-                            label="Simular promesa"
-                            icon="i-lucide-flask-conical"
-                            color="neutral"
-                            variant="ghost"
-                            data-prueba="abrir-simulador"
-                            @click="simuladorAbierto = true"
-                        />
-                    </div>
-                </div>
-                <div
-                    v-if="accionesRed.length || puedeSincronizarRouter || puedeCambiarEmpresa"
-                    class="flex flex-col gap-1.5"
-                    role="group"
-                    aria-labelledby="acciones-red"
-                >
-                    <span
-                        id="acciones-red"
-                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
-                    >Red y administración</span>
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            v-for="accion in accionesRed"
-                            :key="accion.accion"
-                            :label="accion.etiqueta"
-                            :icon="accion.icono"
-                            color="neutral"
-                            variant="outline"
-                            @click="abrirAccion(accion)"
-                        />
-                        <UButton
-                            v-if="puedeSincronizarRouter"
-                            label="Sincronizar con el router"
-                            icon="i-lucide-refresh-cw"
-                            color="neutral"
-                            variant="outline"
-                            data-prueba="abrir-sincronizar-router"
-                            @click="sincronizarRouterAbierto = true"
-                        />
-                        <UButton
-                            v-if="puedeCambiarEmpresa"
-                            label="Cambiar empresa"
-                            icon="i-lucide-arrow-right-left"
-                            color="neutral"
-                            variant="ghost"
-                            data-prueba="abrir-cambiar-empresa"
-                            @click="cambiarEmpresaAbierto = true"
-                        />
-                    </div>
-                </div>
-                <!-- Lo destructivo al final y separado. -->
-                <div
-                    v-if="accionesDestructivas.length"
-                    class="flex flex-col gap-1.5 border-(--ax-borde) sm:ms-auto sm:border-s sm:ps-6"
-                    role="group"
-                    aria-labelledby="acciones-baja"
-                >
-                    <span
-                        id="acciones-baja"
-                        class="text-[0.6875rem] font-bold tracking-[0.06em] text-muted uppercase"
-                    >Baja</span>
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            v-for="accion in accionesDestructivas"
-                            :key="accion.accion"
-                            :label="accion.etiqueta"
-                            :icon="accion.icono"
-                            color="error"
-                            variant="outline"
-                            @click="abrirAccion(accion)"
-                        />
-                    </div>
-                </div>
-            </div>
             <p
-                v-else-if="servicio.estado === 'retirado'"
+                v-if="servicio.estado === 'retirado'"
                 class="text-sm text-muted"
             >
                 Servicio retirado: ya no admite acciones.
             </p>
-
             <template v-if="puedeEliminar">
                 <ProblemaAlerta
                     v-if="problemaEliminable"
                     :problema="problemaEliminable"
                     :reintentar="cargarEliminable"
                 />
-                <div
+                <p
                     v-else-if="eliminable?.eliminable"
-                    class="flex flex-wrap items-center gap-2"
+                    class="text-xs text-muted"
+                    data-prueba="eliminable"
                 >
-                    <UButton
-                        label="Eliminar"
-                        icon="i-lucide-trash-2"
-                        color="error"
-                        variant="outline"
-                        data-prueba="eliminar-servicio"
-                        @click="eliminarAbierto = true"
-                    />
-                    <span class="text-xs text-muted">Nunca se usó: se puede borrar del todo.</span>
-                </div>
+                    Nunca se usó: se puede borrar del todo desde «Más».
+                </p>
                 <p
                     v-else-if="eliminable"
                     class="flex items-start gap-1.5 text-xs text-muted"
@@ -678,463 +769,773 @@ onMounted(cargar)
                 </p>
             </template>
 
-            <div class="grid gap-4 lg:grid-cols-2">
-                <UPageCard
-                    title="Plan y facturación"
-                    icon="i-lucide-gauge"
-                    variant="subtle"
-                >
-                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="Plan"
-                            :valor="nombrePlan(servicio)"
-                        />
-                        <DatoFicha
-                            etiqueta="Precio mensual"
-                            :valor="precio ? `${formatearQuetzales(precio)}${servicio.costo_override ? ' (precio especial)' : ''}` : null"
-                            data-prueba="precio-mensual-servicio"
-                        />
-                        <DatoFicha
-                            v-if="plan"
-                            etiqueta="Velocidad"
-                            :valor="`${formatearVelocidad(plan.bajada_kbps)} ↓ / ${formatearVelocidad(plan.subida_kbps)} ↑`"
-                        />
-                        <DatoFicha
-                            v-if="plan"
-                            etiqueta="Velocidad limitada"
-                            :valor="`${formatearVelocidad(plan.bajada_limitada_kbps)} ↓ / ${formatearVelocidad(plan.subida_limitada_kbps)} ↑`"
-                        />
-                        <DatoFicha
-                            etiqueta="Plantilla de facturación"
-                            :valor="servicio.plantilla_facturacion_id ? (plantilla?.nombre ?? `Plantilla #${servicio.plantilla_facturacion_id}`) : 'Sin plantilla'"
-                        />
-                        <DatoFicha
-                            etiqueta="Instalación"
-                            :valor="formatearFecha(servicio.fecha_instalacion)"
-                        />
-                    </dl>
-                </UPageCard>
-
-                <UPageCard
-                    title="Red"
-                    icon="i-lucide-network"
-                    variant="subtle"
-                >
-                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="Router"
-                            :valor="nombreRouter(servicio)"
-                        />
-                        <DatoFicha
-                            etiqueta="Tipo de conexión"
-                            :valor="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
-                        />
-                        <DatoFicha
-                            v-if="conPppoe && servicio.servidor_pppoe_id"
-                            etiqueta="Servidor PPPoE"
-                            :valor="servidorPppoe?.nombre ?? `Servidor #${servicio.servidor_pppoe_id}`"
-                            data-prueba="servicio-servidor-pppoe"
-                        />
-                        <DatoFicha
-                            v-if="conPppoe"
-                            etiqueta="Gateway (local-address)"
-                            :valor="servicio.local_address ? `${servicio.local_address}${servicio.local_address_derivado ? `, ${MARCA_GATEWAY_DERIVADO}` : ''}` : 'Sin red IPv4'"
-                            :mono="Boolean(servicio.local_address)"
-                            data-prueba="servicio-local-address"
-                        />
-                        <DatoFicha
-                            v-if="!conPppoe"
-                            etiqueta="Amarre IP-MAC"
-                            :valor="servicio.amarre_ip_mac ? 'Sí (ARP estático)' : 'No'"
-                        />
-                        <DatoFicha
-                            etiqueta="IPv4"
-                            :valor="servicio.ipv4 ?? 'Sin IPv4'"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Prefijo de enlace IPv6"
-                            :valor="servicio.prefijo_enlace_v6"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Prefijo delegado IPv6"
-                            :valor="servicio.prefijo_delegado_v6"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Modo IPv6"
-                            :valor="MODOS_IPV6[servicio.ipv6_modo]"
-                        />
-                        <DatoFicha
-                            v-if="servicio.ipv6_duid"
-                            etiqueta="DUID"
-                            :valor="servicio.ipv6_duid"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="MAC"
-                            :valor="servicio.mac"
-                            mono
-                        />
-                        <DatoFicha
-                            etiqueta="Firewall de corte"
-                            :valor="servicio.excluir_firewall ? 'Excluido' : 'Aplica'"
-                        />
-                    </dl>
-                </UPageCard>
-
-                <UPageCard
-                    v-if="conPppoe"
-                    title="Credenciales PPPoE"
-                    icon="i-lucide-key-round"
-                    variant="subtle"
-                >
-                    <ServicioCredenciales
-                        :servicio="servicio"
-                        @consultado="lineaTiempo?.recargar()"
-                    />
-                </UPageCard>
-
-                <UPageCard
-                    v-if="puede('sesiones.ver') && conPppoe"
-                    title="Sesión activa"
-                    icon="i-lucide-activity"
-                    variant="subtle"
-                >
-                    <ProblemaAlerta
-                        v-if="problemaSesion"
-                        :problema="problemaSesion"
-                        :reintentar="cargarSesion"
-                        :reintentando="cargandoSesion"
-                    />
-                    <div
-                        v-else-if="cargandoSesion && !sesion"
-                        class="flex flex-col gap-2"
-                    >
-                        <USkeleton class="h-5 w-48" />
-                        <USkeleton class="h-5 w-64" />
-                    </div>
-                    <div
-                        v-else-if="!sesion"
-                        class="flex flex-col items-start gap-2"
-                    >
-                        <EstadoSesionBadge estado="desconectada" />
-                        <p class="text-sm text-muted">
-                            Sin sesión PPPoE abierta.
-                        </p>
-                    </div>
-                    <div
-                        v-else
-                        class="flex flex-col gap-4"
-                    >
-                        <div class="flex flex-wrap items-center gap-2">
-                            <EstadoSesionBadge
-                                estado="en_linea"
-                                :latido="latidoSesion"
-                                :leido-en="sesionLeidaEn"
-                            />
-                            <UTooltip
-                                v-if="esSesionPorSondeo(sesion)"
-                                :text="DISTINTIVO_SONDEO.explicacion"
-                            >
-                                <UBadge
-                                    :label="DISTINTIVO_SONDEO.etiqueta"
-                                    :icon="DISTINTIVO_SONDEO.icono"
-                                    :color="DISTINTIVO_SONDEO.color"
-                                    variant="subtle"
-                                    size="sm"
-                                    data-prueba="sesion-activa-sondeo"
-                                />
-                            </UTooltip>
-                        </div>
-                        <p
-                            v-if="esSesionPorSondeo(sesion)"
-                            class="text-xs text-muted"
-                        >
-                            {{ DISTINTIVO_SONDEO.explicacion }}
-                        </p>
-                        <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                            <DatoFicha
-                                etiqueta="Conectado desde"
-                                :valor="`${formatearFechaHora(sesion.inicio)} (${formatearDuracion(sesion.inicio)})`"
-                            />
-                            <DatoFicha
-                                etiqueta="NAS"
-                                :valor="`${textoNasSesion(sesion)} · ${sesion.acct_session_id}`"
-                                mono
-                            />
-                            <DatoFicha
-                                etiqueta="IPv4 de la sesión"
-                                :valor="sesion.ipv4"
-                                mono
-                            />
-                            <DatoFicha
-                                etiqueta="Prefijos IPv6 de la sesión"
-                                :valor="[sesion.prefijo_enlace_v6, sesion.prefijo_delegado_v6].filter(Boolean).join(' · ') || null"
-                                mono
-                            />
-                            <DatoFicha
-                                etiqueta="Tráfico"
-                                :valor="textoConsumoSesion(sesion)"
-                                data-prueba="sesion-activa-consumo"
-                            />
-                        </dl>
-                    </div>
-                </UPageCard>
-
-                <ServicioCodigoCorte
-                    ref="codigoCorte"
-                    :servicio-id="servicio.id"
-                />
-
-                <UPageCard
-                    title="Ubicación y contacto en sitio"
-                    icon="i-lucide-map-pin"
-                    variant="subtle"
-                    data-prueba="ubicacion-contacto-servicio"
-                >
-                    <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="Dirección"
-                            :valor="servicio.direccion"
-                            class="sm:col-span-2"
-                        />
-                        <DatoFicha
-                            etiqueta="Referencia"
-                            :valor="servicio.referencia ?? null"
-                            class="sm:col-span-2 whitespace-pre-line"
-                            data-prueba="referencia-servicio"
-                        />
-                        <DatoFicha
-                            etiqueta="Coordenadas"
-                            :valor="servicio.coordenadas"
-                            mono
-                        >
-                            <ULink
-                                v-if="mapaServicio"
-                                :to="mapaServicio"
-                                target="_blank"
-                                class="inline-flex items-center gap-1 text-primary"
-                            >
-                                {{ servicio.coordenadas }}
-                                <UIcon
-                                    name="i-lucide-external-link"
-                                    class="size-3.5"
-                                />
-                            </ULink>
-                            <template v-else>
-                                —
-                            </template>
-                        </DatoFicha>
-                        <DatoFicha
-                            etiqueta="Contacto en sitio"
-                            :valor="contactoSitio"
-                            data-prueba="contacto-servicio"
-                        >
-                            <template v-if="!contactoSitio">
-                                —
-                            </template>
-                            <span v-else-if="servicio.contacto_nombre">{{ servicio.contacto_nombre }}</span>
-                            <ULink
-                                v-if="servicio.contacto_telefono"
-                                :to="`tel:${servicio.contacto_telefono.replace(/[^\d+]/g, '')}`"
-                                :class="servicio.contacto_nombre ? 'ms-2' : ''"
-                                class="inline-flex items-center gap-1 text-primary"
-                            >
-                                <UIcon
-                                    name="i-lucide-phone"
-                                    class="size-3.5"
-                                />
-                                {{ servicio.contacto_telefono }}
-                            </ULink>
-                        </DatoFicha>
-                    </dl>
-                    <p class="mt-4 flex items-center gap-1.5 border-t border-default pt-4 text-xs font-medium text-muted">
-                        <UIcon
-                            name="i-lucide-wrench"
-                            class="size-3.5 shrink-0"
-                        />
-                        Instalación
-                    </p>
-                    <dl class="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <DatoFicha
-                            etiqueta="Instalado el (inicio de la facturación)"
-                            :valor="servicio.instalado_en ? formatearFechaHora(servicio.instalado_en) : 'Pendiente: se fija al activar la instalación'"
-                            data-prueba="instalado-en-servicio"
-                        />
-                        <DatoFicha
-                            etiqueta="Última modificación"
-                            :valor="formatearFechaHora(servicio.updated_at)"
-                        />
-                    </dl>
-                    <div
-                        v-if="planta.length"
-                        class="mt-4 flex flex-col gap-3 border-t border-default pt-4"
-                        data-prueba="planta-servicio"
-                    >
-                        <p class="flex items-center gap-1.5 text-xs font-medium text-muted">
-                            <UIcon
-                                name="i-lucide-cable"
-                                class="size-3.5 shrink-0"
-                            />
-                            Referencia de planta (solo lectura, llega desde Iris)
-                        </p>
-                        <dl class="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-                            <DatoFicha
-                                v-for="dato in planta"
-                                :key="dato.campo"
-                                :etiqueta="dato.etiqueta"
-                                :valor="dato.valor"
-                                mono
-                            />
-                        </dl>
-                    </div>
-                </UPageCard>
-            </div>
-
-            <ServicioConfiguracionEfectiva
-                ref="configuracionEfectiva"
-                :servicio-id="servicio.id"
-            />
-
-            <ServicioPlanesTemporales
-                :servicio="servicio"
-                @cambiado="alCambiarPlanTemporal"
-            />
-
-            <ServicioHorus
-                v-if="puede('horus.ver')"
-                :servicio-id="servicio.id"
-            />
-
-            <ServicioAdicionales
-                :servicio="servicio"
-                @cambiado="lineaTiempo?.recargar()"
-            />
-
-            <ServicioEquipos
-                v-if="puede('inventario.ver')"
-                :servicio="servicio"
-                @cambiado="lineaTiempo?.recargar()"
-            />
-
+            <!-- Pestañas segmentadas dentro de la tarjeta de su contenido. -->
             <section
-                v-if="puede('sesiones.ver') && conPppoe"
-                class="flex flex-col gap-3"
-                aria-label="Historial de sesiones"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Historial de sesiones
-                </h3>
-                <ServicioSesiones
-                    ref="historialSesiones"
-                    :servicio-id="servicio.id"
-                />
-            </section>
-
-            <section
-                class="flex flex-col gap-3"
-                aria-label="Historial de asignaciones"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Historial de asignaciones
-                </h3>
-                <ServicioAsignaciones
-                    ref="asignaciones"
-                    :servicio-id="servicio.id"
-                />
-            </section>
-
-            <PeriodosBonificados
-                v-if="puede('facturas.ver')"
-                ref="periodosBonificados"
-                :servicio-id="servicio.id"
-            />
-
-            <section
-                v-if="puede('promesas.ver')"
-                class="flex flex-col gap-3"
-                aria-label="Promesas del servicio"
+                class="surface-card flex min-w-0 flex-col gap-4 rounded-[1.375rem] p-3 sm:p-4"
+                aria-label="Detalle del servicio"
             >
                 <div class="flex items-center justify-between gap-2">
-                    <h3 class="text-sm font-semibold text-highlighted">
-                        Promesas de pago
-                    </h3>
-                    <UButton
-                        :to="`/promesas?servicio=${servicio.id}`"
-                        label="Ver todas"
-                        color="neutral"
-                        variant="link"
-                        size="sm"
-                        trailing-icon="i-lucide-arrow-right"
+                    <RedPestanas
+                        v-model="pestana"
+                        :items="pestanas"
+                        etiqueta="Secciones del servicio"
+                        data-prueba="pestanas-servicio"
+                    />
+                    <AyudaBoton
+                        solo-icono
+                        class="hidden sm:inline-flex"
                     />
                 </div>
-                <ProblemaAlerta
-                    v-if="problemaPromesas"
-                    :problema="problemaPromesas"
-                    :reintentar="cargarPromesas"
-                    :reintentando="cargandoPromesas"
-                />
-                <USkeleton
-                    v-else-if="cargandoPromesas && !promesas.length"
-                    class="h-16 w-full"
-                />
-                <p
-                    v-else-if="!promesas.length"
-                    class="text-sm text-muted"
+
+                <!-- Resumen. -->
+                <div
+                    v-if="pestana === 'resumen'"
+                    class="flex flex-col gap-4"
+                    data-prueba="servicio-resumen"
                 >
-                    Sin promesas de pago.
-                </p>
-                <ul
-                    v-else
-                    class="flex flex-col divide-y divide-default rounded-lg border border-default"
-                >
-                    <li
-                        v-for="promesa in promesas"
-                        :key="promesa.id"
-                        class="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between"
-                        :data-promesa="promesa.id"
-                    >
-                        <div class="flex flex-col">
-                            <span class="text-sm font-medium text-highlighted">
-                                {{ formatearQuetzales(promesa.monto) }} · vence {{ formatearFechaHora(promesa.vence_en) }}
-                            </span>
-                            <span class="text-xs text-muted">Promesa #{{ promesa.id }} · {{ CANALES_PROMESA[promesa.canal] }} · {{ formatearFechaHora(promesa.created_at) }}</span>
-                            <PromesaCumplimiento
-                                :promesa="promesa"
-                                class="my-1"
+                    <div class="grid gap-4 lg:grid-cols-3">
+                        <RedTarjeta
+                            titulo="Sesión en vivo"
+                            icono="i-lucide-wifi"
+                        >
+                            <template
+                                v-if="sesion && puede('servicios.desconectar') && accionesRed.length"
+                                #accion
+                            >
+                                <UButton
+                                    label="Desconectar"
+                                    icon="i-lucide-ban"
+                                    color="error"
+                                    variant="outline"
+                                    size="xs"
+                                    class="rounded-full"
+                                    data-prueba="desconectar-servicio"
+                                    @click="abrirAccion(accionesRed[0]!)"
+                                />
+                            </template>
+                            <p
+                                v-if="!conPppoe"
+                                class="text-sm text-muted"
+                            >
+                                {{ TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta }}: sin sesión PPPoE; navega con su IP fija.
+                            </p>
+                            <p
+                                v-else-if="!puede('sesiones.ver')"
+                                class="text-sm text-muted"
+                            >
+                                Ver la sesión pide el permiso «sesiones.ver».
+                            </p>
+                            <ProblemaAlerta
+                                v-else-if="problemaSesion"
+                                :problema="problemaSesion"
+                                :reintentar="cargarSesion"
+                                :reintentando="cargandoSesion"
                             />
-                            <EvaluacionPromesa
-                                :promesa="promesa"
-                                compacta
+                            <USkeleton
+                                v-else-if="cargandoSesion && !sesion"
+                                class="h-24 w-full"
+                            />
+                            <div
+                                v-else-if="!sesion"
+                                class="flex flex-col items-start gap-2"
+                            >
+                                <EstadoSesionBadge estado="desconectada" />
+                                <p class="text-sm text-muted">
+                                    Sin sesión PPPoE abierta.
+                                </p>
+                            </div>
+                            <template v-else>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <EstadoSesionBadge
+                                        estado="en_linea"
+                                        :latido="latidoSesion"
+                                        :leido-en="sesionLeidaEn"
+                                    />
+                                    <span class="font-semibold text-highlighted">Conectado hace {{ formatearDuracion(sesion.inicio) }}</span>
+                                    <UTooltip
+                                        v-if="esSesionPorSondeo(sesion)"
+                                        :text="DISTINTIVO_SONDEO.explicacion"
+                                    >
+                                        <UBadge
+                                            :label="DISTINTIVO_SONDEO.etiqueta"
+                                            :icon="DISTINTIVO_SONDEO.icono"
+                                            :color="DISTINTIVO_SONDEO.color"
+                                            variant="subtle"
+                                            size="sm"
+                                            data-prueba="sesion-activa-sondeo"
+                                        />
+                                    </UTooltip>
+                                </div>
+                                <dl>
+                                    <RedFila etiqueta="IPv4">
+                                        <span class="font-mono">{{ sesion.ipv4 ?? '—' }}</span>
+                                        <UBadge
+                                            v-if="servicio.ipv4 && servicio.ipv4 === sesion.ipv4"
+                                            label="fija"
+                                            color="neutral"
+                                            variant="soft"
+                                            size="sm"
+                                            class="ms-1"
+                                        />
+                                    </RedFila>
+                                    <RedFila
+                                        etiqueta="IPv6 de su casa"
+                                        :valor="sesion.prefijo_delegado_v6"
+                                        mono
+                                    />
+                                    <RedFila
+                                        etiqueta="NAS"
+                                        :valor="`${textoNasSesion(sesion)} · ${sesion.acct_session_id}`"
+                                        mono
+                                    />
+                                    <RedFila
+                                        etiqueta="IPv6 del enlace"
+                                        :valor="sesion.prefijo_enlace_v6"
+                                        mono
+                                    />
+                                    <RedFila
+                                        v-if="plan"
+                                        etiqueta="Velocidad del plan"
+                                        :valor="`${formatearVelocidad(plan.bajada_kbps)} / ${formatearVelocidad(plan.subida_kbps)}`"
+                                    />
+                                    <RedFila
+                                        etiqueta="Descargó / subió"
+                                        :valor="textoConsumoSesion(sesion)"
+                                        data-prueba="sesion-activa-consumo"
+                                    />
+                                </dl>
+                            </template>
+                        </RedTarjeta>
+
+                        <RedTarjeta
+                            v-if="puede('inventario.ver')"
+                            titulo="Equipo en comodato"
+                            icono="i-lucide-router"
+                        >
+                            <template #accion>
+                                <UButton
+                                    label="Ver en inventario"
+                                    variant="link"
+                                    size="sm"
+                                    @click="pestana = 'red'"
+                                />
+                            </template>
+                            <ProblemaAlerta
+                                v-if="problemaEquipos"
+                                :problema="problemaEquipos"
+                                :reintentar="cargarEquipos"
+                            />
+                            <USkeleton
+                                v-else-if="!equipos"
+                                class="h-24 w-full"
+                            />
+                            <template v-else-if="equipos.length">
+                                <div
+                                    v-for="equipo in equipos.slice(0, 2)"
+                                    :key="equipo.id"
+                                    class="flex items-center gap-3"
+                                >
+                                    <span class="pastilla-icono pastilla-tono tono-marca size-10 shrink-0 rounded-xl">
+                                        <UIcon
+                                            name="i-lucide-router"
+                                            class="size-5"
+                                        />
+                                    </span>
+                                    <div class="flex min-w-0 flex-col">
+                                        <span class="truncate font-semibold text-highlighted">{{ equipo.producto_nombre }}</span>
+                                        <span class="truncate font-mono text-xs text-muted">{{ [equipo.serie && `Serie ${equipo.serie}`, equipo.mac && `MAC ${equipo.mac}`].filter(Boolean).join(' · ') || `#${equipo.id}` }}</span>
+                                    </div>
+                                </div>
+                                <dl>
+                                    <RedFila etiqueta="Estado">
+                                        <UBadge
+                                            :label="equipos[0]!.condicion ? `En comodato · ${equipos[0]!.condicion}` : 'En comodato'"
+                                            icon="i-lucide-circle-check"
+                                            color="success"
+                                            variant="soft"
+                                            size="sm"
+                                        />
+                                    </RedFila>
+                                    <RedFila
+                                        etiqueta="Asignado"
+                                        :valor="equipos[0]!.fecha_asignacion ? formatearFecha(equipos[0]!.fecha_asignacion) : '—'"
+                                    />
+                                </dl>
+                                <SeccionSinApi
+                                    titulo="Equipo en vivo"
+                                    descripcion="Señal, Wi-Fi y estado del equipo con SmartOLT y GenieACS: en construcción en la API."
+                                    icono="i-lucide-radio"
+                                />
+                                <UButton
+                                    v-if="puede('servicios.cambiar_equipo') && servicio.estado !== 'retirado'"
+                                    label="Cambiar equipo"
+                                    icon="i-lucide-arrow-left-right"
+                                    block
+                                    class="mt-auto rounded-full"
+                                    data-prueba="cambiar-equipo"
+                                    @click="cambiarEquipoAbierto = true"
+                                />
+                            </template>
+                            <UEmpty
+                                v-else
+                                icon="i-lucide-router"
+                                title="Sin equipo en comodato"
+                                description="Asígnalo en «Red y equipo»."
+                                variant="naked"
+                                size="sm"
+                            />
+                        </RedTarjeta>
+
+                        <div class="flex min-w-0 flex-col gap-4">
+                            <ServicioHorus
+                                v-if="puede('horus.ver')"
+                                :servicio-id="servicio.id"
+                            />
+                            <RedTarjeta
+                                v-else
+                                titulo="Tráfico"
+                                icono="i-lucide-activity"
+                            >
+                                <p class="text-sm text-muted">
+                                    El tráfico lo mide Horus; verlo pide el permiso «horus.ver».
+                                </p>
+                            </RedTarjeta>
+                            <div
+                                v-if="sesionesSemana && caidas.length"
+                                class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
+                                data-prueba="caidas-servicio"
+                            >
+                                <UIcon
+                                    name="i-lucide-triangle-alert"
+                                    class="mt-0.5 size-4 shrink-0 text-warning"
+                                />
+                                <span class="min-w-0 flex-1">
+                                    <span class="font-semibold text-warning">{{ caidas.length }} {{ caidas.length === 1 ? 'caída' : 'caídas' }} en 7 días.</span>
+                                    La última: {{ formatearFechaHora(caidas[0]!.fin!) }}{{ textoCausaFin(caidas[0]!) ? ` (${textoCausaFin(caidas[0]!)})` : '' }}.
+                                </span>
+                                <UButton
+                                    label="Ver"
+                                    variant="link"
+                                    size="sm"
+                                    class="shrink-0 px-0"
+                                    @click="pestana = 'red'"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 lg:grid-cols-3">
+                        <RedTarjeta
+                            titulo="Plan y precio"
+                            icono="i-lucide-gauge"
+                        >
+                            <div class="flex items-baseline justify-between gap-2">
+                                <span class="min-w-0">
+                                    <span class="text-lg font-bold text-highlighted">{{ nombrePlan(servicio) }}</span>
+                                    <span
+                                        v-if="plan"
+                                        class="ms-1 text-xs text-muted"
+                                    >{{ formatearVelocidad(plan.bajada_kbps) }} ↓ / {{ formatearVelocidad(plan.subida_kbps) }} ↑</span>
+                                </span>
+                                <span
+                                    v-if="precio"
+                                    class="shrink-0 text-lg font-bold text-highlighted"
+                                    data-prueba="precio-mensual-servicio"
+                                >{{ formatearQuetzales(precio) }} <span class="text-xs font-normal text-muted">/mes</span></span>
+                            </div>
+                            <p
+                                v-if="servicio.costo_override"
+                                class="text-xs text-muted"
+                            >
+                                Precio especial del servicio.
+                            </p>
+                            <dl>
+                                <RedFila
+                                    etiqueta="Plantilla de facturación"
+                                    :valor="servicio.plantilla_facturacion_id ? (plantilla?.nombre ?? `Plantilla #${servicio.plantilla_facturacion_id}`) : 'Sin plantilla'"
+                                />
+                                <RedFila
+                                    v-if="proximaFactura"
+                                    etiqueta="Vence lo pendiente"
+                                    :valor="formatearFecha(proximaFactura)"
+                                />
+                            </dl>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <UButton
+                                    v-if="puedeEditar"
+                                    label="Cambiar plan"
+                                    icon="i-lucide-arrow-right-left"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    class="rounded-full"
+                                    @click="editando = true"
+                                />
+                            </div>
+                            <SeccionSinApi
+                                titulo="Promociones de velocidad"
+                                descripcion="Duplicar la velocidad por días o en horas fijas (decisión del PM): en construcción en la API."
+                                icono="i-lucide-zap"
+                            />
+                        </RedTarjeta>
+
+                        <div class="min-w-0">
+                            <ServicioAdicionales
+                                :servicio="servicio"
+                                @cambiado="lineaTiempo?.recargar()"
                             />
                         </div>
-                        <UBadge
-                            :label="ESTADOS_PROMESA[promesa.estado].etiqueta"
-                            :icon="ESTADOS_PROMESA[promesa.estado].icono"
-                            :color="ESTADOS_PROMESA[promesa.estado].color"
-                            variant="subtle"
-                            size="sm"
-                            class="self-start"
-                        />
-                    </li>
-                </ul>
-            </section>
 
-            <section
-                v-if="puede('bitacora.ver')"
-                class="flex flex-col gap-3"
-            >
-                <h3 class="text-sm font-semibold text-highlighted">
-                    Historial
-                </h3>
+                        <RedTarjeta
+                            titulo="Contacto en sitio"
+                            icono="i-lucide-users"
+                        >
+                            <template
+                                v-if="puede('clientes.ver')"
+                                #accion
+                            >
+                                <UButton
+                                    label="Contactos"
+                                    variant="link"
+                                    size="sm"
+                                    @click="pestana = 'contactos'"
+                                />
+                            </template>
+                            <dl>
+                                <RedFila
+                                    etiqueta="Titular"
+                                    :valor="nombreCliente(servicio)"
+                                />
+                                <RedFila
+                                    etiqueta="Recibe al técnico"
+                                    :valor="contactoSitio ?? '—'"
+                                    data-prueba="contacto-servicio"
+                                />
+                                <RedFila
+                                    etiqueta="Dirección"
+                                    :valor="servicio.direccion"
+                                />
+                            </dl>
+                        </RedTarjeta>
+                    </div>
+
+                    <ServicioPlanesTemporales
+                        :servicio="servicio"
+                        @cambiado="alCambiarPlanTemporal"
+                    />
+                </div>
+
+                <!-- Red y equipo. -->
+                <div
+                    v-else-if="pestana === 'red'"
+                    class="flex flex-col gap-4"
+                    data-prueba="servicio-red"
+                >
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <RedTarjeta
+                            titulo="Red"
+                            icono="i-lucide-network"
+                        >
+                            <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                                <DatoFicha
+                                    etiqueta="Router"
+                                    :valor="nombreRouter(servicio)"
+                                />
+                                <DatoFicha
+                                    etiqueta="Tipo de conexión"
+                                    :valor="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
+                                />
+                                <DatoFicha
+                                    v-if="conPppoe && servicio.servidor_pppoe_id"
+                                    etiqueta="Servidor PPPoE"
+                                    :valor="servidorPppoe?.nombre ?? `Servidor #${servicio.servidor_pppoe_id}`"
+                                    data-prueba="servicio-servidor-pppoe"
+                                />
+                                <DatoFicha
+                                    v-if="conPppoe"
+                                    etiqueta="Gateway (local-address)"
+                                    :valor="servicio.local_address ? `${servicio.local_address}${servicio.local_address_derivado ? `, ${MARCA_GATEWAY_DERIVADO}` : ''}` : 'Sin red IPv4'"
+                                    :mono="Boolean(servicio.local_address)"
+                                    data-prueba="servicio-local-address"
+                                />
+                                <DatoFicha
+                                    v-if="!conPppoe"
+                                    etiqueta="Amarre IP-MAC"
+                                    :valor="servicio.amarre_ip_mac ? 'Sí (ARP estático)' : 'No'"
+                                />
+                                <DatoFicha
+                                    etiqueta="IPv4"
+                                    :valor="servicio.ipv4 ?? 'Sin IPv4'"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="Prefijo de enlace IPv6"
+                                    :valor="servicio.prefijo_enlace_v6"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="Prefijo delegado IPv6"
+                                    :valor="servicio.prefijo_delegado_v6"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="Modo IPv6"
+                                    :valor="MODOS_IPV6[servicio.ipv6_modo]"
+                                />
+                                <DatoFicha
+                                    v-if="servicio.ipv6_duid"
+                                    etiqueta="DUID"
+                                    :valor="servicio.ipv6_duid"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="MAC"
+                                    :valor="servicio.mac"
+                                    mono
+                                />
+                                <DatoFicha
+                                    etiqueta="Firewall de corte"
+                                    :valor="servicio.excluir_firewall ? 'Excluido' : 'Aplica'"
+                                />
+                            </dl>
+                        </RedTarjeta>
+
+                        <RedTarjeta
+                            v-if="conPppoe"
+                            titulo="Credenciales PPPoE"
+                            icono="i-lucide-key-round"
+                        >
+                            <ServicioCredenciales
+                                :servicio="servicio"
+                                @consultado="lineaTiempo?.recargar()"
+                            />
+                        </RedTarjeta>
+
+                        <RedTarjeta
+                            titulo="Ubicación y contacto en sitio"
+                            icono="i-lucide-map-pin"
+                            data-prueba="ubicacion-contacto-servicio"
+                        >
+                            <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                                <DatoFicha
+                                    etiqueta="Dirección"
+                                    :valor="servicio.direccion"
+                                    class="sm:col-span-2"
+                                />
+                                <DatoFicha
+                                    etiqueta="Referencia"
+                                    :valor="servicio.referencia ?? null"
+                                    class="sm:col-span-2 whitespace-pre-line"
+                                    data-prueba="referencia-servicio"
+                                />
+                                <DatoFicha
+                                    etiqueta="Coordenadas"
+                                    :valor="servicio.coordenadas"
+                                    mono
+                                >
+                                    <ULink
+                                        v-if="mapaServicio"
+                                        :to="mapaServicio"
+                                        target="_blank"
+                                        class="inline-flex items-center gap-1 text-primary"
+                                    >
+                                        {{ servicio.coordenadas }}
+                                        <UIcon
+                                            name="i-lucide-external-link"
+                                            class="size-3.5"
+                                        />
+                                    </ULink>
+                                    <template v-else>
+                                        —
+                                    </template>
+                                </DatoFicha>
+                                <DatoFicha
+                                    etiqueta="Contacto en sitio"
+                                    :valor="contactoSitio"
+                                    data-prueba="contacto-servicio"
+                                >
+                                    <template v-if="!contactoSitio">
+                                        —
+                                    </template>
+                                    <span v-else-if="servicio.contacto_nombre">{{ servicio.contacto_nombre }}</span>
+                                    <ULink
+                                        v-if="servicio.contacto_telefono"
+                                        :to="`tel:${servicio.contacto_telefono.replace(/[^\d+]/g, '')}`"
+                                        :class="servicio.contacto_nombre ? 'ms-2' : ''"
+                                        class="inline-flex items-center gap-1 text-primary"
+                                    >
+                                        <UIcon
+                                            name="i-lucide-phone"
+                                            class="size-3.5"
+                                        />
+                                        {{ servicio.contacto_telefono }}
+                                    </ULink>
+                                </DatoFicha>
+                            </dl>
+                            <p class="mt-4 flex items-center gap-1.5 border-t border-default pt-4 text-xs font-medium text-muted">
+                                <UIcon
+                                    name="i-lucide-wrench"
+                                    class="size-3.5 shrink-0"
+                                />
+                                Instalación
+                            </p>
+                            <dl class="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                                <DatoFicha
+                                    etiqueta="Instalado el (inicio de la facturación)"
+                                    :valor="servicio.instalado_en ? formatearFechaHora(servicio.instalado_en) : 'Pendiente: se fija al activar la instalación'"
+                                    data-prueba="instalado-en-servicio"
+                                />
+                                <DatoFicha
+                                    etiqueta="Última modificación"
+                                    :valor="formatearFechaHora(servicio.updated_at)"
+                                />
+                            </dl>
+                            <div
+                                v-if="planta.length"
+                                class="mt-4 flex flex-col gap-3 border-t border-default pt-4"
+                                data-prueba="planta-servicio"
+                            >
+                                <p class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                                    <UIcon
+                                        name="i-lucide-cable"
+                                        class="size-3.5 shrink-0"
+                                    />
+                                    Referencia de planta (solo lectura, llega desde Iris)
+                                </p>
+                                <dl class="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+                                    <DatoFicha
+                                        v-for="dato in planta"
+                                        :key="dato.campo"
+                                        :etiqueta="dato.etiqueta"
+                                        :valor="dato.valor"
+                                        mono
+                                    />
+                                </dl>
+                            </div>
+                        </RedTarjeta>
+                    </div>
+                    <ServicioConfiguracionEfectiva
+                        ref="configuracionEfectiva"
+                        :servicio-id="servicio.id"
+                    />
+                    <ServicioEquipos
+                        v-if="puede('inventario.ver')"
+                        :servicio="servicio"
+                        @cambiado="alCambiarEquipo"
+                    />
+                    <section
+                        v-if="puede('sesiones.ver') && conPppoe"
+                        class="flex flex-col gap-3"
+                        aria-label="Historial de sesiones"
+                    >
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Historial de sesiones
+                        </h3>
+                        <ServicioSesiones
+                            ref="historialSesiones"
+                            :servicio-id="servicio.id"
+                        />
+                    </section>
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-label="Historial de asignaciones"
+                    >
+                        <h3 class="text-sm font-semibold text-highlighted">
+                            Historial de asignaciones
+                        </h3>
+                        <ServicioAsignaciones
+                            ref="asignaciones"
+                            :servicio-id="servicio.id"
+                        />
+                    </section>
+                </div>
+
+                <!-- Facturas. -->
+                <div
+                    v-else-if="pestana === 'facturas'"
+                    class="flex flex-col gap-4"
+                    data-prueba="servicio-facturas"
+                >
+                    <ProblemaAlerta
+                        v-if="facturasServicio.problema.value"
+                        :problema="facturasServicio.problema.value"
+                        :reintentar="facturasServicio.recargar"
+                        :reintentando="facturasServicio.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="facturasServicio.filas.value"
+                            :columns="columnasFacturas"
+                            :loading="facturasServicio.cargando.value"
+                            :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                        >
+                            <template #periodo-cell="{ row }">
+                                <ULink
+                                    :to="`/facturas/${row.original.id}`"
+                                    class="font-semibold text-highlighted hover:text-primary"
+                                >{{ row.original.periodo }}</ULink>
+                            </template>
+                            <template #vence_en-cell="{ row }">
+                                <span class="text-sm text-muted">{{ formatearFecha(row.original.vence_en) }}</span>
+                            </template>
+                            <template #total-cell="{ row }">
+                                <span class="font-semibold tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <EstadoFacturaBadge :estado="row.original.estado" />
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-receipt"
+                                    title="Sin facturas"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="facturasServicio.pagina.value"
+                            :hay-anterior="facturasServicio.hayAnterior.value"
+                            :hay-siguiente="facturasServicio.haySiguiente.value"
+                            :cargando="facturasServicio.cargando.value"
+                            :filas="facturasServicio.filas.value.length"
+                            @anterior="facturasServicio.anterior"
+                            @siguiente="facturasServicio.siguiente"
+                        />
+                    </template>
+                    <PeriodosBonificados
+                        ref="periodosBonificados"
+                        :servicio-id="servicio.id"
+                    />
+                    <section
+                        v-if="puede('promesas.ver')"
+                        class="flex flex-col gap-3"
+                        aria-label="Promesas del servicio"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="text-sm font-semibold text-highlighted">
+                                Promesas de pago
+                            </h3>
+                            <UButton
+                                :to="`/promesas?servicio=${servicio.id}`"
+                                label="Ver todas"
+                                color="neutral"
+                                variant="link"
+                                size="sm"
+                                trailing-icon="i-lucide-arrow-right"
+                            />
+                        </div>
+                        <ProblemaAlerta
+                            v-if="problemaPromesas"
+                            :problema="problemaPromesas"
+                            :reintentar="cargarPromesas"
+                            :reintentando="cargandoPromesas"
+                        />
+                        <USkeleton
+                            v-else-if="cargandoPromesas && !promesas.length"
+                            class="h-16 w-full"
+                        />
+                        <p
+                            v-else-if="!promesas.length"
+                            class="text-sm text-muted"
+                        >
+                            Sin promesas de pago.
+                        </p>
+                        <ul
+                            v-else
+                            class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        >
+                            <li
+                                v-for="promesa in promesas"
+                                :key="promesa.id"
+                                class="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between"
+                                :data-promesa="promesa.id"
+                            >
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-medium text-highlighted">
+                                        {{ formatearQuetzales(promesa.monto) }} · vence {{ formatearFechaHora(promesa.vence_en) }}
+                                    </span>
+                                    <span class="text-xs text-muted">Promesa #{{ promesa.id }} · {{ CANALES_PROMESA[promesa.canal] }} · {{ formatearFechaHora(promesa.created_at) }}</span>
+                                    <PromesaCumplimiento
+                                        :promesa="promesa"
+                                        class="my-1"
+                                    />
+                                    <EvaluacionPromesa
+                                        :promesa="promesa"
+                                        compacta
+                                    />
+                                </div>
+                                <UBadge
+                                    :label="ESTADOS_PROMESA[promesa.estado].etiqueta"
+                                    :icon="ESTADOS_PROMESA[promesa.estado].icono"
+                                    :color="ESTADOS_PROMESA[promesa.estado].color"
+                                    variant="subtle"
+                                    size="sm"
+                                    class="self-start"
+                                />
+                            </li>
+                        </ul>
+                    </section>
+                </div>
+
+                <!-- Contactos. -->
+                <ClienteContactos
+                    v-else-if="pestana === 'contactos'"
+                    :cliente-id="servicio.cliente_id"
+                    :servicios="serviciosCliente"
+                />
+
+                <!-- Bitácora. -->
                 <LineaTiempoBitacora
+                    v-else-if="pestana === 'bitacora'"
                     ref="linea"
                     :filtros="filtrosLinea"
                     etiqueta="Historial del servicio"
                 />
+
+                <!-- Portal de corte. -->
+                <ServicioCodigoCorte
+                    v-else-if="pestana === 'corte'"
+                    ref="codigoCorte"
+                    :servicio-id="servicio.id"
+                />
             </section>
+
+            <!-- Teléfono: «Más», Promesa y «Cobrar Q …» fijos abajo. -->
+            <RedBarraTelefono>
+                <UDropdownMenu
+                    v-if="itemsMas.length"
+                    :items="itemsMas"
+                    :content="{ align: 'start', side: 'top' }"
+                >
+                    <UButton
+                        icon="i-lucide-ellipsis"
+                        color="neutral"
+                        variant="outline"
+                        size="lg"
+                        class="rounded-full"
+                        aria-label="Más acciones del servicio"
+                    />
+                </UDropdownMenu>
+                <UButton
+                    v-if="puedePromesa"
+                    label="Promesa"
+                    icon="i-lucide-hand"
+                    color="neutral"
+                    variant="outline"
+                    size="lg"
+                    class="flex-1 justify-center rounded-full"
+                    @click="abrirPromesa"
+                />
+                <UButton
+                    v-if="puede('pagos.registrar') && debe && saldo"
+                    :to="enlaceCobro"
+                    :label="`Cobrar ${formatearQuetzales(saldo)}`"
+                    :icon="ICONOS.cobrar"
+                    color="success"
+                    size="lg"
+                    class="flex-[2] justify-center rounded-full"
+                />
+            </RedBarraTelefono>
 
             <ServicioEditar
                 v-model:open="editando"
@@ -1198,6 +1599,13 @@ onMounted(cargar)
                 :servicio="servicio"
                 :accion="accionElegida"
                 @hecho="alTerminar"
+            />
+            <ServicioCambiarEquipo
+                v-if="equipos && puede('servicios.cambiar_equipo')"
+                v-model:open="cambiarEquipoAbierto"
+                :servicio-id="servicio.id"
+                :equipos="equipos"
+                @hecho="alCambiarEquipo"
             />
         </div>
     </PanelPagina>

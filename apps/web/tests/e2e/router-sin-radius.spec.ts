@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { conectarRouter, entrar, ir, irAFichaDesdeAlta, pestanaRouter, pestanaServicio } from './ayudas'
 
 /**
  * Router sin RADIUS (A1, `modo_seguridad = 'api'`), en escritorio y teléfono: el alta no pide la IP
@@ -17,23 +17,20 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Routers', /\/routers$/)
 
-    // Alta: el modo va arriba; «Sin RADIUS» quita la IP del NAS y el secreto.
-    await page.locator('[data-prueba="nuevo-router"]').click()
-    const alta = page.getByRole('dialog', { name: 'Nuevo router' })
-    await expect(alta.getByRole('radio', { name: /RADIUS \(recomendado\)/ })).toBeChecked()
-    await expect(alta.locator('[data-prueba="router-nas"]')).toBeVisible()
-    await alta.getByRole('radio', { name: /Sin RADIUS \(todo por la API REST\)/ }).click()
-    await expect(alta.locator('[data-prueba="router-nas"]')).toBeHidden()
-    await expect(alta.getByText('Secreto RADIUS', { exact: true })).toBeHidden()
-    await campo(alta, 'router-nombre').fill('RB-Norte API')
-    await campo(alta, 'router-host').fill('10.40.0.1')
-    // PPPoE sin RADIUS crea los secrets con las credenciales de la API.
-    await expect(alta.getByText('Sin RADIUS, PPPoE se crea como secret con este usuario')).toBeVisible()
-    await alta.getByLabel('Usuario de la API').fill('argos')
-    await alta.getByLabel('Contraseña de la API').fill('clave-api-segura')
-    await alta.getByRole('radio', { name: /^Por código/ }).click()
-    await alta.locator('[data-prueba="router-guardar"]').click()
-    await expect(page).toHaveURL(/\/routers\/\d+$/)
+    // Conectar router: «Sin RADIUS» quita la IP del NAS y el secreto.
+    await page.goto('/routers/nuevo')
+    const pagina = page.locator('[data-prueba="conectar-router"]')
+    await pagina.locator('[data-prueba="router-nombre"] input, input[data-prueba="router-nombre"]').first().fill('RB-Norte API')
+    await pagina.locator('[data-prueba="via-conexion"]').getByRole('radio', { name: /Ya tengo acceso directo/ }).click()
+    await pagina.locator('[data-prueba="router-host"] input, input[data-prueba="router-host"]').first().fill('10.40.0.1')
+    await pagina.locator('[data-prueba="seguir-router"]').click()
+    await expect(pagina.locator('[data-prueba="modo-seguridad"]').getByRole('radio', { name: /^RADIUS/ })).toBeChecked()
+    await expect(pagina.locator('[data-prueba="router-nas"]')).toBeVisible()
+    await pagina.locator('[data-prueba="modo-seguridad"]').getByRole('radio', { name: /Sin RADIUS/ }).click()
+    await expect(pagina.locator('[data-prueba="router-nas"]')).toBeHidden()
+    await expect(pagina.getByText('Secreto RADIUS', { exact: true })).toBeHidden()
+    const alta = await conectarRouter(page, { nombre: 'RB-Norte API', host: '10.40.0.1', apiUsuario: 'argos', apiClave: 'clave-api-segura', sinRadius: true, corte: 'codigo' })
+    await irAFichaDesdeAlta(page, alta)
     const routerId = page.url().split('/').pop()
 
     // Ficha: NAS «Sin RADIUS», distintivo del modo y script deshabilitado con su motivo.
@@ -56,7 +53,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(script).toBeHidden()
 
     // Una red IPv4 para las IP de los servicios.
-    await pestanaRouter(page, 'Pools e IPs')
+    await pestanaRouter(page, 'Red e IPs')
     const direccionamiento = page.locator('[data-prueba="router-direccionamiento"]')
     await direccionamiento.locator('[data-prueba="agregar-red"]').click()
     const red = page.getByRole('dialog', { name: 'Agregar red IPv4' })
@@ -111,6 +108,7 @@ test('alta de un router sin RADIUS y de un servicio PPPoE en él, con su sesión
     await expect(page.locator('[data-prueba="sesion-activa-sondeo"]')).toHaveText('Por sondeo')
     await expect(page.locator('[data-prueba="sesion-activa-consumo"]')).toContainText('— (sin RADIUS no hay consumo)')
     await expect(page.getByText(/^— · sondeo:/)).toBeVisible()
+    await pestanaServicio(page, 'Red y equipo')
     const historial = page.locator('[data-prueba="sesiones-servicio"]')
     await expect(historial.locator('[data-prueba="sesion-por-sondeo"]').first()).toBeVisible()
     await expect(historial).toContainText('— (sin RADIUS no hay consumo)')

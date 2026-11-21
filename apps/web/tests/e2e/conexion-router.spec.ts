@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir, pestanaRouter } from './ayudas'
+import { accionServicio, entrar, ir, pestanaRouter } from './ayudas'
 
 /**
  * Conexión del router por WireGuard (`contratos/conexion-routers.md`), en escritorio y teléfono:
@@ -100,7 +100,7 @@ test('router sin certificado en www-ssl: explica la causa, comandos para copiar 
 test('ficha del servicio: «Sincronizar con el router» muestra lo corregido y luego que ya estaba bien', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/servicios/1')
-    await page.locator('[data-prueba="abrir-sincronizar-router"]').click()
+    await accionServicio(page, 'Sincronizar con el router')
     const modal = page.getByRole('dialog', { name: /Sincronizar con el router/ })
     await modal.locator('[data-prueba="sincronizar-router-confirmar"]').click()
     await expect(modal.locator('[data-prueba="sincronizar-cambios"]')).toContainText('/queue/simple')

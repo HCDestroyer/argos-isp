@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir, verDatosCliente } from './ayudas'
+import { entrar, ir, pestanaServicio, verDatosCliente } from './ayudas'
 
 /**
  * Pedidos de Iris A12–A14 (contrato 0.5.0): alta de un cliente con referencia («cómo llegar») y de
@@ -64,6 +64,7 @@ test('alta de cliente con referencia y de su servicio con contacto en sitio', as
     await servicio.click()
     // Con el servidor de desarrollo, la primera visita a la ficha la compila (varios segundos).
     await expect(page).toHaveURL(/\/servicios\/\d+$/, { timeout: 20_000 })
+    await pestanaServicio(page, 'Red y equipo')
     const tarjeta = page.locator('[data-prueba="ubicacion-contacto-servicio"]')
     await expect(tarjeta).toContainText('Ubicación y contacto en sitio')
     await expect(tarjeta.locator('[data-prueba="referencia-servicio"]')).toContainText('Casa verde frente a la iglesia')

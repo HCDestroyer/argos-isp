@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { accionServicio, entrar, ir } from './ayudas'
 
 /**
  * Servicios adicionales y tipo de plan (A1) en modo fixtures, en escritorio y teléfono:
@@ -83,7 +83,7 @@ test('suspender bloquea los adicionales con su historial; un cobrado entra sin c
     await expect(seccion).toContainText('sin costo este mes')
 
     // Suspender bloquea todos sus adicionales; nadie los desbloquea a mano.
-    await page.getByRole('button', { name: 'Suspender', exact: true }).click()
+    await accionServicio(page, 'Suspender')
     const suspender = page.getByRole('dialog', { name: 'Suspender servicio' })
     await suspender.getByLabel('Motivo').fill('Solicitud del cliente')
     await suspender.getByRole('button', { name: 'Suspender servicio' }).click()
@@ -96,7 +96,7 @@ test('suspender bloquea los adicionales con su historial; un cobrado entra sin c
     await page.keyboard.press('Escape')
     await expect(historial).toBeHidden()
 
-    await page.getByRole('button', { name: 'Reactivar', exact: true }).click()
+    await accionServicio(page, 'Reactivar')
     const reactivar = page.getByRole('dialog', { name: 'Reactivar servicio' })
     await reactivar.getByLabel('Motivo').fill('Volvió de viaje')
     await reactivar.getByRole('button', { name: 'Reactivar servicio' }).click()

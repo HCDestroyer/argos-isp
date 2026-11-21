@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conIdempotencia, conPermiso, problema, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, versionCambiada } from '../comun'
 
 type Migracion = Schema<'MigracionAaaRouter'>
 
@@ -21,6 +21,22 @@ function migracionDe(routerId: number): Migracion {
  * `GET /routers/:id/resumen-sesiones`, con las mismas reglas que la API.
  */
 export const rutasRed: RutasFixture = {
+    /**
+     * `GET /ip/:ip` (`ip.resolver`): la sesión abierta con esa IPv4 o el servicio que la tiene
+     * asignada; una IPv6 dentro del prefijo delegado o de enlace. 404 si nadie la tiene.
+     */
+    'GET /api/v1/ip/:ip': conPermiso('ip.resolver', (solicitud) => {
+        const ip = decodeURIComponent(solicitud.params.ip ?? '').trim()
+        const enPrefijo = (prefijo: string | null) => Boolean(prefijo && ip.includes(':') && ip.toLowerCase().startsWith(prefijo.split('::')[0]!.toLowerCase()))
+        const sesion = bd.sesiones.find(s => s.fin === null && (s.ipv4 === ip || enPrefijo(s.prefijo_delegado_v6) || enPrefijo(s.prefijo_enlace_v6)))
+        const servicio = bd.servicios.find(s => s.id === sesion?.servicio_id)
+            ?? bd.servicios.find(s => s.ipv4 === ip || enPrefijo(s.prefijo_delegado_v6) || enPrefijo(s.prefijo_enlace_v6))
+        if (!servicio) {
+            return problema(404, 'No encontrado', `Ningún servicio tiene la IP ${ip}`)
+        }
+        const prefijo = servicio.ipv4 === ip || sesion?.ipv4 === ip ? `${ip}/32` : (sesion?.prefijo_delegado_v6 ?? servicio.prefijo_delegado_v6 ?? servicio.prefijo_enlace_v6 ?? ip)
+        return { status: 200, cuerpo: { servicio_id: servicio.id, cliente_id: servicio.cliente_id, prefijo } }
+    }),
     'GET /api/v1/red/eventos': conPermiso('red.ver', (solicitud) => {
         const router = numeroQuery(solicitud, 'router_id')
         const servicio = numeroQuery(solicitud, 'servicio_id')

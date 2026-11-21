@@ -52,8 +52,8 @@ test('registrar pago y ver el servicio reactivarse', async ({ page }) => {
     // La ficha del servicio también lo ve activo.
     await servicio.getByRole('link', { name: 'juan.carlos2' }).click()
     await expect(page).toHaveURL(/\/servicios\/2$/)
-    const encabezado = page.getByRole('heading', { level: 2, name: 'juan.carlos2' })
+    const encabezado = page.locator('[data-prueba="franja-servicio"]')
     await expect(encabezado).toBeVisible()
-    await expect(encabezado.locator('..')).toContainText('Activo')
-    await expect(encabezado.locator('..')).not.toContainText('Suspendido')
+    await expect(encabezado).toContainText('Activo')
+    await expect(encabezado).not.toContainText('Suspendido')
 })
