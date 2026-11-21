@@ -3,7 +3,7 @@ import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { estado, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { crearClienteFila, crearEmpresaFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import { crearPlantillaFila, generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { crearServicio, nitAleatorio } from '#tests/portal/ayudas_portal'
@@ -556,6 +556,8 @@ async function cajaAbierta(client: ApiClient, token: string, empresaId: number):
 test.group('Plantillas de documentos: recibo de cobro', (group) => {
     group.each.setup(limpiar)
     group.each.teardown(limpiar)
+    // la empresa B del cobro no queda activa para las pruebas que siguen (una sola empresa)
+    group.each.teardown(() => soloEmpresaPrincipal())
 
     test('recibo de un cobro de dos empresas en carta y en POS; un usuario de una empresa ve su sección', async ({
         client,
