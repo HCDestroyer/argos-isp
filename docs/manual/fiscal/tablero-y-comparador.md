@@ -9,7 +9,7 @@ pantallas:
 
 Dos pantallas de consulta: el tablero resume cómo va la empresa en lo fiscal (lo del mes y del año) y el comparador simula cuánto ISR pagaría en cada régimen. Ninguna guarda ni presenta nada.
 
-Están en **Finanzas → Impuestos → Fiscal** y **Finanzas → Impuestos → Comparador de regímenes**.
+Están en **Finanzas → Impuestos → Resumen fiscal** y **Finanzas → Impuestos → Comparador de regímenes**.
 
 ## Quién la usa
 
