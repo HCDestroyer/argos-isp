@@ -269,11 +269,14 @@ const retiroAbierto = ref(false)
 const categorias = shallowRef<CategoriaEgresoApi[]>([])
 
 function abrirApertura(caja: Caja) {
+    // Una ventana nunca encima de otra: el panel «Cajas e impresión» se cierra antes.
+    administrarAbierto.value = false
     cajaApertura.value = caja
     aperturaAbierta.value = true
 }
 
 function abrirCierre(caja: Caja) {
+    administrarAbierto.value = false
     cajaCierre.value = caja
     cierreAbierto.value = true
 }
@@ -335,7 +338,7 @@ const columnasCierres: TableColumn<Cierre>[] = [
     { accessorKey: 'contado', header: 'Efectivo', meta: SOLO_ANCHO },
     { accessorKey: 'diferencia', header: 'Cuadre' },
     { id: 'deposito', header: 'Depósito', meta: SOLO_ESCRITORIO },
-    { id: 'acciones', header: '', meta: { class: { td: 'w-0 text-right' } } },
+    { id: 'acciones', header: '', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden w-0 text-right sm:table-cell' } } },
 ]
 
 const imprimiendo = shallowRef<{ cierre: Cierre, formato: FormatoImpresion } | null>(null)

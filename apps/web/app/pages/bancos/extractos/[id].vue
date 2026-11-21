@@ -415,10 +415,10 @@ onMounted(cargar)
                 data-prueba="resultado-reglas"
             />
 
-            <div class="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_9.5rem_minmax(0,1fr)]">
+            <div class="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_9.5rem_minmax(0,1fr)]">
                 <!-- Banco -->
                 <section
-                    class="surface-card flex min-h-64 flex-col overflow-hidden rounded-2xl"
+                    class="surface-card flex flex-col overflow-hidden rounded-2xl lg:min-h-64"
                     aria-label="Estado de cuenta del banco"
                 >
                     <h2 class="flex items-center gap-2 border-b border-(--ax-borde) px-4 py-3">
@@ -430,7 +430,7 @@ onMounted(cargar)
                         <span class="truncate text-xs font-normal text-muted">importado {{ formatearFechaCorta(extracto.created_at) }} {{ formatearHora(extracto.created_at) }}</span>
                     </h2>
                     <ul
-                        class="min-h-0 flex-1 overflow-y-auto"
+                        class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
                         aria-label="Líneas del banco"
                         data-prueba="tabla-lineas"
                     >
@@ -544,7 +544,7 @@ onMounted(cargar)
 
                 <!-- Argos -->
                 <section
-                    class="surface-card flex min-h-64 flex-col overflow-hidden rounded-2xl"
+                    class="surface-card flex flex-col overflow-hidden rounded-2xl lg:min-h-64"
                     aria-label="Registrado en Argos"
                 >
                     <h2 class="flex items-center gap-2 border-b border-(--ax-borde) px-4 py-3">
@@ -566,7 +566,7 @@ onMounted(cargar)
                     </div>
                     <ul
                         v-else
-                        class="min-h-0 flex-1 overflow-y-auto"
+                        class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
                         aria-label="Movimientos de Argos"
                         data-prueba="partidas-argos"
                     >
