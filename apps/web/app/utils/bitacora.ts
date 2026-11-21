@@ -114,6 +114,10 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'cuentas_bancarias.crear': 'Cuenta bancaria creada',
     'cuentas_bancarias.editar': 'Cuenta bancaria editada',
     'documentos.editar': 'Plantilla de documento editada',
+    'documentos.crear': 'Plantilla de documento creada',
+    'documentos.predeterminar': 'Plantilla de documento predeterminada',
+    'documentos.desactivar': 'Plantilla de documento desactivada',
+    'documentos.activar': 'Plantilla de documento activada',
     'egresos.registrar': 'Egreso registrado',
     'egresos.anular': 'Egreso anulado',
     // Localización fiscal, fase 4 (A3): cobros, bancos y cartera

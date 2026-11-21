@@ -822,29 +822,69 @@ export const VariableDocumento = definirEsquema(
 )
 
 const TipoDocumento = {
-    ...enumerado(['aviso_cobro', 'nota_credito']),
-    description: 'aviso_cobro (también la factura FEL) o nota_credito (también la NCRE)',
+    ...enumerado(['aviso_cobro', 'nota_credito', 'recibo_cobro']),
+    description:
+        'aviso_cobro (también la factura FEL), nota_credito (también la NCRE) o recibo_cobro (recibo de un cobro de caja)',
+}
+
+const FormatoDocumento = {
+    ...enumerado(['carta', 'pos_80']),
+    description: 'carta (hoja carta) o pos_80 (rollo térmico de 80 mm; el alto sale del contenido)',
+}
+
+const camposPlantilla = {
+    tipo: TipoDocumento,
+    nombre: {
+        ...texto,
+        description: 'Nombre para elegirla al imprimir («Carta», «POS 80 mm»); único por tipo',
+    },
+    formato: FormatoDocumento,
+    predeterminada: {
+        ...booleano,
+        description: 'La que usan el portal, el correo y los procesos automáticos (una por tipo)',
+    },
+    activa: { ...booleano, description: 'Se ofrece al imprimir; una desactivada no se puede pedir' },
+    de_fabrica: {
+        ...booleano,
+        description: 'Usa la plantilla de fábrica de su tipo y formato (sigue a la versión instalada)',
+    },
 }
 
 export const PlantillaDocumentoFabrica = definirEsquema(
     'PlantillaDocumentoFabrica',
     objeto({
         tipo: TipoDocumento,
+        formato: FormatoDocumento,
         html: { ...texto, description: 'HTML de fábrica de la versión instalada (con el bloque FEL)' },
         variables: lista(VariableDocumento),
+    }),
+)
+
+export const PlantillaDocumentoResumen = definirEsquema(
+    'PlantillaDocumentoResumen',
+    objeto({
+        id,
+        ...camposPlantilla,
+        version: { ...entero, minimum: 1, description: 'Envíala al editar, predeterminar o desactivar' },
+        updated_at: instante,
     }),
 )
 
 export const PlantillaDocumento = definirEsquema(
     'PlantillaDocumento',
     objeto({
-        tipo: TipoDocumento,
+        id: {
+            ...nulable(id),
+            description: 'null: la de fábrica en carta, porque el tipo aún no tiene predeterminada guardada',
+        },
+        ...camposPlantilla,
         html: { ...texto, description: 'HTML con variables Mustache (`{{factura.total}}`)' },
         version: {
             ...entero,
             minimum: 0,
             description: '0 = plantilla de fábrica (nadie la ha guardado). Envíala al editar',
         },
+        updated_at: nulable(instante),
         variables: lista(VariableDocumento),
     }),
 )

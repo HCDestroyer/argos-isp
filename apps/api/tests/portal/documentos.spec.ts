@@ -259,9 +259,12 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
 })
 
 test.group('Documentos: plantilla editable', (group) => {
-    group.each.teardown(async () => {
+    // sin plantillas guardadas del tipo (la migración deja la «Carta» de fábrica): versión 0
+    const limpiar = async () => {
         await db.from('core.plantillas_documentos').where('tipo', 'aviso_cobro').delete()
-    })
+    }
+    group.each.setup(limpiar)
+    group.each.teardown(limpiar)
 
     test('lee la de fábrica con sus variables, guarda con diff y el PDF usa la nueva', async ({
         client,

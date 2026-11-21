@@ -35,7 +35,8 @@ describe('usePermisos', () => {
         useUsuarioActual().value = meCajero
         const { puede } = usePermisos()
         const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
-        // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (incluye facturas.ver para bonificaciones, planes.ver, fel.ver, lealtad.ver, adicionales.ver e inventario.ver).
-        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'facturas', 'pagos', 'comprobantes', 'pasarela', 'promesas', 'dte', 'notas-credito', 'bonificaciones', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'existencias', 'traslados', 'mi-bodega', 'kardex', 'productos', 'tipos-producto', 'bodegas', 'unidades', 'por-recuperar', 'conteos', 'valorizado', 'planes', 'adicionales', 'fel', 'cuentas-bancarias'])
+        // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (incluye facturas.ver para bonificaciones, planes.ver, fel.ver, lealtad.ver, adicionales.ver e inventario.ver,
+        // y documentos.ver para elegir con qué plantilla imprimir: ve las plantillas en solo lectura).
+        expect(visibles).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'facturas', 'pagos', 'comprobantes', 'pasarela', 'promesas', 'dte', 'notas-credito', 'bonificaciones', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'existencias', 'traslados', 'mi-bodega', 'kardex', 'productos', 'tipos-producto', 'bodegas', 'unidades', 'por-recuperar', 'conteos', 'valorizado', 'planes', 'adicionales', 'fel', 'cuentas-bancarias', 'aviso-cobro'])
     })
 })
