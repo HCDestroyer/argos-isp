@@ -91,3 +91,45 @@ export const reenviarBienvenidaValidator = vine.compile(
             .meta({ description: 'Sin él, todos los canales que Argos tenga configurados' }),
     }),
 )
+
+const url = () => vine.string().trim().maxLength(500).nullable().optional()
+const secreto = () =>
+    vine
+        .string()
+        .maxLength(500)
+        .nullable()
+        .optional()
+        .meta({ description: 'Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve' })
+
+export const configurarEquiposValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(0),
+        activo: vine.boolean().optional(),
+        smartolt_url: url().meta({ description: '`https://<subdominio>.smartolt.com`' }),
+        smartolt_token: secreto(),
+        genieacs_url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
+        genieacs_usuario: vine.string().trim().maxLength(200).nullable().optional(),
+        genieacs_clave: secreto(),
+        pppoe_por_acs: vine.boolean().optional().meta({
+            description: 'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar',
+        }),
+        perfiles: vine
+            .array(
+                vine.object({
+                    smartolt_olt_id: vine.string().trim().minLength(1).maxLength(50),
+                    plan_id: idEntidad().nullable().optional(),
+                    authorization_preset_id: vine.number().withoutDecimals().min(1),
+                    pon_type: vine
+                        .enum(['gpon', 'epon'] as const)
+                        .nullable()
+                        .optional(),
+                }),
+            )
+            .maxLength(500)
+            .optional()
+            .meta({
+                description:
+                    'Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset',
+            }),
+    }),
+)

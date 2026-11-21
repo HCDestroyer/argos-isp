@@ -3464,7 +3464,7 @@
       "get": {
         "operationId": "aprovisionamientosVer",
         "summary": "Estado de un aprovisionamiento (contrato Iris 0.9.0 §12.2)",
-        "description": "Sin SmartOLT ni ACS no hay aprovisionamientos: responde `404 no_encontrado`.",
+        "description": "`estado` `en_proceso`, `listo` o `fallido`; `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`) con su estado; `causa`, `reintentable` y `detalle` con `fallido`; `equipo { tipo, serie, mac, unidad_id, modelo, gestionado }`. Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`.",
         "tags": [
           "servicios"
         ],
@@ -29604,6 +29604,291 @@
           }
         },
         "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/equipos": {
+      "get": {
+        "operationId": "equiposConfigVer",
+        "summary": "Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)",
+        "description": "Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en `capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigEquipos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso equipos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "equipos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "equiposConfigurar",
+        "summary": "Guardar SmartOLT y GenieACS de la empresa activa",
+        "description": "Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; desactualizada: 409.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "smartolt_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "`https://<subdominio>.smartolt.com`"
+                  },
+                  "smartolt_token": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
+                  },
+                  "genieacs_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "URL del NBI de GenieACS (o del proxy que lo protege)"
+                  },
+                  "genieacs_usuario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "genieacs_clave": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
+                  },
+                  "pppoe_por_acs": {
+                    "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar",
+                    "type": "boolean"
+                  },
+                  "perfiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "smartolt_olt_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 50
+                        },
+                        "plan_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "authorization_preset_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "pon_type": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "gpon",
+                                "epon"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "smartolt_olt_id",
+                        "authorization_preset_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 500,
+                    "description": "Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuración guardada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigEquipos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso equipos.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "equipos.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/equipos/probar": {
+      "post": {
+        "operationId": "equiposProbar",
+        "summary": "Probar la conexión con SmartOLT y GenieACS (configuración guardada)",
+        "description": "SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema no responde: devuelve su error.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la prueba",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruebaEquipos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso equipos.probar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "equipos.probar",
         "x-implementado": true
       }
     },
@@ -72726,6 +73011,9 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
+                        "equipos.configurar",
+                        "equipos.probar",
+                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -73149,6 +73437,9 @@
                         "empresas.desactivar",
                         "empresas.editar",
                         "empresas.ver",
+                        "equipos.configurar",
+                        "equipos.probar",
+                        "equipos.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
                         "facturas.cargo_sin_costo",
@@ -81372,7 +81663,7 @@
       "post": {
         "operationId": "serviciosAprovisionar",
         "summary": "Aprovisionar y activar desde la orden de Iris (contrato Iris 0.9.0 §12.2, A32)",
-        "description": "Asíncrono en el contrato (`202`). **Hoy Argos no tiene SmartOLT ni ACS**: después de validar responde `422 aprovisionamiento_no_disponible` y `capacidades.aprovisionamiento` sale en false (Iris activa al cerrar, §3). Valida: `409 servicio_no_pendiente`, `422 equipo_invalido` (`ont` sin serie, `cpe_wireless` sin MAC, `planta` o `wireless` con otro tipo) y `422 wifi_invalido`. `Idempotency-Key` obligatoria (`iris:aprovisionar:<orden_id>:<intento>`). Con el token de Iris, `X-Iris-Actor` de una persona (el asistente nunca aprovisiona). La clave Wi-Fi nunca se guarda ni se audita.",
+        "description": "Asíncrono (`202 { aprovisionamiento_id, estado: en_proceso }`): el worker autoriza la ONT en SmartOLT con el perfil de su OLT y plan, configura PPPoE (si la empresa lo pide) y el Wi-Fi inicial por GenieACS, asigna IP, hace el comodato y activa el servicio; el resultado llega por `instalacion.aprovisionada` o `instalacion.fallida` y por `GET /aprovisionamientos/:id`. Repetir la misma `Idempotency-Key` (`iris:aprovisionar:<orden_id>:<intento>`) devuelve `200` con el estado final si ya terminó. Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`), `409 unidad_en_otra_bodega`, `422 equipo_invalido`, `422 wifi_invalido`, `422 wifi_no_disponible`, `422 aprovisionamiento_no_disponible` y `422 plan_no_permitido`. Con el token de Iris, `X-Iris-Actor` de una persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita.",
         "tags": [
           "servicios"
         ],
@@ -83026,7 +83317,7 @@
       "get": {
         "operationId": "serviciosVerEquipo",
         "summary": "Estado del equipo del cliente: en línea, señal y firmware (contrato Iris 0.9.0 §12.3, A33)",
-        "description": "Lee SmartOLT o el ACS. **Hoy Argos no tiene ninguno de los dos**: responde siempre `409 equipo_sin_gestion` (con `extensions.equipos[]`, los equipos en comodato del inventario: unidad, producto, serie, MAC y estado; sin `extensions` para el asistente de IA). Con el token de Iris, `X-Iris-Actor` obligatoria; con `asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo.",
+        "description": "Lee SmartOLT (estado y señal de la ONU) y GenieACS (último contacto, firmware, modelo y SSID). Responde la lectura guardada si tiene menos de 60 s (`leido_en`). Sin equipo gestionado (la empresa sin SmartOLT ni ACS probados, o el equipo sin registro en ninguno): `409 equipo_sin_gestion` con `extensions.equipos[]` (los equipos en comodato del inventario), sin `extensions` para el asistente de IA. Si ningún sistema responde: `503 equipo_sin_respuesta`. `ssid` es una extensión de Argos (no está en el contrato). Con el token de Iris, `X-Iris-Actor` obligatoria; con `asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo.",
         "tags": [
           "servicios"
         ],
@@ -86079,7 +86370,7 @@
       "post": {
         "operationId": "serviciosCambiarWifi",
         "summary": "Cambiar el Wi-Fi pedido desde Iris (contrato Iris 0.9.0 §12.4, A35)",
-        "description": "Asíncrono en el contrato (`202` y webhook `equipo.wifi_resuelto`). **Hoy Argos no tiene SmartOLT ni ACS**: después de validar responde `409 equipo_sin_gestion`. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de 1 a 32, clave de 8 a 63) y `422 verificacion_requerida` (`verificacion { metodo, verificado_en, cliente_id }` del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` obligatoria y, con el asistente, `X-Iris-Conversacion`. `Idempotency-Key` obligatoria. La clave nunca se guarda, se audita ni vuelve.",
+        "description": "Asíncrono (`202 { solicitud_id, estado: en_proceso }` y webhook `equipo.wifi_resuelto`): el worker lo aplica por GenieACS (`setParameterValues` en TR-098 o TR-181). `409 equipo_sin_gestion` si el equipo no está en el ACS de la empresa; `429 demasiados_cambios_wifi` (con `Retry-After`) después de 3 cambios por servicio en el día de Guatemala. Con `aplicado` se avisa al titular. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de 1 a 32, clave de 8 a 63) y `422 verificacion_requerida` (`verificacion { metodo, verificado_en, cliente_id }` del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` obligatoria y, con el asistente, `X-Iris-Conversacion`. `Idempotency-Key` obligatoria. La clave nunca se guarda, se audita ni vuelve.",
         "tags": [
           "servicios"
         ],
@@ -86250,6 +86541,16 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -87849,6 +88150,9 @@
                             "empresas.desactivar",
                             "empresas.editar",
                             "empresas.ver",
+                            "equipos.configurar",
+                            "equipos.probar",
+                            "equipos.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
                             "facturas.cargo_sin_costo",
@@ -91256,6 +91560,8 @@
           "reintentable",
           "detalle",
           "servicio_estado",
+          "equipo",
+          "senal",
           "creado_en",
           "actualizado_en"
         ],
@@ -91347,6 +91653,79 @@
           },
           "servicio_estado": {
             "type": "string"
+          },
+          "equipo": {
+            "type": "object",
+            "required": [
+              "tipo",
+              "serie",
+              "mac",
+              "unidad_id",
+              "modelo",
+              "gestionado"
+            ],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "ont",
+                  "cpe_wireless",
+                  "router_tr069"
+                ]
+              },
+              "serie": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mac": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "unidad_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "modelo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gestionado": {
+                "type": "boolean"
+              }
+            }
+          },
+          "senal": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "rx_dbm",
+              "tx_dbm"
+            ],
+            "properties": {
+              "rx_dbm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tx_dbm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
           },
           "creado_en": {
             "type": "string",
@@ -99681,6 +100060,186 @@
           }
         }
       },
+      "ConfigEquipos": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "activo",
+          "smartolt",
+          "genieacs",
+          "pppoe_por_acs",
+          "perfiles",
+          "capacidades",
+          "version"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "smartolt": {
+            "type": "object",
+            "required": [
+              "url",
+              "token",
+              "probado_en",
+              "prueba_ok",
+              "prueba_error"
+            ],
+            "properties": {
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "***"
+                ]
+              },
+              "probado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "prueba_ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "prueba_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "genieacs": {
+            "type": "object",
+            "required": [
+              "url",
+              "usuario",
+              "clave",
+              "probado_en",
+              "prueba_ok",
+              "prueba_error"
+            ],
+            "properties": {
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "usuario": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "clave": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "***"
+                ]
+              },
+              "probado_en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "prueba_ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "prueba_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "pppoe_por_acs": {
+            "type": "boolean"
+          },
+          "perfiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "smartolt_olt_id",
+                "plan_id",
+                "authorization_preset_id",
+                "pon_type"
+              ],
+              "properties": {
+                "smartolt_olt_id": {
+                  "type": "string"
+                },
+                "plan_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "authorization_preset_id": {
+                  "type": "integer"
+                },
+                "pon_type": {
+                  "type": "string",
+                  "enum": [
+                    "gpon",
+                    "epon"
+                  ]
+                }
+              }
+            }
+          },
+          "capacidades": {
+            "type": "object",
+            "required": [
+              "ftth",
+              "wireless",
+              "tr069"
+            ],
+            "properties": {
+              "ftth": {
+                "type": "boolean"
+              },
+              "wireless": {
+                "type": "boolean"
+              },
+              "tr069": {
+                "type": "boolean"
+              }
+            }
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "ConfiguracionEfectivaServicio": {
         "type": "object",
         "required": [
@@ -106859,6 +107418,12 @@
               "acs"
             ]
           },
+          "ssid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "leido_en": {
             "type": "string",
             "format": "date-time"
@@ -113771,6 +114336,9 @@
           "empresas.desactivar",
           "empresas.editar",
           "empresas.ver",
+          "equipos.configurar",
+          "equipos.probar",
+          "equipos.ver",
           "facturas.anular",
           "facturas.anular_nota_credito",
           "facturas.cargo_sin_costo",
@@ -114086,6 +114654,9 @@
           "Desactivar una empresa (no se borra)",
           "Editar los datos fiscales y de contacto de una empresa",
           "Ver las empresas (NIT) de la instalación",
+          "Configurar SmartOLT y GenieACS de la empresa (URL, token, usuario y clave del ACS, perfiles por OLT y plan); solo admin",
+          "Probar la conexión con SmartOLT y GenieACS con la configuración guardada",
+          "Ver la configuración de SmartOLT y GenieACS de la empresa (sin token ni clave) y sus perfiles de autorización",
           "Anular facturas",
           "Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)",
           "Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)",
@@ -114241,7 +114812,7 @@
           "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
-          "Aprovisionar y activar un servicio pendiente con su equipo (SmartOLT o ACS; hoy sin integración)",
+          "Aprovisionar y activar un servicio pendiente con su equipo (ONT por SmartOLT, router o CPE por el ACS TR-069)",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
           "Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación",
           "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
@@ -121844,6 +122415,132 @@
           }
         }
       },
+      "PruebaEquipos": {
+        "type": "object",
+        "required": [
+          "probado_en",
+          "smartolt",
+          "genieacs",
+          "capacidades"
+        ],
+        "properties": {
+          "probado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "smartolt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ok",
+              "latencia_ms",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "latencia_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "olts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "genieacs": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ok",
+              "latencia_ms",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "latencia_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "olts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "capacidades": {
+            "type": "object",
+            "required": [
+              "ftth",
+              "wireless",
+              "tr069"
+            ],
+            "properties": {
+              "ftth": {
+                "type": "boolean"
+              },
+              "wireless": {
+                "type": "boolean"
+              },
+              "tr069": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
       "PuertoPon": {
         "type": "object",
         "required": [
@@ -129185,6 +129882,9 @@
               "empresas.desactivar",
               "empresas.editar",
               "empresas.ver",
+              "equipos.configurar",
+              "equipos.probar",
+              "equipos.ver",
               "facturas.anular",
               "facturas.anular_nota_credito",
               "facturas.cargo_sin_costo",
@@ -129752,6 +130452,7 @@
               "egresos.ver",
               "empresa.ver",
               "empresas.ver",
+              "equipos.ver",
               "facturas.ver",
               "fel.ver",
               "fiscal.ver",

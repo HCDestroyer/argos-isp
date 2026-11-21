@@ -3,9 +3,9 @@
 | Equipos del cliente y bienvenida (A6): contrato Iris 0.9.0 §12
 |--------------------------------------------------------------------------
 |
-| A32 (aprovisionar), A33 (estado del equipo), A35 (Wi-Fi) y A37 (reenviar la bienvenida). Argos aún
-| no tiene SmartOLT ni ACS: las rutas de equipos responden el error de «sin capacidad» del contrato
-| (`#integraciones/equipos/equipos`) y `capacidades.aprovisionamiento` sale en false.
+| A32 (aprovisionar), A33 (estado del equipo), A35 (Wi-Fi) y A37 (reenviar la bienvenida), con
+| SmartOLT (fibra) y GenieACS (TR-069) por empresa (`#integraciones/equipos`), y la configuración de
+| esas dos integraciones (`/integraciones/equipos`).
 |
 */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -22,12 +22,17 @@ import {
     booleano,
 } from '#shared/openapi/esquemas'
 import { NoEncontrado } from '#shared/errores'
+import { exigirAccesoEmpresa, exigirEmpresaActivaDelContexto } from '#shared/empresa_activa'
 import { exigirServicio } from '#core/acceso_empresa'
 import { CabeceraIrisRequerida, exigirActorIris } from '#integraciones/iris/atencion'
 import * as v from '#integraciones/equipos/validators'
 import { estadoEquipo } from '#integraciones/equipos/equipos'
 import AprovisionarServicio from '#integraciones/equipos/actions/aprovisionar_servicio'
 import CambiarWifiServicio from '#integraciones/equipos/actions/cambiar_wifi_servicio'
+import ConfigurarEquipos from '#integraciones/equipos/actions/configurar_equipos'
+import ProbarEquipos from '#integraciones/equipos/actions/probar_equipos'
+import { vistaConfig } from '#integraciones/equipos/configuracion'
+import { leerAprovisionamiento, vistaAprovisionamiento } from '#integraciones/equipos/aprovisionamientos'
 import ReenviarBienvenida from '#notify/actions/reenviar_bienvenida'
 
 const EstadoEquipo = definirEsquema(
@@ -45,9 +50,10 @@ const EstadoEquipo = definirEsquema(
             firmware: nulable(texto),
             ultimo_contacto: nulable(instante),
             fuente: enumerado(['smartolt', 'acs']),
+            ssid: nulable(texto),
             leido_en: instante,
         },
-        ['tipo', 'serie', 'mac', 'modelo', 'firmware', 'fuente'],
+        ['tipo', 'serie', 'mac', 'modelo', 'firmware', 'fuente', 'ssid'],
     ),
 )
 
@@ -76,6 +82,15 @@ const Aprovisionamiento = definirEsquema(
         reintentable: booleano,
         detalle: nulable(texto),
         servicio_estado: texto,
+        equipo: objeto({
+            tipo: enumerado(['ont', 'cpe_wireless', 'router_tr069']),
+            serie: nulable(texto),
+            mac: nulable(texto),
+            unidad_id: nulable(idEsquema),
+            modelo: nulable(texto),
+            gestionado: booleano,
+        }),
+        senal: nulable(objeto({ rx_dbm: nulable({ type: 'number' }), tx_dbm: nulable({ type: 'number' }) })),
         creado_en: instante,
         actualizado_en: instante,
     }),
@@ -96,16 +111,118 @@ function esAsistente(ctx: HttpContext): boolean {
     return exigirActorIris(ctx)?.actor === 'asistente_ia'
 }
 
+const ResultadoPruebaSistema = objeto(
+    {
+        ok: booleano,
+        latencia_ms: nulable({ type: 'integer' }),
+        error: nulable(texto),
+        olts: lista(objeto({ id: texto, name: texto })),
+    },
+    ['olts'],
+)
+const Capacidades = objeto({ ftth: booleano, wireless: booleano, tr069: booleano })
+
+const ConfigEquipos = definirEsquema(
+    'ConfigEquipos',
+    objeto({
+        empresa_id: idEsquema,
+        activo: booleano,
+        smartolt: objeto({
+            url: nulable(texto),
+            token: nulable(enumerado(['***'])),
+            probado_en: nulable(instante),
+            prueba_ok: nulable(booleano),
+            prueba_error: nulable(texto),
+        }),
+        genieacs: objeto({
+            url: nulable(texto),
+            usuario: nulable(texto),
+            clave: nulable(enumerado(['***'])),
+            probado_en: nulable(instante),
+            prueba_ok: nulable(booleano),
+            prueba_error: nulable(texto),
+        }),
+        pppoe_por_acs: booleano,
+        perfiles: lista(
+            objeto({
+                smartolt_olt_id: texto,
+                plan_id: nulable(idEsquema),
+                authorization_preset_id: { type: 'integer' },
+                pon_type: enumerado(['gpon', 'epon']),
+            }),
+        ),
+        capacidades: Capacidades,
+        version: { type: 'integer' },
+    }),
+)
+
+const PruebaEquipos = definirEsquema(
+    'PruebaEquipos',
+    objeto({
+        probado_en: instante,
+        smartolt: nulable(ResultadoPruebaSistema),
+        genieacs: nulable(ResultadoPruebaSistema),
+        capacidades: Capacidades,
+    }),
+)
+
 const rutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/equipos',
+        operacion: 'equiposConfigVer',
+        resumen: 'Configuración de SmartOLT y GenieACS de la empresa activa (sin secretos)',
+        descripcion:
+            'Token de SmartOLT y clave de GenieACS como `***` (o null). `capacidades` es lo que se informa a Iris en ' +
+            '`capacidades.aprovisionamiento`: solo con la integración encendida y su última prueba en ok.',
+        etiqueta: 'integraciones',
+        permiso: 'equipos.ver',
+        respuesta: { status: 200, descripcion: 'Configuración', esquema: ConfigEquipos },
+        handler: async (ctx) => vistaConfig(exigirEmpresaActivaDelContexto(ctx.contextoAccion())),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/integraciones/equipos',
+        operacion: 'equiposConfigurar',
+        resumen: 'Guardar SmartOLT y GenieACS de la empresa activa',
+        descripcion:
+            'Secretos: omitido = se conserva, null = se borra, texto = se reemplaza; se guardan cifrados y nunca vuelven. ' +
+            'Cambiar URL o secreto borra la última prueba (la capacidad vuelve a false hasta probar). `perfiles` ' +
+            'reemplaza la tabla de perfiles de autorización de SmartOLT por OLT y plan. `version` 0 la primera vez; ' +
+            'desactualizada: 409.',
+        etiqueta: 'integraciones',
+        permiso: 'equipos.configurar',
+        cuerpo: v.configurarEquiposValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Configuración guardada', esquema: ConfigEquipos },
+        handler: async (ctx, { cuerpo }) => new ConfigurarEquipos().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/integraciones/equipos/probar',
+        operacion: 'equiposProbar',
+        resumen: 'Probar la conexión con SmartOLT y GenieACS (configuración guardada)',
+        descripcion:
+            'SmartOLT: `GET /api/system/get_olts` (devuelve las OLT para armar los perfiles). GenieACS: una búsqueda de ' +
+            'un dispositivo en el NBI. Guarda el resultado de cada uno; de eso sale la capacidad. No falla si un sistema ' +
+            'no responde: devuelve su error.',
+        etiqueta: 'integraciones',
+        permiso: 'equipos.probar',
+        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaEquipos },
+        handler: async (ctx) => new ProbarEquipos().execute({}, ctx.contextoAccion()),
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/servicios/:id/equipo',
         operacion: 'serviciosVerEquipo',
         resumen: 'Estado del equipo del cliente: en línea, señal y firmware (contrato Iris 0.9.0 §12.3, A33)',
         descripcion:
-            'Lee SmartOLT o el ACS. **Hoy Argos no tiene ninguno de los dos**: responde siempre `409 equipo_sin_gestion` ' +
-            '(con `extensions.equipos[]`, los equipos en comodato del inventario: unidad, producto, serie, MAC y estado; ' +
-            'sin `extensions` para el asistente de IA). Con el token de Iris, `X-Iris-Actor` obligatoria; con ' +
+            'Lee SmartOLT (estado y señal de la ONU) y GenieACS (último contacto, firmware, modelo y SSID). Responde la ' +
+            'lectura guardada si tiene menos de 60 s (`leido_en`). Sin equipo gestionado (la empresa sin SmartOLT ni ACS ' +
+            'probados, o el equipo sin registro en ninguno): `409 equipo_sin_gestion` con `extensions.equipos[]` (los ' +
+            'equipos en comodato del inventario), sin `extensions` para el asistente de IA. Si ningún sistema responde: ' +
+            '`503 equipo_sin_respuesta`. `ssid` es una extensión de Argos (no está en el contrato). Con el token de Iris, ' +
+            '`X-Iris-Actor` obligatoria; con ' +
             '`asistente_ia` la respuesta 200 solo trae `servicio_id`, `tecnologia`, `en_linea`, `senal`, `ultimo_contacto` ' +
             'y `leido_en`. Nunca la clave Wi-Fi ni credenciales del equipo.',
         etiqueta: 'servicios',
@@ -124,12 +241,15 @@ const rutas: Ruta[] = [
         operacion: 'serviciosAprovisionar',
         resumen: 'Aprovisionar y activar desde la orden de Iris (contrato Iris 0.9.0 §12.2, A32)',
         descripcion:
-            'Asíncrono en el contrato (`202`). **Hoy Argos no tiene SmartOLT ni ACS**: después de validar responde ' +
-            '`422 aprovisionamiento_no_disponible` y `capacidades.aprovisionamiento` sale en false (Iris activa al cerrar, §3). ' +
-            'Valida: `409 servicio_no_pendiente`, `422 equipo_invalido` (`ont` sin serie, `cpe_wireless` sin MAC, ' +
-            '`planta` o `wireless` con otro tipo) y `422 wifi_invalido`. `Idempotency-Key` obligatoria ' +
-            '(`iris:aprovisionar:<orden_id>:<intento>`). Con el token de Iris, `X-Iris-Actor` de una persona ' +
-            '(el asistente nunca aprovisiona). La clave Wi-Fi nunca se guarda ni se audita.',
+            'Asíncrono (`202 { aprovisionamiento_id, estado: en_proceso }`): el worker autoriza la ONT en SmartOLT con el ' +
+            'perfil de su OLT y plan, configura PPPoE (si la empresa lo pide) y el Wi-Fi inicial por GenieACS, asigna IP, ' +
+            'hace el comodato y activa el servicio; el resultado llega por `instalacion.aprovisionada` o ' +
+            '`instalacion.fallida` y por `GET /aprovisionamientos/:id`. Repetir la misma `Idempotency-Key` ' +
+            '(`iris:aprovisionar:<orden_id>:<intento>`) devuelve `200` con el estado final si ya terminó. Errores: ' +
+            '`409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`), ' +
+            '`409 unidad_en_otra_bodega`, `422 equipo_invalido`, `422 wifi_invalido`, `422 wifi_no_disponible`, ' +
+            '`422 aprovisionamiento_no_disponible` y `422 plan_no_permitido`. Con el token de Iris, `X-Iris-Actor` de una ' +
+            'persona (el asistente nunca aprovisiona). La clave Wi-Fi se guarda cifrada solo hasta terminar y nunca se audita.',
         etiqueta: 'servicios',
         permiso: 'servicios.aprovisionar',
         cuerpo: v.aprovisionarValidator,
@@ -139,11 +259,26 @@ const rutas: Ruta[] = [
             descripcion: 'Aprovisionamiento aceptado',
             esquema: AprovisionamientoAceptado,
         },
+        releerRepeticion: async (guardada) => {
+            const id = Number(
+                (guardada.body as { aprovisionamiento_id?: unknown } | null)?.aprovisionamiento_id,
+            )
+            const fila = Number.isSafeInteger(id) && id > 0 ? await leerAprovisionamiento(id) : null
+            if (!fila || fila.estado === 'en_proceso') return null
+            return { status: 200, body: await vistaAprovisionamiento(fila) }
+        },
         handler: async (ctx, { cuerpo, params }) => {
             exigirActorIris(ctx, { sinAsistente: true })
             const id = Number(params.id)
             await exigirServicio(ctx, id)
-            return new AprovisionarServicio().execute({ ...cuerpo, servicio_id: id }, ctx.contextoAccion())
+            return new AprovisionarServicio().execute(
+                {
+                    ...cuerpo,
+                    servicio_id: id,
+                    idempotency_key: ctx.request.header('idempotency-key') ?? null,
+                },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({
@@ -151,12 +286,24 @@ const rutas: Ruta[] = [
         ruta: '/aprovisionamientos/:id',
         operacion: 'aprovisionamientosVer',
         resumen: 'Estado de un aprovisionamiento (contrato Iris 0.9.0 §12.2)',
-        descripcion: 'Sin SmartOLT ni ACS no hay aprovisionamientos: responde `404 no_encontrado`.',
+        descripcion:
+            '`estado` `en_proceso`, `listo` o `fallido`; `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`) con su estado; ' +
+            '`causa`, `reintentable` y `detalle` con `fallido`; `equipo { tipo, serie, mac, unidad_id, modelo, gestionado }`. ' +
+            'Nunca el SSID ni la clave del Wi-Fi inicial. De otra empresa o inexistente: `404`.',
         etiqueta: 'servicios',
         permiso: 'servicios.aprovisionar',
         respuesta: { status: 200, descripcion: 'Aprovisionamiento', esquema: Aprovisionamiento },
-        handler: async (_ctx, { params }) => {
-            throw new NoEncontrado(`El aprovisionamiento ${String(params.id)} no existe`)
+        handler: async (ctx, { params }) => {
+            const fila = await leerAprovisionamiento(Number(params.id))
+            const contexto = ctx.contextoAccion()
+            if (
+                !fila ||
+                (contexto.empresasPermitidas && !contexto.empresasPermitidas.includes(fila.empresa_id))
+            ) {
+                throw new NoEncontrado(`El aprovisionamiento ${String(params.id)} no existe`)
+            }
+            exigirAccesoEmpresa(contexto, fila.empresa_id)
+            return vistaAprovisionamiento(fila)
         },
     }),
     definirRuta({
@@ -165,8 +312,10 @@ const rutas: Ruta[] = [
         operacion: 'serviciosCambiarWifi',
         resumen: 'Cambiar el Wi-Fi pedido desde Iris (contrato Iris 0.9.0 §12.4, A35)',
         descripcion:
-            'Asíncrono en el contrato (`202` y webhook `equipo.wifi_resuelto`). **Hoy Argos no tiene SmartOLT ni ACS**: ' +
-            'después de validar responde `409 equipo_sin_gestion`. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de ' +
+            'Asíncrono (`202 { solicitud_id, estado: en_proceso }` y webhook `equipo.wifi_resuelto`): el worker lo aplica ' +
+            'por GenieACS (`setParameterValues` en TR-098 o TR-181). `409 equipo_sin_gestion` si el equipo no está en el ' +
+            'ACS de la empresa; `429 demasiados_cambios_wifi` (con `Retry-After`) después de 3 cambios por servicio en el ' +
+            'día de Guatemala. Con `aplicado` se avisa al titular. Valida `422 wifi_invalido` (al menos SSID o clave; SSID de ' +
             '1 a 32, clave de 8 a 63) y `422 verificacion_requerida` (`verificacion { metodo, verificado_en, cliente_id }` ' +
             'del titular del servicio; el asistente de IA solo `codigo_telefono`, `codigo_correo` o `datos_titular` y de ' +
             'menos de 10 min; una persona además `presencial` o `llamada_verificada`). Con el token de Iris, `X-Iris-Actor` ' +
@@ -177,6 +326,7 @@ const rutas: Ruta[] = [
         cuerpo: v.cambiarWifiValidator,
         idempotente: 'obligatoria',
         respuesta: { status: 202, descripcion: 'Cambio aceptado', esquema: WifiAceptado },
+        limitada: true,
         handler: async (ctx, { cuerpo, params }) => {
             const origen = exigirActorIris(ctx)
             if (origen?.actor === 'asistente_ia' && !origen.conversacion) {
@@ -186,7 +336,14 @@ const rutas: Ruta[] = [
             }
             const id = Number(params.id)
             await exigirServicio(ctx, id)
-            return new CambiarWifiServicio().execute({ ...cuerpo, servicio_id: id }, ctx.contextoAccion())
+            return new CambiarWifiServicio().execute(
+                {
+                    ...cuerpo,
+                    servicio_id: id,
+                    idempotency_key: ctx.request.header('idempotency-key') ?? null,
+                },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({

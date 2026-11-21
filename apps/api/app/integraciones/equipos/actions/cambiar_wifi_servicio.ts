@@ -1,12 +1,17 @@
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
+import { cifrar } from '#shared/cifrado'
+import { LimiteExcedido } from '#core/limite_ventana'
+import { configDeEmpresa, gestionDe } from '#integraciones/equipos/configuracion'
 import {
     EquipoSinGestion,
     VerificacionRequerida,
-    gestionDeEmpresa,
+    descubrirEquipo,
+    equipoGestionado,
     validarWifi,
 } from '#integraciones/equipos/equipos'
+import { encolarEquipos } from '#integraciones/equipos/cola'
 
 /** Métodos de verificación del titular (§12.4). */
 export const METODOS_ASISTENTE = ['codigo_telefono', 'codigo_correo', 'datos_titular'] as const
@@ -14,6 +19,8 @@ export const METODOS_PERSONA = [...METODOS_ASISTENTE, 'presencial', 'llamada_ver
 
 /** Vigencia de la verificación del asistente de IA (§12.4). */
 export const VIGENCIA_VERIFICACION_IA_MIN = 10
+/** Tope de cambios de Wi-Fi por servicio en el día de Guatemala, sumando todos los actores (§12.4). */
+export const CAMBIOS_WIFI_POR_DIA = 3
 
 export interface EntradaCambiarWifi {
     servicio_id: number
@@ -26,31 +33,44 @@ export interface EntradaCambiarWifi {
         verificado_en: Date
         cliente_id: number
     } | null
+    /** `Idempotency-Key` de la petición (la pone la ruta) */
+    idempotency_key?: string | null
+}
+
+export interface SalidaCambiarWifi {
+    solicitud_id: number
+    estado: 'en_proceso'
 }
 
 /**
  * `servicios.cambiar_wifi` (`POST /servicios/:id/wifi`, contrato Iris 0.9.0 §12.4, A35).
  *
- * Valida el cuerpo (`422 wifi_invalido`) y la `verificacion` del titular con las reglas del actor de
- * §7.1 (`422 verificacion_requerida`: falta, método que no vale para ese actor, más de 10 min con el
- * asistente o `cliente_id` que no es el del servicio). Después responde `409 equipo_sin_gestion`:
- * Argos no tiene SmartOLT ni ACS (`#integraciones/equipos/equipos`) y no finge el cambio. La clave
- * nunca llega a la auditoría (`***`). No hay `equipo.wifi_resuelto` porque nunca se acepta un cambio;
- * el tope de 3 por día se cuenta cuando exista la integración (solo cuentan los aceptados).
+ * - Valida el cuerpo (`422 wifi_invalido`) y la `verificacion` del titular con las reglas del actor
+ *   de §7.1 (`422 verificacion_requerida`).
+ * - El equipo debe estar gestionado por el ACS de la empresa (GenieACS probado y el equipo con su id
+ *   en el ACS, del aprovisionamiento o descubierto por la serie o MAC del comodato): si no,
+ *   `409 equipo_sin_gestion`.
+ * - Tope: **3 cambios por servicio en el día de Guatemala**, sumando todos los actores (cuentan los
+ *   aceptados que no fallaron), con el servicio bloqueado: `429 demasiados_cambios_wifi` con
+ *   `Retry-After` hasta la medianoche de Guatemala.
+ * - Guarda el pedido con SSID y clave **cifrados** (se borran al resolverse) y la verificación
+ *   completa; la auditoría lleva la clave como `***`. El worker la aplica (`equipos.aplicar_wifi`)
+ *   y emite `equipo.wifi_resuelto`; con `aplicado`, notify avisa al titular.
  */
-export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi, never> {
+export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi, SalidaCambiarWifi> {
     readonly nombre = 'servicios.cambiar_wifi'
     protected override readonly camposEntradaOcultos = ['clave']
 
-    protected async handle(input: EntradaCambiarWifi, t: Transaccion): Promise<never> {
+    protected async handle(input: EntradaCambiarWifi, t: Transaccion): Promise<SalidaCambiarWifi> {
         t.fijarEntidad('servicio', input.servicio_id)
         const servicio = (await t.trx
             .from('core.servicios')
             .where('id', input.servicio_id)
+            .forUpdate()
             .select('empresa_id', 'cliente_id')
-            .first()) as { empresa_id: number | null; cliente_id: number } | null
+            .first()) as { empresa_id: number; cliente_id: number } | null
         if (!servicio) throw new NoEncontrado(`El servicio ${input.servicio_id} no existe`)
-        const empresaId = servicio.empresa_id === null ? null : Number(servicio.empresa_id)
+        const empresaId = Number(servicio.empresa_id)
         t.fijarEmpresa(empresaId)
         validarWifi({ ssid: input.ssid, clave: input.clave })
 
@@ -81,12 +101,68 @@ export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi
             }
         }
 
-        // Sin SmartOLT ni ACS ningún equipo está gestionado (`gestionDeEmpresa` siempre false): hoy
-        // termina aquí. Con la integración, aquí se registra la solicitud y se responde 202.
-        const gestion = await gestionDeEmpresa(empresaId)
-        if (gestion.ftth || gestion.tr069) {
-            throw new Error('servicios.cambiar_wifi: gestión habilitada sin implementación')
+        const config = await configDeEmpresa(empresaId, t.trx)
+        if (!gestionDe(config).tr069) {
+            throw new EquipoSinGestion(
+                null,
+                'La empresa no tiene el ACS (GenieACS) configurado y probado en Argos',
+            )
         }
-        throw new EquipoSinGestion()
+        const equipo =
+            (await equipoGestionado(input.servicio_id, t.trx)) ??
+            (await descubrirEquipo(input.servicio_id, empresaId, config, t.trx))
+        if (!equipo?.acs_device_id) {
+            throw new EquipoSinGestion(
+                null,
+                'El equipo de este servicio no está registrado en el ACS (TR-069)',
+            )
+        }
+
+        const ahora = DateTime.now().setZone('America/Guatemala')
+        const inicioDia = ahora.startOf('day')
+        const conteo = (await t.trx
+            .from('integraciones.wifi_solicitudes')
+            .where('servicio_id', input.servicio_id)
+            .whereNot('estado', 'fallido')
+            .where('created_at', '>=', inicioDia.toUTC().toJSDate())
+            .count('* as n')
+            .first()) as { n: string | number }
+        if (Number(conteo.n) >= CAMBIOS_WIFI_POR_DIA) {
+            throw new LimiteExcedido(
+                'demasiados_cambios_wifi',
+                'Demasiados cambios de Wi-Fi',
+                `El Wi-Fi de este servicio ya se cambió ${CAMBIOS_WIFI_POR_DIA} veces hoy; vuelve a intentarlo mañana`,
+                Math.max(1, Math.ceil(inicioDia.plus({ days: 1 }).diff(ahora).as('seconds'))),
+            )
+        }
+
+        const [fila] = (await t.trx
+            .insertQuery()
+            .table('integraciones.wifi_solicitudes')
+            .insert({
+                empresa_id: empresaId,
+                servicio_id: input.servicio_id,
+                cliente_id: Number(servicio.cliente_id),
+                origen_tipo: input.origen_tipo,
+                origen_id: input.origen_id,
+                idempotency_key: input.idempotency_key ?? null,
+                cambia_ssid: Boolean(input.ssid),
+                cambia_clave: Boolean(input.clave),
+                ssid_cifrado: input.ssid ? cifrar(input.ssid) : null,
+                clave_cifrada: input.clave ? cifrar(input.clave) : null,
+                verificacion: JSON.stringify({
+                    metodo: v.metodo,
+                    verificado_en: v.verificado_en.toISOString(),
+                    cliente_id: Number(v.cliente_id),
+                    actor: t.ctx.iris?.actor ?? null,
+                }),
+                proximo_intento_en: new Date(),
+                request_id: t.ctx.requestId,
+            })
+            .returning('id')) as Array<{ id: number }>
+        const id = Number(fila!.id)
+        t.anotarAuditoria({ solicitud_id: id })
+        t.alConfirmar(() => encolarEquipos('wifi', id))
+        return { solicitud_id: id, estado: 'en_proceso' }
     }
 }
