@@ -1,250 +1,324 @@
 <script setup lang="ts">
-import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 import Decimal from 'decimal.js'
+import { h } from 'vue'
 
 /**
- * Existencias del inventario (A3, `contratos/inventario.md` §9): cantidad, costo promedio y valor
- * por producto × bodega, con el filtro «bajo mínimo». Desde aquí se registran el saldo inicial, el
- * consumo, el traslado, el ajuste y la baja, cada uno con su permiso; cada fila lleva a su kardex.
+ * Inventario · Existencias (tablero NuevoInventario, A3 `contratos/inventario.md` §9): una fila por
+ * producto con el tipo de seguimiento, dónde está (una pastilla por bodega), el total, el costo
+ * promedio y el valor. Filtros por bodega, bajo el mínimo y lo que viaja en tránsito; cada fila con
+ * su menú «⋯» (consumo, traslado, ajuste, baja y kardex), el mismo del clic derecho.
  */
 definePageMeta({ permiso: 'inventario.ver' })
 
-useHead({ title: 'Existencias · ArgosIsp' })
+useHead({ title: 'Inventario · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const toast = useToast()
 const { puede } = usePermisos()
 
-const TODAS = 0
-const numero = (valor: unknown) => (typeof valor === 'string' && Number(valor) > 0 ? Number(valor) : TODAS)
-const bodega = ref<number>(numero(route.query.bodega))
-const producto = ref<number>(numero(route.query.producto))
+const TODAS = 'todas'
+const texto = (valor: unknown) => (typeof valor === 'string' ? valor : '')
+const bodega = ref<string>(texto(route.query.bodega) || TODAS)
 const bajoMinimo = ref(route.query.bajo_minimo === 'true')
 /** Lo que viaja en órdenes de traslado (bodega `transito`, D.1); la API lo deja fuera si no se pide. */
 const conTransito = ref(route.query.transito === 'true')
+const busqueda = ref(texto(route.query.q))
 
-const productos = shallowRef<Producto[]>([])
+const marco = useTemplateRef<{ recargar: () => void }>('marco')
+const acciones = useTemplateRef<{ abrir: (o: OperacionInventario, productoId?: number | null, bodegaId?: number | null) => Promise<void>, operaciones: OperacionInventario[] }>('acciones')
+
 const bodegas = shallowRef<Bodega[]>([])
-const problemaCatalogos = ref<Problem | null>(null)
+const productos = shallowRef<Producto[]>([])
 
-async function cargarCatalogos() {
-    const [p, b] = await Promise.all([useProductos().activos(), useBodegas().activas()])
-    productos.value = p.ok ? p.data : []
+onMounted(async () => {
+    const [b, p] = await Promise.all([useBodegas().activas(), useProductos().activos()])
     bodegas.value = b.ok ? b.data : []
-    problemaCatalogos.value = !p.ok ? p.problema : (!b.ok ? b.problema : null)
-}
+    productos.value = p.ok ? p.data : []
+})
 
-const itemsBodega = computed<SelectItem[]>(() => [{ label: 'Todas las bodegas', value: TODAS }, ...bodegas.value.map(b => ({ label: b.nombre, value: b.id, icon: TIPOS_BODEGA[b.tipo].icono }))])
-const itemsProducto = computed<SelectItem[]>(() => [{ label: 'Todos los productos', value: TODAS }, ...productos.value.map(p => ({ label: `${p.nombre} · ${p.sku}`, value: p.id }))])
+const itemsBodega = computed<SelectItem[]>(() => [
+    { label: 'Bodega: todas', value: TODAS },
+    ...bodegas.value.filter(b => !esBodegaTransito(b)).map(b => ({ label: b.nombre, value: String(b.id), icon: TIPOS_BODEGA[b.tipo].icono })),
+])
 
-function filtros(): FiltrosExistencias {
-    return {
-        ...(bodega.value ? { bodega_id: bodega.value } : {}),
-        ...(producto.value ? { producto_id: producto.value } : {}),
-        ...(bajoMinimo.value ? { bajo_minimo: true } : {}),
-        ...(conTransito.value ? { incluir_transito: true } : {}),
-    }
-}
+const lista = usePaginacionCursor(cursor => useInventario().existencias({
+    limit: 200,
+    ...(bodega.value !== TODAS ? { bodega_id: Number(bodega.value) } : {}),
+    ...(bajoMinimo.value ? { bajo_minimo: true } : {}),
+    ...(conTransito.value ? { incluir_transito: true } : {}),
+}, cursor))
 
-const lista = usePaginacionCursor(cursor => useInventario().existencias(filtros(), cursor))
-
-watch([bodega, producto, bajoMinimo, conTransito], async () => {
-    await router.replace({ query: { ...(bodega.value ? { bodega: String(bodega.value) } : {}), ...(producto.value ? { producto: String(producto.value) } : {}), ...(bajoMinimo.value ? { bajo_minimo: 'true' } : {}), ...(conTransito.value ? { transito: 'true' } : {}) } })
+watch([bodega, bajoMinimo, conTransito], async () => {
+    await router.replace({ query: {
+        ...(bodega.value !== TODAS ? { bodega: bodega.value } : {}),
+        ...(bajoMinimo.value ? { bajo_minimo: 'true' } : {}),
+        ...(conTransito.value ? { transito: 'true' } : {}),
+        ...(busqueda.value ? { q: busqueda.value } : {}),
+    } })
     await lista.recargar()
 })
 
-onMounted(() => {
-    void cargarCatalogos()
-    void lista.recargar()
-})
+onMounted(() => void lista.recargar())
 
-const columnas: TableColumn<ExistenciaInventario>[] = [
-    { accessorKey: 'producto_nombre', header: 'Producto', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'bodega_nombre', header: 'Bodega', meta: SOLO_ANCHO },
-    { accessorKey: 'cantidad', header: 'Existencia', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'costo_promedio', header: 'Promedio', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
-    { accessorKey: 'valor', header: 'Valor', meta: { class: { th: 'text-right hidden sm:table-cell', td: 'text-right hidden sm:table-cell' } } },
-    { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
-]
-
-const total = computed(() => lista.filas.value.reduce((suma, fila) => suma.plus(fila.valor), new Decimal(0)))
-
-/* Operaciones */
-const operaciones = computed(() => (Object.keys(OPERACIONES_INVENTARIO) as OperacionInventario[]).filter(o => puede(OPERACIONES_INVENTARIO[o].permiso)))
-const operacion = ref<OperacionInventario>('consumo')
-const operacionAbierta = ref(false)
-const elegida = shallowRef<{ productoId: number | null, bodegaId: number | null }>({ productoId: null, bodegaId: null })
-
-function abrir(o: OperacionInventario, fila?: ExistenciaInventario) {
-    operacion.value = o
-    elegida.value = { productoId: fila?.producto_id ?? null, bodegaId: fila?.bodega_id ?? null }
-    operacionAbierta.value = true
+interface FilaProducto {
+    producto_id: number
+    nombre: string
+    sku: string
+    unidad: string
+    serie: boolean
+    filas: ExistenciaInventario[]
+    cantidad: Decimal
+    valor: Decimal
+    bajo: boolean
 }
 
-function menuFila(fila: ExistenciaInventario) {
+const seguimientos = computed(() => new Map(productos.value.map(p => [p.id, p.seguimiento])))
+
+/** Una fila por producto (la API da producto × bodega). */
+const agrupadas = computed<FilaProducto[]>(() => {
+    const mapa = new Map<number, FilaProducto>()
+    for (const fila of lista.filas.value) {
+        const actual = mapa.get(fila.producto_id) ?? {
+            producto_id: fila.producto_id,
+            nombre: fila.producto_nombre,
+            sku: fila.producto_sku,
+            unidad: fila.unidad,
+            serie: (seguimientos.value.get(fila.producto_id) ?? (fila.modalidad === 'comodato' ? 'serie' : 'cantidad')) === 'serie',
+            filas: [],
+            cantidad: new Decimal(0),
+            valor: new Decimal(0),
+            bajo: false,
+        }
+        actual.filas.push(fila)
+        actual.cantidad = actual.cantidad.plus(fila.cantidad)
+        actual.valor = actual.valor.plus(fila.valor)
+        actual.bajo ||= fila.bajo_minimo
+        mapa.set(fila.producto_id, actual)
+    }
+    const q = busqueda.value.trim().toLowerCase()
+    return [...mapa.values()].filter(f => !q || f.nombre.toLowerCase().includes(q) || f.sku.toLowerCase().includes(q))
+})
+
+/** Lo escrito parece una serie o MAC y ningún producto coincide: se ofrece buscarlo en Equipos. */
+const buscarEnEquipos = computed(() => busqueda.value.trim().length >= 4 && agrupadas.value.length === 0)
+
+const columnas: TableColumn<FilaProducto>[] = [
+    { id: 'producto', header: 'Producto', meta: { class: { td: 'whitespace-normal' } } },
+    { id: 'tipo', header: 'Tipo', meta: SOLO_ANCHO },
+    { id: 'donde', header: 'Dónde está', meta: { class: { th: 'hidden lg:table-cell', td: 'hidden lg:table-cell whitespace-normal' } } },
+    { id: 'total', header: 'Total', meta: { class: { th: 'text-end', td: 'text-end' } } },
+    { id: 'costo', header: 'Costo prom.', meta: { class: { th: 'hidden xl:table-cell text-end', td: 'hidden xl:table-cell text-end' } } },
+    { id: 'valor', header: 'Valor', meta: { class: { th: 'hidden sm:table-cell text-end', td: 'hidden sm:table-cell text-end' } } },
+    { id: 'acciones', header: () => h('span', { class: 'sr-only' }, 'Acciones'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
+]
+
+function costoPromedio(f: FilaProducto): string {
+    return f.cantidad.isZero() ? '—' : formatearQuetzales(f.valor.dividedBy(f.cantidad).toFixed(2))
+}
+
+function accionesProducto(f: FilaProducto): AccionFila[] {
+    const unaBodega = f.filas.length === 1 ? f.filas[0]!.bodega_id : null
+    const ops: AccionFila[] = (acciones.value?.operaciones ?? [])
+        .filter(o => o !== 'saldo_inicial')
+        .map(o => ({ etiqueta: OPERACIONES_INVENTARIO[o].etiqueta, icono: OPERACIONES_INVENTARIO[o].icono, alElegir: () => void acciones.value?.abrir(o, f.producto_id, unaBodega), grupo: 'Registrar' }))
     return [
-        operaciones.value.filter(o => o !== 'saldo_inicial').map(o => ({ label: OPERACIONES_INVENTARIO[o].etiqueta, icon: OPERACIONES_INVENTARIO[o].icono, onSelect: () => abrir(o, fila) })),
-        [{ label: 'Ver kardex', icon: 'i-lucide-list-ordered', to: `/inventario/kardex?producto=${fila.producto_id}&bodega=${fila.bodega_id}` }],
+        { etiqueta: 'Ver kardex', icono: 'i-lucide-list-ordered', to: `/inventario/kardex?producto=${f.producto_id}`, grupo: 'Ver' },
+        ...(f.serie ? [{ etiqueta: 'Ver equipos', icono: 'i-lucide-barcode', to: `/inventario/unidades?producto=${f.producto_id}`, grupo: 'Ver' }] : []),
+        ...(puede('productos.editar') ? [{ etiqueta: 'Editar producto', icono: ICONOS.editar, to: `/inventario/productos?editar=${f.producto_id}`, grupo: 'Ver' }] : []),
+        ...ops,
     ]
 }
 
-function alHacer(o: OperacionInventario) {
-    toast.add({ title: `${OPERACIONES_INVENTARIO[o].etiqueta} registrado`, icon: 'i-lucide-circle-check', color: 'success' })
+const menuFila = useMenuFila(accionesProducto)
+
+function alHacer() {
     void lista.recargar()
+    marco.value?.recargar()
 }
 </script>
 
 <template>
     <PanelPagina
         id="inventario"
-        titulo="Existencias"
+        titulo="Inventario"
         icono="i-lucide-package"
+        sin-descripcion
     >
         <template #acciones>
-            <UDropdownMenu
-                v-if="operaciones.length"
-                :items="operaciones.map(o => ({ label: OPERACIONES_INVENTARIO[o].etiqueta, icon: OPERACIONES_INVENTARIO[o].icono, onSelect: () => abrir(o) }))"
-            >
-                <UButton
-                    label="Registrar"
-                    icon="i-lucide-plus"
-                    trailing-icon="i-lucide-chevron-down"
-                    data-prueba="inventario-registrar"
-                />
-            </UDropdownMenu>
+            <InventarioAcciones
+                ref="acciones"
+                @hecho="alHacer"
+            />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <InventarioMarco
+            ref="marco"
+            pestana="existencias"
+        >
+            <template #herramientas>
+                <UInput
+                    v-model="busqueda"
+                    icon="i-lucide-search"
+                    placeholder="Producto, serie o MAC"
+                    aria-label="Buscar producto, serie o MAC"
+                    class="w-full sm:w-72"
+                    :ui="{ base: 'rounded-full' }"
+                    data-prueba="buscar-existencias"
+                />
                 <USelect
                     v-model="bodega"
                     :items="itemsBodega"
-                    class="w-full sm:w-56"
-                    aria-label="Bodega"
+                    icon="i-lucide-filter"
+                    class="w-full rounded-full sm:w-52"
+                    aria-label="Filtrar por bodega"
                     data-prueba="filtro-bodega"
                 />
-                <USelectMenu
-                    v-model="producto"
-                    :items="itemsProducto"
-                    value-key="value"
-                    class="w-full sm:w-72"
-                    aria-label="Producto"
-                />
-                <USwitch
-                    v-model="bajoMinimo"
+                <UButton
                     label="Bajo mínimo"
+                    icon="i-lucide-triangle-alert"
+                    :color="bajoMinimo ? 'primary' : 'neutral'"
+                    :variant="bajoMinimo ? 'solid' : 'outline'"
+                    :aria-pressed="bajoMinimo"
+                    class="rounded-full"
                     data-prueba="filtro-bajo-minimo"
+                    @click="bajoMinimo = !bajoMinimo"
                 />
-                <USwitch
-                    v-model="conTransito"
+                <UButton
                     label="En tránsito"
-                    description="Lo que viaja en órdenes de traslado"
+                    icon="i-lucide-truck"
+                    :color="conTransito ? 'primary' : 'neutral'"
+                    :variant="conTransito ? 'solid' : 'outline'"
+                    :aria-pressed="conTransito"
+                    class="rounded-full"
                     data-prueba="filtro-transito"
+                    @click="conTransito = !conTransito"
+                />
+            </template>
+
+            <div
+                v-if="lista.problema.value"
+                class="p-3 sm:p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
                 />
             </div>
-            <ProblemaAlerta
-                v-if="problemaCatalogos"
-                :problema="problemaCatalogos"
-                :reintentar="cargarCatalogos"
-            />
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
             <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
-                    data-prueba="tabla-existencias"
-                >
-                    <template #producto_nombre-cell="{ row }">
-                        <div
-                            class="flex min-w-0 flex-col gap-0.5"
-                            :data-existencia="`${row.original.producto_id}/${row.original.bodega_id}`"
-                        >
-                            <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                {{ row.original.producto_nombre }}
+                <UContextMenu :items="menuFila.items.value">
+                    <UTable
+                        :data="agrupadas"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        sticky
+                        :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-3' }"
+                        data-menu-contextual
+                        data-prueba="tabla-existencias"
+                        @contextmenu="menuFila.alContextmenu"
+                    >
+                        <template #producto-cell="{ row }">
+                            <div
+                                class="flex min-w-0 items-center gap-3"
+                                :data-existencia="row.original.producto_id"
+                            >
+                                <span class="pastilla-icono pastilla-tono size-9 shrink-0 rounded-xl tono-marca">
+                                    <UIcon
+                                        :name="row.original.serie ? 'i-lucide-barcode' : 'i-lucide-package'"
+                                        class="size-4"
+                                    />
+                                </span>
+                                <div class="flex min-w-0 flex-col">
+                                    <span class="font-semibold text-highlighted">{{ row.original.nombre }}</span>
+                                    <span
+                                        v-if="row.original.bajo"
+                                        class="flex items-center gap-1 text-xs text-error"
+                                    >
+                                        <UIcon
+                                            name="i-lucide-triangle-alert"
+                                            class="size-3"
+                                        />
+                                        Bajo el mínimo
+                                    </span>
+                                    <span class="flex flex-wrap gap-1 pt-1 lg:hidden">
+                                        <UBadge
+                                            v-for="fila in row.original.filas"
+                                            :key="fila.bodega_id"
+                                            :label="`${nombreCortoBodega(fila.bodega_nombre)} ${formatearCantidad(fila.cantidad)}`"
+                                            color="neutral"
+                                            variant="soft"
+                                            size="sm"
+                                        />
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                        <template #tipo-cell="{ row }">
+                            <UBadge
+                                :label="row.original.serie ? 'Serie' : 'Cantidad'"
+                                :icon="row.original.serie ? 'i-lucide-barcode' : 'i-lucide-ruler'"
+                                :color="row.original.serie ? 'primary' : 'neutral'"
+                                variant="subtle"
+                                size="sm"
+                                class="rounded-full"
+                            />
+                        </template>
+                        <template #donde-cell="{ row }">
+                            <span class="flex flex-wrap gap-1">
                                 <UBadge
-                                    v-if="row.original.bajo_minimo"
-                                    label="Bajo mínimo"
-                                    icon="i-lucide-triangle-alert"
-                                    color="warning"
-                                    variant="subtle"
+                                    v-for="fila in row.original.filas"
+                                    :key="fila.bodega_id"
+                                    :label="`${nombreCortoBodega(fila.bodega_nombre)} ${formatearCantidad(fila.cantidad)}`"
+                                    :icon="esBodegaTransito({ tipo: fila.bodega_tipo }) ? 'i-lucide-truck' : undefined"
+                                    color="neutral"
+                                    variant="soft"
                                     size="sm"
+                                    :data-bodega-existencia="`${fila.producto_id}/${fila.bodega_id}`"
                                 />
                             </span>
-                            <span class="font-mono text-xs text-muted">{{ row.original.producto_sku }}</span>
-                            <ModalidadBadge
-                                v-if="row.original.modalidad"
-                                :modalidad="row.original.modalidad"
-                                class="self-start"
-                            />
-                            <span class="text-xs text-muted sm:hidden">{{ row.original.bodega_nombre }} · {{ formatearQuetzales(row.original.valor) }}</span>
-                        </div>
-                    </template>
-                    <template #bodega_nombre-cell="{ row }">
-                        <span class="flex items-center gap-1.5 text-sm">
-                            <UIcon
-                                :name="TIPOS_BODEGA[row.original.bodega_tipo].icono"
-                                class="size-4 text-muted"
-                            />
-                            {{ row.original.bodega_nombre }}
-                        </span>
-                    </template>
-                    <template #cantidad-cell="{ row }">
-                        <div class="flex flex-col items-end text-sm tabular-nums">
-                            <span class="font-medium text-highlighted">{{ formatearCantidad(row.original.cantidad, row.original.unidad) }}</span>
+                        </template>
+                        <template #total-cell="{ row }">
                             <span
-                                v-if="row.original.existencia_minima"
-                                class="text-xs text-muted"
-                            >mín. {{ formatearCantidad(row.original.existencia_minima) }} · total {{ formatearCantidad(row.original.existencia_total) }}</span>
-                        </div>
-                    </template>
-                    <template #costo_promedio-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ row.original.costo_promedio ? formatearQuetzales(new Decimal(row.original.costo_promedio).toFixed(2)) : '—' }}</span>
-                    </template>
-                    <template #valor-cell="{ row }">
-                        <span class="text-sm tabular-nums">{{ formatearQuetzales(row.original.valor) }}</span>
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <UButton
-                            v-if="esBodegaTransito({ tipo: row.original.bodega_tipo })"
-                            icon="i-lucide-truck"
-                            color="neutral"
-                            variant="ghost"
-                            size="sm"
-                            to="/inventario/traslados?estado=en_transito"
-                            :aria-label="`Ver las órdenes en tránsito de ${row.original.producto_nombre}`"
-                        />
-                        <UDropdownMenu
-                            v-else
-                            :items="menuFila(row.original)"
-                        >
-                            <UButton
-                                icon="i-lucide-ellipsis-vertical"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Acciones de ${row.original.producto_nombre} en ${row.original.bodega_nombre}`"
+                                class="font-semibold tabular-nums"
+                                :class="row.original.bajo ? 'text-error' : 'text-highlighted'"
+                            >{{ formatearCantidad(row.original.cantidad.toString(), row.original.serie ? null : row.original.unidad) }}</span>
+                        </template>
+                        <template #costo-cell="{ row }">
+                            <span class="tabular-nums text-muted">{{ costoPromedio(row.original) }}</span>
+                        </template>
+                        <template #valor-cell="{ row }">
+                            <span class="font-semibold tabular-nums text-highlighted">{{ formatearQuetzales(row.original.valor.toFixed(2)) }}</span>
+                        </template>
+                        <template #acciones-cell="{ row }">
+                            <UDropdownMenu
+                                :items="menuFila.itemsDe(row.original)"
+                                :content="{ align: 'end' }"
+                            >
+                                <UButton
+                                    icon="i-lucide-ellipsis"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Más acciones: ${row.original.nombre}`"
+                                />
+                            </UDropdownMenu>
+                        </template>
+                        <template #empty>
+                            <UEmpty
+                                :icon="buscarEnEquipos ? 'i-lucide-barcode' : 'i-lucide-package'"
+                                :title="buscarEnEquipos ? 'Ningún producto se llama así' : bajoMinimo ? 'Nada bajo el mínimo' : 'Sin existencias'"
+                                :description="buscarEnEquipos ? '¿Es una serie o MAC? Búscala entre los equipos.' : bajoMinimo ? 'Ningún producto está por debajo de su existencia mínima.' : 'Carga el saldo inicial o registra una compra con productos.'"
+                                :actions="buscarEnEquipos ? [{ label: 'Buscar en equipos', icon: 'i-lucide-barcode', to: `/inventario/unidades?q=${encodeURIComponent(busqueda.trim())}` }] : undefined"
+                                variant="naked"
                             />
-                        </UDropdownMenu>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-package"
-                            :title="bajoMinimo ? 'Nada bajo el mínimo' : 'Sin existencias'"
-                            :description="bajoMinimo ? 'Ningún producto está por debajo de su existencia mínima.' : 'Carga el saldo inicial o registra una compra con productos.'"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        </template>
+                    </UTable>
+                </UContextMenu>
+                <div
+                    v-if="lista.hayAnterior.value || lista.haySiguiente.value"
+                    class="border-t border-(--ax-borde) px-3 py-2 sm:px-4"
+                >
                     <PaginacionCursor
                         :pagina="lista.pagina.value"
                         :hay-anterior="lista.hayAnterior.value"
@@ -254,25 +328,8 @@ function alHacer(o: OperacionInventario) {
                         @anterior="lista.anterior"
                         @siguiente="lista.siguiente"
                     />
-                    <p
-                        v-if="lista.filas.value.length"
-                        class="text-sm text-muted"
-                        data-prueba="existencias-total"
-                    >
-                        Valor de esta página: <span class="font-medium text-highlighted tabular-nums">{{ formatearQuetzales(total.toFixed(2)) }}</span>
-                    </p>
                 </div>
             </template>
-        </div>
-
-        <MovimientoInventarioModal
-            v-model:open="operacionAbierta"
-            :operacion="operacion"
-            :productos="productos"
-            :bodegas="bodegas"
-            :producto-id="elegida.productoId"
-            :bodega-id="elegida.bodegaId"
-            @hecho="alHacer"
-        />
+        </InventarioMarco>
     </PanelPagina>
 </template>

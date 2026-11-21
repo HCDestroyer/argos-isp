@@ -144,7 +144,7 @@ describe('pantallas', () => {
     it('lista de órdenes con su estado y filtro; el detalle con la firma guardada', async () => {
         const lista = await mountSuspended(conApp(PaginaTraslados))
         await esperar(() => expect(lista.find('[data-orden="3"]').exists()).toBe(true))
-        expect(lista.find('[data-prueba="tabla-traslados"]').text()).toContain('En tránsito')
+        expect(lista.find('[data-prueba="tabla-traslados"]').text()).toContain('En camino')
         expect(lista.find('[data-prueba="tabla-traslados"]').text()).toContain('Cancelada')
         expect(lista.find('[data-prueba="nueva-orden-traslado"]').exists()).toBe(true)
         lista.unmount()

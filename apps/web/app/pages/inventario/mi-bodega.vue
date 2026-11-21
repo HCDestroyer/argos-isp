@@ -3,7 +3,9 @@ import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 /**
- * «Mi bodega» del técnico (A3, `contratos/inventario.md` D.6 y contrato Iris §3.3): sus existencias
+ * «Mi bodega» del técnico (tablero NuevoMiBodega, pensado para el teléfono; A3 `contratos/inventario.md`
+ * D.6, contrato Iris §3.3 y A47): los traslados por recibir arriba, sus equipos, sus materiales y abajo,
+ * fijas, «Devolver a central» y «Pedir material». Con bodega de cuadrilla dice su jefe. Sus existencias
  * (con la modalidad), sus equipos por serie, las órdenes que vienen hacia él («Recibir y firmar») y
  * su kardex (los últimos 50; «Ver más» sigue con `GET /inventario/movimientos?bodega_id=` y cursor).
  * Con alcance global se elige el técnico; sin bodega: 404 `tecnico_sin_bodega`, visible.
@@ -127,12 +129,27 @@ function alRecibir(orden: OrdenTrasladoDetalle) {
     void cargar()
 }
 
-const columnasExistencias: TableColumn<ExistenciaInventario>[] = [
-    { accessorKey: 'producto_nombre', header: 'Producto', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'modalidad', header: 'Modalidad', meta: SOLO_ANCHO },
-    { accessorKey: 'cantidad', header: 'Cantidad', meta: { class: { th: 'text-right', td: 'text-right' } } },
-    { accessorKey: 'valor', header: 'Valor', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
-]
+/* Equipos y materiales */
+const buscarAbierto = ref(false)
+const busqueda = ref('')
+const todosLosEquipos = ref(false)
+const kardexAbierto = ref(false)
+
+const equipos = computed(() => {
+    const q = busqueda.value.trim().toUpperCase().replace(/[^0-9A-Z]/g, '')
+    return (datos.value?.unidades ?? []).filter(u => !q || [u.serie, u.mac].some(v => v?.toUpperCase().replace(/[^0-9A-Z]/g, '').includes(q)))
+})
+const equiposVisibles = computed(() => (todosLosEquipos.value || busqueda.value ? equipos.value : equipos.value.slice(0, 3)))
+/** Los materiales: lo que se lleva por cantidad (los equipos por serie van arriba, uno por uno). */
+const materiales = computed(() => {
+    const porSerie = new Set((datos.value?.unidades ?? []).map(u => u.producto_id))
+    return (datos.value?.existencias ?? []).filter(e => !porSerie.has(e.producto_id) && e.modalidad !== 'comodato')
+})
+
+function elegirEmpresa(id: number) {
+    empresaElegida.value = id
+    void cargar()
+}
 const columnasKardex: TableColumn<MovimientoInventario>[] = [
     { accessorKey: 'fecha', header: 'Fecha' },
     { accessorKey: 'producto_nombre', header: 'Movimiento', meta: { class: { td: 'whitespace-normal' } } },
@@ -146,8 +163,37 @@ const columnasKardex: TableColumn<MovimientoInventario>[] = [
         id="inventario-mi-bodega"
         titulo="Mi bodega"
         icono="i-lucide-hard-hat"
+        encabezado-propio
     >
-        <div class="mx-auto flex w-full max-w-5xl flex-col gap-5">
+        <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 pb-24">
+            <div class="flex items-center gap-3">
+                <AvatarIniciales
+                    :nombre="bodega?.usuario_nombre ?? usuario?.nombre ?? 'Mi bodega'"
+                    class="size-11"
+                />
+                <div class="flex min-w-0 flex-1 flex-col">
+                    <h1 class="flex items-center gap-1 text-lg font-bold text-highlighted">
+                        Mi bodega
+                        <AyudaBoton solo-icono />
+                    </h1>
+                    <span
+                        v-if="bodega"
+                        class="truncate text-xs text-muted"
+                        data-prueba="mi-bodega-nombre"
+                    >{{ [bodega.usuario_nombre, bodega.nombre].filter(Boolean).join(' · ') }}{{ datos?.cuadrilla && datos.jefe ? ` · cuadrilla, jefe ${datos.jefe.nombre}` : '' }}</span>
+                </div>
+                <UButton
+                    v-if="bodega"
+                    icon="i-lucide-scan-barcode"
+                    color="neutral"
+                    variant="outline"
+                    class="boton-flotante boton-circulo"
+                    :aria-pressed="buscarAbierto"
+                    aria-label="Buscar un equipo por serie o MAC"
+                    @click="buscarAbierto = !buscarAbierto"
+                />
+            </div>
+
             <div
                 v-if="alcanceGlobal"
                 class="flex flex-col gap-2 sm:flex-row sm:items-center"
@@ -185,241 +231,266 @@ const columnasKardex: TableColumn<MovimientoInventario>[] = [
                 v-else-if="!datos"
                 class="flex flex-col gap-3"
             >
-                <USkeleton class="h-20 w-full" />
-                <USkeleton class="h-48 w-full" />
+                <USkeleton class="h-20 w-full rounded-2xl" />
+                <USkeleton class="h-48 w-full rounded-2xl" />
             </div>
-            <UCard
+            <div
                 v-else-if="variasEmpresas"
+                class="surface-card flex flex-col gap-3 rounded-2xl p-4"
                 data-prueba="mi-bodega-empresas"
             >
-                <div class="flex flex-col gap-3">
-                    <p class="text-sm text-muted">
-                        Hay bodegas en varias empresas. Elige una:
-                    </p>
-                    <div class="flex flex-wrap gap-2">
+                <p class="text-sm text-muted">
+                    Hay bodegas en varias empresas. Elige una:
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        v-for="b in datos.bodegas ?? []"
+                        :key="b.id"
+                        :label="`${b.nombre} · ${nombreEmpresa(b.empresa_id)}`"
+                        icon="i-lucide-warehouse"
+                        color="neutral"
+                        variant="outline"
+                        class="rounded-full"
+                        @click="elegirEmpresa(b.empresa_id)"
+                    />
+                </div>
+            </div>
+            <template v-else-if="bodega">
+                <div
+                    v-if="buscarAbierto"
+                    class="flex flex-col gap-1"
+                >
+                    <UInput
+                        v-model="busqueda"
+                        icon="i-lucide-search"
+                        placeholder="Escanea o escribe la serie o MAC"
+                        aria-label="Buscar un equipo de mi bodega por serie o MAC"
+                        autofocus
+                        class="w-full"
+                        :ui="{ base: 'rounded-full' }"
+                    />
+                </div>
+
+                <div
+                    class="flex flex-col gap-2"
+                    data-prueba="mi-bodega-por-recibir"
+                >
+                    <div
+                        v-for="orden in datos.traslados_pendientes ?? []"
+                        :key="orden.id"
+                        class="flex items-center gap-3 rounded-2xl border border-info/40 bg-info/5 p-3"
+                        :data-orden-pendiente="orden.numero"
+                    >
+                        <span class="pastilla-icono pastilla-tono tono-2 size-10 shrink-0 rounded-xl">
+                            <UIcon
+                                name="i-lucide-truck"
+                                class="size-5"
+                            />
+                        </span>
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="font-semibold text-highlighted">Traslado T-{{ String(orden.numero).padStart(4, '0') }} por recibir</span>
+                            <span class="truncate text-xs text-info">{{ orden.lineas_total }} {{ orden.lineas_total === 1 ? 'producto' : 'productos' }} desde {{ nombreCortoBodega(orden.bodega_origen_nombre) }}</span>
+                        </div>
                         <UButton
-                            v-for="b in datos.bodegas ?? []"
-                            :key="b.id"
-                            :label="`${b.nombre} · ${nombreEmpresa(b.empresa_id)}`"
-                            icon="i-lucide-warehouse"
-                            color="neutral"
-                            variant="outline"
-                            @click="empresaElegida = b.empresa_id; cargar()"
+                            v-if="puede('inventario.recibir_traslado')"
+                            label="Recibir"
+                            icon="i-lucide-package-check"
+                            class="glow-brand rounded-full"
+                            :loading="abriendo === orden.id"
+                            data-prueba="mi-bodega-recibir"
+                            @click="recibir(orden)"
                         />
                     </div>
                 </div>
-            </UCard>
-            <template v-else-if="bodega">
-                <div class="flex flex-wrap items-center gap-2">
-                    <UIcon
-                        :name="TIPOS_BODEGA[bodega.tipo].icono"
-                        class="size-5 text-muted"
-                    />
-                    <span
-                        class="text-base font-semibold text-highlighted"
-                        data-prueba="mi-bodega-nombre"
-                    >{{ bodega.nombre }}</span>
-                    <span
-                        v-if="bodega.usuario_nombre"
-                        class="text-sm text-muted"
-                    >· {{ bodega.usuario_nombre }}</span>
-                </div>
 
-                <UCard
-                    :ui="{ body: 'p-0 sm:p-0' }"
-                    data-prueba="mi-bodega-por-recibir"
-                >
-                    <template #header>
-                        <div class="flex items-center justify-between gap-2">
-                            <h2 class="text-sm font-semibold text-highlighted">
-                                Por recibir
-                            </h2>
-                            <UBadge
-                                :label="String(datos.traslados_pendientes?.length ?? 0)"
-                                color="info"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </div>
-                    </template>
+                <section class="surface-card overflow-hidden rounded-2xl">
+                    <h2 class="border-b border-(--ax-borde) px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted">
+                        Equipos ({{ equipos.length }})
+                    </h2>
                     <UEmpty
-                        v-if="!datos.traslados_pendientes?.length"
-                        icon="i-lucide-truck"
-                        title="Nada en camino"
-                        description="Cuando te envíen una orden de traslado aparece aquí para recibirla y firmarla."
-                        variant="naked"
-                    />
-                    <ul
-                        v-else
-                        class="divide-y divide-default"
-                    >
-                        <li
-                            v-for="orden in datos.traslados_pendientes"
-                            :key="orden.id"
-                            class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6"
-                            :data-por-recibir="orden.numero"
-                        >
-                            <div class="flex min-w-0 flex-col">
-                                <ULink
-                                    :to="`/inventario/traslados/${orden.id}`"
-                                    class="text-sm font-medium text-highlighted hover:text-primary"
-                                >Orden N.º {{ orden.numero }}</ULink>
-                                <span class="text-xs text-muted">Desde {{ orden.bodega_origen_nombre }} · {{ formatearFechaHora(orden.enviado_en) }} · {{ orden.lineas_total }} {{ orden.lineas_total === 1 ? 'línea' : 'líneas' }}</span>
-                            </div>
-                            <UButton
-                                v-if="puede('inventario.recibir_traslado')"
-                                label="Recibir y firmar"
-                                icon="i-lucide-signature"
-                                class="justify-center"
-                                :loading="abriendo === orden.id"
-                                data-prueba="mi-bodega-recibir"
-                                @click="recibir(orden)"
-                            />
-                        </li>
-                    </ul>
-                </UCard>
-
-                <UCard :ui="{ body: 'p-0 sm:p-0' }">
-                    <template #header>
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Existencias
-                        </h2>
-                    </template>
-                    <UTable
-                        :data="datos.existencias ?? []"
-                        :columns="columnasExistencias"
-                        :ui="{ td: 'py-3' }"
-                        data-prueba="mi-bodega-existencias"
-                    >
-                        <template #producto_nombre-cell="{ row }">
-                            <div class="flex min-w-0 flex-col gap-0.5">
-                                <span class="text-sm font-medium text-highlighted">{{ row.original.producto_nombre }}</span>
-                                <span class="font-mono text-xs text-muted">{{ row.original.producto_sku }}</span>
-                                <ModalidadBadge
-                                    v-if="row.original.modalidad"
-                                    :modalidad="row.original.modalidad"
-                                    class="self-start sm:hidden"
-                                />
-                            </div>
-                        </template>
-                        <template #modalidad-cell="{ row }">
-                            <ModalidadBadge
-                                v-if="row.original.modalidad"
-                                :modalidad="row.original.modalidad"
-                            />
-                        </template>
-                        <template #cantidad-cell="{ row }">
-                            <span class="text-sm tabular-nums">{{ formatearCantidad(row.original.cantidad, row.original.unidad) }}</span>
-                        </template>
-                        <template #valor-cell="{ row }">
-                            <span class="text-sm tabular-nums">{{ formatearQuetzales(row.original.valor) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-package"
-                                title="Sin existencias"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                </UCard>
-
-                <UCard>
-                    <template #header>
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Equipos por serie
-                        </h2>
-                    </template>
-                    <UEmpty
-                        v-if="!datos.unidades?.length"
+                        v-if="!equipos.length"
                         icon="i-lucide-barcode"
-                        title="Sin equipos"
+                        :title="busqueda ? 'Ningún equipo con esa serie o MAC' : 'Sin equipos'"
                         variant="naked"
+                        class="py-6"
                     />
                     <ul
                         v-else
-                        class="grid gap-2 sm:grid-cols-2"
+                        class="divide-y divide-(--ax-borde)"
                         data-prueba="mi-bodega-unidades"
                     >
                         <li
-                            v-for="u in datos.unidades"
+                            v-for="u in equiposVisibles"
                             :key="u.id"
-                            class="flex flex-col gap-1 rounded-md border border-default p-3"
+                            class="flex items-center gap-3 px-4 py-2.5"
                         >
-                            <span class="text-sm font-medium text-highlighted">{{ u.producto_nombre }}</span>
-                            <span class="font-mono text-xs text-muted">{{ identificacionUnidad(u) }}</span>
+                            <span class="pastilla-icono pastilla-tono tono-marca size-8 shrink-0 rounded-lg">
+                                <UIcon
+                                    name="i-lucide-barcode"
+                                    class="size-4"
+                                />
+                            </span>
+                            <div class="flex min-w-0 flex-1 flex-col">
+                                <span class="truncate font-semibold text-highlighted">{{ u.producto_nombre }}</span>
+                                <span class="truncate font-mono text-xs text-muted">{{ identificacionUnidad(u) }}</span>
+                            </div>
                             <UBadge
-                                :label="ESTADOS_UNIDAD[u.estado].etiqueta"
-                                :color="ESTADOS_UNIDAD[u.estado].color"
-                                :icon="ESTADOS_UNIDAD[u.estado].icono"
+                                v-if="estadoEquipoDe(u) !== 'disponible'"
+                                :label="ESTADOS_EQUIPO[estadoEquipoDe(u)].etiqueta"
+                                :icon="ESTADOS_EQUIPO[estadoEquipoDe(u)].icono"
+                                :color="ESTADOS_EQUIPO[estadoEquipoDe(u)].color"
                                 variant="subtle"
                                 size="sm"
-                                class="self-start"
+                                class="rounded-full"
                             />
                         </li>
                     </ul>
-                </UCard>
+                    <UButton
+                        v-if="equipos.length > 3 && !todosLosEquipos"
+                        :label="`Ver los ${equipos.length}`"
+                        color="primary"
+                        variant="link"
+                        class="px-4 pb-3"
+                        @click="todosLosEquipos = true"
+                    />
+                </section>
 
-                <UCard :ui="{ body: 'p-0 sm:p-0' }">
-                    <template #header>
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Kardex
-                        </h2>
-                    </template>
-                    <UTable
-                        :data="kardex"
-                        :columns="columnasKardex"
-                        :ui="{ td: 'py-3' }"
-                        data-prueba="mi-bodega-kardex"
+                <section class="surface-card overflow-hidden rounded-2xl">
+                    <h2 class="border-b border-(--ax-borde) px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted">
+                        Materiales
+                    </h2>
+                    <UEmpty
+                        v-if="!materiales.length"
+                        icon="i-lucide-package"
+                        title="Sin materiales"
+                        variant="naked"
+                        class="py-6"
+                    />
+                    <ul
+                        v-else
+                        class="divide-y divide-(--ax-borde)"
+                        data-prueba="mi-bodega-existencias"
                     >
-                        <template #fecha-cell="{ row }">
-                            <span class="text-sm">{{ formatearFecha(row.original.fecha) }}</span>
-                        </template>
-                        <template #producto_nombre-cell="{ row }">
-                            <div class="flex min-w-0 flex-col gap-0.5">
-                                <span class="text-sm text-highlighted">{{ row.original.producto_nombre }}</span>
-                                <span class="text-xs text-muted">{{ TIPOS_MOVIMIENTO_INVENTARIO[row.original.tipo] }}{{ row.original.motivo ? ` · ${row.original.motivo}` : '' }}</span>
+                        <li
+                            v-for="e in materiales"
+                            :key="e.producto_id"
+                            class="flex items-center gap-3 px-4 py-3"
+                            :data-existencia="e.producto_sku"
+                        >
+                            <span class="pastilla-icono pastilla-tono tono-marca size-8 shrink-0 rounded-lg">
+                                <UIcon
+                                    name="i-lucide-package"
+                                    class="size-4"
+                                />
+                            </span>
+                            <div class="flex min-w-0 flex-1 flex-col">
+                                <span class="truncate font-semibold text-highlighted">{{ e.producto_nombre }}</span>
+                                <span
+                                    v-if="e.modalidad"
+                                    class="text-xs text-muted"
+                                >{{ MODALIDADES[e.modalidad].etiqueta }}</span>
+                            </div>
+                            <span
+                                class="text-lg font-bold tabular-nums"
+                                :class="e.bajo_minimo ? 'text-error' : 'text-highlighted'"
+                            >{{ formatearCantidad(e.cantidad) }}<span class="ms-1 text-xs font-normal text-muted">{{ e.unidad }}</span></span>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="surface-card overflow-hidden rounded-2xl">
+                    <UCollapsible v-model:open="kardexAbierto">
+                        <UButton
+                            :label="`Movimientos recientes (${kardex.length})`"
+                            color="neutral"
+                            variant="ghost"
+                            block
+                            :trailing-icon="kardexAbierto ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                            class="justify-between rounded-none px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted"
+                        />
+                        <template #content>
+                            <UTable
+                                :data="kardex"
+                                :columns="columnasKardex"
+                                :ui="{ thead: 'bg-(--ax-cabecera-tabla)', th: 'text-xs', td: 'py-2.5' }"
+                                data-prueba="mi-bodega-kardex"
+                            >
+                                <template #fecha-cell="{ row }">
+                                    <span class="whitespace-nowrap text-sm text-muted">{{ formatearFechaCorta(row.original.fecha) }}</span>
+                                </template>
+                                <template #producto_nombre-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm text-highlighted">{{ TIPOS_MOVIMIENTO_INVENTARIO[row.original.tipo] }} · {{ row.original.producto_nombre }}</span>
+                                        <span
+                                            v-if="row.original.motivo"
+                                            class="text-xs text-muted"
+                                        >{{ row.original.motivo }}</span>
+                                    </div>
+                                </template>
+                                <template #cantidad-cell="{ row }">
+                                    <span
+                                        class="text-sm font-semibold tabular-nums"
+                                        :class="row.original.cantidad.startsWith('-') ? 'text-error' : 'text-success'"
+                                    >{{ row.original.cantidad.startsWith('-') ? '' : '+' }}{{ formatearCantidad(row.original.cantidad) }}</span>
+                                </template>
+                                <template #saldo_cantidad-cell="{ row }">
+                                    <span class="text-sm tabular-nums text-muted">{{ formatearCantidad(row.original.saldo_cantidad) }}</span>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-list-ordered"
+                                        title="Sin movimientos"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <div class="flex flex-col gap-2 p-3">
+                                <ProblemaAlerta
+                                    v-if="problemaKardex"
+                                    :problema="problemaKardex"
+                                    :reintentar="verMasKardex"
+                                    :reintentando="cargandoKardex"
+                                />
+                                <UButton
+                                    v-if="hayMasKardex"
+                                    label="Ver más"
+                                    icon="i-lucide-chevrons-down"
+                                    color="neutral"
+                                    variant="outline"
+                                    class="self-center rounded-full"
+                                    :loading="cargandoKardex"
+                                    data-prueba="mi-bodega-ver-mas"
+                                    @click="verMasKardex"
+                                />
                             </div>
                         </template>
-                        <template #cantidad-cell="{ row }">
-                            <span
-                                class="text-sm tabular-nums"
-                                :class="row.original.cantidad.startsWith('-') ? 'text-error' : 'text-success'"
-                            >{{ formatearCantidad(row.original.cantidad) }}</span>
-                        </template>
-                        <template #saldo_cantidad-cell="{ row }">
-                            <span class="text-sm tabular-nums">{{ formatearCantidad(row.original.saldo_cantidad) }}</span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-list-ordered"
-                                title="Sin movimientos"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <template #footer>
-                        <div class="flex flex-col gap-2">
-                            <ProblemaAlerta
-                                v-if="problemaKardex"
-                                :problema="problemaKardex"
-                                :reintentar="verMasKardex"
-                                :reintentando="cargandoKardex"
-                            />
-                            <UButton
-                                v-if="hayMasKardex"
-                                label="Ver más"
-                                icon="i-lucide-chevrons-down"
-                                color="neutral"
-                                variant="outline"
-                                class="self-center"
-                                :loading="cargandoKardex"
-                                data-prueba="mi-bodega-ver-mas"
-                                @click="verMasKardex"
-                            />
-                        </div>
-                    </template>
-                </UCard>
+                    </UCollapsible>
+                </section>
+
+                <div class="fixed inset-x-0 bottom-0 z-10 flex gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta)/95 p-3 backdrop-blur lg:static lg:mt-2 lg:border-0 lg:bg-transparent lg:p-0">
+                    <UButton
+                        v-if="puede('inventario.crear_traslado')"
+                        label="Devolver a central"
+                        icon="i-lucide-undo-2"
+                        color="neutral"
+                        variant="outline"
+                        size="lg"
+                        block
+                        class="flex-1 justify-center rounded-full"
+                        :to="`/inventario/traslados/nueva?origen=${bodega.id}`"
+                        data-prueba="mi-bodega-devolver"
+                    />
+                    <UButton
+                        label="Pedir material"
+                        icon="i-lucide-package-plus"
+                        size="lg"
+                        block
+                        disabled
+                        class="flex-1 justify-center rounded-full"
+                        title="Pedir material todavía no está en la API (anotado para A3); por ahora pídelo a la bodega central"
+                        data-prueba="mi-bodega-pedir"
+                    />
+                </div>
             </template>
         </div>
 

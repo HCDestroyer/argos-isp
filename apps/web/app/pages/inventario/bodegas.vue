@@ -1,45 +1,181 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem } from '@nuxt/ui'
+import type { Problem } from '@argosisp/contracts'
+import Decimal from 'decimal.js'
 
 /**
- * Bodegas del inventario (A3): lugares y bodegas de técnico. La de un técnico solo la mueve su
- * usuario o quien tenga el permiso con alcance global (tope por técnico, `contratos/inventario.md`
- * §5). «Nueva bodega» (`bodegas.crear`), «Editar» (`bodegas.editar`) y «Desactivar»
- * (`bodegas.desactivar`, sin existencias). Cada fila lleva a sus existencias.
+ * Bodegas y traslados (tablero NuevoBodegas, A3 y A47): una tarjeta por bodega (lugar, técnico o
+ * cuadrilla) con su valor, artículos y equipos, y lo que tiene en camino; la de cuadrilla dice su
+ * jefe y miembros (llegan de Iris). «En tránsito» es la bodega virtual de lo que viaja. Abajo, los
+ * traslados con «Todos / En camino / Con faltante». La bodega de un técnico solo la mueve su
+ * usuario o quien tenga el permiso con alcance global (tope por técnico, `contratos/inventario.md`).
  */
 definePageMeta({ permiso: 'inventario.ver' })
 
-useHead({ title: 'Bodegas · ArgosIsp' })
+useHead({ title: 'Bodegas y traslados · ArgosIsp' })
 
 const toast = useToast()
 const { puede } = usePermisos()
 
-const lista = usePaginacionCursor(cursor => useBodegas().listar({}, cursor))
-onMounted(() => void lista.recargar())
+const bodegas = shallowRef<Bodega[]>([])
+const problemaBodegas = ref<Problem | null>(null)
+const cargandoBodegas = ref(false)
+const existencias = shallowRef<ExistenciaInventario[]>([])
+const problemaExistencias = ref<Problem | null>(null)
+const enCamino = shallowRef<OrdenTraslado[]>([])
+const miembros = shallowRef<Map<number, MiembrosCuadrilla>>(new Map())
+const verInactivas = ref(false)
 
-const columnas: TableColumn<Bodega>[] = [
-    { accessorKey: 'nombre', header: 'Bodega', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'tipo', header: 'Tipo', meta: SOLO_ANCHO },
-    { accessorKey: 'activo', header: 'Estado' },
-    { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
-]
+async function cargarBodegas() {
+    cargandoBodegas.value = true
+    const r = await useBodegas().listar({ limit: 200 })
+    cargandoBodegas.value = false
+    bodegas.value = r.ok ? r.data.data : []
+    problemaBodegas.value = r.ok ? null : r.problema
+    for (const b of bodegas.value.filter(x => x.tipo === 'cuadrilla')) {
+        void useBodegas().miembros(b.id).then((m) => {
+            if (m.ok) {
+                miembros.value = new Map(miembros.value).set(b.id, m.data)
+            }
+        })
+    }
+}
 
+async function cargarExistencias() {
+    problemaExistencias.value = null
+    const [e, t] = await Promise.all([
+        useInventario().existencias({ limit: 200, incluir_transito: true }),
+        useOrdenesTraslado().listar({ estado: 'en_transito', limit: 50 }),
+    ])
+    existencias.value = e.ok ? e.data.data : []
+    problemaExistencias.value = e.ok ? null : e.problema
+    enCamino.value = t.ok ? t.data.data : []
+}
+
+onMounted(() => {
+    void cargarBodegas()
+    void cargarExistencias()
+})
+
+const visibles = computed(() => bodegas.value
+    .filter(b => verInactivas.value || b.activo)
+    .sort((a, b) => Number(esBodegaTransito(a)) - Number(esBodegaTransito(b)) || Number(b.tipo === 'bodega') - Number(a.tipo === 'bodega')))
+
+interface Resumen {
+    valor: Decimal
+    articulos: Decimal
+    equipos: Decimal
+}
+
+const resumen = computed(() => {
+    const mapa = new Map<number, Resumen>()
+    for (const e of existencias.value) {
+        const r = mapa.get(e.bodega_id) ?? { valor: new Decimal(0), articulos: new Decimal(0), equipos: new Decimal(0) }
+        r.valor = r.valor.plus(e.valor)
+        if (e.modalidad === 'comodato') {
+            r.equipos = r.equipos.plus(e.cantidad)
+        }
+        else {
+            r.articulos = r.articulos.plus(e.cantidad)
+        }
+        mapa.set(e.bodega_id, r)
+    }
+    return mapa
+})
+
+function subtitulo(b: Bodega): string {
+    if (esBodegaTransito(b)) {
+        return 'Virtual · no se opera a mano'
+    }
+    if (b.tipo === 'tecnico') {
+        return `Técnico · ${b.usuario_nombre ?? 'sin usuario'}`
+    }
+    if (b.tipo === 'cuadrilla') {
+        const m = miembros.value.get(b.id)
+        const jefe = m?.miembros.find(x => x.usuario_id !== null && x.usuario_id === m.jefe_id)?.nombre
+        return m ? `Cuadrilla · ${jefe ? `jefe ${jefe} · ` : ''}${m.miembros.filter(x => x.aceptado).length} miembros` : 'Cuadrilla (de Iris)'
+    }
+    return 'Lugar'
+}
+
+function icono(b: Bodega): string {
+    return esBodegaTransito(b) ? 'i-lucide-truck' : b.tipo === 'tecnico' ? 'i-lucide-user-plus' : TIPOS_BODEGA[b.tipo].icono
+}
+
+function tono(b: Bodega): string {
+    return b.tipo === 'tecnico' || b.tipo === 'cuadrilla' ? 'tono-exito' : esBodegaTransito(b) ? 'tono-2' : 'tono-marca'
+}
+
+function caminoA(b: Bodega): OrdenTraslado[] {
+    return enCamino.value.filter(o => o.bodega_destino_id === b.id)
+}
+
+function detalle(b: Bodega): string {
+    if (esBodegaTransito(b)) {
+        return enCamino.value.map(o => `T-${String(o.numero).padStart(4, '0')} a ${o.usuario_destino_nombre?.split(' ')[0] ?? nombreCortoBodega(o.bodega_destino_nombre)}`).join(', ') || 'Nada viajando'
+    }
+    const r = resumen.value.get(b.id)
+    if (!r) {
+        return 'Sin existencias'
+    }
+    return `${formatearCantidad(r.articulos.toString())} artículos · ${formatearCantidad(r.equipos.toString())} equipos`
+}
+
+/* Tarjeta: ⋯ */
 const formularioAbierto = ref(false)
 const editando = shallowRef<Bodega | null>(null)
+const aDesactivar = shallowRef<Bodega | null>(null)
+const desactivarAbierto = ref(false)
+const miembrosAbierto = ref(false)
+const cuadrilla = shallowRef<Bodega | null>(null)
 
 function abrir(bodega: Bodega | null) {
     editando.value = bodega
     formularioAbierto.value = true
 }
 
-function alGuardar(bodega: Bodega) {
-    const existia = lista.filas.value.some(b => b.id === bodega.id)
-    lista.filas.value = existia ? lista.filas.value.map(b => (b.id === bodega.id ? bodega : b)) : [...lista.filas.value, bodega]
-    toast.add({ title: existia ? `${bodega.nombre} guardada` : `${bodega.nombre} creada`, icon: 'i-lucide-circle-check', color: 'success' })
+function verMiembros(b: Bodega) {
+    cuadrilla.value = b
+    miembrosAbierto.value = true
 }
 
-const aDesactivar = shallowRef<Bodega | null>(null)
-const desactivarAbierto = ref(false)
+function pedirDesactivar(b: Bodega) {
+    aDesactivar.value = b
+    desactivarAbierto.value = true
+}
+
+function menuBodega(b: Bodega): DropdownMenuItem[][] {
+    const ver: DropdownMenuItem[] = [
+        { label: 'Ver existencias', icon: 'i-lucide-package', to: `/inventario?bodega=${b.id}` },
+        { label: 'Kardex de la bodega', icon: 'i-lucide-list-ordered', to: `/inventario/kardex?bodega=${b.id}` },
+    ]
+    if (b.tipo === 'cuadrilla') {
+        ver.push({ label: 'Jefe y miembros', icon: 'i-lucide-users', onSelect: () => verMiembros(b) })
+    }
+    if (esBodegaTransito(b)) {
+        return [[{ label: 'Ver lo que viaja', icon: 'i-lucide-truck', to: '/inventario/traslados?estado=en_transito' }]]
+    }
+    const editar: DropdownMenuItem[] = []
+    if (puede('inventario.crear_traslado') && b.activo) {
+        editar.push({ label: 'Trasladar desde aquí', icon: 'i-lucide-truck', to: `/inventario/traslados/nueva?origen=${b.id}` })
+    }
+    if (puede('inventario.abrir_conteo') && b.activo) {
+        editar.push({ label: 'Contar esta bodega', icon: 'i-lucide-clipboard-list', to: `/inventario/conteos?abrir=${b.id}` })
+    }
+    if (puede('bodegas.editar') && b.tipo !== 'cuadrilla') {
+        editar.push({ label: 'Editar', icon: ICONOS.editar, onSelect: () => abrir(b) })
+    }
+    const peligro: DropdownMenuItem[] = puede('bodegas.desactivar') && b.activo && b.tipo !== 'cuadrilla'
+        ? [{ label: 'Desactivar', icon: 'i-lucide-circle-pause', color: 'error', onSelect: () => pedirDesactivar(b) }]
+        : []
+    return [ver, editar, peligro].filter(g => g.length)
+}
+
+function alGuardar(bodega: Bodega) {
+    const existia = bodegas.value.some(b => b.id === bodega.id)
+    bodegas.value = existia ? bodegas.value.map(b => (b.id === bodega.id ? bodega : b)) : [...bodegas.value, bodega]
+    toast.add({ title: existia ? `${bodega.nombre} guardada` : `${bodega.nombre} creada`, icon: 'i-lucide-circle-check', color: 'success' })
+}
 
 function desactivar(motivo: string): Promise<Resultado<Bodega>> {
     const bodega = aDesactivar.value
@@ -47,126 +183,165 @@ function desactivar(motivo: string): Promise<Resultado<Bodega>> {
 }
 
 function alDesactivar(bodega: Bodega) {
-    lista.filas.value = lista.filas.value.map(b => (b.id === bodega.id ? bodega : b))
+    bodegas.value = bodegas.value.map(b => (b.id === bodega.id ? bodega : b))
     toast.add({ title: `${bodega.nombre} desactivada`, icon: 'i-lucide-circle-check', color: 'success' })
+}
+
+const MOTIVOS_RECHAZO: Record<string, string> = {
+    sin_vinculo: 'sin usuario vinculado en Argos',
+    usuario_inexistente: 'el usuario no existe',
+    usuario_inactivo: 'usuario inactivo',
+    fuera_de_la_empresa: 'no es de esta empresa',
+    no_es_tecnico: 'no tiene rol de técnico',
 }
 </script>
 
 <template>
     <PanelPagina
         id="inventario-bodegas"
-        titulo="Bodegas"
+        titulo="Bodegas y traslados"
         icono="i-lucide-warehouse"
+        sin-descripcion
     >
         <template #acciones>
             <UButton
                 v-if="puede('bodegas.crear')"
                 label="Nueva bodega"
                 icon="i-lucide-plus"
+                color="neutral"
+                variant="outline"
+                class="boton-flotante rounded-full"
                 data-prueba="nueva-bodega"
                 @click="abrir(null)"
             />
+            <UButton
+                v-if="puede('inventario.crear_traslado')"
+                label="Nuevo traslado"
+                icon="i-lucide-truck"
+                size="lg"
+                to="/inventario/traslados/nueva"
+                class="glow-brand rounded-full px-5"
+                data-prueba="nuevo-traslado"
+            />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                La bodega de un técnico es su vehículo: solo él la mueve, o quien tenga el permiso con alcance global. Para que el técnico opere solo su bodega, asígnale el rol con alcance de zona o router.
-            </p>
+        <div class="flex min-h-0 flex-1 flex-col gap-4">
             <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
+                v-if="problemaBodegas"
+                :problema="problemaBodegas"
+                :reintentar="cargarBodegas"
+                :reintentando="cargandoBodegas"
             />
-            <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
-                    data-prueba="tabla-bodegas"
+            <div
+                v-else
+                class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                data-prueba="tabla-bodegas"
+            >
+                <template v-if="cargandoBodegas && !bodegas.length">
+                    <USkeleton
+                        v-for="n in 4"
+                        :key="n"
+                        class="h-36 rounded-2xl"
+                    />
+                </template>
+                <article
+                    v-for="b in visibles"
+                    :key="b.id"
+                    class="surface-card flex min-w-0 flex-col gap-3 rounded-2xl p-4"
+                    :class="b.activo ? '' : 'opacity-60'"
+                    :data-bodega="b.nombre"
                 >
-                    <template #nombre-cell="{ row }">
-                        <div
-                            class="flex min-w-0 flex-col gap-0.5"
-                            :data-bodega="row.original.nombre"
+                    <div class="flex items-start gap-3">
+                        <span
+                            class="pastilla-icono pastilla-tono size-10 shrink-0 rounded-xl"
+                            :class="tono(b)"
                         >
-                            <ULink
-                                :to="`/inventario?bodega=${row.original.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                            >{{ row.original.nombre }}</ULink>
-                            <span
-                                v-if="row.original.tipo === 'tecnico'"
-                                class="flex items-center gap-1 text-xs text-muted"
-                                data-prueba="bodega-tope"
-                            >
-                                <UIcon
-                                    name="i-lucide-lock"
-                                    class="size-3.5"
-                                />
-                                Solo la mueve {{ row.original.usuario_nombre ?? `el usuario #${row.original.usuario_id}` }}
-                            </span>
-                            <span class="text-xs text-muted sm:hidden">{{ TIPOS_BODEGA[row.original.tipo].etiqueta }}</span>
+                            <UIcon
+                                :name="icono(b)"
+                                class="size-5"
+                            />
+                        </span>
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate font-semibold text-highlighted">{{ b.nombre }}</span>
+                            <span class="truncate text-xs text-muted">{{ subtitulo(b) }}</span>
                         </div>
-                    </template>
-                    <template #tipo-cell="{ row }">
-                        <UBadge
-                            :label="TIPOS_BODEGA[row.original.tipo].etiqueta"
-                            :icon="TIPOS_BODEGA[row.original.tipo].icono"
-                            color="neutral"
-                            variant="subtle"
-                            size="sm"
-                        />
-                    </template>
-                    <template #activo-cell="{ row }">
-                        <UBadge
-                            :label="row.original.activo ? 'Activa' : 'Desactivada'"
-                            :color="row.original.activo ? 'success' : 'neutral'"
-                            variant="subtle"
-                            size="sm"
-                        />
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <div class="flex justify-end gap-1">
+                        <UDropdownMenu
+                            :items="menuBodega(b)"
+                            :content="{ align: 'end' }"
+                        >
                             <UButton
-                                v-if="puede('bodegas.editar')"
-                                icon="i-lucide-pencil"
+                                icon="i-lucide-ellipsis"
                                 color="neutral"
                                 variant="ghost"
                                 size="sm"
-                                :aria-label="`Editar ${row.original.nombre}`"
-                                @click="abrir(row.original)"
+                                :aria-label="`Acciones de ${b.nombre}`"
                             />
-                            <UButton
-                                v-if="row.original.activo && puede('bodegas.desactivar')"
-                                icon="i-lucide-circle-pause"
-                                color="error"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Desactivar ${row.original.nombre}`"
-                                @click="aDesactivar = row.original; desactivarAbierto = true"
-                            />
-                        </div>
-                    </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-warehouse"
-                            title="Sin bodegas"
-                            description="Crea la bodega central y la de cada técnico."
-                            variant="naked"
+                        </UDropdownMenu>
+                    </div>
+                    <template v-if="problemaExistencias">
+                        <span class="text-sm font-semibold text-highlighted">No se pudo leer</span>
+                        <UButton
+                            label="Reintentar"
+                            icon="i-lucide-refresh-cw"
+                            color="neutral"
+                            variant="link"
+                            size="xs"
+                            class="self-start px-0"
+                            @click="cargarExistencias"
                         />
                     </template>
-                </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
-            </template>
+                    <template v-else>
+                        <span class="text-[1.375rem] font-bold tabular-nums text-highlighted">{{ formatearQuetzales((resumen.get(b.id)?.valor ?? new Decimal(0)).toFixed(2)) }}</span>
+                        <span class="text-sm text-muted">{{ detalle(b) }}</span>
+                    </template>
+                    <div class="flex flex-wrap gap-1.5">
+                        <UBadge
+                            v-if="caminoA(b).length && !esBodegaTransito(b)"
+                            :label="`${caminoA(b).length} ${caminoA(b).length === 1 ? 'traslado' : 'traslados'} en camino`"
+                            icon="i-lucide-truck"
+                            color="warning"
+                            variant="subtle"
+                            size="sm"
+                            class="rounded-full"
+                        />
+                        <UBadge
+                            v-if="!b.activo"
+                            label="Desactivada"
+                            icon="i-lucide-circle-pause"
+                            color="neutral"
+                            variant="subtle"
+                            size="sm"
+                            class="rounded-full"
+                        />
+                        <span
+                            v-if="b.tipo === 'tecnico'"
+                            class="text-xs text-muted"
+                            data-prueba="bodega-tope"
+                        >Solo la mueve {{ b.usuario_nombre ?? 'su técnico' }}</span>
+                    </div>
+                </article>
+                <div
+                    v-if="!cargandoBodegas && !visibles.length"
+                    class="sm:col-span-2 xl:col-span-4"
+                >
+                    <UEmpty
+                        icon="i-lucide-warehouse"
+                        title="Sin bodegas"
+                        description="Crea la bodega central y la de cada técnico."
+                        variant="naked"
+                    />
+                </div>
+            </div>
+            <USwitch
+                v-if="bodegas.some(b => !b.activo)"
+                v-model="verInactivas"
+                label="Ver también las desactivadas"
+                size="sm"
+            />
+
+            <div class="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-auto rounded-2xl">
+                <InventarioTrasladosLista titulo="Traslados" />
+            </div>
         </div>
 
         <BodegaFormulario
@@ -183,5 +358,52 @@ function alDesactivar(bodega: Bodega) {
             :ejecutar="motivo => desactivar(motivo)"
             @hecho="alDesactivar"
         />
+        <USlideover
+            v-model:open="miembrosAbierto"
+            :title="cuadrilla ? `${cuadrilla.nombre}: jefe y miembros` : 'Cuadrilla'"
+            description="La membresía llega de Iris; aquí solo se consulta."
+        >
+            <template #body>
+                <ul
+                    v-if="cuadrilla && miembros.get(cuadrilla.id)"
+                    class="flex flex-col gap-2"
+                    data-prueba="miembros-cuadrilla"
+                >
+                    <li
+                        v-for="m in miembros.get(cuadrilla.id)!.miembros"
+                        :key="m.iris_usuario_id"
+                        class="flex items-center gap-3 rounded-xl border border-(--ax-borde) p-3"
+                    >
+                        <AvatarIniciales :nombre="m.nombre ?? m.iris_usuario_id" />
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="font-semibold text-highlighted">{{ m.nombre ?? m.iris_usuario_id }}</span>
+                            <span class="text-xs text-muted">{{ m.aceptado ? `Desde ${formatearFechaCorta(m.desde)}` : `No se aplicó: ${MOTIVOS_RECHAZO[m.motivo ?? ''] ?? m.motivo}` }}</span>
+                        </div>
+                        <UBadge
+                            v-if="m.usuario_id !== null && m.usuario_id === miembros.get(cuadrilla.id)!.jefe_id"
+                            label="Jefe"
+                            icon="i-lucide-star"
+                            color="primary"
+                            variant="subtle"
+                            class="rounded-full"
+                        />
+                        <UBadge
+                            v-else-if="!m.aceptado"
+                            label="Rechazado"
+                            icon="i-lucide-circle-x"
+                            color="error"
+                            variant="subtle"
+                            class="rounded-full"
+                        />
+                    </li>
+                </ul>
+                <p
+                    v-else
+                    class="text-sm text-muted"
+                >
+                    Leyendo los miembros…
+                </p>
+            </template>
+        </USlideover>
     </PanelPagina>
 </template>
