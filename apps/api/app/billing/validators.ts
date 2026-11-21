@@ -899,7 +899,7 @@ export const emitirFacturasPeriodoValidator = vine.compile(
     vine.object({
         periodos: vine.array(fechaIso()).minLength(1).maxLength(60).optional().meta({
             description:
-                'Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo',
+                'Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta (o ninguno con tramo_inicial cargo_unico). Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo',
         }),
         hasta: fechaIso().optional().meta({
             description:
@@ -912,6 +912,17 @@ export const emitirFacturasPeriodoValidator = vine.compile(
             .meta({
                 description:
                     'Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición',
+            }),
+        tramo_inicial: vine
+            .object({
+                modo: vine.enum(['primera_factura', 'cargo_unico'] as const),
+                monto: dinero().nullable().optional(),
+            })
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Días entre el inicio del ciclo y la instalación (tramo_inicial de la vista previa): primera_factura (la factura del primer periodo, que debe ir en periodos, cubre desde el inicio del ciclo) o cargo_unico (monto; por defecto monto_proporcional; distinto exige facturas.editar_monto_periodo). Con facturas.emitir_periodo_anterior y motivo',
             }),
         motivo: motivo().nullable().optional().meta({
             description:

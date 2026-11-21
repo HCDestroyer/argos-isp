@@ -94,7 +94,11 @@ test.group('Facturas de periodo · vista previa', () => {
     test('lista emitidas, pendientes y 12 futuros con monto y vencimiento, sin escribir nada', async ({
         assert,
     }) => {
-        const e = await servicioDesdeSeptiembre({ fecha_instalacion: '2026-09-16' })
+        // plantilla con prorrateo encendido a propósito: el cron prorratea septiembre
+        const e = await servicioDesdeSeptiembre({
+            fecha_instalacion: '2026-09-16',
+            plantilla: { hora_corte: '00:00', prorrateo: true },
+        })
         await generar(e.servicioId, '2026-10-01')
         const antes = await conteos(e.servicioId)
 
@@ -110,7 +114,8 @@ test.group('Facturas de periodo · vista previa', () => {
                 // septiembre prorrateado por el cron: 15 de 30 días (lo emitido queda como se emitió)
                 ['2026-09-16', 'emitida', '75.00', '2026-09-21', true],
                 ['2026-10-01', 'emitida', '150.00', '2026-10-06', false],
-                ['2026-11-01', 'pendiente', '150.00', '2026-11-06', false],
+                // pendiente emitido a mano: su vencimiento normal (6 nov) ya pasó, vence desde hoy
+                ['2026-11-01', 'pendiente', '150.00', '2026-11-24', false],
                 ['2026-12-01', 'futuro', '150.00', '2026-12-06', false],
             ],
         )
@@ -275,14 +280,22 @@ test.group('Facturas de periodo · emitir', () => {
     test('periodos pasados que el cron no emitió, con hasta', async ({ assert }) => {
         const e = await servicioDesdeSeptiembre()
         const r = await emitir(e.servicioId, { hasta: '2026-11-01' })
+        // a mano, lo atrasado vence desde hoy (19 nov + 5 de gracia): emitirlo no corta al cliente
         assert.deepEqual(
-            r.creadas.map((c) => [c.periodo, c.estado, c.total]),
+            r.creadas.map((c) => [c.periodo, c.estado, c.total, c.vence_en]),
             [
-                ['2026-09-01', 'emitida', '150.00'],
-                ['2026-10-01', 'emitida', '150.00'],
-                ['2026-11-01', 'emitida', '150.00'],
+                ['2026-09-01', 'emitida', '150.00', '2026-11-24'],
+                ['2026-10-01', 'emitida', '150.00', '2026-11-24'],
+                ['2026-11-01', 'emitida', '150.00', '2026-11-24'],
             ],
         )
+        await new VencerFacturas().execute({ servicio_id: e.servicioId, hasta: HOY }, contextoPrueba())
+        const evaluado = await new EvaluarEstadoServicio().execute(
+            { servicio_id: e.servicioId, ignorarHoraCorte: true },
+            contextoPrueba(),
+        )
+        assert.equal(evaluado.vencidas, 0)
+        assert.equal(await estadoServicio(e.servicioId), 'activo')
         assert.equal(await saldoTexto(e.clienteId), '450.00')
         await afirmarLibroCuadrado(assert)
     })
@@ -567,7 +580,11 @@ test.group('Facturas de periodo · sin prorrateo y monto editado', () => {
     test('plantilla con prorrateo: a mano el primer periodo cobra el mes completo; el cron prorratea', async ({
         assert,
     }) => {
-        const aMano = await servicioDesdeSeptiembre({ fecha_instalacion: '2026-09-16' })
+        const conProrrateo = { hora_corte: '00:00', prorrateo: true }
+        const aMano = await servicioDesdeSeptiembre({
+            fecha_instalacion: '2026-09-16',
+            plantilla: conProrrateo,
+        })
         const v = await vista(aMano.servicioId, '2026-09-16')
         assert.deepEqual(
             delServicio(v).map((p) => [p.periodo, p.monto, p.prorrateado, p.dias, p.dias_ciclo]),
@@ -585,7 +602,10 @@ test.group('Facturas de periodo · sin prorrateo y monto editado', () => {
             .select('concepto')
         assert.notInclude(linea!.concepto, 'prorrateo')
 
-        const conCron = await servicioDesdeSeptiembre({ fecha_instalacion: '2026-09-16' })
+        const conCron = await servicioDesdeSeptiembre({
+            fecha_instalacion: '2026-09-16',
+            plantilla: conProrrateo,
+        })
         await generar(conCron.servicioId, '2026-09-16')
         const [delCron] = await facturasDe(conCron.servicioId)
         assert.equal(delCron!.total, '75.00')
@@ -735,6 +755,246 @@ test.group('Facturas de periodo · sin prorrateo y monto editado', () => {
             { status: 422, rule: 'monto_editado_invalido' },
         )
         assert.equal(await facturasEmitidas(e.servicioId), 0)
+    })
+})
+
+test.group('Facturas de periodo · días antes del primer periodo (tramo inicial)', () => {
+    /** Instalado el 16 de septiembre con ciclo del día 1: del 1 al 15 no es de ningún periodo. */
+    function aMitadDeCiclo() {
+        return servicioDesdeSeptiembre({ fecha_instalacion: '2026-09-16' })
+    }
+
+    test('vista previa: el tramo con su sugerencia proporcional; incluirlo en la primera factura', async ({
+        assert,
+    }) => {
+        const e = await aMitadDeCiclo()
+        const v = await vista(e.servicioId)
+        assert.deepEqual(v.tramo_inicial, {
+            desde: '2026-09-01',
+            hasta: '2026-09-15',
+            dias: 15,
+            dias_ciclo: 30,
+            primer_periodo: '2026-09-16',
+            primer_periodo_libre: true,
+            monto_proporcional: '75.00',
+            vence_cargo: '2026-11-24',
+            cobrado_como: null,
+            factura_id: null,
+        })
+        const pedido = { modo: 'primera_factura' as const }
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    periodos: ['2026-09-16'],
+                    tramo_inicial: pedido,
+                    motivo: 'Usó desde el 1',
+                }),
+            ),
+            { status: 422, rule: 'tramo_inicial_sin_permiso' },
+        )
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    periodos: ['2026-09-16'],
+                    tramo_inicial: pedido,
+                    puede_emitir_anterior: true,
+                }),
+            ),
+            { status: 422, rule: 'motivo_requerido' },
+        )
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    periodos: ['2026-10-01'],
+                    tramo_inicial: pedido,
+                    puede_emitir_anterior: true,
+                    motivo: 'Usó desde el 1',
+                }),
+            ),
+            { status: 422, rule: 'tramo_sin_primer_periodo' },
+        )
+        assert.equal(await facturasEmitidas(e.servicioId), 0)
+
+        const r = await emitir(e.servicioId, {
+            periodos: ['2026-09-16'],
+            tramo_inicial: pedido,
+            puede_emitir_anterior: true,
+            motivo: 'Usó el servicio desde el 1 de septiembre',
+        })
+        assert.deepEqual(
+            r.creadas.map((c) => [c.periodo, c.total, c.vence_en]),
+            [['2026-09-16', '150.00', '2026-11-24']],
+        )
+        const facturaId = r.creadas[0]!.factura_id
+        assert.deepEqual(r.tramo_inicial, {
+            modo: 'primera_factura',
+            desde: '2026-09-01',
+            hasta: '2026-09-15',
+            factura_id: facturaId,
+            total: '150.00',
+            monto_calculado: '150.00',
+            monto_editado: false,
+            vence_en: '2026-11-24',
+        })
+        // misma clave que usaría el cron para el primer periodo; la línea cubre desde el inicio del ciclo
+        const factura = await db.from('billing.facturas').where('id', facturaId).firstOrFail()
+        assert.equal(factura.clave_unica, `${e.servicioId}-2026-09-16`)
+        assert.deepEqual(factura.reglas_snapshot.emision_manual.tramo_inicial, {
+            modo: 'primera_factura',
+            desde: '2026-09-01',
+            dias: 15,
+        })
+        const [linea] = await db
+            .from('billing.facturas_lineas')
+            .where('factura_id', facturaId)
+            .where('tipo', 'servicio')
+            .select('concepto')
+        assert.include(linea!.concepto, 'del 2026-09-01 al 2026-09-30')
+
+        // ya cobrado: ni otra vez ni como cargo único; el cron no duplica el primer periodo
+        const despues = await vista(e.servicioId)
+        assert.include(despues.tramo_inicial!, { cobrado_como: 'primera_factura', factura_id: facturaId })
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    tramo_inicial: { modo: 'cargo_unico' },
+                    puede_emitir_anterior: true,
+                    motivo: 'Otra vez',
+                }),
+            ),
+            { status: 422, rule: 'tramo_ya_cobrado' },
+        )
+        const cron = await generar(e.servicioId, '2026-10-01')
+        assert.deepEqual([cron.generadas, cron.omitidas], [1, 1])
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('como cargo único: proporcional sugerido, asiento, sin duplicados con el cron; monto editado', async ({
+        assert,
+    }) => {
+        const e = await aMitadDeCiclo()
+        const pedido = { tramo_inicial: { modo: 'cargo_unico' as const }, puede_emitir_anterior: true }
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    ...pedido,
+                    tramo_inicial: { modo: 'cargo_unico', monto: '100.00' },
+                    motivo: 'Acuerdo',
+                }),
+            ),
+            { status: 422, rule: 'editar_monto_sin_permiso' },
+        )
+        assert.equal(await facturasEmitidas(e.servicioId), 0)
+
+        // solo el tramo, sin periodos
+        const r = await emitir(e.servicioId, { ...pedido, motivo: 'Usó del 1 al 15 de septiembre' })
+        assert.deepEqual(r.creadas, [])
+        const cargo = r.tramo_inicial!
+        assert.deepInclude(cargo, {
+            modo: 'cargo_unico',
+            desde: '2026-09-01',
+            hasta: '2026-09-15',
+            total: '75.00',
+            monto_calculado: '75.00',
+            monto_editado: false,
+            vence_en: '2026-11-24',
+        })
+        const factura = await db.from('billing.facturas').where('id', cargo.factura_id).firstOrFail()
+        assert.equal(factura.clave_unica, `cargo-tramo-${e.servicioId}-2026-09-01`)
+        assert.include(factura.reglas_snapshot, { cargo_unico: true, mora_tipo: 'ninguna' })
+        assert.deepInclude(factura.reglas_snapshot.emision_manual, {
+            motivo: 'Usó del 1 al 15 de septiembre',
+            monto_calculado: '75.00',
+            monto_cobrado: null,
+        })
+        // asiento de servicio de internet (4.1.01) con IVA, de hoy
+        assert.deepEqual(await cuentasDe(cargo.factura_id), {
+            '1.1.03': ['75.00', '0.00'],
+            '4.1.01': ['0.00', '66.96'],
+            '2.1.02': ['0.00', '8.04'],
+        })
+        assert.lengthOf(await eventosDe('factura.emitida', 'servicio_id', e.servicioId), 1)
+        const accion = await db
+            .from('audit.acciones')
+            .where('accion', 'facturas.emitir_periodos')
+            .where('resultado', 'ok')
+            .where('entidad_tipo', 'servicio')
+            .where('entidad_id', e.servicioId)
+            .first()
+        assert.exists(accion)
+
+        // no se cobra dos veces, ni en la primera factura; el cron emite sus periodos completos aparte
+        for (const modo of ['cargo_unico', 'primera_factura'] as const) {
+            assert.deepEqual(
+                await errorDe(
+                    emitir(e.servicioId, {
+                        periodos: modo === 'primera_factura' ? ['2026-09-16'] : undefined,
+                        tramo_inicial: { modo },
+                        puede_emitir_anterior: true,
+                        motivo: 'Otra vez',
+                    }),
+                ),
+                { status: 422, rule: 'tramo_ya_cobrado' },
+            )
+        }
+        const cron = await generar(e.servicioId, '2026-10-01')
+        assert.equal(cron.generadas, 2)
+        const todas = await facturasDe(e.servicioId)
+        assert.deepEqual(
+            todas.map((f) => [f.periodo, f.total]),
+            [
+                ['2026-09-01', '75.00'],
+                ['2026-09-16', '150.00'],
+                ['2026-10-01', '150.00'],
+            ],
+        )
+
+        // otro servicio: el cargo con el monto editado, con permiso y motivo
+        const otro = await aMitadDeCiclo()
+        const editado = await emitir(otro.servicioId, {
+            tramo_inicial: { modo: 'cargo_unico', monto: '90.00' },
+            puede_emitir_anterior: true,
+            puede_editar_monto: true,
+            motivo: 'Acuerdo con el cliente',
+        })
+        assert.deepInclude(editado.tramo_inicial!, {
+            total: '90.00',
+            monto_calculado: '75.00',
+            monto_editado: true,
+        })
+        const auditada = await db
+            .from('audit.acciones')
+            .where('accion', 'facturas.emitir_periodos')
+            .where('resultado', 'ok')
+            .where('entidad_id', otro.servicioId)
+            .firstOrFail()
+        assert.deepEqual(auditada.entrada.auditoria.montos_editados, [
+            {
+                periodo: '2026-09-01',
+                factura_id: editado.tramo_inicial!.factura_id,
+                calculado: '75.00',
+                cobrado: '90.00',
+            },
+        ])
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('sin tramo: un servicio que empieza en inicio de ciclo responde 422 sin_tramo_inicial', async ({
+        assert,
+    }) => {
+        const e = await servicioDesdeSeptiembre()
+        const v = await vista(e.servicioId)
+        assert.isNull(v.tramo_inicial)
+        assert.deepEqual(
+            await errorDe(
+                emitir(e.servicioId, {
+                    tramo_inicial: { modo: 'cargo_unico' },
+                    puede_emitir_anterior: true,
+                    motivo: 'x x x',
+                }),
+            ),
+            { status: 422, rule: 'sin_tramo_inicial' },
+        )
     })
 })
 

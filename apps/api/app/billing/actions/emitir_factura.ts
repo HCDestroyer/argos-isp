@@ -95,6 +95,13 @@ export interface EmisionManual {
      * plan (IVA del neto, 5.1.01), como cualquier descuento. Nunca deja la línea del plan bajo cero.
      */
     monto?: string | null
+    /**
+     * Incluir en esta factura (el primer periodo del servicio) el tramo entre el inicio del ciclo y la
+     * instalación (decisión del PM del 21 nov): la línea dice «del `tramo_desde` al …» y el snapshot
+     * guarda `emision_manual.tramo_inicial`. La clave sigue siendo la del periodo (`servicio_id-inicio`),
+     * la misma que usaría el cron: nunca dos facturas del primer periodo.
+     */
+    tramo_desde?: string | null
 }
 
 export interface ResultadoEmitirFactura {
@@ -155,11 +162,13 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         const factor = dec(input.periodo.factor)
         const prorrateado = !factor.equals(1)
         const ultimoDia = sumarDias(fin, -1)
+        const tramoDesde = input.manual?.tramo_desde ?? null
+        const cubreDesde = tramoDesde ?? periodo
 
         const lineas: LineaCalculada[] = [
             lineaConIva({
                 concepto:
-                    `Servicio de internet ${servicio.plan_nombre} del ${periodo} al ${ultimoDia}` +
+                    `Servicio de internet ${servicio.plan_nombre} del ${cubreDesde} al ${ultimoDia}` +
                     (prorrateado ? ` (prorrateo ${dias}/${diasCiclo} días)` : ''),
                 tipo: 'servicio',
                 cantidad: '1',
@@ -230,6 +239,15 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                           facturar_desde: desde,
                           monto_calculado: aTexto(calculado),
                           monto_cobrado: editado ? aTexto(cobrado) : null,
+                          ...(tramoDesde
+                              ? {
+                                    tramo_inicial: {
+                                        modo: 'primera_factura',
+                                        desde: tramoDesde,
+                                        dias: diasEntre(tramoDesde, periodo),
+                                    },
+                                }
+                              : {}),
                       },
                   }
                 : {}),

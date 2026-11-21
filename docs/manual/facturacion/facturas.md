@@ -127,10 +127,9 @@ Abajo, el **resumen** se actualiza con lo que marcaste (con los montos cambiados
 
 La lista se vuelve a cargar con los meses ya emitidos.
 
-- Los meses futuros y los meses sin emitir vencen en su fecha normal (inicio del mes más los días de gracia de la plantilla). Una factura de un mes futuro **no cuenta para limitar ni cortar** antes de esa fecha.
-- Los meses **antes del inicio del servicio** o **del cobro** vencen **desde hoy**: hoy más los días de gracia de la plantilla. Así el cliente no queda cortado en cuanto los emites; si no paga en ese plazo, se corta como siempre.
+- Los meses futuros vencen en su fecha normal (inicio del mes más los días de gracia de la plantilla). Una factura de un mes futuro **no cuenta para limitar ni cortar** antes de esa fecha.
+- Los meses que ya pasaron (sin emitir, antes del inicio del servicio o del cobro) vencen **desde hoy** si su fecha normal ya pasó: hoy más los días de gracia de la plantilla. Así el cliente no queda cortado en cuanto los emites; si no paga en ese plazo, se corta como siempre.
 - El asiento y la factura electrónica (FEL) llevan la fecha de hoy, aunque el mes sea pasado.
-- Un mes pasado que emites tarde y cuyo vencimiento ya pasó se marca como vencido en el próximo corte y cuenta para limitar o suspender, como cualquier factura vencida.
 - El precio es el de hoy. Si después cambias el plan, las facturas que ya emitiste por adelantado no cambian.
 - Si algo falla (sin conexión, un error del servidor), la pantalla muestra el error con «Reintentar» y no muestra totales que no pudo leer. Reintentar no duplica facturas.
 
@@ -159,6 +158,14 @@ Hoy es 19 de noviembre y agregaste el servicio de Q150 con inicio el 1 de noviem
 3. Escribes el motivo («Usaba el servicio desde septiembre») y pulsas «Emitir 2 facturas».
 4. El servicio sigue activo. Si el 24 de noviembre no ha pagado, esas facturas vencen y el corte funciona como siempre.
 :::
+
+**Días antes del primer mes.** Si el ciclo de la plantilla empieza, por ejemplo, el día 1 y el cliente se instaló el 16, del 1 al 15 no son de ningún mes del servicio. La pantalla lo muestra en «Días antes del primer periodo» y, con el permiso `facturas.emitir_periodo_anterior`, te deja elegir:
+
+- **No cobrarlos** (lo normal).
+- **Incluir en la primera factura:** la factura del primer mes cubre desde el día 1. Cobra el mes completo (el sistema no cobra por días); con el permiso de cambiar montos puedes ajustarlo. Solo si esa primera factura aún no está emitida; al elegirlo se marca ese mes.
+- **Cobrar como cargo único:** una factura aparte por esos días, que vence hoy más los días de gracia. El monto sugerido es la parte proporcional (por ejemplo, 15 de 30 días de un servicio de Q150 = Q75); con el permiso de cambiar montos puedes escribir otro.
+
+En los dos casos el **motivo** es obligatorio y queda en la factura y en la bitácora. Esos días se cobran una sola vez: después la pantalla dice «Días antes del primer periodo ya cobrados» con el enlace a la factura.
 
 **Meses antes del inicio del cobro.** Cuando un servicio que no tenía plantilla la recibe, el sistema solo le factura desde el siguiente mes (nunca hacia atrás). Si de verdad hay que cobrar uno de esos meses anteriores:
 
@@ -226,6 +233,7 @@ Una factura anulada no vuelve a estar vigente. Nada se borra: la factura y su as
 | «…: anterior a facturar_desde (…); requiere el permiso…»                      | Pide a contabilidad o a un administrador que emita ese mes, con su motivo.                     |
 | «Para emitir un periodo anterior al inicio del servicio hace falta el permiso…» | Pide a contabilidad o a un administrador que emita ese mes, con su motivo.                   |
 | «Solo se pueden emitir hasta 24 periodos antes del inicio del servicio.»        | Solo se cobra hasta dos años hacia atrás.                                                    |
+| «Esos días ya se cobraron…»                                                     | Ya están en la primera factura o en un cargo único: mira la factura del enlace.              |
 | «Para cambiar el monto de una factura hace falta el permiso…»                   | Emite con el monto calculado o pide a contabilidad que la emita con el monto acordado.       |
 | «El monto es tan bajo que la rebaja pasa del precio del servicio…»              | Sube el monto: la rebaja no puede ser mayor que el precio del servicio de ese mes.           |
 | «… no es el inicio de un periodo del servicio»                                | Elige los meses de la lista; las fechas deben ser el primer día de cada periodo.               |

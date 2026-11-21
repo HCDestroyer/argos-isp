@@ -8,11 +8,17 @@ import {
     exigirDentroDelMaximo,
     exigirEmitible,
     manualDe,
+    montoProporcionalTramo,
     MAXIMO_PERIODOS_ANTERIORES,
     periodosDelServicio,
     soloPeriodo,
     type PeriodoDelServicio,
+    type PeriodosDelServicio,
+    type TramoInicial,
 } from '#billing/periodos_facturables'
+import { claveTramoInicial, sumarDias } from '#billing/periodos'
+import { lineaConIva } from '#billing/facturas'
+import { emitirDocumento } from '#billing/emision'
 import EmitirFactura from '#billing/actions/emitir_factura'
 
 /**
@@ -36,16 +42,31 @@ import EmitirFactura from '#billing/actions/emitir_factura'
  *   inicio del servicio** (hasta `MAXIMO_PERIODOS_ANTERIORES`, decisión del PM del 21 nov): solo
  *   pedidos en `periodos`, con `puede_emitir_anterior` (la ruta lo fija con
  *   `facturas.emitir_periodo_anterior`) y `motivo`; si no, 422 `antes_de_facturar_desde` /
- *   `antes_del_inicio` o `motivo_requerido`; más atrás, 422 `maximo_periodos_anteriores`. Vencen
- *   desde hoy (`hoy + dias_gracia` si su vencimiento normal ya pasó): emitirlos no corta al cliente.
+ *   `antes_del_inicio` o `motivo_requerido`; más atrás, 422 `maximo_periodos_anteriores`.
+ * - **Vencimiento:** todo periodo emitido aquí vence en `max(periodo, hoy) + dias_gracia`
+ *   (`vencimientoDe`): un pendiente atrasado o un anterior no corta al cliente al emitirlo.
  * - **Monto editado** (`montos`, pedido del PM del 21 nov): el total de un periodo distinto del
  *   calculado exige `puede_editar_monto` (`facturas.editar_monto_periodo`; si no, 422
  *   `editar_monto_sin_permiso`) y `motivo` (422 `motivo_requerido`); mayor que cero (422
  *   `monto_positivo`). Las líneas: `EmisionManual.monto` en `EmitirFactura`. Calculado y cobrado
  *   quedan en `reglas_snapshot.emision_manual`, en el resultado y en la bitácora (`montos_editados`).
+ * - **Tramo inicial** (`tramo_inicial`, decisión del PM del 21 nov): los días entre el inicio del
+ *   ciclo y la instalación (primer periodo a mitad de ciclo) no son de ningún periodo. Con
+ *   `facturas.emitir_periodo_anterior` y motivo (422 `tramo_inicial_sin_permiso`, `motivo_requerido`):
+ *   - `primera_factura`: la factura del primer periodo (que debe venir en `periodos` y estar libre; 422
+ *     `tramo_sin_primer_periodo`) cubre desde el inicio del ciclo, con la misma clave del periodo y el
+ *     monto completo (editable en `montos`).
+ *   - `cargo_unico`: un cargo único del servicio (clave fija `cargo-tramo-<servicio>-<desde>`: no
+ *     ocupa periodo y nunca se duplica), línea de servicio de internet (4.1.01) con las fechas, por
+ *     `monto` o, por defecto, el proporcional (`montoProporcionalTramo`); un monto distinto exige
+ *     `puede_editar_monto`. Sin mora, vence hoy + dias_gracia, asiento, `factura.emitida` y FEL.
+ *   - Ya cobrado de una forma u otra (factura vigente): 422 `tramo_ya_cobrado`; sin tramo: 422
+ *     `sin_tramo_inicial`.
  * - Retirado, pendiente de instalación o sin plantilla: 422 con esa regla. Un inicio que no es de un
  *   periodo del servicio: 422 `periodo_invalido`.
  */
+
+export type ModoTramoInicial = 'primera_factura' | 'cargo_unico'
 
 export interface EntradaEmitirFacturasPeriodo {
     servicio_id: number
@@ -54,6 +75,8 @@ export interface EntradaEmitirFacturasPeriodo {
     motivo?: string | null
     /** total a cobrar por periodo (con IVA), si difiere del calculado */
     montos?: Array<{ periodo: string; monto: string }>
+    /** qué hacer con el tramo entre el inicio del ciclo y la instalación */
+    tramo_inicial?: { modo: ModoTramoInicial; monto?: string | null } | null
     /** la ruta lo fija según `facturas.emitir_periodo_anterior`; nunca viene del cuerpo */
     puede_emitir_anterior?: boolean
     /** la ruta lo fija según `facturas.editar_monto_periodo`; nunca viene del cuerpo */
@@ -81,6 +104,18 @@ export interface PeriodoBonificado {
     bonificacion_id: number
 }
 
+export interface TramoInicialCobrado {
+    modo: ModoTramoInicial
+    desde: string
+    hasta: string
+    factura_id: number
+    total: string
+    /** primera factura: el total del periodo calculado; cargo único: el proporcional sugerido */
+    monto_calculado: string
+    monto_editado: boolean
+    vence_en: string
+}
+
 export type MotivoOmision = 'ya_emitida' | 'bonificada'
 
 export interface PeriodoOmitido {
@@ -96,6 +131,8 @@ export interface ResultadoEmitirFacturasPeriodo {
     creadas: FacturaPeriodoCreada[]
     bonificadas: PeriodoBonificado[]
     omitidas: PeriodoOmitido[]
+    /** el tramo inicial cobrado en esta emisión (null si no se pidió) */
+    tramo_inicial: TramoInicialCobrado | null
     /** saldo a favor del cliente en la empresa del servicio después de emitir */
     saldo_a_favor: string
 }
@@ -111,7 +148,9 @@ export default class EmitirFacturasPeriodo extends DomainAction<
         t: Transaccion,
     ): Promise<ResultadoEmitirFacturasPeriodo> {
         const pidePeriodos = input.periodos !== undefined && input.periodos !== null
-        if (pidePeriodos === Boolean(input.hasta)) {
+        // el tramo como cargo único puede ir solo, sin periodos
+        const soloTramo = !pidePeriodos && !input.hasta && input.tramo_inicial?.modo === 'cargo_unico'
+        if (pidePeriodos === Boolean(input.hasta) && !soloTramo) {
             const mensaje = 'Indica periodos o hasta (uno de los dos)'
             throw new ValidacionFallida([{ field: 'periodos', message: mensaje, rule: 'periodos_o_hasta' }])
         }
@@ -129,13 +168,16 @@ export default class EmitirFacturasPeriodo extends DomainAction<
         t.fijarEmpresa(servicio.empresa_id)
         exigirEmitible(datos)
 
-        const elegidos = pidePeriodos
-            ? elegirPorInicio(datos.periodos, input.periodos!, datos)
-            : elegirHasta(datos.periodos, fechaValida(input.hasta!, 'hasta'), datos)
+        const elegidos = soloTramo
+            ? []
+            : pidePeriodos
+              ? elegirPorInicio(datos.periodos, input.periodos!, datos)
+              : elegirHasta(datos.periodos, fechaValida(input.hasta!, 'hasta'), datos)
 
         const motivo = input.motivo?.trim() || null
         exigirAnteriores(elegidos, datos.facturar_desde, input.puede_emitir_anterior === true, motivo)
         const montos = montosPedidos(input.montos ?? [], elegidos)
+        const tramo = exigirTramo(input, datos, elegidos, motivo)
 
         const resultado: ResultadoEmitirFacturasPeriodo = {
             servicio_id: servicio.id,
@@ -143,6 +185,7 @@ export default class EmitirFacturasPeriodo extends DomainAction<
             creadas: [],
             bonificadas: [],
             omitidas: [],
+            tramo_inicial: null,
             saldo_a_favor: '0.00',
         }
         const emitidas: number[] = []
@@ -168,7 +211,14 @@ export default class EmitirFacturasPeriodo extends DomainAction<
                 {
                     servicio_id: servicio.id,
                     periodo: soloPeriodo(p),
-                    manual: manualDe(p, motivo, montos.get(p.periodo) ?? null),
+                    manual: manualDe(
+                        p,
+                        motivo,
+                        montos.get(p.periodo) ?? null,
+                        tramo?.modo === 'primera_factura' && p.periodo === tramo.primer_periodo
+                            ? tramo.desde
+                            : null,
+                    ),
                 },
                 t.ctx,
                 { trx: t.trx },
@@ -230,11 +280,181 @@ export default class EmitirFacturasPeriodo extends DomainAction<
                 vence_en: f.vence_en,
             }))
         }
+        if (tramo?.modo === 'primera_factura') {
+            const factura = resultado.creadas.find((c) => c.periodo === tramo.primer_periodo)
+            if (!factura) {
+                throw new ReglaNegocio(
+                    `El primer periodo (${tramo.primer_periodo}) no se emitió: no se puede incluir el tramo`,
+                    'tramo_sin_primer_periodo',
+                )
+            }
+            resultado.tramo_inicial = {
+                modo: 'primera_factura',
+                desde: tramo.desde,
+                hasta: sumarDias(tramo.fin, -1),
+                factura_id: factura.factura_id,
+                total: factura.total,
+                monto_calculado: factura.monto_calculado,
+                monto_editado: factura.monto_editado,
+                vence_en: factura.vence_en,
+            }
+        } else if (tramo?.modo === 'cargo_unico') {
+            resultado.tramo_inicial = await cobrarTramoComoCargo(
+                t,
+                datos,
+                tramo,
+                motivo,
+                input.tramo_inicial?.monto,
+            )
+            if (resultado.tramo_inicial.monto_editado) {
+                exigirEdicion(`tramo ${tramo.desde}`, input.puede_editar_monto === true, motivo)
+                editados.push({
+                    periodo: tramo.desde,
+                    factura_id: resultado.tramo_inicial.factura_id,
+                    calculado: resultado.tramo_inicial.monto_calculado,
+                    cobrado: resultado.tramo_inicial.total,
+                })
+            }
+            // emitirDocumento fija la factura como entidad: la de esta acción es el servicio
+            t.fijarEntidad('servicio', servicio.id)
+        }
         if (editados.length > 0) t.anotarAuditoria({ montos_editados: editados })
         resultado.saldo_a_favor = aTexto(
             await saldoAnticipos(t.trx, servicio.cliente_id, servicio.empresa_id),
         )
         return resultado
+    }
+}
+
+type TramoPedido = TramoInicial & { modo: ModoTramoInicial }
+
+/** Valida el tramo inicial pedido: que exista, no esté cobrado, permiso, motivo y su primer periodo. */
+function exigirTramo(
+    input: EntradaEmitirFacturasPeriodo,
+    datos: PeriodosDelServicio,
+    elegidos: PeriodoDelServicio[],
+    motivo: string | null,
+): TramoPedido | null {
+    const pedido = input.tramo_inicial
+    if (!pedido) return null
+    const regla = (codigo: string, mensaje: string) =>
+        new ReglaNegocio(mensaje, codigo, [{ field: 'tramo_inicial', message: mensaje, rule: codigo }])
+    const tramo = datos.tramo_inicial
+    if (!tramo) {
+        throw regla(
+            'sin_tramo_inicial',
+            'El servicio empieza en un inicio de ciclo: no hay días antes del primer periodo',
+        )
+    }
+    if (tramo.cobrado) {
+        throw regla(
+            'tramo_ya_cobrado',
+            `Los días del ${tramo.desde} al ${sumarDias(tramo.fin, -1)} ya se cobraron (factura ${tramo.cobrado.factura_id})`,
+        )
+    }
+    if (!input.puede_emitir_anterior) {
+        throw regla(
+            'tramo_inicial_sin_permiso',
+            'Cobrar los días antes del primer periodo requiere el permiso facturas.emitir_periodo_anterior',
+        )
+    }
+    if (!motivo) {
+        const mensaje = 'Cobrar los días antes del primer periodo exige un motivo'
+        throw new ValidacionFallida([{ field: 'motivo', message: mensaje, rule: 'motivo_requerido' }])
+    }
+    if (pedido.modo === 'primera_factura') {
+        const primero = elegidos.find((p) => p.periodo === tramo.primer_periodo)
+        if (!primero || primero.ocupacion) {
+            throw regla(
+                'tramo_sin_primer_periodo',
+                `Para incluir los días en la primera factura, elige el primer periodo (${tramo.primer_periodo}) y que no esté emitido`,
+            )
+        }
+    } else if (pedido.monto !== undefined && pedido.monto !== null && !dec(pedido.monto).gt(0)) {
+        throw new ValidacionFallida([
+            {
+                field: 'tramo_inicial.monto',
+                message: 'El monto debe ser mayor que cero',
+                rule: 'monto_positivo',
+            },
+        ])
+    }
+    return { ...tramo, modo: pedido.modo }
+}
+
+/** El tramo como cargo único del servicio (mismo camino que `EmitirCargoUnico`: `emitirDocumento`). */
+async function cobrarTramoComoCargo(
+    t: Transaccion,
+    datos: PeriodosDelServicio,
+    tramo: TramoInicial,
+    motivo: string | null,
+    monto: string | null | undefined,
+): Promise<TramoInicialCobrado> {
+    const { servicio } = datos
+    const config = datos.config!
+    const sugerido = montoProporcionalTramo(servicio.precio, tramo)
+    const cobrado = aTexto(monto ? dec(monto) : dec(sugerido))
+    const hasta = sumarDias(tramo.fin, -1)
+    const venceEn = sumarDias(datos.hoy, config.dias_gracia)
+    const emision = await emitirDocumento(t, {
+        empresa_id: servicio.empresa_id,
+        cliente_id: servicio.cliente_id,
+        servicio_id: servicio.id,
+        periodo: tramo.desde,
+        clave_unica: claveTramoInicial(servicio.id, tramo.desde),
+        vence_en: venceEn,
+        lineas: [
+            lineaConIva({
+                concepto: `Servicio de internet ${servicio.plan_nombre} del ${tramo.desde} al ${hasta} (${tramo.dias} días antes del primer periodo)`,
+                tipo: 'servicio',
+                cantidad: '1',
+                gravable: true,
+                total: cobrado,
+            }),
+        ],
+        reglas_snapshot: {
+            ...config,
+            // como todo cargo único: sin mora
+            mora_tipo: 'ninguna',
+            mora_valor: '0.00',
+            mora_recurrente: false,
+            cargo_unico: true,
+            precio: aTexto(servicio.precio),
+            plan_id: servicio.plan_id,
+            plan_nombre: servicio.plan_nombre,
+            emision_manual: {
+                motivo,
+                tramo_inicial: {
+                    modo: 'cargo_unico',
+                    desde: tramo.desde,
+                    hasta,
+                    dias: tramo.dias,
+                    dias_ciclo: tramo.dias_ciclo,
+                },
+                monto_calculado: sugerido,
+                monto_cobrado: dec(cobrado).equals(sugerido) ? null : cobrado,
+            },
+        },
+        certificar_al: config.certificar_al,
+        descripcion: `servicio ${servicio.id} · días del ${tramo.desde} al ${hasta}`,
+    })
+    if (!emision.creada || !emision.factura_id) {
+        throw new ReglaNegocio(`Los días del ${tramo.desde} al ${hasta} ya se cobraron`, 'tramo_ya_cobrado')
+    }
+    const f = (await t.trx
+        .from('billing.facturas')
+        .where('id', emision.factura_id)
+        .select('total')
+        .firstOrFail()) as { total: string }
+    return {
+        modo: 'cargo_unico',
+        desde: tramo.desde,
+        hasta,
+        factura_id: Number(emision.factura_id),
+        total: aTexto(f.total),
+        monto_calculado: sugerido,
+        monto_editado: !dec(cobrado).equals(sugerido),
+        vence_en: venceEn,
     }
 }
 

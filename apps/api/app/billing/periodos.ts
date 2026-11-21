@@ -125,6 +125,32 @@ export function periodosAntesDelInicio(
     return salida
 }
 
+/**
+ * Tramo entre el inicio del ciclo y la instalación (primer periodo a mitad de ciclo, p. ej. `dia_fijo`
+ * día 1 e instalación el 16): `[desde, fin)` con `fin` = el primer día facturable del servicio. Ningún
+ * periodo lo cubre; a mano se puede incluir en la primera factura o cobrar como cargo único (decisión
+ * del PM del 21 nov). null si el servicio empieza justo en un inicio de ciclo.
+ */
+export function tramoAntesDelPrimerPeriodo(
+    config: ConfigCiclo,
+    inicioServicio: string,
+): { desde: string; fin: string; dias: number; dias_ciclo: number } | null {
+    const dia = diaDelCiclo(config, inicioServicio)
+    const desde = inicioCicloQueContiene(inicioServicio, dia)
+    if (desde === inicioServicio) return null
+    return {
+        desde,
+        fin: inicioServicio,
+        dias: diasEntre(desde, inicioServicio),
+        dias_ciclo: diasEntre(desde, siguienteInicio(desde, dia)),
+    }
+}
+
+/** Clave del cargo único del tramo inicial: `cargo-…` (no ocupa periodo) y fija (nunca dos). */
+export function claveTramoInicial(servicioId: number, desde: string): string {
+    return `cargo-tramo-${servicioId}-${desde}`
+}
+
 /** Clave única de la factura de un periodo. */
 export function claveFactura(servicioId: number, periodo: string): string {
     return `${servicioId}-${periodo}`

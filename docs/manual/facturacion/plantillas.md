@@ -44,7 +44,7 @@ Al instalar o actualizar ArgosIsp, el sistema crea solo estas tres plantillas si
 | **Genera 14 · vence 29** | el día 14       | el día 29 (15 días de gracia) |
 | **Genera 1 · vence 5**   | el día 1        | el día 5 (4 días de gracia)   |
 
-- Todo lo demás (corte con 1 factura vencida, hora de corte 08:00, sin mora, FEL al pagar) es lo mismo que trae una plantilla nueva. El prorrateo del primer mes depende de cuándo se crearon: en una instalación nueva vienen sin prorrateo (la primera factura cobra el mes completo); en una que ya las tenía, conservan lo que tenían. Puedes editarlas como cualquier otra.
+- Todo lo demás (corte con 1 factura vencida, hora de corte 08:00, sin mora, FEL al pagar, sin prorrateo: la primera factura cobra el mes completo) es lo mismo que trae una plantilla nueva. Puedes editarlas como cualquier otra.
 - En febrero, «Genera 14 · vence 29» vence el 29 de febrero si el año es bisiesto; si no, el 1 de marzo.
 - **«Genera 1 · vence 15» queda como plantilla por defecto**, salvo que ya tuvieras otra marcada: en ese caso se respeta la tuya y la de fábrica se crea sin la estrella. Puedes marcarla después: la lista te lo ofrece (ver «Marcar la plantilla por defecto»).
 - Si ya tenías una plantilla con alguno de esos nombres, no se duplica ni se cambia.
@@ -93,7 +93,10 @@ Sirve para los servicios que quedaron sin plantilla (por ejemplo, creados antes 
 - **Ciclo:**
     - «Día fijo del mes»: todas las facturas salen el mismo día. Se elige el **Día de facturación**, del 1 al 28 (para que exista en todos los meses).
     - «Aniversario»: cada servicio factura el día del mes en que se instaló. Si se instaló un 29, 30 o 31, factura el 28.
-- **Prorratear el primer periodo:** si está encendido, la primera factura que emite el sistema cobra solo los días desde la instalación hasta el inicio del siguiente periodo. **Apagado, la primera factura cobra el mes completo.** Una plantilla nueva viene **apagada**; las plantillas que ya existían conservan lo que tenían. Las facturas que emites a mano («Emitir facturas de periodos») siempre cobran el mes completo, sea cual sea esta opción.
+- **Prorratear el primer periodo:** **apagado (lo normal), la factura cobra el precio completo del servicio desde el primer mes**, aunque el cliente se haya instalado a mitad de mes. Encendido, la primera factura que emite el sistema cobra solo los días desde la instalación hasta el inicio del siguiente periodo.
+    - Desde el 21 de noviembre de 2026 todas las plantillas quedaron **apagadas** (decisión del PM: la factura cobra el precio del servicio, sin cálculos por día) y las nuevas nacen apagadas. El cambio quedó en la bitácora de cada plantilla.
+    - Si una plantilla debe prorratear a propósito, enciéndelo al editarla.
+    - Las facturas que emites a mano («Emitir facturas de periodos») siempre cobran el mes completo, sea cual sea esta opción. Los días antes del primer periodo se cobran desde esa pantalla, si hace falta (ver [Facturas](./facturas.md)).
 
 ### Corte por falta de pago
 

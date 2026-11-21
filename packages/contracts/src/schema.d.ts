@@ -10328,7 +10328,7 @@ export interface paths {
         put?: never;
         /**
          * Emitir a mano facturas de periodos del servicio (pago adelantado o periodos no emitidos)
-         * @description Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Sin prorrateo: cada periodo cobra el precio efectivo completo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior al inicio del servicio (hasta 24; más atrás 422 maximo_periodos_anteriores) o a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_del_inicio o antes_de_facturar_desde) y motivo (422 motivo_requerido); vence desde hoy (hoy + dias_gracia si su vencimiento normal ya pasó). montos: total editado por periodo, con facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo; más que el calculado agrega una línea de ajuste del servicio, menos un descuento sobre la línea del plan (422 monto_editado_invalido si no alcanza); calculado y cobrado quedan en la factura y en la bitácora. 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.
+         * @description Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Sin prorrateo: cada periodo cobra el precio efectivo completo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior al inicio del servicio (hasta 24; más atrás 422 maximo_periodos_anteriores) o a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_del_inicio o antes_de_facturar_desde) y motivo (422 motivo_requerido); vence desde hoy (hoy + dias_gracia si su vencimiento normal ya pasó). montos: total editado por periodo, con facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo; más que el calculado agrega una línea de ajuste del servicio, menos un descuento sobre la línea del plan (422 monto_editado_invalido si no alcanza); calculado y cobrado quedan en la factura y en la bitácora. Todo periodo emitido aquí vence en max(periodo, hoy) + dias_gracia. tramo_inicial (días entre el inicio del ciclo y la instalación), con facturas.emitir_periodo_anterior y motivo: primera_factura (la factura del primer periodo cubre desde el inicio del ciclo, misma clave) o cargo_unico (cargo-tramo-<servicio>-<desde>, monto o el proporcional); 422 sin_tramo_inicial, tramo_ya_cobrado, tramo_inicial_sin_permiso, tramo_sin_primer_periodo. 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.
          */
         post: operations["serviciosEmitirFacturasPeriodo"];
         delete?: never;
@@ -15522,6 +15522,20 @@ export interface components {
                 factura_id: number | null;
                 bonificacion_id: number | null;
             }[];
+            tramo_inicial: {
+                /** @enum {string} */
+                modo: "primera_factura" | "cargo_unico";
+                /** Format: date */
+                desde: string;
+                /** Format: date */
+                hasta: string;
+                factura_id: number;
+                total: components["schemas"]["Dinero"];
+                monto_calculado: components["schemas"]["Dinero"];
+                monto_editado: boolean;
+                /** Format: date */
+                vence_en: string;
+            } | null;
             /** @description Saldo a favor que queda después de emitir */
             saldo_a_favor: components["schemas"]["Dinero"];
         };
@@ -17127,6 +17141,35 @@ export interface components {
             /** @description Anticipos del cliente en la empresa del servicio */
             saldo_a_favor: components["schemas"]["Dinero"];
             periodos: components["schemas"]["PeriodoFacturable"][];
+            /** @description Días entre el inicio del ciclo y la instalación (primer periodo a mitad de ciclo); null si el servicio empieza en un inicio de ciclo */
+            tramo_inicial: {
+                /**
+                 * Format: date
+                 * @description Inicio del ciclo que contiene la instalación
+                 */
+                desde: string;
+                /**
+                 * Format: date
+                 * @description Día anterior al primer periodo del servicio
+                 */
+                hasta: string;
+                dias: number;
+                dias_ciclo: number;
+                /** Format: date */
+                primer_periodo: string;
+                /** @description El primer periodo no tiene factura: se puede incluir el tramo en ella */
+                primer_periodo_libre: boolean;
+                /** @description Sugerencia del cargo único: precio efectivo × dias / dias_ciclo */
+                monto_proporcional: components["schemas"]["Dinero"];
+                /**
+                 * Format: date
+                 * @description Vencimiento del cargo único (hoy + dias_gracia)
+                 */
+                vence_cargo: string;
+                /** @enum {string|null} */
+                cobrado_como: "primera_factura" | "cargo_unico" | null;
+                factura_id: number | null;
+            } | null;
         };
         Permiso: {
             id: number;
@@ -62239,7 +62282,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo */
+                    /** @description Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta (o ninguno con tramo_inicial cargo_unico). Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo */
                     periodos?: string[];
                     /**
                      * Format: date
@@ -62256,6 +62299,16 @@ export interface operations {
                          */
                         monto: string;
                     }[];
+                    /** @description Días entre el inicio del ciclo y la instalación (tramo_inicial de la vista previa): primera_factura (la factura del primer periodo, que debe ir en periodos, cubre desde el inicio del ciclo) o cargo_unico (monto; por defecto monto_proporcional; distinto exige facturas.editar_monto_periodo). Con facturas.emitir_periodo_anterior y motivo */
+                    tramo_inicial?: {
+                        /** @enum {string} */
+                        modo: "primera_factura" | "cargo_unico";
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        monto?: string | null;
+                    } | null;
                     /** @description Por qué se emiten a mano (queda en reglas_snapshot.emision_manual y en la bitácora); obligatorio para un periodo anterior al inicio del servicio o a facturar_desde, y al editar un monto */
                     motivo?: string | null;
                 };

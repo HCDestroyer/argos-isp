@@ -21,10 +21,12 @@
             "clientes.ver",
             "comprobantes.aprobar",
             "comprobantes.rechazar",
+            "comprobantes.registrar",
             "comprobantes.ver",
             "cuentas_bancarias.ver",
             "egresos.registrar",
             "facturas.emitir_cargo_unico",
+            "facturas.emitir_periodos",
             "facturas.ver",
             "fel.ver",
             "inventario.ver",
@@ -36,8 +38,7 @@
             "promesas.crear",
             "promesas.ver",
             "servicios.ver",
-            "zonas.ver",
-            "comprobantes.registrar"
+            "zonas.ver"
         ]
     },
     {
@@ -167,6 +168,7 @@
             "compras.ver",
             "comprobantes.aprobar",
             "comprobantes.rechazar",
+            "comprobantes.registrar",
             "comprobantes.ver",
             "cuentas_bancarias.editar",
             "cuentas_bancarias.ver",
@@ -186,7 +188,10 @@
             "facturas.cargo_sin_costo",
             "facturas.configurar_conceptos",
             "facturas.configurar_motivos",
+            "facturas.editar_monto_periodo",
             "facturas.emitir_cargo_unico",
+            "facturas.emitir_periodo_anterior",
+            "facturas.emitir_periodos",
             "facturas.generar",
             "facturas.nota_credito",
             "facturas.sustituir",
@@ -252,8 +257,7 @@
             "sorteos.marcar_requisito",
             "sorteos.publicar",
             "sorteos.ver",
-            "zonas.ver",
-            "comprobantes.registrar"
+            "zonas.ver"
         ]
     },
     {

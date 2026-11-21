@@ -1587,6 +1587,30 @@ export const PeriodosFacturables = definirEsquema(
         },
         saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en la empresa del servicio' },
         periodos: lista(PeriodoFacturable),
+        tramo_inicial: {
+            ...nulable(
+                objeto({
+                    desde: { ...fecha, description: 'Inicio del ciclo que contiene la instalación' },
+                    hasta: { ...fecha, description: 'Día anterior al primer periodo del servicio' },
+                    dias: entero,
+                    dias_ciclo: entero,
+                    primer_periodo: fecha,
+                    primer_periodo_libre: {
+                        ...booleano,
+                        description: 'El primer periodo no tiene factura: se puede incluir el tramo en ella',
+                    },
+                    monto_proporcional: {
+                        ...Dinero,
+                        description: 'Sugerencia del cargo único: precio efectivo × dias / dias_ciclo',
+                    },
+                    vence_cargo: { ...fecha, description: 'Vencimiento del cargo único (hoy + dias_gracia)' },
+                    cobrado_como: enumeradoNulable(['primera_factura', 'cargo_unico']),
+                    factura_id: nulable(id),
+                }),
+            ),
+            description:
+                'Días entre el inicio del ciclo y la instalación (primer periodo a mitad de ciclo); null si el servicio empieza en un inicio de ciclo',
+        },
     }),
 )
 
@@ -1629,6 +1653,18 @@ export const FacturasPeriodoEmitidas = definirEsquema(
             ),
             description: 'Periodos pedidos que ya estaban ocupados: nunca se duplican',
         },
+        tramo_inicial: nulable(
+            objeto({
+                modo: enumerado(['primera_factura', 'cargo_unico']),
+                desde: fecha,
+                hasta: fecha,
+                factura_id: id,
+                total: Dinero,
+                monto_calculado: Dinero,
+                monto_editado: booleano,
+                vence_en: fecha,
+            }),
+        ),
         saldo_a_favor: { ...Dinero, description: 'Saldo a favor que queda después de emitir' },
     }),
 )

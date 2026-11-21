@@ -76809,7 +76809,7 @@
       "post": {
         "operationId": "serviciosEmitirFacturasPeriodo",
         "summary": "Emitir a mano facturas de periodos del servicio (pago adelantado o periodos no emitidos)",
-        "description": "Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Sin prorrateo: cada periodo cobra el precio efectivo completo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior al inicio del servicio (hasta 24; más atrás 422 maximo_periodos_anteriores) o a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_del_inicio o antes_de_facturar_desde) y motivo (422 motivo_requerido); vence desde hoy (hoy + dias_gracia si su vencimiento normal ya pasó). montos: total editado por periodo, con facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo; más que el calculado agrega una línea de ajuste del servicio, menos un descuento sobre la línea del plan (422 monto_editado_invalido si no alcanza); calculado y cobrado quedan en la factura y en la bitácora. 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.",
+        "description": "Emite en una transacción y en orden las facturas de periodos (inicios exactos de GET periodos-facturables) o de todo lo no emitido hasta hasta (uno de los dos; 422 periodos_o_hasta), con la misma emisión del cron: líneas, asiento, factura.emitida, FEL según el modo y clave_unica servicio_id-periodo. Aplica el saldo a favor (Anticipos) del cliente de la más antigua a la más nueva. Un periodo ya emitido o bonificado no se duplica: va en omitidas con su motivo. Sin prorrateo: cada periodo cobra el precio efectivo completo. Futuros hasta 12 (422 maximo_periodos_futuros), con su vencimiento normal. Un periodo anterior al inicio del servicio (hasta 24; más atrás 422 maximo_periodos_anteriores) o a facturar_desde solo por periodos, con el permiso facturas.emitir_periodo_anterior (si no, 422 antes_del_inicio o antes_de_facturar_desde) y motivo (422 motivo_requerido); vence desde hoy (hoy + dias_gracia si su vencimiento normal ya pasó). montos: total editado por periodo, con facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo; más que el calculado agrega una línea de ajuste del servicio, menos un descuento sobre la línea del plan (422 monto_editado_invalido si no alcanza); calculado y cobrado quedan en la factura y en la bitácora. Todo periodo emitido aquí vence en max(periodo, hoy) + dias_gracia. tramo_inicial (días entre el inicio del ciclo y la instalación), con facturas.emitir_periodo_anterior y motivo: primera_factura (la factura del primer periodo cubre desde el inicio del ciclo, misma clave) o cargo_unico (cargo-tramo-<servicio>-<desde>, monto o el proporcional); 422 sin_tramo_inicial, tramo_ya_cobrado, tramo_inicial_sin_permiso, tramo_sin_primer_periodo. 422 servicio_retirado, servicio_pendiente_instalacion, sin_plantilla y periodo_invalido; 404 si no existe.",
         "tags": [
           "facturacion"
         ],
@@ -76859,7 +76859,7 @@
                     },
                     "minItems": 1,
                     "maxItems": 60,
-                    "description": "Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta. Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo"
+                    "description": "Inicios exactos de los periodos a emitir (los de GET periodos-facturables). Uno de periodos o hasta (o ninguno con tramo_inicial cargo_unico). Los anteriores al inicio del servicio o a facturar_desde solo así, con facturas.emitir_periodo_anterior y motivo"
                   },
                   "hasta": {
                     "type": "string",
@@ -76894,6 +76894,37 @@
                     },
                     "maxItems": 60,
                     "description": "Total a cobrar (con IVA) de periodos elegidos, si difiere del calculado: exige facturas.editar_monto_periodo (422 editar_monto_sin_permiso) y motivo (422 motivo_requerido); mayor que cero (422 monto_positivo). Igual al calculado = sin edición"
+                  },
+                  "tramo_inicial": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "modo": {
+                        "type": "string",
+                        "enum": [
+                          "primera_factura",
+                          "cargo_unico"
+                        ]
+                      },
+                      "monto": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Monto con hasta 2 decimales, como string",
+                        "examples": [
+                          "150.00"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "modo"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Días entre el inicio del ciclo y la instalación (tramo_inicial de la vista previa): primera_factura (la factura del primer periodo, que debe ir en periodos, cubre desde el inicio del ciclo) o cargo_unico (monto; por defecto monto_proporcional; distinto exige facturas.editar_monto_periodo). Con facturas.emitir_periodo_anterior y motivo"
                   },
                   "motivo": {
                     "type": [
@@ -99300,6 +99331,7 @@
           "creadas",
           "bonificadas",
           "omitidas",
+          "tramo_inicial",
           "saldo_a_favor"
         ],
         "properties": {
@@ -99419,6 +99451,56 @@
               }
             },
             "description": "Periodos pedidos que ya estaban ocupados: nunca se duplican"
+          },
+          "tramo_inicial": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "modo",
+              "desde",
+              "hasta",
+              "factura_id",
+              "total",
+              "monto_calculado",
+              "monto_editado",
+              "vence_en"
+            ],
+            "properties": {
+              "modo": {
+                "type": "string",
+                "enum": [
+                  "primera_factura",
+                  "cargo_unico"
+                ]
+              },
+              "desde": {
+                "type": "string",
+                "format": "date"
+              },
+              "hasta": {
+                "type": "string",
+                "format": "date"
+              },
+              "factura_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "total": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "monto_calculado": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "monto_editado": {
+                "type": "boolean"
+              },
+              "vence_en": {
+                "type": "string",
+                "format": "date"
+              }
+            }
           },
           "saldo_a_favor": {
             "$ref": "#/components/schemas/Dinero",
@@ -106158,7 +106240,8 @@
           "maximo_futuros",
           "maximo_anteriores",
           "saldo_a_favor",
-          "periodos"
+          "periodos",
+          "tramo_inicial"
         ],
         "properties": {
           "servicio_id": {
@@ -106229,6 +106312,78 @@
             "items": {
               "$ref": "#/components/schemas/PeriodoFacturable"
             }
+          },
+          "tramo_inicial": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "desde",
+              "hasta",
+              "dias",
+              "dias_ciclo",
+              "primer_periodo",
+              "primer_periodo_libre",
+              "monto_proporcional",
+              "vence_cargo",
+              "cobrado_como",
+              "factura_id"
+            ],
+            "properties": {
+              "desde": {
+                "type": "string",
+                "format": "date",
+                "description": "Inicio del ciclo que contiene la instalación"
+              },
+              "hasta": {
+                "type": "string",
+                "format": "date",
+                "description": "Día anterior al primer periodo del servicio"
+              },
+              "dias": {
+                "type": "integer"
+              },
+              "dias_ciclo": {
+                "type": "integer"
+              },
+              "primer_periodo": {
+                "type": "string",
+                "format": "date"
+              },
+              "primer_periodo_libre": {
+                "type": "boolean",
+                "description": "El primer periodo no tiene factura: se puede incluir el tramo en ella"
+              },
+              "monto_proporcional": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Sugerencia del cargo único: precio efectivo × dias / dias_ciclo"
+              },
+              "vence_cargo": {
+                "type": "string",
+                "format": "date",
+                "description": "Vencimiento del cargo único (hoy + dias_gracia)"
+              },
+              "cobrado_como": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "primera_factura",
+                  "cargo_unico",
+                  null
+                ]
+              },
+              "factura_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              }
+            },
+            "description": "Días entre el inicio del ciclo y la instalación (primer periodo a mitad de ciclo); null si el servicio empieza en un inicio de ciclo"
           }
         }
       },

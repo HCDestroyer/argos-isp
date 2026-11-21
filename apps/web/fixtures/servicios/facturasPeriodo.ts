@@ -64,13 +64,23 @@ function mesSiguiente(periodo: string, meses = 1): string {
 }
 
 /** Como `vencimientoDe`: lo pasado a mano nunca vence antes de hoy + gracia. */
-function vencimientoDe(periodo: string, estado: PeriodoFacturable['estado'], dia: string, gracia: number): string {
+/** Como `vencimientoDe` de la API: todo lo emitido a mano vence en max(periodo, hoy) + gracia. */
+function vencimientoDe(periodo: string, dia: string, gracia: number): string {
     const normal = sumarDias(periodo, gracia)
-    if (estado !== 'antes_del_inicio' && estado !== 'antes_de_facturar_desde') {
-        return normal
-    }
     const desdeHoy = sumarDias(dia, gracia)
     return desdeHoy > normal ? desdeHoy : normal
+}
+
+function inicioDeMes(fecha: string): string {
+    return `${fecha.slice(0, 7)}-01`
+}
+
+function diasEntre(desde: string, hasta: string): number {
+    return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000)
+}
+
+function claveTramo(servicioId: number, desde: string): string {
+    return `cargo-tramo-${servicioId}-${desde}`
 }
 
 function regla(codigo: string, detalle: string, campo = 'servicio_id'): RespuestaFixture {
@@ -124,11 +134,15 @@ function periodosDe(servicio: Servicio, dia: string): PeriodoInterno[] {
     const gracia = diasGracia(servicio)
     const inicio = inicioDe(servicio)
     const salida: PeriodoInterno[] = []
-    let futuros = 0
-    for (let periodo = mesSiguiente(inicio, -MAXIMO_PERIODOS_ANTERIORES); futuros < MAXIMO_PERIODOS_FUTUROS; periodo = mesSiguiente(periodo)) {
-        if (periodo > dia) {
-            futuros += 1
-        }
+    // los anteriores son meses completos antes del mes del inicio; después, el inicio (a veces a mitad de mes)
+    const inicios: string[] = []
+    for (let periodo = mesSiguiente(inicio, -MAXIMO_PERIODOS_ANTERIORES); periodo < inicioDeMes(inicio); periodo = mesSiguiente(periodo)) {
+        inicios.push(periodo)
+    }
+    for (let periodo = inicio; inicios.filter(p => p > dia).length < MAXIMO_PERIODOS_FUTUROS; periodo = mesSiguiente(periodo)) {
+        inicios.push(periodo)
+    }
+    for (const periodo of inicios) {
         const ocupacion = ocupacionDe(servicio, periodo)
         let estado: PeriodoFacturable['estado']
         if (ocupacion) {
@@ -146,9 +160,37 @@ function periodosDe(servicio: Servicio, dia: string): PeriodoInterno[] {
         else {
             estado = 'pendiente'
         }
-        salida.push({ periodo, hasta: sumarDias(mesSiguiente(periodo), -1), estado, vence_en: ocupacion?.factura?.vence_en ?? vencimientoDe(periodo, estado, dia, gracia), ocupacion })
+        salida.push({ periodo, hasta: sumarDias(mesSiguiente(periodo), -1), estado, vence_en: ocupacion?.factura?.vence_en ?? vencimientoDe(periodo, dia, gracia), ocupacion })
     }
     return salida
+}
+
+type TramoVista = NonNullable<PeriodosFacturables['tramo_inicial']>
+
+/** Como `tramoAntesDelPrimerPeriodo` + la vista de la API: los días del mes antes de un inicio a mitad de mes. */
+function tramoDe(servicio: Servicio, dia: string, periodos: PeriodoInterno[]): TramoVista | null {
+    const inicio = inicioDe(servicio)
+    const desde = inicioDeMes(inicio)
+    if (desde === inicio) {
+        return null
+    }
+    const dias = diasEntre(desde, inicio)
+    const diasCiclo = diasEntre(desde, mesSiguiente(desde))
+    const enPrimera = bd.facturacionServicios[servicio.id]?.tramo_en_primera_factura ?? null
+    const cargo = bd.facturas.find(f => f.clave_unica === claveTramo(servicio.id, desde) && f.estado !== 'anulada')
+    const primero = periodos.find(p => p.periodo === inicio)
+    return {
+        desde,
+        hasta: sumarDias(inicio, -1),
+        dias,
+        dias_ciclo: diasCiclo,
+        primer_periodo: inicio,
+        primer_periodo_libre: Boolean(primero && !primero.ocupacion),
+        monto_proporcional: dinero(new Decimal(servicio.precio_mensual ?? '0').times(dias).div(diasCiclo)),
+        vence_cargo: sumarDias(dia, diasGracia(servicio)),
+        cobrado_como: cargo ? 'cargo_unico' : enPrimera ? 'primera_factura' : null,
+        factura_id: cargo?.id ?? enPrimera ?? null,
+    }
 }
 
 /** Como `saldoAnticipos`: lo que sobró de los pagos del cliente en la empresa del servicio. */
@@ -252,6 +294,7 @@ function vistaPrevia(solicitud: SolicitudFixture): RespuestaFixture {
         maximo_anteriores: MAXIMO_PERIODOS_ANTERIORES,
         saldo_a_favor: dinero(saldo),
         periodos,
+        tramo_inicial: motivo ? null : tramoDe(servicio, dia, todos),
     }
     return { status: 200, cuerpo }
 }
@@ -340,7 +383,10 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
     const lista = Array.isArray(cuerpo.periodos) ? cuerpo.periodos : null
     const hasta = textoOpcional(cuerpo.hasta)
     const motivo = textoOpcional(cuerpo.motivo)
-    if ((lista === null) === (hasta === null)) {
+    const tramoPedido = typeof cuerpo.tramo_inicial === 'object' && cuerpo.tramo_inicial !== null ? cuerpo.tramo_inicial as { modo?: unknown, monto?: unknown } : null
+    const modoTramo = tramoPedido?.modo === 'primera_factura' || tramoPedido?.modo === 'cargo_unico' ? tramoPedido.modo : null
+    const soloTramo = lista === null && hasta === null && modoTramo === 'cargo_unico'
+    if ((lista === null) === (hasta === null) && !soloTramo) {
         return regla('periodos_o_hasta', 'Indique periodos o hasta, uno de los dos', 'periodos')
     }
     if (lista && (lista.length < 1 || lista.length > 60 || lista.some(p => typeof p !== 'string' || !FECHA.test(p)))) {
@@ -407,6 +453,9 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
             }
         }
     }
+    else if (soloTramo) {
+        elegidos = []
+    }
     else {
         const fuera = fueraDelMaximo(todos, hasta ?? '', 'hasta')
         if (fuera) {
@@ -431,7 +480,33 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
         }
     }
 
-    const respuesta: Schema<'FacturasPeriodoEmitidas'> = { servicio_id: servicio.id, cliente_id: servicio.cliente_id, creadas: [], bonificadas: [], omitidas: [], saldo_a_favor: '0.00' }
+    // tramo inicial (días antes del primer periodo): permiso, motivo, primer periodo y que no esté cobrado
+    const tramo = modoTramo ? tramoDe(servicio, hoy(), todos) : null
+    if (modoTramo) {
+        if (!tramo) {
+            return regla('sin_tramo_inicial', 'El servicio empieza en un inicio de ciclo', 'tramo_inicial')
+        }
+        if (tramo.cobrado_como) {
+            return regla('tramo_ya_cobrado', `Los días del ${tramo.desde} al ${tramo.hasta} ya se cobraron`, 'tramo_inicial')
+        }
+        if (!usuario?.permisos.includes('facturas.emitir_periodo_anterior')) {
+            return regla('tramo_inicial_sin_permiso', 'Cobrar los días antes del primer periodo requiere el permiso facturas.emitir_periodo_anterior', 'tramo_inicial')
+        }
+        if (motivo === null) {
+            return datosInvalidos([{ field: 'motivo', message: 'Explique por qué cobra esos días', rule: 'motivo_requerido' }])
+        }
+        if (modoTramo === 'primera_factura' && !elegidos.some(p => p.periodo === tramo.primer_periodo && !p.ocupacion)) {
+            return regla('tramo_sin_primer_periodo', 'Elija el primer periodo del servicio para incluir esos días', 'tramo_inicial')
+        }
+    }
+    const montoTramo = modoTramo === 'cargo_unico' && tramo
+        ? (typeof tramoPedido?.monto === 'string' && MONTO.test(tramoPedido.monto) ? new Decimal(tramoPedido.monto) : new Decimal(tramo.monto_proporcional))
+        : null
+    if (montoTramo && tramo && !montoTramo.equals(tramo.monto_proporcional) && !usuario?.permisos.includes('facturas.editar_monto_periodo')) {
+        return regla('editar_monto_sin_permiso', 'Cambiar el monto calculado requiere el permiso facturas.editar_monto_periodo', 'tramo_inicial')
+    }
+
+    const respuesta: Schema<'FacturasPeriodoEmitidas'> = { servicio_id: servicio.id, cliente_id: servicio.cliente_id, creadas: [], bonificadas: [], omitidas: [], tramo_inicial: null, saldo_a_favor: '0.00' }
     for (const p of elegidos) {
         if (p.ocupacion) {
             respuesta.omitidas.push({
@@ -457,6 +532,24 @@ function emitir(solicitud: SolicitudFixture): RespuestaFixture {
             pagado: factura.pagado,
             vence_en: factura.vence_en,
         })
+    }
+    if (tramo && modoTramo === 'primera_factura') {
+        const primera = respuesta.creadas.find(c => c.periodo === tramo.primer_periodo)
+        if (primera) {
+            const previo = bd.facturacionServicios[servicio.id]
+            bd.facturacionServicios[servicio.id] = { inicio: previo?.inicio ?? tramo.primer_periodo, facturar_desde: previo?.facturar_desde ?? null, tramo_en_primera_factura: primera.factura_id }
+            respuesta.tramo_inicial = { modo: 'primera_factura', desde: tramo.desde, hasta: tramo.hasta, factura_id: primera.factura_id, total: primera.total, monto_calculado: primera.monto_calculado, monto_editado: primera.monto_editado, vence_en: primera.vence_en }
+        }
+    }
+    else if (tramo && montoTramo) {
+        const interno: PeriodoInterno = { periodo: tramo.desde, hasta: tramo.hasta, estado: 'antes_del_inicio', vence_en: tramo.vence_cargo, ocupacion: null }
+        const cargo = crearFactura(servicio, interno, montoTramo)
+        if (!cargo) {
+            return problemaTipado(500, 'error_interno', 'Sin facturas de referencia en los fixtures')
+        }
+        cargo.clave_unica = claveTramo(servicio.id, tramo.desde)
+        cargo.cargo_unico = true
+        respuesta.tramo_inicial = { modo: 'cargo_unico', desde: tramo.desde, hasta: tramo.hasta, factura_id: cargo.id, total: cargo.total, monto_calculado: tramo.monto_proporcional, monto_editado: !montoTramo.equals(tramo.monto_proporcional), vence_en: cargo.vence_en }
     }
     respuesta.saldo_a_favor = dinero(saldoAFavor(servicio))
     registrarAccion(solicitud, 'facturas.emitir_periodos', { tipo: 'servicio', id: servicio.id }, cuerpo)

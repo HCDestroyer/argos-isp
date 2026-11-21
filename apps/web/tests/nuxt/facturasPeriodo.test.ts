@@ -131,7 +131,7 @@ describe('facturas de periodos', () => {
         expect(esquemaFacturasPeriodo(false).safeParse({ periodos: ['2026-11-01'], montos: {}, motivo: 'x'.repeat(501) }).success).toBe(false)
         const datos = esquemaFacturasPeriodo(true).parse({ periodos: ['2026-12-01', '2026-08-01'], montos: {}, motivo: ' Cobro acordado ' })
         expect(cuerpoFacturasPeriodo(datos)).toEqual({ periodos: ['2026-08-01', '2026-12-01'], motivo: 'Cobro acordado' })
-        expect(cuerpoFacturasPeriodo({ periodos: ['2026-11-01'], montos: {}, motivo: '' })).toEqual({ periodos: ['2026-11-01'] })
+        expect(cuerpoFacturasPeriodo({ periodos: ['2026-11-01'], montos: {}, motivo: '', tramo: 'ninguno', monto_tramo: '' })).toEqual({ periodos: ['2026-11-01'] })
     })
 
     it('monto editado: mayor que cero con 2 decimales, motivo obligatorio y solo lo que cambió va al POST', () => {
@@ -160,7 +160,7 @@ describe('facturas de periodos', () => {
         expect(p.detail).toContain('Emitir periodo anterior')
         expect(problemaEmision({ type: 'x', title: 'Otro', status: 422, errors: [{ field: 'motivo', message: 'x', rule: 'motivo_requerido' }] }).detail).toContain('motivo')
         expect(problemaEmision({ type: 'about:blank', title: 'Error interno', status: 500 }).title).toBe('Error interno')
-        expect(avisoEmision({ servicio_id: 1, cliente_id: 1, creadas: [], bonificadas: [], omitidas: [], saldo_a_favor: '0.00' })).toBe('0 facturas emitidas')
+        expect(avisoEmision({ servicio_id: 1, cliente_id: 1, creadas: [], bonificadas: [], omitidas: [], tramo_inicial: null, saldo_a_favor: '0.00' })).toBe('0 facturas emitidas')
     })
 
     it('vista previa: emitidas, futuros hasta 12 con vencimiento; hasta más allá del máximo es 422', async () => {
@@ -298,6 +298,84 @@ describe('facturas de periodos', () => {
         await esperar(() => expect(vista.find('[data-creada="2026-11-01"]').exists()).toBe(true))
         expect(bd.facturas.find(f => f.clave_unica === '1-2026-11-01')?.total).toBe('99.50')
         vista.unmount()
+    })
+
+    it('tramo inicial: esquema y cuerpo (primera factura o cargo único con su monto sugerido)', () => {
+        const tramo = {
+            desde: '2026-09-01', hasta: '2026-09-15', dias: 15, dias_ciclo: 30, primer_periodo: '2026-09-16', primer_periodo_libre: true,
+            monto_proporcional: '100.00', vence_cargo: '2026-10-20', cobrado_como: null, factura_id: null,
+        } as const
+        const lista = [periodo({ periodo: '2026-09-16', estado: 'pendiente' })]
+        const esquema = esquemaFacturasPeriodo(false, lista, tramo)
+        // el cargo puede ir solo; con motivo obligatorio
+        const sinMotivo = esquema.safeParse({ periodos: [], montos: {}, motivo: '', tramo: 'cargo_unico', monto_tramo: '100.00' })
+        expect(sinMotivo.error?.issues.map(i => i.path.join('.'))).toEqual(['motivo'])
+        const cargo = esquema.parse({ periodos: [], montos: {}, motivo: 'Usó del 1 al 15', tramo: 'cargo_unico', monto_tramo: '100.00' })
+        expect(cuerpoFacturasPeriodo(cargo, lista, tramo)).toEqual({ tramo_inicial: { modo: 'cargo_unico' }, motivo: 'Usó del 1 al 15' })
+        const editado = esquema.parse({ periodos: [], montos: {}, motivo: 'Acuerdo', tramo: 'cargo_unico', monto_tramo: '80' })
+        expect(cuerpoFacturasPeriodo(editado, lista, tramo)).toEqual({ tramo_inicial: { modo: 'cargo_unico', monto: '80.00' }, motivo: 'Acuerdo' })
+        expect(esquema.safeParse({ periodos: [], montos: {}, motivo: 'Acuerdo', tramo: 'cargo_unico', monto_tramo: '0' }).error?.issues.map(i => i.path.join('.'))).toEqual(['monto_tramo'])
+        // primera factura: exige el primer periodo marcado
+        expect(esquema.safeParse({ periodos: [], montos: {}, motivo: 'Acuerdo', tramo: 'primera_factura', monto_tramo: '' }).error?.issues.map(i => i.path.join('.'))).toEqual(['periodos', 'tramo'])
+        const primera = esquema.parse({ periodos: ['2026-09-16'], montos: {}, motivo: 'Acuerdo', tramo: 'primera_factura', monto_tramo: '100.00' })
+        expect(cuerpoFacturasPeriodo(primera, lista, tramo)).toEqual({ periodos: ['2026-09-16'], tramo_inicial: { modo: 'primera_factura' }, motivo: 'Acuerdo' })
+        // el resumen suma el cargo
+        expect(resumenEmision(lista, [], '0.00', {}, '100.00')?.total.toFixed(2)).toBe('100.00')
+    })
+
+    it('pantalla: días antes del primer periodo como cargo único (sugerido proporcional) o en la primera factura', async () => {
+        // servicio 1 instalado el 16 de septiembre, sin facturas aún
+        bd.facturacionServicios[1] = { inicio: '2026-09-16', facturar_desde: null }
+        bd.facturas = bd.facturas.filter(f => f.servicio_id !== 1)
+        const precio = new Decimal(bd.servicios[0]?.precio_mensual ?? '0')
+        const sugerido = precio.times(15).div(30).toFixed(2)
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(vista.find('[data-prueba="tramo-inicial"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="tramo-inicial"]').text()).toContain('15 días')
+        expect(estadoDe(vista, '2026-09-16')).toBe('pendiente')
+
+        await vista.find('[data-prueba="opciones-tramo"] input[value="cargo_unico"], [data-prueba="opciones-tramo"] button[value="cargo_unico"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="monto-tramo"]').exists()).toBe(true))
+        expect((vista.find('input[data-prueba="monto-tramo"], [data-prueba="monto-tramo"] input').element as HTMLInputElement).value).toBe(sugerido)
+        await esperar(() => expect(vista.find('[data-prueba="resumen-total"]').text()).toBe(formatearQuetzales(sugerido)))
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.text()).toContain('Obligatorio: cobras días antes del primer periodo'))
+        await vista.find('[data-prueba="motivo-periodos"]').setValue('Usó el servicio del 1 al 15')
+        await vista.find('form').trigger('submit')
+        await esperar(() => expect(vista.find('[data-prueba="resultado-cargo-tramo"]').exists()).toBe(true))
+        expect(bd.facturas.find(f => f.clave_unica === 'cargo-tramo-1-2026-09-01')?.total).toBe(sugerido)
+        await esperar(() => expect(vista.find('[data-prueba="tramo-cobrado"]').text()).toContain('como cargo único'))
+        vista.unmount()
+
+        // otra vez desde cero: incluirlo en la primera factura marca ese periodo
+        reiniciarFixtures()
+        fijarHoyFixtures()
+        bd.facturacionServicios[1] = { inicio: '2026-09-16', facturar_desde: null }
+        bd.facturas = bd.facturas.filter(f => f.servicio_id !== 1)
+        const otra = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(otra.find('[data-prueba="tramo-inicial"]').exists()).toBe(true))
+        await otra.find('[data-prueba="opciones-tramo"] input[value="primera_factura"], [data-prueba="opciones-tramo"] button[value="primera_factura"]').trigger('click')
+        await esperar(() => expect(otra.find('[data-prueba="incluye-tramo"]').exists()).toBe(true))
+        expect(otra.find('[data-prueba="emitir-periodos"]').text()).toContain('Emitir 1 factura')
+        await otra.find('[data-prueba="motivo-periodos"]').setValue('Usó el servicio desde el 1')
+        await otra.find('form').trigger('submit')
+        await esperar(() => expect(otra.find('[data-creada="2026-09-16"]').exists()).toBe(true))
+        await esperar(() => expect(otra.find('[data-prueba="tramo-cobrado"]').text()).toContain('en la primera factura'))
+        otra.unmount()
+    })
+
+    it('tramo sin el permiso (cajero): se explica pero no hay opciones; la API responde 422', async () => {
+        sesionFixture('fixture-cajero')
+        useUsuarioActual().value = meCajero
+        bd.facturacionServicios[1] = { inicio: '2026-09-16', facturar_desde: null }
+        bd.facturas = bd.facturas.filter(f => f.servicio_id !== 1)
+        const vista = await mountSuspended(PaginaFacturasPeriodo, { route: '/servicios/1/facturas-periodo' })
+        await esperar(() => expect(vista.find('[data-prueba="tramo-inicial"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="tramo-inicial"]').text()).toContain('Emitir periodo anterior')
+        expect(vista.find('[data-prueba="opciones-tramo"]').exists()).toBe(false)
+        vista.unmount()
+        const r = await useFacturasPeriodo().emitir(1, { tramo_inicial: { modo: 'cargo_unico' }, motivo: 'Prueba' }, nuevaClaveIdempotencia())
+        expect(!r.ok && reglaEmision(r.problema)).toBe('tramo_inicial_sin_permiso')
     })
 
     it('anteriores sin el permiso (cajero): se ven pero no se eligen; la API responde 422', async () => {
