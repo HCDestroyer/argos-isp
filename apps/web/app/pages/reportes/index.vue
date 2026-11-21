@@ -22,7 +22,6 @@ interface EntradaCatalogo {
     icono: string
     to: string
     categoria: Categoria
-    permiso?: string
 }
 
 const CATEGORIAS: { id: Categoria | 'todos' | 'favoritos', etiqueta: string, icono: string }[] = [
@@ -54,11 +53,15 @@ const CATEGORIA_REPORTE: Record<ClaveReporte, Categoria> = {
 const entradas = computed<EntradaCatalogo[]>(() => [
     ...CLAVES_REPORTE.map(clave => ({ clave, ...REPORTES[clave], to: `/reportes/${clave}`, categoria: CATEGORIA_REPORTE[clave] ?? 'contabilidad' })),
     { clave: 'lealtad', titulo: 'Lealtad', descripcion: 'Puntos emitidos, canjeados y vencidos, y lo que se debe en puntos contra 2.1.10.', icono: 'i-lucide-gem', to: '/reportes/lealtad', categoria: 'ingresos' as const },
-    { clave: 'balance', titulo: 'Balance general', descripcion: 'Lo que tiene, lo que debe y el capital de cada empresa a una fecha.', icono: 'i-lucide-scale', to: '/reportes/balance', categoria: 'contabilidad' as const, permiso: 'libro.ver' },
-    { clave: 'resultados', titulo: 'Estado de resultados', descripcion: 'Ingresos, gastos y la ganancia o pérdida de un periodo.', icono: 'i-lucide-trending-up', to: '/reportes/resultados', categoria: 'contabilidad' as const, permiso: 'libro.ver' },
-    { clave: 'libros-legales', titulo: 'Libros de ventas y compras', descripcion: 'Vista previa de los libros que pide la SAT, con folio cuando el mes está cerrado.', icono: 'i-lucide-book-marked', to: '/libros', categoria: 'fiscal' as const, permiso: 'libros.ver' },
-    { clave: 'comparador', titulo: 'Comparador de regímenes', descripcion: 'Cuánto ISR pagarías en cada régimen con los datos del libro.', icono: 'i-lucide-git-compare', to: '/fiscal/comparador', categoria: 'fiscal' as const, permiso: 'fiscal.ver' },
-].filter(e => !e.permiso || puede(e.permiso)))
+    ...(puede('libro.ver')
+        ? [
+                { clave: 'balance', titulo: 'Balance general', descripcion: 'Lo que tiene, lo que debe y el capital de cada empresa a una fecha.', icono: 'i-lucide-scale', to: '/reportes/balance', categoria: 'contabilidad' as const },
+                { clave: 'resultados', titulo: 'Estado de resultados', descripcion: 'Ingresos, gastos y la ganancia o pérdida de un periodo.', icono: 'i-lucide-trending-up', to: '/reportes/resultados', categoria: 'contabilidad' as const },
+            ]
+        : []),
+    ...(puede('libros.ver') ? [{ clave: 'libros-legales', titulo: 'Libros de ventas y compras', descripcion: 'Vista previa de los libros que pide la SAT, con folio cuando el mes está cerrado.', icono: 'i-lucide-book-marked', to: '/libros', categoria: 'fiscal' as const }] : []),
+    ...(puede('fiscal.ver') ? [{ clave: 'comparador', titulo: 'Comparador de regímenes', descripcion: 'Cuánto ISR pagarías en cada régimen con los datos del libro.', icono: 'i-lucide-git-compare', to: '/fiscal/comparador', categoria: 'fiscal' as const }] : []),
+])
 
 const categoria = ref<Categoria | 'todos' | 'favoritos'>('todos')
 const busqueda = ref('')

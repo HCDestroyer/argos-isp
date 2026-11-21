@@ -527,6 +527,7 @@ const TONO_AVISO = {
                     </ul>
                     <div class="mt-auto flex justify-end border-t border-(--ax-borde) pt-2">
                         <UButton
+                            v-if="puede('declaraciones.ver')"
                             label="Calendario fiscal"
                             trailing-icon="i-lucide-chevron-right"
                             to="/fiscal/calendario"

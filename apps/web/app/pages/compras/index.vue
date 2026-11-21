@@ -56,8 +56,10 @@ const columnas: TableColumn<Compra>[] = [
 function accionesCompra(compra: Compra): AccionFila[] {
     const acciones: AccionFila[] = [
         { etiqueta: 'Ver la compra', icono: ICONOS.abrir, to: `/compras/${compra.id}`, soloMenu: true, grupo: 'Ver' },
-        { etiqueta: 'Ver el proveedor', icono: 'i-lucide-truck', to: `/proveedores/${compra.proveedor_id}`, soloMenu: true, grupo: 'Ver' },
     ]
+    if (puede('proveedores.ver')) {
+        acciones.push({ etiqueta: 'Ver el proveedor', icono: 'i-lucide-truck', to: `/proveedores/${compra.proveedor_id}`, soloMenu: true, grupo: 'Ver' })
+    }
     if (compra.asiento_id && puede('libro.ver')) {
         acciones.push({ etiqueta: 'Ver su asiento', icono: 'i-lucide-book-open', to: `/libro?origen=compra`, soloMenu: true, grupo: 'Ver' })
     }

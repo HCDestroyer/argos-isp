@@ -9,7 +9,7 @@ const { puede } = usePermisos()
 <template>
     <ContaSelectorEmpresa />
     <UButton
-        v-if="puede('compras.registrar')"
+        v-if="puede('compras.registrar') && puede('compras.ver')"
         to="/pagos-proveedores"
         label="Pagar a proveedor"
         icon="i-lucide-landmark"

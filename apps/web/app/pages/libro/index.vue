@@ -320,19 +320,16 @@ onMounted(async () => {
                 class="boton-flotante w-48 rounded-full"
                 data-prueba="periodo-libro"
             />
-            <UTooltip
+            <UButton
                 v-if="puede('libro.registrar_asiento')"
-                text="Llega con la API del asiento manual con aprobación"
-            >
-                <UButton
-                    label="Asiento de ajuste"
-                    icon="i-lucide-plus"
-                    size="lg"
-                    class="glow-brand rounded-full px-5"
-                    disabled
-                    data-prueba="asiento-ajuste"
-                />
-            </UTooltip>
+                title="Llega con la API del asiento manual con aprobación"
+                label="Asiento de ajuste"
+                icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand rounded-full px-5"
+                disabled
+                data-prueba="asiento-ajuste"
+            />
         </template>
 
         <ContaCuerpo>

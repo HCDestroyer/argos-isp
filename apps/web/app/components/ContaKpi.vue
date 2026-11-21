@@ -60,10 +60,7 @@ const COLOR_VARIACION = {
                 />
             </span>
             <span class="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-default">{{ titulo }}</span>
-            <UTooltip
-                v-if="ayuda"
-                :text="ayuda"
-            >
+            <UPopover v-if="ayuda">
                 <UButton
                     icon="i-lucide-circle-help"
                     color="neutral"
@@ -73,7 +70,12 @@ const COLOR_VARIACION = {
                     data-ayuda
                     :aria-label="`Qué es ${titulo}`"
                 />
-            </UTooltip>
+                <template #content>
+                    <p class="max-w-64 p-3 text-xs">
+                        {{ ayuda }}
+                    </p>
+                </template>
+            </UPopover>
             <UBadge
                 v-if="insignia"
                 :label="insignia"

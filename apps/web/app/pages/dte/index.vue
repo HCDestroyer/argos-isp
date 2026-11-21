@@ -12,10 +12,10 @@ useHead({ title: 'Facturación electrónica · ArgosIsp' })
 
 /** Pestañas de la pantalla (tablero ContaFel): documentos y libros legales, cada una su página. */
 const vista = ref('documentos')
-const VISTAS_FEL: PestanaConta[] = [
+const VISTAS_FEL = computed<PestanaConta[]>(() => [
     { label: 'Documentos', value: 'documentos', icon: 'i-lucide-zap', to: '/dte' },
-    { label: 'Libros legales', value: 'libros', icon: 'i-lucide-book', to: '/libros' },
-]
+    ...(puede('libros.ver') ? [{ label: 'Libros legales', value: 'libros', icon: 'i-lucide-book', to: '/libros' }] : []),
+])
 
 const route = useRoute()
 const router = useRouter()

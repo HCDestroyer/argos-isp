@@ -139,7 +139,8 @@ const descripcion = computed(() => {
 })
 
 /* Pestañas y la lista por cobrar. */
-const pestana = ref('cobrar')
+const route = useRoute()
+const pestana = ref(['castigos', 'estimacion'].includes(String(route.query.tab)) ? String(route.query.tab) : 'cobrar')
 const pestanas: PestanaConta[] = [
     { label: 'Por cobrar', value: 'cobrar', icon: 'i-lucide-clock' },
     { label: 'Castigos', value: 'castigos', icon: 'i-lucide-triangle-alert' },
@@ -610,17 +611,16 @@ onMounted(() => {
                     #pie-derecha
                 >
                     <span class="flex items-center gap-2">
-                        <UTooltip text="Llega con la API de gestiones de cobro">
-                            <UButton
-                                label="Registrar gestión"
-                                icon="i-lucide-phone"
-                                color="neutral"
-                                variant="outline"
-                                class="rounded-full"
-                                disabled
-                                data-prueba="registrar-gestion"
-                            />
-                        </UTooltip>
+                        <UButton
+                            title="Llega con la API de gestiones de cobro"
+                            label="Registrar gestión"
+                            icon="i-lucide-phone"
+                            color="neutral"
+                            variant="outline"
+                            class="rounded-full"
+                            disabled
+                            data-prueba="registrar-gestion"
+                        />
                         <UButton
                             v-if="puede('cartera.castigar')"
                             label="Castigar…"

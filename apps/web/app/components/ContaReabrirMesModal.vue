@@ -21,6 +21,7 @@ const emit = defineEmits<{
     hecho: [cierre: CierrePeriodo]
 }>()
 
+const { puede } = usePermisos()
 const mes = ref<string | undefined>(undefined)
 const motivo = ref('')
 const enviando = ref(false)
@@ -45,7 +46,7 @@ watch(mes, () => {
 })
 
 async function reabrir() {
-    if (!mes.value || motivo.value.trim().length < 5) {
+    if (!mes.value || motivo.value.trim().length < 5 || !puede('libro.reabrir_periodo')) {
         return
     }
     enviando.value = true

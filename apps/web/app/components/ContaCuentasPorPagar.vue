@@ -22,7 +22,7 @@ async function cargar() {
 }
 
 async function cargarBorradores() {
-    if (!puede('compras.cargar_borrador')) {
+    if (!puede('compras.cargar_borrador') || !puede('compras.ver')) {
         return
     }
     const r = await useBorradoresCompra().listar({ estado: 'borrador' })

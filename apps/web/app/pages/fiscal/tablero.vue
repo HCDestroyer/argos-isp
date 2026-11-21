@@ -127,7 +127,9 @@ const elegida = shallowRef<ObligacionFiscal | null>(null)
 /* Declaraciones (pestaña): la lista con su estado. */
 const declaraciones = usePaginacionCursor(cursor => useDeclaraciones().listar({ limit: 25 }, cursor))
 
-const pestana = ref('calendario')
+const route = useRoute()
+const PESTANAS_FISCAL = ['calendario', 'declaraciones', 'consejos', 'detalle']
+const pestana = ref(typeof route.query.tab === 'string' && PESTANAS_FISCAL.includes(route.query.tab) ? route.query.tab : (puede('declaraciones.ver') ? 'calendario' : 'consejos'))
 const pestanas = computed<PestanaConta[]>(() => [
     ...(verCalendario.value
         ? [

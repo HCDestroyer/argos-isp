@@ -7,18 +7,16 @@
 const route = useRoute()
 const { puede } = usePermisos()
 
-const TODAS: (PestanaConta & { permiso: string })[] = [
-    { label: 'Compras', value: '/compras', icon: 'i-lucide-shopping-cart', to: '/compras', permiso: 'compras.ver' },
-    { label: 'Borradores', value: '/compras/cargar', icon: 'i-lucide-file-up', to: '/compras/cargar', permiso: 'compras.cargar_borrador' },
-    { label: 'Proveedores', value: '/proveedores', icon: 'i-lucide-truck', to: '/proveedores', permiso: 'proveedores.ver' },
-    { label: 'Pagos', value: '/pagos-proveedores', icon: 'i-lucide-banknote', to: '/pagos-proveedores', permiso: 'compras.ver' },
-    { label: 'Activos fijos', value: '/activos', icon: 'i-lucide-boxes', to: '/activos', permiso: 'activos.ver' },
-    { label: 'Diferidos', value: '/diferimientos', icon: 'i-lucide-calendar-range', to: '/diferimientos', permiso: 'libro.ver' },
-]
-
-const items = computed(() => TODAS.filter(p => puede(p.permiso)))
+const items = computed<PestanaConta[]>(() => [
+    ...(puede('compras.ver') ? [{ label: 'Compras', value: '/compras', icon: 'i-lucide-shopping-cart', to: '/compras' }] : []),
+    ...(puede('compras.cargar_borrador') ? [{ label: 'Borradores', value: '/compras/cargar', icon: 'i-lucide-file-up', to: '/compras/cargar' }] : []),
+    ...(puede('proveedores.ver') ? [{ label: 'Proveedores', value: '/proveedores', icon: 'i-lucide-truck', to: '/proveedores' }] : []),
+    ...(puede('compras.ver') ? [{ label: 'Pagos', value: '/pagos-proveedores', icon: 'i-lucide-banknote', to: '/pagos-proveedores' }] : []),
+    ...(puede('activos.ver') ? [{ label: 'Activos fijos', value: '/activos', icon: 'i-lucide-boxes', to: '/activos' }] : []),
+    ...(puede('libro.ver') ? [{ label: 'Diferidos', value: '/diferimientos', icon: 'i-lucide-calendar-range', to: '/diferimientos' }] : []),
+])
 const actual = computed({
-    get: () => TODAS.find(p => p.value === route.path)?.value ?? '',
+    get: () => items.value.find(p => p.value === route.path)?.value ?? '',
     set: () => undefined,
 })
 </script>

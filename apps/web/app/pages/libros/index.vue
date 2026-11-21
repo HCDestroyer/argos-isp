@@ -16,10 +16,10 @@ useHead({ title: 'Libros legales · ArgosIsp' })
 
 /** Pestañas de la pantalla (tablero ContaFel): documentos y libros legales, cada una su página. */
 const vistaFel = ref('libros')
-const VISTAS_FEL: PestanaConta[] = [
-    { label: 'Documentos electrónicos', value: 'documentos', icon: 'i-lucide-zap', to: '/dte' },
+const VISTAS_FEL = computed<PestanaConta[]>(() => [
+    ...(puede('fel.ver') ? [{ label: 'Documentos electrónicos', value: 'documentos', icon: 'i-lucide-zap', to: '/dte' }] : []),
     { label: 'Libros legales', value: 'libros', icon: 'i-lucide-book', to: '/libros' },
-]
+])
 
 const route = useRoute()
 const router = useRouter()

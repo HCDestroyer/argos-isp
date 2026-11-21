@@ -51,8 +51,13 @@ describe('menú lateral agrupado', () => {
 
     it('sin permiso para ninguna sección del grupo, el grupo no aparece', () => {
         useUsuarioActual().value = meCajero
-        // Finanzas no tiene nada para el cajero (su caja va en «Día a día»).
-        expect(gruposVisibles()).toEqual(['dia', 'facturacion', 'red', 'inventario', 'lealtad', 'configuracion'])
+        // De Finanzas el cajero solo ve la facturación electrónica (`fel.ver`; su caja va en «Día a día»).
+        expect(gruposVisibles()).toEqual(['dia', 'facturacion', 'red', 'inventario', 'lealtad', 'finanzas', 'configuracion'])
+        const { puede } = usePermisos()
+        const finanzas = GRUPOS_PANEL.find(grupo => grupo.id === 'finanzas')
+        expect(seccionesDeGrupo(finanzas!).filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)).toEqual(['dte'])
+        useUsuarioActual().value = { ...meCajero, permisos: meCajero.permisos.filter(p => p !== 'fel.ver') }
+        expect(gruposVisibles()).not.toContain('finanzas')
         useUsuarioActual().value = { ...meCajero, permisos: [...meCajero.permisos, 'egresos.ver'] }
         expect(gruposVisibles()).toContain('finanzas')
         useUsuarioActual().value = { ...meCajero, permisos: meCajero.permisos.filter(p => !['cajas.ver', 'pagos.registrar', 'clientes.ver', 'servicios.ver', 'promesas.ver', 'comprobantes.ver'].includes(p)) }

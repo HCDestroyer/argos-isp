@@ -390,28 +390,26 @@ onMounted(async () => {
             v-if="clave && presentacion"
             #acciones
         >
-            <UTooltip text="Llega con la API de envíos programados">
-                <UButton
-                    label="Programar envío"
-                    icon="i-lucide-send"
-                    color="neutral"
-                    variant="ghost"
-                    class="boton-flotante boton-pastilla hidden sm:inline-flex"
-                    disabled
-                    data-prueba="programar-envio"
-                />
-            </UTooltip>
-            <UTooltip text="Llega con la API de reportes en PDF">
-                <UButton
-                    label="PDF"
-                    icon="i-lucide-file-text"
-                    color="neutral"
-                    variant="ghost"
-                    class="boton-flotante boton-pastilla"
-                    disabled
-                    data-prueba="descargar-pdf"
-                />
-            </UTooltip>
+            <UButton
+                title="Llega con la API de envíos programados"
+                label="Programar envío"
+                icon="i-lucide-send"
+                color="neutral"
+                variant="ghost"
+                class="boton-flotante boton-pastilla hidden sm:inline-flex"
+                disabled
+                data-prueba="programar-envio"
+            />
+            <UButton
+                title="Llega con la API de reportes en PDF"
+                label="PDF"
+                icon="i-lucide-file-text"
+                color="neutral"
+                variant="ghost"
+                class="boton-flotante boton-pastilla"
+                disabled
+                data-prueba="descargar-pdf"
+            />
             <UDropdownMenu
                 :items="[[{ label: 'Descargar en CSV', icon: 'i-lucide-file-text', onSelect: () => descargar('csv') }]]"
                 :content="{ align: 'end' }"
