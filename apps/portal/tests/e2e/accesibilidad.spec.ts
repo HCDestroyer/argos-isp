@@ -40,9 +40,21 @@ async function entrar(page: Page, cuenta: string | null): Promise<void> {
     await page.getByTestId('cuenta').waitFor()
 }
 
-/** Va a una sección de `/cuenta` por la barra (inferior en el teléfono, superior en escritorio). */
+/**
+ * Va a una sección de `/cuenta` por la barra (inferior en el teléfono, menú lateral en escritorio).
+ * «Pagar» es una pestaña de «Facturas y pagos».
+ */
+const NAV: Record<string, string> = { Facturas: 'nav-facturas', Cuenta: 'nav-cuenta', Puntos: 'nav-puntos', Inicio: 'nav-inicio' }
 async function seccion(page: Page, etiqueta: string, testId: string): Promise<void> {
-    await page.getByRole('link', { name: etiqueta, exact: true }).first().click()
+    if (etiqueta === 'Pagar') {
+        if (!(await page.getByTestId('pestanas-facturas').isVisible())) {
+            await page.getByTestId('nav-facturas').filter({ visible: true }).first().click()
+        }
+        await page.getByTestId('pestanas-facturas').getByRole('tab', { name: 'Pagar' }).click()
+    }
+    else {
+        await page.getByTestId(NAV[etiqueta]!).filter({ visible: true }).first().click()
+    }
     await page.getByTestId(testId).waitFor()
 }
 
@@ -112,11 +124,17 @@ for (const tema of ['light', 'dark'] as const) {
             await page.goto('/corte?anuncios=3')
             await page.getByTestId('promo-carrusel').waitFor()
             await revisar(page, 'corte con carrusel')
-            // la promo va debajo de pagar y de pedir promesa
-            const pagar = await page.getByTestId('pagar-en-linea').boundingBox()
+            // la promo va después de pagar y de pedir promesa (en el teléfono «Pagar» queda fija
+            // abajo, así que se compara el orden del documento, no la altura)
+            const despues = (antes: string) => page.evaluate(([a, b]) => {
+                const nodoA = document.querySelector(`[data-testid="${a}"]`)!
+                const nodoB = document.querySelector(`[data-testid="${b}"]`)!
+                return Boolean(nodoA.compareDocumentPosition(nodoB) & Node.DOCUMENT_POSITION_FOLLOWING)
+            }, [antes, 'promociones-pagina_corte'])
+            expect(await despues('pagar-en-linea')).toBe(true)
+            expect(await despues('solicitar-promesa')).toBe(true)
             const promesa = await page.getByTestId('solicitar-promesa').boundingBox()
             const promo = await page.getByTestId('promociones-pagina_corte').boundingBox()
-            expect(promo!.y).toBeGreaterThan(pagar!.y)
             expect(promo!.y).toBeGreaterThan(promesa!.y)
             // sin desbordar a lo ancho (390 px incluidos)
             const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
