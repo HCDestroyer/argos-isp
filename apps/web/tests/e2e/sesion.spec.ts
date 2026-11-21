@@ -37,9 +37,9 @@ async function altaAMediasYBloqueo(page: Page, nombre: string) {
 
 test('expira con el alta a medias: se desbloquea, el formulario sigue y el alta se repite', async ({ page }) => {
     const ventana = await altaAMediasYBloqueo(page, 'Rosa Bloqueo Pruebas')
-    // Debajo, el panel lateral del alta sigue abierto con lo escrito.
+    // Debajo, la página del alta sigue abierta con lo escrito (el alta es una página desde el rediseño).
     await expect(page.getByLabel('Nombre', { exact: true })).toHaveValue('Rosa Bloqueo Pruebas')
-    await expect(page).toHaveURL(/\/clientes$/)
+    await expect(page).toHaveURL(/\/clientes\/nuevo$/)
 
     await ventana.getByLabel('Contraseña').fill('clave-de-prueba')
     await ventana.getByRole('button', { name: 'Desbloquear' }).click()
