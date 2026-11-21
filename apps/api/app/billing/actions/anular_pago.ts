@@ -1,3 +1,4 @@
+import { extrasIrisPago } from '#billing/iris_eventos'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
@@ -180,6 +181,7 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             metodo: pago.metodo,
             facturas: aplicaciones.map((a) => a.factura_id),
             clientes: clientesDelPago(pago.cliente_id, facturas),
+            ...(await extrasIrisPago(t.trx, pago.id)),
         })
 
         // anticipos que vuelven a tener deuda contra la cual aplicarse: los del pagador y los de
