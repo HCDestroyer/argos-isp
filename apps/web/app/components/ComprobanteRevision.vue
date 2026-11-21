@@ -644,6 +644,7 @@ defineExpose({ comprobante })
                                     data-prueba="ver-conversacion-iris"
                                 />
                             </UTooltip>
+                            <span class="sr-only">{{ MOTIVO_SIN_CONVERSACION }}</span>
                             <span
                                 v-if="comprobante.iris_conversacion"
                                 class="font-mono"

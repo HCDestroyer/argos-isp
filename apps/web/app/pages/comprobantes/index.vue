@@ -467,7 +467,7 @@ onMounted(async () => {
                                         v-if="llegoPorIris(row.original) && resumenLecturaIris(row.original)"
                                         class="truncate text-xs text-muted"
                                         data-prueba="fila-iris"
-                                    >{{ resumenLecturaIris(row.original) }}</span>
+                                    ><span class="sr-only">Llegó por Iris · </span>{{ resumenLecturaIris(row.original) }}</span>
                                 </div>
                             </template>
 
