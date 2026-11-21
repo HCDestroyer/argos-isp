@@ -7670,7 +7670,7 @@
       "post": {
         "operationId": "cajasCerrar",
         "summary": "Cerrar turno de caja (esperado vs contado)",
-        "description": "esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.",
+        "description": "esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.",
         "tags": [
           "cajas"
         ],
@@ -7712,12 +7712,74 @@
                 "type": "object",
                 "properties": {
                   "contado": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Total contado; sin él, la suma de `denominaciones`",
                     "examples": [
                       "150.00"
                     ]
+                  },
+                  "denominaciones": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "valor": {
+                          "type": "string",
+                          "enum": [
+                            "200",
+                            "100",
+                            "50",
+                            "20",
+                            "10",
+                            "5",
+                            "1",
+                            "0.50",
+                            "0.25",
+                            "0.10",
+                            "0.05",
+                            "0.01"
+                          ]
+                        },
+                        "cantidad": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
+                      "required": [
+                        "valor",
+                        "cantidad"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 12,
+                    "description": "Conteo por billete y moneda (Q200 … 1¢)"
+                  },
+                  "fondo_siguiente": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Efectivo que queda en la caja para el turno siguiente (≤ contado)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "entregado_a": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Usuario que recibe el resto (obligatorio si contado − fondo_siguiente > 0)"
                   },
                   "motivo": {
                     "type": [
@@ -7729,9 +7791,7 @@
                     "description": "Obligatorio si hay diferencia entre esperado y contado"
                   }
                 },
-                "required": [
-                  "contado"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -8069,6 +8129,80 @@
           },
           "404": {
             "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cajas/turno-actual/resumen": {
+      "get": {
+        "operationId": "cajasTurnoActualResumen",
+        "summary": "Resumen del turno abierto: fondo, cobros por método, retiros e ingresos y lo que debe haber",
+        "description": "Con `caja_id`, el turno abierto de esa caja (alcance por caja: 403). Sin ella, el de la caja del usuario: la del turno que abrió él o la caja que tiene asignada con turno abierto, en la empresa activa. 404 `sin_turno_abierto` si no hay. `esperado` = fondo_inicial + cobros en efectivo (monto − retenido) − egresos en efectivo − depósitos al banco − pagos a proveedores en efectivo del turno: la misma regla del cierre (`POST /cajas/:id/cerrar`). `otros_medios`: cobros por otros medios que registró quien abrió el turno mientras estuvo abierto (no entran a la caja).",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "description": "Caja; sin ella, la del turno abierto del usuario (su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen del turno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenTurnoCaja"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -89227,6 +89361,78 @@
               "null"
             ]
           },
+          "denominaciones": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "valor",
+                "cantidad"
+              ],
+              "properties": {
+                "valor": {
+                  "type": "string",
+                  "enum": [
+                    "200",
+                    "100",
+                    "50",
+                    "20",
+                    "10",
+                    "5",
+                    "1",
+                    "0.50",
+                    "0.25",
+                    "0.10",
+                    "0.05",
+                    "0.01"
+                  ]
+                },
+                "cantidad": {
+                  "type": "integer"
+                }
+              }
+            },
+            "description": "Conteo del cierre por billete y moneda (null si se escribió solo el total)"
+          },
+          "fondo_siguiente": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Efectivo que quedó en la caja para abrir el turno siguiente"
+          },
+          "entregado_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario que recibió el efectivo que no quedó de fondo"
+          },
+          "entregado_a_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entregado_monto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "contado − fondo_siguiente"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -120710,6 +120916,241 @@
             "items": {
               "$ref": "#/components/schemas/ServicioSinSesion"
             }
+          }
+        }
+      },
+      "ResumenTurnoCaja": {
+        "type": "object",
+        "required": [
+          "caja_id",
+          "caja_nombre",
+          "empresa_id",
+          "turno_id",
+          "abierto_en",
+          "abierto_por",
+          "abierto_por_nombre",
+          "cerrado_en",
+          "fondo_inicial",
+          "cobros",
+          "efectivo_cobrado",
+          "otros_medios",
+          "ingresos",
+          "retiros",
+          "esperado"
+        ],
+        "properties": {
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "turno_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "abierto_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "abierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fondo_inicial": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cobros": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "por_metodo"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "por_metodo": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "metodo",
+                    "cantidad",
+                    "monto"
+                  ],
+                  "properties": {
+                    "metodo": {
+                      "type": "string"
+                    },
+                    "cantidad": {
+                      "type": "integer"
+                    },
+                    "monto": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Cobros vigentes del turno: en efectivo y por otros medios del cajero"
+          },
+          "efectivo_cobrado": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Cobros en efectivo (monto − retenido)"
+          },
+          "otros_medios": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              }
+            },
+            "description": "Cobros por otros medios que registró el cajero mientras el turno estuvo abierto"
+          },
+          "ingresos": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "cobros_efectivo"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "cobros_efectivo": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              }
+            },
+            "description": "Efectivo que entró a la caja (sin el fondo)"
+          },
+          "retiros": {
+            "type": "object",
+            "required": [
+              "cantidad",
+              "monto",
+              "egresos",
+              "depositos",
+              "pagos_proveedores"
+            ],
+            "properties": {
+              "cantidad": {
+                "type": "integer"
+              },
+              "monto": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "egresos": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              },
+              "depositos": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              },
+              "pagos_proveedores": {
+                "type": "object",
+                "required": [
+                  "cantidad",
+                  "monto"
+                ],
+                "properties": {
+                  "cantidad": {
+                    "type": "integer"
+                  },
+                  "monto": {
+                    "$ref": "#/components/schemas/Dinero"
+                  }
+                }
+              }
+            },
+            "description": "Efectivo que salió: egresos, depósitos al banco y pagos a proveedores"
+          },
+          "esperado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Debe haber en efectivo: fondo + ingresos − retiros"
           }
         }
       },

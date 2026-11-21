@@ -1042,7 +1042,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar turno de caja (esperado vs contado)
-         * @description esperado = fondo_inicial + pagos vigentes del turno; diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). Emite caja.cerrada. 409 si no hay turno abierto.
+         * @description esperado = el de `GET /cajas/turno-actual/resumen` (fondo + cobros en efectivo − egresos, depósitos y pagos a proveedores en efectivo del turno); diferencia = contado − esperado. Con diferencia ≠ 0 el motivo es obligatorio (422) y queda un asiento cierre_caja (faltante o sobrante). `contado` o `denominaciones` (Q200 … 1¢; con los dos deben coincidir: 422 rule `denominaciones`). `fondo_siguiente` (≤ contado) y `entregado_a` (obligatorio si queda resto): la entrega no es asiento, el dinero sigue en la cuenta de la caja hasta depositarlo. Emite caja.cerrada. 409 si no hay turno abierto.
          */
         post: operations["cajasCerrar"];
         delete?: never;
@@ -1080,6 +1080,26 @@ export interface paths {
         };
         /** Turnos de una caja */
         get: operations["cajasTurnos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cajas/turno-actual/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen del turno abierto: fondo, cobros por método, retiros e ingresos y lo que debe haber
+         * @description Con `caja_id`, el turno abierto de esa caja (alcance por caja: 403). Sin ella, el de la caja del usuario: la del turno que abrió él o la caja que tiene asignada con turno abierto, en la empresa activa. 404 `sin_turno_abierto` si no hay. `esperado` = fondo_inicial + cobros en efectivo (monto − retenido) − egresos en efectivo − depósitos al banco − pagos a proveedores en efectivo del turno: la misma regla del cierre (`POST /cajas/:id/cerrar`). `otros_medios`: cobros por otros medios que registró quien abrió el turno mientras estuvo abierto (no entran a la caja).
+         */
+        get: operations["cajasTurnoActualResumen"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12660,6 +12680,19 @@ export interface components {
             cerrado_por?: number | null;
             abierto_por_nombre?: string | null;
             cerrado_por_nombre?: string | null;
+            /** @description Conteo del cierre por billete y moneda (null si se escribió solo el total) */
+            denominaciones?: {
+                /** @enum {string} */
+                valor: "200" | "100" | "50" | "20" | "10" | "5" | "1" | "0.50" | "0.25" | "0.10" | "0.05" | "0.01";
+                cantidad: number;
+            }[] | null;
+            /** @description Efectivo que quedó en la caja para abrir el turno siguiente */
+            fondo_siguiente?: components["schemas"]["Dinero"] | null;
+            /** @description Usuario que recibió el efectivo que no quedó de fondo */
+            entregado_a?: number | null;
+            entregado_a_nombre?: string | null;
+            /** @description contado − fondo_siguiente */
+            entregado_monto?: components["schemas"]["Dinero"] | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -20560,6 +20593,67 @@ export interface components {
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
         };
+        ResumenTurnoCaja: {
+            caja_id: number;
+            caja_nombre: string;
+            empresa_id: number;
+            turno_id: number;
+            /** Format: date-time */
+            abierto_en: string;
+            abierto_por: number | null;
+            abierto_por_nombre: string | null;
+            /** Format: date-time */
+            cerrado_en: string | null;
+            fondo_inicial: components["schemas"]["Dinero"];
+            /** @description Cobros vigentes del turno: en efectivo y por otros medios del cajero */
+            cobros: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                por_metodo: {
+                    metodo: string;
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                }[];
+            };
+            /** @description Cobros en efectivo (monto − retenido) */
+            efectivo_cobrado: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Cobros por otros medios que registró el cajero mientras el turno estuvo abierto */
+            otros_medios: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+            };
+            /** @description Efectivo que entró a la caja (sin el fondo) */
+            ingresos: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                cobros_efectivo: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+            };
+            /** @description Efectivo que salió: egresos, depósitos al banco y pagos a proveedores */
+            retiros: {
+                cantidad: number;
+                monto: components["schemas"]["Dinero"];
+                egresos: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+                depositos: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+                pagos_proveedores: {
+                    cantidad: number;
+                    monto: components["schemas"]["Dinero"];
+                };
+            };
+            /** @description Debe haber en efectivo: fondo + ingresos − retiros */
+            esperado: components["schemas"]["Dinero"];
+        };
         RetencionCompra: {
             impuesto_codigo: string;
             /** @enum {string} */
@@ -26447,10 +26541,23 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description Monto con hasta 2 decimales, como string
+                     * @description Total contado; sin él, la suma de `denominaciones`
                      * @example 150.00
                      */
-                    contado: string;
+                    contado?: string | null;
+                    /** @description Conteo por billete y moneda (Q200 … 1¢) */
+                    denominaciones?: {
+                        /** @enum {string} */
+                        valor: "200" | "100" | "50" | "20" | "10" | "5" | "1" | "0.50" | "0.25" | "0.10" | "0.05" | "0.01";
+                        cantidad: number;
+                    }[] | null;
+                    /**
+                     * @description Efectivo que queda en la caja para el turno siguiente (≤ contado)
+                     * @example 150.00
+                     */
+                    fondo_siguiente?: string | null;
+                    /** @description Usuario que recibe el resto (obligatorio si contado − fondo_siguiente > 0) */
+                    entregado_a?: number | null;
                     /** @description Obligatorio si hay diferencia entre esperado y contado */
                     motivo?: string | null;
                 };
@@ -26654,6 +26761,56 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cajasTurnoActualResumen: {
+        parameters: {
+            query?: {
+                /** @description Caja; sin ella, la del turno abierto del usuario (su caja) */
+                caja_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen del turno */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenTurnoCaja"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
