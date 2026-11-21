@@ -15,6 +15,8 @@ import { exigirServicio } from '#core/acceso_empresa'
 import { esTokenIris, exigirActorIris } from '#integraciones/iris/atencion'
 import * as vi from '#core/validators_instalacion'
 import ReservarIpServicio from '#core/actions/reservar_ip_servicio'
+import CambiarPlanPendiente from '#core/actions/cambiar_plan_pendiente'
+import { Servicio } from '#core/esquemas'
 
 /** Con el token de Iris: `X-Iris-Actor` obligatoria y nunca el asistente de IA. */
 export function desdeIris(ctx: HttpContext): boolean {
@@ -58,6 +60,32 @@ const instalacion: Ruta[] = [
             const id = Number(params.id)
             await exigirServicio(ctx, id)
             return new ReservarIpServicio().execute({ ...cuerpo, id, desdeIris: iris }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/cambiar-plan',
+        operacion: 'serviciosCambiarPlanPendiente',
+        resumen: 'Cambiar el plan de un servicio pendiente de instalación (contrato Iris 0.10.0 §3.4.5)',
+        descripcion:
+            'Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`), a un plan de `GET /planes?router_id=&modo=` ' +
+            '(activo, del mismo modo y asignado a todos los routers o al del servicio; si no, `422 plan_no_permitido`). ' +
+            'Sin factura ni prorrateo. `version` opcional (`409 conflicto_version`). Emite `servicio.config_cambiada` con ' +
+            '`plan` y `precio` y la orden en `origen_tipo`/`origen_id`. Iris: `Idempotency-Key = iris:plan:<orden_id>:<cambio_id>`, ' +
+            '`X-Iris-Actor` y solo servicios de Iris.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.cambiar_plan_pendiente',
+        cuerpo: vi.cambiarPlanPendienteValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Servicio con el plan nuevo', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const iris = desdeIris(ctx)
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new CambiarPlanPendiente().execute(
+                { ...cuerpo, id, desdeIris: iris },
+                ctx.contextoAccion(),
+            )
         },
     }),
 ]

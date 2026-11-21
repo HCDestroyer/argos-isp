@@ -31,3 +31,16 @@ export const reservarIpValidator = vine.compile(
         origen_id: origenId(),
     }),
 )
+
+export const cambiarPlanPendienteValidator = vine.compile(
+    vine.object({
+        plan_id: idEntidad(),
+        motivo: vine.enum(['mas_velocidad', 'menos_velocidad', 'otro'] as const),
+        motivo_texto: vine.string().trim().minLength(3).maxLength(500).optional().meta({
+            description: 'Obligatorio con motivo otro; queda solo en la auditoría',
+        }),
+        version: versionOpcional(),
+        origen_tipo: origenTipo(),
+        origen_id: origenId(),
+    }),
+)

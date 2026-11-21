@@ -83,6 +83,11 @@ export interface EntradaEditarServicio {
      * sale con `motivo: 'union_routers'` (`contratos/routers.md`).
      */
     mismo_equipo?: boolean
+    /**
+     * Solo interno (`servicios.cambiar_plan_pendiente`, contrato Iris 0.10.0 §3.4.5): la orden de Iris
+     * que pidió el cambio; va en `servicio.config_cambiada` (`origen_tipo`/`origen_id`).
+     */
+    origen?: { origen_tipo: string; origen_id: string }
 }
 
 type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
@@ -171,6 +176,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             user_ppp: userPppEntrada,
             excepciones: excepcionesEntrada,
             mismo_equipo: mismoEquipo,
+            origen,
             servidor_pppoe_id: servidorEntrada,
             ...datos
         } = input
@@ -415,6 +421,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 empresa_id: despues.empresa_id,
                 campos,
                 ...(mismoEquipo ? { motivo: 'union_routers' as const } : {}),
+                ...(origen ? { origen_tipo: origen.origen_tipo, origen_id: origen.origen_id } : {}),
             })
         }
         if (campos.includes('ips') || campos.includes('prefijo_v6')) {

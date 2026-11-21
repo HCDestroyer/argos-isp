@@ -580,6 +580,15 @@ export const Plan = definirEsquema(
                 ...enumerado(TIPOS_PLAN),
                 description: 'residencial (por defecto), empresarial o dedicado',
             },
+            modo: {
+                ...enumerado(['residencial', 'empresarial']),
+                description:
+                    'Contrato Iris 0.10.0 (A40): residencial, o empresarial para los tipos empresarial y dedicado',
+            },
+            routers: {
+                ...lista(id),
+                description: 'Routers con implementación propia del plan; con `global` vale en todos (A40)',
+            },
             global: booleano,
             activo: booleano,
             ...auditable,
@@ -588,8 +597,9 @@ export const Plan = definirEsquema(
                 description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
             },
         },
-        // `warnings` es opcional de verdad: solo en las respuestas de crear y editar
-        ['warnings'],
+        // `warnings` es opcional de verdad: solo en las respuestas de crear y editar. `modo` y `routers`
+        // (Iris 0.10.0): la API siempre los envía; opcionales hasta que las fixtures los traigan
+        ['warnings', 'modo', 'routers'],
     ),
 )
 

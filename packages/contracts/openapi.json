@@ -55068,6 +55068,19 @@
                 "dedicado"
               ]
             }
+          },
+          {
+            "name": "modo",
+            "in": "query",
+            "required": false,
+            "description": "Contrato Iris 0.10.0 (A40): solo los planes aplicables a ese modo, activos y (con router_id) asignados a todos los routers o a ese router. empresarial incluye dedicado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial"
+              ]
+            }
           }
         ],
         "responses": {
@@ -69722,6 +69735,7 @@
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
+                        "servicios.cambiar_plan_pendiente",
                         "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
@@ -70126,6 +70140,7 @@
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
+                        "servicios.cambiar_plan_pendiente",
                         "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
@@ -78440,6 +78455,163 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/cambiar-plan": {
+      "post": {
+        "operationId": "serviciosCambiarPlanPendiente",
+        "summary": "Cambiar el plan de un servicio pendiente de instalación (contrato Iris 0.10.0 §3.4.5)",
+        "description": "Solo en `pendiente_instalacion` (`422 servicio_no_pendiente`), a un plan de `GET /planes?router_id=&modo=` (activo, del mismo modo y asignado a todos los routers o al del servicio; si no, `422 plan_no_permitido`). Sin factura ni prorrateo. `version` opcional (`409 conflicto_version`). Emite `servicio.config_cambiada` con `plan` y `precio` y la orden en `origen_tipo`/`origen_id`. Iris: `Idempotency-Key = iris:plan:<orden_id>:<cambio_id>`, `X-Iris-Actor` y solo servicios de Iris.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "enum": [
+                      "mas_velocidad",
+                      "menos_velocidad",
+                      "otro"
+                    ]
+                  },
+                  "motivo_texto": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500,
+                    "description": "Obligatorio con motivo otro; queda solo en la auditoría"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Opcional (§3.4): si viene y no coincide, 409 conflicto_version"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que lo pide: `iris_orden`"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id de la orden de Iris"
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "motivo",
+                  "origen_tipo",
+                  "origen_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio con el plan nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cambiar_plan_pendiente; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cambiar_plan_pendiente",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/codigo-corte": {
       "get": {
         "operationId": "servicioCodigoCorte",
@@ -82999,6 +83171,7 @@
                             "servicios.adicional_cortesia",
                             "servicios.agregar_adicional",
                             "servicios.cambiar_empresa",
+                            "servicios.cambiar_plan_pendiente",
                             "servicios.cancelar_plan_temporal",
                             "servicios.crear",
                             "servicios.desconectar",
@@ -107460,6 +107633,7 @@
           "servicios.adicional_cortesia",
           "servicios.agregar_adicional",
           "servicios.cambiar_empresa",
+          "servicios.cambiar_plan_pendiente",
           "servicios.cancelar_plan_temporal",
           "servicios.crear",
           "servicios.desconectar",
@@ -107756,6 +107930,7 @@
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
+          "Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)",
           "Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)",
           "Crear servicios",
           "Desconectar la sesión PPPoE de un servicio",
@@ -110584,6 +110759,22 @@
               "dedicado"
             ],
             "description": "residencial (por defecto), empresarial o dedicado"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial"
+            ],
+            "description": "Contrato Iris 0.10.0 (A40): residencial, o empresarial para los tipos empresarial y dedicado"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Routers con implementación propia del plan; con `global` vale en todos (A40)"
           },
           "global": {
             "type": "boolean"
@@ -122355,6 +122546,7 @@
               "servicios.adicional_cortesia",
               "servicios.agregar_adicional",
               "servicios.cambiar_empresa",
+              "servicios.cambiar_plan_pendiente",
               "servicios.cancelar_plan_temporal",
               "servicios.crear",
               "servicios.desconectar",
@@ -122485,6 +122677,7 @@
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
+              "servicios.cambiar_plan_pendiente",
               "servicios.cancelar_plan_temporal",
               "servicios.crear",
               "servicios.desconectar",
@@ -122554,6 +122747,7 @@
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.agregar_adicional",
+              "servicios.cambiar_plan_pendiente",
               "servicios.crear",
               "servicios.desconectar",
               "servicios.editar",

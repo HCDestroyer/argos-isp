@@ -69,6 +69,7 @@ export const PERMISOS_IRIS_CONTRATO = [
     'contactos.gestionar',
     // de la venta a la instalación (contrato 0.10.0 §3.4)
     'servicios.reservar_ip',
+    'servicios.cambiar_plan_pendiente',
 ] as const
 
 /** Permisos que el contrato 0.7.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */

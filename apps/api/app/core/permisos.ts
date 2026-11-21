@@ -48,6 +48,8 @@ export const PERMISOS = {
         'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
     'servicios.reservar_ip':
         'Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)',
+    'servicios.cambiar_plan_pendiente':
+        'Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -506,6 +508,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.quitar_limite',
             'servicios.activar_instalacion',
             'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -553,6 +556,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
             'servicios.activar_instalacion',
             'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',

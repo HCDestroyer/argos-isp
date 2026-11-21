@@ -376,6 +376,9 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
                     ...(anterior ? { empresa_anterior_id: anterior } : {}),
                     ...(texto(p.motivo) ? { motivo: texto(p.motivo) } : {}),
                     ...(entero(p.plan_temporal_id) ? { plan_temporal_id: entero(p.plan_temporal_id) } : {}),
+                    // 0.10.0 §3.4.5: el cambio de plan de un pendiente lo pidió una orden de Iris
+                    ...(texto(p.origen_tipo) ? { origen_tipo: texto(p.origen_tipo) } : {}),
+                    ...(texto(p.origen_id) ? { origen_id: texto(p.origen_id) } : {}),
                 },
                 // Un cambio de empresa le interesa a quien tenía el servicio y a quien lo recibe
                 empresas: anterior && anterior !== empresaId ? [...empresas, anterior] : empresas,
