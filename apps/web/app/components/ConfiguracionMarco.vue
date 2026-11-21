@@ -33,7 +33,7 @@ const props = withDefaults(defineProps<{
 })
 
 const route = useRoute()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const { puedePagina } = usePaginasConfiguracion()
 const { empresas: listaEmpresas, empresaId, elegir } = useEmpresaActiva()
 const slots = useSlots()
@@ -67,7 +67,7 @@ const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?
 <template>
     <PanelPagina
         :id="props.id"
-        :titulo="props.titulo"
+        :titulo="ubicacion && ubicacion.pagina.etiqueta !== ubicacion.seccion.etiqueta && ubicacion.pagina.ruta === route.path ? ubicacion.pagina.etiqueta : props.titulo"
         encabezado-propio
     >
         <div
@@ -153,7 +153,7 @@ const conPestanas = computed(() => pestanas.value.length > 1 && ubicacion.value?
                         icon="i-lucide-plus"
                         color="neutral"
                         variant="outline"
-                        to="/configuracion/empresas?nueva=1"
+                        :to="enlace('/configuracion/empresas?nueva=1')"
                         data-prueba="nueva-empresa"
                     />
                 </div>

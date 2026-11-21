@@ -27,7 +27,7 @@ async function cargar() {
     resumen.horus.value = conector.value
 }
 
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 const route = useRoute()
 const verHorus = computed(() => puede('horus.ver'))
 const verIris = computed(() => puede('iris.ver'))
@@ -366,7 +366,7 @@ onMounted(() => {
                         color="neutral"
                         variant="outline"
                         class="self-start"
-                        to="/usuarios/tokens"
+                        :to="enlace('/usuarios/tokens')"
                     />
                 </ConfiguracionBloque>
             </section>
