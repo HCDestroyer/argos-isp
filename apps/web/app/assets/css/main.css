@@ -618,9 +618,44 @@
     --argos-degradado: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
 }
 
-/* Barra lateral: borde derecho discontinuo y sutil. */
+/*
+ * Layout «islas» (decisión del PM, propuesta A): el menú lateral flota separado 16 px del borde,
+ * con radio 22 px, vidrio claro con desenfoque y sombra suave sobre el aura; el encabezado son
+ * pastillas de vidrio. Con menos transparencia: sólido y sin desenfoque (más abajo).
+ */
 .lateral-argos {
-    border-inline-end: 1px dashed var(--ax-borde);
+    border: 0;
+}
+
+@media (min-width: 1024px) {
+    .lateral-argos {
+        margin: 1rem 0 1rem 1rem;
+        height: calc(100dvh - 2rem);
+        border-radius: 1.375rem;
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 18px 40px -18px rgb(30 27 75 / 0.28);
+    }
+
+    .dark .lateral-argos {
+        box-shadow:
+            0 0 0 1px var(--ax-borde),
+            0 18px 40px -12px rgb(0 0 0 / 0.6);
+    }
+}
+
+.isla-pastilla {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 9999px;
+    background-color: var(--hf-glass-strong);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
+    box-shadow:
+        0 0 0 1px var(--ax-borde),
+        0 8px 24px -14px rgb(30 27 75 / 0.3);
 }
 
 /* Filete de marca: línea de 2 px con el degradado (encabezado del menú, tarjeta destacada). */
@@ -750,6 +785,12 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
+    .isla-pastilla {
+        background-color: var(--ui-bg);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+
     .chrome-material,
     .glass-material {
         background-color: var(--ui-bg);

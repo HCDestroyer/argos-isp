@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { BreadcrumbItem } from '@nuxt/ui'
 
-const { conSelector } = useEmpresaActiva()
 const route = useRoute()
 
 /**
  * Estructura común de una página del panel (sistema visual Argos, `docs/sistema-visual.md`):
- * barra superior de vidrio (plegar menú, buscador Ctrl+K, empresa, caja, avisos, ayuda, tema y
- * usuario) y cuerpo con scroll que empieza con el encabezado de página.
+ * barra superior liviana (a la izquierda plegar menú, buscador Ctrl+K y accesos rápidos; a la
+ * derecha solo el estado del sistema, los avisos y el usuario, con la empresa, el tema y la ayuda
+ * dentro de su menú) y cuerpo con scroll que empieza con el encabezado de página.
  *
  * - Página de una sección del menú (la ruta es la de la sección) o con `descripcion`: encabezado
  *   grande con migas, título, descripción y las acciones (`#acciones`) a la derecha.
@@ -55,56 +55,58 @@ const migas = computed<BreadcrumbItem[]>(() => {
 <template>
     <UDashboardPanel :id="id">
         <template #header>
-            <!-- Un solo nodo raíz: la fila del selector (teléfono) aparece y desaparece sin mover la barra. -->
             <div class="flex shrink-0 flex-col">
                 <UDashboardNavbar
-                    :title="encabezado ? undefined : titulo"
+                    :title="encabezado && DISENO_ENCABEZADO === 'dos-pastillas' ? undefined : titulo"
                     :icon="encabezado ? undefined : icono"
-                    class="chrome-material"
-                    :ui="{ title: 'text-base font-semibold' }"
+                    :ui="{
+                        root: 'h-auto min-h-(--ui-header-height) border-0 bg-transparent px-4 py-3 gap-3.5 sm:px-6',
+                        left: 'gap-3.5',
+                        right: 'gap-1.5',
+                        title: 'text-base font-semibold',
+                    }"
                 >
                     <template #leading>
                         <UDashboardSidebarCollapse />
-                        <AccesosRapidosBoton />
-                        <UDashboardSearchButton
-                            v-if="encabezado"
-                            label="Buscar…"
-                            aria-label="Buscar sección (Ctrl+K)"
-                            class="hidden w-56 rounded-full bg-transparent ring-(--ax-borde) lg:inline-flex"
-                        />
+                        <!-- Islas A2: pastilla izquierda con el buscador y los accesos rápidos. -->
+                        <div
+                            v-if="DISENO_ENCABEZADO === 'dos-pastillas'"
+                            class="isla-pastilla"
+                            data-prueba="pastilla-izquierda"
+                        >
+                            <UDashboardSearchButton
+                                label="Buscar…"
+                                aria-label="Buscar sección (Ctrl+K)"
+                                class="hidden w-44 rounded-full bg-transparent ring-0 lg:inline-flex"
+                            />
+                            <AccesosRapidosBarra />
+                        </div>
                         <span
-                            v-if="encabezado"
+                            v-if="encabezado && DISENO_ENCABEZADO === 'dos-pastillas'"
                             class="truncate font-semibold text-highlighted lg:hidden"
                         >{{ titulo }}</span>
                     </template>
 
                     <template #right>
-                        <UDashboardSearchButton
-                            v-if="!encabezado"
-                            collapsed
-                            aria-label="Buscar sección (Ctrl+K)"
-                            class="hidden lg:inline-flex"
-                        />
-                        <SelectorEmpresa class="hidden sm:flex" />
-                        <CajaAccesoDirecto />
-                        <AvisosBoton />
-                        <AyudaBoton
-                            v-if="!encabezado"
-                            class="hidden sm:inline-flex"
-                        />
-                        <UColorModeButton />
-                        <div class="hidden sm:flex">
-                            <MenuUsuario variante="avatar" />
+                        <div
+                            class="isla-pastilla"
+                            data-prueba="pastilla-derecha"
+                        >
+                            <template v-if="DISENO_ENCABEZADO === 'una-pastilla'">
+                                <UDashboardSearchButton
+                                    label="Buscar…"
+                                    aria-label="Buscar sección (Ctrl+K)"
+                                    class="hidden w-40 rounded-full bg-transparent ring-0 lg:inline-flex"
+                                />
+                                <AccesosRapidosBarra />
+                            </template>
+                            <CajaAccesoDirecto />
+                            <EstadoSistemaBoton />
+                            <AvisosBoton />
+                            <MenuUsuario />
                         </div>
                     </template>
                 </UDashboardNavbar>
-                <!-- En el teléfono el selector de empresa va en su propia fila, bajo la barra. -->
-                <UDashboardToolbar
-                    v-show="conSelector"
-                    class="chrome-material sm:hidden"
-                >
-                    <SelectorEmpresa class="w-full" />
-                </UDashboardToolbar>
             </div>
         </template>
 

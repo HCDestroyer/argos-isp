@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * Compras sin habilitación. Hoy es el 15/10/2026: la vista previa abre en septiembre.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 async function emitir(page: Page, libro: string) {

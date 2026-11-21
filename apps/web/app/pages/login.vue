@@ -10,6 +10,12 @@ definePageMeta({
 useHead({ title: 'Iniciar sesión · ArgosIsp' })
 
 const route = useRoute()
+/** Marca, eslogan, logo y fondo de la instalación (`GET /apariencia/publica`, sin sesión). */
+const tema = useTemaApariencia()
+const marca = computed(() => tema.publica.value?.nombre_marca ?? 'ArgosIsp')
+const eslogan = computed(() => tema.publica.value?.eslogan ?? null)
+const logo = computed(() => tema.urlArchivo(tema.publica.value?.logo_login_url ?? null))
+const fondo = computed(() => tema.urlArchivo(tema.publica.value?.fondo_login_url ?? null))
 const { login } = useAuth()
 const config = useRuntimeConfig()
 
@@ -54,21 +60,31 @@ async function entrarCon(datos: DatosLogin) {
              en el teléfono, solo el formulario con el logo arriba. -->
         <main class="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
             <section
-                class="bienvenida relative hidden flex-col justify-between overflow-hidden rounded-none p-10 text-white lg:flex"
-                aria-label="ArgosIsp"
+                class="bienvenida relative hidden flex-col justify-between overflow-hidden rounded-none bg-cover bg-center p-10 text-white lg:flex"
+                :aria-label="marca"
+                :style="fondo ? { backgroundImage: `linear-gradient(rgb(15 23 42 / 0.62), rgb(15 23 42 / 0.72)), url(${fondo})` } : undefined"
             >
-                <div class="flex items-center gap-3">
-                    <span class="flex size-11 items-center justify-center rounded-xl bg-white/15 ring ring-white/30">
+                <div class="relative flex items-center gap-3">
+                    <img
+                        v-if="logo"
+                        :src="logo"
+                        alt=""
+                        class="h-11 max-w-40 object-contain"
+                    >
+                    <span
+                        v-else
+                        class="flex size-11 items-center justify-center rounded-xl bg-white/15 ring ring-white/30"
+                    >
                         <LogoArgos
                             variante="linea"
                             class="size-8"
                         />
                     </span>
-                    <span class="text-2xl font-bold tracking-[-0.02em]">ArgosIsp</span>
+                    <span class="text-2xl font-bold tracking-[-0.02em]">{{ marca }}</span>
                 </div>
                 <div class="relative flex max-w-md flex-col gap-3">
                     <p class="text-3xl leading-tight font-bold tracking-[-0.02em]">
-                        Tu red, tus clientes y tu cobro, en un solo lugar.
+                        {{ eslogan ?? 'Tu red, tus clientes y tu cobro, en un solo lugar.' }}
                     </p>
                     <p class="text-base text-white/90">
                         Clientes y servicios PPPoE, facturación con su libro contable, cobros y corte automático.
@@ -103,8 +119,21 @@ async function entrarCon(datos: DatosLogin) {
                     <UColorModeButton />
                 </div>
                 <div class="flex flex-col items-center gap-2 lg:hidden">
-                    <LogoArgos class="size-14" />
-                    <span class="text-xl font-bold tracking-[-0.02em] text-highlighted">ArgosIsp</span>
+                    <img
+                        v-if="logo"
+                        :src="logo"
+                        alt=""
+                        class="h-14 max-w-48 object-contain"
+                    >
+                    <LogoArgos
+                        v-else
+                        class="size-14"
+                    />
+                    <span class="text-xl font-bold tracking-[-0.02em] text-highlighted">{{ marca }}</span>
+                    <span
+                        v-if="eslogan"
+                        class="text-sm text-muted"
+                    >{{ eslogan }}</span>
                 </div>
 
                 <div class="surface-card w-full max-w-md p-6 sm:p-8">

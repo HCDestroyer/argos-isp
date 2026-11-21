@@ -8,10 +8,7 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * ISO que no aplican y FEL obligatoria desactivada. Con «Todas», una sección por empresa.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; enlaces al calendario y a libros', async ({ page }) => {

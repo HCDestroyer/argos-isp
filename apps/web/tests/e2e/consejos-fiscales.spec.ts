@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir } from './ayudas'
  * atrasados» del tablero y «Depreciación por debajo del máximo legal» (PR D). Ocultar solo para mí lo quita de la vista y «Ver ocultos» lo devuelve con su marca.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y mostrar', async ({ page }) => {

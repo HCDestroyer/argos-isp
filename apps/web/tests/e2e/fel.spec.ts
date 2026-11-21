@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir } from './ayudas'
  * se certifica en ~1.5 s y una anulación pendiente se confirma igual.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 /**

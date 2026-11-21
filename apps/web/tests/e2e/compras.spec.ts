@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * ISR Q150, abono de Q1,000, saldo Q2,210) y el egreso 2 de EEGSA (Q1,850.40) sin compra.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 function aviso(page: Page, texto: string) {

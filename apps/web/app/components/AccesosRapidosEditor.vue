@@ -4,7 +4,7 @@
  * arrastrando (cursor `grab`) o con las flechas. Se guarda al pulsar «Guardar accesos».
  */
 const abierto = defineModel<boolean>('open', { default: false })
-const { ids, guardar, predeterminados } = useAccesosRapidos()
+const { ids, guardar } = useAccesosRapidos()
 const { puede } = usePermisos()
 const toast = useToast()
 
@@ -62,15 +62,27 @@ function soltar(destino: number) {
     arrastrando.value = null
 }
 
-function guardarCambios() {
-    guardar(borrador.value)
-    abierto.value = false
-    toast.add({ title: 'Accesos rápidos guardados', description: `${borrador.value.length} accesos`, icon: 'i-lucide-zap', color: 'success' })
+const guardando = ref(false)
+
+async function enviar(secciones: string[] | null) {
+    guardando.value = true
+    const resultado = await guardar(secciones)
+    guardando.value = false
+    if (resultado.ok) {
+        abierto.value = false
+        toast.add({ title: secciones === null ? 'Accesos rápidos de tu rol' : 'Accesos rápidos guardados', icon: 'i-lucide-zap', color: 'success' })
+        return
+    }
+    toast.add({ title: 'No se guardaron los accesos', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
 }
 
-/** Vuelve el borrador a los de fábrica (se guarda con «Guardar accesos»). */
+function guardarCambios() {
+    void enviar(borrador.value)
+}
+
+/** Vuelve a los accesos del rol (`secciones: null`): la API borra la lista guardada. */
 function deFabrica() {
-    borrador.value = [...predeterminados.value]
+    void enviar(null)
 }
 </script>
 
@@ -200,10 +212,11 @@ function deFabrica() {
         </template>
         <template #footer>
             <UButton
-                label="Volver a los de fábrica"
+                label="Usar los de mi rol"
                 icon="i-lucide-rotate-ccw"
                 color="neutral"
                 variant="ghost"
+                :disabled="guardando"
                 @click="deFabrica"
             />
             <UButton
@@ -216,6 +229,7 @@ function deFabrica() {
             <UButton
                 label="Guardar accesos"
                 :icon="ICONOS.guardar"
+                :loading="guardando"
                 data-prueba="guardar-accesos"
                 @click="guardarCambios"
             />

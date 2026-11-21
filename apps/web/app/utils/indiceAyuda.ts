@@ -422,6 +422,18 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion/apariencia': {
+        titulo: 'Apariencia',
+        resumen: 'Cambia cómo se ve el sistema para todos: el color del panel y del portal, el modo inicial (claro, oscuro o el del dispositivo), el nombre de la marca, un eslogan y el logo y la imagen de fondo de las pantallas de inicio de sesión del panel y del portal.',
+        pagina: 'configuracion/apariencia',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Colores disponibles',
+            'Logo y fondo',
+            'Accesos rápidos',
+        ],
+    },
     '/configuracion/aviso-cobro': {
         titulo: 'Plantillas de documentos',
         resumen: 'Aquí decides cómo se ven los PDF del aviso de cobro (que pasa a llamarse factura cuando está certificada en FEL), del recibo de cobro de la caja y de la nota de crédito. Cada plantilla es HTML con variables que Argos llena con los datos de cada documento.',
@@ -1408,6 +1420,37 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Qué pasa después',
             'Si algo sale mal',
             'Relacionado',
+        ],
+    },
+    '/sistema/almacenamiento': {
+        titulo: 'Almacenamiento',
+        resumen: 'Muestra qué está guardando el sistema y cuánto espacio ocupa: el disco de datos, la base de datos, Redis y las carpetas de archivos (comprobantes de depósito, logos, imágenes de anuncios, adjuntos de inventario y facturas de compra, libros legales, documentos de sorteos y respaldos locales).',
+        pagina: 'general/almacenamiento',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Qué muestra',
+            'Cuándo se calcula',
+        ],
+    },
+    '/sistema/registro': {
+        titulo: 'Registro del sistema',
+        resumen: 'Lista de lo que salió mal (o se recuperó) en el sistema en los últimos días, del más nuevo al más viejo: acciones que fallaron, comandos que un router rechazó, cortes o reconexiones (CoA) que no llegaron, caídas y recuperaciones de RADIUS, avisos del libro contable, avisos de disco lleno y trabajos de las colas que fallaron. Sirve para entender un problema sin entrar al servidor.',
+        pagina: 'general/registro-del-sistema',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Cómo leerlo',
+        ],
+    },
+    '/sistema/salud': {
+        titulo: 'Salud del sistema',
+        resumen: 'Muestra, en el momento, si el servidor y sus piezas están funcionando: la base de datos, Redis, las colas de trabajo, RADIUS, los routers, los procesos automáticos (facturación, vencimiento y corte), los respaldos y los recursos del servidor (procesador, memoria y disco). Aparece como tarjeta en el Inicio y en su pantalla completa.',
+        pagina: 'general/salud-del-sistema',
+        ancla: null,
+        temas: [
+            'Quién la usa',
+            'Cómo leerla',
         ],
     },
     '/usuarios': {

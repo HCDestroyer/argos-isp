@@ -35,8 +35,10 @@ export interface GrupoSecciones {
     id: string
     etiqueta: string
     icono: string
-    /** Encabezado del bloque al que pertenece (versalitas en el menú expandido). */
+    /** Encabezado del bloque al que pertenece (agrupa el buscador y la documentación). */
     bloque: string
+    /** Etiqueta corta bajo el icono en el menú compacto (rail). */
+    corta: string
     /** Sus secciones van sueltas en el menú (sin grupo plegable). */
     plano?: boolean
     secciones: SeccionPanel[]
@@ -46,12 +48,12 @@ export interface GrupoSecciones {
 
 export const GRUPOS_PANEL: GrupoSecciones[] = [
     {
-        // Lo de mostrador: suelto bajo «Inicio», siempre a la vista.
+        // Lo de mostrador, el primer grupo.
         id: 'dia',
         etiqueta: 'Día a día',
         icono: 'i-lucide-zap',
         bloque: 'Día a día',
-        plano: true,
+        corta: 'Día a día',
         secciones: [
             { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-banknote', ruta: '/cobro', permiso: 'pagos.registrar' },
             { id: 'caja', etiqueta: 'Caja', descripcion: 'Abrir la caja, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
@@ -66,6 +68,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Facturación',
         icono: 'i-lucide-receipt-text',
         bloque: 'Gestión',
+        corta: 'Facturas',
         secciones: [
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-hand-coins', ruta: '/pagos', permiso: 'pagos.ver' },
@@ -80,6 +83,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Red',
         icono: 'i-lucide-network',
         bloque: 'Gestión',
+        corta: 'Red',
         secciones: [
             { id: 'routers', etiqueta: 'Routers', descripcion: 'Routers MikroTik, redes IPv4 y bloques IPv6.', icono: 'i-lucide-router', ruta: '/routers', permiso: 'routers.ver' },
             { id: 'planes', etiqueta: 'Planes', descripcion: 'Velocidades, precios e implementación por router.', icono: 'i-lucide-gauge', ruta: '/planes', permiso: 'planes.ver' },
@@ -93,6 +97,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Inventario',
         icono: 'i-lucide-package',
         bloque: 'Gestión',
+        corta: 'Inventario',
         secciones: [],
         // Más de 7 secciones: en dos subgrupos (lo de todos los días y los catálogos).
         subgrupos: [
@@ -128,6 +133,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Clientes y lealtad',
         icono: 'i-lucide-gem',
         bloque: 'Gestión',
+        corta: 'Lealtad',
         secciones: [
             { id: 'lealtad', etiqueta: 'Lealtad', descripcion: 'Programa de puntos de la empresa, reglas para ganarlos y referidos.', icono: 'i-lucide-gem', ruta: '/lealtad', permiso: 'lealtad.ver' },
             { id: 'premios-lealtad', etiqueta: 'Premios', descripcion: 'Catálogo de premios que se canjean con puntos, y los que se ofrecen en el portal.', icono: 'i-lucide-gift', ruta: '/lealtad/premios', permiso: 'lealtad.ver' },
@@ -141,6 +147,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Finanzas',
         icono: 'i-lucide-landmark',
         bloque: 'Administración',
+        corta: 'Finanzas',
         secciones: [
             { id: 'egresos', etiqueta: 'Egresos', descripcion: 'Gastos pagados por caja, banco o cuenta bancaria, con su asiento.', icono: 'i-lucide-receipt', ruta: '/egresos', permiso: 'egresos.ver' },
             { id: 'cartera', etiqueta: 'Cartera', descripcion: 'Estimación de incobrables y castigo de facturas con su gestión de cobro.', icono: 'i-lucide-shield-alert', ruta: '/cartera', permiso: 'reportes.ver' },
@@ -176,6 +183,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Contabilidad y fiscal',
         icono: 'i-lucide-calculator',
         bloque: 'Administración',
+        corta: 'Contable',
         secciones: [
             { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor, cierre mensual e integridad de la cadena.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
             { id: 'bloqueos-libro', etiqueta: 'Bloqueos del libro', descripcion: 'Bloqueos por tipo, bloqueo duro, excepciones y procesos detenidos por un bloqueo.', icono: 'i-lucide-lock', ruta: '/libro/bloqueos', permiso: 'libro.ver' },
@@ -191,6 +199,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Reportes',
         icono: 'i-lucide-chart-pie',
         bloque: 'Administración',
+        corta: 'Reportes',
         secciones: [
             { id: 'reportes', etiqueta: 'Reportes', descripcion: 'Cartera vencida, ingresos, IVA, cobranza, cierres de caja y más, en CSV o Excel.', icono: 'i-lucide-file-chart-column', ruta: '/reportes', permiso: 'reportes.ver' },
             { id: 'bitacora', etiqueta: 'Bitácora', descripcion: 'Acciones por actor y canal, e historial de cambios.', icono: 'i-lucide-scroll-text', ruta: '/bitacora', permiso: 'bitacora.ver' },
@@ -201,9 +210,10 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Configuración',
         icono: 'i-lucide-settings',
         bloque: 'Sistema',
+        corta: 'Ajustes',
         secciones: [
             // Índice de la configuración: basta con poder abrir alguna de sus secciones.
-            { id: 'configuracion', etiqueta: 'Toda la configuración', descripcion: 'Todas las opciones de configuración por categoría, con buscador.', icono: 'i-lucide-layout-grid', ruta: '/configuracion', permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'portal_corte.ver', 'nodos_portal.administrar', 'inventario.configurar', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'notificaciones.ver', 'horus.ver', 'iris.ver'] },
+            { id: 'configuracion', etiqueta: 'Toda la configuración', descripcion: 'Todas las opciones de configuración por categoría, con buscador.', icono: 'i-lucide-layout-grid', ruta: '/configuracion', permiso: ['empresas.ver', 'fiscal.ver', 'fel.ver', 'empresa.ver', 'plantillas.ver', 'documentos.ver', 'cuentas_bancarias.ver', 'bancos.ver', 'campos_personalizados.editar', 'portal_corte.ver', 'nodos_portal.administrar', 'inventario.configurar', 'usuarios.ver', 'roles.ver', 'tokens.ver', 'notificaciones.ver', 'horus.ver', 'iris.ver', 'sistema.ver_salud', 'sistema.ver_registro', 'sistema.ver_almacenamiento', 'apariencia.ver'] },
         ],
         subgrupos: [
             {
@@ -252,6 +262,18 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                     { id: 'usuarios', etiqueta: 'Usuarios', descripcion: 'Usuarios del panel: alta, edición, roles con su alcance, desactivar y empresas.', icono: 'i-lucide-user-cog', ruta: '/usuarios', permiso: 'usuarios.ver' },
                     { id: 'roles', etiqueta: 'Roles y permisos', descripcion: 'Roles con sus permisos y el catálogo de permisos del ACL.', icono: 'i-lucide-shield', ruta: '/usuarios/roles', permiso: 'roles.ver' },
                     { id: 'tokens', etiqueta: 'Tokens de API', descripcion: 'Tokens para integraciones y agentes de IA: crear (se ven una vez) y revocar.', icono: 'i-lucide-key-round', ruta: '/usuarios/tokens', permiso: 'tokens.ver' },
+                ],
+            },
+            {
+                id: 'config-sistema',
+                etiqueta: 'Sistema y apariencia',
+                icono: 'i-lucide-activity',
+                descripcion: 'Salud del servidor, registro de fallos, espacio en disco y colores y marca del panel.',
+                secciones: [
+                    { id: 'salud', etiqueta: 'Salud del sistema', descripcion: 'Estado del servidor, la base, Redis, colas, RADIUS, routers, respaldos y recursos.', icono: 'i-lucide-heart-pulse', ruta: '/sistema/salud', permiso: 'sistema.ver_salud' },
+                    { id: 'registro', etiqueta: 'Registro del sistema', descripcion: 'Errores y avisos recientes de la API, la red, RADIUS, CoA, colas y contabilidad.', icono: 'i-lucide-scroll', ruta: '/sistema/registro', permiso: 'sistema.ver_registro' },
+                    { id: 'almacenamiento', etiqueta: 'Almacenamiento', descripcion: 'Qué ocupa espacio: disco, archivos por tipo, base de datos y Redis.', icono: 'i-lucide-hard-drive', ruta: '/sistema/almacenamiento', permiso: 'sistema.ver_almacenamiento' },
+                    { id: 'apariencia', etiqueta: 'Apariencia', descripcion: 'Color del panel y del portal, modo claro u oscuro, marca y logo y fondo del inicio de sesión.', icono: 'i-lucide-palette', ruta: '/configuracion/apariencia', permiso: 'apariencia.ver' },
                 ],
             },
             {

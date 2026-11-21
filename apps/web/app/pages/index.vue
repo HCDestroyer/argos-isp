@@ -14,21 +14,6 @@ definePageMeta({
 const { usuario } = useAuth()
 const { puede, enlace } = usePermisos()
 
-/**
- * Accesos agrupados por área (los grupos del menú, en su orden de uso): hasta 6 por bloque, los
- * primeros de cada grupo; la configuración, con un solo acceso a su índice.
- */
-const MAX_ACCESOS = 6
-const bloquesAccesos = computed(() => GRUPOS_PANEL
-    .map(grupo => ({
-        id: grupo.id,
-        etiqueta: grupo.etiqueta,
-        icono: grupo.icono,
-        secciones: (grupo.id === 'configuracion' ? grupo.secciones : seccionesDeGrupo(grupo))
-            .filter(seccion => puede(seccion.permiso))
-            .slice(0, MAX_ACCESOS),
-    }))
-    .filter(bloque => bloque.secciones.length > 0))
 const hoy = formatearFecha(new Date())
 
 /** Saludo según la hora de Guatemala y el primer nombre («Buenos días, Ana»). */
@@ -103,17 +88,14 @@ function nombreCliente(id: number): string {
     return puede('clientes.ver') ? nombres.nombre(id) : `Cliente #${id}`
 }
 
-/** Accesos rápidos del encabezado de bienvenida (los que el usuario puede abrir). */
+/** Acciones de la bienvenida (máximo dos): cobrar y, si hay, revisar los comprobantes. */
+const comprobantesPendientes = computed(() => (puede('comprobantes.ver') ? (useComprobantes().contador.value ?? 0) : 0))
 const rapidos = computed(() => [
     { etiqueta: 'Cobrar', icono: ICONOS.cobrar, to: enlace('/cobro') },
-    { etiqueta: 'Nuevo cliente', icono: 'i-lucide-user-plus', to: enlace('/clientes/nuevo') },
-    { etiqueta: 'Cartera vencida', icono: 'i-lucide-alarm-clock', to: enlace('/facturas?estado=vencida') },
-    { etiqueta: 'Comprobantes', icono: 'i-lucide-file-check-2', to: enlace('/comprobantes') },
+    comprobantesPendientes.value
+        ? { etiqueta: 'Revisar comprobantes', icono: 'i-lucide-file-check-2', to: enlace('/comprobantes') }
+        : { etiqueta: 'Nuevo cliente', icono: 'i-lucide-user-plus', to: enlace('/clientes/nuevo') },
 ].filter((acceso): acceso is { etiqueta: string, icono: string, to: string } => acceso.to !== undefined))
-
-/** Los mismos accesos rápidos de la barra superior (rayo), también aquí. */
-const accesosRapidos = useAccesosRapidos()
-const personalizandoAccesos = ref(false)
 
 async function cargar() {
     void cargarPagos()
@@ -137,18 +119,6 @@ onMounted(cargar)
         titulo="Inicio"
         icono="i-lucide-house"
     >
-        <template #acciones>
-            <UButton
-                v-if="verTablero"
-                icon="i-lucide-refresh-cw"
-                color="neutral"
-                variant="ghost"
-                aria-label="Actualizar el tablero"
-                :loading="cargando"
-                @click="cargar"
-            />
-        </template>
-
         <div class="flex flex-col gap-6">
             <!-- Bienvenida: el único bloque con el degradado de marca de fondo. El texto queda en la
                  zona índigo (blanco sobre #4f46e5, 6,3:1); el cian entra a la derecha, bajo el dibujo. -->
@@ -176,7 +146,7 @@ onMounted(cargar)
                     <path d="M19.12 20.57 A25 25 0 0 1 44.88 20.57" />
                     <path d="M15.31 15.29 A31.5 31.5 0 0 1 48.69 15.29" />
                 </svg>
-                <div class="relative flex max-w-3xl flex-col gap-4">
+                <div class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:pe-44">
                     <div class="flex max-w-2xl flex-col gap-1.5">
                         <h2
                             id="titulo-bienvenida"
@@ -184,15 +154,32 @@ onMounted(cargar)
                         >
                             {{ saludo }}
                         </h2>
-                        <p class="text-sm text-white/90">
+                        <p class="flex flex-wrap items-center gap-x-1 text-sm text-white/90">
                             {{ hoy }}<template v-if="verTablero && actualizado">
                                 · Datos al {{ formatearFechaHora(actualizado) }}
                             </template>
+                            <UButton
+                                v-if="verTablero"
+                                icon="i-lucide-refresh-cw"
+                                size="xs"
+                                variant="ghost"
+                                class="text-white hover:bg-white/15 active:bg-white/15"
+                                title="Actualizar el tablero"
+                                aria-label="Actualizar el tablero"
+                                :loading="cargando"
+                                @click="cargar"
+                            />
+                        </p>
+                        <p
+                            v-if="comprobantesPendientes"
+                            class="text-sm text-white"
+                        >
+                            Hay {{ comprobantesPendientes }} {{ comprobantesPendientes === 1 ? 'comprobante' : 'comprobantes' }} por revisar.
                         </p>
                     </div>
                     <div
                         v-if="rapidos.length"
-                        class="flex flex-wrap gap-2"
+                        class="flex shrink-0 flex-wrap gap-2"
                     >
                         <UButton
                             v-for="(acceso, indice) in rapidos"
@@ -207,58 +194,6 @@ onMounted(cargar)
                         />
                     </div>
                 </div>
-            </section>
-
-            <section
-                v-if="accesosRapidos.accesos.value.length"
-                class="flex flex-col gap-3"
-                aria-labelledby="titulo-accesos-rapidos"
-                data-prueba="inicio-accesos-rapidos"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <h3
-                        id="titulo-accesos-rapidos"
-                        class="flex items-center gap-2 text-sm font-semibold text-highlighted"
-                    >
-                        <UIcon
-                            name="i-lucide-zap"
-                            class="size-4 text-primary"
-                        />
-                        Tus accesos rápidos
-                    </h3>
-                    <UButton
-                        label="Personalizar"
-                        icon="i-lucide-sliders-horizontal"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        @click="personalizandoAccesos = true"
-                    />
-                </div>
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-                    <ULink
-                        v-for="(seccion, indice) in accesosRapidos.accesos.value"
-                        :key="seccion.id"
-                        :to="seccion.ruta"
-                        :title="seccion.descripcion"
-                        class="tarjeta-interactiva flex items-center gap-2.5 surface-card px-3 py-2.5 text-sm font-medium text-highlighted"
-                    >
-                        <span class="pastilla-icono tono-marca pastilla-tono size-8">
-                            <UIcon
-                                :name="seccion.icono"
-                                class="size-4"
-                            />
-                        </span>
-                        <span class="flex-1 truncate">{{ seccion.etiqueta }}</span>
-                        <UKbd
-                            v-if="indice < 9"
-                            :value="String(indice + 1)"
-                            size="sm"
-                            class="hidden lg:inline-flex"
-                        />
-                    </ULink>
-                </div>
-                <AccesosRapidosEditor v-model:open="personalizandoAccesos" />
             </section>
 
             <template v-if="verTablero">
@@ -342,110 +277,13 @@ onMounted(cargar)
                             data-prueba="kpi-promesas"
                         />
                     </div>
-
-                    <section
-                        class="flex flex-col gap-3 surface-card p-4 sm:p-5"
-                        aria-labelledby="titulo-servicios"
-                        data-prueba="tablero-servicios"
-                    >
-                        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                            <h3
-                                id="titulo-servicios"
-                                class="text-sm font-semibold text-highlighted"
-                            >
-                                Servicios por estado
-                            </h3>
-                            <p class="text-xs text-muted">
-                                Clientes: {{ resumen.clientes.activos }} al día · {{ resumen.clientes.limitados }} limitados · {{ resumen.clientes.cortados }} cortados
-                            </p>
-                        </div>
-                        <ul class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            <li
-                                v-for="item in estados"
-                                :key="item.estado"
-                            >
-                                <ULink
-                                    :to="enlace(`/servicios?estado=${item.estado}`)"
-                                    class="tarjeta-interactiva flex flex-col gap-1.5 rounded-lg bg-(--ax-panel) p-3"
-                                    :data-prueba="`servicios-${item.estado}`"
-                                >
-                                    <NumeroVivo
-                                        :valor="item.cantidad.toLocaleString('es-GT')"
-                                        class="text-2xl font-bold tracking-[-0.02em] text-highlighted"
-                                    />
-                                    <EstadoServicioBadge
-                                        :estado="item.estado"
-                                        :etiqueta="item.etiqueta"
-                                        size="sm"
-                                        class="self-start"
-                                    />
-                                </ULink>
-                            </li>
-                        </ul>
-                    </section>
-
-                    <div class="grid gap-4 lg:grid-cols-2">
-                        <section
-                            class="flex min-w-0 flex-col gap-2 surface-card p-4 sm:p-5"
-                            aria-labelledby="titulo-montos"
-                            data-prueba="grafica-montos"
-                        >
-                            <h3
-                                id="titulo-montos"
-                                class="text-sm font-semibold text-highlighted"
-                            >
-                                Facturado y cobrado · últimos 12 meses
-                            </h3>
-                            <GraficaColumnas
-                                v-if="series && conSerie"
-                                titulo="Facturado y cobrado por mes"
-                                :categorias="series.categorias"
-                                :categorias-largas="series.categoriasLargas"
-                                :series="series.montos"
-                                :hallazgo="hallazgoMontos(resumen)"
-                            />
-                            <UEmpty
-                                v-else
-                                icon="i-lucide-chart-column"
-                                title="Sin facturación ni cobros en los últimos 12 meses"
-                                description="Cuando se emitan avisos de cobro y se registren pagos, aparecen aquí."
-                                variant="naked"
-                            />
-                        </section>
-                        <section
-                            class="flex min-w-0 flex-col gap-2 surface-card p-4 sm:p-5"
-                            aria-labelledby="titulo-conteos"
-                            data-prueba="grafica-conteos"
-                        >
-                            <h3
-                                id="titulo-conteos"
-                                class="text-sm font-semibold text-highlighted"
-                            >
-                                Facturas emitidas y pagos registrados
-                            </h3>
-                            <GraficaColumnas
-                                v-if="series && conSerie"
-                                titulo="Facturas y pagos por mes"
-                                :categorias="series.categorias"
-                                :categorias-largas="series.categoriasLargas"
-                                :series="series.conteos"
-                                :hallazgo="hallazgoConteos(resumen)"
-                                formato="entero"
-                            />
-                            <UEmpty
-                                v-else
-                                icon="i-lucide-chart-column"
-                                title="Sin movimientos en los últimos 12 meses"
-                                variant="naked"
-                            />
-                        </section>
-                    </div>
                 </template>
             </template>
 
+            <!-- Últimos pagos (2/3) y accesos rápidos (1/3). -->
             <div
-                class="grid gap-4"
-                :class="verPagos ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : ''"
+                class="grid gap-6"
+                :class="verPagos ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : ''"
             >
                 <section
                     v-if="verPagos"
@@ -523,52 +361,122 @@ onMounted(cargar)
                         class="mt-auto"
                     />
                 </section>
-
-                <section
-                    class="flex min-w-0 flex-col gap-3"
-                    aria-labelledby="titulo-accesos"
-                    data-prueba="accesos"
-                >
-                    <h3
-                        id="titulo-accesos"
-                        class="text-sm font-semibold text-highlighted"
-                    >
-                        Accesos
-                    </h3>
-                    <div class="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                        <nav
-                            v-for="bloque in bloquesAccesos"
-                            :key="bloque.id"
-                            class="flex flex-col gap-1 surface-card p-3"
-                            :aria-labelledby="`accesos-${bloque.id}`"
-                        >
-                            <h4
-                                :id="`accesos-${bloque.id}`"
-                                class="flex items-center gap-2 px-1 pb-1 text-xs font-bold tracking-[0.05em] text-muted uppercase"
-                            >
-                                <UIcon
-                                    :name="bloque.icono"
-                                    class="size-4 text-primary"
-                                />
-                                {{ bloque.etiqueta }}
-                            </h4>
-                            <ULink
-                                v-for="seccion in bloque.secciones"
-                                :key="seccion.id"
-                                :to="seccion.ruta"
-                                :title="seccion.descripcion"
-                                class="flex items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-default transition-colors hover:bg-(--ax-fila-hover) hover:text-primary"
-                            >
-                                <UIcon
-                                    :name="seccion.icono"
-                                    class="size-4 shrink-0 text-dimmed"
-                                />
-                                <span class="truncate">{{ seccion.etiqueta }}</span>
-                            </ULink>
-                        </nav>
-                    </div>
-                </section>
+                <AccesosRapidosTarjeta />
             </div>
+
+            <!-- Salud (2/3) y registro (1/3) del sistema: solo con sus permisos. -->
+            <div
+                v-if="puede('sistema.ver_salud') || puede('sistema.ver_registro')"
+                class="grid gap-6"
+                :class="puede('sistema.ver_salud') && puede('sistema.ver_registro') ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : ''"
+            >
+                <SaludSistemaTarjeta
+                    v-if="puede('sistema.ver_salud')"
+                    compacto
+                />
+                <RegistroSistemaTarjeta v-if="puede('sistema.ver_registro')" />
+            </div>
+
+            <!-- Servicios por estado y gráficas de 12 meses (la primera versión del tablero). -->
+            <template v-if="verTablero && resumen">
+                <section
+                    class="flex flex-col gap-3 surface-card p-4 sm:p-5"
+                    aria-labelledby="titulo-servicios"
+                    data-prueba="tablero-servicios"
+                >
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <h3
+                            id="titulo-servicios"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Servicios por estado
+                        </h3>
+                        <p class="text-xs text-muted">
+                            Clientes: {{ resumen.clientes.activos }} al día · {{ resumen.clientes.limitados }} limitados · {{ resumen.clientes.cortados }} cortados
+                        </p>
+                    </div>
+                    <ul class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <li
+                            v-for="item in estados"
+                            :key="item.estado"
+                        >
+                            <ULink
+                                :to="enlace(`/servicios?estado=${item.estado}`)"
+                                class="tarjeta-interactiva flex flex-col gap-1.5 rounded-lg bg-(--ax-panel) p-3"
+                                :data-prueba="`servicios-${item.estado}`"
+                            >
+                                <NumeroVivo
+                                    :valor="item.cantidad.toLocaleString('es-GT')"
+                                    class="text-2xl font-bold tracking-[-0.02em] text-highlighted"
+                                />
+                                <EstadoServicioBadge
+                                    :estado="item.estado"
+                                    :etiqueta="item.etiqueta"
+                                    size="sm"
+                                    class="self-start"
+                                />
+                            </ULink>
+                        </li>
+                    </ul>
+                </section>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <section
+                        class="flex min-w-0 flex-col gap-2 surface-card p-4 sm:p-5"
+                        aria-labelledby="titulo-montos"
+                        data-prueba="grafica-montos"
+                    >
+                        <h3
+                            id="titulo-montos"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Facturado y cobrado · últimos 12 meses
+                        </h3>
+                        <GraficaColumnas
+                            v-if="series && conSerie"
+                            titulo="Facturado y cobrado por mes"
+                            :categorias="series.categorias"
+                            :categorias-largas="series.categoriasLargas"
+                            :series="series.montos"
+                            :hallazgo="hallazgoMontos(resumen)"
+                        />
+                        <UEmpty
+                            v-else
+                            icon="i-lucide-chart-column"
+                            title="Sin facturación ni cobros en los últimos 12 meses"
+                            description="Cuando se emitan avisos de cobro y se registren pagos, aparecen aquí."
+                            variant="naked"
+                        />
+                    </section>
+                    <section
+                        class="flex min-w-0 flex-col gap-2 surface-card p-4 sm:p-5"
+                        aria-labelledby="titulo-conteos"
+                        data-prueba="grafica-conteos"
+                    >
+                        <h3
+                            id="titulo-conteos"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Facturas emitidas y pagos registrados
+                        </h3>
+                        <GraficaColumnas
+                            v-if="series && conSerie"
+                            titulo="Facturas y pagos por mes"
+                            :categorias="series.categorias"
+                            :categorias-largas="series.categoriasLargas"
+                            :series="series.conteos"
+                            :hallazgo="hallazgoConteos(resumen)"
+                            formato="entero"
+                        />
+                        <UEmpty
+                            v-else
+                            icon="i-lucide-chart-column"
+                            title="Sin movimientos en los últimos 12 meses"
+                            variant="naked"
+                        />
+                    </section>
+                </div>
+            </template>
         </div>
     </PanelPagina>
 </template>

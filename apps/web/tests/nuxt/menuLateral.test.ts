@@ -14,16 +14,15 @@ describe('menú lateral agrupado', () => {
         return GRUPOS_PANEL.filter(grupo => seccionesDeGrupo(grupo).some(seccion => puede(seccion.permiso))).map(grupo => grupo.id)
     }
 
-    it('día a día suelto, grupos por bloque en orden de uso y cada sección en uno solo', () => {
+    it('día a día primero, grupos en orden de uso con su etiqueta corta y cada sección en uno solo', () => {
         expect(GRUPOS_PANEL.map(grupo => grupo.id)).toEqual(['dia', 'facturacion', 'red', 'inventario', 'lealtad', 'finanzas', 'contabilidad', 'control', 'configuracion'])
         expect([...new Set(GRUPOS_PANEL.map(grupo => grupo.bloque))]).toEqual(['Día a día', 'Gestión', 'Administración', 'Sistema'])
         const ids = SECCIONES_PANEL.map(seccion => seccion.id)
         expect(new Set(ids).size).toBe(ids.length)
         expect(ids).toContain('migracion')
         const dia = GRUPOS_PANEL.find(grupo => grupo.id === 'dia')
-        expect(dia?.plano).toBe(true)
         expect(dia?.secciones.map(seccion => seccion.id)).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes'])
-        expect(GRUPOS_PANEL.filter(grupo => grupo.plano)).toHaveLength(1)
+        expect(GRUPOS_PANEL.map(grupo => grupo.corta)).toEqual(['Día a día', 'Facturas', 'Red', 'Inventario', 'Lealtad', 'Finanzas', 'Contable', 'Reportes', 'Ajustes'])
     })
 
     it('ningún grupo ni subgrupo pasa de 7 secciones sueltas: los largos van en subgrupos', () => {
@@ -34,7 +33,7 @@ describe('menú lateral agrupado', () => {
             }
         }
         const configuracion = GRUPOS_PANEL.find(grupo => grupo.id === 'configuracion')
-        expect(configuracion?.subgrupos?.map(subgrupo => subgrupo.etiqueta)).toEqual(['Empresa y fiscal', 'Facturación y cobro', 'Red y portal', 'Usuarios y acceso', 'Notificaciones e integraciones'])
+        expect(configuracion?.subgrupos?.map(subgrupo => subgrupo.etiqueta)).toEqual(['Empresa y fiscal', 'Facturación y cobro', 'Red y portal', 'Usuarios y acceso', 'Sistema y apariencia', 'Notificaciones e integraciones'])
         expect(GRUPOS_PANEL.find(grupo => grupo.id === 'inventario')?.subgrupos?.map(subgrupo => subgrupo.id)).toEqual(['inventario-movimientos', 'inventario-catalogos'])
     })
 
@@ -73,22 +72,24 @@ describe('menú lateral agrupado', () => {
         expect(grupoDeRuta('/clientes-viejos')).toBeNull()
     })
 
-    it('la barra compacta se recuerda por usuario', () => {
+    it('el menú compacto (rail) es el de fábrica y la elección se recuerda por usuario', () => {
+        expect(leerMenuCompacto(8)).toBe(true)
+        expect(leerMenuCompacto(null)).toBe(true)
+        guardarMenuCompacto(7, false)
+        expect(window.localStorage.getItem(claveMenuCompacto(7))).toBe('0')
+        expect(leerMenuCompacto(7)).toBe(false)
         guardarMenuCompacto(7, true)
-        expect(window.localStorage.getItem(claveMenuCompacto(7))).toBe('1')
         expect(leerMenuCompacto(7)).toBe(true)
-        expect(leerMenuCompacto(8)).toBe(false)
-        expect(leerMenuCompacto(null)).toBe(false)
     })
 
-    it('sin almacenamiento (lanza) arranca expandida y no rompe', () => {
+    it('sin almacenamiento (lanza) arranca compacto y no rompe', () => {
         vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
             throw new Error('bloqueado')
         })
         vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
             throw new Error('bloqueado')
         })
-        expect(leerMenuCompacto(7)).toBe(false)
+        expect(leerMenuCompacto(7)).toBe(true)
         expect(() => guardarMenuCompacto(7, true)).not.toThrow()
     })
 })

@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir } from './ayudas'
  * ejercicio 2024 cerrado y 2025 abierto.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('ISR trimestral por trimestre, anular un pago y registrar otro, ajustes y el cierre anual desde la declaración', async ({ page }) => {

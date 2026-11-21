@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * Q3,099.46 menos (m = 29.80 %, m* = 20.00 %). Fibra del Sur: sobre utilidades pagaría menos.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('aviso, tabla con m y m*, sin aplicar; el crecimiento recalcula la proyección y se valida', async ({ page }) => {

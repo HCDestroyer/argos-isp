@@ -1,65 +1,15 @@
+import type { Problem, Schema } from '@argosisp/contracts'
+
+export type AccesosRapidos = Schema<'AccesosRapidos'>
+
 /**
- * Accesos rápidos del usuario (pedido del PM): hasta 12 secciones del menú, en el orden que el
- * usuario elige, a mano desde cualquier pantalla (botón del rayo, Alt+1…9) y en el inicio.
- *
- * NEEDS(A6): persistir con `GET/PUT /api/v1/me/accesos-rapidos`
- * (`.claude/integration/contratos/accesos-rapidos.md`, aún sin publicar). Mientras ese endpoint no
- * esté en `packages/contracts`, la elección se recuerda por usuario en `localStorage` (con
- * try/catch: sin almacenamiento valen los de fábrica) y se lee y escribe solo aquí, para cambiar a
- * la API sin tocar las pantallas.
+ * Accesos rápidos del usuario (pedido del PM: «en un clic, según los permisos»): hasta 12
+ * secciones del menú en el orden que el usuario elige, en la barra superior de todas las pantallas
+ * (Alt+1…9) y en el inicio. `GET/PUT /api/v1/me/accesos-rapidos` (A6,
+ * `contratos/accesos-rapidos.md`): sin lista guardada la API da los del rol (`predeterminados`).
+ * Los ids que el panel no conoce o que el usuario no puede abrir no se muestran ni se borran.
  */
 export const MAX_ACCESOS_RAPIDOS = 12
-
-/**
- * Predeterminados por rol, iguales a los de la API (`contratos/accesos-rapidos.md` §2): la unión,
- * en este orden de rol y sin repetidos, de los roles base del usuario; sin ninguno, los de `lectura`.
- */
-export const ACCESOS_POR_ROL: Record<string, readonly string[]> = {
-    admin: ['clientes', 'servicios', 'cobro', 'facturas', 'routers', 'configuracion'],
-    contabilidad: ['libro', 'facturas', 'pagos', 'declaraciones', 'conciliacion', 'egresos'],
-    cajero: ['cobro', 'caja', 'clientes', 'comprobantes'],
-    soporte: ['clientes', 'servicios', 'promesas', 'routers'],
-    tecnico: ['servicios', 'routers', 'mi-bodega', 'clientes'],
-    lectura: ['clientes', 'servicios', 'facturas'],
-}
-
-export function accesosPredeterminados(roles: readonly string[]): string[] {
-    const base = Object.keys(ACCESOS_POR_ROL).filter(rol => roles.includes(rol))
-    const lista = (base.length ? base : ['lectura']).flatMap(rol => ACCESOS_POR_ROL[rol] ?? [])
-    return [...new Set(lista)].slice(0, MAX_ACCESOS_RAPIDOS)
-}
-
-const PREFIJO = 'argos_accesos_rapidos:'
-
-export function claveAccesosRapidos(usuarioId: number | string): string {
-    return `${PREFIJO}${usuarioId}`
-}
-
-export function leerAccesosRapidos(usuarioId: number | string | null | undefined): string[] | null {
-    if (usuarioId === null || usuarioId === undefined) {
-        return null
-    }
-    try {
-        const crudo = window.localStorage.getItem(claveAccesosRapidos(usuarioId))
-        const lista: unknown = crudo ? JSON.parse(crudo) : null
-        return Array.isArray(lista) && lista.every(id => typeof id === 'string') ? lista.slice(0, MAX_ACCESOS_RAPIDOS) : null
-    }
-    catch {
-        return null
-    }
-}
-
-export function guardarAccesosRapidos(usuarioId: number | string | null | undefined, ids: readonly string[]): void {
-    if (usuarioId === null || usuarioId === undefined) {
-        return
-    }
-    try {
-        window.localStorage.setItem(claveAccesosRapidos(usuarioId), JSON.stringify(ids.slice(0, MAX_ACCESOS_RAPIDOS)))
-    }
-    catch {
-        // Sin almacenamiento: la elección vale solo para esta visita.
-    }
-}
 
 /** Grupo del menú de una sección, para agrupar los accesos por área. */
 function grupoDe(id: string): GrupoSecciones | undefined {
@@ -67,22 +17,33 @@ function grupoDe(id: string): GrupoSecciones | undefined {
 }
 
 export function useAccesosRapidos() {
+    const api = useApi()
     const { usuario } = useAuth()
     const { puede } = usePermisos()
-    const elegidos = useState<string[] | null>('accesos-rapidos', () => null)
+    const datos = useState<AccesosRapidos | null>('accesos-rapidos', () => null)
+    const problema = useState<Problem | null>('accesos-rapidos-problema', () => null)
+    const cargando = useState('accesos-rapidos-cargando', () => false)
 
-    watch(() => usuario.value?.id, (id) => {
-        elegidos.value = leerAccesosRapidos(id)
-    }, { immediate: true })
+    async function cargar(): Promise<void> {
+        if (!usuario.value) {
+            datos.value = null
+            return
+        }
+        cargando.value = true
+        const resultado = await resolver(api.GET('/api/v1/me/accesos-rapidos'))
+        cargando.value = false
+        datos.value = resultado.ok ? resultado.data : null
+        problema.value = resultado.ok ? null : resultado.problema
+    }
 
-    /** Ids vigentes: los elegidos (o los de fábrica) que existen y el usuario puede abrir. */
-    const ids = computed(() => (elegidos.value ?? accesosPredeterminados(usuario.value?.roles ?? []))
+    /** Ids vigentes: los de la API que existen en el menú y el usuario puede abrir. */
+    const ids = computed(() => (datos.value?.secciones ?? [])
         .filter(id => SECCIONES_PANEL.some(seccion => seccion.id === id && puede(seccion.permiso)))
         .slice(0, MAX_ACCESOS_RAPIDOS))
 
     const accesos = computed(() => ids.value.map(id => obtenerSeccion(id)))
 
-    /** Los accesos agrupados por área del menú, en el orden elegido dentro de cada área. */
+    /** Los accesos agrupados por área del menú, con su número de atajo (Alt+n). */
     const porArea = computed(() => {
         const areas = new Map<string, { etiqueta: string, icono: string, secciones: { seccion: SeccionPanel, numero: number }[] }>()
         accesos.value.forEach((seccion, indice) => {
@@ -95,17 +56,22 @@ export function useAccesosRapidos() {
         return [...areas.values()]
     })
 
-    /** Secciones permitidas que todavía no están entre los accesos. */
-    const disponibles = computed(() => SECCIONES_PANEL.filter(seccion => puede(seccion.permiso) && !ids.value.includes(seccion.id)))
-
-    function guardar(nuevos: readonly string[]) {
-        elegidos.value = [...new Set(nuevos)].slice(0, MAX_ACCESOS_RAPIDOS)
-        guardarAccesosRapidos(usuario.value?.id, elegidos.value)
+    /**
+     * Guarda la lista (o `null`: vuelve a los del rol). Los ids que el panel no muestra se conservan
+     * al final (otra versión del panel o un permiso quitado por un rato), sin pasar de 12.
+     */
+    async function guardar(nuevos: readonly string[] | null): Promise<Resultado<AccesosRapidos>> {
+        const ocultos = (datos.value?.secciones ?? []).filter(id => !ids.value.includes(id))
+        const secciones = nuevos === null ? null : [...new Set([...nuevos, ...ocultos])].slice(0, MAX_ACCESOS_RAPIDOS)
+        const resultado = await resolver(api.PUT('/api/v1/me/accesos-rapidos', {
+            body: { secciones, ...(datos.value?.version !== null && datos.value?.version !== undefined ? { version: datos.value.version } : {}) },
+            params: { header: { 'Idempotency-Key': nuevaClaveIdempotencia() } },
+        }))
+        if (resultado.ok) {
+            datos.value = resultado.data
+        }
+        return resultado
     }
 
-    /** Los predeterminados del rol (sin guardar), para «Volver a los de fábrica». */
-    const predeterminados = computed(() => accesosPredeterminados(usuario.value?.roles ?? [])
-        .filter(id => SECCIONES_PANEL.some(seccion => seccion.id === id && puede(seccion.permiso))))
-
-    return { ids, accesos, porArea, disponibles, predeterminados, guardar }
+    return { datos, problema, cargando, cargar, ids, accesos, porArea, guardar }
 }

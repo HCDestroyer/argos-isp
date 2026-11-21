@@ -7,10 +7,7 @@ import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
  * (02/10, vencía el 30/09) y sigue sin pagar: su pago lleva mora y multa.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('calcular septiembre, revisar con confirmación, marcar presentada y pagar; agosto con mora y multa', async ({ page }) => {

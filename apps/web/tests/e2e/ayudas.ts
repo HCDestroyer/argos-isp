@@ -26,7 +26,10 @@ export async function entrar(page: Page, email: string): Promise<void> {
     await expect(page).not.toHaveURL(/\/login/)
 }
 
-/** Abre el menú lateral si está plegado (teléfono) y devuelve su contenedor. */
+/**
+ * Abre el menú lateral si está plegado (teléfono) y devuelve su contenedor. En escritorio el menú
+ * arranca compacto (rail de iconos): se pasa a expandido (con nombres), que queda recordado.
+ */
 export async function menu(page: Page) {
     const lateral = page.locator('#dashboard-sidebar-principal')
     const abrir = page.getByRole('button', { name: 'Abrir barra lateral' })
@@ -34,6 +37,10 @@ export async function menu(page: Page) {
     await expect(lateral.getByRole('link', { name: 'Inicio' }).or(abrir).first()).toBeVisible()
     if (!(await lateral.isVisible())) {
         await page.getByRole('button', { name: 'Abrir barra lateral' }).click()
+    }
+    else if (await lateral.locator('[data-prueba="menu-rail"]').isVisible()) {
+        await lateral.locator('[data-prueba="alternar-menu"]').click()
+        await expect(lateral.locator('[data-prueba="menu-principal"]')).toBeVisible()
     }
     // En teléfono el menú se abre en un panel aparte con los mismos enlaces.
     const abierto = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Inicio' }) })
@@ -62,6 +69,19 @@ async function esperarQuieto(elemento: Locator): Promise<void> {
         anterior = caja
         return quieto
     }, { intervals: [100] }).toBe(true)
+}
+
+/** Elige la empresa activa desde el menú del usuario (barra superior). */
+export async function elegirEmpresa(page: Page, nombre: string | RegExp): Promise<void> {
+    await page.locator('[data-prueba="menu-usuario"]').click()
+    await page.getByRole('menuitem', { name: /^Empresa:/ }).click()
+    await page.getByRole('menuitemcheckbox', { name: nombre }).click()
+    await expect(empresaActiva(page)).toContainText(nombre)
+}
+
+/** La empresa activa que muestra el botón del usuario. */
+export function empresaActiva(page: Page): Locator {
+    return page.locator('[data-prueba="empresa-activa"]').first()
 }
 
 /** Va a una sección por el menú lateral. */

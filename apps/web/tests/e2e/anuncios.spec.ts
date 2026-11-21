@@ -10,10 +10,7 @@ import { entrar, ir } from './ayudas'
  * 3. Métricas del anuncio publicado: vistas, clics y tasa.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
+    await elegirEmpresa(page, nombre)
 }
 
 test('crear un anuncio con vista previa, imagen y publicarlo', async ({ page }) => {

@@ -31,6 +31,7 @@ onMounted(actualizarContadores)
  * también funciona en Mac, donde Alt+número escribe otro carácter). Nunca dentro de un campo.
  */
 const accesosRapidos = useAccesosRapidos()
+watch(() => useUsuarioActual().value?.id, () => void accesosRapidos.cargar(), { immediate: true })
 function alTeclearAcceso(evento: KeyboardEvent) {
     if (!evento.altKey || evento.ctrlKey || evento.metaKey || !/^Digit[1-9]$/.test(evento.code)) {
         return
@@ -73,78 +74,91 @@ const subgrupoActual = computed(() => ubicacion.value?.subgrupo?.id ?? null)
 /** Inicio de cada usuario: el cajero entra a su caja (`rutaInicio`). */
 const inicio = computed(() => rutaInicio(useUsuarioActual().value))
 
+/** Pendientes de una sección (punto y contador en el menú): hoy, los comprobantes por verificar. */
 function insignia(texto: string | undefined) {
     return texto ? { label: texto, color: 'primary' as const, variant: 'solid' as const } : undefined
-}
-
-/**
- * Enlace de una sección. Dentro de un grupo expandido lleva viñeta de punto (la jerarquía la da la
- * sangría); suelta o en el menú compacto, su icono. La descripción va en el tooltip.
- */
-function itemSeccion(seccion: SeccionPanel, anidado: boolean, compacto: boolean): NavigationMenuItem {
-    return {
-        'label': seccion.etiqueta,
-        'icon': anidado && !compacto ? 'i-lucide-dot' : seccion.icono,
-        'to': seccion.ruta,
-        'aria-label': seccion.etiqueta,
-        'descripcion': seccion.descripcion,
-        'badge': insignia(contadores.value[seccion.id]),
-        'onSelect': cerrarMovil,
-    }
 }
 
 function pendientesDe(secciones: SeccionPanel[]): string | undefined {
     return secciones.map(seccion => contadores.value[seccion.id]).find(Boolean)
 }
 
-/**
- * Menú por bloques (encabezados en versalitas, no clicables): Inicio y el día a día sueltos, luego
- * los grupos plegables. En el menú compacto los subgrupos se aplanan (el popover tiene un nivel).
- */
-function itemsMenu(compacto: boolean): NavigationMenuItem[] {
-    const lista: NavigationMenuItem[] = [{
-        'label': 'Inicio',
-        'icon': 'i-lucide-house',
-        'to': inicio.value,
-        'aria-label': 'Inicio',
+/** Estado de la caja propia en el menú («Abierta»), sin pedir nada más que lo de la barra. */
+const miCaja = useMiCaja()
+function estadoSeccion(id: string): string | undefined {
+    return id === 'caja' && miCaja.abierta.value ? 'Abierta' : undefined
+}
+
+/** Enlace de una sección en el menú expandido: viñeta de punto dentro del grupo, descripción en el tooltip. */
+function itemSeccion(seccion: SeccionPanel): NavigationMenuItem {
+    return {
+        'label': seccion.etiqueta,
+        'icon': 'i-lucide-dot',
+        'to': seccion.ruta,
+        'aria-label': seccion.etiqueta,
+        'descripcion': seccion.descripcion,
+        'badge': insignia(contadores.value[seccion.id]) ?? (estadoSeccion(seccion.id) ? { label: estadoSeccion(seccion.id), color: 'success' as const, variant: 'subtle' as const } : undefined),
         'onSelect': cerrarMovil,
-    }]
-    let bloque = ''
-    for (const grupo of gruposVisibles.value) {
-        if (grupo.bloque !== bloque) {
-            bloque = grupo.bloque
-            // Encabezado del bloque: versalitas, no clicable, con aire y un divisor sobre él.
-            lista.push({ label: bloque, type: 'label', class: 'mt-2 border-t border-(--ax-borde) pt-3.5 uppercase tracking-[0.06em] text-[0.6875rem] font-bold text-dimmed' })
-        }
-        if (grupo.plano) {
-            lista.push(...grupo.secciones.map(seccion => itemSeccion(seccion, false, compacto)))
-            continue
-        }
-        const hijos: NavigationMenuItem[] = grupo.secciones.map(seccion => itemSeccion(seccion, true, compacto))
-        for (const subgrupo of grupo.subgrupos) {
-            if (compacto) {
-                hijos.push(...subgrupo.secciones.map(seccion => itemSeccion(seccion, true, compacto)))
-                continue
-            }
-            hijos.push({
-                'label': subgrupo.etiqueta,
-                'icon': subgrupo.icono,
-                'aria-label': subgrupo.etiqueta,
-                'defaultOpen': subgrupo.id === subgrupoActual.value,
-                'badge': insignia(pendientesDe(subgrupo.secciones)),
-                'children': subgrupo.secciones.map(seccion => itemSeccion(seccion, true, compacto)),
-            })
-        }
-        lista.push({
-            'label': grupo.etiqueta,
-            'icon': grupo.icono,
-            'aria-label': grupo.etiqueta,
-            'defaultOpen': grupo.id === grupoActual.value,
-            'badge': insignia(pendientesDe(seccionesDeGrupo(grupo))),
-            'children': hijos,
-        })
     }
-    return lista
+}
+
+const itemInicio = computed<NavigationMenuItem>(() => ({
+    'label': 'Inicio',
+    'icon': 'i-lucide-house',
+    'to': inicio.value,
+    'aria-label': 'Inicio',
+    'corta': 'Inicio',
+    'onSelect': cerrarMovil,
+}))
+
+/** Menú expandido: Inicio y un grupo en acordeón por área (el de la página, abierto); subgrupos dentro. */
+const itemsExpandido = computed<NavigationMenuItem[]>(() => [itemInicio.value, ...gruposVisibles.value.map(grupo => ({
+    'label': grupo.etiqueta,
+    'icon': grupo.icono,
+    'aria-label': grupo.etiqueta,
+    'defaultOpen': grupo.id === grupoActual.value,
+    'badge': insignia(pendientesDe(seccionesDeGrupo(grupo))),
+    'children': [
+        ...grupo.secciones.map(itemSeccion),
+        ...grupo.subgrupos.map(subgrupo => ({
+            'label': subgrupo.etiqueta,
+            'icon': subgrupo.icono,
+            'aria-label': subgrupo.etiqueta,
+            'defaultOpen': subgrupo.id === subgrupoActual.value,
+            'badge': insignia(pendientesDe(subgrupo.secciones)),
+            'children': subgrupo.secciones.map(itemSeccion),
+        })),
+    ],
+}))])
+
+/**
+ * Menú compacto (rail): un icono con etiqueta corta por área; al tocarla se abre a su derecha un
+ * menú flotante con sus secciones agrupadas (slot `area-content`). Ajustes va abajo, aparte.
+ */
+function itemArea(grupo: (typeof gruposVisibles.value)[number]): NavigationMenuItem {
+    const pendiente = pendientesDe(seccionesDeGrupo(grupo))
+    return {
+        'label': grupo.etiqueta,
+        'corta': grupo.corta,
+        'icon': grupo.icono,
+        'aria-label': grupo.etiqueta,
+        'grupo': grupo,
+        'punto': Boolean(pendiente),
+        'active': grupo.id === grupoActual.value,
+        // El popover solo se pinta con hijos: el contenido real lo arma el slot.
+        'children': seccionesDeGrupo(grupo).map(seccion => ({ label: seccion.etiqueta, to: seccion.ruta })),
+    }
+}
+
+const itemsRail = computed<NavigationMenuItem[]>(() => [
+    { ...itemInicio.value, active: route.path === inicio.value },
+    ...gruposVisibles.value.filter(grupo => grupo.id !== 'configuracion').map(itemArea),
+])
+const itemsRailAjustes = computed<NavigationMenuItem[]>(() => gruposVisibles.value.filter(grupo => grupo.id === 'configuracion').map(itemArea))
+
+/** Para el slot del rail: el grupo con sus permisos ya filtrados. */
+function grupoDeItem(item: NavigationMenuItem): (typeof gruposVisibles.value)[number] | null {
+    return (item.grupo as (typeof gruposVisibles.value)[number] | undefined) ?? null
 }
 
 /** Buscador: las mismas secciones permitidas, por grupo, con su descripción. */
@@ -185,32 +199,47 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             :default-size="16.5"
             :min-size="15"
             :max-size="22"
+            :collapsed-size="5.5"
             class="glass-material lateral-argos"
             :ui="{
                 header: 'h-auto flex-col items-stretch gap-3 pt-4 pb-1',
                 body: 'gap-1',
-                footer: 'lg:border-t lg:border-(--ax-borde)',
+                footer: 'flex-col items-stretch gap-2 lg:border-t lg:border-(--ax-borde)',
             }"
         >
             <template #header="{ collapsed }">
-                <NuxtLink
-                    :to="inicio"
-                    class="flex min-w-0 items-center gap-2.5 px-1 font-semibold text-highlighted"
-                    :class="collapsed ? 'justify-center' : ''"
-                    aria-label="ArgosIsp, inicio"
+                <div
+                    class="flex items-center gap-2"
+                    :class="collapsed ? 'flex-col' : 'justify-between'"
                 >
-                    <LogoArgos class="size-8 shrink-0" />
-                    <span
-                        v-if="!collapsed"
-                        class="truncate text-lg tracking-[-0.02em]"
-                    >Argos<span class="text-primary">Isp</span></span>
-                </NuxtLink>
+                    <NuxtLink
+                        :to="inicio"
+                        class="flex min-w-0 items-center gap-2.5 px-1 font-semibold text-highlighted"
+                        aria-label="ArgosIsp, inicio"
+                    >
+                        <LogoArgos class="size-8 shrink-0" />
+                        <span
+                            v-if="!collapsed"
+                            class="truncate text-lg tracking-[-0.02em]"
+                        >Argos<span class="text-primary">Isp</span></span>
+                    </NuxtLink>
+                    <UButton
+                        :icon="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-left'"
+                        color="neutral"
+                        variant="ghost"
+                        size="xs"
+                        class="hidden lg:inline-flex"
+                        :title="collapsed ? 'Expandir el menú (con nombres)' : 'Compactar el menú (solo iconos)'"
+                        :aria-label="collapsed ? 'Expandir el menú' : 'Compactar el menú'"
+                        data-prueba="alternar-menu"
+                        @click="compacto = !collapsed"
+                    />
+                </div>
                 <!-- Filete con el degradado de marca: el único acento de color del menú. -->
                 <div
                     class="h-0.5 rounded-full bg-(image:--argos-degradado) opacity-80"
                     aria-hidden="true"
                 />
-                <MenuUsuario :collapsed="collapsed" />
             </template>
 
             <template #default="{ collapsed }">
@@ -222,12 +251,50 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                     class="bg-transparent ring-default lg:hidden"
                 />
                 <UNavigationMenu
-                    :key="`${grupoActual}-${subgrupoActual}-${collapsed}`"
-                    :collapsed="collapsed"
-                    :items="itemsMenu(collapsed)"
+                    v-if="collapsed"
+                    :key="`rail-${grupoActual}`"
+                    collapsed
+                    :items="itemsRail"
                     orientation="vertical"
                     tooltip
-                    popover
+                    :popover="{ content: { side: 'right', align: 'start', sideOffset: 10 } }"
+                    aria-label="Menú principal"
+                    data-prueba="menu-rail"
+                    :ui="{ root: 'gap-1', list: 'flex flex-col gap-1', link: 'px-0 py-0 justify-center before:hidden' }"
+                >
+                    <template #item="{ item, active }">
+                        <span
+                            class="flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2"
+                            :class="active ? 'bg-primary/10 text-primary' : 'text-muted group-hover:text-highlighted'"
+                        >
+                            <UChip
+                                :show="Boolean(item.punto)"
+                                color="warning"
+                                size="sm"
+                            >
+                                <UIcon
+                                    :name="item.icon ?? 'i-lucide-circle'"
+                                    class="size-5"
+                                />
+                            </UChip>
+                            <span class="max-w-full truncate text-[0.6875rem] leading-tight font-medium">{{ item.corta ?? item.label }}</span>
+                        </span>
+                    </template>
+                    <template #item-content="{ item, close }">
+                        <MenuArea
+                            v-if="grupoDeItem(item)"
+                            :grupo="grupoDeItem(item)!"
+                            :contadores="contadores"
+                            :estado-seccion="estadoSeccion"
+                            @elegir="close?.(); cerrarMovil()"
+                        />
+                    </template>
+                </UNavigationMenu>
+                <UNavigationMenu
+                    v-else
+                    :key="`expandido-${grupoActual}-${subgrupoActual}`"
+                    :items="itemsExpandido"
+                    orientation="vertical"
                     aria-label="Menú principal"
                     data-prueba="menu-principal"
                     :ui="{
@@ -260,6 +327,38 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
             </template>
 
             <template #footer="{ collapsed }">
+                <UNavigationMenu
+                    v-if="collapsed && itemsRailAjustes.length"
+                    collapsed
+                    :items="itemsRailAjustes"
+                    orientation="vertical"
+                    :popover="{ content: { side: 'right', align: 'end', sideOffset: 10 } }"
+                    aria-label="Ajustes"
+                    class="w-full"
+                    :ui="{ link: 'px-0 py-0 justify-center before:hidden' }"
+                >
+                    <template #item="{ item, active }">
+                        <span
+                            class="flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2"
+                            :class="active ? 'bg-primary/10 text-primary' : 'text-muted group-hover:text-highlighted'"
+                        >
+                            <UIcon
+                                :name="item.icon ?? 'i-lucide-settings'"
+                                class="size-5"
+                            />
+                            <span class="text-[0.6875rem] leading-tight font-medium">{{ item.corta ?? item.label }}</span>
+                        </span>
+                    </template>
+                    <template #item-content="{ item, close }">
+                        <MenuArea
+                            v-if="grupoDeItem(item)"
+                            :grupo="grupoDeItem(item)!"
+                            :contadores="contadores"
+                            :estado-seccion="estadoSeccion"
+                            @elegir="close?.(); cerrarMovil()"
+                        />
+                    </template>
+                </UNavigationMenu>
                 <p
                     v-if="!collapsed"
                     class="hidden px-1 text-xs text-dimmed lg:block"
