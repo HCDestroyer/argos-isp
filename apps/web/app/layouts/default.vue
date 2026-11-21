@@ -260,7 +260,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                     :popover="{ content: { side: 'right', align: 'start', sideOffset: 10 } }"
                     aria-label="Menú principal"
                     data-prueba="menu-rail"
-                    :ui="{ root: 'gap-1', list: 'flex flex-col gap-1', link: 'px-0 py-0 justify-center before:hidden' }"
+                    :ui="{ root: 'gap-1', list: 'flex flex-col gap-1', link: 'px-0 py-0 justify-center before:hidden', content: 'min-w-0 rounded-xl bg-(--ax-tarjeta) ring ring-(--ax-borde) shadow-(--ax-sombra-flotante)' }"
                 >
                     <template #item="{ item, active }">
                         <span
@@ -335,7 +335,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
                     :popover="{ content: { side: 'right', align: 'end', sideOffset: 10 } }"
                     aria-label="Ajustes"
                     class="w-full"
-                    :ui="{ link: 'px-0 py-0 justify-center before:hidden' }"
+                    :ui="{ link: 'px-0 py-0 justify-center before:hidden', content: 'min-w-0 rounded-xl bg-(--ax-tarjeta) ring ring-(--ax-borde) shadow-(--ax-sombra-flotante)' }"
                 >
                     <template #item="{ item, active }">
                         <span
