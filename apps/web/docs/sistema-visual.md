@@ -84,16 +84,39 @@ compacta, › expande; `data-prueba="alternar-menu"`). No hay otro botón de ple
   subgrupos dentro cuando pasan de ~7 secciones y la descripción en tooltip. **Ajustes** va abajo,
   aparte, en su propio acordeón (`data-prueba="menu-ajustes"`), como en el compacto.
 
-En el teléfono el menú es el panel lateral (drawer) en modo expandido. El buscador Ctrl/Cmd+K
-encuentra todas las secciones permitidas.
+En el teléfono y la tableta (< 1024 px) no hay menú lateral ni botón de menú: manda la **isla de
+navegación abajo** (abajo). El buscador Ctrl/Cmd+K encuentra todas las secciones permitidas.
+
+## Teléfono: isla de navegación abajo (`PanelIslaMovil`)
+
+Pedido del PM (como la barra del portal; tablero `MarcoMovil` en `.claude/diseno/tableros/`):
+
+- Isla flotante abajo, a 12 px de los bordes y del área segura (`env(safe-area-inset-bottom)`), con
+  el radio (22 px), el vidrio y la sombra del menú lateral. Solo bajo `lg`; desde 1024 px no existe.
+- Cinco destinos de 56 px de alto, ícono Lucide con texto corto debajo: **Inicio**, los **2 primeros
+  accesos rápidos** del usuario (los mismos del encabezado de escritorio; Cobrar en verde), **Avisos**
+  con su punto cian y **Más**. Todo según permisos (sin `comprobantes.ver` no hay Avisos). El activo va
+  en índigo (700 claro, 300 oscuro, para pasar AA a 11 px) con fondo suave.
+- **Más** abre el menú completo a pantalla completa (el mismo `UDashboardSidebar`, `mode="modal"`):
+  marca y cerrar arriba, «Buscar una sección…» (abre el buscador), «Personalizar mis accesos», las
+  áreas en acordeón con la de la página abierta, Ayuda y Ajustes abajo.
+- En el teléfono el encabezado lleva la marca a la izquierda y, a la derecha, caja, sistema y la
+  cuenta; los accesos y los avisos se mudan a la isla.
+- `--ax-isla-reserva` (`main.css`) es el alto que la isla le quita a la pantalla (0 en escritorio):
+  lo usan el contenido (`.panel-cuerpo`, el desplazamiento sigue dentro del contenedor), la barra
+  de acciones de los formularios (`FormularioAcciones`, se detiene encima de la isla), la acción
+  fija de cada pantalla (`PanelBarraAccion`) y los avisos emergentes (`toaster` en `app.config.ts`).
+- **Acción principal fija** (`PanelBarraAccion`, por ejemplo «Promesa» y «Cobrar Q …» de la ficha del
+  cliente): otra isla de vidrio justo encima de la de navegación, sin taparla; el contenido gana su
+  aire. Desde `lg` va en su lugar, dentro del flujo.
 
 ## Encabezado (`PanelPagina`)
 
 Botones flotantes sueltos; en medio, aire. El título nunca va en el encabezado.
 
 - **Izquierda, «lo que haces»:** el buscador «Buscar…» (pastilla ancha con Ctrl K, desde `lg`) y
-  los accesos rápidos (2 directos, Cobrar en verde, y «Más» en círculo). En el teléfono, antes, el
-  botón que abre el menú.
+  los accesos rápidos (2 directos, Cobrar en verde, y «Más» en círculo). En el teléfono, la marca
+  (los accesos van en la isla de abajo).
 - **Derecha, «lo que vigilas»:** círculos con su punto de color: la caja (icono con punto verde abierta o gris cerrada; su menú dice la caja,
   desde cuándo, el fondo inicial, «Ir a la caja» y «Cerrar caja…» o «Abrir caja…», cada uno con su
   permiso; nunca montos en el icono), el estado del sistema (icono con punto si hay aviso, con
@@ -140,7 +163,9 @@ rol; sin permiso, el acceso no aparece.
 | `FormularioSeccion` + `FormularioAcciones` | Formulario en página: secciones con título y descripción a la izquierda (consulta de contenedor: se apilan en paneles angostos) y barra de acciones fija abajo |
 | `ModalTitulo` | Título de modal con icono en pastilla por tipo (info, advertencia, peligro) |
 | `EstadoServicioBadge`, `EstadoPagoBadge`… | Estados con color + icono + texto |
-| `AvisosBoton` | Campana de la barra superior |
+| `AvisosBoton` | Campana de la barra superior (en el teléfono, Avisos va en la isla) |
+| `PanelIslaMovil` | Navegación del teléfono: isla abajo con Inicio, 2 accesos, Avisos y «Más» |
+| `PanelBarraAccion` | Acción principal fija de una pantalla en el teléfono, encima de la isla |
 
 `app.config.ts` unifica: tarjetas (radio 12 px, borde `--ax-borde`), tablas (cabecera en versalitas
 sobre `--ax-panel`, filas con línea fina, hover suave, sin cebra), ítem activo del menú, botones en
@@ -181,7 +206,8 @@ pruebas de axe (`tests/e2e/accesibilidad.spec.ts`) recorren las pantallas princi
 - **Ficha** (NuevoClienteFicha): `ClienteFranja` fija arriba que se compacta al bajar (centinela con
   `IntersectionObserver`), contadores con `TarjetaDato`, acciones en círculos flotantes,
   `PromesaServicioBoton` (la promesa es por servicio), pestañas segmentadas (`UTabs` pill) dentro de
-  la tarjeta y `SeccionSinApi` para lo que la API aún no da. Teléfono: barra fija abajo.
+  la tarjeta y `SeccionSinApi` para lo que la API aún no da. Teléfono: barra fija abajo
+  (`PanelBarraAccion`, encima de la isla de navegación).
 - **Alta** (NuevoAltaCliente): tarjeta centrada con el progreso de 3 pasos; `ClienteFormulario`
   con `con-servicio` y `ServicioAltaFormulario` con `pasos-externos`.
 - Tonos de estado para pastillas: `tono-exito`, `tono-aviso`, `tono-error` (además de `tono-marca`).

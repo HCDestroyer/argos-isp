@@ -838,6 +838,40 @@
       "w": 1440,
       "x": 1520,
       "y": 8900
+    },
+    "PortalFacturas.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Facturas y pagos (pestañas) y corte con la acción fija abajo"
+    },
+    "PortalSoporte.dc.html": {
+      "x": 0,
+      "y": 1100,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Soporte: tickets, reportar un problema y conversación"
+    },
+    "PortalContactos.dc.html": {
+      "x": 0,
+      "y": 2200,
+      "w": 1400,
+      "h": 980,
+      "page": "portal",
+      "title": "Portal · Mis contactos, un contacto y «Está a tu cargo»"
+    },
+    "MarcoMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Marco del panel · teléfono: isla de navegación abajo, acción fija y menú «Más» (interactiva)",
+      "w": 390,
+      "x": 0,
+      "y": 13840
     }
   },
   "createdOnFiles": {
@@ -857,7 +891,8 @@
     "tituloA",
     "tituloRed",
     "tituloConta",
-    "tituloOper"
+    "tituloOper",
+    "tituloPortal"
   ],
   "notes": {
     "titulo": {
@@ -930,6 +965,14 @@
       "w": 240,
       "x": 0,
       "y": -300
+    },
+    "tituloPortal": {
+      "x": 0,
+      "y": -300,
+      "text": "Portal del cliente: pantallas nuevas",
+      "kind": "title1",
+      "maxW": 1400,
+      "page": "portal"
     }
   },
   "order": [
@@ -1021,7 +1064,11 @@
     "OperRoles.dc.html",
     "OperBitacora.dc.html",
     "OperLealtad.dc.html",
-    "OperSorteo.dc.html"
+    "OperSorteo.dc.html",
+    "PortalFacturas.dc.html",
+    "PortalSoporte.dc.html",
+    "PortalContactos.dc.html",
+    "MarcoMovil.dc.html"
   ],
   "pages": [
     {
@@ -1051,6 +1098,10 @@
     {
       "id": "operacion",
       "name": "Operación: servicios, facturas, comprobantes y más"
+    },
+    {
+      "id": "portal",
+      "name": "Portal del cliente"
     }
   ],
   "title": "Rediseño ArgosIsp"

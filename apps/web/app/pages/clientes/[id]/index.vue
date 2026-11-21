@@ -332,7 +332,7 @@ onMounted(cargar)
 
         <div
             v-else-if="cliente"
-            class="flex flex-col gap-4 pb-20 sm:pb-0"
+            class="flex flex-col gap-4"
         >
             <div
                 ref="centinela"
@@ -734,9 +734,9 @@ onMounted(cargar)
                 </div>
             </section>
 
-            <!-- Teléfono: la acción principal fija abajo (Promesa y «Cobrar Q …»). -->
-            <div
-                class="fixed inset-x-0 bottom-0 z-20 flex gap-2 border-t border-(--ax-borde) bg-(--ax-tarjeta) p-3 sm:hidden"
+            <!-- Teléfono: la acción principal fija abajo (Promesa y «Cobrar Q …»), encima de la isla de navegación. -->
+            <PanelBarraAccion
+                class="sm:hidden"
                 data-prueba="barra-cobro-cliente"
             >
                 <PromesaServicioBoton
@@ -754,7 +754,7 @@ onMounted(cargar)
                     block
                     class="flex-1 rounded-full"
                 />
-            </div>
+            </PanelBarraAccion>
         </div>
         <ClienteSlideover
             v-if="cliente && puede('clientes.editar')"
