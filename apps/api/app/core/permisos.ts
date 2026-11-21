@@ -192,6 +192,10 @@ export const PERMISOS = {
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
+    'bancos.importar_extracto_archivo':
+        'Importar el estado de cuenta tal como lo descarga el banco (.xlsx, .xls o .csv) y ver su vista previa',
+    'bancos.guardar_mapeo_extracto':
+        'Guardar el mapeo de columnas del estado de cuenta de una cuenta bancaria',
     'bancos.conciliar':
         'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
     'bancos.reatribuir_llegada':
@@ -661,6 +665,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',
+            'bancos.importar_extracto_archivo',
+            'bancos.guardar_mapeo_extracto',
             'bancos.conciliar',
             'bancos.reatribuir_llegada',
             'cartera.provisionar',
