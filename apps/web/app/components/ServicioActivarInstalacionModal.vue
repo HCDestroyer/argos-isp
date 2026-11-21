@@ -83,6 +83,12 @@ async function recargar() {
         :description="etiquetaServicio(servicio)"
         :dismissible="!enviando"
     >
+        <template #title>
+            <ModalTitulo
+                texto="Activar instalación"
+                :icono="ICONOS.reactivar"
+            />
+        </template>
         <template #body>
             <UForm
                 id="form-activar-instalacion"
@@ -175,6 +181,7 @@ async function recargar() {
             <div class="flex w-full justify-end gap-2">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     :disabled="enviando"

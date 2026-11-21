@@ -246,66 +246,76 @@ onMounted(cargar)
             v-else-if="cliente"
             class="flex flex-col gap-6"
         >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex flex-col gap-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h2 class="text-xl font-semibold text-highlighted">
-                            {{ cliente.nombre }}
-                        </h2>
-                        <UBadge
-                            :label="cliente.tipo === 'empresa' ? 'Empresa' : 'Persona'"
-                            :icon="cliente.tipo === 'empresa' ? 'i-lucide-building-2' : 'i-lucide-user'"
-                            color="neutral"
-                            variant="outline"
-                        />
-                    </div>
-                    <p
-                        v-if="cliente.responsable_pago_id"
-                        class="flex items-center gap-1.5 text-sm text-muted"
-                    >
-                        <UIcon
-                            name="i-lucide-hand-coins"
-                            class="size-4 shrink-0"
-                        />
-                        Paga:
-                        <ULink
-                            :to="`/clientes/${cliente.responsable_pago_id}`"
-                            class="text-primary"
+            <div class="flex flex-col gap-4 surface-card p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+                <div class="flex min-w-0 items-start gap-4">
+                    <AvatarIniciales
+                        :nombre="cliente.nombre"
+                        size="3xl"
+                        class="hidden sm:inline-flex"
+                    />
+                    <div class="flex min-w-0 flex-col gap-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h2 class="text-xl font-bold tracking-[-0.02em] text-highlighted">
+                                {{ cliente.nombre }}
+                            </h2>
+                            <UBadge
+                                :label="cliente.tipo === 'empresa' ? 'Empresa' : 'Persona'"
+                                :icon="cliente.tipo === 'empresa' ? 'i-lucide-building-2' : 'i-lucide-user'"
+                                color="neutral"
+                                variant="outline"
+                            />
+                        </div>
+                        <p
+                            v-if="cliente.responsable_pago_id"
+                            class="flex items-center gap-1.5 text-sm text-muted"
                         >
-                            {{ cliente.responsable_pago_nombre ?? `Cliente #${cliente.responsable_pago_id}` }}
-                        </ULink>
-                    </p>
-                    <p class="text-sm text-muted">
-                        Cliente #{{ cliente.id }}<template v-if="zona">
-                            · {{ zona }}
-                        </template> · alta {{ formatearFecha(cliente.created_at) }}
-                    </p>
-                    <p
-                        v-if="origen"
-                        class="flex items-center gap-1.5 text-xs text-dimmed"
-                        data-prueba="cliente-importado"
-                    >
-                        <UIcon
-                            name="i-lucide-import"
-                            class="size-3.5 shrink-0"
-                        />
-                        {{ textoImportado(origen) }}
-                    </p>
+                            <UIcon
+                                name="i-lucide-hand-coins"
+                                class="size-4 shrink-0"
+                            />
+                            Paga:
+                            <ULink
+                                :to="`/clientes/${cliente.responsable_pago_id}`"
+                                class="text-primary"
+                            >
+                                {{ cliente.responsable_pago_nombre ?? `Cliente #${cliente.responsable_pago_id}` }}
+                            </ULink>
+                        </p>
+                        <p class="text-sm text-muted">
+                            Cliente #{{ cliente.id }}<template v-if="zona">
+                                · {{ zona }}
+                            </template> · alta {{ formatearFecha(cliente.created_at) }}
+                        </p>
+                        <p
+                            v-if="origen"
+                            class="flex items-center gap-1.5 text-xs text-dimmed"
+                            data-prueba="cliente-importado"
+                        >
+                            <UIcon
+                                name="i-lucide-import"
+                                class="size-3.5 shrink-0"
+                            />
+                            {{ textoImportado(origen) }}
+                        </p>
+                    </div>
                 </div>
 
+                <!-- Una sola acción primaria (Cobrar); el resto, secundarias. -->
                 <div class="flex flex-wrap gap-2">
                     <UButton
                         v-if="puede('pagos.registrar')"
                         :to="`/cobro?cliente=${cliente.id}`"
-                        icon="i-lucide-hand-coins"
+                        :icon="ICONOS.cobrar"
                         label="Cobrar"
                         color="success"
+                        class="glow-brand"
                     />
                     <UButton
                         v-if="puede('servicios.crear')"
                         icon="i-lucide-plus"
                         label="Nuevo servicio"
-                        class="glow-brand"
+                        color="neutral"
+                        variant="outline"
                         data-prueba="nuevo-servicio-cliente"
                         @click="altaServicioAbierta = true"
                     />

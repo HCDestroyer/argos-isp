@@ -9,7 +9,7 @@ pantallas:
 
 Los bienes de la empresa que se deprecian: equipo de red, cómputo, mobiliario, vehículos, herramientas, edificios. Aquí los das de alta, ves su depreciación y los das de baja por venta o retiro.
 
-Está en **Compras → Activos fijos**.
+Está en **Finanzas → Compras → Activos fijos**.
 
 ## Quién la usa
 

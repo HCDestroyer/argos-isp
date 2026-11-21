@@ -15,7 +15,7 @@ Aquí revisas los comprobantes de depósito y transferencia que mandan los clien
 - **Aprobar:** `comprobantes.aprobar` (`admin`, `cajero`, `contabilidad`).
 - **Rechazar:** `comprobantes.rechazar` (`admin`, `cajero`, `contabilidad`).
 
-Está en **Cobros → Comprobantes**. El menú muestra cuántos están pendientes.
+Está en **Comprobantes**. El menú muestra cuántos están pendientes.
 
 ## Lista de comprobantes
 

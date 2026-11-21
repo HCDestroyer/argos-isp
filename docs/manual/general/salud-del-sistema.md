@@ -1,5 +1,7 @@
 ---
 orden: 5
+pantallas:
+    - /sistema/salud
 ---
 
 # Salud del sistema

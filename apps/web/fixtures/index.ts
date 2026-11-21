@@ -16,6 +16,7 @@ import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
 import { rutasVersion } from './version/rutas'
+import { rutasSistema } from './sistema/rutas'
 import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
@@ -532,6 +533,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCompras,
     ...rutasAnuncios,
     ...rutasVersion,
+    ...rutasSistema,
     // Antes que servicios y planes: `/servicios/:id/adicionales` y `/planes/:id/adicionales`.
     ...rutasAdicionales,
     ...rutasEmpresas,

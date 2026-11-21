@@ -327,7 +327,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // `routers.ver` de la página; el modal se monta solo con `routers.cambiar_tipo_conexion`.
     'RouterTipoConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
     'CambiarTipoConexionModal.vue': { permisos: ['routers.cambiar_tipo_conexion', 'routers.ver'], desde: ['components/RouterTipoConexion.vue'], exentos: { 'components/RouterTipoConexion.vue': ['routers.ver'] } },
-    'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
+    // Desde el rediseño, «Nuevo cliente» abre su página (`/clientes/nuevo`): el panel lateral queda para editar desde la ficha.
+    'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar', 'clientes.ver'], desde: ['pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {
