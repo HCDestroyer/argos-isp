@@ -87,6 +87,38 @@ Contrato: `.claude/integration/contratos/multiempresa.md`. Varios NIT en una ins
 - `referencia` (Iris 0.5.0, pedido A12): cómo llegar, texto libre hasta 300 caracteres (`core.clientes.referencia`), en el alta, la edición y la vista; diff en `audit.cambios`.
 - Teléfonos (Iris 0.5.0, pedido A14; `telefonos.ts`): `telefono` y `movil` del cliente y `contacto_telefono` del servicio. Regla: 8 dígitos de Guatemala que empiezan con 2-7, con `+502`/`502`/`00502` opcional, o internacional con `+` (o `00`) y 8 a 15 dígitos; se toleran espacios, guiones, puntos y paréntesis. Se guardan normalizados: `+502 5512-3344` (Guatemala) o `+15551234567` (internacional). **Solo se valida cuando el campo cambia**: reenviar el valor guardado tal cual (aunque sea un teléfono viejo inválido) no falla ni lo toca; otro valor inválido responde 422 en el campo (`rule: 'telefono'`). En el alta (`POST /clientes`, `POST /servicios`) no hay valor anterior: se validan siempre, y uno inválido responde 422 sin crear nada. Los teléfonos existentes no se migran (una migración masiva no dejaría diff por fila en `audit.cambios`). El canal `consola` (importador y comandos `ace`) guarda un teléfono inválido tal cual en vez de rechazar el registro. La edición de cliente y de servicio verifica `version` (409) antes de validar. El VineJS solo limita el largo (30); la regla vive en la acción para poder comparar con lo guardado.
 
+## Contactos del cliente (`contactos.ts`; contrato Iris 0.10.0 §3.5, A42, y 0.10.1 §3.8, A46)
+
+- `core.contactos_cliente` (nombre, `relacion`: `titular`, `familiar`, `inquilino`, `empleado`, `otro`; `servicios` bigint[] o null = todos; `permisos` jsonb `consultar`, `reportar`, `pagar`, `avisos`, todos encendidos por defecto; `persona_cliente_id`; `origen`; `version`; `quitado_en`) y `core.contactos_cliente_telefonos` (E.164, `whatsapp`, `principal` uno por contacto, `adicional`). Un mismo número puede estar en varios clientes.
+- **Contacto titular**: uno por cliente, lo crea la base al insertar el cliente (trigger `clientes_contacto_titular`; los existentes en la migración). Sus números registrados son `telefono` y `movil` del cliente; en la tabla de teléfonos solo lleva los adicionales (`telefonos_adicionales[]` de `POST /clientes`, hasta 4), que nunca cuentan como registrados (§7.5, §12.4). No se quita (`422 contacto_titular`); desde Iris, todo `PUT`/`DELETE` sobre él es `422 contacto_titular_no_permitido`.
+- Acciones `CrearContactoCliente`, `EditarContactoCliente`, `QuitarContactoCliente` (permiso `contactos.gestionar`, `Idempotency-Key` obligatoria, `version` al editar y quitar) y `BuscarContactos` (`contactos.buscar`, auditada con el número enmascarado). Rutas en `start/routes/contactos.ts`: `GET /contactos/buscar?telefono=`, `GET /clientes/:id/contactos`, `GET /clientes/:id/a-cargo`, `POST /clientes/:id/contactos`, `PUT /contactos/:id`, `DELETE /contactos/:id`. Con el token de Iris exigen `X-Iris-Actor` (`exigirActorIris`); gestionar nunca con `asistente_ia` (`403 actor_ia_no_permitido`). Límite de búsquedas: 60 por minuto por token y 20 por actor (`CONTACTOS_LIMITE_TOKEN`, `CONTACTOS_LIMITE_ACTOR`; `429 demasiadas_busquedas` con `Retry-After`, `#core/limite_ventana`).
+- `buscar` nunca devuelve números ni documentos: titular (`es_titular`, `adicional` si el número es uno de sus adicionales) o contacto (`a_cargo: true`), dentro del alcance de empresas.
+- A46: `persona_cliente_id` = otro cliente que comparte empresa con el dueño (422 si no). Desde Iris solo se guarda si un número del contacto es el `telefono`/`movil` **verificado** (`telefono_verificado_en`/`movil_verificado_en` en los últimos 12 meses) de esa persona; si no, queda suelto. Cambiar los números del contacto o el teléfono de la persona (`EditarCliente`) revalida el vínculo: si antes coincidía y ya no, se rompe (`motivo: vinculo_roto`). Quitar el contacto lo rompe al momento.
+- Evento `cliente.contactos_cambiados` (sin números). Para notify: `telefonosEnmascarados(contacto_id)` (`+502 ****-3344`). Para A3: `exigirPermisoDeContacto` (`X-Iris-Contacto`, `403 servicio_fuera_del_contacto` y `permiso_de_contacto`).
+- `core.clientes.campos_sin_confirmar`: `telefono`, `movil`, `email` agregados por `completar-datos` y el `nit_cui` de un alta de Iris no cuentan como registrados hasta que el titular los confirme; el personal que los edita los confirma.
+
+## De la venta a la instalación (`instalacion_iris.ts`, `identidad.ts`; contrato Iris 0.10.0 §3.4)
+
+Rutas en `start/routes/instalacion_iris.ts`. Con el token de Iris: `X-Iris-Actor` obligatoria, nunca el asistente (`403 actor_ia_no_permitido`) y solo servicios de Iris (`403 servicio_no_de_iris`: cliente con `codigo_externo` `iris:*` o una orden ya registrada para ese servicio en `core.servicios_origenes_iris`). `version` opcional en todas.
+
+| Acción | Permiso | Ruta | Eventos |
+| --- | --- | --- | --- |
+| `ReservarIpServicio` (A38) | `servicios.reservar_ip` | `POST /servicios/:id/reservar-ip` | `asignacion.cambiada` |
+| `VencerReservaIp` (cron `reservas_ip_vencidas`, 30 días) | (sistema) | — | `asignacion.cambiada` (vacía) |
+| `CambiarPlanPendiente` (A40) | `servicios.cambiar_plan_pendiente` | `POST /servicios/:id/cambiar-plan` | `servicio.config_cambiada` (`plan`, `precio`, con `origen_tipo`/`origen_id`) |
+| `RegistrarIdentidadCliente` (A41) | `clientes.registrar_identidad` | `POST /clientes/:id/identidad` (multipart) | `cliente.identidad_registrada` |
+| `VerIdentidadCliente` (cada vista auditada) | `clientes.ver_identidad` | `GET /clientes/:id/identidad`, `GET /clientes/:id/identidad/:identidadId/frente\|reverso` | — |
+| `BorrarIdentidadesCliente` (cron `identidades_vencidas`, 12 meses tras el retiro) | (sistema) | — | — |
+| `CompletarDatosServicio` (A43) | `servicios.completar_datos` | `POST /servicios/:id/completar-datos` | `cliente.actualizado`, `servicio.datos_cambiados` |
+| `CambiarTitularServicio` (A39) | `servicios.cambiar_titular` | `POST /servicios/:id/cambiar-titular` (multipart) | `servicio.titular_cambiado`, `cliente.identidad_registrada` |
+
+- **A38**: un pendiente no recibe IP al crearse (salvo una pedida a mano); `activar-instalacion` la asigna con el router final (`422 sin_ip_disponible`) y exige que el plan esté asignado a ese router (`422 plan_no_permitido`).
+- **A40**: `GET /planes?router_id=&modo=residencial|empresarial` (activos, del modo y globales o del router); `Plan.modo` y `Plan.routers`; `catalogo.cambiado` de plan suma `modo` y `routers`.
+- **A41**: número, nombre y fotos cifrados con AES-256-GCM (clave derivada de `APP_KEY`), huellas HMAC para comparar; solo vigente y anterior; nunca en eventos, logs ni portal; el token de Iris no la lee. Cliente con historial: documento y nombre deben coincidir (`422 titular_no_coincide`); sin documento previo, se guarda sin confirmar. Nunca escribe `nit_cui`.
+- **A39**: Argos decide el titular (documento y nombre normalizado en la empresa del servicio): existente al momento, `422 titular_no_coincide` o nuevo con `posible_duplicado`. Límites (Redis, `#core/limite_ventana`): 2 por servicio y 10 por empresa y actor al día, 5 `titular_no_coincide` por documento en 24 h (`429 demasiados_cambios_titular`). El cliente anterior sin servicios ni movimientos se elimina. `GET /reportes/titulares-iris?existente=true` (`servicios.ver`) lista los asignados a clientes existentes para revisión.
+- **A43**: solo llena vacíos (`422 campo_ya_registrado`), el nombre solo con la identidad vigente, y nada de contacto ni receptor fiscal en un cliente con historial (`422 cliente_con_historial`). `core.servicios.precision_m`.
+- Errores sin el valor recibido en `detail` ni en `errors[]`.
+
 ## Integración Horus (`integraciones_horus.ts`, `sso.ts`; contrato `.claude/integration/contratos/horus.md`)
 
 El conector viene apagado: sin token generado Horus no lee nada, y nada de Argos espera a Horus.
@@ -112,6 +144,8 @@ El conector viene apagado: sin token generado Horus no lee nada, y nada de Argos
 - **Tickets de Iris sin destino (0.7.0)**: `destino` opcional en `POST /integraciones/iris/sso/tickets` (canje y vinculación llevan a `/`); `usuario.id_externo` con el formato de `X-Iris-Actor` (`[A-Za-z0-9_-]{1,64}`, 422 si no). Horus sigue exigiendo destino.
 
 ## Servicios
+
+Código y nombre (Iris 0.10.0 §3.7, A45): `codigo` (`S-000412`) lo pone la base al insertar (trigger `servicios_codigo`, secuencia `core.servicios_codigo_seq` de toda la instalación: un servicio que cambia de empresa conserva su código sin chocar), único e inmutable; `nombre` opcional hasta 60, en el alta y la edición (`servicio.datos_cambiados` con `nombre`). Los webhooks a Iris con `servicio_id` suman `servicio_codigo` y `servicio_nombre` (contrato ≥ 0.10.0).
 
 Datos de ubicación y contacto (Iris 0.5.0, pedidos A10, A12 y A13): `direccion`, `coordenadas`, `referencia` (texto libre hasta 300) y el contacto en sitio `contacto_nombre` (hasta 200) y `contacto_telefono` (normalizado, `telefonos.ts`), en el alta, la edición y la vista. Cambiarlos emite `servicio.datos_cambiados { servicio_id, empresa_id, empresas[], cliente_id, campos[] }` (solo nombres; `empresas` = `[empresa_id]`, la forma de `cliente.actualizado`), nunca `servicio.config_cambiada`: no cambian la red, y así RouterOS, coa y `aaa-cache` no reaccionan (`aaa-cache` lo excluye en `acepta`). No se emite al crear.
 
