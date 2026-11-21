@@ -362,6 +362,26 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   (cambió `costo_override` o un plan temporal con otro precio) y de `catalogo.cambiado` de plan
   (cambió el precio) llega tal cual: `campos[]` se reenvía completo, sin filtro de versión (es
   aditivo). Lo emite A1; prueba en `tests/integraciones/iris_webhooks_080.spec.ts`.
+- **Cobro de las órdenes de Iris** (contrato 0.9.0 §2.3, A36; `EVENTOS_DESDE_090`, solo con
+  `conectorAdmite('0.9.0')`): `factura.emitida` / `.anulada` (`factura_id`, `numero` = serie-número del
+  DTE o el id, `empresa_id`, `cliente_id`, `servicio_id`, `origen_tipo` `iris_orden`, `origen_id`,
+  `estado`, `total`, `saldo` con `verFactura` de A3, `moneda` `GTQ`) y `pago.registrado` / `.anulado`
+  (`pago_id`, `factura_id`, `origen_tipo`, `origen_id`, `empresa_id`, `monto` aplicado a esa factura,
+  `fecha` del pago). **Solo** facturas con `origen_externo_tipo = iris_orden`; un pago que cubre varias
+  facturas de Iris sale con la primera (un webhook por evento del outbox).
+- **Contactos y titular** (contrato 0.10.0 §2.3, A42 y A39; `EVENTOS_DESDE_0100`):
+  `cliente.contactos_cambiados` (`cliente_id`, `empresa_id`, `contacto_id`, `accion`, `campos[]` de la
+  lista cerrada `nombre`, `relacion`, `servicios`, `permisos`, `telefonos`, `persona_cliente_id`; nunca
+  números) y `persona_cliente_id` (A46) solo con `conectorAdmite('0.10.1')`.
+  `servicio.titular_cambiado` (`servicio_id`, `empresa_id`, `de_cliente_id`, `a_cliente_id`,
+  `existente`, `posible_duplicado`, `de_cliente_eliminado`, `motivo_codigo` `menor_de_edad`·`otro`,
+  `origen_tipo`, `origen_id`); nunca el texto del motivo ni el documento.
+- **Equipos del cliente** (contrato 0.12.0 §2.3 y §3.10, A48; `EVENTOS_DESDE_0120`):
+  `inventario.equipo_cambiado` (`servicio_id`, `empresa_id`, `cliente_id`, `sale_unidad_id`,
+  `entra_unidad_id`, `motivo`, `destino_sale`, `origen`, `origen_id`; nunca `nota` ni
+  `cobro_propuesto`) e `inventario.unidad_estado_cambiado` (`unidad_id`, `empresa_id`, `servicio_id`,
+  `de`, `a`, `motivo`; sin costos, proveedor ni RMA). Los emiten A1 y A3 (`.claude/integration/a6.md`);
+  las pruebas usan eventos de muestra (`tests/integraciones/iris_webhooks_0120.spec.ts`).
 - **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
   reservado; `receptor.ts`, `actions/recibir_webhook_iris.ts`, tabla `integraciones.iris_recibidos`).
   Misma firma `v1=` que Horus con el secreto de entrada del canje, ±5 min, 503 `iris_apagado` con el
