@@ -22,6 +22,8 @@ import { bodegasDelUsuario } from '#inventario/tecnicos'
  */
 
 export const CONTRATO_VINCULOS = '0.14.0'
+/** Desde 0.13.1 (H7) un vínculo conocido que no coincide responde `actor_no_coincide` en la bodega personal. */
+export const CONTRATO_ACTOR_NO_COINCIDE = '0.13.1'
 
 const FORMATO_ACTOR = /^usuario:([A-Za-z0-9_-]{1,64})$/
 
@@ -106,7 +108,18 @@ export async function exigirVinculoIris(
 ): Promise<VinculoVigente | null> {
     if (!(await esActorIris(t))) return null
     const estado = await estadoVinculos(t.trx)
-    if (!estado.exige) return null
+    if (!estado.exige) {
+        // 0.13.1 (H7): con un vínculo ya conocido, actor_no_coincide también en la bodega personal
+        const idActor = idIrisDe(datos.iris_actor)
+        if (!idActor || !contratoAdmite(estado.contrato, CONTRATO_ACTOR_NO_COINCIDE)) return null
+        const conocido = await vinculoVigente(t.trx, datos.empresaId, idActor)
+        if (conocido && conocido.usuario_id !== datos.usuarioId) {
+            throw actorNoCoincideVinculo(
+                `X-Iris-Actor (usuario:${idActor}) está vinculado a otro usuario de Argos, no al técnico ${datos.usuarioId}`,
+            )
+        }
+        return conocido
+    }
     const idIris = idIrisDe(datos.iris_actor)
     if (!idIris) {
         throw new Problema(
