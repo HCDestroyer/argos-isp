@@ -19,6 +19,7 @@ import integraciones from '#start/routes/integraciones'
 import lealtad from '#start/routes/lealtad'
 import inventario from '#start/routes/inventario'
 import monitoreo from '#start/routes/monitoreo'
+import apariencia from '#start/routes/apariencia'
 
 export const registroRutas: Ruta[] = [
     ...core,
@@ -32,4 +33,5 @@ export const registroRutas: Ruta[] = [
     ...notify,
     ...integraciones,
     ...monitoreo,
+    ...apariencia,
 ]
