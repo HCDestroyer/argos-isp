@@ -205,6 +205,40 @@ test.group('billing · promesas: crear y evaluar', () => {
         })
         assert.equal(await estadoServicio(servicioId), 'suspendido')
     })
+
+    test('suspensión manual con canal portal: 422 suspension_manual, nada guardado (nunca «aprobada» y cortado)', async ({
+        assert,
+    }) => {
+        const { servicioId } = await servicioCortado()
+        await db.from('core.servicios').where('id', servicioId).update({
+            suspension_manual: true,
+            suspension_manual_motivo: 'fraude',
+            suspension_manual_en: new Date(),
+        })
+        const eventosAntes = await db
+            .from('audit.outbox')
+            .where('evento', 'promesa.creada')
+            .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [servicioId])
+            .count('* as n')
+        await assert.rejects(() => prometer(servicioId, { canal: 'portal' }), /lo suspendió un operador/)
+        const promesas = await db.from('billing.promesas').where('servicio_id', servicioId).count('* as n')
+        assert.equal(Number(promesas[0].n), 0)
+        const eventos = await db
+            .from('audit.outbox')
+            .where('evento', 'promesa.creada')
+            .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [servicioId])
+            .count('* as n')
+        assert.equal(Number(eventos[0].n), Number(eventosAntes[0].n))
+        // el error queda auditado con su código
+        const auditada = await db
+            .from('audit.acciones')
+            .where('accion', 'promesas.crear')
+            .where('entidad_id', String(servicioId))
+            .orderBy('id', 'desc')
+            .first()
+        assert.exists(auditada)
+        assert.equal(await estadoServicio(servicioId), 'suspendido')
+    })
 })
 
 test.group('billing · promesas: cumplir e incumplir', () => {

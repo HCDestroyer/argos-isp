@@ -113,6 +113,13 @@ const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
 const SIN_VENCIDO = 'No tienes facturas vencidas: no necesitas una promesa de pago.'
 
 /**
+ * Suspendido a mano por un operador: `evaluarEstadoServicio` no lo toca, así que una promesa no lo
+ * reactivaría (`CrearPromesaPago` responde 422 `suspension_manual` con canal `portal`).
+ */
+const SUSPENDIDO_A_MANO =
+    'Tu servicio fue suspendido por un asesor y una promesa de pago no lo reactiva. Comunícate con nosotros para reactivarlo.'
+
+/**
  * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3): no hay corte que evitar ni
  * servicio que reactivar, así que no hay promesa. Sus cargos únicos se pagan en línea o por depósito.
  */
@@ -146,6 +153,9 @@ export async function condicionesPromesa(
     }
     if (estado === 'pendiente_instalacion') {
         return NO_DISPONIBLE(INSTALACION_PENDIENTE)
+    }
+    if (servicio.suspension_manual) {
+        return NO_DISPONIBLE(SUSPENDIDO_A_MANO)
     }
 
     const abierta = (await cliente
@@ -409,6 +419,9 @@ export function errorParaCliente(error: unknown): unknown {
     }
     if (error.code === 'E_SERVICIO_PENDIENTE_INSTALACION') {
         return new ReglaNegocio(INSTALACION_PENDIENTE, 'servicio_pendiente_instalacion')
+    }
+    if (error.code === 'E_SUSPENSION_MANUAL') {
+        return new ReglaNegocio(SUSPENDIDO_A_MANO, 'suspension_manual')
     }
     if (error.code === 'E_SERVICIO_RETIRADO') {
         return new ReglaNegocio(

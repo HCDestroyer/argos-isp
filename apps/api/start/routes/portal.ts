@@ -1008,7 +1008,7 @@ const promesas: Ruta[] = [
             '`sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa ' +
             'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
             '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
-            '`promesa_abierta` si ya hay una activa o pendiente; 422 si la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. ' +
+            '`promesa_abierta` si ya hay una activa o pendiente; 422 si la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado; 422 `suspension_manual` (sin guardar nada) si un operador lo suspendió a mano: la promesa no lo reactivaría. ' +
             `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
