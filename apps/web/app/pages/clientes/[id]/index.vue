@@ -416,7 +416,7 @@ onMounted(cargar)
                             class="boton-flotante boton-circulo"
                             :class="datosAbiertos ? 'bg-primary/10 text-primary' : ''"
                             :aria-pressed="datosAbiertos"
-                            aria-controls="datos-cliente"
+                            :aria-controls="datosAbiertos ? 'datos-cliente' : undefined"
                             title="Datos del cliente"
                             aria-label="Datos del cliente"
                             data-prueba="ver-datos-cliente"
