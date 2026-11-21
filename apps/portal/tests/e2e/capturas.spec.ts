@@ -208,6 +208,13 @@ for (const tema of ['light', 'dark'] as const) {
             await page.keyboard.type('123456')
             await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
             await capturar(page, 'rediseno-cuenta-inicio', info.project.name, nombreTema)
+            if (DESPUES) {
+                // Solo la ventana, al final del scroll: la barra inferior fija no tapa el pie.
+                await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+                await page.waitForTimeout(300)
+                await page.screenshot({ path: join(DESTINO!, `rediseno-cuenta-inicio-final-${nombreTema}-${info.project.name}.png`) })
+                await page.evaluate(() => window.scrollTo(0, 0))
+            }
             await page.getByTestId('nav-facturas').filter({ visible: true }).first().click()
             await page.getByTestId('seccion-facturas').waitFor({ timeout: 30_000 })
             await capturar(page, 'rediseno-cuenta-facturas', info.project.name, nombreTema)

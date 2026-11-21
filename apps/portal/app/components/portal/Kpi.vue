@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Indicador del tablero (sistema visual): pastilla de icono tintada al 10 %, etiqueta gris, el dato
- * grande con cifras tabulares y un detalle. Con `to` toda la tarjeta es un enlace (sube 1 px al
+ * grande con cifras tabulares y un detalle. Nada se corta con elipsis: la etiqueta hace wrap a dos
+ * líneas como mucho y el dato principal, a las que necesite. Con `to` toda la tarjeta es un enlace (sube 1 px al
  * pasar el puntero).
  */
 const props = withDefaults(defineProps<{
@@ -34,10 +35,13 @@ const Enlace = resolveComponent('ULink')
                 :tono="props.tono"
                 tamano="sm"
             />
-            <span class="truncate text-sm text-muted">{{ props.etiqueta }}</span>
+            <span class="line-clamp-2 min-w-0 text-sm text-muted">{{ props.etiqueta }}</span>
         </span>
         <span class="min-w-0">
-            <span class="block truncate text-xl font-semibold tracking-[-0.02em] tabular-nums text-highlighted">{{ props.valor }}</span>
+            <span
+                class="block text-xl font-semibold tracking-[-0.02em] break-words tabular-nums text-highlighted"
+                data-kpi-valor
+            >{{ props.valor }}</span>
             <span
                 v-if="props.detalle || $slots.detalle"
                 class="mt-0.5 block text-xs text-muted"

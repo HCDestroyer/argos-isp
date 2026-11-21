@@ -37,16 +37,27 @@ const presentacion = computed(() => props.estado ? ESTADOS_SERVICIO[props.estado
         aria-label="Resumen de tu cuenta"
         data-testid="resumen-cuenta"
     >
-        <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div class="min-w-0 flex-1">
-                <p class="ax-banner-suave truncate text-sm">
+        <!--
+            En el teléfono todo se apila (saludo, monto, vencimiento; estado y «Actualizar» en una
+            fila que hace wrap; «Pagar factura» a lo ancho). Desde 640 px el texto va a la izquierda y
+            las acciones a la derecha. Nada se recorta: el nombre largo hace wrap.
+        -->
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+            <div class="min-w-0">
+                <p
+                    class="ax-banner-suave text-sm break-words"
+                    data-testid="banner-saludo"
+                >
                     Hola, <span class="font-semibold">{{ props.nombre }}</span>
                 </p>
                 <p
                     class="flex flex-wrap items-baseline gap-x-2"
                     :class="props.destacado ? 'mt-2' : 'mt-0.5'"
                 >
-                    <span class="ax-banner-suave text-xs">Total pendiente</span>
+                    <span
+                        class="ax-banner-suave text-xs whitespace-nowrap"
+                        data-testid="banner-total-etiqueta"
+                    >Total pendiente</span>
                     <span
                         class="font-semibold tracking-[-0.02em] whitespace-nowrap tabular-nums"
                         :class="props.destacado ? 'text-3xl sm:text-4xl' : 'text-2xl'"
@@ -55,16 +66,19 @@ const presentacion = computed(() => props.estado ? ESTADOS_SERVICIO[props.estado
                 </p>
                 <p
                     v-if="props.destacado && props.proxima && conSaldo"
-                    class="ax-banner-suave mt-0.5 text-sm"
+                    class="ax-banner-suave mt-0.5 text-sm whitespace-nowrap"
                     data-testid="banner-vence"
                 >
                     {{ props.proxima.vencida ? 'Vencida desde el' : 'Por pagar · vence el' }} {{ formatearFecha(props.proxima.vence_en) }}
                 </p>
-                <p
-                    v-if="presentacion"
-                    :class="props.destacado ? 'mt-3' : 'mt-1.5'"
-                >
-                    <span class="ax-banner-pastilla">
+            </div>
+            <div class="flex flex-col gap-3 sm:shrink-0 sm:items-end">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span
+                        v-if="presentacion"
+                        class="ax-banner-pastilla"
+                        data-testid="banner-estado"
+                    >
                         <UIcon
                             :name="presentacion.icono"
                             class="size-3.5"
@@ -72,20 +86,18 @@ const presentacion = computed(() => props.estado ? ESTADOS_SERVICIO[props.estado
                         />
                         {{ presentacion.etiqueta }}
                     </span>
-                </p>
-            </div>
-            <div class="flex shrink-0 items-center gap-2">
-                <UButton
-                    :icon="props.actualizando ? undefined : 'i-lucide-refresh-cw'"
-                    :loading="props.actualizando"
-                    :label="props.actualizando ? 'Actualizando…' : 'Actualizar'"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    class="ax-banner-boton rounded-full"
-                    data-testid="actualizar-cuenta"
-                    @click="emit('actualizar')"
-                />
+                    <UButton
+                        :icon="props.actualizando ? undefined : 'i-lucide-refresh-cw'"
+                        :loading="props.actualizando"
+                        :label="props.actualizando ? 'Actualizando…' : 'Actualizar'"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        class="ax-banner-boton rounded-full"
+                        data-testid="actualizar-cuenta"
+                        @click="emit('actualizar')"
+                    />
+                </div>
                 <UButton
                     v-if="props.destacado && conSaldo"
                     label="Pagar factura"
@@ -93,7 +105,7 @@ const presentacion = computed(() => props.estado ? ESTADOS_SERVICIO[props.estado
                     color="neutral"
                     size="lg"
                     to="/cuenta?seccion=pagar"
-                    class="ax-banner-accion rounded-full px-5 font-semibold"
+                    class="ax-banner-accion w-full rounded-full px-5 font-semibold sm:w-auto"
                     data-testid="banner-pagar"
                 />
             </div>
