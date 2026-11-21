@@ -496,7 +496,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                             <p class="hidden text-sm text-muted sm:block">
                                 Arrastra aquí la foto o el PDF, o elige cómo subirlo.
                             </p>
-                            <div class="grid w-full grid-cols-2 gap-2">
+                            <div class="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                                 <UButton
                                     label="Tomar foto"
                                     icon="i-lucide-camera"

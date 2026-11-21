@@ -157,6 +157,21 @@ for (const tema of ['light', 'dark'] as const) {
                 await revisar(page, `cuenta (${nombre}): pagar`)
                 await seccion(page, 'Facturas', 'seccion-facturas')
                 await revisar(page, `cuenta (${nombre}): facturas`)
+                // Detalle de una factura en el drawer (sin salir de la lista).
+                await page.getByTestId('factura').first().click()
+                await page.getByTestId('detalle').waitFor()
+                await revisar(page, `cuenta (${nombre}): detalle de factura`)
+                await page.keyboard.press('Escape')
+                await page.getByTestId('detalle').waitFor({ state: 'detached' })
+                // Subir comprobante: página propia; «Volver» regresa a «Pagar».
+                await seccion(page, 'Pagar', 'seccion-pagar')
+                await page.getByTestId('cuenta-subir-comprobante').click()
+                await page.getByTestId('comprobante-formulario').waitFor()
+                await revisar(page, `cuenta (${nombre}): subir comprobante`)
+                const anchoComprobante = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+                expect(anchoComprobante).toBeLessThanOrEqual(0)
+                await page.getByTestId('comprobante-volver').click()
+                await page.getByTestId('seccion-pagar').waitFor()
                 await seccion(page, 'Cuenta', 'seccion-cuenta')
                 if (cuenta) {
                     await expect(page.locator('[data-testid^="telegram-empresa-"]')).toHaveCount(2)

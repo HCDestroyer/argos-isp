@@ -213,7 +213,8 @@ contra el servidor de producción (`node .output/server/index.mjs`), sumando cad
 | | Archivos | Sin comprimir | gzip | brotli |
 | --- | --- | --- | --- | --- |
 | Antes (v1.19.0) | 36 | 1 231 KB | 360 KB | 310 KB |
-| Ahora | 37 | 735 KB | 234 KB | 205 KB |
+| v1.22.2 | 37 | 735 KB | 234 KB | 205 KB |
+| Rediseño índigo (sistema visual `--ax-*`) | 39 | 767 KB | 239 KB (+2,4 %) | 209 KB |
 
 Qué se hizo:
 
@@ -346,7 +347,8 @@ comprobante» y vigila la reactivación como antes.
 ### Peso de `/corte`
 
 El sistema visual no agrega fuentes ni imágenes a `/corte` (pila de fuentes del sistema; Inter no se
-carga). Ver la tabla de «Peso de la página de corte».
+carga): 233,5 → 239,1 KB gzip (+2,4 %), por el CSS de los tokens y dos chunks chicos (pastilla de icono y
+tonos). Ver la tabla de «Peso de la página de corte».
 
 ## Inicio del cliente (dashboard móvil) y PWA
 

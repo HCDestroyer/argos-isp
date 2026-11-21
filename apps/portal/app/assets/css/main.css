@@ -784,7 +784,16 @@
     min-width: 0;
 }
 
+/* La cabecera de columnas solo en escritorio (`.ax-grilla` la volvería a mostrar). */
+.ax-lista-cabecera.ax-grilla {
+    display: none;
+}
+
 @media (width >= 48rem) {
+    .ax-lista-cabecera.ax-grilla {
+        display: grid;
+    }
+
     .ax-grilla {
         grid-template-columns: 2.5rem minmax(0, 1fr) 9rem 11rem 5.5rem;
         grid-template-areas:

@@ -31,6 +31,13 @@ export default defineAppConfig({
                     variant: 'solid',
                     class: 'rounded-full shadow-[0_0_18px_var(--hf-glow-brand)] hover:bg-(--ui-color-primary-700) active:bg-(--ui-color-primary-700) dark:hover:bg-primary/90 dark:active:bg-primary/90',
                 },
+                {
+                    // La acción secundaria junto a la primaria (Cancelar, Ver datos de depósito): la
+                    // misma forma de pastilla. Las tarjetas-botón (`ax-tarjeta`) conservan su radio.
+                    color: 'neutral',
+                    variant: 'outline',
+                    class: 'rounded-full',
+                },
             ],
         },
         badge: {

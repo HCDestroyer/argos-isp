@@ -28,7 +28,7 @@ const plan = computed(() => {
 <template>
     <section
         aria-label="Indicadores de tu cuenta"
-        class="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        class="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]"
         data-testid="indicadores"
     >
         <PortalKpi
