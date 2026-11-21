@@ -1,3 +1,4 @@
+import { espiarApi } from './espiarApi'
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -296,7 +297,7 @@ describe('/cuenta con varios servicios', () => {
     it('saldo por servicio, promesa solo donde aplica y se elige qué servicio pagar en línea', async () => {
         fijarSesionFixture(true)
         fijarCuentaFixture(DOS_SERVICIOS)
-        const post = vi.spyOn(useApi(), 'POST')
+        const post = espiarApi('POST')
         const wrapper = await montarCuenta()
 
         expect(wrapper.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')

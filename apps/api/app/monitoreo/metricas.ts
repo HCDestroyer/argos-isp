@@ -48,11 +48,12 @@ export const CRONS = [
     'notificaciones.recordatorios',
     'notificaciones.vigilar_crons',
     'auditoria.crear_particiones',
+    'sistema.recalcular_almacenamiento',
 ] as const
 
 let colas: Map<string, Queue> | undefined
 
-function colasAbiertas(): Map<string, Queue> {
+export function colasAbiertas(): Map<string, Queue> {
     if (!colas) {
         colas = new Map(
             COLAS.map((nombre) => [
@@ -118,7 +119,7 @@ async function gruposStream(stream: string): Promise<{ longitud: number; grupos:
     return { longitud, grupos }
 }
 
-async function ultimaCorrida(accion: string): Promise<number | null> {
+export async function ultimaCorrida(accion: string): Promise<number | null> {
     const fila = (await db
         .from('audit.acciones')
         .where('accion', accion)
