@@ -139,9 +139,30 @@ for (const ancho of [1280, 1440]) {
             await expect(page.getByTestId('navegacion-lateral')).toBeVisible()
             await expect(page.getByTestId('navegacion-inferior')).toBeHidden()
 
+            // El menú isla del panel: 76 px compacto y 244 px expandido, a 16 px del borde, con el
+            // botón ‹ › de 28 px sobre el borde derecho en el mismo lugar en los dos modos.
+            const menu = page.getByTestId('navegacion-lateral')
+            const boton = page.getByTestId('alternar-menu')
+            const medir = async () => ({ menu: (await menu.boundingBox())!, boton: (await boton.boundingBox())! })
+            const compacto = await medir()
+            expect(Math.round(compacto.menu.width)).toBe(76)
+            expect(Math.round(compacto.menu.x)).toBe(16)
+            expect(Math.round(compacto.boton.width)).toBe(28)
+            await boton.click()
+            await expect(menu).toHaveAttribute('data-compacto', 'no')
+            const expandido = await medir()
+            expect(Math.round(expandido.menu.width)).toBe(244)
+            for (const m of [compacto, expandido]) {
+                expect(Math.abs(m.boton.x + m.boton.width / 2 - (m.menu.x + m.menu.width))).toBeLessThan(2)
+            }
+            expect(Math.round(expandido.boton.y)).toBe(Math.round(compacto.boton.y))
+            await boton.click()
+            await expect(menu).toHaveAttribute('data-compacto', 'si')
+
             // Lo último va al lado de los servicios, no debajo.
             const servicios = (await page.locator('[data-testid^="grupo-"]').first().boundingBox())!
-            const recientes = (await page.getByTestId('recientes').boundingBox())!
+            // La columna de la derecha empieza con «Está a tu cargo» (si hay) y luego lo último.
+            const recientes = (await page.getByRole('complementary', { name: 'Lo último de tu cuenta' }).boundingBox())!
             expect(recientes.x).toBeGreaterThan(servicios.x + servicios.width - 1)
             expect(Math.abs(recientes.y - servicios.y)).toBeLessThan(40)
 

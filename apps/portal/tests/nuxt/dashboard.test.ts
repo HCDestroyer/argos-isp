@@ -232,11 +232,20 @@ describe('barra de navegación del cliente', () => {
         }
         expect(barra.find('[data-testid="nav-facturas"]').attributes('aria-current')).toBe('page')
         expect(barra.find('[data-testid="nav-inicio"]').attributes('aria-current')).toBeUndefined()
-        // Escritorio: menú lateral con los nombres largos y la misma sección marcada.
+        // Escritorio: el menú isla del panel, compacto de fábrica (nombres cortos) con la misma sección
+        // marcada; el botón ‹ › lo expande con los nombres largos.
         const lateral = conSesion.find('[data-testid="navegacion-lateral"]')
         expect(lateral.exists()).toBe(true)
+        expect(lateral.attributes('data-compacto')).toBe('si')
+        expect(lateral.classes()).toContain('w-[4.75rem]')
+        expect(lateral.findAll('li a').map(d => d.text())).toEqual(['Inicio', 'Facturas', 'Cuenta'])
+        expect(lateral.find('a[aria-current="page"]').text()).toBe('Facturas')
+        await lateral.find('[data-testid="alternar-menu"]').trigger('click')
+        await esperar()
+        expect(lateral.attributes('data-compacto')).toBe('no')
+        expect(lateral.classes()).toContain('w-[15.25rem]')
         expect(lateral.findAll('li a').map(d => d.text())).toEqual(['Inicio', 'Facturas y pagos', 'Mi cuenta'])
-        expect(lateral.find('[data-testid="nav-facturas"]').attributes('aria-current')).toBe('page')
+        expect(lateral.find('a[aria-current="page"]').text()).toBe('Facturas y pagos')
     })
 })
 

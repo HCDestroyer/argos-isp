@@ -356,8 +356,11 @@ CSS) y dos chunks chicos (pastilla de icono y tonos). Ver la tabla de «Peso de 
 
 ### Escritorio
 
-Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px con el menú lateral «isla» a la
-izquierda (marca, secciones y tema; sin barra superior ni barra inferior), el banner arriba y rejillas
+Desde 1024 px `/cuenta` es un tablero de escritorio de hasta 1200 px con el mismo menú «isla» del
+panel a la izquierda (`PortalNavegacion` lateral: 76 px compacto, de fábrica, o 244 px expandido,
+logo de 36 px y el botón ‹ › de 28 px sobre el borde derecho; se recuerda en el navegador con
+`useMenuCompacto`; sin barra superior ni barra inferior). Es una réplica del del panel con los mismos
+tokens y medidas: conviene extraer los dos a un paquete compartido en `packages/`; el banner arriba y rejillas
 por sección: inicio con servicios, accesos y «Solicitar un servicio» (2/3) y «Está a tu cargo», «Mis
 facturas» y «Mis pagos» al lado (1/3); «Facturas y pagos», una tarjeta con las pestañas segmentadas
 Facturas (con las notas de crédito al lado) y Pagar (pagar y promesas a la izquierda, comprobantes y
