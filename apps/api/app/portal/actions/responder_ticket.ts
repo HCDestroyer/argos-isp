@@ -1,5 +1,10 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { llamarIrisJson, type ArchivoIris, type SesionIris } from '#portal/soporte/iris_portal'
+import {
+    llamarIrisJson,
+    type ArchivoIris,
+    type ContactoIris,
+    type SesionIris,
+} from '#portal/soporte/iris_portal'
 import { adjuntosParaAuditoria } from '#portal/soporte/adjuntos'
 import {
     mensajeSoporte,
@@ -13,6 +18,8 @@ export interface EntradaResponderTicket {
     clienteId: number
     empresaId: number
     sesion: SesionIris
+    /** `titular` o el contacto a cargo con `reportar` (§11.10: solo sobre sus propios tickets) */
+    contacto: ContactoIris
     ticketId: number
     /** UUID del envío: `argos:portal:respuesta:<clave>` */
     clave: string
@@ -52,6 +59,7 @@ export default class ResponderTicketPortal extends DomainAction<EntradaResponder
             cuerpo,
             archivos: input.archivos,
             idempotencia: `argos:portal:respuesta:${input.clave}`,
+            contacto: input.contacto,
         })
         if (!respuesta || typeof respuesta !== 'object') throw new SoporteNoDisponible()
         return { ticket: ticketSoporte(respuesta.ticket), mensaje: mensajeSoporte(respuesta.mensaje) }

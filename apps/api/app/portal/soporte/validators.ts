@@ -43,17 +43,38 @@ function estados<T extends string>(valores: readonly T[]) {
         .meta({ description: `Uno o varios separados por coma: ${valores.join(', ')}` })
 }
 
+/**
+ * Servicio a cargo (A46, contrato Iris 0.12.1 §11.10): `contacto_id` (el contacto de la persona en la
+ * cuenta del dueño) con `servicio_id` (obligatorio con `contacto_id`). Sin ellos, el titular.
+ */
+const aCargo = {
+    contacto_id: idEntidad().optional().meta({
+        description:
+            'Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`',
+    }),
+    servicio_id: idEntidad().optional().meta({
+        description:
+            'Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio',
+    }),
+}
+
 export const empresaSoporteValidator = vine.compile(vine.object({ empresa_id: empresa() }))
+
+/** Detalle, mensajes y adjuntos de un ticket: el titular o un contacto a cargo. */
+export const verTicketValidator = vine.compile(vine.object({ empresa_id: empresa(), ...aCargo }))
 
 export const listarTicketsValidator = vine.compile(
     vine.object({
         empresa_id: empresa(),
         estado: estados(ESTADOS_TICKET),
+        ...aCargo,
         ...paginacionIris,
     }),
 )
 
-export const listarMensajesValidator = vine.compile(vine.object({ empresa_id: empresa(), ...paginacionIris }))
+export const listarMensajesValidator = vine.compile(
+    vine.object({ empresa_id: empresa(), ...aCargo, ...paginacionIris }),
+)
 
 export const listarSolicitudesValidator = vine.compile(
     vine.object({
@@ -83,6 +104,7 @@ export const responderTicketValidator = vine.compile(
     vine.object({
         empresa_id: empresa(),
         cuerpo: vine.string().trim().minLength(1).maxLength(20_000),
+        ...aCargo,
         version: vine.number().withoutDecimals().min(1).optional().meta({
             description: 'La del ticket que vio el cliente; si cambió, 409 `conflicto_version`',
         }),
@@ -90,7 +112,7 @@ export const responderTicketValidator = vine.compile(
 )
 
 export const confirmarSolucionValidator = vine.compile(
-    vine.object({ empresa_id: empresa(), version: versionEsperada() }),
+    vine.object({ empresa_id: empresa(), ...aCargo, version: versionEsperada() }),
 )
 
 /** `POST /portal/soporte/solicitudes` (§11.7). Las reglas por tipo las revisa el handler. */

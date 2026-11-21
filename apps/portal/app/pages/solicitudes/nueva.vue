@@ -56,6 +56,7 @@ watch([servicios, tipo], ([lista]) => {
     }
 }, { immediate: true })
 
+const formulario = useTemplateRef('formulario')
 const enviando = ref(false)
 const error = ref<string | null>(null)
 const enviada = ref<SolicitudServicio | null>(null)
@@ -161,10 +162,12 @@ const volver = '/cuenta?seccion=soporte&pestana=solicitudes'
                     variant="subtle"
                     icon="i-lucide-circle-alert"
                     :title="error"
+                    :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => formulario?.submit() }]"
                     data-testid="solicitud-error"
                 />
 
                 <UForm
+                    ref="formulario"
                     :schema="esquema"
                     :state="estado"
                     class="flex flex-col gap-4"

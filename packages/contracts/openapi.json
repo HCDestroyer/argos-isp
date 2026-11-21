@@ -65415,6 +65415,26 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -65914,6 +65934,26 @@
             }
           },
           {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -66161,6 +66201,26 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -66259,6 +66319,26 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -66352,6 +66432,16 @@
                     "type": "integer",
                     "minimum": 1,
                     "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio"
+                  },
+                  "contacto_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`"
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio"
                   },
                   "version": {
                     "type": "integer",
@@ -66450,6 +66540,26 @@
             "in": "query",
             "required": false,
             "description": "Empresa del servicio (una de las del cliente); sin ella, la del primer servicio",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "contacto_id",
+            "in": "query",
+            "required": false,
+            "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -66601,6 +66711,16 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 20000
+                  },
+                  "contacto_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id`"
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio"
                   },
                   "version": {
                     "type": "integer",
@@ -121228,6 +121348,7 @@
           "estado",
           "detalle",
           "capacidades",
+          "contactos",
           "sesion",
           "empresas"
         ],
@@ -121260,6 +121381,10 @@
                 "type": "null"
               }
             ]
+          },
+          "contactos": {
+            "type": "boolean",
+            "description": "Tickets de los servicios a cargo (A46): Iris con contrato ≥ 0.12.1 (§11.10, `X-Iris-Contacto`) y sesión `documento`"
           },
           "sesion": {
             "type": "string",

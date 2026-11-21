@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirSesionPortal, type SesionPortal } from '#portal/acceso/sesion'
 import { empresasDeCliente, verContacto, type ContactoVista, type PermisoContacto } from '#core/contactos'
-import type { MetodoSesionIris, SesionIris } from '#portal/soporte/iris_portal'
+import type { ContactoIris, MetodoSesionIris, SesionIris } from '#portal/soporte/iris_portal'
 
 /**
  * Quién pide y en qué empresa, para las rutas de soporte del portal (contrato Iris 0.9.0 §11.1:
@@ -157,8 +157,9 @@ export async function servicioACargo(
     personaClienteId: number,
     contactoId: number,
     servicioId: number,
-    permiso: PermisoContacto,
+    permiso: PermisoContacto | PermisoContacto[],
 ): Promise<ServicioACargo> {
+    const permisos = Array.isArray(permiso) ? permiso : [permiso]
     const ajeno = () => new NoEncontrado('Ese servicio no está a tu cargo')
     const contacto = await verContacto(contactoId).catch(() => null)
     if (!contacto || contacto.persona_cliente_id !== personaClienteId) throw ajeno()
@@ -170,6 +171,51 @@ export async function servicioACargo(
         .select('empresa_id')
         .first()) as { empresa_id: number } | null
     if (!servicio) throw ajeno()
-    if (!contacto.permisos[permiso]) throw new PermisoDeContacto(permiso)
+    if (!permisos.some((p) => contacto.permisos[p])) throw new PermisoDeContacto(permisos[0]!)
     return { contacto, clienteId: contacto.cliente_id, servicioId, empresaId: Number(servicio.empresa_id) }
+}
+
+/** En nombre de quién se llama a Iris (contrato Iris 0.12.1 §11.10). */
+export interface QuienPide {
+    /** cliente de la ruta de Iris: el de la sesión o el dueño del servicio a cargo */
+    clienteId: number
+    empresaId: number
+    contacto: ContactoIris
+    /** con un contacto, el servicio a cargo (obligatorio); con el titular, el pedido o null */
+    servicioId: number | null
+}
+
+/**
+ * Titular o contacto a cargo (A46). Sin `contactoId`, el titular de la sesión en la empresa pedida.
+ * Con `contactoId`: sesión `documento`, `servicio_id` obligatorio (422 `servicio_id`) y el contacto
+ * validado en Argos antes de llamar a Iris (`servicioACargo`, con alguno de `permisos`): Iris recibe
+ * `X-Iris-Contacto: <contacto_id>` y `X-Iris-Contacto-Version`.
+ */
+export async function quienPide(
+    s: SesionSoporte,
+    entrada: { contactoId?: number; servicioId?: number; empresaId?: number },
+    permisos: PermisoContacto[],
+): Promise<QuienPide> {
+    if (entrada.contactoId === undefined) {
+        const empresaId = await empresaDeSoporte(s, entrada.empresaId)
+        return {
+            clienteId: s.clienteId,
+            empresaId,
+            contacto: 'titular',
+            servicioId: entrada.servicioId ?? null,
+        }
+    }
+    exigirDocumento(s)
+    if (entrada.servicioId === undefined) {
+        throw new ValidacionFallida([
+            { field: 'servicio_id', rule: 'required', message: 'Elige el servicio que tienes a cargo' },
+        ])
+    }
+    const aCargo = await servicioACargo(s.clienteId, entrada.contactoId, entrada.servicioId, permisos)
+    return {
+        clienteId: aCargo.clienteId,
+        empresaId: aCargo.empresaId,
+        contacto: { id: aCargo.contacto.contacto_id, version: aCargo.contacto.version },
+        servicioId: aCargo.servicioId,
+    }
 }

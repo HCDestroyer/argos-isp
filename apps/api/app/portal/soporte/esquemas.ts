@@ -33,6 +33,11 @@ export const PortalSoporte = definirEsquema(
         },
         detalle: { ...nulable(texto), description: 'Texto para el cliente cuando no está disponible' },
         capacidades: nulable(PortalCapacidadesSoporte),
+        contactos: {
+            ...booleano,
+            description:
+                'Tickets de los servicios a cargo (A46): Iris con contrato ≥ 0.12.1 (§11.10, `X-Iris-Contacto`) y sesión `documento`',
+        },
         sesion: {
             ...enumerado(['documento', 'ip']),
             description:

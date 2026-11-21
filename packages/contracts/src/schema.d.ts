@@ -19888,6 +19888,8 @@ export interface components {
             /** @description Texto para el cliente cuando no está disponible */
             detalle: string | null;
             capacidades: components["schemas"]["PortalCapacidadesSoporte"] | null;
+            /** @description Tickets de los servicios a cargo (A46): Iris con contrato ≥ 0.12.1 (§11.10, `X-Iris-Contacto`) y sesión `documento` */
+            contactos: boolean;
             /**
              * @description `ip` («Ver mi cuenta» en /corte): solo abrir ticket sin adjuntos y ver la lista reducida
              * @enum {string}
@@ -59560,6 +59562,10 @@ export interface operations {
             query?: {
                 /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                 empresa_id?: number;
+                /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                contacto_id?: number;
+                /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                servicio_id?: number;
             };
             header?: never;
             path?: never;
@@ -59853,6 +59859,10 @@ export interface operations {
                 empresa_id?: number;
                 /** @description Uno o varios separados por coma: nuevo, abierto, en_espera, resuelto, cerrado */
                 estado?: string;
+                /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                contacto_id?: number;
+                /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                servicio_id?: number;
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description De 1 a 100 (20 por defecto) */
@@ -59989,6 +59999,10 @@ export interface operations {
             query?: {
                 /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                 empresa_id?: number;
+                /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                contacto_id?: number;
+                /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                servicio_id?: number;
             };
             header?: never;
             path: {
@@ -60050,6 +60064,10 @@ export interface operations {
             query?: {
                 /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                 empresa_id?: number;
+                /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                contacto_id?: number;
+                /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                servicio_id?: number;
             };
             header?: never;
             path: {
@@ -60121,6 +60139,10 @@ export interface operations {
                 "application/json": {
                     /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                     empresa_id?: number;
+                    /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                    contacto_id?: number;
+                    /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                    servicio_id?: number;
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                 };
@@ -60179,6 +60201,10 @@ export interface operations {
             query?: {
                 /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                 empresa_id?: number;
+                /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                contacto_id?: number;
+                /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                servicio_id?: number;
                 /** @description Cursor opaco de la página anterior */
                 cursor?: string;
                 /** @description De 1 a 100 (20 por defecto) */
@@ -60260,6 +60286,10 @@ export interface operations {
                     /** @description Empresa del servicio (una de las del cliente); sin ella, la del primer servicio */
                     empresa_id?: number;
                     cuerpo: string;
+                    /** @description Servicio a cargo (A46): el contacto de la persona en la cuenta del dueño. Exige `servicio_id` */
+                    contacto_id?: number;
+                    /** @description Con `contacto_id`, el servicio a cargo (obligatorio); con el titular, filtra por servicio */
+                    servicio_id?: number;
                     /** @description La del ticket que vio el cliente; si cambió, 409 `conflicto_version` */
                     version?: number;
                     /**

@@ -32,6 +32,8 @@ import { configIris, contratoAdmite, leerFilaIris } from '#integraciones/iris/co
 
 /** Contrato mínimo del conector para las rutas de §11. */
 export const CONTRATO_PORTAL_IRIS = '0.9.0'
+/** Contrato mínimo para las sesiones de un contacto a cargo (§11.10, `X-Iris-Contacto`). */
+export const CONTRATO_CONTACTOS_IRIS = '0.12.1'
 
 const RUTA_BASE = '/api/v1/integraciones/argosisp/portal/clientes'
 const RUTA_ESTADO = '/api/v1/integraciones/argosisp/estado'
@@ -59,6 +61,8 @@ export type EstadoSoporte =
 export interface DisponibilidadSoporte {
     estado: EstadoSoporte
     capacidades: CapacidadesIris | null
+    /** el Iris conectado admite tickets pedidos por un contacto a cargo (contrato ≥ 0.12.1, §11.10) */
+    contactos: boolean
 }
 
 /** Lo que el portal necesita del conector (secretos en claro: nunca salen del proceso). */
@@ -125,12 +129,12 @@ function capacidadesDe(valor: unknown): CapacidadesIris | null {
 /** ¿Se pueden usar las rutas de §11 ahora? Lee el conector y las capacidades de Iris (sin caché). */
 export async function disponibilidadSoporte(): Promise<DisponibilidadSoporte> {
     const conector = await fuenteConector()
-    if (!conector.urlBase) return { estado: 'sin_iris', capacidades: null }
-    if (!conector.activo) return { estado: 'apagado', capacidades: null }
+    if (!conector.urlBase) return { estado: 'sin_iris', capacidades: null, contactos: false }
+    if (!conector.activo) return { estado: 'apagado', capacidades: null, contactos: false }
     if (!contratoAdmite(conector.contrato, CONTRATO_PORTAL_IRIS)) {
-        return { estado: 'version', capacidades: null }
+        return { estado: 'version', capacidades: null, contactos: false }
     }
-    if (!conector.tokenPortal) return { estado: 'sin_token', capacidades: null }
+    if (!conector.tokenPortal) return { estado: 'sin_token', capacidades: null, contactos: false }
     let capacidades: CapacidadesIris | null = null
     try {
         const respuesta = await fetchIris(`${conector.urlBase}${RUTA_ESTADO}`, {
@@ -140,15 +144,19 @@ export async function disponibilidadSoporte(): Promise<DisponibilidadSoporte> {
             },
             signal: AbortSignal.timeout(TIMEOUT_MS),
         })
-        if (!respuesta.ok) return { estado: 'sin_respuesta', capacidades: null }
+        if (!respuesta.ok) return { estado: 'sin_respuesta', capacidades: null, contactos: false }
         const cuerpo = (await respuesta.json()) as { capacidades?: unknown }
         capacidades = capacidadesDe(cuerpo.capacidades)
     } catch (error) {
         logger.warn({ err: error }, 'portal: Iris no respondió al leer su estado')
-        return { estado: 'sin_respuesta', capacidades: null }
+        return { estado: 'sin_respuesta', capacidades: null, contactos: false }
     }
-    if (!capacidades?.portal_argos) return { estado: 'version', capacidades }
-    return { estado: 'disponible', capacidades }
+    if (!capacidades?.portal_argos) return { estado: 'version', capacidades, contactos: false }
+    return {
+        estado: 'disponible',
+        capacidades,
+        contactos: contratoAdmite(conector.contrato, CONTRATO_CONTACTOS_IRIS),
+    }
 }
 
 const MENSAJES_NO_DISPONIBLE: Record<Exclude<EstadoSoporte, 'disponible'>, string> = {
@@ -268,6 +276,22 @@ const TEXTOS_CLIENTE: Record<string, { status: number; titulo: string; detalle: 
         titulo: 'Envío repetido',
         detalle: 'Ese envío ya se usó con otros datos. Vuelve a abrir el formulario.',
     },
+    servicio_fuera_del_contacto: {
+        status: 403,
+        titulo: 'Servicio fuera de tu cargo',
+        detalle:
+            'Ese servicio ya no está a tu cargo. Actualiza la página o pídele al titular que te agregue.',
+    },
+    permiso_de_contacto: {
+        status: 403,
+        titulo: 'Sin permiso del titular',
+        detalle: 'El titular de este servicio no te dio permiso para esto.',
+    },
+    solo_titular: {
+        status: 403,
+        titulo: 'Solo el titular',
+        detalle: 'Esto solo lo puede pedir el titular del servicio.',
+    },
     idempotencia_en_proceso: {
         status: 409,
         titulo: 'Seguimos enviando',
@@ -287,6 +311,7 @@ const DE_CONFIGURACION = new Set([
     'solo_integracion_argos',
     'empresa_no_permitida',
     'cabecera_requerida',
+    'cabecera_iris_requerida',
     'argos_apagado',
     'idempotency_key_requerida',
 ])
@@ -385,14 +410,31 @@ export interface PeticionIris {
     archivos?: ArchivoIris[]
     /** `argos:portal:<operacion>:<id>` (obligatoria en `POST`) */
     idempotencia?: string
+    /**
+     * Quién pide (contrato 0.12.1 §11.10): `titular`, o el contacto a cargo (A46) con su `version` de
+     * `core.contactos_cliente`, ya validado en Argos (`servicioACargo` / `contactoACargo`).
+     */
+    contacto: ContactoIris
+}
+
+export type ContactoIris = 'titular' | { id: number; version: number }
+
+/** `X-Iris-Contacto` y, con un contacto, `X-Iris-Contacto-Version` (§11.10). */
+export function cabecerasContactoIris(contacto: ContactoIris): Record<string, string> {
+    if (contacto === 'titular') return { 'X-Iris-Contacto': 'titular' }
+    return { 'X-Iris-Contacto': String(contacto.id), 'X-Iris-Contacto-Version': String(contacto.version) }
 }
 
 /** Conector listo para llamar o `503 soporte_no_disponible`. */
-async function conectorListo(): Promise<{ urlBase: string; token: string }> {
+async function conectorListo(contacto: ContactoIris): Promise<{ urlBase: string; token: string }> {
     const conector = await fuenteConector()
     if (!conector.urlBase) throw new SoporteNoDisponible('sin_iris')
     if (!conector.activo) throw new SoporteNoDisponible('apagado')
     if (!contratoAdmite(conector.contrato, CONTRATO_PORTAL_IRIS)) throw new SoporteNoDisponible('version')
+    // §4 (0.12.1): con un Iris anterior, Argos nunca manda al portal sesiones de contactos
+    if (contacto !== 'titular' && !contratoAdmite(conector.contrato, CONTRATO_CONTACTOS_IRIS)) {
+        throw new SoporteNoDisponible('version')
+    }
     if (!conector.tokenPortal) throw new SoporteNoDisponible('sin_token')
     return { urlBase: conector.urlBase, token: conector.tokenPortal }
 }
@@ -416,13 +458,14 @@ function cuerpoDeLaPeticion(peticion: PeticionIris): { body?: string | FormData;
 
 /** Respuesta cruda de Iris (2xx) o el problema ya traducido. */
 export async function llamarIris(peticion: PeticionIris): Promise<Response> {
-    const { urlBase, token } = await conectorListo()
+    const { urlBase, token } = await conectorListo(peticion.contacto)
     const { body, tipo } = cuerpoDeLaPeticion(peticion)
     const cabeceras: Record<string, string> = {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
         'X-Iris-Empresa': String(peticion.empresaId),
         'X-Argos-Portal-Sesion': cabeceraSesionIris(peticion.sesion),
+        ...cabecerasContactoIris(peticion.contacto),
     }
     if (tipo) cabeceras['Content-Type'] = tipo
     if (peticion.idempotencia) cabeceras['Idempotency-Key'] = peticion.idempotencia

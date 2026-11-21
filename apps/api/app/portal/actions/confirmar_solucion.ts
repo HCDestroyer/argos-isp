@@ -1,11 +1,13 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { llamarIrisJson, type SesionIris } from '#portal/soporte/iris_portal'
+import { llamarIrisJson, type ContactoIris, type SesionIris } from '#portal/soporte/iris_portal'
 import { ticketSoporte, type TicketSoporte } from '#portal/soporte/vistas'
 
 export interface EntradaConfirmarSolucion {
     clienteId: number
     empresaId: number
     sesion: SesionIris
+    /** `titular` o el contacto a cargo con `reportar` (§11.10: solo sobre sus propios tickets) */
+    contacto: ContactoIris
     ticketId: number
     version: number
 }
@@ -32,6 +34,7 @@ export default class ConfirmarSolucionPortal extends DomainAction<EntradaConfirm
                 ruta: `/tickets/${input.ticketId}/confirmar-solucion`,
                 cuerpo: { version: input.version },
                 idempotencia: `argos:portal:confirmar:${input.ticketId}:${input.version}`,
+                contacto: input.contacto,
             }),
         )
     }

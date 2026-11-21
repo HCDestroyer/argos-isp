@@ -276,15 +276,17 @@ test.group('Portal: mis contactos y servicios a cargo (Iris 0.10.x §3.5 y §3.8
         const jose = await clienteConSesion('José García')
         const contactoId = await vincular(mama.clienteId, jose.clienteId, { permisos: { reportar: false } })
         const urls: string[] = []
+        const cabeceras: Array<Record<string, string>> = []
         fijarConectorPortalIris(async () => ({
             activo: true,
             urlBase: 'https://iris.example.test',
             tokenPanel: null,
             tokenPortal: `iris_pat_${'Pt7Rt8Lo'.repeat(5)}`,
-            contrato: '0.10.1',
+            contrato: '0.12.1',
         }))
-        fijarFetchPortalIris(async (url) => {
+        fijarFetchPortalIris(async (url, init) => {
             urls.push(String(url))
+            cabeceras.push(Object.fromEntries(new Headers(init?.headers).entries()))
             return Response.json(
                 {
                     id: 9001,
@@ -328,6 +330,8 @@ test.group('Portal: mis contactos y servicios a cargo (Iris 0.10.x §3.5 y §3.8
             })
         await estado(abrir(), 201)
         assert.include(urls[0]!, `/portal/clientes/${mama.clienteId}/tickets`)
+        assert.equal(cabeceras[0]!['x-iris-contacto'], String(contactoId))
+        assert.equal(cabeceras[0]!['x-iris-contacto-version'], '1')
         const fila = await db
             .from('audit.acciones')
             .where('accion', 'portal.abrir_ticket')
@@ -351,5 +355,204 @@ test.group('Portal: mis contactos y servicios a cargo (Iris 0.10.x §3.5 y §3.8
                 .field('contacto_id', String(contactoId)),
             404,
         )
+    })
+})
+
+test.group('Portal: tickets del servicio a cargo (Iris 0.12.1 §11.10)', (group) => {
+    let llamadas: Array<{ url: string; metodo: string; cabeceras: Record<string, string> }> = []
+    let respuesta: () => Response = () => Response.json({ data: [], nextCursor: null })
+
+    function conector(contrato: string) {
+        fijarConectorPortalIris(async () => ({
+            activo: true,
+            urlBase: 'https://iris.example.test',
+            tokenPanel: null,
+            tokenPortal: `iris_pat_${'Pt7Rt8Lo'.repeat(5)}`,
+            contrato,
+        }))
+    }
+
+    group.each.setup(async () => {
+        const previo = Object.fromEntries(VARIABLES.map((v) => [v, process.env[v]]))
+        process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
+        process.env.PORTAL_REDIS_PREFIJO = unico('prueba-a-cargo')
+        delete process.env.PORTAL_LIMITE_PETICIONES
+        llamadas = []
+        respuesta = () => Response.json({ data: [], nextCursor: null })
+        conector('0.12.1')
+        fijarFetchPortalIris(async (url, init) => {
+            if (String(url).endsWith('/argosisp/estado')) {
+                return Response.json({
+                    capacidades: { portal_argos: true, solicitudes_servicio: true, adjuntos_ticket: true },
+                })
+            }
+            llamadas.push({
+                url: String(url),
+                metodo: init?.method ?? 'GET',
+                cabeceras: Object.fromEntries(new Headers(init?.headers).entries()),
+            })
+            return respuesta()
+        })
+        return async () => {
+            fijarConectorPortalIris()
+            fijarFetchPortalIris()
+            await soloEmpresaPrincipal()
+            for (const variable of VARIABLES) {
+                if (previo[variable] === undefined) delete process.env[variable]
+                else process.env[variable] = previo[variable]
+            }
+        }
+    })
+
+    async function escenario(permisos: Record<string, boolean> = {}) {
+        const mama = await crearServicio({ nit: nitAleatorio(), estado: 'activo', sinFacturas: true })
+        const jose = await clienteConSesion('José García')
+        const contactoId = await vincular(mama.clienteId, jose.clienteId, {
+            servicios: [mama.servicioId],
+            permisos,
+        })
+        return { mama, jose, contactoId }
+    }
+
+    function lista(client: ApiClient, cookie: string, consulta: string) {
+        return get(client, `/api/v1/portal/soporte/tickets?${consulta}`, cookie)
+    }
+
+    test('la lista del servicio a cargo va con X-Iris-Contacto, su versión y servicio_id', async ({
+        client,
+        assert,
+    }) => {
+        const { mama, jose, contactoId } = await escenario({ reportar: false })
+        await estado(
+            lista(client, jose.cookie, `contacto_id=${contactoId}&servicio_id=${mama.servicioId}`),
+            200,
+        )
+        const llamada = llamadas.at(-1)!
+        assert.equal(
+            llamada.url,
+            `https://iris.example.test/api/v1/integraciones/argosisp/portal/clientes/${mama.clienteId}/tickets?servicio_id=${mama.servicioId}`,
+        )
+        assert.equal(llamada.cabeceras['x-iris-contacto'], String(contactoId))
+        assert.equal(llamada.cabeceras['x-iris-contacto-version'], '1')
+
+        // sin servicio_id: 422 sin llamar a Iris
+        const antes = llamadas.length
+        const sinServicio = await estado(lista(client, jose.cookie, `contacto_id=${contactoId}`), 422)
+        assert.equal(sinServicio.body().errors[0].field, 'servicio_id')
+        assert.equal(llamadas.length, antes)
+    })
+
+    test('sin reportar ni consultar no ve nada; con un Iris anterior a 0.12.1, 503', async ({
+        client,
+        assert,
+    }) => {
+        const { mama, jose, contactoId } = await escenario({ reportar: false, consultar: false })
+        const r = await estado(
+            lista(client, jose.cookie, `contacto_id=${contactoId}&servicio_id=${mama.servicioId}`),
+            403,
+        )
+        assert.equal(r.body().type, 'urn:argosisp:problema:permiso_de_contacto')
+
+        await db
+            .from('core.contactos_cliente')
+            .where('id', contactoId)
+            .update({
+                permisos: JSON.stringify({ consultar: true, reportar: true, pagar: true, avisos: true }),
+            })
+        conector('0.12.0')
+        const viejo = await estado(
+            lista(client, jose.cookie, `contacto_id=${contactoId}&servicio_id=${mama.servicioId}`),
+            503,
+        )
+        assert.equal(viejo.body().type, 'urn:argosisp:problema:soporte_no_disponible')
+        assert.lengthOf(llamadas, 0)
+        const soporte = await estado(get(client, '/api/v1/portal/soporte', jose.cookie), 200)
+        assert.isFalse(soporte.body().contactos)
+        conector('0.12.1')
+        const nuevo = await estado(get(client, '/api/v1/portal/soporte', jose.cookie), 200)
+        assert.isTrue(nuevo.body().contactos)
+    })
+
+    test('responder y confirmar como contacto exigen reportar y llevan sus cabeceras', async ({
+        client,
+        assert,
+    }) => {
+        const { mama, jose, contactoId } = await escenario({ reportar: false })
+        const responder = () =>
+            client
+                .post('/api/v1/portal/soporte/tickets/9001/responder')
+                .header('Cookie', jose.cookie)
+                .header('X-Forwarded-For', ipNueva())
+                .header('Idempotency-Key', randomUUID())
+                .field('cuerpo', 'Sigue sin luz')
+                .field('contacto_id', String(contactoId))
+                .field('servicio_id', String(mama.servicioId))
+        await estado(responder(), 403)
+        assert.lengthOf(llamadas, 0)
+
+        await db
+            .from('core.contactos_cliente')
+            .where('id', contactoId)
+            .update({
+                permisos: JSON.stringify({ consultar: true, reportar: true, pagar: true, avisos: true }),
+            })
+        const ticket = {
+            id: 9001,
+            numero: 'TK-009001',
+            asunto: 'Sin internet',
+            estado: 'abierto',
+            categoria: null,
+            servicio_id: mama.servicioId,
+            origen: 'portal_argos',
+            afectado_por_incidente: false,
+            puede_confirmar: false,
+            resuelto_en: null,
+            cerrado_en: null,
+            version: 2,
+            creado_en: '2026-11-21T14:03:11Z',
+            actualizado_en: '2026-11-21T14:03:11Z',
+        }
+        respuesta = () =>
+            Response.json({
+                ticket,
+                mensaje: {
+                    id: 1,
+                    autor_tipo: 'cliente',
+                    autor_nombre: 'José',
+                    cuerpo: 'Sigue sin luz',
+                    adjuntos: [],
+                    creado_en: '2026-11-21T14:03:11Z',
+                },
+            })
+        await estado(responder(), 200)
+        assert.equal(llamadas.at(-1)!.cabeceras['x-iris-contacto'], String(contactoId))
+
+        // Iris: no es un ticket suyo, o el servicio ya no está a su cargo
+        respuesta = () =>
+            Response.json(
+                { type: 'urn:iris:problema:servicio_fuera_del_contacto', title: 'x', status: 403 },
+                { status: 403 },
+            )
+        const fuera = await estado(
+            client
+                .post('/api/v1/portal/soporte/tickets/9001/confirmar-solucion')
+                .header('Cookie', jose.cookie)
+                .header('X-Forwarded-For', ipNueva())
+                .json({ version: 2, contacto_id: contactoId, servicio_id: mama.servicioId }),
+            403,
+        )
+        assert.equal(fuera.body().type, 'urn:argosisp:problema:servicio_fuera_del_contacto')
+
+        // Iris pide la cabecera (un Argos mal configurado): 503, sin detalles internos
+        respuesta = () =>
+            Response.json(
+                { type: 'urn:iris:problema:cabecera_iris_requerida', title: 'x', status: 400 },
+                { status: 400 },
+            )
+        const cabecera = await estado(
+            lista(client, jose.cookie, `contacto_id=${contactoId}&servicio_id=${mama.servicioId}`),
+            503,
+        )
+        assert.equal(cabecera.body().type, 'urn:argosisp:problema:soporte_no_disponible')
     })
 })

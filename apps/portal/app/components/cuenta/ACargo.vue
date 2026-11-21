@@ -3,11 +3,15 @@
  * «Está a cargo de» en el inicio (contrato Iris 0.10.1 §3.8, A46): servicios de otros clientes que
  * esta persona tiene a cargo como su contacto. Solo el código y el nombre del servicio, su estado y,
  * con el permiso «consultar», lo que debe; nunca el nombre ni los datos del titular. Con «reportar»
- * y soporte disponible, «Reportar una falla» abre el ticket en la cuenta del titular. No aparece si
+ * y un Iris con contrato ≥ 0.12.1, «Reportar una falla» abre el ticket en la cuenta del titular y
+ * se listan los tickets de ese servicio (los suyos completos; los demás, reducidos). No aparece si
  * no tiene ninguno.
  */
 const aCargo = useACargo()
 const soporte = useSoporte()
+
+/** Tickets de los servicios a cargo: Iris con contrato ≥ 0.12.1 (§11.10) y soporte disponible. */
+const conTickets = computed(() => soporte.disponible.value && soporte.disponibilidad.value?.contactos === true)
 
 const servicios = computed(() => (aCargo.lista.value ?? []).flatMap(grupo => grupo.servicios.map(servicio => ({
     servicio,
@@ -79,7 +83,7 @@ const servicios = computed(() => (aCargo.lista.value ?? []).flatMap(grupo => gru
                     El titular no te dio permiso para ver el saldo.
                 </p>
                 <UButton
-                    v-if="permisos.reportar && soporte.disponible.value"
+                    v-if="permisos.reportar && conTickets"
                     label="Reportar una falla"
                     icon="i-lucide-life-buoy"
                     color="neutral"
@@ -89,6 +93,12 @@ const servicios = computed(() => (aCargo.lista.value ?? []).flatMap(grupo => gru
                     data-testid="a-cargo-reportar"
                 />
             </div>
+            <SoporteTicketsACargo
+                v-if="conTickets && (permisos.reportar || permisos.consultar)"
+                :contacto-id="contactoId"
+                :servicio-id="servicio.id"
+                class="mt-3"
+            />
             <p
                 v-if="permisos.pagar"
                 class="mt-2 text-xs text-muted"

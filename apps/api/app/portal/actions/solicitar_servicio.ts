@@ -55,6 +55,8 @@ export default class SolicitarServicioPortal extends DomainAction<
                 ruta: '/solicitudes',
                 cuerpo,
                 idempotencia: `argos:portal:solicitud:${input.clave}`,
+                // §11.10: las solicitudes son solo del titular (un contacto recibe 403 solo_titular)
+                contacto: 'titular',
             }),
         )
         t.fijarEntidad('solicitud_iris', solicitud.id)

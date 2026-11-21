@@ -388,6 +388,10 @@ revisor y su rastreador no ejecutan JavaScript). Manual: `docs/manual/portal/pol
   permisos (consultar, reportar fallas, pagar, avisos), servicios y de 1 a 5 teléfonos con uno principal.
 - **Está a tu cargo** (en el inicio, `CuentaACargo`): código y nombre del servicio, estado, saldo solo
   con «consultar» y «Reportar una falla» con «reportar». Nunca datos del titular.
+- **Tickets del servicio a cargo** (Iris ≥ 0.12.1, `contactos` en `GET /portal/soporte`): la tarjeta
+  lista los tickets del servicio (`SoporteTicketsACargo`); los que abrió la persona se abren en
+  `/soporte/:id?contacto=&servicio=`, los demás solo con número y estado. Los errores al enviar
+  muestran «Reintentar».
 - `Idempotency-Key`: un UUID por envío, el mismo en los reintentos sin respuesta (`claveIdempotencia`).
 - Fixtures: `?soporte=disponible|apagado|sin_iris|ip` (queda para la pestaña; por defecto `sin_iris`).
   Capturas: `PW_CAPTURAS=/ruta pnpm test:e2e tests/e2e/capturas-soporte.spec.ts`.

@@ -45,7 +45,11 @@ const categorias = ref<{ label: string, value: number }[]>([])
 const problemaCategorias = ref<string | null>(null)
 async function cargarCategorias() {
     problemaCategorias.value = null
-    const leidas = await tickets.categorias(contactoId.value ? undefined : empresaId.value)
+    const servicio = numero(route.query.servicio)
+    const leidas = await tickets.categorias(
+        empresaId.value,
+        contactoId.value && servicio ? { contactoId: contactoId.value, servicioId: servicio } : undefined,
+    )
     if (leidas.ok) {
         categorias.value = leidas.data.data.map(c => ({ label: c.nombre, value: c.id }))
     }
@@ -63,6 +67,7 @@ watch(servicios, (lista) => {
 }, { immediate: true })
 
 const archivos = ref<File[]>([])
+const formulario = useTemplateRef('formulario')
 const enviando = ref(false)
 const error = ref<string | null>(null)
 const creado = ref<TicketSoporte | null>(null)
@@ -165,7 +170,16 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                 </div>
 
                 <UAlert
-                    v-if="contactoId && servicioACargo"
+                    v-if="contactoId && soporte.disponibilidad.value && !soporte.disponibilidad.value.contactos"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-cloud-off"
+                    title="Por ahora no puedes reportar fallas de los servicios a tu cargo"
+                    description="Pídele al titular que lo reporte o llámanos."
+                    :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => soporte.recargar() }]"
+                />
+                <UAlert
+                    v-else-if="contactoId && servicioACargo"
                     color="info"
                     variant="subtle"
                     icon="i-lucide-users"
@@ -186,10 +200,12 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                     variant="subtle"
                     icon="i-lucide-circle-alert"
                     :title="error"
+                    :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: () => formulario?.submit() }]"
                     data-testid="ticket-error"
                 />
 
                 <UForm
+                    ref="formulario"
                     :schema="esquemaTicket"
                     :state="estado"
                     class="flex flex-col gap-4"
@@ -260,7 +276,7 @@ const volver = computed(() => contactoId.value ? '/cuenta' : '/cuenta?seccion=so
                         size="xl"
                         block
                         :loading="enviando"
-                        :disabled="Boolean(contactoId && !servicioACargo)"
+                        :disabled="Boolean(contactoId && (!servicioACargo || soporte.disponibilidad.value?.contactos === false))"
                         data-testid="ticket-enviar"
                     />
                 </UForm>

@@ -52,6 +52,15 @@ export const TICKETS_FIXTURE: Schema<'PortalTicket'>[] = [
     },
 ]
 
+/**
+ * Tickets del servicio a cargo (S-000412, §11.10): el que abrió la persona, completo; otro del
+ * servicio que abrió el titular, sin asunto.
+ */
+export const TICKETS_A_CARGO_FIXTURE: Schema<'PortalTicket'>[] = [
+    { ...TICKETS_FIXTURE[0]!, id: 2001, numero: 'TK-002001', asunto: 'Sin internet en casa de mamá', servicio_id: 88, estado: 'en_espera' },
+    { ...TICKETS_FIXTURE[1]!, id: 2002, numero: 'TK-002002', asunto: null, servicio_id: 88, puede_confirmar: false, estado: 'cerrado' },
+]
+
 export const MENSAJES_FIXTURE: Schema<'PortalMensajeTicket'>[] = [
     {
         id: 51200,
@@ -211,21 +220,22 @@ export function rutasSoporte(conSesion: (responder: (s: SolicitudFixture) => Res
                 estado: e === 'ip' ? 'disponible' : e,
                 detalle: e === 'apagado' ? 'El soporte en línea no está disponible ahora. Intenta de nuevo más tarde.' : null,
                 capacidades: e === 'apagado' || e === 'sin_iris' ? null : { portal_argos: true, solicitudes_servicio: true, adjuntos_ticket: true },
+                contactos: e === 'disponible',
                 sesion: e === 'ip' ? 'ip' : 'documento',
                 empresas: [1],
             }
             return { status: 200, cuerpo }
         }),
         'GET /api/v1/portal/soporte/categorias': disponible(() => ({ status: 200, cuerpo: { data: CATEGORIAS_FIXTURE } })),
-        'GET /api/v1/portal/soporte/tickets': disponible(() => ({
-            status: 200,
-            cuerpo: {
-                data: escenario() === 'ip' ? estado.tickets.map(t => ({ ...t, asunto: null })) : estado.tickets,
-                nextCursor: null,
-            },
-        })),
+        'GET /api/v1/portal/soporte/tickets': disponible(({ query }) => {
+            if (query.get('contacto_id')) {
+                return { status: 200, cuerpo: { data: TICKETS_A_CARGO_FIXTURE, nextCursor: null } }
+            }
+            const data = escenario() === 'ip' ? estado.tickets.map(t => ({ ...t, asunto: null })) : estado.tickets
+            return { status: 200, cuerpo: { data, nextCursor: null } }
+        }),
         'GET /api/v1/portal/soporte/tickets/:ticketId': disponible(({ params }) => {
-            const ticket = estado.tickets.find(t => t.id === Number(params.ticketId))
+            const ticket = [...estado.tickets, ...TICKETS_A_CARGO_FIXTURE].find(t => t.id === Number(params.ticketId))
             return ticket ? { status: 200, cuerpo: ticket } : problema(404, 'no_encontrado', 'No encontrado', 'No encontramos ese ticket en tu cuenta.')
         }, true),
         'GET /api/v1/portal/soporte/tickets/:ticketId/mensajes': disponible(() => ({ status: 200, cuerpo: { data: MENSAJES_FIXTURE, nextCursor: null } }), true),

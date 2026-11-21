@@ -597,6 +597,16 @@ Pedidos A30 (tickets), A31 (solicitudes de servicio), A42 (contactos desde el po
   los primeros bytes (413 `tamano_excedido`, 422 `mime_no_permitido`, `demasiados_adjuntos`); el total
   lo acota el bodyparser (20 MB). Descarga por Argos con `Content-Disposition: attachment`,
   `nosniff` y `Content-Security-Policy: sandbox`.
+- **Contrato 0.12.1 (§11.10, B28)**: toda llamada lleva `X-Iris-Contacto` (`titular`, o el `contacto_id`
+  con `X-Iris-Contacto-Version` = su `version` en `core.contactos_cliente`). Una petición como contacto
+  (`contacto_id` + `servicio_id` en la consulta o el cuerpo) se valida antes en Argos
+  (`quienPide` → `servicioACargo`): contacto vigente que apunta a la persona, servicio entre los suyos y
+  `reportar` o `consultar` para ver (`reportar` para crear, responder y confirmar); sin `servicio_id`, 422.
+  Con un Iris < 0.12.1 Argos no manda sesiones de contactos: `503 soporte_no_disponible` y
+  `GET /portal/soporte` responde `contactos: false`. La lista como contacto va siempre con
+  `?servicio_id=`; Iris manda completos solo los tickets que abrió el contacto (los demás, sin asunto).
+  Solicitudes: siempre `titular`. `servicio_fuera_del_contacto`, `permiso_de_contacto` y `solo_titular`
+  salen con su código; `cabecera_iris_requerida` como `503 soporte_no_disponible`.
 - **A cargo** (A46): `GET /portal/a-cargo` lista los contactos con `persona_cliente_id` = cliente de la
   sesión y sus servicios (código, nombre, estado y saldo solo con `consultar`). `POST
   /portal/soporte/tickets` con `contacto_id` abre el ticket en la cuenta del dueño si el contacto

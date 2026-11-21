@@ -245,6 +245,8 @@ test.group('Portal: soporte con Iris (0.9.0 §11, A30 y A31)', (group) => {
         const disponible = await leer()
         assert.equal(disponible.estado, 'disponible')
         assert.deepEqual(disponible.capacidades, CAPACIDADES)
+        // contrato 0.9.0: sin tickets de servicios a cargo (§11.10 nace en 0.12.1)
+        assert.isFalse(disponible.contactos)
         assert.equal(disponible.sesion, 'documento')
         assert.deepEqual(disponible.empresas, [1])
         // las capacidades se leen con el token del panel, nunca con el del portal
@@ -327,6 +329,9 @@ test.group('Portal: soporte con Iris (0.9.0 §11, A30 y A31)', (group) => {
         assert.equal(llamada.cabeceras.authorization, `Bearer ${TOKEN_PORTAL}`)
         assert.equal(llamada.cabeceras['x-iris-empresa'], '1')
         assert.equal(llamada.cabeceras['x-argos-portal-sesion'], `documento:${idSesionIris(c.sesionId)}`)
+        // §11.10 (0.12.1): el titular siempre con `X-Iris-Contacto: titular` y sin versión
+        assert.equal(llamada.cabeceras['x-iris-contacto'], 'titular')
+        assert.notProperty(llamada.cabeceras, 'x-iris-contacto-version')
         assert.match(llamada.cabeceras['x-argos-portal-sesion'] ?? '', /^(documento|ip):[A-Za-z0-9_-]{8,64}$/)
         // nunca la cookie ni la IP del cliente
         assert.notInclude(JSON.stringify(llamada.cabeceras), c.cookie.split('=')[1] ?? '')

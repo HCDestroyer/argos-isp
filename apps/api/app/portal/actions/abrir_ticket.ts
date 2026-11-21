@@ -1,13 +1,18 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { llamarIrisJson, type ArchivoIris, type SesionIris } from '#portal/soporte/iris_portal'
+import {
+    llamarIrisJson,
+    type ArchivoIris,
+    type ContactoIris,
+    type SesionIris,
+} from '#portal/soporte/iris_portal'
 import { adjuntosParaAuditoria } from '#portal/soporte/adjuntos'
 import { ticketSoporte, type TicketSoporte } from '#portal/soporte/vistas'
 
 export interface EntradaAbrirTicket {
     /** cliente de la ruta de Iris: el de la sesión, o el dueño del servicio que tiene a cargo (A46) */
     clienteId: number
-    /** contacto con que actúa la persona de la sesión sobre el servicio de otro (A46); null = titular */
-    contactoId: number | null
+    /** `titular`, o el contacto con que actúa la persona de la sesión sobre el servicio de otro (A46) */
+    contacto: ContactoIris
     empresaId: number
     sesion: SesionIris
     /** UUID del envío del formulario (`Idempotency-Key` del portal): `argos:portal:ticket:<clave>` */
@@ -26,7 +31,7 @@ export interface EntradaAbrirTicket {
  * `cliente` y canal `portal` (los adjuntos, solo nombre, tipo y tamaño). Iris emite `ticket.creado`.
  *
  * La misma `clave` repite la misma respuesta en Iris (`argos:portal:ticket:<uuid>`). Desde una
- * sesión `ip` va sin adjuntos (la ruta ya los rechaza). Con `contactoId` (A46) la ruta ya validó que
+ * sesión `ip` va sin adjuntos (la ruta ya los rechaza). Con un contacto (A46, Iris ≥ 0.12.1) la ruta ya validó que
  * el contacto apunta a la persona de la sesión y tiene `reportar`.
  */
 export default class AbrirTicketPortal extends DomainAction<EntradaAbrirTicket, TicketSoporte> {
@@ -37,7 +42,7 @@ export default class AbrirTicketPortal extends DomainAction<EntradaAbrirTicket, 
         t.fijarEmpresa(input.empresaId)
         t.anotarAuditoria({
             cliente_id: input.clienteId,
-            contacto_id: input.contactoId,
+            contacto_id: input.contacto === 'titular' ? null : input.contacto.id,
             metodo: input.sesion.metodo,
             adjuntos: adjuntosParaAuditoria(input.archivos),
         })
@@ -54,6 +59,7 @@ export default class AbrirTicketPortal extends DomainAction<EntradaAbrirTicket, 
                 cuerpo,
                 archivos: input.archivos,
                 idempotencia: `argos:portal:ticket:${input.clave}`,
+                contacto: input.contacto,
             }),
         )
         t.fijarEntidad('ticket_iris', ticket.id)

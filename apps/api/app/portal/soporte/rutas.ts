@@ -26,6 +26,7 @@ import {
     listarMensajesValidator,
     listarSolicitudesValidator,
     listarTicketsValidator,
+    verTicketValidator,
     quitarContactoValidator,
     responderTicketValidator,
     solicitarServicioValidator,
@@ -36,7 +37,7 @@ import {
     empresasDeSoporte,
     exigirDocumento,
     exigirServicioDelCliente,
-    servicioACargo,
+    quienPide,
     sesionSoporte,
     type SesionSoporte,
 } from '#portal/soporte/sesion'
@@ -96,6 +97,13 @@ function limitarYUnirEstados(endpoint: string) {
         const qs = ctx.request.qs()
         if (Array.isArray(qs.estado)) ctx.request.updateQs({ ...qs, estado: qs.estado.join(',') })
     }
+}
+
+/** Ver la lista, el detalle, los mensajes y los adjuntos: un contacto con `reportar` o `consultar`. */
+const LECTURA = ['reportar', 'consultar'] as Array<'reportar' | 'consultar'>
+
+function entradaACargo(e: { contacto_id?: number; servicio_id?: number; empresa_id?: number }) {
+    return { contactoId: e.contacto_id, servicioId: e.servicio_id, empresaId: e.empresa_id }
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -161,6 +169,7 @@ const soporte: Ruta[] = [
                 estado: disponibilidad.estado,
                 detalle: textos[disponibilidad.estado] ?? null,
                 capacidades: disponibilidad.capacidades,
+                contactos: disponibilidad.contactos && s.iris.metodo === 'documento',
                 sesion: s.iris.metodo,
                 empresas,
             }
@@ -177,7 +186,7 @@ const soporte: Ruta[] = [
         permiso: null,
         limitada: true,
         antes: limitarAntes('soporte_categorias'),
-        query: empresaSoporteValidator,
+        query: verTicketValidator,
         respuesta: {
             status: 200,
             descripcion: 'Categorías',
@@ -185,12 +194,13 @@ const soporte: Ruta[] = [
         },
         handler: async (ctx, { query }) => {
             const s = await sesionSoporte(ctx)
-            const empresaId = await empresaDeSoporte(s, query.empresa_id)
+            const q = await quienPide(s, entradaACargo(query), ['reportar'])
             const r = await llamarIrisJson<{ data?: unknown }>({
                 metodo: 'GET',
-                clienteId: s.clienteId,
-                empresaId,
+                clienteId: q.clienteId,
+                empresaId: q.empresaId,
                 sesion: s.iris,
+                contacto: q.contacto,
                 ruta: '/categorias',
             })
             if (!Array.isArray(r?.data)) return { data: [] }
@@ -212,13 +222,23 @@ const soporte: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de tickets', esquema: pagina(PortalTicket) },
         handler: async (ctx, { query }) => {
             const s = await sesionSoporte(ctx)
-            const empresaId = await empresaDeSoporte(s, query.empresa_id)
+            const q = await quienPide(s, entradaACargo(query), LECTURA)
+            if (q.contacto === 'titular' && q.servicioId !== null) {
+                await exigirServicioDelCliente(s, q.servicioId, q.empresaId)
+            }
             const r = await llamarIrisJson<unknown>({
                 metodo: 'GET',
-                clienteId: s.clienteId,
-                empresaId,
+                clienteId: q.clienteId,
+                empresaId: q.empresaId,
                 sesion: s.iris,
-                ruta: `/tickets${consulta({ estado: query.estado, cursor: query.cursor, limit: query.limit })}`,
+                contacto: q.contacto,
+                // §11.10: con un contacto, `servicio_id` siempre (el suyo a cargo)
+                ruta: `/tickets${consulta({
+                    estado: query.estado,
+                    servicio_id: q.servicioId ?? undefined,
+                    cursor: query.cursor,
+                    limit: query.limit,
+                })}`,
             })
             const p = paginaSoporte(r, ticketSoporte)
             // §11.2: la sesión `ip` nunca ve el asunto, aunque Iris lo mandara
@@ -237,18 +257,19 @@ const soporte: Ruta[] = [
         permiso: null,
         limitada: true,
         antes: limitarAntes('soporte_ticket'),
-        query: empresaSoporteValidator,
+        query: verTicketValidator,
         respuesta: { status: 200, descripcion: 'Ticket', esquema: PortalTicket },
         handler: async (ctx, { query, params }) => {
             const s = await sesionSoporte(ctx)
             exigirDocumento(s)
-            const empresaId = await empresaDeSoporte(s, query.empresa_id)
+            const q = await quienPide(s, entradaACargo(query), LECTURA)
             return ticketSoporte(
                 await llamarIrisJson<unknown>({
                     metodo: 'GET',
-                    clienteId: s.clienteId,
-                    empresaId,
+                    clienteId: q.clienteId,
+                    empresaId: q.empresaId,
                     sesion: s.iris,
+                    contacto: q.contacto,
                     ruta: `/tickets/${Number(params.ticketId)}`,
                 }),
             )
@@ -270,12 +291,13 @@ const soporte: Ruta[] = [
         handler: async (ctx, { query, params }) => {
             const s = await sesionSoporte(ctx)
             exigirDocumento(s)
-            const empresaId = await empresaDeSoporte(s, query.empresa_id)
+            const q = await quienPide(s, entradaACargo(query), LECTURA)
             const r = await llamarIrisJson<unknown>({
                 metodo: 'GET',
-                clienteId: s.clienteId,
-                empresaId,
+                clienteId: q.clienteId,
+                empresaId: q.empresaId,
                 sesion: s.iris,
+                contacto: q.contacto,
                 ruta: `/tickets/${Number(params.ticketId)}/mensajes${consulta({ cursor: query.cursor, limit: query.limit })}`,
             })
             return paginaSoporte(r, mensajeSoporte)
@@ -295,7 +317,7 @@ const soporte: Ruta[] = [
         permiso: null,
         limitada: true,
         antes: limitarAntes('soporte_adjunto'),
-        query: empresaSoporteValidator,
+        query: verTicketValidator,
         parametros: { adjunto: { type: 'string', pattern: '^[A-Za-z0-9-]{1,64}$' } },
         respuesta: { status: 200, descripcion: 'Archivo', contenido: 'application/octet-stream' },
         handler: async (ctx, { query, params }) => {
@@ -307,12 +329,13 @@ const soporte: Ruta[] = [
                     { field: 'adjunto', rule: 'formato', message: 'Adjunto inválido' },
                 ])
             }
-            const empresaId = await empresaDeSoporte(s, query.empresa_id)
+            const q = await quienPide(s, entradaACargo(query), LECTURA)
             const respuesta = await llamarIris({
                 metodo: 'GET',
-                clienteId: s.clienteId,
-                empresaId,
+                clienteId: q.clienteId,
+                empresaId: q.empresaId,
                 sesion: s.iris,
+                contacto: q.contacto,
                 ruta: `/tickets/${Number(params.ticketId)}/adjuntos/${adjunto}`,
             })
             const tipo = respuesta.headers.get('content-type') ?? 'application/octet-stream'
@@ -352,41 +375,16 @@ const soporte: Ruta[] = [
         handler: async (ctx, { cuerpo }) => {
             const clave = claveDelEnvio(ctx)
             const s = await sesionSoporte(ctx)
-            let clienteId = s.clienteId
-            let empresaId: number
-            let contactoId: number | null = null
-            if (cuerpo.contacto_id !== undefined) {
-                exigirDocumento(s)
-                if (cuerpo.servicio_id === undefined) {
-                    throw new ValidacionFallida([
-                        {
-                            field: 'servicio_id',
-                            rule: 'required',
-                            message: 'Elige el servicio que tienes a cargo',
-                        },
-                    ])
-                }
-                const aCargo = await servicioACargo(
-                    s.clienteId,
-                    cuerpo.contacto_id,
-                    cuerpo.servicio_id,
-                    'reportar',
-                )
-                clienteId = aCargo.clienteId
-                empresaId = aCargo.empresaId
-                contactoId = aCargo.contacto.contacto_id
-            } else {
-                empresaId = await empresaDeSoporte(s, cuerpo.empresa_id)
-                if (cuerpo.servicio_id !== undefined) {
-                    await exigirServicioDelCliente(s, cuerpo.servicio_id, empresaId)
-                }
+            const q = await quienPide(s, entradaACargo(cuerpo), ['reportar'])
+            if (q.contacto === 'titular' && cuerpo.servicio_id !== undefined) {
+                await exigirServicioDelCliente(s, cuerpo.servicio_id, q.empresaId)
             }
             const archivos = await adjuntosDeLaPeticion(ctx, s.iris.metodo === 'documento')
             return new AbrirTicketPortal().execute(
                 {
-                    clienteId,
-                    contactoId,
-                    empresaId,
+                    clienteId: q.clienteId,
+                    contacto: q.contacto,
+                    empresaId: q.empresaId,
                     sesion: s.iris,
                     clave,
                     asunto: cuerpo.asunto,
@@ -422,13 +420,15 @@ const soporte: Ruta[] = [
             const clave = claveDelEnvio(ctx)
             const s = await sesionSoporte(ctx)
             exigirDocumento(s)
-            const empresaId = await empresaDeSoporte(s, cuerpo.empresa_id)
+            // §11.10: un contacto solo sobre sus propios tickets y con `reportar` (lo revisa también Iris)
+            const q = await quienPide(s, entradaACargo(cuerpo), ['reportar'])
             const archivos = await adjuntosDeLaPeticion(ctx, true)
             return new ResponderTicketPortal().execute(
                 {
-                    clienteId: s.clienteId,
-                    empresaId,
+                    clienteId: q.clienteId,
+                    empresaId: q.empresaId,
                     sesion: s.iris,
+                    contacto: q.contacto,
                     ticketId: Number(params.ticketId),
                     clave,
                     cuerpo: cuerpo.cuerpo,
@@ -457,12 +457,14 @@ const soporte: Ruta[] = [
         handler: async (ctx, { cuerpo, params }) => {
             const s = await sesionSoporte(ctx)
             exigirDocumento(s)
-            const empresaId = await empresaDeSoporte(s, cuerpo.empresa_id)
+            // §11.10: un contacto solo sobre sus propios tickets y con `reportar` (lo revisa también Iris)
+            const q = await quienPide(s, entradaACargo(cuerpo), ['reportar'])
             return new ConfirmarSolucionPortal().execute(
                 {
-                    clienteId: s.clienteId,
-                    empresaId,
+                    clienteId: q.clienteId,
+                    empresaId: q.empresaId,
                     sesion: s.iris,
+                    contacto: q.contacto,
                     ticketId: Number(params.ticketId),
                     version: cuerpo.version,
                 },
@@ -490,12 +492,14 @@ const soporte: Ruta[] = [
         handler: async (ctx, { query }) => {
             const s = await sesionSoporte(ctx)
             exigirDocumento(s)
+            // §11.10: las solicitudes son solo del titular
             const empresaId = await empresaDeSoporte(s, query.empresa_id)
             const r = await llamarIrisJson<unknown>({
                 metodo: 'GET',
                 clienteId: s.clienteId,
                 empresaId,
                 sesion: s.iris,
+                contacto: 'titular',
                 ruta: `/solicitudes${consulta({ estado: query.estado, cursor: query.cursor, limit: query.limit })}`,
             })
             return paginaSoporte(r, solicitudSoporte)
@@ -524,6 +528,7 @@ const soporte: Ruta[] = [
                     clienteId: s.clienteId,
                     empresaId,
                     sesion: s.iris,
+                    contacto: 'titular',
                     ruta: `/solicitudes/${Number(params.solicitudId)}`,
                 }),
             )

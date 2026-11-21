@@ -12,23 +12,31 @@ const toast = useToast()
 const tickets = useTickets()
 
 const ticketId = computed(() => Number(route.params.id))
-const empresaId = computed(() => {
-    const n = Number(route.query.empresa)
+function numero(valor: unknown): number | undefined {
+    const n = Number(Array.isArray(valor) ? valor[0] : valor)
     return Number.isSafeInteger(n) && n > 0 ? n : undefined
+}
+const empresaId = computed(() => numero(route.query.empresa))
+/** Servicio a cargo (A46, §11.10): `?contacto=&servicio=`; solo sus propios tickets se abren aquí. */
+const aCargo = computed<ACargoTicket | undefined>(() => {
+    const contactoId = numero(route.query.contacto)
+    const servicioId = numero(route.query.servicio)
+    return contactoId && servicioId ? { contactoId, servicioId } : undefined
 })
+const volver = computed(() => aCargo.value ? '/cuenta' : '/cuenta?seccion=soporte')
 
 const ticket = ref<TicketSoporte | null>(null)
 const problema = ref<ReturnType<typeof mensajeProblema> | null>(null)
 const sinSesion = ref(false)
 const cargando = ref(true)
-const mensajes = shallowRef(tickets.mensajes(ticketId.value, empresaId.value))
+const mensajes = shallowRef(tickets.mensajes(ticketId.value, empresaId.value, aCargo.value))
 
 useHead({ title: computed(() => ticket.value ? `Ticket ${ticket.value.numero}` : 'Ticket') })
 
 async function cargar() {
     cargando.value = true
     problema.value = null
-    const leido = await tickets.ver(ticketId.value, empresaId.value)
+    const leido = await tickets.ver(ticketId.value, empresaId.value, aCargo.value)
     cargando.value = false
     if (!leido.ok) {
         if (esSinSesion(leido.problema)) {
@@ -40,7 +48,7 @@ async function cargar() {
         return
     }
     ticket.value = leido.data
-    mensajes.value = tickets.mensajes(ticketId.value, empresaId.value)
+    mensajes.value = tickets.mensajes(ticketId.value, empresaId.value, aCargo.value)
     await mensajes.value.recargar()
 }
 onMounted(cargar)
@@ -63,7 +71,9 @@ async function responder(evento: FormSubmitEvent<DatosRespuesta>) {
     const r = await tickets.responder(ticket.value.id, {
         cuerpo: evento.data.cuerpo,
         ...(ticket.value.version ? { version: ticket.value.version } : {}),
-        ...(empresaId.value ? { empresa_id: empresaId.value } : {}),
+        ...(aCargo.value
+            ? { contacto_id: aCargo.value.contactoId, servicio_id: aCargo.value.servicioId }
+            : empresaId.value ? { empresa_id: empresaId.value } : {}),
     }, archivos.value, clave)
     enviando.value = false
     if (!r.ok) {
@@ -71,14 +81,28 @@ async function responder(evento: FormSubmitEvent<DatosRespuesta>) {
             clave = claveIdempotencia()
         }
         errorRespuesta.value = mensajeProblema(r.problema)
+        reintento.value = 'responder'
         return
     }
+    reintento.value = null
     clave = claveIdempotencia()
     ticket.value = r.data.ticket
     respuesta.cuerpo = ''
     archivos.value = []
     await mensajes.value.recargar()
     toast.add({ title: 'Mensaje enviado', icon: 'i-lucide-check', color: 'success' })
+}
+
+/** Lo último que falló al enviar, para «Reintentar» (responder reenvía con la misma clave). */
+const reintento = ref<'responder' | 'confirmar' | null>(null)
+const formulario = useTemplateRef('formulario')
+function reintentar() {
+    if (reintento.value === 'confirmar') {
+        void confirmar()
+    }
+    else {
+        formulario.value?.submit()
+    }
 }
 
 const confirmando = ref(false)
@@ -88,12 +112,14 @@ async function confirmar() {
     }
     confirmando.value = true
     errorRespuesta.value = null
-    const r = await tickets.confirmar(ticket.value.id, ticket.value.version, empresaId.value)
+    const r = await tickets.confirmar(ticket.value.id, ticket.value.version, empresaId.value, aCargo.value)
     confirmando.value = false
     if (!r.ok) {
         errorRespuesta.value = mensajeProblema(r.problema)
+        reintento.value = 'confirmar'
         return
     }
+    reintento.value = null
     ticket.value = r.data
     toast.add({ title: 'Gracias, cerramos tu ticket', icon: 'i-lucide-circle-check', color: 'success' })
 }
@@ -106,11 +132,11 @@ async function confirmar() {
     >
         <div>
             <UButton
-                label="Mis tickets"
+                :label="aCargo ? 'Inicio' : 'Mis tickets'"
                 icon="i-lucide-arrow-left"
                 color="neutral"
                 variant="ghost"
-                to="/cuenta?seccion=soporte"
+                :to="volver"
             />
         </div>
 
@@ -214,7 +240,7 @@ async function confirmar() {
                                     :key="adjunto.id"
                                     :label="adjunto.nombre"
                                     :icon="adjunto.mime === 'application/pdf' ? 'i-lucide-file-text' : 'i-lucide-image'"
-                                    :href="tickets.urlAdjunto(ticket.id, adjunto.id, empresaId)"
+                                    :href="tickets.urlAdjunto(ticket.id, adjunto.id, empresaId, aCargo)"
                                     external
                                     download
                                     size="sm"
@@ -233,6 +259,7 @@ async function confirmar() {
                 :ui="{ body: 'p-4 sm:p-6' }"
             >
                 <UForm
+                    ref="formulario"
                     :schema="esquemaRespuesta"
                     :state="respuesta"
                     class="flex flex-col gap-4"
@@ -244,6 +271,7 @@ async function confirmar() {
                         variant="subtle"
                         icon="i-lucide-circle-alert"
                         :title="errorRespuesta"
+                        :actions="[{ label: 'Reintentar', icon: 'i-lucide-refresh-cw', color: 'error', variant: 'outline', onClick: reintentar }]"
                         data-testid="ticket-error"
                     />
                     <UFormField

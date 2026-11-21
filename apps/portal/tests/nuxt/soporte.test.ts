@@ -56,8 +56,8 @@ describe('textos y reglas de soporte', () => {
         expect(seccionesVisibles(false, false).map(s => s.seccion)).not.toContain('soporte')
         expect(seccionesVisibles(false, true).map(s => s.seccion)).toContain('soporte')
         expect(soporteVisible(null)).toBe(false)
-        expect(soporteVisible({ estado: 'sin_iris', detalle: null, capacidades: null, sesion: 'documento', empresas: [] })).toBe(false)
-        expect(soporteVisible({ estado: 'apagado', detalle: 'x', capacidades: null, sesion: 'documento', empresas: [1] })).toBe(true)
+        expect(soporteVisible({ estado: 'sin_iris', detalle: null, capacidades: null, contactos: false, sesion: 'documento', empresas: [] })).toBe(false)
+        expect(soporteVisible({ estado: 'apagado', detalle: 'x', capacidades: null, contactos: false, sesion: 'documento', empresas: [1] })).toBe(true)
     })
 
     it('qué pide cada solicitud y los adjuntos', () => {
@@ -185,5 +185,36 @@ describe('mis contactos y servicios a cargo', () => {
         expect(tarjeta.text()).toContain('Q 150.00')
         const reportar = wrapper.find('[data-testid="a-cargo-reportar"]')
         expect(reportar.attributes('href')).toBe(`/soporte/nuevo?contacto=${A_CARGO_FIXTURE[0]!.contacto_id}&servicio=88`)
+    })
+
+    it('está a cargo de: tickets del servicio; solo los suyos se abren (§11.10)', async () => {
+        fijarSoporteFixture('disponible')
+        fijarSesionFixture(true)
+        limpiarDatos()
+        useSesionPortal().confirmar()
+        const wrapper = await mountSuspended(CuentaACargo)
+        await esperar()
+        const filas = wrapper.find('[data-testid="a-cargo-tickets"]').findAll('[data-testid="ticket"]')
+        expect(filas).toHaveLength(2)
+        expect(filas[0]!.text()).toContain('Sin internet en casa de mamá')
+        expect(filas[0]!.attributes('href')).toBe(`/soporte/2001?contacto=${A_CARGO_FIXTURE[0]!.contacto_id}&servicio=88`)
+        expect(filas[1]!.text()).toContain('Ticket TK-002002')
+        expect(filas[1]!.attributes('href')).toBeUndefined()
+    })
+
+    it('está a cargo de: si Iris falla, los tickets muestran el error con «Reintentar»', async () => {
+        fijarSoporteFixture('disponible')
+        fijarSesionFixture(true)
+        limpiarDatos()
+        useSesionPortal().confirmar()
+        fijarFallaFixture('GET /api/v1/portal/soporte/tickets', {
+            status: 403,
+            cuerpo: { type: 'urn:argosisp:problema:servicio_fuera_del_contacto', title: 'Servicio fuera de tu cargo', status: 403, detail: 'Ese servicio ya no está a tu cargo.' },
+        })
+        const wrapper = await mountSuspended(CuentaACargo)
+        await esperar()
+        const tickets = wrapper.find('[data-testid="a-cargo-tickets"]')
+        expect(tickets.text()).toContain('Ese servicio ya no está a tu cargo.')
+        expect(tickets.text()).toContain('Reintentar')
     })
 })
