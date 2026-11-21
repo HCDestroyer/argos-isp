@@ -9,6 +9,8 @@ export interface FacturacionServicioFixture {
     inicio: string
     /** Primer periodo que factura el cron; null = desde el inicio. */
     facturar_desde: string | null
+    /** Los días antes del primer periodo ya cobrados en la primera factura (el cargo único se ve por su clave). */
+    tramo_en_primera_factura?: number | null
 }
 
 export const facturacionServicios: Record<number, FacturacionServicioFixture> = {

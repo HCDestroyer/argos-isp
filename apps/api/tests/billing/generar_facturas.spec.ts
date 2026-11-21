@@ -97,7 +97,11 @@ test.group('billing · generarFacturas', (group) => {
     test('emite todo lo pendiente con prorrateo, asiento CxC / Ingresos + IVA y factura.emitida; repetir no duplica', async ({
         assert,
     }) => {
-        const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-09-16' })
+        // plantilla con prorrateo encendido a propósito (desde el 21 nov viene apagado)
+        const { servicioId, clienteId } = await escenario({
+            fecha_instalacion: '2026-09-16',
+            plantilla: { prorrateo: true },
+        })
 
         const primera = await generar(servicioId, '2026-10-15')
         assert.equal(primera.generadas, 2)

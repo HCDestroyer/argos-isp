@@ -1540,13 +1540,17 @@ export const PeriodoFacturable = definirEsquema(
         estado: {
             ...enumerado(ESTADOS_PERIODO),
             description:
-                'emitida (tiene factura), bonificada (quedó en cero), pendiente (el cron la emitiría hoy), futuro (pago adelantado), antes_de_facturar_desde (solo con facturas.emitir_periodo_anterior y motivo)',
+                'emitida (tiene factura), bonificada (quedó en cero), pendiente (el cron la emitiría hoy), futuro (pago adelantado), antes_de_facturar_desde y antes_del_inicio (anterior al primer periodo del servicio, hasta 24); estos dos, solo con facturas.emitir_periodo_anterior y motivo',
         },
-        vence_en: { ...fecha, description: 'El de la factura emitida, o periodo + dias_gracia' },
+        vence_en: {
+            ...fecha,
+            description:
+                'El de la factura emitida, o el que tendrá al emitirla hoy: periodo + dias_gracia; antes_del_inicio y antes_de_facturar_desde, nunca antes de hoy + dias_gracia',
+        },
         monto: {
             ...nulable(Dinero),
             description:
-                'Total de la factura emitida, o el que tendría emitida hoy (precio efectivo, prorrateo, conceptos, adicionales y descuentos); null si no se pudo calcular (ver error)',
+                'Total de la factura emitida, o el que tendría emitida hoy a mano (precio efectivo completo, sin prorrateo; conceptos, adicionales y descuentos); null si no se pudo calcular (ver error)',
         },
         pagado: {
             ...nulable(Dinero),
@@ -1577,8 +1581,36 @@ export const PeriodosFacturables = definirEsquema(
                 'Primer periodo que factura el cron (asignación de plantilla sin facturar atrás); null = desde el inicio',
         },
         maximo_futuros: { ...entero, description: 'Periodos futuros que se pueden emitir (12)' },
+        maximo_anteriores: {
+            ...entero,
+            description: 'Periodos anteriores al inicio del servicio que se pueden emitir (24)',
+        },
         saldo_a_favor: { ...Dinero, description: 'Anticipos del cliente en la empresa del servicio' },
         periodos: lista(PeriodoFacturable),
+        tramo_inicial: {
+            ...nulable(
+                objeto({
+                    desde: { ...fecha, description: 'Inicio del ciclo que contiene la instalación' },
+                    hasta: { ...fecha, description: 'Día anterior al primer periodo del servicio' },
+                    dias: entero,
+                    dias_ciclo: entero,
+                    primer_periodo: fecha,
+                    primer_periodo_libre: {
+                        ...booleano,
+                        description: 'El primer periodo no tiene factura: se puede incluir el tramo en ella',
+                    },
+                    monto_proporcional: {
+                        ...Dinero,
+                        description: 'Sugerencia del cargo único: precio efectivo × dias / dias_ciclo',
+                    },
+                    vence_cargo: { ...fecha, description: 'Vencimiento del cargo único (hoy + dias_gracia)' },
+                    cobrado_como: enumeradoNulable(['primera_factura', 'cargo_unico']),
+                    factura_id: nulable(id),
+                }),
+            ),
+            description:
+                'Días entre el inicio del ciclo y la instalación (primer periodo a mitad de ciclo); null si el servicio empieza en un inicio de ciclo',
+        },
     }),
 )
 
@@ -1596,6 +1628,15 @@ export const FacturasPeriodoEmitidas = definirEsquema(
                     description: 'emitida, parcial o pagada (saldo a favor), por_certificar (FEL)',
                 },
                 total: Dinero,
+                monto_calculado: {
+                    ...Dinero,
+                    description:
+                        'Total calculado (precio efectivo completo, conceptos, adicionales y descuentos)',
+                },
+                monto_editado: {
+                    ...booleano,
+                    description: 'El total se cambió a mano (distinto del calculado)',
+                },
                 pagado: { ...Dinero, description: 'Lo que cubrió el saldo a favor al emitirla' },
                 vence_en: fecha,
             }),
@@ -1612,6 +1653,18 @@ export const FacturasPeriodoEmitidas = definirEsquema(
             ),
             description: 'Periodos pedidos que ya estaban ocupados: nunca se duplican',
         },
+        tramo_inicial: nulable(
+            objeto({
+                modo: enumerado(['primera_factura', 'cargo_unico']),
+                desde: fecha,
+                hasta: fecha,
+                factura_id: id,
+                total: Dinero,
+                monto_calculado: Dinero,
+                monto_editado: booleano,
+                vence_en: fecha,
+            }),
+        ),
         saldo_a_favor: { ...Dinero, description: 'Saldo a favor que queda después de emitir' },
     }),
 )

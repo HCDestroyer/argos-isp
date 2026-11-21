@@ -1,7 +1,8 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { facturarDesdeDe } from '#billing/asignacion_plantilla'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
-import { aTexto, dec } from '#ledger/dinero'
+import { aTexto, dec, type Dec } from '#ledger/dinero'
+import { ReglaNegocio } from '#shared/errores'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import {
     claveFactura,
@@ -34,7 +35,8 @@ import {
  *   `servicio_adicional_id`), todos multiplicados por el factor de prorrateo del periodo. Precios con
  *   IVA incluido; el IVA se desglosa por línea (`lineaConIva`).
  * - Guarda `reglas_snapshot`: la configuración efectiva (plantilla + excepciones) y el precio con
- *   que se emitió. Vence `dias_gracia` días después del inicio del periodo.
+ *   que se emitió. Vence `dias_gracia` días después del inicio del periodo (a mano, lo pasado vence
+ *   desde hoy: `manual.vence_en`, y el total puede editarse: `manual.monto`).
  * - Adicionales `cobrado` (decisiones del PM 2 y 3, `contratos/adicionales.md`): no se cobran en un
  *   periodo que empieza con la asignación bloqueada (servicio suspendido); el periodo en que empieza a
  *   cobrarse (`cobrado_desde`) se cobra según `primer_periodo`: `prorrateado`, los días desde
@@ -74,7 +76,32 @@ export interface EntradaEmitirFactura {
      * aunque sea anterior al `facturar_desde` de la asignación (excepción explícita, con su motivo y el
      * permiso `facturas.emitir_periodo_anterior`, que valida quien llama). El cron nunca la manda.
      */
-    manual?: { motivo: string | null; antes_de_facturar_desde: boolean } | null
+    manual?: EmisionManual | null
+}
+
+/** Emisión manual de un periodo (`facturas.emitir_periodos`; `manualDe` en `#billing/periodos_facturables`). */
+export interface EmisionManual {
+    motivo: string | null
+    /** periodo anterior al `facturar_desde` de la asignación (excepción con permiso y motivo) */
+    antes_de_facturar_desde: boolean
+    /** periodo anterior al primero del servicio (`antes_del_inicio`, misma excepción) */
+    antes_del_inicio?: boolean
+    /** vencimiento fijado por quien llama (lo pasado a mano vence desde hoy); por defecto periodo + gracia */
+    vence_en?: string | null
+    /**
+     * Total editado a mano (con IVA incluido; `facturas.editar_monto_periodo` y motivo, que valida quien
+     * llama). Si difiere del calculado: mayor, una línea `servicio` «Ajuste del monto del periodo» por
+     * la diferencia (4.1.01, IVA desglosado); menor, un descuento por la diferencia sobre la línea del
+     * plan (IVA del neto, 5.1.01), como cualquier descuento. Nunca deja la línea del plan bajo cero.
+     */
+    monto?: string | null
+    /**
+     * Incluir en esta factura (el primer periodo del servicio) el tramo entre el inicio del ciclo y la
+     * instalación (decisión del PM del 21 nov): la línea dice «del `tramo_desde` al …» y el snapshot
+     * guarda `emision_manual.tramo_inicial`. La clave sigue siendo la del periodo (`servicio_id-inicio`),
+     * la misma que usaría el cron: nunca dos facturas del primer periodo.
+     */
+    tramo_desde?: string | null
 }
 
 export interface ResultadoEmitirFactura {
@@ -84,6 +111,8 @@ export interface ResultadoEmitirFactura {
     creada: boolean
     /** por qué no se creó (ya existía, sin plantilla, retirado, pendiente de instalación, monto cero, antes de `facturar_desde`) */
     motivo: string | null
+    /** total calculado antes de editar el monto (solo al crear una factura o bonificación) */
+    monto_calculado?: string | null
 }
 
 export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, ResultadoEmitirFactura> {
@@ -124,7 +153,8 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         if (!config) return { factura_id: null, creada: false, motivo: 'sin_plantilla' }
         // asignada por `plantillas.asignar_sin_plantilla`: nunca un periodo anterior a `facturar_desde`
         const desde = await facturarDesdeDe(t.trx, servicio.id)
-        if (desde && input.periodo.periodo < desde && !input.manual?.antes_de_facturar_desde) {
+        const permitida = input.manual?.antes_de_facturar_desde || input.manual?.antes_del_inicio
+        if (desde && input.periodo.periodo < desde && !permitida) {
             return { factura_id: null, creada: false, motivo: 'antes_de_facturar_desde' }
         }
 
@@ -132,11 +162,13 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         const factor = dec(input.periodo.factor)
         const prorrateado = !factor.equals(1)
         const ultimoDia = sumarDias(fin, -1)
+        const tramoDesde = input.manual?.tramo_desde ?? null
+        const cubreDesde = tramoDesde ?? periodo
 
         const lineas: LineaCalculada[] = [
             lineaConIva({
                 concepto:
-                    `Servicio de internet ${servicio.plan_nombre} del ${periodo} al ${ultimoDia}` +
+                    `Servicio de internet ${servicio.plan_nombre} del ${cubreDesde} al ${ultimoDia}` +
                     (prorrateado ? ` (prorrateo ${dias}/${diasCiclo} días)` : ''),
                 tipo: 'servicio',
                 cantidad: '1',
@@ -177,15 +209,21 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                 ? await descuentosParaFactura(t, servicio, dec(positivas[plan]!.total), factor)
                 : { descuentos: [], canjes: [] }
         const pedidos = [...lealtad.descuentos, ...(input.descuentos ?? [])]
-        const conMonto =
+        const calculadas =
             plan >= 0 && pedidos.length > 0
                 ? aplicarDescuentos(
                       positivas,
                       pedidos.map((d) => ({ indice: plan, concepto: d.concepto, monto: d.monto })),
                   )
                 : positivas
+        const calculado = totalesDe(calculadas).total
+        const cobrado = input.manual?.monto ? dec(input.manual.monto) : null
+        const editado = cobrado !== null && !cobrado.equals(calculado)
+        const conMonto = editado
+            ? conMontoEditado(calculadas, positivas, pedidos, plan, calculado, cobrado)
+            : calculadas
 
-        const venceEn = sumarDias(periodo, config.dias_gracia)
+        const venceEn = input.manual?.vence_en ?? sumarDias(periodo, config.dias_gracia)
         const snapshot = {
             ...config,
             precio: aTexto(servicio.precio),
@@ -197,14 +235,26 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                       emision_manual: {
                           motivo: input.manual.motivo,
                           antes_de_facturar_desde: input.manual.antes_de_facturar_desde,
+                          antes_del_inicio: input.manual.antes_del_inicio ?? false,
                           facturar_desde: desde,
+                          monto_calculado: aTexto(calculado),
+                          monto_cobrado: editado ? aTexto(cobrado) : null,
+                          ...(tramoDesde
+                              ? {
+                                    tramo_inicial: {
+                                        modo: 'primera_factura',
+                                        desde: tramoDesde,
+                                        dias: diasEntre(tramoDesde, periodo),
+                                    },
+                                }
+                              : {}),
                       },
                   }
                 : {}),
         }
 
         if (totalesDe(conMonto).total.isZero()) {
-            return bonificarPeriodo(t, {
+            const bonificado = await bonificarPeriodo(t, {
                 servicio,
                 periodo,
                 clave,
@@ -214,6 +264,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                 pedido: input.bonificacion ?? null,
                 descuentos: input.descuentos ?? [],
             })
+            return { ...bonificado, monto_calculado: aTexto(calculado) }
         }
 
         const emision = await emitirDocumento(t, {
@@ -231,8 +282,56 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         if (!emision.creada) return { factura_id: emision.factura_id, creada: false, motivo: 'ya_existe' }
         const facturaId = emision.factura_id!
         await aplicarCanjesEmitidos(t, { factura_id: facturaId }, lealtad.canjes)
-        return { factura_id: facturaId, creada: true, motivo: null }
+        return { factura_id: facturaId, creada: true, motivo: null, monto_calculado: aTexto(calculado) }
     }
+}
+
+/**
+ * Las líneas con el total editado a mano (`EmisionManual.monto`): más que lo calculado, una línea
+ * `servicio` por la diferencia; menos, un descuento más sobre la línea del plan, junto con los que ya
+ * tenía (lealtad, pedidos), para que el IVA del neto salga de una vez. 422 `monto_editado_invalido`
+ * si la línea del plan no alcanza para la rebaja.
+ */
+function conMontoEditado(
+    calculadas: LineaCalculada[],
+    positivas: LineaCalculada[],
+    pedidos: Array<{ concepto: string; monto: string }>,
+    plan: number,
+    calculado: Dec,
+    cobrado: Dec,
+): LineaCalculada[] {
+    const diferencia = cobrado.minus(calculado)
+    let lineas: LineaCalculada[]
+    if (diferencia.gt(0)) {
+        lineas = [
+            ...calculadas,
+            lineaConIva({
+                concepto: 'Ajuste del monto del periodo',
+                tipo: 'servicio',
+                cantidad: '1',
+                gravable: true,
+                total: diferencia,
+            }),
+        ]
+    } else {
+        if (plan < 0) throw montoInvalido('La factura no tiene línea del servicio que rebajar')
+        lineas = aplicarDescuentos(positivas, [
+            ...pedidos.map((d) => ({ indice: plan, concepto: d.concepto, monto: d.monto })),
+            { indice: plan, concepto: 'Ajuste del monto del periodo', monto: aTexto(diferencia.negated()) },
+        ])
+    }
+    if (!totalesDe(lineas).total.equals(cobrado)) {
+        throw montoInvalido(
+            `El monto ${aTexto(cobrado)} rebaja más que la línea del servicio (calculado ${aTexto(calculado)})`,
+        )
+    }
+    return lineas
+}
+
+function montoInvalido(mensaje: string): ReglaNegocio {
+    return new ReglaNegocio(mensaje, 'monto_editado_invalido', [
+        { field: 'montos', message: mensaje, rule: 'monto_editado_invalido' },
+    ])
 }
 
 /** Periodo en cero: bonificación con su asiento interno; los canjes que lo dejaron en cero, aplicados a ella. */

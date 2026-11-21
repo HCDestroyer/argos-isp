@@ -78,3 +78,47 @@ test('adelantar 3 meses desde la ficha del servicio', async ({ page }) => {
     await resultado.locator('[data-prueba="facturas-periodo-ver-facturas"]').click()
     await expect(page).toHaveURL(/\/facturas\?.*servicio=1/)
 })
+
+/**
+ * Pedido del PM (21 nov): «quiero agregar facturas pasadas» de un servicio recién agregado, y «si un
+ * servicio vale 200, la factura es de 200; lo que sí es poder editar ese monto». Se abren los 24
+ * periodos anteriores al inicio del servicio, se marca el último (vence desde hoy) y un futuro con el
+ * monto cambiado; el motivo es obligatorio.
+ */
+test('periodos antes del inicio del servicio y monto editado', async ({ page }) => {
+    await fijarHoyFixtures(page)
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/servicios/1/facturas-periodo')
+    const lista = page.locator('[data-prueba="lista-periodos"]')
+    await expect(lista).toBeVisible({ timeout: 20_000 })
+
+    const verAnteriores = page.locator('[data-prueba="ver-anteriores"]')
+    await expect(verAnteriores).toContainText('24 periodos antes del inicio del servicio')
+    await expect(lista.locator('[data-estado="antes_del_inicio"]')).toHaveCount(0)
+    await verAnteriores.click()
+    const anteriores = lista.locator('[data-estado="antes_del_inicio"]')
+    await expect(anteriores).toHaveCount(24)
+    const ultimo = anteriores.last()
+    await expect(ultimo).toContainText('Antes del inicio del servicio')
+    await ultimo.locator('[role="checkbox"]').click()
+    await expect(page.locator('[data-prueba="aviso-anterior"]')).toContainText('vencen desde hoy')
+
+    await lista.locator('[data-periodo="2026-11-01"] [role="checkbox"]').click()
+    const monto = page.locator('[data-prueba="monto-2026-11-01"] input, input[data-prueba="monto-2026-11-01"]').first()
+    await monto.fill('99.50')
+    await expect(page.locator('[data-prueba="monto-editado-2026-11-01"]')).toContainText(quetzales(PRECIO))
+    await expect(page.locator('[data-prueba="resumen-total"]')).toHaveText(quetzales(PRECIO.plus('99.50')))
+    await capturas(page, 'anteriores-monto')
+
+    await page.locator('[data-prueba="emitir-periodos"]').click()
+    await expect(page.getByText('Obligatorio: emites un periodo anterior al inicio')).toBeVisible()
+    await page.locator('[data-prueba="motivo-periodos"]').fill('Usó el servicio antes del alta; acuerdo de precio')
+    // el aviso se va al validar de nuevo: se espera a que el botón deje de moverse
+    await expect(page.getByText('Obligatorio: emites un periodo anterior al inicio')).toHaveCount(0)
+    await page.locator('[data-prueba="emitir-periodos"]').click()
+
+    const resultado = page.locator('[data-prueba="facturas-periodo-resultado"]')
+    await expect(resultado).toContainText('2 facturas emitidas')
+    await expect(resultado.locator('[data-creada="2026-11-01"]')).toContainText(quetzales(new Decimal('99.50')))
+    await capturas(page, 'anteriores-resultado')
+})
