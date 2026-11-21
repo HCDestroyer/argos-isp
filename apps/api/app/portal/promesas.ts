@@ -113,16 +113,16 @@ const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
 const SIN_VENCIDO = 'No tienes facturas vencidas: no necesitas una promesa de pago.'
 
 /**
- * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3): no hay corte que evitar ni
- * servicio que reactivar, así que no hay promesa. Sus cargos únicos se pagan en línea o por depósito.
- */
-/**
  * Suspendido a mano por un operador: `evaluarEstadoServicio` no lo toca, así que una promesa no lo
  * reactivaría (`CrearPromesaPago` responde 422 `suspension_manual` con canal `portal`).
  */
 const SUSPENDIDO_A_MANO =
     'Tu servicio fue suspendido por un asesor y una promesa de pago no lo reactiva. Comunícate con nosotros para reactivarlo.'
 
+/**
+ * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3): no hay corte que evitar ni
+ * servicio que reactivar, así que no hay promesa. Sus cargos únicos se pagan en línea o por depósito.
+ */
 const INSTALACION_PENDIENTE =
     'Tu servicio está pendiente de instalación: las promesas de pago no aplican. Puedes pagar tus cargos en línea o por depósito.'
 
