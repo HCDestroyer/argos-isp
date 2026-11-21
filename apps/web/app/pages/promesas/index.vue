@@ -162,7 +162,7 @@ const columnas: TableColumn<Promesa>[] = [
     { accessorKey: 'canal', header: 'Quién la pidió', meta: { class: { th: 'max-2xl:hidden', td: 'max-2xl:hidden' } } },
     { accessorKey: 'monto', header: 'Cubre', meta: { class: { th: 'text-right max-sm:hidden', td: 'text-right max-sm:hidden' } } },
     { accessorKey: 'vence_en', header: 'Vence', meta: { class: { th: 'max-sm:hidden', td: 'max-sm:hidden' } } },
-    { accessorKey: 'estado', header: 'Estado' },
+    { accessorKey: 'estado', header: 'Estado', meta: { class: { th: 'max-sm:hidden', td: 'max-sm:hidden' } } },
     { id: 'acciones', header: () => h('span', { class: 'sr-only' }, 'Acciones'), meta: { class: { td: 'w-0 text-end', th: 'w-0' } } },
 ]
 
@@ -639,7 +639,7 @@ onMounted(async () => {
                                             <div class="flex min-w-0 flex-col">
                                                 <span class="font-mono font-semibold text-highlighted">Servicio {{ row.original.servicio_id }}</span>
                                                 <span class="truncate text-xs text-muted">{{ nombres.nombre(row.original.cliente_id) }}</span>
-                                                <span class="text-xs text-muted sm:hidden">{{ formatearQuetzales(row.original.monto) }} · vence {{ formatearFechaHora(row.original.vence_en) }}</span>
+                                                <span class="text-xs text-muted sm:hidden">{{ formatearQuetzales(row.original.monto) }} · vence {{ formatearFechaHora(row.original.vence_en) }} · {{ ESTADOS_PROMESA[row.original.estado].etiqueta }}</span>
                                                 <PromesaOrigen
                                                     :promesa="row.original"
                                                     class="mt-0.5"
