@@ -10,7 +10,7 @@ import { elegirEmpresa, entrar, fijarHoyFixtures, ir } from './ayudas'
 test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y mostrar', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Resumen fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /ArgosNet/)
     await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: /^Consejos/ }).click()
 
@@ -40,7 +40,7 @@ test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y m
 test('bitácora con el texto de ocultar un consejo', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Resumen fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /ArgosNet/)
     await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: /^Consejos/ }).click()
     await page.locator('[data-consejos="1"] [data-consejo="regimen_simulado"] [data-prueba="ocultar-empresa"]').click()

@@ -131,188 +131,192 @@ const FILAS_BLOQUEO: { tipo: 'duro' | 'global' | 'impuestos' | 'ventas' | 'compr
         </template>
 
         <ContaCuerpo>
+            <!-- Los doce meses. -->
             <UAlert
                 v-if="!unaEmpresa"
                 color="info"
                 variant="subtle"
                 icon="i-lucide-building-2"
-                title="Elige una empresa"
+                title="Elige una empresa para ver sus meses"
                 description="Cada empresa (NIT) lleva su libro y cierra sus meses por separado. Elige una arriba para ver sus periodos."
                 data-prueba="cierres-elige-empresa"
             />
-            <template v-else>
-                <!-- Los doce meses. -->
-                <ProblemaAlerta
-                    v-if="problemaCierres"
-                    :problema="problemaCierres"
-                    :reintentar="cargar"
-                />
+            <ProblemaAlerta
+                v-else-if="problemaCierres"
+                :problema="problemaCierres"
+                :reintentar="cargar"
+            />
+            <div
+                v-else
+                class="grid grid-cols-4 gap-2 sm:grid-cols-6 xl:grid-cols-12"
+                role="list"
+                aria-label="Meses del ejercicio"
+                data-prueba="meses-ejercicio"
+            >
                 <div
-                    v-else
-                    class="grid grid-cols-4 gap-2 sm:grid-cols-6 xl:grid-cols-12"
-                    role="list"
-                    aria-label="Meses del ejercicio"
-                    data-prueba="meses-ejercicio"
+                    v-for="m in meses"
+                    :key="m.periodo"
+                    role="listitem"
+                    class="surface-card flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center"
+                    :class="ESTADOS_MES[m.estado].clase"
+                    :data-mes="m.periodo"
+                    :data-estado="m.estado"
                 >
-                    <div
-                        v-for="m in meses"
-                        :key="m.periodo"
-                        role="listitem"
-                        class="surface-card flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center"
-                        :class="ESTADOS_MES[m.estado].clase"
-                        :data-mes="m.periodo"
-                        :data-estado="m.estado"
-                    >
-                        <span class="text-sm font-semibold">{{ m.corto }}</span>
-                        <span class="flex items-center gap-1 text-[0.6875rem]">
-                            <UIcon
-                                :name="ESTADOS_MES[m.estado].icono"
-                                class="size-3"
-                            />
-                            {{ ESTADOS_MES[m.estado].etiqueta }}
-                        </span>
-                    </div>
+                    <span class="text-sm font-semibold">{{ m.corto }}</span>
+                    <span class="flex items-center gap-1 text-[0.6875rem]">
+                        <UIcon
+                            :name="ESTADOS_MES[m.estado].icono"
+                            class="size-3"
+                        />
+                        {{ ESTADOS_MES[m.estado].etiqueta }}
+                    </span>
                 </div>
+            </div>
 
-                <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
-                    <ContaIsla llenar>
-                        <template #cabecera>
-                            <ContaPestanas
-                                v-model="pestana"
-                                :items="pestanas"
-                                etiqueta="Cierres"
-                            />
-                        </template>
-                        <div class="p-3 sm:p-4">
-                            <LibroCierres v-if="pestana === 'mes'" />
-                            <LibroEjercicios v-else />
-                        </div>
-                        <template #pie>
-                            Una anomalía se resuelve en su pantalla o el contador la supervisa con una nota. Las verificaciones nunca se marcan a mano.
-                        </template>
-                    </ContaIsla>
+            <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
+                <ContaIsla llenar>
+                    <template #cabecera>
+                        <ContaPestanas
+                            v-model="pestana"
+                            :items="pestanas"
+                            etiqueta="Cierres"
+                        />
+                    </template>
+                    <div class="p-3 sm:p-4">
+                        <LibroCierres v-if="pestana === 'mes'" />
+                        <LibroEjercicios v-else />
+                    </div>
+                    <template #pie>
+                        Una anomalía se resuelve en su pantalla o el contador la supervisa con una nota. Las verificaciones nunca se marcan a mano.
+                    </template>
+                </ContaIsla>
 
-                    <div class="flex min-h-0 flex-col gap-4 overflow-auto">
-                        <section
-                            class="surface-card flex flex-col gap-2 rounded-[1.375rem] p-4"
-                            aria-labelledby="titulo-bloqueos"
-                            data-prueba="bloqueos-resumen"
-                        >
-                            <div class="flex items-center justify-between gap-2">
-                                <h2
-                                    id="titulo-bloqueos"
-                                    class="text-base font-semibold text-highlighted"
-                                >
-                                    Bloqueos del libro
-                                </h2>
-                                <UButton
-                                    v-if="puede('libro.bloquear')"
-                                    label="Bloquear"
-                                    icon="i-lucide-lock"
-                                    to="/libro/bloqueos"
-                                    color="neutral"
-                                    variant="outline"
-                                    size="sm"
-                                    class="rounded-full"
-                                />
-                            </div>
-                            <p class="text-xs text-muted">
-                                Nada con fecha anterior puede registrarse ni cambiarse
-                            </p>
-                            <ProblemaAlerta
-                                v-if="problemaBloqueos"
-                                :problema="problemaBloqueos"
-                                :reintentar="cargar"
-                            />
-                            <USkeleton
-                                v-else-if="!bloqueos"
-                                class="h-40 w-full"
-                            />
-                            <ul
-                                v-else
-                                class="divide-y divide-(--ax-borde)"
-                            >
-                                <li
-                                    v-for="fila in FILAS_BLOQUEO"
-                                    :key="fila.tipo"
-                                    class="flex items-center gap-3 py-2.5"
-                                    :data-bloqueo="fila.tipo"
-                                >
-                                    <span class="pastilla-icono pastilla-tono tono-marca size-8 shrink-0 rounded-lg">
-                                        <UIcon
-                                            :name="fila.icono"
-                                            class="size-4"
-                                        />
-                                    </span>
-                                    <span class="flex min-w-0 flex-1 flex-col">
-                                        <span class="text-sm font-semibold text-highlighted">{{ fila.titulo }}</span>
-                                        <span class="truncate text-xs text-muted">{{ fila.detalle }}</span>
-                                    </span>
-                                    <span class="flex shrink-0 flex-col items-end">
-                                        <span class="text-sm font-semibold text-highlighted">{{ vigentes?.[fila.tipo] ? `hasta ${formatearFecha(vigentes[fila.tipo])}` : 'Sin bloqueo' }}</span>
-                                        <span
-                                            v-if="fila.tipo === 'duro' && vigentes?.duro"
-                                            class="text-xs text-muted"
-                                        >irreversible</span>
-                                    </span>
-                                </li>
-                            </ul>
-                            <UButton
-                                label="Ver bloqueos y su historial"
-                                trailing-icon="i-lucide-chevron-right"
-                                to="/libro/bloqueos"
-                                color="primary"
-                                variant="link"
-                                size="sm"
-                                class="self-end px-0"
-                            />
-                        </section>
-
-                        <section
-                            class="surface-card flex flex-col gap-2 rounded-[1.375rem] p-4"
-                            aria-labelledby="titulo-excepciones"
-                        >
+                <div class="flex min-h-0 flex-col gap-4 overflow-auto">
+                    <section
+                        class="surface-card flex flex-col gap-2 rounded-[1.375rem] p-4"
+                        aria-labelledby="titulo-bloqueos"
+                        data-prueba="bloqueos-resumen"
+                    >
+                        <div class="flex items-center justify-between gap-2">
                             <h2
-                                id="titulo-excepciones"
+                                id="titulo-bloqueos"
                                 class="text-base font-semibold text-highlighted"
                             >
-                                Excepciones vigentes
+                                Bloqueos del libro
                             </h2>
-                            <p class="text-xs text-muted">
-                                Solo un administrador; siempre con fecha de fin
-                            </p>
-                            <UEmpty
-                                v-if="excepciones && !excepciones.length"
-                                icon="i-lucide-key-round"
-                                title="Ninguna excepción vigente"
-                                variant="naked"
+                            <UButton
+                                v-if="puede('libro.bloquear')"
+                                label="Bloquear"
+                                icon="i-lucide-lock"
+                                to="/libro/bloqueos"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                class="rounded-full"
                             />
-                            <ul
-                                v-else-if="excepciones"
-                                class="flex flex-col gap-2"
+                        </div>
+                        <p class="text-xs text-muted">
+                            Nada con fecha anterior puede registrarse ni cambiarse
+                        </p>
+                        <ProblemaAlerta
+                            v-if="problemaBloqueos"
+                            :problema="problemaBloqueos"
+                            :reintentar="cargar"
+                        />
+                        <USkeleton
+                            v-else-if="!bloqueos"
+                            class="h-40 w-full"
+                        />
+                        <p
+                            v-else-if="!unaEmpresa"
+                            class="text-sm text-muted"
+                        >
+                            Elige una empresa: cada una tiene sus bloqueos.
+                        </p>
+                        <ul
+                            v-else
+                            class="divide-y divide-(--ax-borde)"
+                        >
+                            <li
+                                v-for="fila in FILAS_BLOQUEO"
+                                :key="fila.tipo"
+                                class="flex items-center gap-3 py-2.5"
+                                :data-bloqueo="fila.tipo"
                             >
-                                <li
-                                    v-for="ex in excepciones"
-                                    :key="ex.id"
-                                    class="flex gap-3 rounded-xl border border-(--ax-borde) p-3"
-                                >
-                                    <span class="pastilla-icono pastilla-tono tono-aviso size-8 shrink-0 rounded-lg">
-                                        <UIcon
-                                            name="i-lucide-key-round"
-                                            class="size-4"
-                                        />
-                                    </span>
-                                    <span class="flex min-w-0 flex-col text-xs text-muted">
-                                        <span class="text-sm font-semibold text-highlighted">{{ TIPOS_BLOQUEO[ex.tipo].etiqueta }} · {{ ex.usuario_nombre ?? 'Todos los usuarios' }}</span>
-                                        <span>«{{ ex.motivo }}»</span>
-                                        <span>hasta el {{ formatearFechaHora(ex.hasta_en) }}</span>
-                                    </span>
-                                </li>
-                            </ul>
-                        </section>
-                    </div>
+                                <span class="pastilla-icono pastilla-tono tono-marca size-8 shrink-0 rounded-lg">
+                                    <UIcon
+                                        :name="fila.icono"
+                                        class="size-4"
+                                    />
+                                </span>
+                                <span class="flex min-w-0 flex-1 flex-col">
+                                    <span class="text-sm font-semibold text-highlighted">{{ fila.titulo }}</span>
+                                    <span class="truncate text-xs text-muted">{{ fila.detalle }}</span>
+                                </span>
+                                <span class="flex shrink-0 flex-col items-end">
+                                    <span class="text-sm font-semibold text-highlighted">{{ vigentes?.[fila.tipo] ? `hasta ${formatearFecha(vigentes[fila.tipo])}` : 'Sin bloqueo' }}</span>
+                                    <span
+                                        v-if="fila.tipo === 'duro' && vigentes?.duro"
+                                        class="text-xs text-muted"
+                                    >irreversible</span>
+                                </span>
+                            </li>
+                        </ul>
+                        <UButton
+                            label="Ver bloqueos y su historial"
+                            trailing-icon="i-lucide-chevron-right"
+                            to="/libro/bloqueos"
+                            color="primary"
+                            variant="link"
+                            size="sm"
+                            class="self-end px-0"
+                        />
+                    </section>
+
+                    <section
+                        class="surface-card flex flex-col gap-2 rounded-[1.375rem] p-4"
+                        aria-labelledby="titulo-excepciones"
+                    >
+                        <h2
+                            id="titulo-excepciones"
+                            class="text-base font-semibold text-highlighted"
+                        >
+                            Excepciones vigentes
+                        </h2>
+                        <p class="text-xs text-muted">
+                            Solo un administrador; siempre con fecha de fin
+                        </p>
+                        <UEmpty
+                            v-if="excepciones && !excepciones.length"
+                            icon="i-lucide-key-round"
+                            title="Ninguna excepción vigente"
+                            variant="naked"
+                        />
+                        <ul
+                            v-else-if="excepciones"
+                            class="flex flex-col gap-2"
+                        >
+                            <li
+                                v-for="ex in excepciones"
+                                :key="ex.id"
+                                class="flex gap-3 rounded-xl border border-(--ax-borde) p-3"
+                            >
+                                <span class="pastilla-icono pastilla-tono tono-aviso size-8 shrink-0 rounded-lg">
+                                    <UIcon
+                                        name="i-lucide-key-round"
+                                        class="size-4"
+                                    />
+                                </span>
+                                <span class="flex min-w-0 flex-col text-xs text-muted">
+                                    <span class="text-sm font-semibold text-highlighted">{{ TIPOS_BLOQUEO[ex.tipo].etiqueta }} · {{ ex.usuario_nombre ?? 'Todos los usuarios' }}</span>
+                                    <span>«{{ ex.motivo }}»</span>
+                                    <span>hasta el {{ formatearFechaHora(ex.hasta_en) }}</span>
+                                </span>
+                            </li>
+                        </ul>
+                    </section>
                 </div>
-            </template>
+            </div>
         </ContaCuerpo>
 
         <ContaReabrirMesModal

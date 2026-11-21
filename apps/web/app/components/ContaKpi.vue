@@ -108,7 +108,7 @@ const COLOR_VARIACION = {
             class="h-8 w-32"
         />
         <template v-else>
-            <span class="text-[1.625rem] leading-tight font-bold tracking-[-0.02em] text-highlighted tabular-nums">{{ valor }}</span>
+            <span class="text-xl leading-tight font-bold tracking-[-0.02em] text-highlighted tabular-nums sm:text-[1.625rem]">{{ valor }}</span>
             <span
                 v-if="variacion || detalle"
                 class="flex min-w-0 items-center gap-2 text-xs text-muted"

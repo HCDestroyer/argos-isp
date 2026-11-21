@@ -162,7 +162,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
                 etiqueta: 'Impuestos',
                 icono: 'i-lucide-landmark',
                 secciones: [
-                    { id: 'tablero-fiscal', etiqueta: 'Fiscal', descripcion: 'IVA, ISR e ISO estimados, límite del pequeño contribuyente, vencimientos, declaraciones y consejos.', icono: 'i-lucide-layout-dashboard', ruta: '/fiscal/tablero', permiso: 'fiscal.ver' },
+                    { id: 'tablero-fiscal', etiqueta: 'Resumen fiscal', descripcion: 'IVA, ISR e ISO estimados, límite del pequeño contribuyente, vencimientos, declaraciones y consejos.', icono: 'i-lucide-layout-dashboard', ruta: '/fiscal/tablero', permiso: 'fiscal.ver' },
                     { id: 'calendario-fiscal', etiqueta: 'Calendario fiscal', descripcion: 'Vencimientos de IVA, ISR, ISO y retenciones por mes o en lista, con las vencidas en rojo.', icono: 'i-lucide-calendar-check', ruta: '/fiscal/calendario', permiso: 'declaraciones.ver' },
                     { id: 'declaraciones', etiqueta: 'Declaraciones', descripcion: 'IVA y pequeño contribuyente: borrador desde los libros, revisión con liquidación, presentación y pago.', icono: 'i-lucide-file-spreadsheet', ruta: '/declaraciones', permiso: 'declaraciones.ver' },
                     { id: 'dte', etiqueta: 'Facturación electrónica', descripcion: 'Documentos FEL: en cola, rechazados, en contingencia, por anular y certificados.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },

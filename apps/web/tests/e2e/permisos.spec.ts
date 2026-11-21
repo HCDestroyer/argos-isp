@@ -29,7 +29,7 @@ test('el cajero no ve Routers y la ruta lo manda a sin permiso', async ({ page }
 test('el administrador ve Routers, Bitácora y Libro', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     const lateral = await menu(page)
-    for (const seccion of ['Routers', 'Planes', 'Bitácora', 'Libro', 'Usuarios', 'Facturas', 'Pagos']) {
+    for (const seccion of ['Routers', 'Planes', 'Bitácora', 'Libro contable', 'Usuarios', 'Facturas', 'Pagos']) {
         await expect(lateral.getByRole('link', { name: seccion, exact: true })).toBeVisible()
     }
 })

@@ -11,7 +11,7 @@ import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; enlaces al calendario y a libros', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Resumen fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /ArgosNet/)
     await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
 
@@ -58,7 +58,7 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
     await expect(page.locator('[data-prueba="obligacion-detalle"]')).toHaveCount(0)
 
     // Del bloque de libros a los libros legales.
-    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Resumen fiscal', /\/fiscal\/tablero/)
     await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
     await page.locator('[data-empresa="1"] [data-prueba="tablero-libros"]').click()
     await expect(page).toHaveURL(/\/libros$/)
@@ -67,7 +67,7 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
 test('Fibra del Sur con FEL obligatoria desactivada y «Todas» con una sección por empresa', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Resumen fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /Fibra del Sur/)
     await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
 
@@ -89,5 +89,5 @@ test('Fibra del Sur con FEL obligatoria desactivada y «Todas» con una sección
 test('el cajero no ve el tablero fiscal', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     const contenedor = await menu(page)
-    await expect(contenedor.getByRole('link', { name: 'Fiscal', exact: true })).toHaveCount(0)
+    await expect(contenedor.getByRole('link', { name: 'Resumen fiscal', exact: true })).toHaveCount(0)
 })
