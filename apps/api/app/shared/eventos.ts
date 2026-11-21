@@ -56,6 +56,16 @@ interface PayloadFactura {
     total: Dinero
     /** fecha de vencimiento YYYY-MM-DD */
     vence: string
+    /**
+     * A36 (contrato Iris 0.9.0): solo en facturas de una orden de Iris (`origen_tipo = iris_orden`, el cargo
+     * único de la orden); ausentes en las demás (`#billing/iris_eventos`)
+     */
+    origen_tipo?: 'iris_orden'
+    origen_id?: string
+    numero?: string | null
+    estado?: string
+    saldo?: Dinero
+    moneda?: 'GTQ'
 }
 
 interface PayloadPago {
@@ -1093,6 +1103,9 @@ export interface CatalogoEventos {
         OrigenExternoPayload & { condicion: 'nuevo' | 'usado'; bodega_id: number }
     /** El servicio se retiró con la unidad en comodato: queda por recuperar. */
     'inventario.equipo_por_recuperar': PayloadComodato
+    'inventario.unidad_estado_cambiado': PayloadUnidadEstado
+    'inventario.equipo_cambiado': PayloadEquipoCambiado
+    'inventario.recuperacion_intentada': PayloadRecuperacionIntentada
     /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
     'inventario.existencia_minima': {
         empresa_id: number
@@ -1352,6 +1365,56 @@ interface PayloadComodato {
     mac: string | null
 }
 
+/**
+ * Estado del equipo (contrato Iris 0.12.0 §3.10, A48): disponible, en_comodato, por_recuperar, revision,
+ * garantia, dada_de_baja, no_recuperada (y los internos vendida, anulada, devuelta_proveedor, entregada).
+ * Sin costos, proveedor ni RMA; nunca la nota.
+ */
+interface PayloadUnidadEstado {
+    unidad_id: number
+    empresa_id: number
+    producto_id: number
+    serie: string | null
+    mac: string | null
+    de: string | null
+    a: string
+    /** código del motivo (`cambio_equipo`, `garantia`, `reparada`, `no_recuperada`…), nunca texto libre */
+    motivo: string | null
+    servicio_id: number | null
+    origen_externo_tipo: string | null
+    origen_externo_id: string | null
+}
+
+/** Cambio de equipo en una sola operación (A48): sale una unidad y entra otra. Nunca la nota. */
+interface PayloadEquipoCambiado {
+    cambio_id: number
+    empresa_id: number
+    servicio_id: number
+    cliente_id: number
+    sale: { unidad_id: number; estado: string }
+    entra: { unidad_id: number; estado: string }
+    motivo: string
+    destino_sale: string
+    cobro_propuesto: boolean
+    origen_externo_tipo: string | null
+    origen_externo_id: string | null
+}
+
+/** Intento de recuperar un equipo desde Iris (A48): para avisar al titular con la serie enmascarada. */
+interface PayloadRecuperacionIntentada {
+    intento_id: number
+    unidad_id: number
+    empresa_id: number
+    servicio_id: number
+    cliente_id: number
+    intento_n: number
+    motivo: string
+    /** la serie (o MAC) enmascarada: «…1A2B» */
+    serie_enmascarada: string
+    origen_externo_tipo: string | null
+    origen_externo_id: string | null
+}
+
 interface PayloadCanjeLealtad {
     canje_id: number
     empresa_id: number
@@ -1493,6 +1556,9 @@ export const EVENTOS = [
     'inventario.comodato_asignado',
     'inventario.comodato_devuelto',
     'inventario.equipo_por_recuperar',
+    'inventario.unidad_estado_cambiado',
+    'inventario.equipo_cambiado',
+    'inventario.recuperacion_intentada',
     'inventario.existencia_minima',
     'inventario.conteo_cerrado',
     'inventario.traslado_enviado',

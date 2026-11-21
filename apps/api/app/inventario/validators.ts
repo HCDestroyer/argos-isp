@@ -685,6 +685,17 @@ export const configurarInventarioValidator = vine.compile(
     vine.object({
         empresa_id: idEntidad().nullable().optional().meta({ description: 'Por defecto la empresa activa' }),
         traslado_firma_obligatoria: vine.boolean(),
+        recuperacion_tecnicos_minimos: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .max(10)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Iris 0.12.0 §3.10: técnicos distintos con intentos de recuperación para declarar un equipo no recuperado (2 de fábrica); sin él se conserva',
+            }),
         version: vine.number().withoutDecimals().min(0).meta({ description: '0 la primera vez' }),
     }),
 )
@@ -905,4 +916,139 @@ export const miBodegaValidator = vine.compile(
             description: 'Otro técnico por su correo (solo con alcance global)',
         }),
     }),
+)
+
+/*
+| A48 · equipos del cliente (contrato Iris 0.12.0 §3.10)
+*/
+
+const notaIris = () =>
+    vine.string().trim().maxLength(500).nullable().optional().meta({
+        description: 'Hasta 500 caracteres; se muestra escapada y nunca va en eventos ni en logs',
+    })
+
+export const cambiarEquipoValidator = vine.compile(
+    vine.object({
+        sale: vine.object({ unidad_id: idEntidad() }),
+        entra: vine.object({
+            unidad_id: idEntidad().nullable().optional(),
+            serie: texto(100).nullable().optional(),
+            mac: texto(30).nullable().optional(),
+        }),
+        motivo: vine.enum(['danado', 'actualizacion', 'garantia', 'otro'] as const),
+        destino_sale: vine.enum(['funciona', 'revision', 'garantia', 'danado'] as const).meta({
+            description:
+                'funciona (vuelve disponible), revision o danado (a revisión), garantia (a garantía). funciona no vale con motivo danado o garantia',
+        }),
+        cobro_propuesto: vine
+            .object({ motivo: vine.string().trim().minLength(2).maxLength(100), nota: notaIris() })
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Sin monto: entra en la cola de cobros de equipo (inventario.cobrar_equipo)',
+            }),
+        nota: notaIris(),
+        tecnico: tecnicoExterno().nullable().optional().meta({
+            description:
+                'El técnico (id_externo); con el token de Iris, por defecto el miembro de cuadrilla de X-Iris-Actor',
+        }),
+        ...reglasFechaIris('Hora del teléfono (RFC 3339), con recibido_en_iris'),
+        ...reglasOrigenExterno(),
+    }),
+)
+
+export const noRecuperadoValidator = vine.compile(
+    vine.object({
+        motivo: vine.enum(['cliente_ausente', 'se_nego', 'equipo_perdido', 'otro'] as const),
+        foto_ref: vine
+            .string()
+            .trim()
+            .regex(/^[A-Za-z0-9._:-]{1,128}$/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Id opaco del adjunto de la orden en Iris; obligatoria con se_nego y equipo_perdido',
+            }),
+        ubicacion: vine.object({
+            lat: vine.number().min(-90).max(90),
+            lng: vine.number().min(-180).max(180),
+            precision_m: vine.number().min(0).max(100000),
+        }),
+        nota: notaIris(),
+        tecnico: tecnicoExterno().nullable().optional(),
+        ...reglasFechaIris('Hora del teléfono (RFC 3339), con recibido_en_iris'),
+        ...reglasOrigenExterno(),
+    }),
+)
+
+export const verUnidadValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad().optional().meta({
+            description: 'Iris (M5): el servicio de la orden en curso; su id se muestra en el historial',
+        }),
+    }),
+)
+
+export const declararNoRecuperadaValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        monto: dinero().nullable().optional().meta({
+            description: 'Cobro «Equipo no devuelto» con IVA incluido (> 0); sin él solo se declara',
+        }),
+        concepto_id: idEntidad().nullable().optional().meta({
+            description: 'Concepto del cargo; por defecto «Equipo no devuelto» de la empresa',
+        }),
+        fecha: fechaIso().nullable().optional(),
+    }),
+)
+
+export const contactoRecuperacionValidator = vine.compile(
+    vine.object({
+        medio: vine.enum(['llamada', 'whatsapp', 'correo', 'visita', 'oficina', 'otro'] as const),
+        nota: vine.string().trim().minLength(3).maxLength(500),
+    }),
+)
+
+export const enviarGarantiaValidator = vine.compile(
+    vine.object({
+        proveedor_id: idEntidad().nullable().optional(),
+        proveedor_nombre: texto(200).nullable().optional(),
+        rma: vine.string().trim().minLength(1).maxLength(100),
+        vence_en: fechaIso(),
+        nota: texto(500).nullable().optional(),
+    }),
+)
+
+export const resolverGarantiaValidator = vine.compile(
+    vine.object({
+        resultado: vine.enum(['reparada', 'reemplazada', 'rechazada'] as const),
+        serie: texto(100)
+            .nullable()
+            .optional()
+            .meta({ description: 'reemplazada: la serie del equipo nuevo' }),
+        mac: texto(30).nullable().optional().meta({ description: 'reemplazada: la MAC del equipo nuevo' }),
+        nota: texto(500).nullable().optional(),
+    }),
+)
+
+export const listarCobrosEquipoValidator = vine.compile(
+    vine.object({
+        estado: vine.enum(['propuesto', 'aprobado', 'rechazado'] as const).optional(),
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+    }),
+)
+
+export const aprobarCobroEquipoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        monto: dinero(),
+        concepto_id: idEntidad().nullable().optional(),
+        motivo: texto(500).nullable().optional(),
+    }),
+)
+
+export const rechazarCobroEquipoValidator = vine.compile(
+    vine.object({ version: versionEsperada(), motivo: motivo() }),
 )

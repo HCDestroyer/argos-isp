@@ -39,7 +39,10 @@ export const PERMISOS_IRIS_CONTRATO = [
     'servicios.retirar',
     'inventario.asignar_comodato',
     'inventario.devolver_comodato',
-    'inventario.declarar_perdida_comodato',
+    // 0.12.0 §3.10 (A48): Iris ya no declara pérdidas (las decide una persona en Argos); cambia equipos,
+    // registra intentos de recuperación y lee una unidad sin costos
+    'servicios.cambiar_equipo',
+    'inventario.ver_unidad',
     'inventario.consumir',
     // recepción de órdenes de traslado en la app de campo (contrato 0.5.0 §3.3)
     'inventario.recibir_traslado',
@@ -65,6 +68,15 @@ export const PERMISOS_IRIS_CONTRATO = [
     'comprobantes.aprobar',
     'comprobantes.rechazar',
 ] as const
+
+/** Permisos que el contrato 0.12.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
+export const PERMISOS_IRIS_0120 = [
+    'servicios.cambiar_equipo',
+    'inventario.ver_unidad',
+] as const satisfies ReadonlyArray<(typeof PERMISOS_IRIS_CONTRATO)[number]>
+
+/** Permiso que el contrato 0.12.0 le quitó al usuario técnico Iris (la pérdida la declara una persona). */
+export const PERMISO_RETIRADO_IRIS_0120 = 'inventario.declarar_perdida_comodato'
 
 /** Permisos que el contrato 0.7.0 sumó al usuario técnico Iris (migración de los tokens vigentes). */
 export const PERMISOS_IRIS_070 = [

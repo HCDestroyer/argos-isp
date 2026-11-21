@@ -132,6 +132,9 @@ async function contenidoDeBodega(
         jefe = { id_externo: String(bodega.jefe_id), nombre: String(fila?.nombre ?? '') }
     }
     return {
+        id: bodega.id,
+        empresa_id: bodega.empresa_id,
+        nombre: bodega.nombre,
         bodega,
         cuadrilla: esCuadrilla,
         jefe,

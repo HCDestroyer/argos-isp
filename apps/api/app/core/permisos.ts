@@ -287,6 +287,19 @@ export const PERMISOS = {
     'inventario.configurar':
         'Configurar el inventario de la empresa (firma obligatoria al recibir traslados)',
     'inventario.configurar_ia': 'Configurar la IA que lee facturas de compra (proveedor, modelo y clave)',
+    // contrato Iris 0.12.0 §3.10 (A48): equipos del cliente
+    'servicios.cambiar_equipo':
+        'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
+    'inventario.ver_unidad':
+        'Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor',
+    'inventario.cobrar_equipo':
+        'Declarar un equipo no recuperado y decidir los cobros de equipo (Equipo no devuelto y cobros propuestos)',
+    'inventario.enviar_garantia':
+        'Enviar a garantía del proveedor una unidad en revisión (proveedor, RMA y vencimiento)',
+    'inventario.resolver_garantia':
+        'Resolver la garantía de una unidad: volvió reparada, reemplazada o rechazada',
+    'inventario.registrar_contacto_recuperacion':
+        'Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)',
     // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
     'inventario.sincronizar_cuadrilla':
         'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
@@ -599,6 +612,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.crear_traslado',
             'inventario.recibir_traslado',
             'inventario.cancelar_traslado',
+            // A48: cambio de equipo e intentos de recuperación desde el panel
+            'servicios.cambiar_equipo',
+            'inventario.ver_unidad',
         ],
     },
     contabilidad: {
@@ -678,6 +694,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.cerrar_conteo',
             'inventario.cancelar_conteo',
             'inventario.marcar_reparada',
+            'inventario.enviar_garantia',
+            'inventario.resolver_garantia',
+            'inventario.registrar_contacto_recuperacion',
             'productos.crear',
             'productos.editar',
             'productos.desactivar',
