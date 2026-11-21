@@ -7,19 +7,27 @@ Solo el panel de ArgosIsp: Iris y Horus conservan su teal; el portal (A5) usa lo
 
 ## Color
 
+Los tokens `--ax-*` tienen **los mismos nombres y valores que el portal** (`apps/portal`, su
+«Sistema visual»); el panel solo agrega `--ax-panel`.
+
 | Token | Claro | Oscuro | Uso |
 | --- | --- | --- | --- |
 | `primary` (Nuxt UI `indigo`) | 600 `#4f46e5` (6,3:1 sobre blanco) | 400 `#818cf8` | Acción primaria, enlaces, ítem activo, foco |
 | `secondary` (`cyan`) | 700 | 300 | Acentos secundarios |
-| `--argos-marca-1` → `--argos-marca-2` | `#4f46e5` → `#06b6d4` | igual | Degradado de marca: logo, filete del menú, bienvenida del inicio, login, tarjeta KPI destacada |
-| `--ax-fondo` | `#f7f8fc` | `#0b0f1a` (azul noche, nunca negro) | Fondo de página |
-| `--ax-borde` | `#e6e8f0` | `#1e2638` | Bordes de tarjetas, tablas y separadores |
-| `--ax-panel` | `#f3f4fa` | `#0f1523` | Panel interno (mini gráficas, métricas, cabecera de tabla) |
-| `--ax-radio` | 14 px | 14 px | Tarjetas, tablas, pastillas grandes |
+| `--ax-gradiente` | `#4f46e5` → `#06b6d4` | `#818cf8` → `#22d3ee` | Acento de marca sin texto encima: logo, filete del menú, tarjeta KPI destacada |
+| `--ax-gradiente-texto` | `#4f46e5` → `#4338ca` → `#0e7490` | igual | El único degradado con texto blanco encima (4,5:1 en todo el recorrido): bienvenida del inicio, panel de marca del login |
+| `--ax-tinte` | índigo y cian al 10 % | al 16 % y 10 % | Fondos suaves de marca |
+| `--ax-fondo` | `#f8f9fa` | `#0b0f1a` (azul noche, nunca negro) | Fondo de página |
+| `--ax-tarjeta` | `#ffffff` | `#121828` | Tarjetas, tablas, menús |
+| `--ax-borde` | `#e7eaee` | `#222a40` | Bordes de tarjetas, tablas y separadores |
+| `--ax-cabecera-tabla` / `--ax-fila-hover` | `#f8f9fa` / `#f8f9fb` | `#0f1424` / `#161c2e` | Cabecera y hover de tablas y listas |
+| `--ax-radio` / `--ax-radio-modal` | 12 px / 16 px | igual | Tarjetas y tablas / modales |
+| `--ax-sombra` / `--ax-sombra-flotante` | casi nada / flotante | más densas | Tarjetas / menús y modales |
+| `--ax-panel` (solo panel) | `#f3f5f7` | `#0f1424` | Panel interno (mini gráficas, métricas) |
 | `--viz-1…5` + `.tono-n` | paleta categórica | paleta categórica | Color de cada métrica (pastilla, mini barras, tendencia); nunca un estado |
 
-- El degradado **nunca va bajo texto chico**. En la bienvenida y el login el texto queda en la zona
-  índigo (blanco sobre `#4f46e5`, 6,3:1) y el cian entra a la derecha, bajo el dibujo.
+- Texto blanco **nunca** sobre `--ax-gradiente` (el cian puro no da 4,5:1): donde hay texto va
+  `--ax-gradiente-texto`.
 - Estados: activo verde, limitado ámbar, suspendido rojo, retirado gris, pendiente de instalación
   azul, siempre color + icono + texto (`EstadoServicioBadge`, `utils/estadoServicio.ts`).
 - `--tono-texto` oscurece (claro) o aclara (oscuro) el tono de la métrica para que el texto pase AA.
@@ -91,9 +99,9 @@ aplanan en el popover. Buscador Ctrl/Cmd+K con todas las secciones permitidas.
 | `EstadoServicioBadge`, `EstadoPagoBadge`… | Estados con color + icono + texto |
 | `AvisosBoton` | Campana de la barra superior |
 
-`app.config.ts` unifica: tarjetas (radio 14 px, borde `--ax-borde`), tablas (cabecera en versalitas
+`app.config.ts` unifica: tarjetas (radio 12 px, borde `--ax-borde`), tablas (cabecera en versalitas
 sobre `--ax-panel`, filas con línea fina, hover suave, sin cebra), ítem activo del menú, botones en
-pastilla, campos (`rounded-lg`, error con icono), modales (radio 16 px, fondo desenfocado, pie a la
+pastilla, campos (`rounded-lg`, error con icono), modales (`--ax-radio-modal`, 16 px, fondo desenfocado, pie a la
 derecha; **hoja inferior a todo el ancho en 390 px**), toasts, estados vacíos (icono en pastilla del
 primario) y skeletons.
 

@@ -35,7 +35,8 @@
     --ui-warning: var(--ui-color-warning-800);
     --ui-error: var(--ui-color-error-700);
     --ui-text-muted: var(--ui-color-neutral-600);
-    --ui-text-dimmed: var(--ui-color-neutral-500);
+    /* Slate 500 queda justo bajo 4,5:1 sobre los fondos grises (#f8f9fa): un punto más oscuro. */
+    --ui-text-dimmed: color-mix(in oklab, var(--ui-color-neutral-500) 45%, var(--ui-color-neutral-600));
     /* Fondo claro suavizado para la estructura; el contenido va sobre blanco (HIG dark-mode). */
     --ui-bg-muted: var(--ui-color-neutral-50);
     --ui-radius: 0.375rem;
@@ -54,7 +55,7 @@
     --ui-bg: #0b0f1a;
     --ui-bg-muted: #0f1424;
     --ui-bg-elevated: #182036;
-    --ui-border: #1e2638;
+    --ui-border: #222a40;
 }
 
 /*
@@ -69,19 +70,19 @@
     --hf-glass-strong: rgb(255 255 255 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.7);
     /* Opaca en claro: el aura teñiría el fondo y bajaría el contraste de los badges (AA). */
-    --hf-card: #ffffff;
+    --hf-card: var(--ax-tarjeta);
     --hf-aura-1: rgb(79 70 229 / 0.1);
     --hf-aura-2: rgb(6 182 212 / 0.08);
     --hf-glow-brand: transparent;
     --hf-glow-crit: rgb(220 38 38 / 0.12);
-    --hf-radius-card: 0.875rem;
+    --hf-radius-card: var(--ax-radio);
 }
 
 .dark {
     --hf-glass: rgb(15 20 36 / 0.62);
     --hf-glass-strong: rgb(15 20 36 / 0.86);
     --hf-glass-edge: rgb(255 255 255 / 0.06);
-    --hf-card: rgb(18 26 43 / 0.92);
+    --hf-card: var(--ax-tarjeta);
     --hf-aura-1: rgb(99 102 241 / 0.22);
     --hf-aura-2: rgb(6 182 212 / 0.14);
     --hf-glow-brand: rgb(129 140 248 / 0.45);
@@ -96,19 +97,37 @@
  */
 :root,
 .light {
-    --ax-fondo: #f7f8fc;
-    --ax-borde: #e6e8f0;
-    --ax-panel: #f3f4fa;
-    --ax-fila-hover: rgb(79 70 229 / 0.035);
-    --ax-radio: 0.875rem;
-    --ax-sombra: 0 1px 2px rgb(15 23 42 / 0.04);
+    /* Mismos nombres y valores que el portal (apps/portal, «Sistema visual»). */
+    --ax-fondo: #f8f9fa;
+    --ax-tarjeta: #ffffff;
+    --ax-borde: #e7eaee;
+    --ax-radio: 0.75rem;
+    --ax-radio-modal: 1rem;
+    --ax-sombra: 0 1px 2px rgb(16 24 40 / 0.04);
+    --ax-sombra-flotante: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 2px 6px rgb(16 24 40 / 0.06);
+    --ax-marca-1: #4f46e5;
+    --ax-marca-2: #06b6d4;
+    --ax-gradiente: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+    /* Con texto blanco encima: termina en cyan-700, así el blanco pasa 4,5:1 en todo el recorrido. */
+    --ax-gradiente-texto: linear-gradient(120deg, #4f46e5 0%, #4338ca 45%, #0e7490 100%);
+    --ax-tinte: linear-gradient(135deg, rgb(79 70 229 / 0.1), rgb(6 182 212 / 0.1));
+    --ax-cabecera-tabla: #f8f9fa;
+    --ax-fila-hover: #f8f9fb;
+    /* Propio del panel: panel interno de tarjetas (mini gráficas, métricas). */
+    --ax-panel: #f3f5f7;
 }
 
 .dark {
     --ax-fondo: #0b0f1a;
-    --ax-borde: #1e2638;
-    --ax-panel: #0f1523;
-    --ax-fila-hover: rgb(129 140 248 / 0.06);
+    --ax-tarjeta: #121828;
+    --ax-borde: #222a40;
+    --ax-sombra: 0 1px 2px rgb(0 0 0 / 0.3);
+    --ax-sombra-flotante: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+    --ax-gradiente: linear-gradient(135deg, #818cf8 0%, #22d3ee 100%);
+    --ax-tinte: linear-gradient(135deg, rgb(129 140 248 / 0.16), rgb(34 211 238 / 0.1));
+    --ax-cabecera-tabla: #0f1424;
+    --ax-fila-hover: #161c2e;
+    --ax-panel: #0f1424;
 }
 
 @layer base {
@@ -591,11 +610,12 @@
  * tablero, gráficos de portada): nunca de fondo bajo texto (contraste AA).
  */
 :root {
-    --argos-marca-1: #4f46e5;
-    --argos-marca-2: #06b6d4;
+    /* Alias del panel sobre los tokens compartidos con el portal. */
+    --argos-marca-1: var(--ax-marca-1);
+    --argos-marca-2: var(--ax-marca-2);
     --argos-marca-fondo: var(--argos-marca-1);
     --argos-marca-trazo: #fff;
-    --argos-degradado: linear-gradient(135deg, var(--argos-marca-1), var(--argos-marca-2));
+    --argos-degradado: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
 }
 
 /* Barra lateral: borde derecho discontinuo y sutil. */
@@ -640,11 +660,11 @@
 }
 
 /*
- * Bienvenida del inicio: el degradado de marca (índigo → cian) como fondo, con el índigo sostenido
- * en la zona del texto (blanco sobre #4f46e5 pasa 6,3:1) y el cian solo a la derecha.
+ * Bienvenida del inicio y panel de marca del login: `--ax-gradiente-texto` (índigo → cyan-700), el
+ * único degradado con texto blanco encima (4,5:1 en todo el recorrido), igual que el portal.
  */
 .bienvenida {
-    background-image: linear-gradient(110deg, var(--argos-marca-1) 0%, var(--argos-marca-1) 42%, var(--argos-marca-2) 100%);
+    background-image: var(--ax-gradiente-texto);
     box-shadow: 0 10px 30px -12px rgb(79 70 229 / 0.45);
 }
 

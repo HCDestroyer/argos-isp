@@ -33,7 +33,7 @@ export default defineAppConfig({
         badge: {
             slots: { base: 'rounded-full font-medium' },
         },
-        // Tarjetas: fondo de tarjeta, borde fino y radio 14 px, casi sin sombra (`--ax-*`).
+        // Tarjetas: fondo de tarjeta, borde fino y radio 12 px, casi sin sombra (`--ax-*`, igual que el portal).
         card: {
             slots: {
                 root: 'rounded-(--ax-radio)',
@@ -60,7 +60,7 @@ export default defineAppConfig({
         table: {
             slots: {
                 root: 'bg-(--hf-card) rounded-(--ax-radio) ring ring-(--ax-borde) dark:shadow-[0_12px_32px_rgb(0_0_0/0.22)]',
-                thead: 'bg-(--ax-panel)',
+                thead: 'bg-(--ax-cabecera-tabla)',
                 th: 'px-4 py-3 text-xs font-semibold uppercase tracking-[0.04em] text-muted',
                 tbody: '[&>tr]:transition-colors [&>tr:hover]:bg-(--ax-fila-hover)',
                 td: 'px-4 py-3.5 text-sm text-default',
@@ -95,7 +95,7 @@ export default defineAppConfig({
                     scrollable: false,
                     fullscreen: false,
                     class: {
-                        content: 'rounded-2xl ring-(--ax-borde) max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh]',
+                        content: 'rounded-(--ax-radio-modal) ring-(--ax-borde) shadow-(--ax-sombra-flotante) max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh]',
                     },
                 },
             ],
