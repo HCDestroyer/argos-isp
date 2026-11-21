@@ -45,7 +45,12 @@ async function sembrar(marca: string) {
     ])
     await db.table('audit.red').insert({
         tipo: 'routeros',
-        comando: JSON.stringify({ operacion: 'aplicar', ruta: '/ppp/secret', password: 'nunca-visible', request_id: `${marca}-3` }),
+        comando: JSON.stringify({
+            operacion: 'aplicar',
+            ruta: '/ppp/secret',
+            password: 'nunca-visible',
+            request_id: `${marca}-3`,
+        }),
         respuesta: JSON.stringify({ error: `timeout ${marca}`, secret: 'x' }),
         ok: false,
         created_at: hace(20),
@@ -53,7 +58,12 @@ async function sembrar(marca: string) {
     await db.table('audit.outbox').multiInsert([
         {
             evento: 'coa.fallido',
-            payload: JSON.stringify({ servicio_id: 7, nas_ip: '10.0.0.1', tipo: 'disconnect', error: `NAK ${marca}` }),
+            payload: JSON.stringify({
+                servicio_id: 7,
+                nas_ip: '10.0.0.1',
+                tipo: 'disconnect',
+                error: `NAK ${marca}`,
+            }),
             request_id: `${marca}-4`,
             created_at: hace(10),
         },
@@ -75,7 +85,8 @@ async function sembrar(marca: string) {
 
 function propias(data: EntradaRegistro[], marca: string) {
     return data.filter(
-        (e) => e.request_id?.startsWith(marca) || (e.detalle ?? '').includes(marca) || e.titulo.includes(marca),
+        (e) =>
+            e.request_id?.startsWith(marca) || (e.detalle ?? '').includes(marca) || e.titulo.includes(marca),
     )
 }
 
@@ -95,7 +106,9 @@ async function todas(consulta: Parameters<typeof registroSistema>[0]) {
 test.group('monitoreo · registro del sistema', (group) => {
     group.each.setup(() => {
         // sin Redis en estas pruebas: el registro sale sin los jobs y no falla
-        fijarFuentesSalud({ colas: () => new Map([['notify-envios', { getJobCounts: nunca, getFailed: nunca }]]) })
+        fijarFuentesSalud({
+            colas: () => new Map([['notify-envios', { getJobCounts: nunca, getFailed: nunca }]]),
+        })
         return () => fijarFuentesSalud()
     })
 
@@ -149,10 +162,15 @@ test.group('monitoreo · registro del sistema', (group) => {
         const p2 = await registroSistema({ limit: 2, cursor: p1.nextCursor! })
         const ids1 = p1.data.map((e) => e.id)
         for (const e of p2.data) assert.notInclude(ids1, e.id)
-        assert.notInclude(p2.data.map((e) => e.detalle ?? ''), `NAS 10.0.0.2 · nuevo ${marca}`)
+        assert.notInclude(
+            p2.data.map((e) => e.detalle ?? ''),
+            `NAS 10.0.0.2 · nuevo ${marca}`,
+        )
     })
 
-    test('validación: cursor inválido, desde de más de 31 días, nivel desconocido → 422', async ({ client }) => {
+    test('validación: cursor inválido, desde de más de 31 días, nivel desconocido → 422', async ({
+        client,
+    }) => {
         const { token } = await usuarioConRoles(['admin'])
         await estado(client.get('/api/v1/sistema/registro?cursor=basura').bearerToken(token), 422)
         const viejo = new Date(Date.now() - 40 * 86_400_000).toISOString()
@@ -170,7 +188,13 @@ test.group('monitoreo · registro del sistema', (group) => {
                         {
                             getJobCounts: async () => ({}),
                             getFailed: async () => [
-                                { id: '1', name: 'envio', failedReason: `SMTP caído password=x ${marca}`, finishedOn: Date.now(), timestamp: Date.now() },
+                                {
+                                    id: '1',
+                                    name: 'envio',
+                                    failedReason: `SMTP caído password=x ${marca}`,
+                                    finishedOn: Date.now(),
+                                    timestamp: Date.now(),
+                                },
                             ],
                         },
                     ],

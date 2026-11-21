@@ -64,10 +64,18 @@ export async function filaAccesos(
     return ((await q.first()) as FilaAccesos | null) ?? null
 }
 
-export async function verAccesosRapidos(usuarioId: number, cliente?: QueryClientContract): Promise<AccesosRapidos> {
+export async function verAccesosRapidos(
+    usuarioId: number,
+    cliente?: QueryClientContract,
+): Promise<AccesosRapidos> {
     const fila = await filaAccesos(usuarioId, cliente)
     if (fila && fila.secciones !== null) {
-        return { secciones: fila.secciones, predeterminados: false, maximo: MAXIMO_ACCESOS, version: fila.version }
+        return {
+            secciones: fila.secciones,
+            predeterminados: false,
+            maximo: MAXIMO_ACCESOS,
+            version: fila.version,
+        }
     }
     return {
         secciones: predeterminadosDeRoles(await rolesDeUsuario(usuarioId, cliente)),

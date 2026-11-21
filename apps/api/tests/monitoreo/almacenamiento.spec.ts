@@ -56,16 +56,27 @@ test.group('monitoreo · almacenamiento', (group) => {
         }
     })
 
-    test('desglose por categoría con crecimiento de 30 días y el archivo más grande', async ({ client, assert }) => {
+    test('desglose por categoría con crecimiento de 30 días y el archivo más grande', async ({
+        client,
+        assert,
+    }) => {
         const { token } = await usuarioConRoles(['admin'])
-        const r = await estado(client.post('/api/v1/sistema/almacenamiento/recalcular').bearerToken(token), 200)
+        const r = await estado(
+            client.post('/api/v1/sistema/almacenamiento/recalcular').bearerToken(token),
+            200,
+        )
         const m = r.body()
         assert.equal(m.origen, 'manual')
         assert.isFalse(m.parcial)
 
         const comprobantes = cat(m.categorias, 'comprobantes')
         // las subcarpetas con dueño no se cuentan dos veces
-        assert.include(comprobantes, { bytes: 4500, archivos: 3, crecimiento_30d_bytes: 4000, crecimiento_30d_archivos: 2 })
+        assert.include(comprobantes, {
+            bytes: 4500,
+            archivos: 3,
+            crecimiento_30d_bytes: 4000,
+            crecimiento_30d_archivos: 2,
+        })
         assert.deepEqual(comprobantes.mayor, { nombre: join('2026', '11', 'b.pdf'), bytes: 3000 })
         assert.include(cat(m.categorias, 'logos'), { bytes: 1000, archivos: 2 })
         assert.include(cat(m.categorias, 'inventario'), { bytes: 4000, crecimiento_30d_bytes: 0 })
@@ -136,7 +147,9 @@ test.group('monitoreo · almacenamiento', (group) => {
         }
     })
 
-    test('tamaños de la base y escritura con los privilegios de la API (argosisp_app)', async ({ assert }) => {
+    test('tamaños de la base y escritura con los privilegios de la API (argosisp_app)', async ({
+        assert,
+    }) => {
         const trx: TransactionClientContract = await db.transaction()
         try {
             await trx.rawQuery('SET LOCAL ROLE argosisp_app')
@@ -151,7 +164,9 @@ test.group('monitoreo · almacenamiento', (group) => {
         }
     })
 
-    test('permisos: 403 sin sistema.ver_almacenamiento ni sistema.recalcular_almacenamiento', async ({ client }) => {
+    test('permisos: 403 sin sistema.ver_almacenamiento ni sistema.recalcular_almacenamiento', async ({
+        client,
+    }) => {
         const { token } = await usuarioConRoles(['contabilidad'])
         await estado(client.get('/api/v1/sistema/almacenamiento').bearerToken(token), 403)
         await estado(client.post('/api/v1/sistema/almacenamiento/recalcular').bearerToken(token), 403)

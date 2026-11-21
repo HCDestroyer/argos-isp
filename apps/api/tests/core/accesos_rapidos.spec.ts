@@ -17,7 +17,14 @@ test.group('Accesos rápidos', () => {
         })
         const admin = await usuarioConRoles(['admin'])
         const a = await estado(client.get('/api/v1/me/accesos-rapidos').bearerToken(admin.token), 200)
-        assert.deepEqual(a.body().secciones, ['clientes', 'servicios', 'cobro', 'facturas', 'routers', 'configuracion'])
+        assert.deepEqual(a.body().secciones, [
+            'clientes',
+            'servicios',
+            'cobro',
+            'facturas',
+            'routers',
+            'configuracion',
+        ])
 
         assert.deepEqual(predeterminadosDeRoles(['cajero', 'soporte']), [
             'cobro',
@@ -39,20 +46,34 @@ test.group('Accesos rápidos', () => {
         const otro = await usuarioConRoles(['cajero'])
 
         const g = await estado(
-            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: ['caja', 'cobro', 'notas-credito'] }),
+            client
+                .put('/api/v1/me/accesos-rapidos')
+                .bearerToken(token)
+                .json({ secciones: ['caja', 'cobro', 'notas-credito'] }),
             200,
         )
-        assert.deepEqual(g.body(), { secciones: ['caja', 'cobro', 'notas-credito'], predeterminados: false, maximo: 12, version: 1 })
+        assert.deepEqual(g.body(), {
+            secciones: ['caja', 'cobro', 'notas-credito'],
+            predeterminados: false,
+            maximo: 12,
+            version: 1,
+        })
 
         const otroLee = await estado(client.get('/api/v1/me/accesos-rapidos').bearerToken(otro.token), 200)
         assert.isTrue(otroLee.body().predeterminados)
 
         await estado(
-            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: ['caja'], version: 1 }),
+            client
+                .put('/api/v1/me/accesos-rapidos')
+                .bearerToken(token)
+                .json({ secciones: ['caja'], version: 1 }),
             200,
         )
         await estado(
-            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: ['cobro'], version: 1 }),
+            client
+                .put('/api/v1/me/accesos-rapidos')
+                .bearerToken(token)
+                .json({ secciones: ['cobro'], version: 1 }),
             409,
         )
         const vacia = await estado(
@@ -86,16 +107,28 @@ test.group('Accesos rápidos', () => {
         assert.equal(Number(cambios.n), 4)
     })
 
-    test('validación: más de 12, repetidos o patrón inválido → 422; sin sesión 401', async ({ client, assert }) => {
+    test('validación: más de 12, repetidos o patrón inválido → 422; sin sesión 401', async ({
+        client,
+        assert,
+    }) => {
         const { token } = await usuarioConRoles(['soporte'])
         const trece = Array.from({ length: 13 }, (_, i) => `seccion-${i}`)
-        await estado(client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: trece }), 422)
         await estado(
-            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: ['caja', 'caja'] }),
+            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: trece }),
+            422,
+        )
+        await estado(
+            client
+                .put('/api/v1/me/accesos-rapidos')
+                .bearerToken(token)
+                .json({ secciones: ['caja', 'caja'] }),
             422,
         )
         const patron = await estado(
-            client.put('/api/v1/me/accesos-rapidos').bearerToken(token).json({ secciones: ['Caja Rápida'] }),
+            client
+                .put('/api/v1/me/accesos-rapidos')
+                .bearerToken(token)
+                .json({ secciones: ['Caja Rápida'] }),
             422,
         )
         assert.match(patron.body().errors[0].field, /^secciones/)

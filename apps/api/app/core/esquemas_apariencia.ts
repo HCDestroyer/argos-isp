@@ -1,4 +1,13 @@
-import { definirEsquema, entero, enumerado, instante, lista, nulable, objeto, texto } from '#shared/openapi/esquemas'
+import {
+    definirEsquema,
+    entero,
+    enumerado,
+    instante,
+    lista,
+    nulable,
+    objeto,
+    texto,
+} from '#shared/openapi/esquemas'
 import { IDS_TEMAS, MODOS } from '#core/apariencia'
 
 /** Esquemas de apariencia (`contratos/apariencia.md`) y accesos rápidos (`contratos/accesos-rapidos.md`). */

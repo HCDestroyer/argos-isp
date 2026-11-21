@@ -26,7 +26,10 @@ test.group('monitoreo · salud del sistema', (group) => {
         fijarEspacioVolumen()
     })
 
-    test('con todo arriba: núcleo ok, todos los componentes del contrato y sin 500', async ({ client, assert }) => {
+    test('con todo arriba: núcleo ok, todos los componentes del contrato y sin 500', async ({
+        client,
+        assert,
+    }) => {
         const { token } = await usuarioConRoles(['admin'])
         const r = await estado(client.get('/api/v1/sistema/salud').bearerToken(token), 200)
         const cuerpo = r.body() as { estado_general: string; componentes: Componente[]; duracion_ms: number }
@@ -69,7 +72,11 @@ test.group('monitoreo · salud del sistema', (group) => {
         const colgada = { getJobCounts: nunca, getFailed: nunca }
         fijarFuentesSalud({
             ping: nunca,
-            colas: () => new Map([['notify-envios', colgada], ['billing-cron', colgada]]),
+            colas: () =>
+                new Map([
+                    ['notify-envios', colgada],
+                    ['billing-cron', colgada],
+                ]),
         })
         const inicio = Date.now()
         const r = await estado(client.get('/api/v1/sistema/salud').bearerToken(token), 200)
@@ -104,10 +111,8 @@ test.group('monitoreo · salud del sistema', (group) => {
             evento: 'aaa.recuperado',
             payload: JSON.stringify({ nodo: b, hasta: new Date().toISOString() }),
         })
-        const despues = componente(
-            (await estado(client.get('/api/v1/sistema/salud').bearerToken(token), 200)).body(),
-            'aaa',
-        )
+        const segunda = await estado(client.get('/api/v1/sistema/salud').bearerToken(token), 200)
+        const despues = componente(segunda.body(), 'aaa')
         assert.notInclude(String(despues.metricas.caidos ?? ''), b)
     })
 
@@ -126,8 +131,7 @@ test.group('monitoreo · salud del sistema', (group) => {
     })
 
     test('estadoGeneral: desconocido no baja el estado; núcleo caído = caido', ({ assert }) => {
-        const c = (id: string, e: Componente['estado']) =>
-            ({ id, estado: e }) as Componente
+        const c = (id: string, e: Componente['estado']) => ({ id, estado: e }) as Componente
         assert.equal(estadoGeneral([c('api', 'ok'), c('respaldos', 'desconocido')]), 'ok')
         assert.equal(estadoGeneral([c('api', 'ok'), c('coa', 'degradado')]), 'degradado')
         assert.equal(estadoGeneral([c('postgres', 'caido'), c('coa', 'ok')]), 'caido')

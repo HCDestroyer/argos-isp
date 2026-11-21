@@ -4,7 +4,13 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { redis } from '#shared/redis'
 import { directorioComprobantes } from '#billing/comprobantes_archivos'
-import { conTimeout, estadoDisco, leerEspacioVolumen, usoDisco, type EstadoComponente } from '#monitoreo/salud'
+import {
+    conTimeout,
+    estadoDisco,
+    leerEspacioVolumen,
+    usoDisco,
+    type EstadoComponente,
+} from '#monitoreo/salud'
 
 /**
  * Almacenamiento (`GET /api/v1/sistema/almacenamiento`, contrato `salud.md` §6; pedido del PM:
@@ -234,7 +240,12 @@ export async function categoriasArchivos(limite: number): Promise<Categoria[]> {
         ),
     )
     for (const s of SUBCARPETAS) {
-        salida.push(await categoria({ id: s.id, nombre: s.nombre, ruta: s.carpeta, absoluta: join(raiz, s.carpeta) }, limite))
+        salida.push(
+            await categoria(
+                { id: s.id, nombre: s.nombre, ruta: s.carpeta, absoluta: join(raiz, s.carpeta) },
+                limite,
+            ),
+        )
     }
     const respaldos = directorioRespaldos()
     salida.push(
@@ -421,7 +432,9 @@ export function medicionDeFila(fila: FilaMedicion): Medicion {
     }
 }
 
-export async function ultimaMedicion(cliente: QueryClientContract = db.connection()): Promise<Medicion | null> {
+export async function ultimaMedicion(
+    cliente: QueryClientContract = db.connection(),
+): Promise<Medicion | null> {
     const fila = (await cliente
         .from('core.almacenamiento_mediciones')
         .orderBy('id', 'desc')

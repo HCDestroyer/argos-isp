@@ -73,7 +73,10 @@ export const UMBRALES = {
 /** Lo mínimo de una cola BullMQ que se lee aquí y en el registro del sistema. */
 export interface ColaLegible {
     getJobCounts(...tipos: string[]): Promise<Record<string, number>>
-    getFailed(inicio?: number, fin?: number): Promise<
+    getFailed(
+        inicio?: number,
+        fin?: number,
+    ): Promise<
         Array<{ id?: string; name: string; failedReason?: string; finishedOn?: number; timestamp: number }>
     >
 }
@@ -145,7 +148,8 @@ function peor(...estados: EstadoComponente[]): EstadoComponente {
 }
 
 type Base = Omit<Componente, 'estado' | 'detalle' | 'latencia_ms' | 'desde' | 'metricas'>
-type Resultado = Pick<Componente, 'estado' | 'detalle'> & Partial<Pick<Componente, 'latencia_ms' | 'desde' | 'metricas'>>
+type Resultado = Pick<Componente, 'estado' | 'detalle'> &
+    Partial<Pick<Componente, 'latencia_ms' | 'desde' | 'metricas'>>
 
 /**
  * Corre un chequeo con timeout. Si lanza o no responde, el componente sale `caido` (o el estado que
@@ -274,32 +278,39 @@ async function chequeoCola(nombre: string, cola: ColaLegible | undefined): Promi
 }
 
 async function chequeoOutbox(): Promise<Componente> {
-    return chequear({ id: 'outbox', grupo: 'eventos', nombre: 'Publicación de eventos (outbox)' }, async () => {
-        const fila = (await db
-            .from('audit.outbox')
-            .whereNull('publicado_en')
-            .count('* as n')
-            .min('created_at as viejo')
-            .first()) as { n: string | number; viejo: Date | null }
-        const pendientes = Number(fila.n)
-        if (pendientes === 0 || !fila.viejo) {
-            return { estado: 'ok', detalle: 'Sin eventos pendientes', metricas: { sin_publicar: 0, antiguedad_s: 0 } }
-        }
-        const viejo = new Date(fila.viejo)
-        const antiguedad = Math.max(0, Math.round((Date.now() - viejo.getTime()) / 1000))
-        const estado: EstadoComponente =
-            antiguedad >= UMBRALES.outboxCaidoS
-                ? 'caido'
-                : antiguedad >= UMBRALES.outboxDegradadoS
-                  ? 'degradado'
-                  : 'ok'
-        return {
-            estado,
-            detalle: `${pendientes} eventos sin publicar · el más viejo de ${hace(viejo)}`,
-            desde: estado === 'ok' ? null : viejo.toISOString(),
-            metricas: { sin_publicar: pendientes, antiguedad_s: antiguedad },
-        }
-    })
+    return chequear(
+        { id: 'outbox', grupo: 'eventos', nombre: 'Publicación de eventos (outbox)' },
+        async () => {
+            const fila = (await db
+                .from('audit.outbox')
+                .whereNull('publicado_en')
+                .count('* as n')
+                .min('created_at as viejo')
+                .first()) as { n: string | number; viejo: Date | null }
+            const pendientes = Number(fila.n)
+            if (pendientes === 0 || !fila.viejo) {
+                return {
+                    estado: 'ok',
+                    detalle: 'Sin eventos pendientes',
+                    metricas: { sin_publicar: 0, antiguedad_s: 0 },
+                }
+            }
+            const viejo = new Date(fila.viejo)
+            const antiguedad = Math.max(0, Math.round((Date.now() - viejo.getTime()) / 1000))
+            const estado: EstadoComponente =
+                antiguedad >= UMBRALES.outboxCaidoS
+                    ? 'caido'
+                    : antiguedad >= UMBRALES.outboxDegradadoS
+                      ? 'degradado'
+                      : 'ok'
+            return {
+                estado,
+                detalle: `${pendientes} eventos sin publicar · el más viejo de ${hace(viejo)}`,
+                desde: estado === 'ok' ? null : viejo.toISOString(),
+                metricas: { sin_publicar: pendientes, antiguedad_s: antiguedad },
+            }
+        },
+    )
 }
 
 async function chequeoAaa(): Promise<Componente> {
@@ -322,9 +333,7 @@ async function chequeoAaa(): Promise<Componente> {
                 }
             }
             const caidos = rows.filter((r) => r.evento === 'aaa.caido')
-            const desde = caidos
-                .map((r) => r.payload.desde ?? new Date(r.created_at).toISOString())
-                .sort()[0]
+            const desde = caidos.map((r) => r.payload.desde ?? new Date(r.created_at).toISOString()).sort()[0]
             const estado: EstadoComponente =
                 caidos.length === 0 ? 'ok' : caidos.length === rows.length ? 'caido' : 'degradado'
             const nombres = caidos.map((r) => r.nodo).join(', ')
@@ -349,9 +358,10 @@ async function chequeoCoa(): Promise<Componente> {
             .where('evento', 'coa.fallido')
             .where('created_at', '>', db.raw(`now() - interval '24 hours'`))
             .select(
-                db.raw(`count(*) FILTER (WHERE created_at > now() - make_interval(mins => ?))::int AS recientes`, [
-                    UMBRALES.coaVentanaMin,
-                ]),
+                db.raw(
+                    `count(*) FILTER (WHERE created_at > now() - make_interval(mins => ?))::int AS recientes`,
+                    [UMBRALES.coaVentanaMin],
+                ),
                 db.raw('count(*)::int AS dia'),
                 db.raw('max(created_at) AS ultimo'),
             )
@@ -387,7 +397,12 @@ async function chequeoRouters(): Promise<Componente> {
             )) as { rows: Array<{ total: number; en_linea: number; sin_respuesta: number }> }
             const { total, en_linea: enLinea, sin_respuesta: sinRespuesta } = rows[0]!
             const medidos = enLinea + sinRespuesta
-            const metricas = { total, en_linea: enLinea, sin_respuesta: sinRespuesta, sin_medicion: total - medidos }
+            const metricas = {
+                total,
+                en_linea: enLinea,
+                sin_respuesta: sinRespuesta,
+                sin_medicion: total - medidos,
+            }
             if (medidos === 0) {
                 return {
                     estado: 'desconocido',
@@ -457,11 +472,14 @@ async function chequeoRespaldos(): Promise<Componente> {
                     metricas: { ultimo: null, archivo: null, tamano_bytes: null },
                 }
             }
-            const nombres = (await readdir(dir)).filter((n) => /\.dump(\.age)?$/.test(n))
+            const todos = await readdir(dir)
+            const nombres = todos.filter((n) => /\.dump(\.age)?$/.test(n))
             let ultimo: { nombre: string; mtime: Date; tamano: number } | null = null
             for (const nombre of nombres) {
                 const info = await stat(join(dir, nombre))
-                if (!ultimo || info.mtime > ultimo.mtime) ultimo = { nombre, mtime: info.mtime, tamano: info.size }
+                if (!ultimo || info.mtime > ultimo.mtime) {
+                    ultimo = { nombre, mtime: info.mtime, tamano: info.size }
+                }
             }
             if (!ultimo) {
                 return {
@@ -472,12 +490,20 @@ async function chequeoRespaldos(): Promise<Componente> {
             }
             const horas = (Date.now() - ultimo.mtime.getTime()) / 3_600_000
             const estado: EstadoComponente =
-                horas >= UMBRALES.respaldoCaidoH ? 'caido' : horas >= UMBRALES.respaldoDegradadoH ? 'degradado' : 'ok'
+                horas >= UMBRALES.respaldoCaidoH
+                    ? 'caido'
+                    : horas >= UMBRALES.respaldoDegradadoH
+                      ? 'degradado'
+                      : 'ok'
             return {
                 estado,
                 detalle: `Último respaldo ${hace(ultimo.mtime)} (${bytesLegibles(ultimo.tamano)})`,
                 desde: ultimo.mtime.toISOString(),
-                metricas: { ultimo: ultimo.mtime.toISOString(), archivo: ultimo.nombre, tamano_bytes: ultimo.tamano },
+                metricas: {
+                    ultimo: ultimo.mtime.toISOString(),
+                    archivo: ultimo.nombre,
+                    tamano_bytes: ultimo.tamano,
+                },
             }
         },
         'desconocido',
@@ -493,7 +519,11 @@ async function chequeoCpu(): Promise<Componente> {
             const relativa = c5! / nucleos
             return {
                 estado:
-                    relativa >= UMBRALES.cpuCaido ? 'caido' : relativa >= UMBRALES.cpuDegradado ? 'degradado' : 'ok',
+                    relativa >= UMBRALES.cpuCaido
+                        ? 'caido'
+                        : relativa >= UMBRALES.cpuDegradado
+                          ? 'degradado'
+                          : 'ok',
                 detalle: `Carga ${c1!.toFixed(2)} / ${c5!.toFixed(2)} / ${c15!.toFixed(2)} con ${nucleos} núcleos`,
                 metricas: {
                     carga_1: Number(c1!.toFixed(2)),
@@ -516,7 +546,11 @@ async function chequeoMemoria(): Promise<Componente> {
             const pct = total > 0 ? usada / total : 0
             return {
                 estado:
-                    pct >= UMBRALES.memoriaCaido ? 'caido' : pct >= UMBRALES.memoriaDegradado ? 'degradado' : 'ok',
+                    pct >= UMBRALES.memoriaCaido
+                        ? 'caido'
+                        : pct >= UMBRALES.memoriaDegradado
+                          ? 'degradado'
+                          : 'ok',
                 detalle: `${bytesLegibles(usada)} usados de ${bytesLegibles(total)} (${Math.round(pct * 100)} %)`,
                 metricas: { usada_bytes: usada, total_bytes: total, porcentaje: Math.round(pct * 1000) / 10 },
             }

@@ -1,4 +1,14 @@
-import { definirEsquema, entero, enumerado, instante, lista, nulable, objeto, pagina, texto } from '#shared/openapi/esquemas'
+import {
+    definirEsquema,
+    entero,
+    enumerado,
+    instante,
+    lista,
+    nulable,
+    objeto,
+    pagina,
+    texto,
+} from '#shared/openapi/esquemas'
 import { NIVELES, ORIGENES } from '#monitoreo/registro'
 
 /** Respuesta de `GET /api/v1/version` (`app/monitoreo/version.ts`). */
@@ -39,7 +49,11 @@ const estadoComponente = enumerado(['ok', 'degradado', 'caido', 'desconocido'])
 export const ComponenteSalud = definirEsquema(
     'ComponenteSalud',
     objeto({
-        id: { ...texto, description: 'Estable: api, postgres, redis, cola.<nombre>, outbox, aaa, coa, routers, cron.<x>, respaldos, host.<x>' },
+        id: {
+            ...texto,
+            description:
+                'Estable: api, postgres, redis, cola.<nombre>, outbox, aaa, coa, routers, cron.<x>, respaldos, host.<x>',
+        },
         grupo: enumerado(['nucleo', 'colas', 'eventos', 'red', 'procesos', 'host']),
         nombre: texto,
         estado: estadoComponente,
@@ -102,7 +116,10 @@ const archivoMayor = nulable(objeto({ nombre: texto, bytes: entero }))
 export const CategoriaAlmacenamiento = definirEsquema(
     'CategoriaAlmacenamiento',
     objeto({
-        id: { ...texto, description: 'comprobantes, logos, anuncios, inventario, libros, sorteos, respaldos' },
+        id: {
+            ...texto,
+            description: 'comprobantes, logos, anuncios, inventario, libros, sorteos, respaldos',
+        },
         nombre: texto,
         ruta: nulable(texto),
         estado: enumerado(['completo', 'parcial', 'no_disponible']),
@@ -144,6 +161,9 @@ export const Almacenamiento = definirEsquema(
     'Almacenamiento',
     objeto({
         volumenes: { ...lista(VolumenAlmacenamiento), description: 'Leídos en el momento de la petición' },
-        medicion: { ...nulable(MedicionAlmacenamiento), description: 'Último cálculo guardado (null si nunca)' },
+        medicion: {
+            ...nulable(MedicionAlmacenamiento),
+            description: 'Último cálculo guardado (null si nunca)',
+        },
     }),
 )

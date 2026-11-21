@@ -27,7 +27,10 @@ type Operacion = 'subir' | 'quitar'
  * El archivo nuevo se escribe antes de la fila; si la transacción falla se borra. El anterior se
  * borra después del COMMIT. El diff guarda la huella (sha256) y el tipo, nunca la ruta interna.
  */
-export default class CambiarArchivoApariencia extends DomainAction<EntradaArchivoApariencia, AparienciaCompleta> {
+export default class CambiarArchivoApariencia extends DomainAction<
+    EntradaArchivoApariencia,
+    AparienciaCompleta
+> {
     readonly nombre: string
 
     constructor(

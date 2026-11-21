@@ -208,8 +208,12 @@ async function filasBase(
     return rows
 }
 
-function texto(valor: unknown): string | null {
-    return typeof valor === 'string' && valor ? valor : valor === null || valor === undefined ? null : String(valor)
+function comoTexto(valor: unknown): string | null {
+    return typeof valor === 'string' && valor
+        ? valor
+        : valor === null || valor === undefined
+          ? null
+          : String(valor)
 }
 
 function entradaDeFila(f: FilaFuente): EntradaRegistro {
@@ -266,38 +270,45 @@ function describirEvento(
             return {
                 titulo: `Falló un ${p.tipo === 'disconnect' ? 'Disconnect' : 'CoA'}`,
                 detalle: enmascararTexto(
-                    [texto(p.nas_ip) && `NAS ${texto(p.nas_ip)}`, texto(p.error)].filter(Boolean).join(' · '),
+                    [comoTexto(p.nas_ip) && `NAS ${comoTexto(p.nas_ip)}`, comoTexto(p.error)]
+                        .filter(Boolean)
+                        .join(' · '),
                 ),
                 entidad: servicio,
             }
         case 'routeros.fallido':
             return {
                 titulo: 'Falló una operación en RouterOS',
-                detalle: enmascararTexto([texto(p.operacion), texto(p.error)].filter(Boolean).join(' · ')),
+                detalle: enmascararTexto(
+                    [comoTexto(p.operacion), comoTexto(p.error)].filter(Boolean).join(' · '),
+                ),
                 entidad: servicio ?? (p.router_id ? { tipo: 'router', id: String(p.router_id) } : null),
             }
         case 'aaa.caido':
             return {
-                titulo: `RADIUS dejó de responder (${texto(p.nodo) ?? 'nodo'})`,
-                detalle: enmascararTexto(texto(p.ultimo_error)),
+                titulo: `RADIUS dejó de responder (${comoTexto(p.nodo) ?? 'nodo'})`,
+                detalle: enmascararTexto(comoTexto(p.ultimo_error)),
                 entidad: null,
             }
         case 'aaa.recuperado':
             return {
-                titulo: `RADIUS volvió a responder (${texto(p.nodo) ?? 'nodo'})`,
-                detalle: p.desde ? `Caído desde ${texto(p.desde)}` : null,
+                titulo: `RADIUS volvió a responder (${comoTexto(p.nodo) ?? 'nodo'})`,
+                detalle: p.desde ? `Caído desde ${comoTexto(p.desde)}` : null,
                 entidad: null,
             }
         case 'libro.integridad_rota':
             return {
                 titulo: 'Se rompió la integridad del libro',
-                detalle: p.asiento_id ? `Asiento ${texto(p.asiento_id)}` : null,
+                detalle: p.asiento_id ? `Asiento ${comoTexto(p.asiento_id)}` : null,
                 entidad: p.asiento_id ? { tipo: 'asiento', id: String(p.asiento_id) } : null,
             }
         case 'libro.proceso_bloqueado':
             return {
                 titulo: 'Un proceso se detuvo por un bloqueo del libro',
-                detalle: [texto(p.proceso), p.documentos !== undefined ? `${texto(p.documentos)} documentos` : null]
+                detalle: [
+                    comoTexto(p.proceso),
+                    p.documentos !== undefined ? `${comoTexto(p.documentos)} documentos` : null,
+                ]
                     .filter(Boolean)
                     .join(' · '),
                 entidad: null,

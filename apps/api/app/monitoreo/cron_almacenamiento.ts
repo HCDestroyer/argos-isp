@@ -19,7 +19,10 @@ export async function ejecutarAlmacenamiento(): Promise<Medicion> {
     )
 }
 
-export async function programarCronAlmacenamiento(cola: Queue, patron = PATRON_ALMACENAMIENTO): Promise<void> {
+export async function programarCronAlmacenamiento(
+    cola: Queue,
+    patron = PATRON_ALMACENAMIENTO,
+): Promise<void> {
     await cola.upsertJobScheduler(
         ID_ALMACENAMIENTO,
         { pattern: patron, tz: 'UTC' },

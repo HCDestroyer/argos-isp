@@ -29,7 +29,10 @@ export const PRESUPUESTO_CRON_MS = 5 * 60_000
  * - La fila guarda `estado_disco`: con `degradado` o `caido` (≥ 80 % / ≥ 95 % usado) el registro del
  *   sistema muestra un aviso de disco (`GET /sistema/registro`, origen `almacenamiento`).
  */
-export default class RecalcularAlmacenamiento extends DomainAction<EntradaRecalcularAlmacenamiento, Medicion> {
+export default class RecalcularAlmacenamiento extends DomainAction<
+    EntradaRecalcularAlmacenamiento,
+    Medicion
+> {
     readonly nombre = 'sistema.recalcular_almacenamiento'
 
     protected async handle(input: EntradaRecalcularAlmacenamiento, t: Transaccion): Promise<Medicion> {
@@ -45,7 +48,7 @@ export default class RecalcularAlmacenamiento extends DomainAction<EntradaRecalc
         }
         const inicio = Date.now()
         const limite = inicio + (input.presupuesto_ms ?? PRESUPUESTO_MANUAL_MS)
-        const [base_datos, redis, volumen_datos] = await Promise.all([
+        const [baseDatos, memoria, volumenDatosActual] = await Promise.all([
             tamanoBaseDatos(t.trx),
             memoriaRedis(),
             volumenDatos(),
@@ -58,9 +61,14 @@ export default class RecalcularAlmacenamiento extends DomainAction<EntradaRecalc
                 duracion_ms: Date.now() - inicio,
                 origen: input.origen ?? 'manual',
                 parcial,
-                estado_disco: volumen_datos.estado,
-                porcentaje_disco: volumen_datos.porcentaje_usado,
-                resultado: JSON.stringify({ categorias, base_datos, redis, volumen_datos }),
+                estado_disco: volumenDatosActual.estado,
+                porcentaje_disco: volumenDatosActual.porcentaje_usado,
+                resultado: JSON.stringify({
+                    categorias,
+                    base_datos: baseDatos,
+                    redis: memoria,
+                    volumen_datos: volumenDatosActual,
+                }),
             })
             .returning('*')) as Parameters<typeof medicionDeFila>[0][]
         t.fijarEntidad('almacenamiento_medicion', Number(fila!.id))

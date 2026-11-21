@@ -22,11 +22,7 @@ import EditarApariencia from '#core/actions/editar_apariencia'
 import CambiarArchivoApariencia from '#core/actions/cambiar_archivo_apariencia'
 import EditarAccesosRapidos from '#core/actions/editar_accesos_rapidos'
 import * as v from '#core/validators_apariencia'
-import {
-    AccesosRapidos,
-    Apariencia,
-    AparienciaPublica,
-} from '#core/esquemas_apariencia'
+import { AccesosRapidos, Apariencia, AparienciaPublica } from '#core/esquemas_apariencia'
 
 /** Archivo `archivo` del multipart; 422 antes de leerlo si pasa del máximo. */
 async function archivoDeLaPeticion(ctx: HttpContext, tipo: ArchivoApariencia): Promise<Uint8Array> {
@@ -64,7 +60,8 @@ function rutasArchivo(archivo: ArchivoApariencia, segmento: string, etiquetaHuma
             resumen: `Subir ${etiquetaHumana}`,
             descripcion: `\`multipart/form-data\` con el archivo \`archivo\` (${tipos}) y \`version\`. ${DESCRIPCION_SVG}`,
             etiqueta: 'apariencia',
-            permiso: archivo === 'logo_login' ? 'apariencia.subir_logo_login' : 'apariencia.subir_fondo_login',
+            permiso:
+                archivo === 'logo_login' ? 'apariencia.subir_logo_login' : 'apariencia.subir_fondo_login',
             cuerpo: v.versionAparienciaValidator,
             multipart: { archivos: { archivo: tipos } },
             versionada: true,
@@ -82,7 +79,8 @@ function rutasArchivo(archivo: ArchivoApariencia, segmento: string, etiquetaHuma
             operacion: `aparienciaQuitar${nombre}`,
             resumen: `Quitar ${etiquetaHumana}`,
             etiqueta: 'apariencia',
-            permiso: archivo === 'logo_login' ? 'apariencia.quitar_logo_login' : 'apariencia.quitar_fondo_login',
+            permiso:
+                archivo === 'logo_login' ? 'apariencia.quitar_logo_login' : 'apariencia.quitar_fondo_login',
             cuerpo: v.versionAparienciaValidator,
             versionada: true,
             idempotente: true,
@@ -131,7 +129,9 @@ const apariencia: Ruta[] = [
         etiqueta: 'apariencia',
         seguridad: 'publico',
         permiso: null,
-        parametros: { nombre: { type: 'string', pattern: '^(logo|fondo)-login-[0-9a-f]{16}\\.(png|svg|jpg|webp)$' } },
+        parametros: {
+            nombre: { type: 'string', pattern: '^(logo|fondo)-login-[0-9a-f]{16}\\.(png|svg|jpg|webp)$' },
+        },
         respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
         handler: async (ctx, { params }) => {
             const archivo = await archivoVigente(String(params.nombre))
@@ -142,7 +142,10 @@ const apariencia: Ruta[] = [
             const contenido = await archivo.leer()
             ctx.response.header('Content-Type', archivo.tipo)
             if (archivo.tipo === 'image/svg+xml') {
-                ctx.response.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+                ctx.response.header(
+                    'Content-Security-Policy',
+                    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                )
             }
             return contenido
         },
@@ -162,7 +165,8 @@ const apariencia: Ruta[] = [
         ruta: '/apariencia',
         operacion: 'aparienciaEditar',
         resumen: 'Cambiar tema, modo predeterminado, nombre de marca o eslogan',
-        descripcion: 'Lo que no viene no cambia. `version` desactualizada → 409. Sin cambios no sube la versión.',
+        descripcion:
+            'Lo que no viene no cambia. `version` desactualizada → 409. Sin cambios no sube la versión.',
         etiqueta: 'apariencia',
         permiso: 'apariencia.editar',
         cuerpo: v.editarAparienciaValidator,
@@ -198,7 +202,11 @@ const apariencia: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Accesos rápidos guardados', esquema: AccesosRapidos },
         handler: (ctx, { cuerpo }) =>
             new EditarAccesosRapidos().execute(
-                { usuario_id: ctx.auth.getUserOrFail().id, secciones: cuerpo.secciones, version: cuerpo.version },
+                {
+                    usuario_id: ctx.auth.getUserOrFail().id,
+                    secciones: cuerpo.secciones,
+                    version: cuerpo.version,
+                },
                 ctx.contextoAccion(),
             ),
     }),

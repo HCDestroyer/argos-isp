@@ -50,15 +50,17 @@ const EXTENSION: Record<TipoImagen, string> = {
 }
 
 /** Reglas por archivo: tipos admitidos y tamaño máximo. */
-export const REGLAS_ARCHIVO: Record<ArchivoApariencia, { tipos: TipoImagen[]; maximo: number; prefijo: string }> =
-    {
-        logo_login: { tipos: ['image/png', 'image/svg+xml'], maximo: 512 * 1024, prefijo: 'logo-login' },
-        fondo_login: {
-            tipos: ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'],
-            maximo: 1536 * 1024,
-            prefijo: 'fondo-login',
-        },
-    }
+export const REGLAS_ARCHIVO: Record<
+    ArchivoApariencia,
+    { tipos: TipoImagen[]; maximo: number; prefijo: string }
+> = {
+    logo_login: { tipos: ['image/png', 'image/svg+xml'], maximo: 512 * 1024, prefijo: 'logo-login' },
+    fondo_login: {
+        tipos: ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'],
+        maximo: 1536 * 1024,
+        prefijo: 'fondo-login',
+    },
+}
 
 export interface ImagenPreparada {
     contenido: Buffer
@@ -161,7 +163,10 @@ export interface FilaApariencia {
     updated_at: Date
 }
 
-export async function filaApariencia(cliente?: QueryClientContract, bloquear = false): Promise<FilaApariencia> {
+export async function filaApariencia(
+    cliente?: QueryClientContract,
+    bloquear = false,
+): Promise<FilaApariencia> {
     const q = (cliente ?? db).from('core.apariencia').where('id', 1).select('*')
     if (bloquear) q.forUpdate()
     const fila = (await q.first()) as FilaApariencia | null

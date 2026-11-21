@@ -32,7 +32,7 @@ async function restablecer() {
 
 function luminancia(hex: string): number {
     const c = [1, 3, 5]
-        .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255)
         .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
     return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!
 }
@@ -77,13 +77,20 @@ test.group('Apariencia', (group) => {
     }) => {
         const { token } = await usuarioConRoles(['admin'])
         const r = await estado(
-            client
-                .put('/api/v1/apariencia')
-                .bearerToken(token)
-                .json({ version: 1, tema: 'esmeralda', modo_predeterminado: 'oscuro', eslogan: '  Internet que sí llega ' }),
+            client.put('/api/v1/apariencia').bearerToken(token).json({
+                version: 1,
+                tema: 'esmeralda',
+                modo_predeterminado: 'oscuro',
+                eslogan: '  Internet que sí llega ',
+            }),
             200,
         )
-        assert.include(r.body(), { tema: 'esmeralda', modo_predeterminado: 'oscuro', eslogan: 'Internet que sí llega', version: 2 })
+        assert.include(r.body(), {
+            tema: 'esmeralda',
+            modo_predeterminado: 'oscuro',
+            eslogan: 'Internet que sí llega',
+            version: 2,
+        })
         assert.deepEqual(r.body().paleta, { color: 'emerald', claro: '#047857', oscuro: '#34D399' })
         assert.lengthOf(r.body().temas, 7)
 
@@ -99,7 +106,10 @@ test.group('Apariencia', (group) => {
             ['tema', 'modo_predeterminado', 'eslogan'],
         )
 
-        await estado(client.put('/api/v1/apariencia').bearerToken(token).json({ version: 1, tema: 'rosa' }), 409)
+        await estado(
+            client.put('/api/v1/apariencia').bearerToken(token).json({ version: 1, tema: 'rosa' }),
+            409,
+        )
         const igual = await estado(
             client.put('/api/v1/apariencia').bearerToken(token).json({ version: 2, tema: 'esmeralda' }),
             200,
@@ -124,7 +134,11 @@ test.group('Apariencia', (group) => {
     }) => {
         const { token } = await usuarioConRoles(['admin'])
         const subida = await estado(
-            client.post('/api/v1/apariencia/logo-login').bearerToken(token).field('version', '1').file('archivo', PNG, { filename: 'x.png' }),
+            client
+                .post('/api/v1/apariencia/logo-login')
+                .bearerToken(token)
+                .field('version', '1')
+                .file('archivo', PNG, { filename: 'x.png' }),
             200,
         )
         const url: string = subida.body().logo_login_url
@@ -140,22 +154,34 @@ test.group('Apariencia', (group) => {
         assert.include(archivo.header('cache-control') ?? '', 'immutable')
         const etag = archivo.header('etag') ?? ''
         assert.equal(etag, `"${subida.body().logo_login.etag}"`)
-        ;(await client.get(url).header('If-None-Match', etag)).assertStatus(304)
+        const cache = await client.get(url).header('If-None-Match', etag)
+        cache.assertStatus(304)
         // un nombre que no es el vigente: 404
         await estado(client.get('/api/v1/apariencia/archivos/logo-login-0000000000000000.png'), 404)
 
         await estado(
-            client.post('/api/v1/apariencia/logo-login').bearerToken(token).field('version', '1').file('archivo', PNG, { filename: 'x.png' }),
+            client
+                .post('/api/v1/apariencia/logo-login')
+                .bearerToken(token)
+                .field('version', '1')
+                .file('archivo', PNG, { filename: 'x.png' }),
             409,
         )
         // el logo no admite JPG
         const jpg = await estado(
-            client.post('/api/v1/apariencia/logo-login').bearerToken(token).field('version', '2').file('archivo', JPG, { filename: 'x.jpg' }),
+            client
+                .post('/api/v1/apariencia/logo-login')
+                .bearerToken(token)
+                .field('version', '2')
+                .file('archivo', JPG, { filename: 'x.jpg' }),
             422,
         )
         assert.include(jpg.body().errors[0], { field: 'archivo', rule: 'tipo' })
 
-        const quitada = await estado(client.post('/api/v1/apariencia/logo-login/quitar').bearerToken(token).json({ version: 2 }), 200)
+        const quitada = await estado(
+            client.post('/api/v1/apariencia/logo-login/quitar').bearerToken(token).json({ version: 2 }),
+            200,
+        )
         assert.isNull(quitada.body().logo_login_url)
         assert.equal(quitada.body().version, 3)
         await estado(client.get(url), 404)
@@ -167,12 +193,19 @@ test.group('Apariencia', (group) => {
             .select('accion', 'resultado', 'entrada')
         assert.includeMembers(
             acciones.map((a) => `${a.accion}:${a.resultado}`),
-            ['apariencia.subir_logo_login:ok', 'apariencia.subir_logo_login:error', 'apariencia.quitar_logo_login:ok'],
+            [
+                'apariencia.subir_logo_login:ok',
+                'apariencia.subir_logo_login:error',
+                'apariencia.quitar_logo_login:ok',
+            ],
         )
         for (const a of acciones) assert.notInclude(JSON.stringify(a.entrada), 'iVBOR')
     })
 
-    test('SVG malicioso se sanea y se sirve con CSP; fondo JPG; fondo de más de 1.5 MB 422', async ({ client, assert }) => {
+    test('SVG malicioso se sanea y se sirve con CSP; fondo JPG; fondo de más de 1.5 MB 422', async ({
+        client,
+        assert,
+    }) => {
         const { token } = await usuarioConRoles(['admin'])
         const malicioso = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" onload="alert(1)">
   <script>alert('xss')</script>
@@ -198,7 +231,11 @@ test.group('Apariencia', (group) => {
         assert.include(texto, '<circle')
 
         const fondo = await estado(
-            client.post('/api/v1/apariencia/fondo-login').bearerToken(token).field('version', '2').file('archivo', JPG, { filename: 'f.jpg' }),
+            client
+                .post('/api/v1/apariencia/fondo-login')
+                .bearerToken(token)
+                .field('version', '2')
+                .file('archivo', JPG, { filename: 'f.jpg' }),
             200,
         )
         assert.match(fondo.body().fondo_login_url, /fondo-login-[0-9a-f]{16}\.jpg$/)
@@ -206,7 +243,11 @@ test.group('Apariencia', (group) => {
 
         const grande = Buffer.concat([PNG, Buffer.alloc(1537 * 1024)])
         const pesado = await estado(
-            client.post('/api/v1/apariencia/fondo-login').bearerToken(token).field('version', '3').file('archivo', grande, { filename: 'g.png' }),
+            client
+                .post('/api/v1/apariencia/fondo-login')
+                .bearerToken(token)
+                .field('version', '3')
+                .file('archivo', grande, { filename: 'g.png' }),
             422,
         )
         assert.equal(pesado.body().errors[0].rule, 'tamano')
@@ -218,9 +259,15 @@ test.group('Apariencia', (group) => {
         await estado(client.get('/api/v1/apariencia').bearerToken(cajero.token), 403)
         const lectura = await usuarioConRoles(['lectura'])
         await estado(client.get('/api/v1/apariencia').bearerToken(lectura.token), 200)
-        await estado(client.put('/api/v1/apariencia').bearerToken(lectura.token).json({ version: 1, tema: 'rosa' }), 403)
         await estado(
-            client.post('/api/v1/apariencia/logo-login/quitar').bearerToken(lectura.token).json({ version: 1 }),
+            client.put('/api/v1/apariencia').bearerToken(lectura.token).json({ version: 1, tema: 'rosa' }),
+            403,
+        )
+        await estado(
+            client
+                .post('/api/v1/apariencia/logo-login/quitar')
+                .bearerToken(lectura.token)
+                .json({ version: 1 }),
             403,
         )
     })
