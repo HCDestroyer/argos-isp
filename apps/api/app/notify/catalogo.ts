@@ -89,6 +89,10 @@ const NOMBRES: Record<string, string> = {
     'contacto.telefono_agregado': 'Número de un contacto cambiado (aviso al titular)',
     'servicio.asignado_a_tu_nombre': 'Servicio asignado a tu nombre (aviso al titular)',
     'equipo.intento_recuperacion': 'Intento de recuperación del equipo (aviso al titular)',
+    'soporte.ticket_resuelto': 'Ticket de soporte resuelto (Iris)',
+    'soporte.ticket_cerrado': 'Ticket de soporte cerrado (Iris)',
+    'soporte.ticket_respondido': 'Respuesta en un ticket de soporte (Iris)',
+    'soporte.solicitud_estado_cambiado': 'Solicitud de servicio con estado nuevo (Iris)',
 }
 
 const ETIQUETAS_GRUPO: Record<string, string> = {
@@ -112,6 +116,8 @@ const ETIQUETAS_GRUPO: Record<string, string> = {
     contacto: 'Contacto',
     equipo: 'Equipo',
     titular: 'Titular',
+    ticket: 'Ticket de soporte',
+    solicitud: 'Solicitud de servicio',
     alerta: 'Alerta',
 }
 
@@ -357,6 +363,24 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
         }
     }
     if (evento === 'servicio.asignado_a_tu_nombre') v.servicio = SERVICIO
+    if (evento === 'soporte.ticket_resuelto' || evento === 'soporte.ticket_cerrado') {
+        v.ticket = { id: '9123', numero: 'TK-000123', puede_confirmar: evento === 'soporte.ticket_resuelto' }
+    }
+    if (evento === 'soporte.ticket_respondido') {
+        v.ticket = { id: '9123', numero: 'TK-000123', masivo: false, de_sistema: false }
+    }
+    if (evento === 'soporte.solicitud_estado_cambiado') {
+        v.solicitud = {
+            id: '731',
+            numero: 'PR-000731',
+            tipo: 'traslado',
+            tipo_texto: 'traslado',
+            estado: 'en_revision',
+            estado_texto: 'la estamos revisando',
+            completada: false,
+            no_procede: false,
+        }
+    }
     if (evento === 'equipo.intento_recuperacion') {
         v.servicio = SERVICIO
         v.equipo = { serie: '…1A2B', intento: 2 }

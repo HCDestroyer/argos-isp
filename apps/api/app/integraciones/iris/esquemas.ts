@@ -69,6 +69,11 @@ export const ConectorIris = definirEsquema(
             activo: { type: 'boolean', description: 'Apagado por defecto; encender exige URL y token' },
             url_base: { ...nulable(texto), description: 'Origen de la API de Iris' },
             token: secreto,
+            token_portal: {
+                ...secreto,
+                description:
+                    'Contrato 0.9.0 §1.2: `***` si Iris entregó el token del portal del cliente (§11); null si no. Nunca el valor',
+            },
             webhook_salida_url: {
                 ...nulable(texto),
                 description: 'Receptor de Iris (webhooks Argos → Iris, §2.3)',
@@ -147,6 +152,7 @@ export const ConectorIris = definirEsquema(
             version: { type: 'integer', minimum: 0 },
         },
         [
+            'token_portal',
             'estado_canje',
             'canje_vence_en',
             'desconectado_en',
@@ -156,6 +162,33 @@ export const ConectorIris = definirEsquema(
         ],
     ),
 )
+
+/** `capacidades` (contrato Iris 0.9.0 §4.3): canje y estado. */
+const capacidades = {
+    capacidades: {
+        type: 'object',
+        description:
+            'Contrato Iris 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología. Sin SmartOLT ni ACS, todo false',
+        properties: {
+            aprovisionamiento: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        empresa_id: { type: 'integer', minimum: 1 },
+                        ftth: { type: 'boolean' },
+                        wireless: { type: 'boolean' },
+                        tr069: { type: 'boolean' },
+                    },
+                    required: ['empresa_id', 'ftth', 'wireless', 'tr069'],
+                    additionalProperties: false,
+                },
+            },
+        },
+        required: ['aprovisionamiento'],
+        additionalProperties: false,
+    },
+}
 
 /** `version_argos` y `contrato`: canje y estado (contrato Iris 0.5.0, «Versión y compatibilidad»). */
 const versiones = {
@@ -173,7 +206,17 @@ const versiones = {
 
 export const EstadoConectorIris = definirEsquema(
     'EstadoConectorIris',
-    objeto({ activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' }, ...versiones }),
+    objeto(
+        {
+            activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' },
+            ...versiones,
+            ...capacidades,
+        },
+        [
+            // opcional en el OpenAPI hasta que las fixtures del panel la traigan (Argos siempre la manda)
+            'capacidades',
+        ],
+    ),
 )
 
 export const ContratoConectorIris = definirEsquema(
@@ -232,6 +275,7 @@ export const CanjeConexionIris = definirEsquema(
                 'URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0)',
         },
         ...versiones,
+        ...capacidades,
     }),
 )
 
