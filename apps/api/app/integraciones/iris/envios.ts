@@ -90,6 +90,8 @@ export const EVENTOS_A_IRIS = [
     'factura.anulada',
     'pago.registrado',
     'pago.anulado',
+    // 0.9.0 (A37): bienvenida con seguimiento
+    'servicio.bienvenida_cambiada',
     // 0.10.0 (A42, A41 y A39)
     'cliente.contactos_cambiados',
     'cliente.identidad_registrada',
@@ -138,6 +140,8 @@ export const EVENTOS_DESDE_090 = [
     'factura.anulada',
     'pago.registrado',
     'pago.anulado',
+    // bienvenida con seguimiento (§12.5, A37)
+    'servicio.bienvenida_cambiada',
 ] as const satisfies ReadonlyArray<(typeof EVENTOS_A_IRIS)[number]>
 
 export const CONTRATO_EVENTOS_090 = '0.9.0'
@@ -367,6 +371,7 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
     if (evento === 'factura.emitida' || evento === 'factura.anulada') return payloadFacturaIris(evento, p)
     if (evento === 'pago.registrado' || evento === 'pago.anulado') return payloadPagoIris(p)
     if (evento === 'inventario.unidad_estado_cambiado') return payloadUnidadEstado(p)
+    if (evento === 'servicio.bienvenida_cambiada') return payloadBienvenida(p)
 
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
@@ -923,6 +928,44 @@ async function payloadPagoIris(p: Payload): Promise<WebhookIris | null> {
             fecha: instanteIso(a.created_at),
         },
         empresas: [empresaId],
+    }
+}
+
+// ── 0.9.0 (A37): bienvenida con seguimiento ───────────────────────────────────────────────────
+
+const CANALES_BIENVENIDA = ['whatsapp', 'correo', 'telegram'] as const
+const ESTADOS_BIENVENIDA = ['pendiente', 'enviada', 'fallida', 'omitida'] as const
+
+/**
+ * `servicio.bienvenida_cambiada` (0.9.0 §2.3 y §12.5): servicio_id, empresa_id, cliente_id,
+ * origen_tipo (`iris_orden` o null), origen_id, canales[] ({ canal, estado, motivo, aviso_id }) y
+ * reenvio. Nunca el texto ni las cuentas (lista cerrada).
+ */
+function payloadBienvenida(p: Payload): WebhookIris | null {
+    const servicioId = entero(p.servicio_id)
+    const clienteId = entero(p.cliente_id)
+    if (!servicioId || !clienteId || !Array.isArray(p.canales)) return null
+    const empresaId = entero(p.empresa_id)
+    const canales = (p.canales as Payload[])
+        .map((c) => ({
+            canal: unoDe(c.canal, CANALES_BIENVENIDA),
+            estado: unoDe(c.estado, ESTADOS_BIENVENIDA),
+            motivo: texto(c.motivo),
+            aviso_id: texto(c.aviso_id),
+        }))
+        .filter((c) => c.canal && c.estado)
+    const origenTipo = p.origen_tipo === 'iris_orden' ? 'iris_orden' : null
+    return {
+        payload: {
+            servicio_id: servicioId,
+            empresa_id: empresaId,
+            cliente_id: clienteId,
+            origen_tipo: origenTipo,
+            origen_id: origenTipo ? texto(p.origen_id) : null,
+            canales,
+            reenvio: p.reenvio === true,
+        },
+        empresas: empresaId ? [empresaId] : [],
     }
 }
 

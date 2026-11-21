@@ -40,6 +40,11 @@ export interface AvisoIris {
     servicioId: number | null
     /** solo las claves declaradas en la plantilla de Iris (§6.3) */
     variables: Record<string, string>
+    /**
+     * Contrato Iris 0.9.0 §6.2: la orden de Iris que activó el servicio, solo en `bienvenida_servicio`
+     * (ausente si la activación fue desde el panel de Argos)
+     */
+    origen?: { tipo: 'iris_orden'; id: string } | null
 }
 
 export interface ResultadoEnvio {

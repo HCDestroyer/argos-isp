@@ -312,6 +312,12 @@ export const PERMISOS = {
     // contrato Iris 0.12.0 §3.10 (A48): equipos del cliente
     'servicios.cambiar_equipo':
         'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
+    // contrato Iris 0.9.0 §12 (A32, A33, A35 y A37): equipos del cliente y bienvenida
+    'servicios.aprovisionar':
+        'Aprovisionar y activar un servicio pendiente con su equipo (SmartOLT o ACS; hoy sin integración)',
+    'servicios.ver_equipo': 'Ver el estado del equipo del cliente (en línea, señal y firmware)',
+    'servicios.cambiar_wifi': 'Cambiar el nombre o la clave del Wi-Fi del equipo del cliente',
+    'servicios.reenviar_bienvenida': 'Reenviar la bienvenida de un servicio activo por sus canales',
     'inventario.ver_unidad':
         'Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor',
     'inventario.cobrar_equipo':
@@ -544,6 +550,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
+            'servicios.reenviar_bienvenida',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -595,6 +604,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.registrar_identidad',
             'servicios.completar_datos',
             'servicios.cambiar_titular',
+            'servicios.aprovisionar',
+            'servicios.ver_equipo',
+            'servicios.cambiar_wifi',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',

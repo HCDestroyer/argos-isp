@@ -163,6 +163,33 @@ export const ConectorIris = definirEsquema(
     ),
 )
 
+/** `capacidades` (contrato Iris 0.9.0 §4.3): canje y estado. */
+const capacidades = {
+    capacidades: {
+        type: 'object',
+        description:
+            'Contrato Iris 0.9.0 §4.3: qué puede aprovisionar Argos por empresa y tecnología. Sin SmartOLT ni ACS, todo false',
+        properties: {
+            aprovisionamiento: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        empresa_id: { type: 'integer', minimum: 1 },
+                        ftth: { type: 'boolean' },
+                        wireless: { type: 'boolean' },
+                        tr069: { type: 'boolean' },
+                    },
+                    required: ['empresa_id', 'ftth', 'wireless', 'tr069'],
+                    additionalProperties: false,
+                },
+            },
+        },
+        required: ['aprovisionamiento'],
+        additionalProperties: false,
+    },
+}
+
 /** `version_argos` y `contrato`: canje y estado (contrato Iris 0.5.0, «Versión y compatibilidad»). */
 const versiones = {
     version_argos: {
@@ -179,7 +206,17 @@ const versiones = {
 
 export const EstadoConectorIris = definirEsquema(
     'EstadoConectorIris',
-    objeto({ activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' }, ...versiones }),
+    objeto(
+        {
+            activo: { type: 'boolean', description: 'Si "Ver en Iris" puede funcionar' },
+            ...versiones,
+            ...capacidades,
+        },
+        [
+            // opcional en el OpenAPI hasta que las fixtures del panel la traigan (Argos siempre la manda)
+            'capacidades',
+        ],
+    ),
 )
 
 export const ContratoConectorIris = definirEsquema(
@@ -238,6 +275,7 @@ export const CanjeConexionIris = definirEsquema(
                 'URL pública del panel de Argos (`PANEL_URL_PUBLICA`): «Ver en Argos» y volver a autorizar (contrato Iris 0.4.0)',
         },
         ...versiones,
+        ...capacidades,
     }),
 )
 
