@@ -16,7 +16,8 @@ export default class extends BaseSchema {
                 origen text NOT NULL CHECK (origen IN ('manual', 'cron')),
                 parcial boolean NOT NULL DEFAULT false,
                 estado_disco text NOT NULL CHECK (estado_disco IN ('ok', 'degradado', 'caido', 'desconocido')),
-                porcentaje_disco numeric(5, 1),
+                -- numeric(14,2) como todo numérico del esquema (prueba 10 del auditor contable)
+                porcentaje_disco numeric(14, 2),
                 resultado jsonb NOT NULL
             );
             CREATE INDEX almacenamiento_mediciones_disco
