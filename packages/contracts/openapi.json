@@ -31570,6 +31570,14 @@
                     "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?$",
                     "description": "Versión del contrato que habla Iris (semver, 0.5.0). Se guarda en el conector: sin ella, Argos no envía los webhooks nuevos de 0.5.0"
                   },
+                  "token_portal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Contrato 0.9.0 §1.2: `iris_pat_` recortado a `portal_argos.*` para el servidor del portal del cliente. Se rota con cada canje (ausente: el conector queda sin él). Argos lo guarda cifrado y nunca lo devuelve; en la auditoría queda como ***"
+                  },
                   "receptor_argos": {
                     "type": "boolean",
                     "description": "Contrato Iris 0.6.2: true si Iris guardó la URL y el secreto del receptor de Argos de esta respuesta (con B1, siempre true). Se guarda en el conector; omitido queda null (desconocido)"
@@ -31685,6 +31693,14 @@
                     "maxLength": 64,
                     "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?$",
                     "description": "Versión del contrato Iris ↔ Argos que habla Iris (semver, p. ej. `0.5.0`)"
+                  },
+                  "token_portal": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Contrato 0.9.0 §1.2: `iris_pat_` recortado a `portal_argos.*` para el servidor del portal del cliente. Solo con contrato ≥ 0.9.0 (con uno anterior se ignora). Omitido: se conserva el guardado. Argos lo guarda cifrado y nunca lo devuelve; en la auditoría queda como ***"
                   },
                   "receptor_argos": {
                     "type": "boolean",
@@ -98408,6 +98424,17 @@
               null
             ],
             "description": "Secreto de solo escritura: `***` si está guardado, null si no"
+          },
+          "token_portal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Contrato 0.9.0 §1.2: `***` si Iris entregó el token del portal del cliente (§11); null si no. Nunca el valor"
           },
           "webhook_salida_url": {
             "type": [

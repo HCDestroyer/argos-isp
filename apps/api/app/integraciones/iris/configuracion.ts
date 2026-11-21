@@ -128,6 +128,8 @@ export interface FilaConectorIris {
     activo: boolean
     url_base: string | null
     token_cifrado: string | null
+    /** `token_portal` de Iris (0.9.0 §1.2), cifrado v1; solo lo lee el servidor del portal (A5) */
+    token_portal_cifrado: string | null
     webhook_salida_url: string | null
     webhook_salida_secreto_cifrado: string | null
     webhook_entrada_secreto_cifrado: string | null
@@ -315,6 +317,8 @@ export interface JuegoPendienteIris {
     webhook_entrada_secreto: string
     contrato: string | null
     receptor_argos: boolean | null
+    /** `token_portal` del canje nuevo (0.9.0 §1.2); null si Iris no lo mandó */
+    token_portal?: string | null
 }
 
 /**
@@ -387,6 +391,8 @@ export interface VistaConectorIris {
     activo: boolean
     url_base: string | null
     token: '***' | null
+    /** `***` si Iris entregó el `token_portal` (0.9.0 §1.2); nunca el valor */
+    token_portal: '***' | null
     webhook_salida_url: string | null
     webhook_salida_secreto: '***' | null
     webhook_entrada_url: string | null
@@ -468,6 +474,7 @@ export function vistaConectorIris(fila: FilaConectorIris | null): VistaConectorI
         activo: fila?.activo ?? false,
         url_base: fila?.url_base ?? null,
         token: mascara(fila?.token_cifrado),
+        token_portal: mascara(fila?.token_portal_cifrado),
         webhook_salida_url: fila?.webhook_salida_url ?? null,
         webhook_salida_secreto: mascara(fila?.webhook_salida_secreto_cifrado),
         webhook_entrada_url: base ? `${base}${RUTA_RECEPTOR_IRIS}` : null,

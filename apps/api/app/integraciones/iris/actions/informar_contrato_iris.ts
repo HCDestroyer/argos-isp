@@ -1,6 +1,10 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { ValidacionFallida } from '#shared/errores'
+import { cifrar, descifrar } from '#shared/cifrado'
 import { exigirTokenIris } from '#integraciones/iris/token_iris'
 import {
+    FORMATO_TOKEN_IRIS,
+    contratoAdmite,
     guardarConectorIris,
     versionesIris,
     type EstadoConectorIris,
@@ -14,6 +18,11 @@ export interface EntradaInformarContratoIris {
      * B1: el panel pide volver a conectar). Ausente: se conserva el último informado
      */
     receptor_argos?: boolean | null
+    /**
+     * Contrato 0.9.0 §1.2: el `token_portal` para un conector ya conectado. Solo con contrato ≥ 0.9.0
+     * (con uno anterior se ignora); null lo borra; ausente, se conserva. Se audita como `***`.
+     */
+    token_portal?: string | null
     /** id (`core.tokens_api.id`) del token que hizo la petición; no se llama `token_*` para que la auditoría no lo enmascare */
     atk_id: number | null
 }
@@ -34,6 +43,8 @@ export type SalidaInformarContratoIris = { contrato_iris: string } & Omit<Estado
  *   nuevo obligaría a reconectar cada Iris para que su token lo incluya.
  * - Contrato 0.6.2: `receptor_argos` opcional (true/false) se guarda en el conector; omitido, se
  *   conserva el anterior. Con false, `GET /integraciones/iris` responde `requiere_reconectar: true`.
+ * - Contrato 0.9.0 §1.2: `token_portal` (opcional) se guarda cifrado en `token_portal_cifrado` solo
+ *   si el contrato informado es ≥ 0.9.0; nunca se devuelve y en `audit.cambios` queda como `***`.
  * - Responde `contrato_iris` (el guardado) y, como el canje, `version_argos` y `contrato` (el de Argos).
  */
 export default class InformarContratoIris extends DomainAction<
@@ -54,9 +65,40 @@ export default class InformarContratoIris extends DomainAction<
         if (receptor !== undefined && receptor !== null && antes?.receptor_argos !== receptor) {
             cambios.receptor_argos = receptor
         }
+        if (input.token_portal !== undefined && contratoAdmite(input.contrato, CONTRATO_TOKEN_PORTAL)) {
+            const nuevo = input.token_portal
+            if (nuevo !== null && !FORMATO_TOKEN_IRIS.test(nuevo)) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'token_portal',
+                        rule: 'formato',
+                        message: 'Se espera un token iris_pat_ de Iris',
+                    },
+                ])
+            }
+            if (nuevo === null) {
+                if (antes?.token_portal_cifrado) cambios.token_portal_cifrado = null
+            } else if (
+                !antes?.token_portal_cifrado ||
+                descifrarSeguro(antes.token_portal_cifrado) !== nuevo
+            ) {
+                cambios.token_portal_cifrado = cifrar(nuevo)
+            }
+        }
         const despues =
             antes && Object.keys(cambios).length === 0 ? antes : await guardarConectorIris(t, antes, cambios)
         t.fijarEntidad('conector_iris', 1)
         return { contrato_iris: despues.contrato ?? input.contrato, ...(await versionesIris()) }
+    }
+}
+
+/** Versión del contrato desde la que Iris entrega el `token_portal` (§1.2). */
+export const CONTRATO_TOKEN_PORTAL = '0.9.0'
+
+function descifrarSeguro(valor: string): string | null {
+    try {
+        return descifrar(valor)
+    } catch {
+        return null
     }
 }

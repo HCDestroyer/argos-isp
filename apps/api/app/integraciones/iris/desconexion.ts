@@ -24,7 +24,7 @@ export async function revocarTokenIrisSiVigente(t: Transaccion, tokenId: number)
 
 /**
  * Contrato Iris 0.6.3: deja el conector canjeado sin credenciales vivas. Revoca el `atk_` del canje
- * (si sigue vigente), apaga el conector, borra los secretos (el `iris_pat_` de Iris y los dos
+ * (si sigue vigente), apaga el conector, borra los secretos (el `iris_pat_` de Iris, el `token_portal` y los dos
  * secretos de webhooks) y marca `desconectado_en` con su motivo. Conserva la URL, el receptor, el
  * `conector_id`, `token_argos_id` y el contrato informado: el historial queda en la fila, en
  * `audit.cambios` (secretos como `***`) y en `core.tokens_api`. La fila ya viene bloqueada
@@ -40,6 +40,7 @@ export async function desconectarConectorIris(
     return guardarConectorIris(t, antes, {
         activo: false,
         token_cifrado: null,
+        token_portal_cifrado: null,
         webhook_salida_secreto_cifrado: null,
         webhook_entrada_secreto_cifrado: null,
         encender_al_confirmar: false,
@@ -101,6 +102,8 @@ export async function confirmarCanjeIris(
         await guardarConectorIris(t, antes, {
             url_base: juego.url_base,
             token_cifrado: cifrar(juego.token),
+            // 0.9.0 §1.2: el token_portal se rota con cada canje (sin él, el portal no usa §11)
+            token_portal_cifrado: juego.token_portal ? cifrar(juego.token_portal) : null,
             webhook_salida_url: juego.webhook_salida_url,
             webhook_salida_secreto_cifrado: cifrar(juego.webhook_salida_secreto),
             webhook_entrada_secreto_cifrado: cifrar(juego.webhook_entrada_secreto),
