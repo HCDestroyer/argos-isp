@@ -343,7 +343,9 @@ function irAConciliar() {
                     />
                 </template>
             </ol>
-            <AyudaBoton solo-icono />
+            <span class="me-8 flex">
+                <AyudaBoton solo-icono />
+            </span>
         </template>
 
         <template #body>

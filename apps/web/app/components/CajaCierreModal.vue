@@ -253,7 +253,9 @@ const formatoCaja = computed(() => impresion.formatoDe(props.caja.id))
                     />
                 </template>
             </ol>
-            <AyudaBoton solo-icono />
+            <span class="me-8 flex">
+                <AyudaBoton solo-icono />
+            </span>
         </template>
 
         <template #body>
@@ -282,7 +284,7 @@ const formatoCaja = computed(() => impresion.formatoDe(props.caja.id))
                 </div>
 
                 <aside
-                    class="flex h-fit flex-col gap-0 rounded-2xl bg-(--ax-panel) p-4 max-lg:order-first"
+                    class="flex h-fit flex-col gap-0 rounded-2xl bg-(--ax-panel) p-4 max-lg:hidden"
                     aria-label="Efectivo en caja"
                     data-prueba="cierre-efectivo"
                 >

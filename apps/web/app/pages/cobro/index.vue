@@ -989,7 +989,7 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
 
                 <div class="surface-card flex flex-wrap items-center gap-2 rounded-2xl p-2.5 sm:flex-nowrap sm:p-3">
                     <div
-                        class="min-w-0 flex-1"
+                        class="min-w-0 flex-1 max-sm:basis-full"
                         data-prueba="buscar-cliente-cobro"
                     >
                         <ClienteSelector

@@ -279,6 +279,7 @@ const itemsVista = [
                             :hay-siguiente="depositos.haySiguiente.value"
                             :cargando="depositos.cargando.value"
                             :filas="depositos.filas.value.length"
+                        class="border-t border-(--ax-borde) px-3 py-2"
                             @anterior="depositos.anterior"
                             @siguiente="depositos.siguiente"
                         />
@@ -341,6 +342,7 @@ const itemsVista = [
                             :hay-siguiente="traslados.haySiguiente.value"
                             :cargando="traslados.cargando.value"
                             :filas="traslados.filas.value.length"
+                        class="border-t border-(--ax-borde) px-3 py-2"
                             @anterior="traslados.anterior"
                             @siguiente="traslados.siguiente"
                         />

@@ -209,7 +209,7 @@ async function cargarCobradoHoy() {
     let cantidad = 0
     let cursor: string | undefined
     for (let pagina = 0; pagina < 10; pagina++) {
-        const resultado = await usePagos().listar({ desde: hoy, hasta: hoy, limit: 200 }, cursor)
+        const resultado = await usePagos().listar({ desde: inicioDiaGuatemala(hoy), hasta: finDiaGuatemala(hoy), limit: 200 }, cursor)
         if (!resultado.ok) {
             problemaCobrado.value = resultado.problema
             cobradoHoy.value = null
@@ -319,7 +319,7 @@ const itemsMas = computed<DropdownMenuItem[][]>(() => [[
 
 // Tabla de cierres
 const columnasCierres: TableColumn<Cierre>[] = [
-    { accessorKey: 'id', header: 'Corte' },
+    { accessorKey: 'id', header: 'Corte', meta: SOLO_ANCHO },
     { id: 'caja', header: 'Caja y cajero' },
     { accessorKey: 'cerrado_en', header: 'Cerrada', meta: SOLO_ANCHO },
     { accessorKey: 'esperado', header: 'Debe haber', meta: SOLO_ESCRITORIO },

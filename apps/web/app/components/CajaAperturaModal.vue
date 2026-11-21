@@ -119,7 +119,9 @@ async function enviar(evento: FormSubmitEvent<DatosApertura>) {
             <span class="ps-13">Para cobrar necesitas tu caja abierta</span>
         </template>
         <template #actions>
-            <AyudaBoton solo-icono />
+            <span class="me-8 flex">
+                <AyudaBoton solo-icono />
+            </span>
         </template>
 
         <template #body>
