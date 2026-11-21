@@ -29,6 +29,9 @@ export type Papel = (typeof PAPELES)[number]
 export type FormatoFecha = 'dmy' | 'mdy' | 'ymd'
 export type Decimal = 'punto' | 'coma'
 
+/** Índice de una columna del archivo (desde 0); nunca un importe. */
+export type IndiceColumna = number
+
 /** Mapeo de columnas (índices desde 0) de un estado de cuenta. */
 export interface MapeoExtracto {
     /** hoja del libro (null = la primera con datos; en CSV, null) */
@@ -44,8 +47,8 @@ export interface MapeoExtracto {
         debito: number | null
         credito: number | null
         /** monto con signo (+ entra, − sale) en vez de débito y crédito */
-        monto: number | null
-        saldo: number | null
+        monto: IndiceColumna | null
+        saldo: IndiceColumna | null
     }
     formato_fecha: FormatoFecha
     decimal: Decimal
