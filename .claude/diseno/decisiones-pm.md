@@ -32,3 +32,4 @@ Respuestas del PM a las 31 preguntas de los diseños de reportes y contabilidad 
 29. Menú Red: Routers, Planes, Direcciones IP, Red de acceso y Conectados ahora.
 30. IP pública: ambas — adicional cobrado (precio en catálogo; se libera al quitar o retirar) y también incluida en algunos planes empresariales.
 31. Caídas repetidas: alerta en Argos Y ticket en Iris (uno por servicio mientras siga abierto; umbral 3 en 60 min configurable). Si es una falla general o corte (muchos servicios del mismo router, OLT, PON o zona a la vez), se abre UN ticket general en Iris que agrupa a los afectados, para que técnicos y atención al cliente sepan qué pasa; no un ticket por servicio.
+32. GenieACS va en un servidor aparte. Regla principal del PM: el crecimiento es horizontal (CLAUDE.md §14).
