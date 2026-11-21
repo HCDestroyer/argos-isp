@@ -12,7 +12,7 @@ Pedido del PM: «El admin puede elegir el tema de la interfaz; los logos del ini
 | Permiso / acción | Rol base | Ruta |
 | --- | --- | --- |
 | (público) | — | `GET /api/v1/apariencia/publica`, `GET /api/v1/apariencia/archivos/:nombre` |
-| `apariencia.ver` | `admin` (y todo rol que hoy ve configuración: `admin`) | `GET /api/v1/apariencia` |
+| `apariencia.ver` | `admin` y `lectura` (que recibe todo `*.ver`); los datos son los mismos de la ruta pública más el catálogo | `GET /api/v1/apariencia` |
 | `apariencia.editar` | `admin` | `PUT /api/v1/apariencia` |
 | `apariencia.subir_logo_login` | `admin` | `POST /api/v1/apariencia/logo-login` |
 | `apariencia.quitar_logo_login` | `admin` | `POST /api/v1/apariencia/logo-login/quitar` |
@@ -103,6 +103,8 @@ Responde 200 `Apariencia` con `version + 1`. Sin cambios reales responde 200 igu
 - `multipart/form-data` con el archivo `archivo` y el campo de texto `version`; las rutas `quitar` llevan JSON `{ "version": n }`. 409 si `version` no coincide.
 - El tipo se decide por el contenido, no por la extensión ni el `Content-Type`. El SVG se sanea (sin scripts, manejadores de eventos, `foreignObject`, estilos ni referencias externas); con DOCTYPE, entidades o mal formado → 422 en `archivo`. Más grande que el máximo → 422 en `archivo` (`rule: tamano`). Otro tipo → 422 (`rule: tipo`). Falta → 422 (`rule: required`).
 - Se guardan en el mismo volumen que los logos de empresa (`COMPROBANTES_DIR/logos/apariencia/`). El archivo anterior se borra después del COMMIT.
+- Quitar cuando no hay archivo responde 200 sin subir la versión.
+- La auditoría guarda la entrada con `contenido: "***"` y el diff con la huella (sha256) y el tipo.
 - Responden 200 `Apariencia` con `version + 1`.
 
 ## 7. `GET /api/v1/apariencia/archivos/:nombre` (sin autenticación)

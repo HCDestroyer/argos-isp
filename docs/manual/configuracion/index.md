@@ -4,4 +4,4 @@ orden: 16
 
 # Configuración
 
-Empresa, empresas y ajustes generales.
+Empresa, empresas, apariencia y ajustes generales.
