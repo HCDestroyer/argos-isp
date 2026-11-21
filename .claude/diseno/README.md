@@ -65,6 +65,14 @@ Esta carpeta guarda **el diseño que el PM fue aprobando (21 nov 2026)** para qu
   - control de velocidad con **3 opciones visibles y «Ver las otras»**;
   - tipo de cola con su **«?»** que explica cómo funciona.
 
+## Portal del cliente
+
+- Tableros: `Portal` (teléfono: inicio, corte y entrar), `NuevoPortal` (escritorio) y los de la página «Portal del cliente» del artifact: `PortalFacturas` (Facturas y pagos con pestañas segmentadas y el corte con la acción fija abajo), `PortalSoporte` (tickets y solicitudes, reportar un problema, conversación) y `PortalContactos` («Mis contactos», un contacto con sus permisos, «Está a tu cargo»). Generador: `generadores/portal_tableros.py`.
+- **Saldo una sola vez** por pantalla: en el banner. Ni los indicadores ni el botón de pagar lo repiten («Pagar en línea», no «Pagar Q …»).
+- Escritorio: menú lateral «isla» (como el del panel) con «Inicio, Facturas y pagos, Soporte, Mis puntos, Mi cuenta» y el tema abajo; sin barra superior. Teléfono: barra inferior (Inicio, Facturas, Soporte, Puntos, Cuenta) y la acción principal fija abajo en corte y formularios.
+- «Facturas y pagos» es una tarjeta con dos pestañas segmentadas, Facturas y Pagar (`?seccion=facturas|pagar`).
+- «Mi WiFi» del tablero `NuevoPortal` queda fuera hasta que exista la API (nombre de la red y cambio de clave); «Solicitar servicio» va como tarjeta del inicio, no en el menú.
+
 ## Decisiones de negocio que acompañan al diseño (contrato con Iris 0.9.0–0.12.0)
 
 - **Prospecto:** vive en Iris; Argos lo registra con `telefonos[]`.
