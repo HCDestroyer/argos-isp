@@ -170,24 +170,116 @@ const HTML_FABRICA_NOTA = `{{#empresa.logo}}<img src="empresa:logo" height="48">
 <p class="tenue centro"><small>Generado el {{generado}}</small></p>
 `
 
-/** `GET /documentos/plantillas/:tipo/fabrica`: la plantilla de esta versión, con el bloque FEL. */
-export const plantillasFabrica: Record<Schema<'PlantillaDocumento'>['tipo'], Schema<'PlantillaDocumentoFabrica'>> = {
-    aviso_cobro: { tipo: 'aviso_cobro', html: HTML_FABRICA, variables: variablesAvisoCobro },
-    nota_credito: { tipo: 'nota_credito', html: HTML_FABRICA_NOTA, variables: variablesNotaCredito },
+/** Variables del recibo de cobro, como `VARIABLES_RECIBO_COBRO` de la API (resumidas). */
+export const variablesReciboCobro: Schema<'VariableDocumento'>[] = [
+    { nombre: 'empresa.nombre', descripcion: 'Nombre comercial de la empresa del encabezado (la primera)' },
+    { nombre: 'empresa.logo', descripcion: 'Sección: la empresa tiene logo. Se dibuja con <img src="empresa:logo" height="48">' },
+    { nombre: 'cliente.nombre', descripcion: 'Nombre fiscal (o nombre) del cliente que pagó' },
+    { nombre: 'cliente.nit', descripcion: 'NIT o CUI del cliente; "CF" si no tiene' },
+    { nombre: 'cobro.numero', descripcion: 'Número del cobro: "000123"' },
+    { nombre: 'cobro.fecha', descripcion: 'Fecha y hora del cobro (Guatemala)' },
+    { nombre: 'cobro.metodo', descripcion: 'Forma de pago: "Efectivo en caja", "Depósito bancario"…' },
+    { nombre: 'cobro.total', descripcion: 'Total cobrado: "Q 350.00"' },
+    { nombre: 'cobro.cajero', descripcion: 'Nombre de quien registró el cobro (vacío si fue el sistema)' },
+    { nombre: 'cobro.varias_empresas', descripcion: 'Sección: el cobro pagó facturas de más de una empresa' },
+    { nombre: 'secciones', descripcion: 'Lista para {{#secciones}}: una por empresa, con empresa.*, pago.numero, pago.monto, aplicaciones, anticipo' },
+    { nombre: 'aplicaciones', descripcion: 'Dentro de una sección, lista para {{#aplicaciones}}: documento, numero, periodo y monto' },
+    { nombre: 'generado', descripcion: 'Fecha y hora de generación (Guatemala)' },
+]
+
+/** Versiones cortas de las de fábrica en rollo de 80 mm y del recibo (`plantilla_base.ts` de la API). */
+const HTML_FABRICA_POS = `<h2 class="centro">{{empresa.nombre}}</h2>
+<h3 class="centro">{{factura.documento}}</h3>
+<p class="centro">No. <strong>{{factura.numero}}</strong><br>Vence: {{factura.vence}}</p>
+<p>Cliente: <strong>{{cliente.nombre}}</strong></p>
+{{#factura.fel}}<p><small>FEL · {{factura.fel_tipo}}<br>Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
+{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}{{/factura.fel}}
+<p class="grande"><strong>Saldo {{factura.saldo}}</strong></p>
+`
+
+const HTML_FABRICA_NOTA_POS = `<h2 class="centro">{{empresa.nombre}}</h2>
+<h3 class="centro">{{nota.documento}}</h3>
+<p class="centro">No. <strong>{{nota.numero}}</strong></p>
+{{#nota.fel}}<p><small>FEL · Nota de crédito<br>Serie {{nota.fel_serie}} · Número {{nota.fel_numero}}<br>Autorización {{nota.fel_uuid}}</small></p>{{/nota.fel}}
+<p class="grande"><strong>Total {{nota.monto}}</strong></p>
+`
+
+const HTML_FABRICA_RECIBO = `<h1>{{empresa.nombre}}</h1>
+<h2>Recibo de cobro No. {{cobro.numero}}</h2>
+<p>Recibimos de <strong>{{cliente.nombre}}</strong> · NIT {{cliente.nit}}</p>
+{{#secciones}}<h3>{{empresa.nombre}}</h3>
+{{#aplicaciones}}<p>{{documento}} {{numero}} · {{periodo}} · {{monto}}</p>{{/aplicaciones}}
+<p class="derecha">Subtotal {{pago.monto}}</p>{{/secciones}}
+<p class="derecha grande"><strong>Total cobrado {{cobro.total}}</strong></p>
+`
+
+const HTML_FABRICA_RECIBO_POS = `<h2 class="centro">{{empresa.nombre}}</h2>
+<h3 class="centro">Recibo de cobro</h3>
+<p class="centro">No. <strong>{{cobro.numero}}</strong><br>{{cobro.fecha}}</p>
+{{#secciones}}<hr>{{#aplicaciones}}<p>{{documento}} {{numero}} {{monto}}</p>{{/aplicaciones}}{{/secciones}}
+<p class="grande"><strong>TOTAL {{cobro.total}}</strong></p>
+`
+
+type Tipo = Schema<'PlantillaDocumento'>['tipo']
+type Formato = Schema<'PlantillaDocumento'>['formato']
+
+const VARIABLES: Record<Tipo, Schema<'VariableDocumento'>[]> = {
+    aviso_cobro: variablesAvisoCobro,
+    nota_credito: variablesNotaCredito,
+    recibo_cobro: variablesReciboCobro,
 }
 
-export const plantillaNotaCredito: Schema<'PlantillaDocumento'> = {
-    tipo: 'nota_credito',
-    html: HTML_FABRICA_NOTA,
-    version: 0,
-    variables: variablesNotaCredito,
+const HTML: Record<Tipo, Record<Formato, string>> = {
+    aviso_cobro: { carta: HTML_FABRICA, pos_80: HTML_FABRICA_POS },
+    nota_credito: { carta: HTML_FABRICA_NOTA, pos_80: HTML_FABRICA_NOTA_POS },
+    recibo_cobro: { carta: HTML_FABRICA_RECIBO, pos_80: HTML_FABRICA_RECIBO_POS },
 }
 
-export const plantillaAvisoCobro: Schema<'PlantillaDocumento'> = {
-    tipo: 'aviso_cobro',
-    html: HTML_FABRICA,
-    version: 0,
-    variables: variablesAvisoCobro,
+export function variablesDe(tipo: Tipo): Schema<'VariableDocumento'>[] {
+    return VARIABLES[tipo]
+}
+
+/** `GET /documentos/plantillas/:tipo/fabrica?formato=`: la plantilla de esta versión, con el bloque FEL. */
+export function plantillaFabrica(tipo: Tipo, formato: Formato = 'carta'): Schema<'PlantillaDocumentoFabrica'> {
+    return { tipo, formato, html: HTML[tipo][formato], variables: VARIABLES[tipo] }
+}
+
+/** Compatibilidad: la de fábrica en carta de cada tipo. */
+export const plantillasFabrica: Record<Tipo, Schema<'PlantillaDocumentoFabrica'>> = {
+    aviso_cobro: plantillaFabrica('aviso_cobro'),
+    nota_credito: plantillaFabrica('nota_credito'),
+    recibo_cobro: plantillaFabrica('recibo_cobro'),
+}
+
+/** Una plantilla guardada que sigue a la de fábrica (`html` null en la base), como la devuelve la API. */
+function deFabrica(id: number, tipo: Tipo, nombre: string, formato: Formato, predeterminada: boolean): Schema<'PlantillaDocumento'> {
+    return {
+        id,
+        tipo,
+        nombre,
+        formato,
+        predeterminada,
+        activa: true,
+        de_fabrica: true,
+        html: HTML[tipo][formato],
+        version: 1,
+        updated_at: '2026-11-20T15:00:00.000Z',
+        variables: VARIABLES[tipo],
+    }
+}
+
+/**
+ * Lo que deja la migración `1795226874225` en una instalación sin plantillas guardadas: «Carta»
+ * predeterminada de cada tipo y «POS 80 mm» del aviso y del recibo, todas de fábrica.
+ */
+export function plantillasDocumentosIniciales(): Schema<'PlantillaDocumento'>[] {
+    return [
+        deFabrica(1, 'aviso_cobro', 'Carta', 'carta', true),
+        deFabrica(2, 'aviso_cobro', 'POS 80 mm', 'pos_80', false),
+        deFabrica(3, 'nota_credito', 'Carta', 'carta', true),
+        deFabrica(4, 'recibo_cobro', 'Carta', 'carta', true),
+        deFabrica(5, 'recibo_cobro', 'POS 80 mm', 'pos_80', false),
+    ]
 }
 
 /** PDF mínimo válido (una página en blanco con un título) para las descargas en modo fixtures. */

@@ -569,6 +569,24 @@ function imprimir() {
     window.print()
 }
 
+/**
+ * Recibo del cobro en PDF (`GET /documentos/recibo-cobro/:cobroId`) con la plantilla predeterminada
+ * o con la elegida en «Imprimir con…» (p. ej. POS 80 mm para la impresora térmica).
+ */
+const generandoRecibo = ref(false)
+async function abrirReciboPdf(plantillaId: number | null) {
+    const cobroId = pago.value?.cobro_id
+    if (!cobroId || generandoRecibo.value) {
+        return
+    }
+    generandoRecibo.value = true
+    const problema = await abrirPdf(() => useDocumentos().reciboCobro(cobroId, plantillaId), `recibo-cobro-${cobroId}.pdf`)
+    generandoRecibo.value = false
+    if (problema) {
+        toast.add({ title: 'No se pudo generar el recibo', description: problema.detail ?? problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+    }
+}
+
 /** Esc limpia (o empieza otro cobro tras el recibo), salvo que haya un menú o modal abierto. */
 function alTeclear(evento: KeyboardEvent) {
     if (evento.key !== 'Escape' || evento.defaultPrevented) {
@@ -1096,6 +1114,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         label="Imprimir"
                         icon="i-lucide-printer"
                         @click="imprimir"
+                    />
+                    <ImprimirConPlantilla
+                        v-if="pago.cobro_id && puede('pagos.ver')"
+                        tipo="recibo_cobro"
+                        etiqueta="Recibo en PDF"
+                        :generando="generandoRecibo"
+                        data-prueba="recibo-pdf"
+                        @imprimir="abrirReciboPdf"
                     />
                     <UButton
                         label="Nuevo cobro"
