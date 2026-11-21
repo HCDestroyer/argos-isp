@@ -17,6 +17,10 @@ const emit = defineEmits<{
 }>()
 
 const { puede } = usePermisos()
+const { conSelector: variasEmpresas, empresas } = useEmpresaActiva()
+function nombreEmpresa(id: number | undefined): string {
+    return empresas.value.find(e => e.id === id)?.nombre_comercial ?? (id ? `Empresa ${id}` : '')
+}
 const impresion = useImpresionCaja()
 const itemsFormato = FORMATOS_IMPRESION.map(f => ({ label: f.etiqueta, value: f.valor, icon: f.icono }))
 
@@ -64,6 +68,11 @@ function cambiarFormato(caja: Caja, valor: unknown) {
                         </span>
                         <span class="flex min-w-0 flex-1 flex-col">
                             <span class="font-semibold text-highlighted">{{ caja.nombre }}</span>
+                            <span
+                                v-if="variasEmpresas"
+                                class="text-xs text-muted"
+                                :data-empresa-caja="caja.empresa_id"
+                            >{{ nombreEmpresa(caja.empresa_id) }}</span>
                             <span class="truncate text-xs text-muted">{{ caja.turno_abierto_id ? `Abierta${caja.turno_abierto_por_nombre ? ` · ${caja.turno_abierto_por_nombre}` : ''}` : `Cerrada${caja.cajero_nombre ? ` · ${caja.cajero_nombre}` : ''}` }}</span>
                         </span>
                         <UButton

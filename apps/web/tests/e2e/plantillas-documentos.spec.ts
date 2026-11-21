@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { elegirClienteCobro, entrar, ir } from './ayudas'
 
 /**
  * Varias plantillas por documento (pedido del PM: impresoras POS de 80 mm), en modo fixtures, en
@@ -55,13 +55,12 @@ test('crear una plantilla POS 80 mm del recibo y verla en la lista', async ({ pa
 test('en la caja, el recibo se imprime con la plantilla POS 80 mm', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     await ir(page, 'Cobrar', /\/cobro/)
-    await page.getByPlaceholder('Buscar cliente…').fill('Juan Carlos')
-    await page.getByRole('option', { name: /Juan Carlos Ramírez/ }).click()
-    await expect(page.getByLabel('Monto')).toHaveValue('300.00')
-    await page.getByLabel('Monto').press('Enter')
+    const cobrar = await elegirClienteCobro(page, 'Juan Carlos', /Juan Carlos Ramírez/)
+    await expect(cobrar).toHaveText('Cobrar Q 300.00')
+    await cobrar.click()
 
-    await expect(page.getByRole('article', { name: 'Recibo de pago' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Recibo en PDF' })).toBeVisible()
+    await expect(page.locator('[data-prueba="cobro-listo"]')).toContainText('¡Cobro listo!')
+    await expect(page.getByRole('button', { name: 'Reimprimir' })).toBeVisible()
     await page.getByRole('button', { name: 'Elegir otra plantilla' }).click()
     const pos = page.getByRole('menuitem', { name: /POS 80 mm/ })
     await expect(pos).toBeVisible()

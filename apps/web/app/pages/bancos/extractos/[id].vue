@@ -444,6 +444,7 @@ onMounted(cargar)
                             class="flex cursor-pointer items-center gap-3 border-b border-(--ax-borde) border-l-3 px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             :class="l.conciliada ? 'border-l-success bg-success/5' : lineaElegida === l.id ? 'border-l-primary bg-primary/5' : 'border-l-transparent hover:bg-(--ax-fila-hover)'"
                             :data-linea="l.id"
+                            :data-conciliar="l.conciliada ? undefined : l.id"
                             @click="elegirLinea(l)"
                             @keydown.enter.prevent="elegirLinea(l)"
                             @keydown.space.prevent="elegirLinea(l)"
@@ -477,6 +478,9 @@ onMounted(cargar)
                                     size="xs"
                                     :aria-label="`Más acciones de la línea ${l.orden}`"
                                     :data-acciones-linea="l.id"
+                                    :data-registrar="l.conciliada ? undefined : l.id"
+                                    :data-deshacer="l.conciliada ? l.id : undefined"
+                                    :data-reatribuir="l.conciliada && llegadaDe(l) && puede('bancos.reatribuir_llegada') ? l.id : undefined"
                                     @click.stop
                                 />
                             </UDropdownMenu>
@@ -645,7 +649,7 @@ onMounted(cargar)
                         color="neutral"
                         variant="outline"
                         class="rounded-full"
-                        :data-registrar="linea.id"
+                        data-prueba="registrar-linea"
                         @click="aRegistrar = linea"
                     />
                     <UButton
@@ -655,7 +659,7 @@ onMounted(cargar)
                         color="neutral"
                         variant="outline"
                         class="rounded-full"
-                        :data-registrar="linea.id"
+                        data-prueba="registrar-linea"
                         @click="aRegistrar = linea"
                     />
                 </template>
@@ -671,7 +675,7 @@ onMounted(cargar)
         </div>
 
         <ExtractoImportarModal
-            v-if="extracto"
+            v-if="extracto && puede('bancos.importar_extracto_archivo')"
             v-model:open="importarAbierto"
             :cuenta-id="extracto.cuenta_id"
             @hecho="alImportar"

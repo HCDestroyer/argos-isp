@@ -93,6 +93,9 @@ const porMetodo = computed(() => (resumen.value?.cobros.por_metodo ?? []).map(m 
 })))
 
 async function cargarResumen() {
+    if (!puede('cajas.ver')) {
+        return
+    }
     cargando.value = true
     problemaResumen.value = null
     const resultado = await useCajas().resumen(props.caja.id)
@@ -184,7 +187,9 @@ const imprimiendo = ref<FormatoImpresion | null>(null)
 async function imprimirCorte(formato: FormatoImpresion) {
     imprimiendo.value = formato
     await nextTick()
-    window.print()
+    if (typeof window.print === 'function') {
+        window.print()
+    }
     imprimiendo.value = null
 }
 const formatoCaja = computed(() => impresion.formatoDe(props.caja.id))

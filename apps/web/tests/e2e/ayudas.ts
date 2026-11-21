@@ -128,3 +128,22 @@ export async function verDatosCliente(page: Page): Promise<void> {
     await page.locator('[data-prueba="ver-datos-cliente"]:visible, [data-prueba="ver-datos-cliente-movil"]:visible').first().click()
     await expect(datos).toBeVisible()
 }
+
+/**
+ * Cobro POS (tablero NuevoCobro): busca al cliente, lo elige y, en el teléfono, pasa a la segunda
+ * pantalla con «Continuar». Devuelve el botón «Cobrar Q …» (no lo pulsa).
+ */
+export async function elegirClienteCobro(page: Page, buscar: string, nombre: RegExp): Promise<Locator> {
+    // Sin caja abierta, la ventana «Abrir caja» aparece sola: «Ahora no» la cierra.
+    const ahoraNo = page.getByRole('button', { name: 'Ahora no' })
+    if (await ahoraNo.isVisible().catch(() => false)) {
+        await ahoraNo.click()
+    }
+    await page.getByPlaceholder(/Buscar cliente: nombre/).fill(buscar)
+    await page.getByRole('option', { name: nombre }).click()
+    const continuar = page.locator('[data-prueba="continuar-cobro"]')
+    if (await continuar.isVisible()) {
+        await continuar.click()
+    }
+    return page.locator('[data-prueba="cobrar"]')
+}

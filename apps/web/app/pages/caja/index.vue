@@ -187,18 +187,27 @@ async function cargarDepositos() {
         return
     }
     cargandoDepositos.value = true
-    const resultado = await useFondosEnTransito().depositos(undefined, undefined, 200)
+    // Con `bancos.ver`, todos; sin él (el cajero), los de cada caja que ve (la API pide `caja_id`).
+    const resultados = puede('bancos.ver')
+        ? [await useFondosEnTransito().depositos(undefined, undefined, 200)]
+        : await Promise.all(cajas.value.map(c => useFondosEnTransito().depositos(undefined, undefined, 200, { caja_id: c.id })))
     cargandoDepositos.value = false
-    depositos.value = resultado.ok ? resultado.data.data : []
-    problemaDepositos.value = resultado.ok ? null : resultado.problema
+    const fallo = resultados.find(r => !r.ok)
+    depositos.value = fallo ? [] : resultados.flatMap(r => (r.ok ? r.data.data : [])).sort((x, y) => y.id - x.id)
+    problemaDepositos.value = fallo && !fallo.ok ? fallo.problema : null
 }
 
 async function cargarRetiros() {
     cargandoRetiros.value = true
-    const resultado = await useEgresos().listar({ metodo: 'caja', desde: `${mes.value.slice(0, 7)}-01`, limit: 200 })
+    const desde = `${mes.value.slice(0, 7)}-01`
+    // Con `egresos.ver`, todos; con solo `cajas.ver` (el cajero), los de cada caja (la API pide `caja_id`).
+    const resultados = puede('egresos.ver')
+        ? [await useEgresos().listar({ metodo: 'caja', desde, limit: 200 })]
+        : await Promise.all(cajas.value.map(c => useEgresos().listar({ metodo: 'caja', caja_id: c.id, desde, limit: 200 })))
     cargandoRetiros.value = false
-    retiros.value = resultado.ok ? resultado.data.data : []
-    problemaRetiros.value = resultado.ok ? null : resultado.problema
+    const fallo = resultados.find(r => !r.ok)
+    retiros.value = fallo ? [] : resultados.flatMap(r => (r.ok ? r.data.data : [])).sort((x, y) => y.created_at.localeCompare(x.created_at))
+    problemaRetiros.value = fallo && !fallo.ok ? fallo.problema : null
 }
 
 async function cargarCobradoHoy() {
@@ -333,7 +342,9 @@ const imprimiendo = shallowRef<{ cierre: Cierre, formato: FormatoImpresion } | n
 async function imprimir(cierre: Cierre, formato: FormatoImpresion = impresion.formatoDe(cierre.caja_id)) {
     imprimiendo.value = { cierre, formato }
     await nextTick()
-    window.print()
+    if (typeof window.print === 'function') {
+        window.print()
+    }
     imprimiendo.value = null
 }
 

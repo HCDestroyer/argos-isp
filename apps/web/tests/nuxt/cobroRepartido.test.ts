@@ -96,11 +96,12 @@ describe('cobro repartido por empresa', () => {
         await esperar(() => expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(true))
 
         await vista.get('form').trigger('submit')
-        await esperar(() => expect(vista.find('[data-prueba="pagos-por-empresa"]').exists()).toBe(true))
-        const partes = vista.get('[data-prueba="pagos-por-empresa"]').text()
+        // La ventana «¡Cobro listo!» (teleportada al body) lista el pago de cada empresa.
+        await esperar(() => expect(document.body.querySelector('[data-prueba="pagos-por-empresa"]')).not.toBeNull())
+        const partes = document.body.querySelector('[data-prueba="pagos-por-empresa"]')?.textContent ?? ''
         expect(partes).toContain('ArgosNet')
         expect(partes).toContain('Fibra del Sur')
-        expect(partes).toContain('Q 900.00')
+        expect(document.body.querySelector('[data-prueba="cobro-listo"]')?.textContent).toContain('Q 900.00')
         await esperar(() => expect(vista.find('[data-prueba="recibo-cobro"]').exists()).toBe(true))
         expect(vista.findAll('[data-prueba="recibo-cobro"] section[data-empresa]')).toHaveLength(2)
         expect(vista.get('[data-prueba="total-cobro"]').text()).toContain('Q 900.00')

@@ -63,6 +63,10 @@ const pasos = computed(() => [
 const indicePaso = computed(() => pasos.value.findIndex(p => p.id === paso.value))
 
 async function cargarCuentas() {
+    if (!puede('cuentas_bancarias.ver')) {
+        problemaCuentas.value = { type: 'about:blank', title: 'Sin permiso para ver las cuentas bancarias (cuentas_bancarias.ver)', status: 403 }
+        return
+    }
     const resultado = await useCuentasBancarias().listar({ activa: true })
     cuentas.value = resultado.ok ? resultado.data : []
     problemaCuentas.value = resultado.ok ? null : resultado.problema
@@ -288,7 +292,7 @@ async function importar() {
 function irAConciliar() {
     const id = importado.value?.extracto.id
     abierto.value = false
-    if (id) {
+    if (id && puede('bancos.ver')) {
         void navigateTo(`/bancos/extractos/${id}`)
     }
 }

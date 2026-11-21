@@ -24,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const usuario = useUsuarioActual()
+const { puede } = usePermisos()
 const estado = reactive<DatosApertura>({ fondo_inicial: '' })
 const elegida = ref<number | undefined>(undefined)
 const caja = computed<Caja | null>(() => props.caja ?? props.opciones.find(c => c.id === elegida.value) ?? null)
@@ -46,7 +47,7 @@ const RAPIDOS = ['300', '1000']
 async function cargarAnterior() {
     anterior.value = null
     const id = caja.value?.id
-    if (!id) {
+    if (!id || !puede('cajas.ver')) {
         return
     }
     const resultado = await useCajas().turnos(id)

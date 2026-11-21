@@ -27,14 +27,15 @@ describe('abrir caja', () => {
         useMiCaja().cajas.value = null
     })
 
-    it('la caja cerrada muestra «Abrir caja» como acción principal y los pasos', async () => {
+    it('con su caja cerrada, «Abrir caja» es la acción principal y abre la ventana (NuevoAbrirCaja)', async () => {
         const vista = await mountSuspended(PaginaCaja, { route: '/caja' })
-        await esperar(() => expect(vista.find('[data-prueba="caja-cerrada"]').exists()).toBe(true))
-        const cerrada = vista.get('[data-prueba="caja-cerrada"]')
-        expect(cerrada.text()).toContain('Caja Central está cerrada')
-        expect(cerrada.find('[data-prueba="abrir-caja"]').text()).toBe('Abrir caja')
-        expect(cerrada.text()).toContain('Cerrar caja')
-        expect(vista.find('[data-prueba="abrir-caja-barra"]').exists()).toBe(true)
+        await esperar(() => expect(vista.find('[data-prueba="abrir-caja-barra"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="abrir-caja-barra"]').text()).toBe('Abrir caja')
+        expect(vista.find('[data-prueba="cerrar-caja"]').exists()).toBe(false)
+        await vista.get('[data-prueba="abrir-caja-barra"]').trigger('click')
+        await esperar(() => expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Fondo inicial'))
+        expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Ahora no')
+        vista.unmount()
     })
 
     it('al cobrar en efectivo sin caja abierta, avisa y abre la caja en un modal sin salir del cobro', async () => {
@@ -42,7 +43,7 @@ describe('abrir caja', () => {
         await esperar(() => expect(vista.find('[data-prueba="aviso-sin-caja"]').exists()).toBe(true))
         const aviso = vista.get('[data-prueba="aviso-sin-caja"]')
         expect(aviso.text()).toContain('No tienes una caja abierta')
-        await aviso.findAll('button').find(boton => boton.text().includes('Abrir caja'))!.trigger('click')
+        // FlujoCobro, paso 0: sin caja abierta la ventana «Abrir caja» aparece sola una vez.
         await esperar(() => expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Fondo inicial'))
 
         // Abierta la caja (como lo haría el modal), el aviso desaparece y el cobro va a esa caja.

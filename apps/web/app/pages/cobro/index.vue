@@ -810,7 +810,9 @@ function nuevoCobro() {
 async function imprimirRecibo() {
     if (formatoRecibo.value === 'pos_80' || !pago.value?.cobro_id || !puede('pagos.ver')) {
         await nextTick()
-        window.print()
+        if (typeof window.print === 'function') {
+            window.print()
+        }
         return
     }
     await abrirReciboPdf(plantillaCarta.value)
@@ -2033,9 +2035,12 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                             name="i-lucide-zap"
                             class="size-4 shrink-0"
                         />
-                        {{ servicio.codigo }}<template v-if="servicio.nombre">
-                            · {{ servicio.nombre }}
-                        </template> se reactivó
+                        <span>
+                            <ULink
+                                :to="`/servicios/${servicio.id}`"
+                                class="font-semibold underline"
+                            >{{ servicio.codigo }}</ULink><template v-if="servicio.nombre"> · {{ servicio.nombre }}</template> se reactivó
+                        </span>
                     </div>
                     <p
                         v-if="seguimiento.siguiendo.value"
@@ -2073,12 +2078,22 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                         :problema="seguimiento.problema.value"
                     />
                     <div class="grid w-full grid-cols-2 gap-2">
+                        <!-- Reimprimir con el formato de la caja; «Elegir otra plantilla» abre el PDF con otra. -->
+                        <ImprimirConPlantilla
+                            v-if="pago.cobro_id && puede('pagos.ver')"
+                            tipo="recibo_cobro"
+                            etiqueta="Reimprimir"
+                            :generando="generandoRecibo"
+                            class="w-full justify-center"
+                            data-prueba="recibo-pdf"
+                            @imprimir="(id) => (id === null ? imprimirRecibo() : abrirReciboPdf(id))"
+                        />
                         <UButton
+                            v-else
                             label="Reimprimir"
                             :icon="ICONOS.imprimir"
                             color="neutral"
                             variant="outline"
-                            :loading="generandoRecibo"
                             class="justify-center rounded-full"
                             data-prueba="reimprimir"
                             @click="imprimirRecibo"
@@ -2093,14 +2108,6 @@ const itemsRecientes = computed<DropdownMenuItem[][]>(() => [recientes.value.len
                             variant="outline"
                             class="justify-center rounded-full"
                             data-prueba="recibo-whatsapp"
-                        />
-                        <ImprimirConPlantilla
-                            v-else-if="pago.cobro_id && puede('pagos.ver')"
-                            tipo="recibo_cobro"
-                            etiqueta="PDF"
-                            :generando="generandoRecibo"
-                            data-prueba="recibo-pdf"
-                            @imprimir="abrirReciboPdf"
                         />
                     </div>
                     <UButton
