@@ -154,7 +154,10 @@ export function horarioApi(h: Horario): HorarioApi {
             return {
                 ...base,
                 cada_segundos: Math.max(1, Math.round(h.ms / 1000)),
-                texto: `Siempre activo (revisa ${textoCada(h.ms).toLowerCase()})`,
+                texto:
+                    h.ms < 1000
+                        ? 'Siempre activo'
+                        : `Siempre activo (revisa ${textoCada(h.ms).toLowerCase()})`,
             }
         case 'diario':
             return { ...base, hora: h.hora, texto: `Todos los días a las ${h.hora}` }

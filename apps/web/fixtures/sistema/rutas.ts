@@ -6,7 +6,7 @@ import type { Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, paginar, problemaTipado, sinSesion, usuariosPorToken } from '../comun'
-import { almacenamientoFixture, aparienciaPublica } from './datos'
+import { almacenamientoFixture, aparienciaPublica, corridasDe, tareasDe } from './datos'
 
 /** Predeterminados por rol de `contratos/accesos-rapidos.md` §2 (los mismos de la API). */
 const POR_ROL: Record<string, string[]> = {
@@ -88,6 +88,36 @@ export const rutasSistema: RutasFixture = {
         bd.sistema.almacenamiento = { ...bd.sistema.almacenamiento, medicion: nueva }
         return { status: 200, cuerpo: nueva }
     }),
+    'GET /api/v1/sistema/crons': conPermiso('sistema.ver_crons', () => ({ status: 200, cuerpo: tareasDe(bd.sistema.tareas, Date.now()) })),
+    'GET /api/v1/sistema/crons/:clave/corridas': conPermiso('sistema.ver_crons', (solicitud) => {
+        const tarea = bd.sistema.tareas.find(t => t.base.clave === solicitud.params.clave)
+        if (!tarea) {
+            return problemaTipado(404, 'no_encontrado', 'No encontrado', 'No existe esa tarea programada')
+        }
+        return { status: 200, cuerpo: paginar(corridasDe(tarea, Date.now()), solicitud, 20) }
+    }),
+    'POST /api/v1/sistema/crons/:clave/ejecutar': conPermiso('sistema.ejecutar_cron', conIdempotencia((solicitud) => {
+        const tarea = bd.sistema.tareas.find(t => t.base.clave === solicitud.params.clave)
+        if (!tarea) {
+            return problemaTipado(404, 'no_encontrado', 'No encontrado', 'No existe esa tarea programada')
+        }
+        if (!tarea.base.manual) {
+            return problemaTipado(422, 'no_manual', 'Regla de negocio', 'Esta tarea corre todo el tiempo y no se ejecuta a mano')
+        }
+        if (!tarea.base.activo) {
+            return problemaTipado(422, 'cron_apagado', 'Regla de negocio', 'Esta tarea está apagada por configuración')
+        }
+        if (tarea.base.estado === 'en_curso') {
+            return problemaTipado(409, 'en_curso', 'Ya se está ejecutando', 'Esta tarea ya se está ejecutando; espera a que termine y vuelve a consultar')
+        }
+        // Como el worker: corre, queda en el historial (manual) y la tarea vuelve a estar al día.
+        tarea.corridas.unshift({ hace: 0, estado: 'ok', duracion_ms: 1200, resumen: 'Corrida a pedido', origen: 'manual', instancia: 'worker-1' })
+        if (tarea.base.estado === 'atrasada' || tarea.base.estado === 'error') {
+            tarea.base = { ...tarea.base, estado: 'ok', atrasada: false }
+        }
+        const clave = String(solicitud.params.clave)
+        return { status: 202, cuerpo: { clave, job_id: `manual-${clave.replace(/[^a-z0-9_-]/gi, '_')}`, estado: 'encolada', encolada_en: ahora() } }
+    })),
     'GET /api/v1/apariencia/publica': () => ({ status: 200, cuerpo: aparienciaPublica(bd.sistema.apariencia) }),
     'GET /api/v1/apariencia': conPermiso('apariencia.ver', () => ({ status: 200, cuerpo: bd.sistema.apariencia })),
     'PUT /api/v1/apariencia': conPermiso('apariencia.editar', conIdempotencia((solicitud) => {

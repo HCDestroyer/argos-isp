@@ -383,6 +383,10 @@
 .tono-error {
     --tono: var(--ui-color-error-500);
 }
+/* Gris de estados neutros (tareas programadas sin cambios, apagadas o sin datos). */
+.tono-neutro {
+    --tono: var(--ui-text-muted);
+}
 
 [class*='tono-'] {
     --tono-texto: color-mix(in oklab, var(--tono) var(--viz-proporcion-texto), var(--viz-mezcla-texto));
