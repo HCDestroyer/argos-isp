@@ -434,6 +434,10 @@ export const crearServicioValidator = vine.compile(
             .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
             .nullable()
             .optional(),
+        nombre: vine.string().trim().minLength(1).maxLength(60).nullable().optional().meta({
+            description:
+                'Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda',
+        }),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
         referencia: referencia(),
         contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({
@@ -510,6 +514,10 @@ export const editarServicioValidator = vine.compile(
             .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
             .nullable()
             .optional(),
+        nombre: vine.string().trim().minLength(1).maxLength(60).nullable().optional().meta({
+            description:
+                'Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda',
+        }),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
         referencia: referencia(),
         contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({

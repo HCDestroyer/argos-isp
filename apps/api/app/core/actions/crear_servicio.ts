@@ -58,6 +58,8 @@ export interface EntradaCrearServicio {
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
+    /** nombre opcional del servicio (A45, hasta 60); el `codigo` lo pone la base */
+    nombre?: string | null
     direccion?: string | null
     /** cómo llegar, texto libre (pedido A12 de Iris) */
     referencia?: string | null
@@ -264,6 +266,7 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 user_ppp: userPpp,
                 pass_ppp: passPpp,
                 mac: input.mac ?? null,
+                nombre: input.nombre ?? null,
                 direccion: input.direccion ?? null,
                 referencia: input.referencia ?? null,
                 contacto_nombre: input.contacto_nombre ?? null,

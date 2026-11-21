@@ -221,6 +221,29 @@ export interface WebhookIris {
  * Payload que recibe Iris (§2.3) a partir del evento de Argos, con `empresa_id`; null si el evento
  * no sirve a Iris. Lista cerrada de campos: lo que no está aquí no sale de Argos.
  */
+/** Versión del contrato desde la que los payloads llevan `servicio_codigo`/`servicio_nombre` (A45). */
+export const CONTRATO_EVENTOS_0100 = '0.10.0'
+
+/**
+ * Contrato Iris 0.10.0 §3.7 (A45): todo payload hacia Iris que lleva `servicio_id` suma
+ * `servicio_codigo` y `servicio_nombre` del servicio (o null si ya no existe: `servicio.eliminado`).
+ * Solo a conectores con contrato ≥ 0.10.0 (`registrarEnvioIris`). `servicio_nombre` es texto del
+ * cliente: va en el cuerpo firmado, nunca a logs.
+ */
+export async function conCodigoServicio(payload: Payload): Promise<Payload> {
+    const servicioId = entero(payload.servicio_id)
+    if (!servicioId) return payload
+    const fila = (await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .select('codigo', 'nombre')
+        .first()) as {
+        codigo: string
+        nombre: string | null
+    } | null
+    return { ...payload, servicio_codigo: fila?.codigo ?? null, servicio_nombre: fila?.nombre ?? null }
+}
+
 export async function payloadParaIris(evento: string, p: Payload): Promise<WebhookIris | null> {
     if (evento === 'cliente.actualizado') {
         const clienteId = entero(p.cliente_id)
@@ -346,7 +369,16 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         case 'servicio.datos_cambiados':
             // Solo nombres de campo (dirección, coordenadas, referencia, contacto): Iris relee el servicio.
             // `empresas` = [empresa_id], la forma de `cliente.actualizado` (§2.3)
-            return { payload: { ...base, empresas, campos: textos(p.campos) }, empresas }
+            return {
+                payload: {
+                    ...base,
+                    empresas,
+                    campos: textos(p.campos),
+                    ...(texto(p.origen_tipo) ? { origen_tipo: texto(p.origen_tipo) } : {}),
+                    ...(texto(p.origen_id) ? { origen_id: texto(p.origen_id) } : {}),
+                },
+                empresas,
+            }
         case 'asignacion.cambiada':
             return {
                 payload: {
@@ -669,7 +701,10 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
     if (!webhook || !enAlcance(alcance, webhook.empresas, webhook.compartido)) return null
 
     // Seguro extra (A1, 0.6.0): `nit_cui` nunca sale hacia el usuario técnico Iris
-    const payload = ocultarDocumentoIris({ ...webhook.payload })
+    const conCodigo = (await conectorAdmite(CONTRATO_EVENTOS_0100))
+        ? await conCodigoServicio(webhook.payload)
+        : webhook.payload
+    const payload = ocultarDocumentoIris({ ...conCodigo })
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {
         // Iris solo ve las empresas de su alcance
         const visibles = webhook.empresas.filter((e) => alcance.empresas.includes(e))

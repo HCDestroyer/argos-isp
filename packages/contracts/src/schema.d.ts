@@ -20741,6 +20741,10 @@ export interface components {
         };
         Servicio: {
             id: number;
+            /** @description Código del servicio (`S-000412`): automático, único e inmutable (contrato Iris 0.10.0 §3.7). Es el «número de servicio» con que el cliente se identifica */
+            codigo?: string;
+            /** @description Nombre opcional del servicio (hasta 60: «Casa», «Negocio»); texto del cliente */
+            nombre?: string | null;
             cliente_id: number;
             /** @description Empresa (NIT) que factura el servicio */
             empresa_id: number;
@@ -62318,6 +62322,8 @@ export interface operations {
                     /** @description Solo pppoe; se genera si no viene */
                     pass_ppp?: string;
                     mac?: string | null;
+                    /** @description Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda */
+                    nombre?: string | null;
                     direccion?: string | null;
                     /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
                     referencia?: string | null;
@@ -62501,6 +62507,8 @@ export interface operations {
                     /** @description Solo pppoe; al cambiar a pppoe se genera si no viene. Cambiarla emite servicio.config_cambiada con credenciales (nunca el valor; en audit.cambios queda ***) */
                     pass_ppp?: string;
                     mac?: string | null;
+                    /** @description Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda */
+                    nombre?: string | null;
                     direccion?: string | null;
                     /** @description Cómo llegar, texto libre (hasta 300 caracteres); null lo borra */
                     referencia?: string | null;

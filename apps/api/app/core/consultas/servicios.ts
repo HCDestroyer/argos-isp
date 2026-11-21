@@ -29,6 +29,10 @@ export type TipoConexion = (typeof TIPOS_CONEXION)[number]
 
 export interface ServicioVista {
     id: number
+    /** `S-000412`: automático, único e inmutable (contrato Iris 0.10.0 §3.7, A45) */
+    codigo: string
+    /** opcional, hasta 60 («Casa», «Negocio»); texto del cliente, nunca a logs (A45) */
+    nombre: string | null
     cliente_id: number
     /** empresa (NIT) que factura el servicio (`core.empresas`) */
     empresa_id: number
@@ -127,6 +131,8 @@ export function precioMensualSql(alias = 's'): string {
 function columnas(cliente: QueryClientContract) {
     return [
         's.id',
+        's.codigo',
+        's.nombre',
         's.cliente_id',
         's.empresa_id',
         's.router_id',

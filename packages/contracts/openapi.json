@@ -75326,6 +75326,15 @@
                     ],
                     "pattern": "^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
                   },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "description": "Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda"
+                  },
                   "direccion": {
                     "type": [
                       "string",
@@ -75793,6 +75802,15 @@
                       "null"
                     ],
                     "pattern": "^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "description": "Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda"
                   },
                   "direccion": {
                     "type": [
@@ -122020,6 +122038,17 @@
           "id": {
             "type": "integer",
             "minimum": 1
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Código del servicio (`S-000412`): automático, único e inmutable (contrato Iris 0.10.0 §3.7). Es el «número de servicio» con que el cliente se identifica"
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre opcional del servicio (hasta 60: «Casa», «Negocio»); texto del cliente"
           },
           "cliente_id": {
             "type": "integer",

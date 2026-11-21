@@ -351,13 +351,25 @@ export interface CatalogoEventos {
      * nombres, nunca valores. Evento propio y no `servicio.config_cambiada`: no cambian nada en la
      * red, y así RouterOS, coa y aaa-cache no reaccionan. No se emite al crear (va en `servicio.creado`).
      * `empresas` = `[empresa_id]`, con la misma forma que `cliente.actualizado` (contrato Iris 0.5.0).
+     * Desde Iris 0.10.0 también `nombre` (A45: nombre del servicio) y, con `completar-datos` (A43),
+     * `precision_m` y `origen_tipo`/`origen_id` de la orden de Iris.
      */
     'servicio.datos_cambiados': {
         servicio_id: number
         empresa_id: number
         empresas: number[]
         cliente_id: number
-        campos: Array<'direccion' | 'coordenadas' | 'referencia' | 'contacto_nombre' | 'contacto_telefono'>
+        campos: Array<
+            | 'nombre'
+            | 'direccion'
+            | 'coordenadas'
+            | 'referencia'
+            | 'contacto_nombre'
+            | 'contacto_telefono'
+            | 'precision_m'
+        >
+        origen_tipo?: string
+        origen_id?: string
     }
     /**
      * Cambió una zona, un plan o un router en lo que otros sistemas muestran (contrato Iris 0.5.0,

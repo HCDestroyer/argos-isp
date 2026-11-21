@@ -49,6 +49,8 @@ export interface EntradaEditarServicio {
     user_ppp?: string
     pass_ppp?: string
     mac?: string | null
+    /** nombre del servicio (A45); el `codigo` es inmutable */
+    nombre?: string | null
     direccion?: string | null
     /** cómo llegar, texto libre (pedido A12 de Iris) */
     referencia?: string | null
@@ -88,6 +90,7 @@ type CampoDatos = CatalogoEventos['servicio.datos_cambiados']['campos'][number]
 
 /** Datos de ubicación y contacto que emiten `servicio.datos_cambiados` (pedidos A10, A12, A13). */
 export const CAMPOS_DATOS_SERVICIO = [
+    'nombre',
     'direccion',
     'coordenadas',
     'referencia',
