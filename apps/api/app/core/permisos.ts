@@ -224,6 +224,8 @@ export const PERMISOS = {
     'iris.configurar':
         'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
     'iris.abrir': 'Abrir un ticket, orden o prospecto en Iris sin volver a iniciar sesión',
+    'prospectos.registrar':
+        'Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)',
     'iris.generar_token':
         'Generar el token atk_ del usuario técnico Iris (permisos del contrato Iris §1.1); solo admin',
     'iris.revocar_token': 'Revocar un token del usuario técnico Iris',
@@ -475,6 +477,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'lealtad.ver',
             'lealtad.canjear',
             'inventario.ver',
+            'prospectos.registrar',
         ],
     },
     soporte: {
@@ -484,6 +487,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.crear',
             'clientes.editar',
             'notificaciones.registrar_consentimiento',
+            'prospectos.registrar',
             'clientes.estado_cuenta',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',

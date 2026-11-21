@@ -382,6 +382,23 @@ Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compo
   `cobro_propuesto`) e `inventario.unidad_estado_cambiado` (`unidad_id`, `empresa_id`, `servicio_id`,
   `de`, `a`, `motivo`; sin costos, proveedor ni RMA). Los emiten A1 y A3 (`.claude/integration/a6.md`);
   las pruebas usan eventos de muestra (`tests/integraciones/iris_webhooks_0120.spec.ts`).
+- **Prospectos desde Argos** (contrato 0.10.0 §3.6, A44; `prospectos.ts`,
+  `actions/registrar_prospecto_iris.ts`, rutas en `start/routes/iris_prospectos.ts`):
+  `POST /integraciones/iris/prospectos` (`prospectos.registrar`: admin, cajero y soporte) valida los
+  teléfonos como el contrato (1 a 5 E.164 sin repetir, un `principal`, `titular` solo en el principal;
+  422 `telefonos_invalidos` sin repetir el número), deja el pedido en `integraciones.iris_prospectos`
+  con `Idempotency-Key = argos:prospecto:<uuid>` y lo entrega al momento a
+  `POST <iris>/api/v1/integraciones/argosisp/prospectos` (`X-Iris-Empresa`, `X-Iris-Actor:
+  usuario:<id>`). `201` → `enviado` con `prospecto_id`, `numero`, `estado_iris`, `asignado` y
+  `url_iris` (enlace plano, sin fragmento); `409 prospecto_duplicado` → `duplicado` con `url_iris`;
+  `422` → `rechazado` con `codigo_error`; red, `5xx`, `429`, `409 idempotencia_en_proceso` y
+  `409 argos_apagado` se reintentan en `iris:worker` (1 min … 12 h) con la misma clave y los mismos
+  bytes. Con el conector apagado o un Iris < 0.10.0, 409 `iris_no_disponible` (y
+  `GET /integraciones/iris/prospectos/disponible` para ocultar el botón). **Solo el vínculo:** el
+  cuerpo se borra al terminar y la auditoría guarda nombre, teléfonos, dirección, coordenadas y
+  comentario como `***`. `GET /integraciones/iris/prospectos` y `/:id` listan los vínculos. El
+  webhook `prospecto.estado_cambiado` (`prospecto_id`, `empresa_id`, `de`, `a`, `motivo_codigo`)
+  actualiza `estado_iris` (un atrasado no cambia nada) con su diff en `audit.cambios`.
 - **Receptor Iris → Argos** (contrato 0.6.0 §6.6, A6): `POST /integraciones/iris/webhook` (ya no
   reservado; `receptor.ts`, `actions/recibir_webhook_iris.ts`, tabla `integraciones.iris_recibidos`).
   Misma firma `v1=` que Horus con el secreto de entrada del canje, ±5 min, 503 `iris_apagado` con el

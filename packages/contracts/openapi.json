@@ -30555,6 +30555,480 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/iris/prospectos": {
+      "get": {
+        "operationId": "irisProspectos",
+        "summary": "Prospectos registrados en Iris desde Argos (solo el vínculo)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "entrega",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "duplicado",
+                "rechazado",
+                "fallido"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de prospectos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProspectoIris"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "irisRegistrarProspecto",
+        "summary": "Registrar en Iris a alguien interesado en un servicio",
+        "description": "Contrato Iris 0.10.0 §3.6 (A44). Deja el pedido en la cola hacia Iris (Idempotency-Key argos:prospecto:<uuid>) y lo entrega al momento: entrega `enviado` con prospecto_id, numero y url_iris; `duplicado` (409 prospecto_duplicado de Iris, con url_iris); `rechazado` (422 de Iris: plan_no_permitido, telefonos_invalidos, cliente_no_valido); `pendiente` si Iris no respondió (iris:worker reintenta con la misma clave). 409 iris_no_disponible con el conector apagado o un Iris < 0.10.0. 422 telefonos_invalidos (sin repetir el número). Argos guarda solo el vínculo.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "origen": {
+                    "type": "string",
+                    "enum": [
+                      "oficina",
+                      "llamada",
+                      "whatsapp",
+                      "referido",
+                      "otro"
+                    ]
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "telefonos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "numero": {
+                          "type": "string",
+                          "maxLength": 20,
+                          "description": "E.164: +50255123344"
+                        },
+                        "whatsapp": {
+                          "type": "boolean"
+                        },
+                        "principal": {
+                          "type": "boolean"
+                        },
+                        "nombre": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "relacion": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "titular",
+                                "familiar",
+                                "otro"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "numero",
+                        "whatsapp",
+                        "principal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  },
+                  "modo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial"
+                    ]
+                  },
+                  "direccion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "zona_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "coordenadas": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d+(\\.\\d+)?, ?-?\\d+(\\.\\d+)?$",
+                    "description": "Latitud y longitud: \"14.6349,-90.5069\""
+                  },
+                  "plan_interes_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "comentario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "cliente_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo si se eligió un cliente existente de la empresa"
+                  }
+                },
+                "required": [
+                  "origen",
+                  "nombre",
+                  "telefonos",
+                  "modo",
+                  "direccion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Prospecto registrado (o en cola)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectoIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/prospectos/{id}": {
+      "get": {
+        "operationId": "irisVerProspecto",
+        "summary": "Vínculo de un prospecto registrado en Iris",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prospecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectoIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/prospectos/disponible": {
+      "get": {
+        "operationId": "irisProspectosDisponible",
+        "summary": "¿Se puede registrar prospectos en Iris? (conector activo y contrato ≥ 0.10.0)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disponibilidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisponibilidadProspectosIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso prospectos.registrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "prospectos.registrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/iris/resolver": {
       "post": {
         "operationId": "irisResolver",
@@ -69430,6 +69904,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
                         "qos.gestionar",
@@ -69833,6 +70308,7 @@
                         "promesas.crear",
                         "promesas.rechazar",
                         "promesas.ver",
+                        "prospectos.registrar",
                         "proveedores.editar",
                         "proveedores.ver",
                         "qos.gestionar",
@@ -82550,6 +83026,7 @@
                             "promesas.crear",
                             "promesas.rechazar",
                             "promesas.ver",
+                            "prospectos.registrar",
                             "proveedores.editar",
                             "proveedores.ver",
                             "qos.gestionar",
@@ -98301,6 +98778,24 @@
           }
         }
       },
+      "DisponibilidadProspectosIris": {
+        "type": "object",
+        "required": [
+          "disponible",
+          "motivo"
+        ],
+        "properties": {
+          "disponible": {
+            "type": "boolean"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Dte": {
         "type": "object",
         "required": [
@@ -107113,6 +107608,7 @@
           "promesas.crear",
           "promesas.rechazar",
           "promesas.ver",
+          "prospectos.registrar",
           "proveedores.editar",
           "proveedores.ver",
           "qos.gestionar",
@@ -107408,6 +107904,7 @@
           "Crear promesas de pago",
           "Rechazar promesas pendientes de aprobación",
           "Ver promesas de pago",
+          "Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)",
           "Crear y editar proveedores",
           "Ver proveedores",
           "Crear perfiles de QoS, crear, editar, activar y desactivar sus clases y elegir el perfil de un router",
@@ -114385,6 +114882,152 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProspectoIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "registrado_por",
+          "origen",
+          "telefonos",
+          "entrega",
+          "intentos",
+          "ultimo_error",
+          "codigo_error",
+          "prospecto_id",
+          "numero",
+          "estado_iris",
+          "motivo_iris",
+          "asignado",
+          "url_iris",
+          "enviado_en",
+          "estado_cambiado_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "oficina",
+              "llamada",
+              "whatsapp",
+              "referido",
+              "otro"
+            ]
+          },
+          "telefonos": {
+            "type": "integer",
+            "description": "Cuántos números se enviaron (los números no se guardan)"
+          },
+          "entrega": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "duplicado",
+              "rechazado",
+              "fallido"
+            ],
+            "description": "pendiente: en la cola hacia Iris; duplicado: ya había un prospecto abierto con uno de los números (Iris sumó el pedido como actividad); rechazado: 422 de Iris (codigo_error)"
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codigo_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "plan_no_permitido, telefonos_invalidos, cliente_no_valido, prospecto_duplicado…"
+          },
+          "prospecto_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Último estado informado por Iris (prospecto.estado_cambiado)"
+          },
+          "motivo_iris": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asignado": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Ya tiene vendedor en Iris"
+          },
+          "url_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Enlace plano al prospecto en Iris (el autologin se pide al abrirlo)"
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "estado_cambiado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -121945,6 +122588,7 @@
               "promesas.crear",
               "promesas.rechazar",
               "promesas.ver",
+              "prospectos.registrar",
               "proveedores.editar",
               "proveedores.ver",
               "qos.gestionar",
@@ -122065,6 +122709,7 @@
               "planes.ver",
               "promesas.crear",
               "promesas.ver",
+              "prospectos.registrar",
               "servicios.ver",
               "zonas.ver"
             ]
@@ -122099,6 +122744,7 @@
               "plantillas.ver",
               "promesas.crear",
               "promesas.ver",
+              "prospectos.registrar",
               "red.ver",
               "red_acceso.ver",
               "redes.ver",

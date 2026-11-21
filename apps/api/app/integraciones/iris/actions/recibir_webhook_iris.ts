@@ -1,9 +1,16 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { envioDeClaveAviso } from '#notify/canales/whatsapp'
 import { aplicarAcuseIris } from '#notify/acuses_iris'
+import { aplicarEstadoProspecto } from '#integraciones/iris/prospectos'
 
 /** Eventos de Iris → Argos (contrato Iris 0.6.0 §6.6). */
-export const EVENTOS_DE_IRIS = ['aviso.entregado', 'aviso.fallido', 'contacto.baja'] as const
+export const EVENTOS_DE_IRIS = [
+    'aviso.entregado',
+    'aviso.fallido',
+    'contacto.baja',
+    // 0.10.0 (A44, §3.6 y §6.6): solo de prospectos registrados desde Argos
+    'prospecto.estado_cambiado',
+] as const
 
 const CANALES_CONTACTO = ['whatsapp', 'telegram', 'correo'] as const
 const ORIGENES_BAJA = ['cliente', 'agente'] as const
@@ -138,6 +145,42 @@ export default class RecibirWebhookIris extends DomainAction<
                 duplicado: false,
                 estado: r.procesado ? 'procesado' : 'ignorado',
                 resultado: r.resultado,
+            }
+        } else if (input.evento === 'prospecto.estado_cambiado') {
+            const prospectoId =
+                texto(input.payload.prospecto_id) ?? entero(input.payload.prospecto_id)?.toString() ?? null
+            const a = texto(input.payload.a)
+            if (!prospectoId || !a) {
+                salida = { duplicado: false, estado: 'ignorado', resultado: 'payload_invalido' }
+            } else {
+                const r = await aplicarEstadoProspecto(t.trx, {
+                    prospecto_id: prospectoId,
+                    empresa_id: entero(input.payload.empresa_id),
+                    a,
+                    motivo: texto(input.payload.motivo_codigo),
+                    ocurrido: ocurrido ?? new Date().toISOString(),
+                })
+                if (r.encontrado) {
+                    t.fijarEntidad('prospecto_iris', r.id!)
+                    t.fijarEmpresa(r.empresa_id)
+                    if (r.cambio) {
+                        await t.registrarCambios(
+                            { tipo: 'prospecto_iris', id: r.id! },
+                            { estado_iris: r.antes },
+                            { estado_iris: a },
+                        )
+                    }
+                }
+                enlace = { empresa_id: r.empresa_id, cliente_id: r.cliente_id }
+                salida = {
+                    duplicado: false,
+                    estado: r.encontrado ? 'procesado' : 'ignorado',
+                    resultado: !r.encontrado
+                        ? 'prospecto_no_encontrado'
+                        : r.cambio
+                          ? 'estado_aplicado'
+                          : 'sin_cambio',
+                }
             }
         } else {
             salida = { duplicado: false, estado: 'ignorado', resultado: 'evento_desconocido' }
