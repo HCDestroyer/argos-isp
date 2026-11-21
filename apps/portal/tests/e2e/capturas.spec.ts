@@ -7,6 +7,8 @@ import { expect, test, type Page } from '@playwright/test'
  * pantallas de las promociones en claro y oscuro, a 390 px y 1280 px. Sin la variable, se salta.
  */
 const DESTINO = process.env.PW_CAPTURAS
+/** Capturas del rediseño posteriores (drawer, comprobante, confirmación): no existían antes. */
+const DESPUES = process.env.PW_CAPTURAS_DESPUES === '1'
 
 async function capturar(page: Page, nombre: string, proyecto: string, tema: string) {
     await page.waitForLoadState('networkidle')
@@ -161,6 +163,97 @@ for (const tema of ['light', 'dark'] as const) {
                 }
                 await seccion.screenshot({ path: join(DESTINO!, `whatsapp-${escenario}-${nombreTema}-${info.project.name}.png`) })
             }
+        })
+    })
+}
+
+/**
+ * Rediseño (índigo eléctrico): inicio público, `/entrar`, `/cuenta` (inicio y facturas) y `/corte`,
+ * en claro y oscuro, a 390 px y 1280 px, con densidad 2 para revisar el detalle.
+ */
+for (const tema of ['light', 'dark'] as const) {
+    test.describe(`capturas rediseño ${tema}`, () => {
+        test.skip(!DESTINO, 'Solo con PW_CAPTURAS')
+        test.use({ colorScheme: tema, deviceScaleFactor: 2 })
+
+        test('pantallas principales', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/corte')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await capturar(page, 'rediseno-corte', info.project.name, nombreTema)
+            await page.goto('/')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-portal', info.project.name, nombreTema)
+            await page.goto('/entrar')
+            await page.getByRole('heading', { level: 1 }).first().waitFor()
+            await capturar(page, 'rediseno-entrar', info.project.name, nombreTema)
+
+            await page.goto('/entrar?con=codigo')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.getByTestId('seccion-inicio').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-cuenta-inicio', info.project.name, nombreTema)
+            await page.getByTestId('nav-facturas').filter({ visible: true }).first().click()
+            await page.getByTestId('seccion-facturas').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-cuenta-facturas', info.project.name, nombreTema)
+            if (!DESPUES) {
+                return
+            }
+            // Drawer de detalle de una factura (sin salir de la lista).
+            await page.getByTestId('factura').first().click()
+            await page.getByTestId('detalle').waitFor()
+            await page.waitForTimeout(400)
+            await page.screenshot({ path: join(DESTINO!, `rediseno-drawer-factura-${nombreTema}-${info.project.name}.png`) })
+            await page.keyboard.press('Escape')
+            // Subir comprobante: página propia (se navega con la SPA: la sesión vive en memoria).
+            await page.getByTestId('nav-pagar').filter({ visible: true }).first().click()
+            await page.getByTestId('cuenta-subir-comprobante').click()
+            await page.getByTestId('comprobante-formulario').waitFor({ timeout: 30_000 })
+            await capturar(page, 'rediseno-comprobante', info.project.name, nombreTema)
+        })
+
+        test('confirmación (canje de puntos)', async ({ page }, info) => {
+            test.skip(!DESPUES, 'Solo en las capturas de después')
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            await page.goto('/entrar?con=codigo&puntos=canje')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.getByTestId('resumen-puntos').waitFor({ timeout: 30_000 })
+            await page.getByTestId('nav-puntos').filter({ visible: true }).first().click()
+            await page.getByTestId('premio-501').getByTestId('canjear').click()
+            await page.getByTestId('confirmar-canje').waitFor()
+            await page.waitForTimeout(400)
+            await page.screenshot({ path: join(DESTINO!, `rediseno-modal-canje-${nombreTema}-${info.project.name}.png`) })
         })
     })
 }

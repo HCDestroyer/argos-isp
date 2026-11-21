@@ -39,8 +39,9 @@ async function canjeado() {
         class="flex flex-col gap-6"
         data-testid="seccion-puntos"
     >
-        <h2 class="text-lg font-semibold text-highlighted">
+        <h2 class="flex items-center gap-1 text-lg font-semibold text-highlighted">
             Mis puntos
+            <PortalAyuda clave="puntos" />
         </h2>
 
         <template v-if="cargando && !empresas && !problema">
@@ -63,7 +64,7 @@ async function canjeado() {
             v-else-if="empresas && empresas.length === 0"
             color="neutral"
             variant="subtle"
-            icon="i-lucide-sparkles"
+            icon="i-lucide-gem"
             title="El programa de puntos no está disponible"
             description="Cuando tu proveedor lo active, aquí verás tus puntos y los premios."
             data-testid="puntos-no-disponible"

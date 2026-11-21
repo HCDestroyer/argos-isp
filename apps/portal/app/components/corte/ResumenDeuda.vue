@@ -22,7 +22,7 @@ const etiquetaVencidas = computed(() => {
 </script>
 
 <template>
-    <UCard>
+    <UCard class="ax-acento">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm text-muted">
@@ -76,8 +76,8 @@ const etiquetaVencidas = computed(() => {
                 class="flex items-center gap-2 text-sm text-muted"
             >
                 <UIcon
-                    name="i-lucide-calendar-check"
-                    class="size-4 shrink-0"
+                    name="i-lucide-circle-check"
+                    class="size-4 shrink-0 text-success"
                 />
                 Sin facturas vencidas
             </p>
@@ -87,7 +87,7 @@ const etiquetaVencidas = computed(() => {
                 class="mt-3"
                 color="info"
                 variant="subtle"
-                icon="i-lucide-hand-coins"
+                icon="i-lucide-calendar-check"
                 title="Tienes una promesa de pago activa"
             />
         </template>

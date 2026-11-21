@@ -3,7 +3,8 @@
  * Logo de ArgosIsp: ojo con pupila-nodo y tres arcos de señal (viewBox 64, geometría del video
  * de presentación). SVG en línea: sin petición extra en `/corte`.
  *
- * - `marca`: trazo blanco sobre el cuadro teal 700 con radio 7/32 (igual en claro y oscuro).
+ * - `marca`: trazo blanco sobre el cuadro con el degradado de marca índigo-600 → cyan-700 con radio
+ *   7/32 (igual en claro y oscuro; el trazo blanco pasa 3:1 en todo el recorrido).
  *   Tamaño mínimo 16 px. Es la misma figura que `public/favicon.svg`: si cambia una, cambia la otra.
  * - `linea`: solo trazos en `currentColor`, para tamaños grandes (p. ej. `text-primary`).
  *
@@ -14,6 +15,8 @@ withDefaults(defineProps<{
 }>(), {
     variante: 'marca',
 })
+
+const idDegradado = `argos-marca-${useId()}`
 </script>
 
 <template>
@@ -24,13 +27,33 @@ withDefaults(defineProps<{
         focusable="false"
         data-testid="logo-argos"
     >
-        <rect
-            v-if="variante === 'marca'"
-            width="64"
-            height="64"
-            rx="14"
-            class="fill-(--ui-color-primary-700)"
-        />
+        <template v-if="variante === 'marca'">
+            <defs>
+                <linearGradient
+                    :id="idDegradado"
+                    x1="0"
+                    y1="0"
+                    x2="64"
+                    y2="64"
+                    gradientUnits="userSpaceOnUse"
+                >
+                    <stop
+                        offset="0"
+                        stop-color="#4f46e5"
+                    />
+                    <stop
+                        offset="1"
+                        stop-color="#0e7490"
+                    />
+                </linearGradient>
+            </defs>
+            <rect
+                width="64"
+                height="64"
+                rx="14"
+                :fill="`url(#${idDegradado})`"
+            />
+        </template>
         <g
             fill="none"
             :stroke="variante === 'marca' ? 'white' : 'currentColor'"

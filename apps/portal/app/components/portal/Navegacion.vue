@@ -8,8 +8,9 @@
  * - `superior` (escritorio, ≥ md): las mismas secciones como barra centrada sobre el contenido; con
  *   cinco (con «Puntos») van sin icono, para que «Facturas» no se corte. La
  *
- * En las dos, la activa lleva el texto en `text-highlighted` sobre el tinte teal: el primario sobre
- * su propio tinte, encima del vidrio, no llegaba al contraste AA (axe, `tests/e2e/accesibilidad.spec.ts`).
+ * En las dos, la activa lleva el texto en `text-highlighted` sobre el tinte índigo (el primario sobre
+ * su propio tinte, encima del vidrio, queda justo en AA: `tests/e2e/accesibilidad.spec.ts`). En
+ * escritorio la barra es una pastilla centrada (segmento), como los filtros de las listas.
  */
 const props = defineProps<{
     variante: 'inferior' | 'superior'
@@ -27,12 +28,15 @@ const secciones = computed(() => seccionesVisibles(conPuntos.value))
         :aria-label="props.variante === 'inferior' ? 'Secciones de mi cuenta' : 'Secciones de mi cuenta (escritorio)'"
         :class="props.variante === 'inferior'
             ? 'chrome-material fixed inset-x-0 bottom-0 z-30 border-t border-default pb-[env(safe-area-inset-bottom)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] md:hidden'
-            : 'surface-card hidden p-1 md:block'"
+            : 'hidden md:flex md:justify-center'"
         :data-testid="`navegacion-${props.variante}`"
     >
         <ul
-            class="mx-auto grid max-w-xl gap-1"
-            :class="secciones.length === 5 ? 'grid-cols-5' : 'grid-cols-4'"
+            class="mx-auto grid w-full max-w-xl gap-1"
+            :class="[
+                secciones.length === 5 ? 'grid-cols-5' : 'grid-cols-4',
+                props.variante === 'superior' ? 'ax-tarjeta rounded-full p-1' : '',
+            ]"
         >
             <li
                 v-for="item in secciones"
@@ -52,7 +56,7 @@ const secciones = computed(() => seccionesVisibles(conPuntos.value))
                             base: ['min-h-14 flex-col gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium', activa === item.seccion ? 'text-highlighted' : ''].join(' '),
                             leadingIcon: 'size-6',
                         }
-                        : { base: ['min-h-11 gap-2 text-sm', secciones.length === 5 ? 'justify-center px-2' : '', activa === item.seccion ? 'text-highlighted' : ''].join(' ') }"
+                        : { base: ['min-h-11 gap-2 rounded-full text-sm', secciones.length === 5 ? 'justify-center px-2' : '', activa === item.seccion ? 'text-highlighted' : ''].join(' ') }"
                 />
             </li>
         </ul>

@@ -14,10 +14,10 @@ export interface ItemNavegacion {
 
 export const SECCIONES_CUENTA: readonly ItemNavegacion[] = [
     { seccion: 'inicio', etiqueta: 'Inicio', icono: 'i-lucide-house', to: '/cuenta' },
-    { seccion: 'pagar', etiqueta: 'Pagar', icono: 'i-lucide-wallet', to: '/cuenta?seccion=pagar' },
+    { seccion: 'pagar', etiqueta: 'Pagar', icono: 'i-lucide-credit-card', to: '/cuenta?seccion=pagar' },
     { seccion: 'facturas', etiqueta: 'Facturas', icono: 'i-lucide-receipt', to: '/cuenta?seccion=facturas' },
     // Solo si el panel activó el programa de puntos en el portal (`seccionesVisibles`).
-    { seccion: 'puntos', etiqueta: 'Puntos', icono: 'i-lucide-sparkles', to: '/cuenta?seccion=puntos' },
+    { seccion: 'puntos', etiqueta: 'Puntos', icono: 'i-lucide-gem', to: '/cuenta?seccion=puntos' },
     { seccion: 'cuenta', etiqueta: 'Cuenta', icono: 'i-lucide-user-round', to: '/cuenta?seccion=cuenta' },
 ]
 

@@ -167,7 +167,7 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         const respuesta = await pedir('/favicon.svg', { host: 'captive.apple.com' })
         expect(respuesta.status).toBe(200)
         expect(respuesta.headers['content-type']).toContain('image/svg+xml')
-        expect(respuesta.cuerpo).toContain('#0f766e')
+        expect(respuesta.cuerpo).toContain('#4f46e5')
     })
 
     it('el manifiesto PWA y sus íconos se sirven en el Host ajeno', async () => {
@@ -176,7 +176,7 @@ describe('sondas de portal cautivo (sin URL pública: laboratorio sin DNS)', () 
         expect(manifiesto.headers['content-type']).toContain('application/manifest+json')
         const datos = JSON.parse(manifiesto.cuerpo) as { display: string, theme_color: string, icons: { src: string }[] }
         expect(datos.display).toBe('standalone')
-        expect(datos.theme_color).toBe('#0f766e')
+        expect(datos.theme_color).toBe('#4f46e5')
         for (const icono of datos.icons) {
             const respuesta = await pedir(icono.src, { host: 'captive.apple.com' })
             expect(respuesta.status, icono.src).toBe(200)

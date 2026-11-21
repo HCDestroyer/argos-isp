@@ -179,9 +179,10 @@ function usarGrupo(grupo: GrupoEmpresa | null) {
     }
 }
 const estadoGeneral = computed(() => estadoMasUrgente(cuenta.value?.servicios ?? []))
+/** La factura pendiente más urgente (banner del inicio). */
+const proxima = computed(() => cuenta.value ? proximoVencimiento(cuenta.value) : null)
 
 const verPromesa = ref(false)
-const verComprobante = ref(false)
 const verDeposito = ref(false)
 const servicioPromesa = ref<number | undefined>(undefined)
 const promesa = ref<PromesaSolicitada | null>(null)
@@ -202,7 +203,7 @@ function alAcceso(grupo: GrupoEmpresa, accion: NonNullable<AccesoRapido['accion'
         void navigateTo('/cuenta?seccion=pagar')
     }
     else if (accion === 'comprobante') {
-        verComprobante.value = true
+        void navigateTo(rutaComprobante(servicioComprobante.value, empresaModal.value))
     }
     else if (accion === 'deposito') {
         verDeposito.value = true
@@ -294,6 +295,8 @@ watch(() => route.hash, async (hash) => {
                 :monto-adeudado="cuenta.monto_adeudado"
                 :estado="estadoGeneral"
                 :actualizando="actualizando"
+                :destacado="seccion === 'inicio'"
+                :proxima="proxima ? proxima.factura : null"
                 @actualizar="actualizar"
             />
 
@@ -338,6 +341,7 @@ watch(() => route.hash, async (hash) => {
                         :actions="[{ label: 'Cómo reactivar mi servicio', icon: 'i-lucide-wifi', color: 'neutral', variant: 'outline', to: '/corte' }]"
                         data-testid="aviso-reactivar"
                     />
+                    <CuentaIndicadores :cuenta="cuenta" />
                     <CuentaInicioEmpresa
                         v-for="(grupo, indice) in grupos"
                         :key="grupo.clave"
@@ -349,7 +353,6 @@ watch(() => route.hash, async (hash) => {
                         @accion="alAcceso(grupo, $event)"
                         @pedir-promesa="pedirPromesa"
                     />
-                    <PuntosResumen />
                     <PromoPromociones lugar="portal_inicio" />
                 </div>
 
@@ -433,9 +436,10 @@ watch(() => route.hash, async (hash) => {
                     >
                         <h2
                             id="titulo-promesas"
-                            class="text-sm font-semibold text-highlighted"
+                            class="flex items-center gap-1 text-sm font-semibold text-highlighted"
                         >
                             Promesas de pago
+                            <PortalAyuda clave="promesa" />
                         </h2>
                         <CuentaPromesas :key="`promesas-${recargas}`" />
                     </section>
@@ -553,12 +557,6 @@ watch(() => route.hash, async (hash) => {
             v-model:open="verPromesa"
             :servicio-id="servicioPromesa"
             @resultado="promesaResuelta"
-        />
-        <ComprobanteSubir
-            v-model:open="verComprobante"
-            :servicio-id="servicioComprobante"
-            :empresa-id="empresaModal"
-            @enviado="recargas += 1"
         />
         <CorteDatosDeposito
             v-model:open="verDeposito"
