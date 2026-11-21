@@ -77,7 +77,7 @@ aplanan en el popover. Buscador Ctrl/Cmd+K con todas las secciones permitidas.
   avisos (comprobantes por verificar), tema, avatar con el menú de la cuenta.
 - **Página de una sección del menú**: migas, título grande (28 px, negrita) con el **?** de ayuda,
   la descripción de la sección y las acciones a la derecha.
-- **Ficha o subpágina**: título y acciones en la barra superior; migas hasta su sección.
+- **Ficha o subpágina**: título en la barra superior; en el cuerpo, las migas hasta su sección y las acciones de la pantalla a la derecha.
 - **Ayuda contextual** (`AyudaBoton`): panel lateral con el resumen de la pantalla del manual
   (`utils/indiceAyuda.ts`, generado de `docs/manual/**` y su frontmatter `pantallas:` con
   `pnpm --filter @argosisp/web ayuda:indice`; una prueba falla si quedó desfasado) y «Ver manual

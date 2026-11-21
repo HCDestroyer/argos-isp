@@ -30,7 +30,7 @@ Para buscar **clientes** usa la pantalla **Clientes** o **Cobrar**: buscan por n
 
 ## El encabezado de cada pantalla
 
-Las pantallas del menú empiezan con las migas (por dónde llegaste, por ejemplo «Inicio › Facturación › Facturas»), el **título** con el botón **?** de ayuda, una frase que dice para qué sirve y, a la derecha, sus botones (por ejemplo, «Nuevo cliente»). Las fichas (un cliente, un servicio, una factura) tienen el título en la barra de arriba y las migas hasta su lista.
+Las pantallas del menú empiezan con las migas (por dónde llegaste, por ejemplo «Inicio › Facturación › Facturas»), el **título** con el botón **?** de ayuda, una frase que dice para qué sirve y, a la derecha, sus botones (por ejemplo, «Nuevo cliente»). Las fichas (un cliente, un servicio, una factura) tienen el título en la barra de arriba y, debajo, las migas hasta su lista con los botones de la ficha a la derecha.
 
 ## Listas: vista rápida y clic derecho
 

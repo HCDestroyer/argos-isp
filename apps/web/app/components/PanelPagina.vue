@@ -11,8 +11,8 @@ const route = useRoute()
  *
  * - Página de una sección del menú (la ruta es la de la sección) o con `descripcion`: encabezado
  *   grande con migas, título, descripción y las acciones (`#acciones`) a la derecha.
- * - Ficha o subpágina: el título y las acciones siguen en la barra superior y el cuerpo empieza
- *   con las migas hasta la sección a la que pertenece.
+ * - Ficha o subpágina: el título va en la barra superior y el cuerpo empieza con las migas hasta
+ *   la sección a la que pertenece y las acciones de la pantalla a la derecha.
  */
 const props = withDefaults(defineProps<{
     id: string
@@ -24,7 +24,13 @@ const props = withDefaults(defineProps<{
     descripcion: undefined,
 })
 
-const ubicacion = computed(() => ubicacionDeRuta(route.path))
+/**
+ * Pantallas que ya pintan sus propias migas (con pasos propios): aquí no se repiten.
+ * `servicios/[id]/facturas-periodo` (Servicios › servicio › Emitir facturas de periodos).
+ */
+const MIGAS_PROPIAS = [/^\/servicios\/\d+\/facturas-periodo$/]
+
+const ubicacion = computed(() => (MIGAS_PROPIAS.some(patron => patron.test(route.path)) ? null : ubicacionDeRuta(route.path)))
 const esSeccion = computed(() => ubicacion.value?.seccion.ruta === route.path)
 const encabezado = computed(() => esSeccion.value || props.descripcion !== undefined)
 const descripcionVisible = computed(() => props.descripcion ?? (esSeccion.value ? ubicacion.value?.seccion.descripcion : undefined))
@@ -80,10 +86,6 @@ const migas = computed<BreadcrumbItem[]>(() => {
                         />
                         <SelectorEmpresa class="hidden sm:flex" />
                         <CajaAccesoDirecto />
-                        <slot
-                            v-if="!encabezado"
-                            name="acciones"
-                        />
                         <AvisosBoton />
                         <AyudaBoton
                             v-if="!encabezado"
@@ -138,13 +140,26 @@ const migas = computed<BreadcrumbItem[]>(() => {
                     <slot name="acciones" />
                 </div>
             </div>
-            <UBreadcrumb
-                v-else-if="ubicacion"
-                :items="migas"
-                class="hidden sm:flex"
-                :ui="{ link: 'text-xs', linkLeadingIcon: 'size-3.5' }"
-                data-prueba="migas"
-            />
+            <!-- Ficha o subpágina: migas a la izquierda y las acciones de la pantalla a la derecha (la
+                 barra superior queda para el título y lo global, así el título nunca se queda sin lugar). -->
+            <div
+                v-else-if="ubicacion || $slots.acciones"
+                class="flex flex-wrap items-center justify-between gap-2"
+            >
+                <UBreadcrumb
+                    v-if="ubicacion"
+                    :items="migas"
+                    class="hidden sm:flex"
+                    :ui="{ link: 'text-xs', linkLeadingIcon: 'size-3.5' }"
+                    data-prueba="migas"
+                />
+                <div
+                    v-if="$slots.acciones"
+                    class="ms-auto flex flex-wrap items-center gap-2"
+                >
+                    <slot name="acciones" />
+                </div>
+            </div>
             <slot />
         </template>
     </UDashboardPanel>
