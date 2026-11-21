@@ -691,6 +691,55 @@ export interface CatalogoEventos {
         campos: CampoClienteActualizado[]
     }
     /**
+     * Contrato Iris 0.9.0 §6.6 (A30): un ticket del cliente cambió de estado en Iris (webhook
+     * `ticket.estado_cambiado`). Para notify: con `a = resuelto` («revisa y confirma»,
+     * `puede_confirmar`) o `cerrado`, avisa al cliente. Nunca el cuerpo de un mensaje ni un motivo
+     * escrito por una persona. `ticket_id` es el id de Iris (texto).
+     */
+    'soporte.ticket_estado_cambiado': {
+        ticket_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        servicio_id: number | null
+        origen: string | null
+        de: string | null
+        a: string
+        puede_confirmar: boolean
+        webhook_id: string
+    }
+    /**
+     * Contrato Iris 0.9.0 §6.6 (A30): hay una respuesta en el ticket (webhook `ticket.respondido`).
+     * Para notify: «tienes una respuesta en tu ticket TK-…»; con `aviso_por_correo` no manda correo
+     * (Iris ya lo mandó); con `masivo` (falla general), un solo aviso por cliente.
+     */
+    'soporte.ticket_respondido': {
+        ticket_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        mensaje_id: string | null
+        autor_tipo: 'agente' | 'sistema'
+        masivo: boolean
+        aviso_por_correo: boolean
+        webhook_id: string
+    }
+    /**
+     * Contrato Iris 0.9.0 §6.6 y §11.7 (A31): una solicitud de servicio del cliente cambió de estado
+     * (webhook `solicitud_servicio.estado_cambiado`, `a` = `estado_cliente`). Para notify: avisa al cliente.
+     */
+    'soporte.solicitud_estado_cambiado': {
+        solicitud_id: string
+        numero: string | null
+        empresa_id: number | null
+        cliente_id: number
+        tipo: string | null
+        servicio_id: number | null
+        de: string | null
+        a: string
+        webhook_id: string
+    }
+    /**
      * Contrato Iris 0.10.0 §3.5 (A42) y 0.10.1 §3.8 (A46): se creó, editó o quitó un contacto del
      * cliente. `campos[]` solo nombres (`nombre`, `relacion`, `servicios`, `permisos`, `telefonos`,
      * `persona_cliente_id`); nunca números ni documentos. `persona_anterior_id` y `motivo:
@@ -1552,6 +1601,9 @@ export const EVENTOS = [
     'router.redes_cambiadas',
     'router.radius_cambiado',
     'cliente.actualizado',
+    'soporte.ticket_estado_cambiado',
+    'soporte.ticket_respondido',
+    'soporte.solicitud_estado_cambiado',
     'cliente.contactos_cambiados',
     'cliente.identidad_registrada',
     'servicio.titular_cambiado',
