@@ -113,6 +113,11 @@ export const PlantillaFacturacion = definirEsquema(
             mora_tipo: enumerado(['ninguna', 'fija', 'porcentaje']),
             mora_valor: Dinero,
             mora_recurrente: booleano,
+            rechazar_monto_distinto: {
+                ...booleano,
+                description:
+                    'Decisión del PM 14: true = un comprobante cuyo monto no coincide con lo que debe cubrir no se aprueba (422 monto_distinto); false (fábrica) = se aplica como abono y se informa cuánto falta',
+            },
             hora_corte: {
                 type: 'string',
                 pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',

@@ -33,6 +33,10 @@ const camposPlantilla = {
     mora_tipo: vine.enum(['ninguna', 'fija', 'porcentaje'] as const).optional(),
     mora_valor: dinero().optional(),
     mora_recurrente: vine.boolean().optional(),
+    rechazar_monto_distinto: vine.boolean().optional().meta({
+        description:
+            'Decisión del PM 14: no aprobar un comprobante cuyo monto no coincide con lo que debe cubrir (false de fábrica: se aplica como abono)',
+    }),
     hora_corte: vine
         .string()
         .trim()
@@ -70,6 +74,7 @@ export const editarPlantillaValidator = vine.compile(
         mora_tipo: vine.enum(['ninguna', 'fija', 'porcentaje'] as const).optional(),
         mora_valor: dinero().optional(),
         mora_recurrente: vine.boolean().optional(),
+        rechazar_monto_distinto: vine.boolean().optional(),
         hora_corte: vine
             .string()
             .trim()

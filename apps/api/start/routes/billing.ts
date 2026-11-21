@@ -29,6 +29,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
 import { exigirContactoIris } from '#billing/contacto_iris'
 import cobranza from '#start/routes/cobranza'
+import { ComprobanteAprobado } from '#billing/esquemas_cobro'
 
 import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
@@ -1071,8 +1072,8 @@ const comprobantes: Ruta[] = [
         antes: exigirIdempotenciaIris,
         descripcion:
             DESCRIPCION_IRIS_070 +
-            'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
-        respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: Comprobante },
+            'Registra el pago (como POST /pagos, en la misma transacción) con el método, la cuenta, el banco de origen, la referencia y el monto del comprobante; `facturas[]` opcional. Con menos dinero (decisión del PM 14) se abona a las facturas más viejas y `cobertura` dice cuánto falta; si la plantilla del servicio tiene rechazar_monto_distinto, un monto distinto de lo que se debe responde 422 monto_distinto (rechazarlo con esa causa). Responde el comprobante aprobado con `pago` (aplicaciones y `servicios[]` reactivados). 409 comprobante_revisado si ya se revisó; 409 referencia_duplicada si la referencia ya es un pago.',
+        respuesta: { status: 200, descripcion: 'Comprobante aprobado', esquema: ComprobanteAprobado },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             const dimensiones = await dimensionesDeComprobante(id)

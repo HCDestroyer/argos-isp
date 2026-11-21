@@ -13,6 +13,7 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { ESTADOS_BORRADOR } from '#ledger/borradores'
+import { Comprobante, Pago } from '#billing/esquemas'
 import { ORIGENES_GESTION, RESULTADOS_GESTION, TIPOS_GESTION } from '#billing/gestiones_cobro'
 
 /**
@@ -119,3 +120,30 @@ export const AsientoManual = definirEsquema(
         borrador: nulable(BorradorAsiento),
     }),
 )
+
+export const CoberturaComprobante = definirEsquema(
+    'CoberturaComprobante',
+    objeto({
+        deuda: { ...Dinero, description: 'Saldo de las facturas a las que se aplicó, antes del pago' },
+        aplicado: { ...Dinero, description: 'Lo que el pago cubrió de esas facturas' },
+        falta: {
+            ...Dinero,
+            description: 'Lo que esas facturas siguen debiendo (0.00 si quedaron cubiertas)',
+        },
+    }),
+)
+
+/** `POST /comprobantes/:id/aprobar`: el comprobante con su pago y la cobertura (decisión del PM 14). */
+export const ComprobanteAprobado = definirEsquema('ComprobanteAprobado', {
+    allOf: [
+        Comprobante,
+        objeto({
+            pago: { ...Pago, description: 'El pago registrado (como POST /pagos)' },
+            cobertura: {
+                ...CoberturaComprobante,
+                description:
+                    'Decisión del PM 14: con menos dinero se abona a las facturas más viejas y se informa cuánto falta',
+            },
+        }),
+    ],
+})
