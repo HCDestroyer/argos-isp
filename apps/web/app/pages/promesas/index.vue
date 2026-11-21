@@ -686,13 +686,21 @@ onMounted(async () => {
                                     </template>
 
                                     <template #estado-cell="{ row }">
-                                        <UBadge
-                                            :label="ESTADOS_PROMESA[row.original.estado].etiqueta"
-                                            :icon="ESTADOS_PROMESA[row.original.estado].icono"
-                                            :color="ESTADOS_PROMESA[row.original.estado].color"
-                                            variant="subtle"
-                                            size="sm"
-                                        />
+                                        <div class="flex max-w-56 flex-col gap-1">
+                                            <UBadge
+                                                :label="ESTADOS_PROMESA[row.original.estado].etiqueta"
+                                                :icon="ESTADOS_PROMESA[row.original.estado].icono"
+                                                :color="ESTADOS_PROMESA[row.original.estado].color"
+                                                variant="subtle"
+                                                size="sm"
+                                                class="self-start"
+                                            />
+                                            <EvaluacionPromesa
+                                                v-if="row.original.estado !== 'activa'"
+                                                :promesa="row.original"
+                                                compacta
+                                            />
+                                        </div>
                                     </template>
 
                                     <template #acciones-cell="{ row }">

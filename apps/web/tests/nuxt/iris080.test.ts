@@ -6,7 +6,7 @@ import { bd } from '~~/fixtures/bd'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { conectorIrisCanjeConfirmado, conectorIrisInicial, ORIGENES_IRIS_FIXTURES, sincronizacionIrisEjemplo } from '~~/fixtures/iris/datos'
 import { UApp } from '#components'
-import ComprobanteAprobarModal from '~/components/ComprobanteAprobarModal.vue'
+import ComprobanteRevision from '~/components/ComprobanteRevision.vue'
 import CuentaBancariaFormulario from '~/components/CuentaBancariaFormulario.vue'
 import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
 import PaginaIris from '~/pages/configuracion/integraciones/iris.vue'
@@ -104,10 +104,10 @@ describe('iris 0.8.0 · cuenta desactivada en llano', () => {
         const cuenta = bd.cuentasBancarias.find(c => c.id === comprobante.cuenta_bancaria_id)!
         cuenta.activa = false
         const vista = await mountSuspended(conApp(defineComponent({
-            render: () => h(ComprobanteAprobarModal, { comprobante, open: true }),
+            render: () => h(ComprobanteRevision, { comprobanteId: comprobante.id }),
         })))
-        await esperar(() => expect(enCuerpo('form')).not.toBeNull())
-        enCuerpo('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+        await esperar(() => expect(enCuerpo('[data-prueba="aprobar-comprobante"]')).not.toBeNull())
+        enCuerpo('[data-prueba="aprobar-comprobante"]')!.click()
         await esperar(() => expect(enCuerpo('[data-prueba="cuenta-inactiva"]')).not.toBeNull())
         expect(enCuerpo('[data-prueba="cuenta-inactiva"]')?.textContent).toContain('cuenta desactivada')
         expect(enCuerpo('[data-prueba="cuenta-inactiva"]')?.textContent).toContain('Configuración → Cuentas bancarias')

@@ -32,10 +32,13 @@ function campo(contenedor: Locator, prueba: string): Locator {
 test('plantilla: «Mismas reglas para IA y operador» atenúa IA, se guarda y conserva sus valores', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/plantillas')
+    // Rediseño: la plantilla se abre a la derecha; sus reglas de promesa en «Promesas y reconexión».
     const tabla = page.locator('[data-prueba="tabla-plantillas"]')
-    const fila = tabla.locator('tr').filter({ has: page.locator('[data-plantilla="1"]') })
-    await expect(fila).toContainText('Mensual día 1')
-    await expect(fila.locator('[data-prueba="plantilla-mismas-reglas"]')).toHaveCount(0)
+    await expect(tabla.locator('[data-plantilla="1"]')).toContainText('Mensual día 1')
+    await tabla.locator('[data-plantilla="1"]').getByRole('button').click()
+    const abierta = page.locator('[data-prueba="plantilla-abierta"]')
+    await abierta.getByRole('tab', { name: 'Promesas y reconexión' }).click()
+    await expect(abierta.locator('[data-prueba="plantilla-mismas-reglas"]')).toHaveCount(0)
 
     await page.locator('[data-prueba="editar-plantilla-1"]').click()
     const panel = page.getByRole('dialog', { name: 'Editar Mensual día 1' })
@@ -61,7 +64,7 @@ test('plantilla: «Mismas reglas para IA y operador» atenúa IA, se guarda y co
     await panel.locator('[data-prueba="plantilla-guardar"]').click()
     await expect(panel).toBeHidden()
     await expect(page.getByText('Mensual día 1 actualizada', { exact: true })).toBeVisible()
-    await expect(fila.locator('[data-prueba="plantilla-mismas-reglas"]').filter({ visible: true })).toHaveText('IA: mismas reglas que operador')
+    await expect(abierta.locator('[data-prueba="plantilla-mismas-reglas"]')).toHaveText('IA: mismas reglas que operador')
     await sinDesborde(page)
     await capturar(page, 'lista')
 

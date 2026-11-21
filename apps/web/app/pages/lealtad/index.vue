@@ -223,10 +223,19 @@ onMounted(() => {
             <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
                 <LealtadPestanas actual="programa">
                     <template
-                        v-if="programa && puede('lealtad.configurar')"
+                        v-if="programa"
                         #derecha
                     >
+                        <UBadge
+                            :label="programa.activo ? 'Activo' : 'Inactivo'"
+                            :icon="programa.activo ? 'i-lucide-circle-check' : 'i-lucide-circle-pause'"
+                            :color="programa.activo ? 'success' : 'neutral'"
+                            variant="subtle"
+                            :class="puede('lealtad.configurar') ? 'sr-only' : ''"
+                            data-prueba="estado-programa"
+                        />
                         <USwitch
+                            v-if="puede('lealtad.configurar')"
                             :model-value="programa.activo"
                             :label="`Programa «${programa.nombre}»`"
                             :loading="activando"
@@ -479,12 +488,8 @@ onMounted(() => {
                                         <dt class="text-muted">
                                             Diferimiento (NIIF 15)
                                         </dt>
-                                        <dd
-                                            class="text-end text-highlighted"
-                                            data-prueba="estado-programa"
-                                        >
+                                        <dd class="text-end text-highlighted">
                                             {{ programa.diferimiento ? `Sí · pasivo Q ${programa.valor_pasivo_punto} por punto` : 'No: solo indicador' }}
-                                            · {{ programa.activo ? 'Activo' : 'Inactivo' }}
                                         </dd>
                                     </div>
                                     <div class="flex justify-between gap-3 py-2">
