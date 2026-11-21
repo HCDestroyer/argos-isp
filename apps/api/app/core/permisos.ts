@@ -287,6 +287,9 @@ export const PERMISOS = {
     'inventario.configurar':
         'Configurar el inventario de la empresa (firma obligatoria al recibir traslados)',
     'inventario.configurar_ia': 'Configurar la IA que lee facturas de compra (proveedor, modelo y clave)',
+    // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
+    'inventario.sincronizar_cuadrilla':
+        'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
     'tipos_producto.crear': 'Crear tipos de producto',
     'tipos_producto.editar': 'Editar tipos de producto',
     'tipos_producto.desactivar': 'Desactivar tipos de producto',

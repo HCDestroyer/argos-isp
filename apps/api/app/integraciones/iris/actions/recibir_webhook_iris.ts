@@ -1,9 +1,17 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { envioDeClaveAviso } from '#notify/canales/whatsapp'
 import { aplicarAcuseIris } from '#notify/acuses_iris'
+import SincronizarCuadrilla from '#inventario/actions/sincronizar_cuadrilla'
 
 /** Eventos de Iris → Argos (contrato Iris 0.6.0 §6.6). */
-export const EVENTOS_DE_IRIS = ['aviso.entregado', 'aviso.fallido', 'contacto.baja'] as const
+export const EVENTOS_DE_IRIS = [
+    'aviso.entregado',
+    'aviso.fallido',
+    'contacto.baja',
+    // contrato 0.11.0 §3.9 (A47): membresía de la bodega de cuadrilla
+    'cuadrilla.creada',
+    'cuadrilla.actualizada',
+] as const
 
 const CANALES_CONTACTO = ['whatsapp', 'telegram', 'correo'] as const
 const ORIGENES_BAJA = ['cliente', 'agente'] as const
@@ -139,6 +147,14 @@ export default class RecibirWebhookIris extends DomainAction<
                 estado: r.procesado ? 'procesado' : 'ignorado',
                 resultado: r.resultado,
             }
+        } else if (input.evento === 'cuadrilla.creada' || input.evento === 'cuadrilla.actualizada') {
+            const r = await this.cuadrilla(t, input.payload)
+            enlace = { empresa_id: r.empresaId }
+            salida = {
+                duplicado: false,
+                estado: r.aplicado ? 'procesado' : 'ignorado',
+                resultado: r.resultado,
+            }
         } else {
             salida = { duplicado: false, estado: 'ignorado', resultado: 'evento_desconocido' }
         }
@@ -154,6 +170,46 @@ export default class RecibirWebhookIris extends DomainAction<
                 envio_id: enlace.envio_id ?? null,
             })
         return salida
+    }
+
+    /** `cuadrilla.*` (0.11.0 §3.9): la aplica el inventario (`inventario.sincronizar_cuadrilla`). */
+    private async cuadrilla(
+        t: Transaccion,
+        p: Record<string, unknown>,
+    ): Promise<{ aplicado: boolean; resultado: string; empresaId: number | null }> {
+        const empresaId = entero(p.empresa_id)
+        const version = entero(p.version)
+        const cuadrillaId = texto(p.cuadrilla_id) ?? entero(p.cuadrilla_id)?.toString() ?? null
+        if (!empresaId || !version || !cuadrillaId || !Array.isArray(p.miembros)) {
+            return { aplicado: false, resultado: 'payload_invalido', empresaId: null }
+        }
+        const r = await new SincronizarCuadrilla().execute(
+            {
+                cuadrilla_id: cuadrillaId,
+                empresa_id: empresaId,
+                version,
+                nombre: texto(p.nombre),
+                activa: typeof p.activa === 'boolean' ? p.activa : null,
+                miembros: (p.miembros as Array<Record<string, unknown>>)
+                    .filter((m) => m && typeof m === 'object')
+                    .map((m) => ({
+                        usuario_id: String(m.usuario_id ?? ''),
+                        id_externo:
+                            m.id_externo === null || m.id_externo === undefined ? null : String(m.id_externo),
+                    })),
+                jefe_usuario_id:
+                    p.jefe_usuario_id === null || p.jefe_usuario_id === undefined
+                        ? null
+                        : String(p.jefe_usuario_id),
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        return {
+            aplicado: r.aplicado,
+            resultado: r.aplicado ? 'cuadrilla_aplicada' : (r.motivo ?? 'ignorado'),
+            empresaId: r.aplicado ? empresaId : null,
+        }
     }
 
     private async baja(

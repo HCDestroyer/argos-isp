@@ -13,6 +13,7 @@ import {
     type MetodoRecepcion,
     type OrdenTrasladoDetalle,
 } from '#inventario/ordenes_traslado'
+import { esMiembroAhora, idIrisDelActor, jefeEn } from '#inventario/cuadrillas'
 import {
     ArchivoAdjunto,
     borrarArchivoInventario,
@@ -67,6 +68,9 @@ export interface EntradaRecibirTraslado {
     firma_ip?: string | null
     /** el actor tiene el permiso con alcance global (la pone la ruta) */
     registro_global?: boolean
+    /** `X-Iris-Actor` (de la cabecera) y si la petición es del usuario técnico Iris (las pone la ruta) */
+    iris_actor?: string | null
+    token_iris?: boolean
 }
 
 interface OrdenFila {
@@ -163,6 +167,8 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
                     `La orden ${orden.numero} va a la bodega de otro técnico: la recibe él o un usuario con alcance global`,
                 )
             }
+        } else if (destino.tipo === 'cuadrilla') {
+            recibidoPor = await this.jefeQueRecibe(t, input, destino.id, orden.numero, actor, global)
         } else {
             recibidoPor = input.recibido_por
                 ? await resolverTecnico(t, input.recibido_por, 'recibido_por')
@@ -517,6 +523,51 @@ export default class RecibirTraslado extends DomainAction<EntradaRecibirTraslado
             if (firmaRuta) await borrarArchivoInventario(firmaRuta)
             throw error
         }
+    }
+    /**
+     * Bodega de cuadrilla (A47 §3.9, «jefe al recibir»): recibe el jefe que la cuadrilla tenía en
+     * `recibido_en` según su historial, que además sigue siendo miembro al procesar; `recibido_por` y, desde
+     * Iris, `X-Iris-Actor` deben ser ese jefe. Si no (o la cuadrilla no tiene jefe: el traslado espera),
+     * 403 `solo_jefe_recibe`. Si el jefe cambió en camino, recibe el nuevo.
+     */
+    private async jefeQueRecibe(
+        t: Transaccion,
+        input: EntradaRecibirTraslado,
+        bodegaId: number,
+        numero: number,
+        actor: number | null,
+        global: boolean,
+    ): Promise<number> {
+        const soloJefe = (detalle: string) =>
+            new Problema(403, 'solo_jefe_recibe', 'Solo el jefe de la cuadrilla recibe', detalle, [
+                { field: 'recibido_por', message: detalle, rule: 'solo_jefe_recibe' },
+            ])
+        const instante = input.recibido_en ? new Date(input.recibido_en) : new Date()
+        const jefe = await jefeEn(t.trx, bodegaId, Number.isNaN(instante.getTime()) ? new Date() : instante)
+        if (!jefe) {
+            throw soloJefe(`La cuadrilla de la orden ${numero} no tenía jefe al recibir: el traslado espera`)
+        }
+        if (!(await esMiembroAhora(t.trx, bodegaId, jefe.usuario_id))) {
+            throw soloJefe(`El jefe que recibió la orden ${numero} ya no es miembro de la cuadrilla`)
+        }
+        if (input.recibido_por) {
+            const indicado = await resolverTecnico(t, input.recibido_por, 'recibido_por')
+            if (indicado !== jefe.usuario_id) {
+                throw soloJefe(`La orden ${numero} la recibe el jefe de la cuadrilla`)
+            }
+        } else if (input.token_iris) {
+            throw soloJefe('Indica en recibido_por al jefe de la cuadrilla')
+        }
+        if (input.token_iris) {
+            if (idIrisDelActor(input.iris_actor) !== jefe.iris_usuario_id) {
+                throw soloJefe('X-Iris-Actor debe ser el jefe de la cuadrilla')
+            }
+        } else if (actor !== jefe.usuario_id && !global) {
+            throw soloJefe(
+                `La orden ${numero} la recibe el jefe de la cuadrilla o un usuario con alcance global`,
+            )
+        }
+        return jefe.usuario_id
     }
 }
 

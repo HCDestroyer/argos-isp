@@ -20,7 +20,9 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 export const TIPOS_BODEGA = ['bodega', 'tecnico'] as const
 export type TipoBodega = (typeof TIPOS_BODEGA)[number]
 /** Tipos que se leen: además la bodega virtual «en tránsito» de las órdenes de traslado (fase D). */
-export const TIPOS_BODEGA_VISTA = ['bodega', 'tecnico', 'transito'] as const
+export const TIPOS_BODEGA_VISTA = ['bodega', 'tecnico', 'transito', 'cuadrilla'] as const
+/** Destinos de una orden de traslado: una bodega, un técnico o una cuadrilla (Iris 0.11.0 §3.9) */
+export const TIPOS_BODEGA_DESTINO = ['bodega', 'tecnico', 'cuadrilla'] as const
 export type TipoBodegaVista = (typeof TIPOS_BODEGA_VISTA)[number]
 
 export interface BodegaVista {
@@ -33,6 +35,10 @@ export interface BodegaVista {
     zona_id: number | null
     router_id: number | null
     activo: boolean
+    /** cuadrilla de Iris (bodega `cuadrilla`, contrato Iris 0.11.0 §3.9); null en las demás */
+    cuadrilla_id_iris: string | null
+    /** jefe actual de la cuadrilla (usuario de Argos); null sin jefe o si no es de cuadrilla */
+    jefe_id: number | null
     version: number
     created_at: Date
     updated_at: Date
@@ -52,6 +58,8 @@ function consulta(cliente: QueryClientContract) {
             'b.zona_id',
             'b.router_id',
             'b.activo',
+            'b.cuadrilla_id_iris',
+            'b.jefe_id',
             'b.version',
             'b.created_at',
             'b.updated_at',
@@ -68,6 +76,7 @@ function normalizar(fila: BodegaVista): BodegaVista {
         usuario_id: n(fila.usuario_id),
         zona_id: n(fila.zona_id),
         router_id: n(fila.router_id),
+        jefe_id: n(fila.jefe_id),
         version: Number(fila.version),
     }
 }

@@ -1334,6 +1334,8 @@ interface PayloadTraslado {
     bodega_destino_id: number
     /** técnico de la bodega destino; null si es una bodega */
     tecnico: { id_externo: string; correo: string } | null
+    /** cuadrilla de Iris de la bodega destino (contrato Iris 0.11.0 §3.9); null si no es de cuadrilla */
+    cuadrilla_id: string | null
     estado: 'en_transito' | 'recibida' | 'recibida_con_diferencias' | 'cancelada'
     lineas: Array<{ producto_id: number; cantidad: string; series: string[] }>
     enviado_en: string

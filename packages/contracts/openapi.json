@@ -6508,7 +6508,8 @@
               "enum": [
                 "bodega",
                 "tecnico",
-                "transito"
+                "transito",
+                "cuadrilla"
               ]
             }
           },
@@ -7096,6 +7097,79 @@
           }
         },
         "x-permiso": "bodegas.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bodegas/{id}/miembros": {
+      "get": {
+        "operationId": "bodegasMiembros",
+        "summary": "Miembros vigentes de una bodega de cuadrilla (aceptados y rechazados) y su jefe",
+        "description": "Contrato Iris 0.11.0 §3.9 (A47): la membresía llega de Iris (cuadrilla.creada / cuadrilla.actualizada). Un miembro con aceptado = false es un miembro_rechazado (motivo: sin_vinculo, usuario_inexistente, usuario_inactivo, fuera_de_la_empresa, no_es_tecnico). 422 si la bodega no es de cuadrilla.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Miembros de la cuadrilla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiembrosCuadrilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
         "x-implementado": true
       }
     },
@@ -31995,7 +32069,7 @@
       "post": {
         "operationId": "inventarioConsumir",
         "summary": "Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)",
-        "description": "Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
+        "description": "Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): con tecnico y sin bodega_id, cada línea sale primero de sus cuadrillas y después de la personal (409 sin_existencia con bodegas[]: solo las suyas y lo pedido); con bodega_id, solo su personal o una cuadrilla de la que es miembro en fecha (403 no_es_miembro, con fuera_de_membresia en errors[].rule si lo fue), antes de mirar existencias. Sobre una cuadrilla: tecnico por id_externo, X-Iris-Actor: usuario:<id> obligatoria (400 cabecera_iris_requerida) y el mismo miembro que el técnico (403 actor_no_coincide); el movimiento guarda actor_tecnico. Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
         "tags": [
           "inventario"
         ],
@@ -32204,9 +32278,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date",
-                    "description": "Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy. Desde Iris 0.12.0 también la hora del teléfono (RFC 3339), con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "origen_tipo": {
                     "anyOf": [
@@ -35439,7 +35521,7 @@
       "post": {
         "operationId": "inventarioRecibirTraslado",
         "summary": "Recibir una orden de traslado (firma digital, firma en papel o aceptación), con faltantes",
-        "description": "Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Emite inventario.traslado_recibido.",
+        "description": "Contrato Iris 0.5.0 §3.3. Solo en_transito: una orden ya recibida responde 409 traslado_ya_recibido (con la recepción guardada en recepcion), una cancelada 409 traslado_cancelado, una que no existe 404 traslado_no_encontrado. Recibe el técnico de la bodega destino o un usuario con alcance global en su nombre (recibido_por: { id_externo } o { correo }; otro técnico: 422 traslado_de_otro_tecnico); una bodega, quien pueda operarla. Métodos: firma_digital (firma { png_base64, sha256 }, en JSON; PNG hasta 200 KB y de 50×20 a 1000×400 px: 422 firma_invalida), firma_papel (solo un encargado con alcance global; el escaneo va después en POST …/documento) y aceptacion_sistema (sin firma, solo si la empresa no la exige). recibido_en (RFC 3339) no anterior al envío ni futuro (5 min de tolerancia). Faltantes por línea: cantidad_recibida y series_faltantes (o unidad_ids_faltantes): vuelven al origen al costo de la línea, sin asiento; la orden queda recibida_con_diferencias (422 lineas_invalidas). Bodega de cuadrilla (Iris 0.11.0 §3.9): la recibe el jefe que tenía la cuadrilla en recibido_en (según su historial) y que sigue siendo miembro; recibido_por y X-Iris-Actor deben ser ese jefe; si no, o sin jefe (el traslado espera), 403 solo_jefe_recibe. Emite inventario.traslado_recibido.",
         "tags": [
           "inventario"
         ],
@@ -68884,6 +68966,7 @@
                         "inventario.devolver_comodato",
                         "inventario.marcar_reparada",
                         "inventario.recibir_traslado",
+                        "inventario.sincronizar_cuadrilla",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -69285,6 +69368,7 @@
                         "inventario.devolver_comodato",
                         "inventario.marcar_reparada",
                         "inventario.recibir_traslado",
+                        "inventario.sincronizar_cuadrilla",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -78229,9 +78313,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date",
-                    "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad). Desde Iris 0.12.0 también la hora del teléfono, con recibido_en_iris"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "bodega_id": {
                     "type": [
@@ -78487,8 +78579,17 @@
                       "string",
                       "null"
                     ],
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
-                    "format": "date"
+                    "pattern": "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2}))$",
+                    "description": "Fecha de la devolución (por defecto hoy); desde Iris 0.12.0 también la hora del teléfono"
+                  },
+                  "recibido_en_iris": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})$",
+                    "format": "date-time",
+                    "description": "Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy"
                   },
                   "motivo": {
                     "type": [
@@ -82000,6 +82101,7 @@
                             "inventario.devolver_comodato",
                             "inventario.marcar_reparada",
                             "inventario.recibir_traslado",
+                            "inventario.sincronizar_cuadrilla",
                             "inventario.trasladar",
                             "inventario.ver",
                             "ip.resolver",
@@ -88675,9 +88777,10 @@
             "enum": [
               "bodega",
               "tecnico",
-              "transito"
+              "transito",
+              "cuadrilla"
             ],
-            "description": "bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)"
+            "description": "bodega, tecnico, cuadrilla (la compartida de una cuadrilla de Iris, 0.11.0 §3.9) o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)"
           },
           "usuario_id": {
             "type": [
@@ -88708,6 +88811,21 @@
           },
           "activo": {
             "type": "boolean"
+          },
+          "cuadrilla_id_iris": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cuadrilla de Iris (solo tipo cuadrilla)"
+          },
+          "jefe_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Jefe actual de la cuadrilla (usuario de Argos); null sin jefe"
           },
           "version": {
             "type": "integer",
@@ -94575,6 +94693,29 @@
             ],
             "minimum": 1,
             "description": "Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)"
+          },
+          "actor_tecnico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)"
+          },
+          "actor_tecnico_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario de Argos del técnico de la operación de Iris"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hora del teléfono (fecha de Iris 0.12.0)"
           },
           "movimientos": {
             "type": "array",
@@ -101234,7 +101375,8 @@
             "enum": [
               "bodega",
               "tecnico",
-              "transito"
+              "transito",
+              "cuadrilla"
             ],
             "description": "La bodega transito (fase D) solo sale con ?bodega_id= o ?incluir_transito=true"
           },
@@ -105218,12 +105360,177 @@
             },
             "description": "Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id="
           },
+          "cuadrilla": {
+            "type": "boolean",
+            "description": "La bodega de arriba es de cuadrilla"
+          },
+          "jefe": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id_externo",
+              "nombre"
+            ],
+            "properties": {
+              "id_externo": {
+                "type": "string"
+              },
+              "nombre": {
+                "type": "string"
+              }
+            },
+            "description": "Jefe de la cuadrilla (null sin jefe o si no es de cuadrilla)"
+          },
           "bodegas": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Bodega"
+              "type": "object",
+              "required": [
+                "cuadrilla",
+                "jefe"
+              ],
+              "properties": {
+                "bodega": {
+                  "$ref": "#/components/schemas/Bodega"
+                },
+                "cuadrilla": {
+                  "type": "boolean"
+                },
+                "jefe": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "id_externo",
+                    "nombre"
+                  ],
+                  "properties": {
+                    "id_externo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "existencias": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExistenciaInventario"
+                  }
+                },
+                "unidades": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnidadInventario"
+                  }
+                },
+                "traslados_pendientes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrdenTraslado"
+                  }
+                },
+                "kardex": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MovimientoInventario"
+                  }
+                },
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                }
+              }
             },
-            "description": "Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)"
+            "description": "Con empresa (Iris 0.11.0 §3.9): primero las cuadrillas de las que es miembro y después la personal, cada una con su contenido. Sin empresa y con bodegas en varias empresas: una Bodega por empresa (con cuadrilla y jefe) y nada más"
+          }
+        }
+      },
+      "MiembrosCuadrilla": {
+        "type": "object",
+        "required": [
+          "bodega_id",
+          "cuadrilla_id_iris",
+          "version",
+          "jefe_id",
+          "miembros"
+        ],
+        "properties": {
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuadrilla_id_iris": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "jefe_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "miembros": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "iris_usuario_id",
+                "usuario_id",
+                "nombre",
+                "aceptado",
+                "motivo",
+                "desde"
+              ],
+              "properties": {
+                "iris_usuario_id": {
+                  "type": "string"
+                },
+                "usuario_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "aceptado": {
+                  "type": "boolean"
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "desde": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
@@ -105903,6 +106210,29 @@
             ],
             "minimum": 1,
             "description": "Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)"
+          },
+          "actor_tecnico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)"
+          },
+          "actor_tecnico_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Usuario de Argos del técnico de la operación de Iris"
+          },
+          "ocurrido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hora del teléfono (fecha de Iris 0.12.0)"
           }
         }
       },
@@ -106369,6 +106699,7 @@
           "inventario.devolver_comodato",
           "inventario.marcar_reparada",
           "inventario.recibir_traslado",
+          "inventario.sincronizar_cuadrilla",
           "inventario.trasladar",
           "inventario.ver",
           "ip.resolver",
@@ -106662,6 +106993,7 @@
           "Recibir de vuelta un equipo en comodato (baja del activo sin resultado)",
           "Devolver a disponible una unidad en reparación",
           "Recibir una orden de traslado (firma digital, firma en papel o aceptación), marcando faltantes",
+          "Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)",
           "Trasladar existencias entre bodegas o técnicos",
           "Ver productos, bodegas, existencias y el kardex",
           "Resolver una IP a su servicio",
@@ -107347,7 +107679,8 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico"
+              "tecnico",
+              "cuadrilla"
             ]
           },
           "usuario_destino_id": {
@@ -107594,7 +107927,8 @@
             "type": "string",
             "enum": [
               "bodega",
-              "tecnico"
+              "tecnico",
+              "cuadrilla"
             ]
           },
           "usuario_destino_id": {
@@ -121432,6 +121766,7 @@
               "inventario.devolver_comodato",
               "inventario.marcar_reparada",
               "inventario.recibir_traslado",
+              "inventario.sincronizar_cuadrilla",
               "inventario.trasladar",
               "inventario.ver",
               "ip.resolver",

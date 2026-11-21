@@ -15,7 +15,7 @@ import {
 } from '#shared/openapi/esquemas'
 import { SEGUIMIENTOS } from '#inventario/productos'
 import { MODALIDADES } from '#inventario/tipos_producto'
-import { TIPOS_BODEGA, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
+import { TIPOS_BODEGA_DESTINO, TIPOS_BODEGA_VISTA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
@@ -72,21 +72,49 @@ export const Producto = definirEsquema(
 
 export const Bodega = definirEsquema(
     'Bodega',
-    objeto({
-        id,
-        empresa_id: id,
-        nombre: texto,
-        tipo: {
-            ...enumerado(TIPOS_BODEGA_VISTA),
-            description:
-                'bodega, tecnico o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            nombre: texto,
+            tipo: {
+                ...enumerado(TIPOS_BODEGA_VISTA),
+                description:
+                    'bodega, tecnico, cuadrilla (la compartida de una cuadrilla de Iris, 0.11.0 §3.9) o transito (la bodega virtual de las órdenes de traslado; solo sale con ?tipo=transito)',
+            },
+            usuario_id: nulable(id),
+            usuario_nombre: nulable(texto),
+            zona_id: nulable(id),
+            router_id: nulable(id),
+            activo: booleano,
+            cuadrilla_id_iris: { ...nulable(texto), description: 'Cuadrilla de Iris (solo tipo cuadrilla)' },
+            jefe_id: {
+                ...nulable(id),
+                description: 'Jefe actual de la cuadrilla (usuario de Argos); null sin jefe',
+            },
+            ...auditable,
         },
-        usuario_id: nulable(id),
-        usuario_nombre: nulable(texto),
-        zona_id: nulable(id),
-        router_id: nulable(id),
-        activo: booleano,
-        ...auditable,
+        ['cuadrilla_id_iris', 'jefe_id'],
+    ),
+)
+
+export const MiembrosCuadrilla = definirEsquema(
+    'MiembrosCuadrilla',
+    objeto({
+        bodega_id: id,
+        cuadrilla_id_iris: nulable(texto),
+        version: entero,
+        jefe_id: nulable(id),
+        miembros: lista(
+            objeto({
+                iris_usuario_id: texto,
+                usuario_id: nulable(id),
+                nombre: nulable(texto),
+                aceptado: booleano,
+                motivo: nulable(texto),
+                desde: instante,
+            }),
+        ),
     }),
 )
 
@@ -167,12 +195,27 @@ const camposMovimiento = {
         description:
             'Solo en la respuesta de POST /inventario/consumos: la factura del cargo único (modalidad consumible_cobro)',
     },
+    actor_tecnico: {
+        ...nulable(texto),
+        description: 'Iris 0.11.0 §3.9: X-Iris-Actor del técnico que usó el material (nunca del cuerpo)',
+    },
+    actor_tecnico_id: { ...nulable(id), description: 'Usuario de Argos del técnico de la operación de Iris' },
+    ocurrido_en: { ...nulable(instante), description: 'Hora del teléfono (fecha de Iris 0.12.0)' },
 }
+
+const OPCIONALES_MOVIMIENTO = [
+    'origen_externo_tipo',
+    'origen_externo_id',
+    'factura_id',
+    'actor_tecnico',
+    'actor_tecnico_id',
+    'ocurrido_en',
+]
 
 export const MovimientoInventario = definirEsquema(
     'MovimientoInventario',
     // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
-    objeto(camposMovimiento, ['origen_externo_tipo', 'origen_externo_id', 'factura_id']),
+    objeto(camposMovimiento, OPCIONALES_MOVIMIENTO),
 )
 
 /** Respuesta de `POST /inventario/consumos` (fase D): el movimiento de la primera línea más el lote. */
@@ -191,7 +234,7 @@ export const ConsumoInventario = definirEsquema(
                     'Cargos al cliente de las líneas consumible_cobro (id = la factura del cargo único)',
             },
         },
-        ['origen_externo_tipo', 'origen_externo_id', 'factura_id', 'movimientos', 'cargos'],
+        [...OPCIONALES_MOVIMIENTO, 'movimientos', 'cargos'],
     ),
 )
 
@@ -374,7 +417,7 @@ const camposOrdenTraslado = {
     bodega_origen_nombre: texto,
     bodega_destino_id: id,
     bodega_destino_nombre: texto,
-    bodega_destino_tipo: enumerado(TIPOS_BODEGA),
+    bodega_destino_tipo: enumerado(TIPOS_BODEGA_DESTINO),
     usuario_destino_id: {
         ...nulable(id),
         description: 'Técnico de la bodega destino; null si es una bodega',
@@ -609,13 +652,52 @@ export const MiBodega = definirEsquema(
                 description:
                     'Los últimos 50 movimientos (el más reciente primero); el resto con GET /inventario/movimientos?bodega_id=',
             },
+            cuadrilla: { ...booleano, description: 'La bodega de arriba es de cuadrilla' },
+            jefe: {
+                ...nulable(objeto({ id_externo: texto, nombre: texto })),
+                description: 'Jefe de la cuadrilla (null sin jefe o si no es de cuadrilla)',
+            },
             bodegas: {
-                ...lista(Bodega),
+                ...lista(
+                    objeto(
+                        {
+                            bodega: Bodega,
+                            cuadrilla: booleano,
+                            jefe: nulable(objeto({ id_externo: texto, nombre: texto })),
+                            existencias: lista(Existencia),
+                            unidades: lista(Unidad),
+                            traslados_pendientes: lista(OrdenTraslado),
+                            kardex: lista(MovimientoInventario),
+                            id: id,
+                            empresa_id: id,
+                            nombre: texto,
+                        },
+                        [
+                            'bodega',
+                            'existencias',
+                            'unidades',
+                            'traslados_pendientes',
+                            'kardex',
+                            'id',
+                            'empresa_id',
+                            'nombre',
+                        ],
+                    ),
+                ),
                 description:
-                    'Solo sin empresa y con bodegas en varias empresas: una por empresa (y nada más)',
+                    'Con empresa (Iris 0.11.0 §3.9): primero las cuadrillas de las que es miembro y después la personal, cada una con su contenido. Sin empresa y con bodegas en varias empresas: una Bodega por empresa (con cuadrilla y jefe) y nada más',
             },
         },
-        ['bodega', 'existencias', 'unidades', 'traslados_pendientes', 'kardex', 'bodegas'],
+        [
+            'bodega',
+            'existencias',
+            'unidades',
+            'traslados_pendientes',
+            'kardex',
+            'bodegas',
+            'cuadrilla',
+            'jefe',
+        ],
     ),
 )
 

@@ -61,6 +61,32 @@ export const tecnicoExterno = () =>
         }),
     })
 
+const RFC3339 = String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})`
+
+/** Instante RFC 3339 (como texto). */
+export const instanteTexto = () =>
+    vine
+        .string()
+        .trim()
+        .regex(new RegExp(`^${RFC3339}$`))
+        .meta({ format: 'date-time' })
+
+/** Fecha de día (`YYYY-MM-DD`) o, desde Iris 0.12.0, la hora del teléfono (RFC 3339). */
+export const fechaOInstante = () =>
+    vine
+        .string()
+        .trim()
+        .regex(new RegExp(`^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|${RFC3339})$`))
+
+/** Campos de Iris 0.12.0 (§3.10): la hora del teléfono y la del servidor de Iris. */
+export const reglasFechaIris = (descripcion: string) => ({
+    fecha: fechaOInstante().nullable().optional().meta({ description: descripcion }),
+    recibido_en_iris: instanteTexto().nullable().optional().meta({
+        description:
+            'Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote. Con ella, `fecha` es la hora del teléfono y debe cumplir recibido_en_iris − 72 h ≤ fecha ≤ recibido_en_iris + 5 min (422 rule `ventana`); la membresía de una cuadrilla se evalúa en `fecha` y el kardex lleva la fecha de hoy',
+    }),
+})
+
 /** Unidad nueva de un producto de serie: serie o MAC (al menos una). */
 const unidadNueva = () =>
     vine.object({
@@ -318,10 +344,9 @@ const datosConsumo = {
             'Instalación o reparación en la que se usó (misma empresa); obligatorio para cobrar o prestar en comodato',
     }),
     motivo: texto(500).nullable().optional(),
-    fecha: fechaIso().nullable().optional().meta({
-        description:
-            'Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy',
-    }),
+    ...reglasFechaIris(
+        'Fecha del consumo a gasto (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después. Cobros y comodatos van con la de hoy. Desde Iris 0.12.0 también la hora del teléfono (RFC 3339), con recibido_en_iris',
+    ),
     ...reglasOrigenExterno(),
 }
 
@@ -429,10 +454,9 @@ export const asignarComodatoValidator = vine.compile(
             description:
                 'Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id`',
         }),
-        fecha: fechaIso().nullable().optional().meta({
-            description:
-                'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)',
-        }),
+        ...reglasFechaIris(
+            'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad). Desde Iris 0.12.0 también la hora del teléfono, con recibido_en_iris',
+        ),
         bodega_id: idEntidad().nullable().optional().meta({
             description: 'Fase D: la bodega de la que debe salir (409 unidad_en_otra_bodega si está en otra)',
         }),
@@ -454,7 +478,9 @@ export const devolverComodatoValidator = vine.compile(
         }),
         condicion: vine.enum(CONDICIONES).nullable().optional().meta({ description: 'Por defecto usado' }),
         en_reparacion: vine.boolean().nullable().optional(),
-        fecha: fechaIso().nullable().optional(),
+        ...reglasFechaIris(
+            'Fecha de la devolución (por defecto hoy); desde Iris 0.12.0 también la hora del teléfono',
+        ),
         motivo: texto(500).nullable().optional(),
         ...reglasOrigenExterno(),
     }),

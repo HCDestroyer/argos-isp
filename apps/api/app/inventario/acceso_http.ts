@@ -34,3 +34,11 @@ export async function exigirPermiso(ctx: HttpContext, permiso: Permiso): Promise
         throw new Prohibido(`Esta operación necesita además el permiso ${permiso}`)
     }
 }
+
+/**
+ * `X-Iris-Actor` de la petición (contrato Iris 0.11.0 §3.9: quién usó el material sale de la cabecera,
+ * nunca del cuerpo). La validan las acciones sobre una bodega de cuadrilla; null si no viene.
+ */
+export function irisActorDe(ctx: HttpContext): string | null {
+    return ctx.request.header('X-Iris-Actor')?.trim() || null
+}

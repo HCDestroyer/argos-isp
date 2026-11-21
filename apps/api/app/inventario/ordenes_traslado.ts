@@ -402,8 +402,10 @@ export async function payloadTraslado(cliente: QueryClientContract, ordenId: num
             'o.enviado_en',
             'u.id as usuario_id',
             'u.email',
+            'b.cuadrilla_id_iris',
         )
         .firstOrFail()) as {
+        cuadrilla_id_iris: string | null
         id: number
         empresa_id: number
         numero: number
@@ -420,6 +422,7 @@ export async function payloadTraslado(cliente: QueryClientContract, ordenId: num
         numero: Number(o.numero),
         bodega_destino_id: Number(o.bodega_destino_id),
         tecnico: o.usuario_id ? { id_externo: String(o.usuario_id), correo: String(o.email) } : null,
+        cuadrilla_id: o.cuadrilla_id_iris ?? null,
         estado: o.estado,
         lineas: lineas.map((l) => ({
             producto_id: l.producto_id,

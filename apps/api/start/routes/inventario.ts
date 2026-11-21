@@ -19,6 +19,7 @@ import {
     ConteoInventario,
     ConteoInventarioDetalle,
     InventarioValorizado,
+    MiembrosCuadrilla,
     EquipoServicio,
     Existencia,
     MovimientoInventario,
@@ -37,9 +38,10 @@ import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
 import { alcanceGlobal, listarBodegas, verBodega } from '#inventario/bodegas'
-import { Prohibido } from '#shared/errores'
+import { Prohibido, ValidacionFallida } from '#shared/errores'
+import { miembrosDeCuadrilla } from '#inventario/cuadrillas'
 import { exigirPermiso } from '#inventario/acceso_http'
-import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
+import { accesoBodegas, exigirBodega, irisActorDe } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
 import CrearProductosLote from '#inventario/actions/crear_productos_lote'
@@ -201,6 +203,42 @@ const bodegas: Ruta[] = [
         },
     }),
     definirRuta({
+        metodo: 'get',
+        ruta: '/bodegas/:id/miembros',
+        operacion: 'bodegasMiembros',
+        resumen: 'Miembros vigentes de una bodega de cuadrilla (aceptados y rechazados) y su jefe',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        descripcion:
+            'Contrato Iris 0.11.0 §3.9 (A47): la membresía llega de Iris (cuadrilla.creada / cuadrilla.actualizada). Un miembro con aceptado = false es un miembro_rechazado (motivo: sin_vinculo, usuario_inexistente, usuario_inactivo, fuera_de_la_empresa, no_es_tecnico). 422 si la bodega no es de cuadrilla.',
+        respuesta: { status: 200, descripcion: 'Miembros de la cuadrilla', esquema: MiembrosCuadrilla },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirBodega(ctx, id)
+            const bodega = await verBodega(id)
+            if (bodega.tipo !== 'cuadrilla') {
+                throw new ValidacionFallida([
+                    { field: 'id', message: 'La bodega no es de cuadrilla', rule: 'no_es_cuadrilla' },
+                ])
+            }
+            const miembros = await miembrosDeCuadrilla(id)
+            return {
+                bodega_id: id,
+                cuadrilla_id_iris: bodega.cuadrilla_id_iris,
+                version: bodega.version,
+                jefe_id: bodega.jefe_id,
+                miembros: miembros.map((m) => ({
+                    iris_usuario_id: m.iris_usuario_id,
+                    usuario_id: m.usuario_id === null ? null : Number(m.usuario_id),
+                    nombre: m.nombre,
+                    aceptado: m.aceptado,
+                    motivo: m.motivo,
+                    desde: m.desde,
+                })),
+            }
+        },
+    }),
+    definirRuta({
         metodo: 'post',
         ruta: '/bodegas',
         operacion: 'bodegasCrear',
@@ -306,11 +344,14 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.consumir',
         cuerpo: v.consumoValidator,
         idempotente: true,
-        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
+        descripcion: `Una línea (producto_id) o varias (lineas[]), todo o nada. Cada línea aplica la modalidad de su producto (fase D): consumible_gasto (cuenta_consumo / 1.1.14), consumible_cobro (un cargo único al cliente del servicio por las líneas cobradas, con la venta del kardex 5.6.01 / 1.1.14, el origen de la orden y cargos[] en la respuesta; sin servicio 422 cobro_sin_cliente; precio de la línea o precio_venta, concepto de la línea o concepto_cargo_id: 422 precio_requerido, concepto_requerido); comodato: 422 producto_es_comodato (va por POST /servicios/:id/equipos). bodega_id, o tecnico (solo con alcance global, p. ej. Iris): la bodega del técnico en la empresa del servicio o la activa (422 tecnico_no_encontrado, tecnico_ambiguo, tecnico_sin_bodega, empresa_requerida). Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): con tecnico y sin bodega_id, cada línea sale primero de sus cuadrillas y después de la personal (409 sin_existencia con bodegas[]: solo las suyas y lo pedido); con bodega_id, solo su personal o una cuadrilla de la que es miembro en fecha (403 no_es_miembro, con fuera_de_membresia en errors[].rule si lo fue), antes de mirar existencias. Sobre una cuadrilla: tecnico por id_externo, X-Iris-Actor: usuario:<id> obligatoria (400 cabecera_iris_requerida) y el mismo miembro que el técnico (403 actor_no_coincide); el movimiento guarda actor_tecnico. Responde el movimiento de la primera línea más movimientos[], cargos[] y factura_id. ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
         respuesta: { status: 201, descripcion: 'Consumo', esquema: ConsumoInventario },
         handler: async (ctx, { cuerpo }) => {
             await exigirBodegaDeConsumo(ctx, cuerpo)
-            return new ConsumirInventario().execute(cuerpo, ctx.contextoAccion())
+            return new ConsumirInventario().execute(
+                { ...cuerpo, iris_actor: irisActorDe(ctx) },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({
@@ -504,6 +545,8 @@ const comodato: Ruta[] = [
                     servicio_id: id,
                     origen_tipo: cuerpo.origen_tipo,
                     origen_id: cuerpo.origen_id,
+                    recibido_en_iris: cuerpo.recibido_en_iris,
+                    iris_actor: irisActorDe(ctx),
                 },
                 ctx.contextoAccion(),
             )
@@ -529,7 +572,12 @@ const comodato: Ruta[] = [
                 throw new Prohibido('Solo un usuario con alcance global indica la bodega por el técnico')
             }
             return new DevolverComodato().execute(
-                { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
+                {
+                    ...cuerpo,
+                    servicio_id: id,
+                    unidad_id: Number(params.unidadId),
+                    iris_actor: irisActorDe(ctx),
+                },
                 ctx.contextoAccion(),
             )
         },

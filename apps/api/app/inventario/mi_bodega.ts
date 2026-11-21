@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import { verBodega, type AccesoBodegas, type BodegaVista } from '#inventario/bodegas'
+import { verBodega, type AccesoBodegas } from '#inventario/bodegas'
+import { cuadrillasDelTecnico } from '#inventario/cuadrillas'
 import { listarExistencias, verMovimiento, type MovimientoVista } from '#inventario/kardex'
 import { listarUnidades } from '#inventario/unidades'
 import { listarOrdenesTraslado } from '#inventario/ordenes_traslado'
@@ -22,6 +23,9 @@ import {
  * - Empresa: `empresa_id` o la activa (`X-Empresa-Id`). Sin ninguna y con bodegas en varias empresas
  *   responde `{ bodegas: [...] }` (una por empresa) para que se elija.
  * - Sin bodega: 404 `tecnico_sin_bodega`.
+ * - Bodega de cuadrilla (Iris 0.11.0 §3.9): con empresa, `bodegas[]` trae primero las cuadrillas de las
+ *   que es miembro (`cuadrilla: true`, con su `jefe { id_externo, nombre }` o null) y después la personal,
+ *   cada una con su contenido; arriba queda la personal (o la primera cuadrilla si no tiene personal).
  */
 
 export interface ConsultaMiBodega {
@@ -73,25 +77,41 @@ export async function miBodega(
         usuarioId = await resolverTecnico({ trx: cliente }, tecnico)
     }
     const empresaId = consulta.empresa_id ?? empresaActiva ?? null
-    let bodegaId: number
     if (empresaId) {
-        bodegaId = await bodegaDelTecnico(cliente, usuarioId, empresaId, 'tecnico', 404)
-    } else {
-        const bodegas = await bodegasDelUsuario(cliente, usuarioId, empresas)
-        if (bodegas.length === 0) {
-            throw errorTecnico(
-                404,
-                'tecnico_sin_bodega',
-                `El usuario ${usuarioId} no tiene bodega de técnico activa`,
-            )
-        }
-        if (bodegas.length > 1) {
-            const vistas: BodegaVista[] = []
-            for (const b of bodegas) vistas.push(await verBodega(b.id))
-            return { bodegas: vistas }
-        }
-        bodegaId = bodegas[0]!.id
+        // A47 (Iris 0.11.0 §3.9): primero sus cuadrillas en esa empresa, después la personal
+        const cuadrillas = await cuadrillasDelTecnico(cliente, usuarioId, empresaId)
+        const [personal] = await bodegasDelUsuario(cliente, usuarioId, [empresaId])
+        const ids = [...cuadrillas, ...(personal ? [personal.id] : [])]
+        if (ids.length === 0) await bodegaDelTecnico(cliente, usuarioId, empresaId, 'tecnico', 404)
+        const bodegas = []
+        for (const id of ids) bodegas.push(await contenidoDeBodega(cliente, id, empresas, acceso))
+        const principal = bodegas.find((b) => b.bodega.id === personal?.id) ?? bodegas[0]!
+        return { ...principal, bodegas }
     }
+    const bodegas = await bodegasDelUsuario(cliente, usuarioId, empresas)
+    if (bodegas.length === 0) {
+        throw errorTecnico(
+            404,
+            'tecnico_sin_bodega',
+            `El usuario ${usuarioId} no tiene bodega de técnico activa`,
+        )
+    }
+    if (bodegas.length > 1) {
+        const vistas = []
+        for (const b of bodegas) vistas.push({ ...(await verBodega(b.id)), cuadrilla: false, jefe: null })
+        return { bodegas: vistas }
+    }
+    const unica = await contenidoDeBodega(cliente, bodegas[0]!.id, empresas, acceso)
+    return { ...unica, bodegas: [unica] }
+}
+
+/** Una bodega del técnico con todo lo suyo (y, si es de cuadrilla, su jefe). */
+async function contenidoDeBodega(
+    cliente: QueryClientContract,
+    bodegaId: number,
+    empresas: number[] | null,
+    acceso: AccesoBodegas,
+) {
     const bodega = await verBodega(bodegaId)
     const [existencias, unidades, pendientes, kardex] = await Promise.all([
         todas((cursor) => listarExistencias({ bodega_id: bodegaId, limit: 100, cursor }, empresas, acceso)),
@@ -105,8 +125,16 @@ export async function miBodega(
         ),
         ultimosMovimientos(cliente, bodegaId, 50),
     ])
+    const esCuadrilla = bodega.tipo === 'cuadrilla'
+    let jefe: { id_externo: string; nombre: string } | null = null
+    if (esCuadrilla && bodega.jefe_id !== null) {
+        const fila = await cliente.from('core.usuarios').where('id', bodega.jefe_id).select('nombre').first()
+        jefe = { id_externo: String(bodega.jefe_id), nombre: String(fila?.nombre ?? '') }
+    }
     return {
         bodega,
+        cuadrilla: esCuadrilla,
+        jefe,
         existencias,
         unidades,
         traslados_pendientes: pendientes.filter((o) => o.bodega_destino_id === bodegaId),
