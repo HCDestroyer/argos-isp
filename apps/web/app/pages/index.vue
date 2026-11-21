@@ -23,7 +23,40 @@ const saludo = computed(() => {
     const nombre = usuario.value?.nombre.split(/\s+/)[0]
     return nombre ? `${parte}, ${nombre}` : parte
 })
-const verTablero = computed(() => puede('reportes.ver'))
+/**
+ * Inicio por rol (decisión 2 del PM): dueño y admin ven el panel financiero; los demás, «Día a
+ * día» (lo que tienen que atender hoy). El ajuste por rol y por usuario llega con la API de A3
+ * (`agente/a3-reportes-pm`, `.claude/integration/a4.md`): mientras tanto se decide por el rol.
+ */
+const ROLES_PANEL_FINANCIERO = ['admin', 'dueno']
+const panelFinanciero = computed(() => (usuario.value?.roles ?? []).some(rol => ROLES_PANEL_FINANCIERO.includes(rol)))
+const verTablero = computed(() => puede('reportes.ver') && panelFinanciero.value)
+
+/* «Día a día»: comprobantes por revisar, promesas por aprobar y las que vencen hoy (reales, hasta 200). */
+const diaPromesas = shallowRef<{ porAprobar: string, vencenHoy: string } | null>(null)
+const problemaDia = ref<Problem | null>(null)
+
+async function cargarDia() {
+    if (panelFinanciero.value || !puede('promesas.ver')) {
+        return
+    }
+    diaPromesas.value = null
+    problemaDia.value = null
+    const [pendientes, activas] = await Promise.all([
+        usePromesas().listar({ estado: 'pendiente_aprobacion', limit: 200 }),
+        usePromesas().listar({ estado: 'activa', limit: 200 }),
+    ])
+    if (!pendientes.ok || !activas.ok) {
+        problemaDia.value = !pendientes.ok ? pendientes.problema : !activas.ok ? activas.problema : null
+        return
+    }
+    const hoyGt = hoyGuatemala()
+    const vencen = activas.data.data.filter(p => fechaGuatemala(p.vence_en) === hoyGt).length
+    diaPromesas.value = {
+        porAprobar: pendientes.data.nextCursor ? '200+' : String(pendientes.data.data.length),
+        vencenHoy: activas.data.nextCursor ? `${vencen}+` : String(vencen),
+    }
+}
 
 const resumen = shallowRef<ResumenDashboard | null>(null)
 const problema = ref<Problem | null>(null)
@@ -99,6 +132,7 @@ const rapidos = computed(() => [
 
 async function cargar() {
     void cargarPagos()
+    void cargarDia()
     if (!verTablero.value) {
         return
     }
@@ -196,6 +230,56 @@ onMounted(cargar)
                     </div>
                 </div>
             </section>
+
+            <!-- Día a día (todos menos dueño y admin). -->
+            <div
+                v-if="!panelFinanciero"
+                class="grid grid-cols-2 gap-3 xl:grid-cols-4"
+                data-prueba="inicio-dia-a-dia"
+            >
+                <ULink
+                    v-if="puede('comprobantes.ver')"
+                    to="/comprobantes"
+                    class="block"
+                >
+                    <TarjetaDato
+                        etiqueta="Comprobantes por revisar"
+                        icono="i-lucide-file-check-2"
+                        tono="tono-aviso"
+                        :valor="useComprobantes().contador.value === null ? null : String(useComprobantes().contador.value)"
+                        detalle="Foto, datos y decisión en una pantalla"
+                    />
+                </ULink>
+                <ULink
+                    v-if="puede('promesas.ver')"
+                    to="/promesas?pestana=por_aprobar"
+                    class="block"
+                >
+                    <TarjetaDato
+                        etiqueta="Promesas por aprobar"
+                        icono="i-lucide-hand"
+                        :valor="diaPromesas?.porAprobar ?? null"
+                        detalle="Fuera de política"
+                        :problema="problemaDia"
+                        @reintentar="cargarDia"
+                    />
+                </ULink>
+                <ULink
+                    v-if="puede('promesas.ver')"
+                    to="/promesas?pestana=por_vencer"
+                    class="block"
+                >
+                    <TarjetaDato
+                        etiqueta="Promesas que vencen hoy"
+                        icono="i-lucide-clock"
+                        tono="tono-error"
+                        :valor="diaPromesas?.vencenHoy ?? null"
+                        detalle="Se cortan a la hora de corte si no pagan"
+                        :problema="problemaDia"
+                        @reintentar="cargarDia"
+                    />
+                </ULink>
+            </div>
 
             <template v-if="verTablero">
                 <ProblemaAlerta

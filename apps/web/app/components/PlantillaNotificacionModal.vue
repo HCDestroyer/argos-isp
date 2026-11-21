@@ -13,11 +13,15 @@ import * as z from 'zod'
  * WhatsApp (contrato Iris 0.6.0 §6.3): el cuerpo es el **código** de la plantilla de Iris (Iris
  * tiene el texto y la aprobación de Meta); no hay editor de texto libre, solo «Activa».
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     plantilla: PlantillaNotificacion
     /** Evento del catálogo (`GET /notificaciones/eventos`); `null` si no se pudo leer. */
     evento: EventoNotificacion | null
-}>()
+    /** Solo vista previa: las de WhatsApp se editan en Iris (decisión 26 del PM). */
+    soloLectura?: boolean
+}>(), {
+    soloLectura: false,
+})
 
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ guardado: [plantilla: PlantillaNotificacion] }>()
@@ -119,7 +123,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
     <USlideover
         v-model:open="abierto"
         :title="evento?.nombre ?? plantilla.evento"
-        :description="`${CANALES_AVISO[plantilla.canal].etiqueta} · ${plantilla.evento}`"
+        :description="soloLectura ? `${CANALES_AVISO[plantilla.canal].etiqueta} · vista previa · se edita en Iris` : `${CANALES_AVISO[plantilla.canal].etiqueta} · ${plantilla.evento}`"
         :dismissible="!enviando"
         :ui="{ content: 'sm:max-w-2xl' }"
     >
@@ -129,6 +133,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 ref="formulario"
                 :schema="esquema"
                 :state="estado"
+                :disabled="soloLectura"
                 class="flex flex-col gap-5"
                 @submit="enviar"
             >
@@ -298,7 +303,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
         <template #footer>
             <div class="flex w-full justify-end gap-2">
                 <UButton
-                    label="Cancelar"
+                    :label="soloLectura ? 'Cerrar' : 'Cancelar'"
                     :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
@@ -306,6 +311,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     @click="abierto = false"
                 />
                 <UButton
+                    v-if="!soloLectura"
                     type="submit"
                     form="form-plantilla-notificacion"
                     label="Guardar"

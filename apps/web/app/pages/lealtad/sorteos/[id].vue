@@ -486,6 +486,7 @@ onMounted(() => {
                 <div class="flex min-w-0 flex-col gap-4">
                     <UPageCard
                         v-if="ejecutado"
+                        :ui="{ root: 'rounded-[1.375rem]' }"
                         title="Resultado"
                         :description="`Ejecutado el ${sorteo.ejecutado_en ? formatearFechaHora(sorteo.ejecutado_en) : '—'} con ${sorteo.participantes} participantes y ${sorteo.boletos} boletos.`"
                         icon="i-lucide-trophy"
@@ -517,6 +518,7 @@ onMounted(() => {
                     </UPageCard>
 
                     <UPageCard
+                        :ui="{ root: 'rounded-[1.375rem]' }"
                         title="Premios"
                         :description="sorteo.premios.length ? `${titularesSorteo(sorteo.premios)} titulares y ${sorteo.suplentes} suplentes · valor total ${formatearQuetzales(valorPremiosSorteo(sorteo.premios))}` : 'Aún sin premios.'"
                         icon="i-lucide-gift"
@@ -541,6 +543,7 @@ onMounted(() => {
 
                     <div class="grid gap-6 lg:grid-cols-2">
                         <UPageCard
+                            :ui="{ root: 'rounded-[1.375rem]' }"
                             title="Bases"
                             icon="i-lucide-scroll-text"
                             variant="subtle"
@@ -606,6 +609,7 @@ onMounted(() => {
                         </UPageCard>
 
                         <UPageCard
+                            :ui="{ root: 'rounded-[1.375rem]' }"
                             title="Participación"
                             icon="i-lucide-users"
                             variant="subtle"
@@ -656,6 +660,7 @@ onMounted(() => {
                 </div>
                 <div class="flex min-w-0 flex-col gap-4">
                     <UPageCard
+                        :ui="{ root: 'rounded-[1.375rem]' }"
                         title="Lo que pide la ley"
                         description="Cada paso con su evidencia."
                         icon="i-lucide-scale"
@@ -673,6 +678,7 @@ onMounted(() => {
                     </UPageCard>
                     <UPageCard
                         v-if="sorteo.acta_hash"
+                        :ui="{ root: 'rounded-[1.375rem]' }"
                         title="Acta"
                         :description="sorteo.acta_cerrada_en ? `Cerrada el ${formatearFechaHora(sorteo.acta_cerrada_en)}. El PDF se generó una sola vez; su SHA-256 lo identifica.` : 'El PDF se generó una sola vez; su SHA-256 lo identifica.'"
                         icon="i-lucide-file-signature"

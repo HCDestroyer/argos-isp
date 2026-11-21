@@ -228,292 +228,314 @@ onMounted(() => {
         id="notificaciones-plantillas"
         titulo="Plantillas de avisos"
         icono="i-lucide-message-square-text"
+        descripcion="Un texto por evento y canal. Correo y Telegram se editan aquí; las de WhatsApp se editan en Iris y aquí solo se ven."
     >
-        <div class="flex flex-col gap-4">
-            <UTabs
-                v-model="pestana"
-                :items="pestanas"
-                :content="false"
-                variant="link"
-                class="w-full"
-                data-prueba="avisos-pestanas"
-            />
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="border-b border-(--ax-borde) p-3 sm:p-4">
+                <OperPestanas
+                    v-model="pestana"
+                    :items="pestanas"
+                    etiqueta="Avisos"
+                    data-prueba="avisos-pestanas"
+                />
+            </div>
+            <div class="flex flex-col gap-4 p-3 sm:p-4">
+                <!-- Plantillas -->
+                <template v-if="pestana === 'plantillas'">
+                    <ProblemaAlerta
+                        v-if="problemaPlantillas"
+                        :problema="problemaPlantillas"
+                        :reintentar="cargarPlantillas"
+                        :reintentando="cargandoPlantillas"
+                    />
+                    <ProblemaAlerta
+                        v-if="problemaEventos"
+                        :problema="problemaEventos"
+                        :reintentar="cargarEventos"
+                        :reintentando="cargandoEventos"
+                        data-prueba="eventos-error"
+                    />
+                    <template v-else>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <USelect
+                                v-model="grupo"
+                                :items="itemsGrupo"
+                                aria-label="Filtrar por tipo de evento"
+                                class="w-full sm:w-56"
+                                data-prueba="filtro-grupo-evento"
+                            />
+                            <USelect
+                                v-model="canal"
+                                :items="itemsCanal"
+                                aria-label="Filtrar por canal"
+                                class="w-full sm:w-48"
+                            />
+                        </div>
+                        <UTable
+                            :data="filasPlantillas"
+                            :columns="columnasPlantillas"
+                            :loading="cargandoPlantillas"
+                            :ui="{ td: 'py-3' }"
+                            data-prueba="tabla-plantillas-aviso"
+                        >
+                            <template #evento-cell="{ row }">
+                                <div
+                                    class="flex min-w-0 flex-col gap-0.5"
+                                    :data-aviso="`${row.original.evento}/${row.original.canal}`"
+                                >
+                                    <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
+                                        {{ nombreEvento(row.original.evento) }}
+                                        <UBadge
+                                            v-if="!row.original.activa"
+                                            label="Apagada"
+                                            color="neutral"
+                                            variant="subtle"
+                                            size="sm"
+                                        />
+                                    </span>
+                                    <span class="font-mono text-xs text-muted">{{ row.original.evento }}<span class="sm:hidden"> · {{ CANALES_AVISO[row.original.canal].etiqueta }}</span></span>
+                                </div>
+                            </template>
+                            <template #canal-cell="{ row }">
+                                <UBadge
+                                    :label="CANALES_AVISO[row.original.canal].etiqueta"
+                                    :icon="CANALES_AVISO[row.original.canal].icono"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                />
+                            </template>
+                            <template #texto-cell="{ row }">
+                                <div class="flex flex-col gap-0.5 text-xs">
+                                    <span
+                                        v-if="row.original.asunto"
+                                        class="font-medium text-highlighted"
+                                    >{{ row.original.asunto }}</span>
+                                    <span class="whitespace-pre-line text-muted">{{ resumen(row.original.cuerpo) }}</span>
+                                </div>
+                            </template>
+                            <template #acciones-cell="{ row }">
+                                <UButton
+                                    v-if="row.original.canal === 'whatsapp'"
+                                    icon="i-lucide-eye"
+                                    label="Se edita en Iris"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Ver ${nombreEvento(row.original.evento)} por WhatsApp (se edita en Iris)`"
+                                    :data-prueba="`ver-aviso-${row.original.id}`"
+                                    @click="editar(row.original)"
+                                />
+                                <UButton
+                                    v-else-if="puede('notificaciones.editar')"
+                                    icon="i-lucide-pencil"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Editar ${nombreEvento(row.original.evento)} por ${CANALES_AVISO[row.original.canal].etiqueta}`"
+                                    :data-prueba="`editar-aviso-${row.original.id}`"
+                                    @click="editar(row.original)"
+                                />
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-file-text"
+                                    title="No hay plantillas con estos filtros"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                    </template>
+                </template>
 
-            <!-- Plantillas -->
-            <template v-if="pestana === 'plantillas'">
-                <p class="text-sm text-muted">
-                    Un texto por evento y canal. Los canales y qué tipos de aviso se mandan se configuran en Configuración → Notificaciones.
-                </p>
-                <ProblemaAlerta
-                    v-if="problemaPlantillas"
-                    :problema="problemaPlantillas"
-                    :reintentar="cargarPlantillas"
-                    :reintentando="cargandoPlantillas"
-                />
-                <ProblemaAlerta
-                    v-if="problemaEventos"
-                    :problema="problemaEventos"
-                    :reintentar="cargarEventos"
-                    :reintentando="cargandoEventos"
-                    data-prueba="eventos-error"
-                />
+                <!-- Recordatorios -->
+                <template v-else-if="pestana === 'recordatorios'">
+                    <p class="text-sm text-muted">
+                        Hasta tres recordatorios por factura sin pagar. Su texto es la plantilla «Recordatorio de pago n» de cada canal.
+                    </p>
+                    <ProblemaAlerta
+                        v-if="problemaRecordatorios"
+                        :problema="problemaRecordatorios"
+                        :reintentar="cargarRecordatorios"
+                        :reintentando="cargandoRecordatorios"
+                    />
+                    <div
+                        v-else
+                        class="grid gap-3 md:grid-cols-3"
+                        data-prueba="recordatorios"
+                    >
+                        <USkeleton
+                            v-if="cargandoRecordatorios && !recordatorios.length"
+                            class="h-28 md:col-span-3"
+                        />
+                        <UCard
+                            v-for="r in recordatorios"
+                            :key="r.id"
+                            variant="subtle"
+                            :data-recordatorio="r.orden"
+                        >
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-sm font-medium text-highlighted">Recordatorio {{ r.orden }}</span>
+                                    <span class="text-sm">{{ diasRecordatorio(r.dias) }}</span>
+                                    <span class="text-xs text-muted">a las {{ r.hora.slice(0, 5) }} h (Guatemala)</span>
+                                    <UBadge
+                                        :label="r.activo ? 'Activo' : 'Apagado'"
+                                        :color="r.activo ? 'success' : 'neutral'"
+                                        variant="subtle"
+                                        size="sm"
+                                        class="self-start"
+                                    />
+                                </div>
+                                <UButton
+                                    v-if="row.original.canal === 'whatsapp'"
+                                    icon="i-lucide-eye"
+                                    label="Se edita en Iris"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Ver ${nombreEvento(row.original.evento)} por WhatsApp (se edita en Iris)`"
+                                    :data-prueba="`ver-aviso-${row.original.id}`"
+                                    @click="editar(row.original)"
+                                />
+                                <UButton
+                                    v-else-if="puede('notificaciones.editar')"
+                                    icon="i-lucide-pencil"
+                                    color="neutral"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Editar el recordatorio ${r.orden}`"
+                                    :data-prueba="`editar-recordatorio-${r.orden}`"
+                                    @click="editarRecordatorio(r)"
+                                />
+                            </div>
+                        </UCard>
+                    </div>
+                </template>
+
+                <!-- Envíos -->
                 <template v-else>
-                    <div class="flex flex-col gap-2 sm:flex-row">
-                        <USelect
-                            v-model="grupo"
-                            :items="itemsGrupo"
-                            aria-label="Filtrar por tipo de evento"
-                            class="w-full sm:w-56"
-                            data-prueba="filtro-grupo-evento"
+                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <ClienteSelector
+                            v-if="puede('clientes.ver')"
+                            v-model="clienteId"
+                            :seleccionado="clienteElegido"
+                            placeholder="Cliente"
+                            aria-label="Filtrar por cliente"
+                            class="w-full"
+                            @elegido="alElegirCliente"
+                        />
+                        <UInput
+                            v-model="filtroEvento"
+                            icon="i-lucide-search"
+                            placeholder="Evento exacto (factura.emitida)"
+                            aria-label="Filtrar por evento"
+                            class="w-full"
                         />
                         <USelect
-                            v-model="canal"
+                            v-model="filtroCanal"
                             :items="itemsCanal"
-                            aria-label="Filtrar por canal"
-                            class="w-full sm:w-48"
+                            aria-label="Filtrar envíos por canal"
+                            class="w-full"
+                        />
+                        <USelect
+                            v-model="filtroEstado"
+                            :items="itemsEstado"
+                            aria-label="Filtrar envíos por estado"
+                            class="w-full"
+                            data-prueba="filtro-estado-envio"
                         />
                     </div>
-                    <UTable
-                        :data="filasPlantillas"
-                        :columns="columnasPlantillas"
-                        :loading="cargandoPlantillas"
-                        :ui="{ td: 'py-3' }"
-                        data-prueba="tabla-plantillas-aviso"
-                    >
-                        <template #evento-cell="{ row }">
-                            <div
-                                class="flex min-w-0 flex-col gap-0.5"
-                                :data-aviso="`${row.original.evento}/${row.original.canal}`"
-                            >
-                                <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                    {{ nombreEvento(row.original.evento) }}
+                    <ProblemaAlerta
+                        v-if="envios.problema.value"
+                        :problema="envios.problema.value"
+                        :reintentar="envios.recargar"
+                        :reintentando="envios.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="envios.filas.value"
+                            :columns="columnasEnvios"
+                            :loading="envios.cargando.value"
+                            :ui="{ td: 'py-2.5' }"
+                            data-prueba="tabla-envios"
+                        >
+                            <template #fecha-cell="{ row }">
+                                <span class="whitespace-nowrap text-sm">{{ formatearFechaHora(row.original.created_at) }}</span>
+                            </template>
+                            <template #evento-cell="{ row }">
+                                <div
+                                    class="flex min-w-0 flex-col gap-0.5"
+                                    :data-envio="row.original.id"
+                                >
+                                    <span class="text-sm font-medium text-highlighted">{{ nombreEvento(row.original.evento) }}</span>
+                                    <span class="text-xs text-muted">
+                                        <UIcon
+                                            :name="CANALES_AVISO[row.original.canal].icono"
+                                            class="size-3 align-middle"
+                                        /> {{ row.original.destino }}
+                                    </span>
+                                    <span class="text-xs text-muted sm:hidden">{{ formatearFechaHora(row.original.created_at) }}</span>
+                                    <span class="text-xs text-muted lg:hidden">{{ nombreCliente(row.original.cliente_id) }}</span>
+                                </div>
+                            </template>
+                            <template #cliente-cell="{ row }">
+                                <span class="text-sm">{{ nombreCliente(row.original.cliente_id) }}</span>
+                            </template>
+                            <template #estado-cell="{ row }">
+                                <div class="flex flex-col items-start gap-0.5">
                                     <UBadge
-                                        v-if="!row.original.activa"
-                                        label="Apagada"
-                                        color="neutral"
+                                        :label="ESTADOS_ENVIO[row.original.estado].etiqueta"
+                                        :icon="ESTADOS_ENVIO[row.original.estado].icono"
+                                        :color="ESTADOS_ENVIO[row.original.estado].color"
                                         variant="subtle"
                                         size="sm"
                                     />
-                                </span>
-                                <span class="font-mono text-xs text-muted">{{ row.original.evento }}<span class="sm:hidden"> · {{ CANALES_AVISO[row.original.canal].etiqueta }}</span></span>
-                            </div>
-                        </template>
-                        <template #canal-cell="{ row }">
-                            <UBadge
-                                :label="CANALES_AVISO[row.original.canal].etiqueta"
-                                :icon="CANALES_AVISO[row.original.canal].icono"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                            />
-                        </template>
-                        <template #texto-cell="{ row }">
-                            <div class="flex flex-col gap-0.5 text-xs">
-                                <span
-                                    v-if="row.original.asunto"
-                                    class="font-medium text-highlighted"
-                                >{{ row.original.asunto }}</span>
-                                <span class="whitespace-pre-line text-muted">{{ resumen(row.original.cuerpo) }}</span>
-                            </div>
-                        </template>
-                        <template #acciones-cell="{ row }">
-                            <UButton
-                                v-if="puede('notificaciones.editar')"
-                                icon="i-lucide-pencil"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Editar ${nombreEvento(row.original.evento)} por ${CANALES_AVISO[row.original.canal].etiqueta}`"
-                                :data-prueba="`editar-aviso-${row.original.id}`"
-                                @click="editar(row.original)"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-file-text"
-                                title="No hay plantillas con estos filtros"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                </template>
-            </template>
-
-            <!-- Recordatorios -->
-            <template v-else-if="pestana === 'recordatorios'">
-                <p class="text-sm text-muted">
-                    Hasta tres recordatorios por factura sin pagar. Su texto es la plantilla «Recordatorio de pago n» de cada canal.
-                </p>
-                <ProblemaAlerta
-                    v-if="problemaRecordatorios"
-                    :problema="problemaRecordatorios"
-                    :reintentar="cargarRecordatorios"
-                    :reintentando="cargandoRecordatorios"
-                />
-                <div
-                    v-else
-                    class="grid gap-3 md:grid-cols-3"
-                    data-prueba="recordatorios"
-                >
-                    <USkeleton
-                        v-if="cargandoRecordatorios && !recordatorios.length"
-                        class="h-28 md:col-span-3"
-                    />
-                    <UCard
-                        v-for="r in recordatorios"
-                        :key="r.id"
-                        variant="subtle"
-                        :data-recordatorio="r.orden"
-                    >
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="flex flex-col gap-1">
-                                <span class="text-sm font-medium text-highlighted">Recordatorio {{ r.orden }}</span>
-                                <span class="text-sm">{{ diasRecordatorio(r.dias) }}</span>
-                                <span class="text-xs text-muted">a las {{ r.hora.slice(0, 5) }} h (Guatemala)</span>
-                                <UBadge
-                                    :label="r.activo ? 'Activo' : 'Apagado'"
-                                    :color="r.activo ? 'success' : 'neutral'"
-                                    variant="subtle"
+                                    <span
+                                        v-if="row.original.fallback_de"
+                                        class="text-xs text-muted"
+                                    >respaldo del #{{ row.original.fallback_de }}</span>
+                                </div>
+                            </template>
+                            <template #acciones-cell="{ row }">
+                                <UButton
+                                    icon="i-lucide-eye"
+                                    color="neutral"
+                                    variant="ghost"
                                     size="sm"
-                                    class="self-start"
+                                    :aria-label="`Ver el envío ${row.original.id}`"
+                                    :data-prueba="`ver-envio-${row.original.id}`"
+                                    @click="verEnvio(row.original)"
                                 />
-                            </div>
-                            <UButton
-                                v-if="puede('notificaciones.editar')"
-                                icon="i-lucide-pencil"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Editar el recordatorio ${r.orden}`"
-                                :data-prueba="`editar-recordatorio-${r.orden}`"
-                                @click="editarRecordatorio(r)"
-                            />
-                        </div>
-                    </UCard>
-                </div>
-            </template>
-
-            <!-- Envíos -->
-            <template v-else>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <ClienteSelector
-                        v-if="puede('clientes.ver')"
-                        v-model="clienteId"
-                        :seleccionado="clienteElegido"
-                        placeholder="Cliente"
-                        aria-label="Filtrar por cliente"
-                        class="w-full"
-                        @elegido="alElegirCliente"
-                    />
-                    <UInput
-                        v-model="filtroEvento"
-                        icon="i-lucide-search"
-                        placeholder="Evento exacto (factura.emitida)"
-                        aria-label="Filtrar por evento"
-                        class="w-full"
-                    />
-                    <USelect
-                        v-model="filtroCanal"
-                        :items="itemsCanal"
-                        aria-label="Filtrar envíos por canal"
-                        class="w-full"
-                    />
-                    <USelect
-                        v-model="filtroEstado"
-                        :items="itemsEstado"
-                        aria-label="Filtrar envíos por estado"
-                        class="w-full"
-                        data-prueba="filtro-estado-envio"
-                    />
-                </div>
-                <ProblemaAlerta
-                    v-if="envios.problema.value"
-                    :problema="envios.problema.value"
-                    :reintentar="envios.recargar"
-                    :reintentando="envios.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="envios.filas.value"
-                        :columns="columnasEnvios"
-                        :loading="envios.cargando.value"
-                        :ui="{ td: 'py-2.5' }"
-                        data-prueba="tabla-envios"
-                    >
-                        <template #fecha-cell="{ row }">
-                            <span class="whitespace-nowrap text-sm">{{ formatearFechaHora(row.original.created_at) }}</span>
-                        </template>
-                        <template #evento-cell="{ row }">
-                            <div
-                                class="flex min-w-0 flex-col gap-0.5"
-                                :data-envio="row.original.id"
-                            >
-                                <span class="text-sm font-medium text-highlighted">{{ nombreEvento(row.original.evento) }}</span>
-                                <span class="text-xs text-muted">
-                                    <UIcon
-                                        :name="CANALES_AVISO[row.original.canal].icono"
-                                        class="size-3 align-middle"
-                                    /> {{ row.original.destino }}
-                                </span>
-                                <span class="text-xs text-muted sm:hidden">{{ formatearFechaHora(row.original.created_at) }}</span>
-                                <span class="text-xs text-muted lg:hidden">{{ nombreCliente(row.original.cliente_id) }}</span>
-                            </div>
-                        </template>
-                        <template #cliente-cell="{ row }">
-                            <span class="text-sm">{{ nombreCliente(row.original.cliente_id) }}</span>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <div class="flex flex-col items-start gap-0.5">
-                                <UBadge
-                                    :label="ESTADOS_ENVIO[row.original.estado].etiqueta"
-                                    :icon="ESTADOS_ENVIO[row.original.estado].icono"
-                                    :color="ESTADOS_ENVIO[row.original.estado].color"
-                                    variant="subtle"
-                                    size="sm"
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-send"
+                                    title="No hay envíos con estos filtros"
+                                    variant="naked"
                                 />
-                                <span
-                                    v-if="row.original.fallback_de"
-                                    class="text-xs text-muted"
-                                >respaldo del #{{ row.original.fallback_de }}</span>
-                            </div>
-                        </template>
-                        <template #acciones-cell="{ row }">
-                            <UButton
-                                icon="i-lucide-eye"
-                                color="neutral"
-                                variant="ghost"
-                                size="sm"
-                                :aria-label="`Ver el envío ${row.original.id}`"
-                                :data-prueba="`ver-envio-${row.original.id}`"
-                                @click="verEnvio(row.original)"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-send"
-                                title="No hay envíos con estos filtros"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="envios.pagina.value"
-                        :hay-anterior="envios.hayAnterior.value"
-                        :hay-siguiente="envios.haySiguiente.value"
-                        :cargando="envios.cargando.value"
-                        :filas="envios.filas.value.length"
-                        @anterior="envios.anterior"
-                        @siguiente="envios.siguiente"
-                    />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="envios.pagina.value"
+                            :hay-anterior="envios.hayAnterior.value"
+                            :hay-siguiente="envios.haySiguiente.value"
+                            :cargando="envios.cargando.value"
+                            :filas="envios.filas.value.length"
+                            @anterior="envios.anterior"
+                            @siguiente="envios.siguiente"
+                        />
+                    </template>
                 </template>
-            </template>
-        </div>
+            </div>
+        </section>
 
         <PlantillaNotificacionModal
             v-if="editando"
             v-model:open="editorAbierto"
             :plantilla="editando"
             :evento="eventoDe(editando.evento)"
+            :solo-lectura="editando.canal === 'whatsapp' || !puede('notificaciones.editar')"
             @guardado="alGuardarPlantilla"
         />
         <RecordatorioPagoModal

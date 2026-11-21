@@ -99,6 +99,7 @@ onMounted(() => {
         <template #acciones>
             <UButton
                 v-if="enlace('/reportes/bonificaciones')"
+                size="lg"
                 :to="enlace('/reportes/bonificaciones')"
                 icon="i-lucide-chart-column"
                 label="Reporte"
@@ -108,59 +109,66 @@ onMounted(() => {
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <UAlert
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-info"
-                description="Un periodo regalado o un cargo sin costo no es una factura de Q 0.00: queda como bonificación, con su motivo y el valor bruto que no se cobró (asiento interno 5.1.01 / ingreso, sin IVA ni DTE)."
-            />
-            <div class="grid gap-3 sm:grid-cols-3">
-                <USelect
-                    v-model="origen"
-                    :items="itemsOrigen"
-                    aria-label="Origen"
-                    class="w-full"
-                    data-prueba="filtro-origen-bonificacion"
-                />
-                <UInput
-                    v-model="desde"
-                    type="date"
-                    aria-label="Desde"
-                    class="w-full"
-                />
-                <UInput
-                    v-model="hasta"
-                    type="date"
-                    aria-label="Hasta"
-                    class="w-full"
-                />
-            </div>
-            <div
-                v-if="clienteId || servicioId"
-                class="flex flex-wrap items-center gap-2 text-sm text-muted"
-            >
-                <UBadge
-                    :label="servicioId ? `Servicio #${servicioId}` : nombres.nombre(clienteId ?? 0)"
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
+                <UAlert
                     color="neutral"
                     variant="subtle"
+                    icon="i-lucide-info"
+                    description="Un periodo regalado o un cargo sin costo no es una factura de Q 0.00: queda como bonificación, con su motivo y el valor bruto que no se cobró (asiento interno 5.1.01 / ingreso, sin IVA ni DTE)."
                 />
-                <UButton
-                    to="/bonificaciones"
-                    label="Ver todas"
-                    color="neutral"
-                    variant="link"
-                    size="sm"
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <USelect
+                        v-model="origen"
+                        :items="itemsOrigen"
+                        aria-label="Origen"
+                        class="w-full"
+                        data-prueba="filtro-origen-bonificacion"
+                    />
+                    <UInput
+                        v-model="desde"
+                        type="date"
+                        aria-label="Desde"
+                        class="w-full"
+                    />
+                    <UInput
+                        v-model="hasta"
+                        type="date"
+                        aria-label="Hasta"
+                        class="w-full"
+                    />
+                </div>
+                <div
+                    v-if="clienteId || servicioId"
+                    class="flex flex-wrap items-center gap-2 text-sm text-muted"
+                >
+                    <UBadge
+                        :label="servicioId ? `Servicio #${servicioId}` : nombres.nombre(clienteId ?? 0)"
+                        color="neutral"
+                        variant="subtle"
+                    />
+                    <UButton
+                        to="/bonificaciones"
+                        label="Ver todas"
+                        color="neutral"
+                        variant="link"
+                        size="sm"
+                    />
+                </div>
+            </div>
+            <div
+                v-if="lista.problema.value"
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
                 />
             </div>
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
             <template v-else>
                 <UTable
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none' }"
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
@@ -215,16 +223,18 @@ onMounted(() => {
                         />
                     </template>
                 </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
     </PanelPagina>
 </template>

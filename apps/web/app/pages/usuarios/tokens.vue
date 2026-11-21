@@ -101,36 +101,40 @@ const columnas: TableColumn<TokenApi>[] = [
         id="tokens"
         titulo="Tokens de API"
         icono="i-lucide-key-round"
+        descripcion="Un token actúa como su usuario y pasa por el mismo ACL, recortado a sus alcances. Se muestra una sola vez al crearlo; revocarlo lo apaga de inmediato."
     >
         <template #acciones>
             <UButton
                 v-if="puede('tokens.crear') && puede('usuarios.ver')"
                 label="Nuevo token"
                 icon="i-lucide-plus"
+                size="lg"
+                class="glow-brand px-5"
                 data-prueba="nuevo-token"
                 @click="crearAbierto = true"
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <UsuariosNavegacion />
-
-            <p class="text-sm text-muted">
-                Un token actúa como su usuario y pasa por el mismo ACL, recortado a sus alcances. Se muestra una sola vez al crearlo; revocarlo lo apaga de inmediato.
-            </p>
-
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="border-b border-(--ax-borde) p-3 sm:p-4">
+                <UsuariosNavegacion />
+            </div>
+            <div
                 v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="lista.problema.value"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                />
+            </div>
             <template v-else>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-3' }"
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-3' }"
                     data-prueba="tabla-tokens"
                 >
                     <template #nombre-cell="{ row }">
@@ -183,17 +187,19 @@ const columnas: TableColumn<TokenApi>[] = [
                     </template>
                 </UTable>
 
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <TokenApiModal
             v-model:open="crearAbierto"

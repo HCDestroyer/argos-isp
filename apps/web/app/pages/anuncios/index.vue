@@ -57,13 +57,15 @@ onMounted(() => void lista.recargar())
         id="anuncios"
         titulo="Anuncios"
         icono="i-lucide-megaphone"
+        descripcion="Promociones de la empresa en el inicio del portal y en la página de corte. Solo se ven publicadas, dentro de su vigencia y para los clientes de su audiencia."
     >
         <template #acciones>
             <UButton
                 v-if="puede('anuncios.administrar')"
+                class="glow-brand px-5"
+                size="lg"
                 label="Nuevo anuncio"
                 icon="i-lucide-plus"
-                :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo anuncio"
                 :disabled="sinEmpresa"
                 data-prueba="nuevo-anuncio"
@@ -71,39 +73,41 @@ onMounted(() => void lista.recargar())
             />
         </template>
 
-        <div class="flex flex-col gap-4">
-            <p class="max-w-3xl text-sm text-muted">
-                Promociones de la empresa en el inicio del portal y en la página de corte. Solo se ven publicadas, dentro de su vigencia y para los clientes de su audiencia.
-            </p>
-            <UAlert
-                v-if="sinEmpresa && puede('anuncios.administrar')"
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-building-2"
-                title="Elige una empresa para crear anuncios"
-                description="Cada anuncio es de una empresa: con «Todas» se ven los de todas, pero para crear uno elige la empresa en el selector de arriba."
-                data-prueba="anuncio-sin-empresa"
-            />
-            <USelect
-                v-model="estado"
-                :items="itemsEstado"
-                aria-label="Filtrar por estado"
-                class="w-full sm:w-56"
-                data-prueba="filtro-estado-anuncio"
-            />
-
-            <ProblemaAlerta
+        <section class="surface-card flex min-w-0 flex-col overflow-hidden rounded-[1.375rem]">
+            <div class="flex flex-col gap-3 border-b border-(--ax-borde) p-3 sm:p-4">
+                <UAlert
+                    v-if="sinEmpresa && puede('anuncios.administrar')"
+                    color="neutral"
+                    variant="subtle"
+                    icon="i-lucide-building-2"
+                    title="Elige una empresa para crear anuncios"
+                    description="Cada anuncio es de una empresa: con «Todas» se ven los de todas, pero para crear uno elige la empresa en el selector de arriba."
+                    data-prueba="anuncio-sin-empresa"
+                />
+                <USelect
+                    v-model="estado"
+                    :items="itemsEstado"
+                    aria-label="Filtrar por estado"
+                    class="w-full sm:w-56"
+                    data-prueba="filtro-estado-anuncio"
+                />
+            </div>
+            <div
                 v-if="lista.problema.value"
-                :problema="problemaAnuncioLegible(lista.problema.value)"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
+                class="p-4"
+            >
+                <ProblemaAlerta
+                    :problema="problemaAnuncioLegible(lista.problema.value)"
+                    :reintentar="lista.recargar"
+                    :reintentando="lista.cargando.value"
+                />
+            </div>
             <template v-else>
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
                     :loading="lista.cargando.value"
-                    :ui="{ td: 'py-2.5' }"
+                    :ui="{ root: 'rounded-none bg-transparent ring-0 shadow-none dark:shadow-none', td: 'py-2.5' }"
                     data-prueba="tabla-anuncios"
                 >
                     <template #titulo-cell="{ row }">
@@ -177,17 +181,19 @@ onMounted(() => void lista.recargar())
                     </template>
                 </UTable>
 
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
+                <div class="border-t border-(--ax-borde) px-4 py-2">
+                    <PaginacionCursor
+                        :pagina="lista.pagina.value"
+                        :hay-anterior="lista.hayAnterior.value"
+                        :hay-siguiente="lista.haySiguiente.value"
+                        :cargando="lista.cargando.value"
+                        :filas="lista.filas.value.length"
+                        @anterior="lista.anterior"
+                        @siguiente="lista.siguiente"
+                    />
+                </div>
             </template>
-        </div>
+        </section>
 
         <AnuncioFormulario
             v-if="puede('anuncios.administrar')"

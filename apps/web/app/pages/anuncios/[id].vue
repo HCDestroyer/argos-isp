@@ -194,6 +194,7 @@ onMounted(cargar)
                 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
                     <div class="flex flex-col gap-6">
                         <UPageCard
+                            :ui="{ root: 'rounded-[1.375rem]' }"
                             title="Datos"
                             icon="i-lucide-info"
                             variant="subtle"
