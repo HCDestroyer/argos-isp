@@ -1,5 +1,6 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer as crearHttps } from 'node:https'
+import type { AddressInfo, Server } from 'node:net'
 
 /**
  * SmartOLT y GenieACS simulados: un servidor HTTP local por sistema que registra cada petición y
@@ -31,11 +32,13 @@ export class Simulado {
     #servidor: Server | null = null
     url = ''
 
-    async iniciar(): Promise<this> {
-        this.#servidor = createServer((req, res) => void this.#atender(req, res))
+    /** Con `tls` escucha por HTTPS (como el proxy del NBI de GenieACS en su servidor). */
+    async iniciar(opciones: { tls?: { key: string; cert: string } } = {}): Promise<this> {
+        const atender = (req: IncomingMessage, res: ServerResponse) => void this.#atender(req, res)
+        this.#servidor = opciones.tls ? crearHttps(opciones.tls, atender) : createServer(atender)
         await new Promise<void>((r) => this.#servidor!.listen(0, '127.0.0.1', r))
         const { port } = this.#servidor.address() as AddressInfo
-        this.url = `http://127.0.0.1:${port}`
+        this.url = `${opciones.tls ? 'https' : 'http'}://127.0.0.1:${port}`
         return this
     }
 

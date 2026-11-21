@@ -138,6 +138,7 @@ const ConfigEquipos = definirEsquema(
             url: nulable(texto),
             usuario: nulable(texto),
             clave: nulable(enumerado(['***'])),
+            ca: booleano,
             probado_en: nulable(instante),
             prueba_ok: nulable(booleano),
             prueba_error: nulable(texto),

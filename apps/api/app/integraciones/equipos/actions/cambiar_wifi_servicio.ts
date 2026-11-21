@@ -109,7 +109,7 @@ export default class CambiarWifiServicio extends DomainAction<EntradaCambiarWifi
             )
         }
         const equipo =
-            (await equipoGestionado(input.servicio_id, t.trx)) ??
+            (await equipoGestionado(input.servicio_id, empresaId, t.trx)) ??
             (await descubrirEquipo(input.servicio_id, empresaId, config, t.trx))
         if (!equipo?.acs_device_id) {
             throw new EquipoSinGestion(

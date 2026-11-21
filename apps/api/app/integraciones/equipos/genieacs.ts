@@ -132,6 +132,7 @@ async function buscar(
         base: config.url,
         ruta,
         cabeceras: cabeceras(config),
+        ca: config.ca,
         servicioId,
         timeoutMs: TIMEOUT_LECTURA_MS,
     })
@@ -146,6 +147,7 @@ export async function probar(config: ConfigGenieAcs): Promise<{ dispositivos: nu
         base: config.url,
         ruta: `/devices/?query=${encodeURIComponent('{}')}&projection=_id&limit=1`,
         cabeceras: cabeceras(config),
+        ca: config.ca,
         timeoutMs: TIMEOUT_LECTURA_MS,
         reintentos: 0,
     })
@@ -209,6 +211,7 @@ export async function tarea(
         base: config.url,
         ruta: `/devices/${id}/tasks?connection_request&timeout=${ESPERA_SESION_MS}`,
         cabeceras: cabeceras(config, true),
+        ca: config.ca,
         cuerpo: JSON.stringify(cuerpo),
         cuerpoAuditado: cuerpo,
         servicioId,
@@ -231,6 +234,7 @@ export async function tarea(
                 base: config.url,
                 ruta,
                 cabeceras: cabeceras(config),
+                ca: config.ca,
                 servicioId,
                 timeoutMs: TIMEOUT_LECTURA_MS,
                 reintentos: 1,

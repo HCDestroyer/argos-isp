@@ -110,6 +110,13 @@ export const configurarEquiposValidator = vine.compile(
         genieacs_url: url().meta({ description: 'URL del NBI de GenieACS (o del proxy que lo protege)' }),
         genieacs_usuario: vine.string().trim().maxLength(200).nullable().optional(),
         genieacs_clave: secreto(),
+        genieacs_ca: vine
+            .string()
+            .trim()
+            .maxLength(20_000)
+            .nullable()
+            .optional()
+            .meta({ description: 'Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra' }),
         pppoe_por_acs: vine.boolean().optional().meta({
             description: 'Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar',
         }),

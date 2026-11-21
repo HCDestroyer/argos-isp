@@ -29726,6 +29726,14 @@
                     "maxLength": 500,
                     "description": "Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve"
                   },
+                  "genieacs_ca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "description": "Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra"
+                  },
                   "pppoe_por_acs": {
                     "description": "Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar",
                     "type": "boolean"
@@ -100132,6 +100140,7 @@
               "url",
               "usuario",
               "clave",
+              "ca",
               "probado_en",
               "prueba_ok",
               "prueba_error"
@@ -100157,6 +100166,9 @@
                 "enum": [
                   "***"
                 ]
+              },
+              "ca": {
+                "type": "boolean"
               },
               "probado_en": {
                 "type": [

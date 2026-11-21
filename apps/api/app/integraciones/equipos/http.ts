@@ -1,3 +1,5 @@
+import { request as solicitudHttp } from 'node:http'
+import { request as solicitudHttps } from 'node:https'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 
@@ -17,7 +19,7 @@ import logger from '@adonisjs/core/services/logger'
 
 export type SistemaEquipos = 'smartolt' | 'genieacs'
 
-export type TipoFallo = 'red' | 'timeout' | 'http'
+export type TipoFallo = 'red' | 'timeout' | 'http' | 'tls'
 
 export class ErrorEquipos extends Error {
     constructor(
@@ -32,6 +34,7 @@ export class ErrorEquipos extends Error {
 
     /** El sistema no respondió o respondió con un error suyo: tiene sentido reintentar. */
     get transitorio(): boolean {
+        if (this.tipo === 'tls') return false
         return this.tipo !== 'http' || (this.status !== null && (this.status >= 500 || this.status === 429))
     }
 }
@@ -49,6 +52,8 @@ export interface PeticionEquipos {
     /** cuerpo para la auditoría (se limpia de secretos) */
     cuerpoAuditado?: unknown
     servicioId?: number | null
+    /** autoridad propia en PEM para validar el certificado (además de las del sistema) */
+    ca?: string | null
     timeoutMs?: number
     reintentos?: number
 }
@@ -119,12 +124,31 @@ async function auditarRed(p: PeticionEquipos, respuesta: unknown, ok: boolean, i
 
 /** `ECONNREFUSED`, `ENOTFOUND`… o el mensaje del error. */
 function causa(error: unknown): string {
-    const origen = (error as { cause?: { code?: string; message?: string } }).cause
-    return origen?.code ?? origen?.message ?? (error as Error).message ?? String(error)
+    const e = error as { code?: string; cause?: { code?: string; message?: string }; message?: string }
+    return e.code ?? e.cause?.code ?? e.cause?.message ?? e.message ?? String(error)
 }
 
 function nombre(sistema: SistemaEquipos) {
     return sistema === 'smartolt' ? 'SmartOLT' : 'GenieACS'
+}
+
+/** Códigos de OpenSSL/Node de un certificado que no se puede confiar. */
+const ERRORES_TLS: Record<string, string> = {
+    DEPTH_ZERO_SELF_SIGNED_CERT: 'es autofirmado',
+    SELF_SIGNED_CERT_IN_CHAIN: 'lo firma una autoridad que Argos no conoce',
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'no se pudo verificar quién lo firmó',
+    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'no se pudo verificar quién lo firmó',
+    CERT_HAS_EXPIRED: 'está vencido',
+    CERT_NOT_YET_VALID: 'todavía no es válido (revisa la hora del servidor)',
+    ERR_TLS_CERT_ALTNAME_INVALID: 'no es del nombre de la URL',
+}
+
+function mensajeTls(sistema: SistemaEquipos, codigo: string): string {
+    return (
+        `El certificado HTTPS de ${nombre(sistema)} no es válido: ${ERRORES_TLS[codigo]} (${codigo}). ` +
+        'Usa un certificado válido para ese nombre (p. ej. Let’s Encrypt) o, si es de una autoridad propia, ' +
+        'pega su certificado raíz en la configuración'
+    )
 }
 
 /** Para pruebas: sin esperas entre reintentos. */
@@ -133,9 +157,48 @@ export function fijarEsperaReintentos(ms: number) {
     esperaBaseMs = ms
 }
 
+interface RespuestaCruda {
+    status: number
+    statusText: string
+    texto: string
+}
+
+/**
+ * Una petición con `node:http(s)`: permite confiar en una autoridad propia (`ca`, PEM) sin tocar la
+ * del proceso, no sigue redirecciones y corta a los `timeoutMs`.
+ */
+function enviar(p: PeticionEquipos, timeoutMs: number): Promise<RespuestaCruda> {
+    const url = new URL(`${p.base}${p.ruta}`)
+    const cabeceras: Record<string, string> = { accept: 'application/json', ...(p.cabeceras ?? {}) }
+    if (p.cuerpo !== undefined) cabeceras['content-length'] = String(Buffer.byteLength(p.cuerpo))
+    const opciones = { method: p.metodo, headers: cabeceras, ...(p.ca ? { ca: p.ca } : {}) }
+    return new Promise((resolver, rechazar) => {
+        const req = (url.protocol === 'https:' ? solicitudHttps : solicitudHttp)(url, opciones, (res) => {
+            const partes: Buffer[] = []
+            res.on('data', (c: Buffer) => partes.push(c))
+            res.on('end', () =>
+                resolver({
+                    status: res.statusCode ?? 0,
+                    statusText: res.statusMessage ?? '',
+                    texto: Buffer.concat(partes).toString('utf8'),
+                }),
+            )
+            res.on('error', rechazar)
+        })
+        req.setTimeout(timeoutMs, () =>
+            req.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT_EQUIPOS' })),
+        )
+        req.on('error', rechazar)
+        if (p.cuerpo !== undefined) req.write(p.cuerpo)
+        req.end()
+    })
+}
+
 /**
  * Hace la llamada con reintentos acotados. Lanza `ErrorEquipos` si no hubo respuesta o si fue
- * fuera de 2xx; si no, devuelve el cuerpo ya interpretado (JSON o texto).
+ * fuera de 2xx; si no, devuelve el cuerpo ya interpretado (JSON o texto). Errores con texto claro
+ * para la persona: certificado inválido (no se reintenta), credenciales rechazadas (401) o acceso
+ * negado por el proxy (403).
  */
 export async function llamar<T = unknown>(p: PeticionEquipos): Promise<RespuestaEquipos<T>> {
     const reintentos = Math.max(0, p.reintentos ?? 2)
@@ -143,40 +206,38 @@ export async function llamar<T = unknown>(p: PeticionEquipos): Promise<Respuesta
     let ultimo: ErrorEquipos | null = null
     for (let intento = 1; intento <= reintentos + 1; intento++) {
         if (intento > 1) await new Promise((r) => setTimeout(r, esperaBaseMs * 2 ** (intento - 2)))
-        let respuesta: Response
+        let respuesta: RespuestaCruda
         try {
-            respuesta = await fetch(`${p.base}${p.ruta}`, {
-                method: p.metodo,
-                headers: { accept: 'application/json', ...(p.cabeceras ?? {}) },
-                body: p.cuerpo,
-                signal: AbortSignal.timeout(timeoutMs),
-                redirect: 'error',
-            })
+            respuesta = await enviar(p, timeoutMs)
         } catch (error) {
-            const n = (error as Error).name
+            const codigo = causa(error)
+            if (codigo in ERRORES_TLS) {
+                ultimo = new ErrorEquipos(mensajeTls(p.sistema, codigo), p.sistema, 'tls')
+                await auditarRed(p, { error: ultimo.message }, false, intento)
+                throw ultimo
+            }
             ultimo =
-                n === 'TimeoutError' || n === 'AbortError'
+                codigo === 'ETIMEDOUT_EQUIPOS'
                     ? new ErrorEquipos(
                           `${nombre(p.sistema)} no respondió en ${timeoutMs} ms`,
                           p.sistema,
                           'timeout',
                       )
                     : new ErrorEquipos(
-                          `No se pudo conectar con ${nombre(p.sistema)}: ${causa(error)}`,
+                          `No se pudo conectar con ${nombre(p.sistema)}: ${codigo}`,
                           p.sistema,
                           'red',
                       )
             await auditarRed(p, { error: ultimo.message }, false, intento)
             continue
         }
-        const texto = await respuesta.text().catch(() => '')
-        let datos: unknown = texto
+        let datos: unknown = respuesta.texto
         try {
-            datos = texto ? JSON.parse(texto) : null
+            datos = respuesta.texto ? JSON.parse(respuesta.texto) : null
         } catch {
-            datos = texto.slice(0, 1000)
+            datos = respuesta.texto.slice(0, 1000)
         }
-        const ok = respuesta.ok
+        const ok = respuesta.status >= 200 && respuesta.status < 300
         await auditarRed(
             p,
             { status: respuesta.status, status_text: respuesta.statusText, cuerpo: datos },
@@ -184,13 +245,13 @@ export async function llamar<T = unknown>(p: PeticionEquipos): Promise<Respuesta
             intento,
         )
         if (ok) return { status: respuesta.status, statusText: respuesta.statusText, datos: datos as T }
-        ultimo = new ErrorEquipos(
-            `${nombre(p.sistema)} respondió ${respuesta.status}${detalleDe(datos)}`,
-            p.sistema,
-            'http',
-            respuesta.status,
-            datos,
-        )
+        const mensaje =
+            respuesta.status === 401
+                ? `${nombre(p.sistema)} rechazó el usuario o la clave (401): revísalos en la configuración`
+                : respuesta.status === 403 && p.sistema === 'genieacs'
+                  ? 'GenieACS negó el acceso (403): la IP de Argos no está permitida en el proxy del ACS'
+                  : `${nombre(p.sistema)} respondió ${respuesta.status}${detalleDe(datos)}`
+        ultimo = new ErrorEquipos(mensaje, p.sistema, 'http', respuesta.status, datos)
         if (!ultimo.transitorio) throw ultimo
     }
     throw ultimo!

@@ -32,6 +32,7 @@ export interface FilaConfigEquipos {
     genieacs_url: string | null
     genieacs_usuario: string | null
     genieacs_clave_cifrada: string | null
+    genieacs_ca: string | null
     genieacs_probado_en: Date | null
     genieacs_prueba_ok: boolean | null
     genieacs_prueba_error: string | null
@@ -52,6 +53,8 @@ export interface ConfigGenieAcs {
     url: string
     usuario: string | null
     clave: string | null
+    /** certificado raíz propio (PEM) del proxy HTTPS del NBI, o null (autoridades del sistema) */
+    ca: string | null
 }
 
 export interface ConfigEquipos {
@@ -144,6 +147,7 @@ export function desdeFila(fila: FilaConfigEquipos | null, empresaId: number): Co
               url: fila.genieacs_url,
               usuario: fila.genieacs_usuario,
               clave: descifrarCampo(fila.genieacs_clave_cifrada, 'genieacs_clave', empresaId),
+              ca: fila.genieacs_ca ?? null,
           }
         : null
     return {
@@ -227,6 +231,8 @@ export interface VistaConfigEquipos {
         url: string | null
         usuario: string | null
         clave: '***' | null
+        /** hay un certificado raíz propio guardado */
+        ca: boolean
         probado_en: string | null
         prueba_ok: boolean | null
         prueba_error: string | null
@@ -258,6 +264,7 @@ export async function vistaConfig(
             url: fila?.genieacs_url ?? null,
             usuario: fila?.genieacs_usuario ?? null,
             clave: fila?.genieacs_clave_cifrada ? '***' : null,
+            ca: Boolean(fila?.genieacs_ca),
             probado_en: iso(fila?.genieacs_probado_en ?? null),
             prueba_ok: fila?.genieacs_prueba_ok ?? null,
             prueba_error: fila?.genieacs_prueba_error ?? null,

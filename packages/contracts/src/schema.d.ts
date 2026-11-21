@@ -14619,6 +14619,7 @@ export interface components {
                 usuario: string | null;
                 /** @enum {string|null} */
                 clave: "***" | null;
+                ca: boolean;
                 /** Format: date-time */
                 probado_en: string | null;
                 prueba_ok: boolean | null;
@@ -39848,6 +39849,8 @@ export interface operations {
                     genieacs_usuario?: string | null;
                     /** @description Omitido: se conserva; null: se borra; texto: se reemplaza. Nunca vuelve */
                     genieacs_clave?: string | null;
+                    /** @description Certificado raíz propio del proxy HTTPS del NBI (PEM); null lo borra */
+                    genieacs_ca?: string | null;
                     /** @description Configurar usuario y clave PPPoE en el equipo por TR-069 al aprovisionar */
                     pppoe_por_acs?: boolean;
                     /** @description Reemplaza todos los perfiles: OLT de SmartOLT + plan (null = cualquiera) → preset */

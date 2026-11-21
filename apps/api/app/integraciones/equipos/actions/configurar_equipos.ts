@@ -30,6 +30,8 @@ export interface EntradaConfigurarEquipos {
     genieacs_usuario?: string | null
     /** Omitido: se conserva; null: se borra; texto: se reemplaza */
     genieacs_clave?: string | null
+    /** Certificado raíz propio del proxy del NBI (PEM). Omitido: se conserva; null: se borra */
+    genieacs_ca?: string | null
     pppoe_por_acs?: boolean
     /** Reemplaza todos los perfiles de autorización de la empresa */
     perfiles?: PerfilEntrada[]
@@ -92,6 +94,18 @@ export default class ConfigurarEquipos extends DomainAction<EntradaConfigurarEqu
         if (usuario !== undefined) cambios.genieacs_usuario = usuario
         const clave = limpio(input.genieacs_clave)
         if (clave !== undefined) cambios.genieacs_clave_cifrada = clave === null ? null : cifrar(clave)
+        const ca = limpio(input.genieacs_ca)
+        if (ca !== undefined) {
+            if (ca !== null && !/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----$/.test(ca)) {
+                errores.push({
+                    field: 'genieacs_ca',
+                    rule: 'formato',
+                    message:
+                        'Pega el certificado en formato PEM (-----BEGIN CERTIFICATE----- … -----END CERTIFICATE-----)',
+                })
+            }
+            cambios.genieacs_ca = ca
+        }
         if (input.activo !== undefined) cambios.activo = input.activo
         if (input.pppoe_por_acs !== undefined) cambios.pppoe_por_acs = input.pppoe_por_acs
 
@@ -132,7 +146,8 @@ export default class ConfigurarEquipos extends DomainAction<EntradaConfigurarEqu
         if (
             'genieacs_url' in cambios ||
             'genieacs_usuario' in cambios ||
-            'genieacs_clave_cifrada' in cambios
+            'genieacs_clave_cifrada' in cambios ||
+            'genieacs_ca' in cambios
         ) {
             Object.assign(cambios, {
                 genieacs_probado_en: null,
@@ -213,6 +228,7 @@ function sinSecretos(
         genieacs_url: fila.genieacs_url,
         genieacs_usuario: fila.genieacs_usuario,
         genieacs_clave: oculto(Boolean(fila.genieacs_clave_cifrada), reemplazados.genieacs),
+        genieacs_ca: fila.genieacs_ca ? 'certificado propio' : null,
         pppoe_por_acs: fila.pppoe_por_acs,
     }
 }

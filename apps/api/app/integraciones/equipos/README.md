@@ -6,11 +6,11 @@ servidor propio) para configurar routers, CPE y Wi-Fi. Iris nunca ve credenciale
 
 ## Configuración por empresa
 
-| Ruta | Permiso | Qué hace |
-| --- | --- | --- |
-| `GET /integraciones/equipos` | `equipos.ver` | Configuración de la empresa activa; token y clave como `***` |
-| `PUT /integraciones/equipos` | `equipos.configurar` | URL y token de SmartOLT; URL, usuario y clave de GenieACS; `pppoe_por_acs`; `perfiles[]` (OLT de SmartOLT + plan → `authorization_preset_id`). Con `version` (409) |
-| `POST /integraciones/equipos/probar` | `equipos.probar` | Prueba los dos con lo guardado y guarda el resultado (devuelve las OLT) |
+| Ruta                                 | Permiso              | Qué hace                                                                                                                                                           |
+| ------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /integraciones/equipos`         | `equipos.ver`        | Configuración de la empresa activa; token y clave como `***`                                                                                                       |
+| `PUT /integraciones/equipos`         | `equipos.configurar` | URL y token de SmartOLT; URL, usuario y clave de GenieACS; `pppoe_por_acs`; `perfiles[]` (OLT de SmartOLT + plan → `authorization_preset_id`). Con `version` (409) |
+| `POST /integraciones/equipos/probar` | `equipos.probar`     | Prueba los dos con lo guardado y guarda el resultado (devuelve las OLT)                                                                                            |
 
 - Tabla `integraciones.equipos_config` (una fila por empresa). Secretos cifrados con `#shared/cifrado`
   (`AAA_PPP_KEY`); nunca salen en respuestas, auditoría (`***`), `audit.red` ni logs.
@@ -18,15 +18,24 @@ servidor propio) para configurar routers, CPE y Wi-Fi. Iris nunca ve credenciale
   `GET /integraciones/iris/estado`): `ftth` con SmartOLT probado, `tr069` con GenieACS probado,
   `wireless` con cualquiera de los dos. Cambiar URL o secreto borra la prueba.
 - Solo `https://`; `http://` con `EQUIPOS_PERMITIR_HTTP=true` (laboratorio).
+- **GenieACS va en otro servidor** (decisión del PM): su NBI detrás de un proxy con HTTPS, autenticación
+  básica y lista de IP (`infra/genieacs/`). Argos manda `Authorization: Basic` con el usuario y la clave
+  de la empresa y, si el certificado del proxy es de una autoridad propia, confía en el certificado raíz
+  guardado en `genieacs_ca` (PEM, solo para ese ACS). Errores claros en «Probar conexión»: clave mala
+  (401), IP no permitida (403) y certificado inválido (autofirmado, vencido, de otro nombre; no se
+  reintenta ni se mandan credenciales).
+- **Un ACS y un SmartOLT por empresa**, nada global: cada servicio usa los de su empresa y el equipo
+  gestionado guardado solo vale para la empresa con la que se registró (si el servicio cambia de
+  empresa, se vuelve a descubrir).
 
 ## Rutas del contrato
 
-| Ruta | Permiso | Qué hace |
-| --- | --- | --- |
+| Ruta                               | Permiso                  | Qué hace                                                                                                                                                         |
+| ---------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /servicios/:id/aprovisionar` | `servicios.aprovisionar` | Valida y acepta (`202 { aprovisionamiento_id, estado: en_proceso }`); repetir la clave ya terminada da `200` con el estado final (`releerRepeticion` de la ruta) |
-| `GET /aprovisionamientos/:id` | `servicios.aprovisionar` | Estado, `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`), `causa`, `reintentable`, `detalle`, `equipo`, `senal` |
-| `GET /servicios/:id/equipo` | `servicios.ver_equipo` | Estado en vivo (SmartOLT + GenieACS), lectura de menos de 60 s guardada; asistente: solo lo que permite §12.3 |
-| `POST /servicios/:id/wifi` | `servicios.cambiar_wifi` | Valida, verifica al titular, tope 3 por día, acepta (`202 { solicitud_id }`) |
+| `GET /aprovisionamientos/:id`      | `servicios.aprovisionar` | Estado, `pasos[]` (`ip`, `equipo`, `wifi`, `activacion`), `causa`, `reintentable`, `detalle`, `equipo`, `senal`                                                  |
+| `GET /servicios/:id/equipo`        | `servicios.ver_equipo`   | Estado en vivo (SmartOLT + GenieACS), lectura de menos de 60 s guardada; asistente: solo lo que permite §12.3                                                    |
+| `POST /servicios/:id/wifi`         | `servicios.cambiar_wifi` | Valida, verifica al titular, tope 3 por día, acepta (`202 { solicitud_id }`)                                                                                     |
 
 Errores: `409 servicio_no_pendiente`, `409 aprovisionamiento_en_curso` (`extensions.aprovisionamiento_id`),
 `409 unidad_en_otra_bodega` (simulando el comodato), `422 equipo_invalido`, `422 wifi_invalido`,
@@ -58,6 +67,10 @@ servicios.cambiar_wifi ──▶ integraciones.wifi_solicitudes ──▶ equipo
 - Una tarea TR-069 que el equipo no ejecutó en la sesión se **borra** del ACS (`DELETE /tasks/:id`):
   nunca se aplica sola después de que Argos dijo «fallido».
 - El SSID y la clave del Wi-Fi viven cifrados en la fila solo mientras está `en_proceso`.
+- **Varias instancias de `equipos-worker`** (crecimiento horizontal): BullMQ reparte los jobs y el advisory
+  lock de Postgres por pedido (`LOCK_EQUIPOS`/`LOCK_WIFI` + id) hace que solo una trabaje cada pedido;
+  la otra lo omite. Además cada acción bloquea la fila del pedido (`FOR UPDATE`) y no hace nada si ya
+  no está `en_proceso`.
 
 ## Eventos
 
@@ -74,30 +87,30 @@ API 1.0», enlazada desde `https://api.smartolt.com`). Base `https://<subdominio
 cabecera `X-Token`, cuerpos `application/x-www-form-urlencoded`, respuesta `{ status, response | error,
 error_code }`.
 
-| Uso | Ruta | Verificado |
-| --- | --- | --- |
-| Probar | `GET /api/system/get_olts` | en la especificación (la doc pide no usarla como latido: solo a pedido) |
-| Buscar ONU por serie | `GET /api/onu/unconfigured_onus?sn=` | especificación |
-| ¿Ya autorizada? | `GET /api/onu/get_onus_details_by_sn/{sn}` | especificación |
-| Autorizar | `POST /api/onu/authorize_onu` (`olt_id`, `pon_type`, `sn`, `board`, `port`, `authorization_preset_id`, `onu_external_id`; `onu_type` si responde `specify_onu_type`) | especificación |
-| Estado | `GET /api/onu/get_onu_status/{onu_external_id}` | especificación |
-| Señal | `GET /api/onu/get_onu_signal/{onu_external_id}` (`onu_signal_1490` → `rx_dbm`, `onu_signal_1310` → `tx_dbm`) | especificación; el mapeo de `tx_dbm` está por confirmar |
+| Uso                  | Ruta                                                                                                                                                                 | Verificado                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Probar               | `GET /api/system/get_olts`                                                                                                                                           | en la especificación (la doc pide no usarla como latido: solo a pedido) |
+| Buscar ONU por serie | `GET /api/onu/unconfigured_onus?sn=`                                                                                                                                 | especificación                                                          |
+| ¿Ya autorizada?      | `GET /api/onu/get_onus_details_by_sn/{sn}`                                                                                                                           | especificación                                                          |
+| Autorizar            | `POST /api/onu/authorize_onu` (`olt_id`, `pon_type`, `sn`, `board`, `port`, `authorization_preset_id`, `onu_external_id`; `onu_type` si responde `specify_onu_type`) | especificación                                                          |
+| Estado               | `GET /api/onu/get_onu_status/{onu_external_id}`                                                                                                                      | especificación                                                          |
+| Señal                | `GET /api/onu/get_onu_signal/{onu_external_id}` (`onu_signal_1490` → `rx_dbm`, `onu_signal_1310` → `tx_dbm`)                                                         | especificación; el mapeo de `tx_dbm` está por confirmar                 |
 
 **GenieACS** — `https://docs.genieacs.com/en/latest/api-reference.html` (NBI, puerto 7557),
 `environment-variables.html` y `virtual-parameters.html`, más el código del NBI
 (`lib/nbi.ts`, `lib/db/synth.ts`, `lib/cwmp/db.ts` de `genieacs/genieacs`).
 
-| Uso | Ruta o parámetro | Verificado |
-| --- | --- | --- |
-| Probar / buscar | `GET /devices/?query=<JSON>&projection=&limit=` | referencia del API; `limit` en `lib/nbi.ts` |
-| Por serie | `query {"_deviceId._SerialNumber": …}` | `DeviceID.SerialNumber` ↔ `_deviceId._SerialNumber` en `lib/db/synth.ts` |
-| Por MAC | `…WANIPConnection.1.MACAddress` (ejemplo de la referencia), `…WANPPPConnection.1.MACAddress`, `Device.Ethernet.Interface.1.MACAddress` | solo la primera está en la doc |
-| Tarea | `POST /devices/<id>/tasks?connection_request&timeout=<ms>` con `setParameterValues` | referencia; `200` aplicada, `202` «Task queued but not processed» o «Task faulted» en `lib/nbi.ts` |
-| Limpiar | `DELETE /tasks/<id>`, `DELETE /faults/<device>:task_<id>` | referencia y `lib/nbi.ts` |
-| Wi-Fi TR-098 | `InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID` y `.KeyPassphrase` | referencia y `virtual-parameters.html` |
-| Wi-Fi TR-181 | `Device.WiFi.SSID.1.SSID` y `Device.WiFi.AccessPoint.1.Security.KeyPassphrase` | la clave en `virtual-parameters.html`; el SSID es del modelo TR-181 (Broadband Forum), **pendiente** con equipos reales |
-| PPPoE | `…WANPPPConnection.1.Username/Password` (TR-098), `Device.PPP.Interface.1.Username/Password` (TR-181) | modelo de datos BBF, **pendiente** con equipos reales |
-| Autenticación | El NBI **no tiene**; Argos manda `Authorization: Basic` si la empresa guarda usuario y clave (proxy delante) | `environment-variables.html` (`NBI_INTERFACE`) |
+| Uso             | Ruta o parámetro                                                                                                                       | Verificado                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Probar / buscar | `GET /devices/?query=<JSON>&projection=&limit=`                                                                                        | referencia del API; `limit` en `lib/nbi.ts`                                                                             |
+| Por serie       | `query {"_deviceId._SerialNumber": …}`                                                                                                 | `DeviceID.SerialNumber` ↔ `_deviceId._SerialNumber` en `lib/db/synth.ts`                                                |
+| Por MAC         | `…WANIPConnection.1.MACAddress` (ejemplo de la referencia), `…WANPPPConnection.1.MACAddress`, `Device.Ethernet.Interface.1.MACAddress` | solo la primera está en la doc                                                                                          |
+| Tarea           | `POST /devices/<id>/tasks?connection_request&timeout=<ms>` con `setParameterValues`                                                    | referencia; `200` aplicada, `202` «Task queued but not processed» o «Task faulted» en `lib/nbi.ts`                      |
+| Limpiar         | `DELETE /tasks/<id>`, `DELETE /faults/<device>:task_<id>`                                                                              | referencia y `lib/nbi.ts`                                                                                               |
+| Wi-Fi TR-098    | `InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID` y `.KeyPassphrase`                                                        | referencia y `virtual-parameters.html`                                                                                  |
+| Wi-Fi TR-181    | `Device.WiFi.SSID.1.SSID` y `Device.WiFi.AccessPoint.1.Security.KeyPassphrase`                                                         | la clave en `virtual-parameters.html`; el SSID es del modelo TR-181 (Broadband Forum), **pendiente** con equipos reales |
+| PPPoE           | `…WANPPPConnection.1.Username/Password` (TR-098), `Device.PPP.Interface.1.Username/Password` (TR-181)                                  | modelo de datos BBF, **pendiente** con equipos reales                                                                   |
+| Autenticación   | El NBI **no tiene**; Argos manda `Authorization: Basic` si la empresa guarda usuario y clave (proxy delante)                           | `environment-variables.html` (`NBI_INTERFACE`)                                                                          |
 
 **Pendientes:** solo la primera red Wi-Fi (índice 1; una segunda banda de 5 GHz no se toca);
 confirmar con equipos reales el formato de la serie de la ONT en el ACS (puede diferir del SN de
@@ -105,6 +118,8 @@ SmartOLT); la tecnología del servicio no se compara con `equipo.tipo` (Argos no
 viejo que no pasó por A32 se descubre por la serie o MAC de su comodato, sin pantalla para vincularlo
 a mano.
 
-Pruebas: `tests/integraciones/equipos_smartolt_genieacs.spec.ts` (SmartOLT y GenieACS simulados con
+Pruebas: `tests/integraciones/equipos_acs_aparte.spec.ts` (NBI por HTTPS con autenticación básica y
+certificados generados con `openssl`, un ACS por empresa, dos workers sobre la misma cola),
+`tests/integraciones/equipos_smartolt_genieacs.spec.ts` (SmartOLT y GenieACS simulados con
 servidores HTTP locales, `equipos_simulado.ts`) y `tests/integraciones/iris_equipos_090.spec.ts`
 (empresa sin integraciones).

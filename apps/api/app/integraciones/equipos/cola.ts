@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { Queue, Worker, type RedisOptions } from 'bullmq'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
@@ -37,11 +38,20 @@ function conexion(): RedisOptions {
     }
 }
 
+let prefijoFijado: string | null = null
+
 function prefijo() {
-    return env.get('COLAS_PREFIJO') ?? 'argosisp'
+    return prefijoFijado ?? env.get('COLAS_PREFIJO') ?? 'argosisp'
 }
 
 let cola: Queue | null = null
+
+/** Pruebas: otro prefijo de Redis para la cola (y cierra la cola abierta con el anterior). */
+export async function fijarPrefijoColaEquipos(p: string | null) {
+    prefijoFijado = p
+    if (cola) await cola.close()
+    cola = null
+}
 
 function colaEquipos(): Queue {
     cola ??= new Queue(NOMBRE_COLA_EQUIPOS, { connection: conexion(), prefix: prefijo() })
@@ -55,7 +65,7 @@ export async function encolarEquipos(tipo: 'aprovisionar' | 'wifi', id: number):
         tipo,
         { id },
         {
-            jobId: `${tipo === 'aprovisionar' ? 'aprov' : 'wifi'}-${id}-${Date.now()}`,
+            jobId: `${tipo === 'aprovisionar' ? 'aprov' : 'wifi'}-${id}-${randomUUID()}`,
             removeOnComplete: { count: 200 },
             removeOnFail: { count: 500 },
         },
@@ -130,6 +140,29 @@ export async function procesarPendientesEquipos(
     return r ?? { aprovisionamientos: 0, wifi: 0 }
 }
 
+/**
+ * Un worker de la cola `equipos`. Puede haber varias instancias (varios contenedores
+ * `equipos-worker`, crecimiento horizontal): BullMQ reparte los jobs y el advisory lock por pedido
+ * impide que dos instancias trabajen el mismo pedido a la vez (la segunda lo omite).
+ */
+export function crearWorkerEquipos(opciones: { concurrencia?: number } = {}): Worker {
+    const worker = new Worker(
+        NOMBRE_COLA_EQUIPOS,
+        async (job) => {
+            if (job.name === 'pendientes') return procesarPendientesEquipos()
+            const id = Number((job.data as { id?: unknown }).id)
+            if (!Number.isSafeInteger(id) || id <= 0) return null
+            return job.name === 'wifi' ? procesarWifi(id) : procesarAprovisionamiento(id)
+        },
+        { connection: conexion(), prefix: prefijo(), concurrency: opciones.concurrencia ?? 2 },
+    )
+    worker.on('failed', (job, error) =>
+        logger.warn({ jobId: job?.id, tipo: job?.name, err: error }, 'equipos: job fallido'),
+    )
+    worker.on('error', (error) => logger.error({ err: error }, 'Worker de equipos'))
+    return worker
+}
+
 export async function iniciarWorkerEquipos(opciones: { cadaMs?: number } = {}) {
     const q = colaEquipos()
     await q.upsertJobScheduler(
@@ -141,19 +174,5 @@ export async function iniciarWorkerEquipos(opciones: { cadaMs?: number } = {}) {
             opts: { removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
         },
     )
-    const worker = new Worker(
-        NOMBRE_COLA_EQUIPOS,
-        async (job) => {
-            if (job.name === 'pendientes') return procesarPendientesEquipos()
-            const id = Number((job.data as { id?: unknown }).id)
-            if (!Number.isSafeInteger(id) || id <= 0) return null
-            return job.name === 'wifi' ? procesarWifi(id) : procesarAprovisionamiento(id)
-        },
-        { connection: conexion(), prefix: prefijo(), concurrency: 2 },
-    )
-    worker.on('failed', (job, error) =>
-        logger.warn({ jobId: job?.id, tipo: job?.name, err: error }, 'equipos: job fallido'),
-    )
-    worker.on('error', (error) => logger.error({ err: error }, 'Worker de equipos'))
-    return { cola: q, worker }
+    return { cola: q, worker: crearWorkerEquipos() }
 }

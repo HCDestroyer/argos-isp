@@ -223,13 +223,20 @@ export interface EquipoGestionado {
     acs_device_id: string | null
 }
 
+/**
+ * El equipo gestionado del servicio **en el ACS y la OLT de esa empresa**. Cada empresa tiene su
+ * propio SmartOLT y su propio GenieACS: si el servicio pasó a otra empresa, el registro viejo no vale
+ * (apunta al ACS de la otra) y se vuelve a descubrir.
+ */
 export async function equipoGestionado(
     servicioId: number,
+    empresaId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<EquipoGestionado | null> {
     const fila = (await cliente
         .from('integraciones.equipos_servicio')
         .where('servicio_id', servicioId)
+        .where('empresa_id', empresaId)
         .first()) as EquipoGestionado | null
     if (!fila) return null
     return {
@@ -365,7 +372,8 @@ export async function estadoEquipo(
 
     if (!gestion.ftth && !gestion.tr069) throw await sinGestion()
     const equipo =
-        (await equipoGestionado(servicioId)) ?? (await descubrirEquipo(servicioId, empresaId, config))
+        (await equipoGestionado(servicioId, empresaId)) ??
+        (await descubrirEquipo(servicioId, empresaId, config))
     if (!equipo) throw await sinGestion()
 
     const guardada = (await db

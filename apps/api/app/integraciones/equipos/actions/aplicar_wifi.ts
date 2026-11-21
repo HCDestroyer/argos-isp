@@ -40,7 +40,7 @@ export default class AplicarWifi extends DomainAction<{ id: number }, ResultadoA
         t.fijarEntidad('solicitud_wifi', Number(fila.id))
 
         const config = await configDeEmpresa(empresaId, t.trx)
-        const equipo = await equipoGestionado(servicioId, t.trx)
+        const equipo = await equipoGestionado(servicioId, empresaId, t.trx)
         if (!gestionDe(config).tr069 || !config.genieacs || !equipo?.acs_device_id) {
             return this.resolver(t, fila, 'fallido', 'equipo_sin_gestion')
         }
