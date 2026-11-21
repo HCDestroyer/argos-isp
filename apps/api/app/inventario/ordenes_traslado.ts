@@ -67,6 +67,8 @@ export async function bodegaTransito(t: Transaccion, empresaId: number): Promise
 export interface ConfiguracionInventario {
     empresa_id: number
     traslado_firma_obligatoria: boolean
+    /** A48: técnicos distintos con intentos para declarar un equipo no recuperado (2 de fábrica) */
+    recuperacion_tecnicos_minimos: number
     version: number
 }
 
@@ -78,11 +80,16 @@ export async function configuracionInventario(
     const fila = (await cliente
         .from('inventario.configuracion')
         .where('empresa_id', empresaId)
-        .select('traslado_firma_obligatoria', 'version')
-        .first()) as { traslado_firma_obligatoria: boolean; version: number } | null
+        .select('traslado_firma_obligatoria', 'recuperacion_tecnicos_minimos', 'version')
+        .first()) as {
+        traslado_firma_obligatoria: boolean
+        recuperacion_tecnicos_minimos: number
+        version: number
+    } | null
     return {
         empresa_id: empresaId,
         traslado_firma_obligatoria: fila ? Boolean(fila.traslado_firma_obligatoria) : true,
+        recuperacion_tecnicos_minimos: fila ? Number(fila.recuperacion_tecnicos_minimos) : 2,
         version: fila ? Number(fila.version) : 0,
     }
 }
@@ -402,8 +409,10 @@ export async function payloadTraslado(cliente: QueryClientContract, ordenId: num
             'o.enviado_en',
             'u.id as usuario_id',
             'u.email',
+            'b.cuadrilla_id_iris',
         )
         .firstOrFail()) as {
+        cuadrilla_id_iris: string | null
         id: number
         empresa_id: number
         numero: number
@@ -420,6 +429,7 @@ export async function payloadTraslado(cliente: QueryClientContract, ordenId: num
         numero: Number(o.numero),
         bodega_destino_id: Number(o.bodega_destino_id),
         tecnico: o.usuario_id ? { id_externo: String(o.usuario_id), correo: String(o.email) } : null,
+        cuadrilla_id: o.cuadrilla_id_iris ?? null,
         estado: o.estado,
         lineas: lineas.map((l) => ({
             producto_id: l.producto_id,

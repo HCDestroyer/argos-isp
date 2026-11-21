@@ -1,4 +1,10 @@
 import db from '@adonisjs/lucid/services/db'
+import {
+    capturarEstado,
+    registrarEstadoEquipo,
+    type EstadoEquipo,
+    type OpcionesEstado,
+} from '#inventario/equipos'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { Conflicto, NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
@@ -30,6 +36,8 @@ export const ESTADOS_UNIDAD = [
     'anulada',
     'devuelta_proveedor',
     'entregada',
+    // A48 (Iris 0.12.0 §3.10): el equipo que el cliente no devolvió, declarado por una persona
+    'no_recuperada',
 ] as const
 export type EstadoUnidad = (typeof ESTADOS_UNIDAD)[number]
 export const CONDICIONES = ['nuevo', 'usado'] as const
@@ -331,7 +339,10 @@ export async function actualizarUnidad(
     cambios: Partial<
         Pick<UnidadFila, 'estado' | 'condicion' | 'bodega_id' | 'costo' | 'servicio_id' | 'activo_id'>
     >,
+    /** motivo del cambio de estado del equipo (A48: historial y `inventario.unidad_estado_cambiado`) */
+    opciones: OpcionesEstado = {},
 ): Promise<void> {
+    const antes = cambios.estado === undefined ? null : await capturarEstado(t, id)
     await t.trx
         .from('inventario.unidades')
         .where('id', id)
@@ -340,6 +351,7 @@ export async function actualizarUnidad(
             version: t.trx.knexRawQuery('version + 1'),
             updated_at: t.trx.knexRawQuery('now()'),
         } as Record<string, unknown>)
+    if (antes) await registrarEstadoEquipo(t, id, antes, opciones)
 }
 
 /** Fecha del último movimiento de la unidad (una salida con fecha pasada no queda antes). */
@@ -363,6 +375,8 @@ export interface UnidadVista extends UnidadFila {
     producto_nombre: string
     bodega_nombre: string | null
     cliente_id: number | null
+    /** estado del equipo de Iris 0.12.0 §3.10 (`revision` / `garantia` para `en_reparacion`) */
+    estado_equipo: EstadoEquipo
     created_at: Date
     updated_at: Date
 }
@@ -390,11 +404,18 @@ function consulta(cliente: QueryClientContract) {
             's.cliente_id',
             'u.activo_id',
             'u.compra_id',
+            cliente.raw(SQL_ESTADO_EQUIPO),
             'u.version',
             'u.created_at',
             'u.updated_at',
         )
 }
+
+/** Estado del equipo (A48) en SQL, para la unidad `u`. */
+export const SQL_ESTADO_EQUIPO = `case when u.estado = 'en_reparacion' then
+        case when exists (select 1 from inventario.garantias g where g.unidad_id = u.id and g.resultado is null)
+             then 'garantia' else 'revision' end
+        else u.estado end as estado_equipo`
 
 function normalizarVista(f: UnidadVista): UnidadVista {
     return { ...f, ...normalizarFila(f), cliente_id: n(f.cliente_id) }

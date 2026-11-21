@@ -1,5 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { enmascararTelefono } from '#notify/contactos'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { usuarioDelActor } from '#shared/contexto'
 import { claveConsentimiento, verConsentimiento, type VistaConsentimiento } from '#notify/consentimientos'
@@ -18,6 +19,11 @@ export interface EntradaConsentimiento {
      * instalación; si no se puede saber, 422 `empresa_requerida`.
      */
     empresa_id?: number | null
+    /**
+     * Número de un contacto del cliente (E.164, contrato Iris 0.10.0 §6.4, A42): el permiso es de ese
+     * número. No cambia el estado del cliente (`notify.contacto_iris`).
+     */
+    telefono?: string | null
 }
 
 /**
@@ -41,6 +47,9 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
 > {
     readonly nombre = 'notificaciones.registrar_consentimiento'
 
+    /** El número de un contacto no queda en claro en la auditoría (va enmascarado en `audit.cambios`). */
+    protected readonly camposEntradaOcultos = ['telefono']
+
     protected async handle(input: EntradaConsentimiento, t: Transaccion): Promise<VistaConsentimiento> {
         const cliente = await t.trx.from('core.clientes').where('id', input.cliente_id).select('id').first()
         if (!cliente) throw new NoEncontrado(`El cliente ${input.cliente_id} no existe`)
@@ -49,11 +58,17 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
         t.fijarEmpresa(empresaId)
 
         const ocurrido = new Date(input.ocurrido_en ?? Date.now()).toISOString()
-        const clave = claveConsentimiento(empresaId, input.cliente_id, 'whatsapp', ocurrido)
+        const telefono = input.telefono?.trim() || null
+        if (telefono && !/^\+[1-9]\d{7,14}$/.test(telefono)) {
+            throw new ValidacionFallida([
+                { field: 'telefono', message: 'Número en formato E.164', rule: 'e164' },
+            ])
+        }
+        const clave = claveConsentimiento(empresaId, input.cliente_id, 'whatsapp', ocurrido, telefono)
         const insertadas = (await t.trx.rawQuery(
             `INSERT INTO notify.consentimientos_iris
-                (empresa_id, cliente_id, canal, estado, origen, ocurrido_en, idempotency_key, registrado_por, request_id)
-             VALUES (?, ?, 'whatsapp', ?, ?, ?, ?, ?, ?)
+                (empresa_id, cliente_id, canal, estado, origen, ocurrido_en, idempotency_key, registrado_por, request_id, telefono)
+             VALUES (?, ?, 'whatsapp', ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (idempotency_key) DO NOTHING
              RETURNING id`,
             [
@@ -65,9 +80,17 @@ export default class RegistrarConsentimientoWhatsapp extends DomainAction<
                 clave,
                 usuarioDelActor(t.ctx.actor),
                 t.ctx.requestId,
+                telefono,
             ] as any[],
         )) as { rows: Array<{ id: number }> }
         if (insertadas.rows.length === 0) {
+            return verConsentimiento(t.trx, clave)
+        }
+        if (telefono) {
+            // Permiso de un número de contacto: queda en la línea de tiempo con el número enmascarado
+            await t.registrarCambios({ tipo: 'cliente', id: input.cliente_id }, null, {
+                avisos_whatsapp_numero: `${enmascararTelefono(telefono)}: ${input.estado}`,
+            })
             return verConsentimiento(t.trx, clave)
         }
 

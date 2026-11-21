@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Sistema visual Argos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#F7F8FC}
+a{color:#4338CA}a:hover{color:#3730A3}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:14px;padding:20px}
+.h{margin:0 0 14px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#475569}
+.sw{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#475569}
+.sw span:first-child{height:56px;border-radius:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 18px;font-weight:600;font-size:14px;border:0;cursor:pointer;font-family:inherit}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.cur{display:flex;align-items:center;gap:10px;border:1px dashed #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px}
+.cur code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#F1F5F9;border-radius:6px;padding:2px 6px;margin-left:auto}
+</style>
+</helmet>
+<div style="width:100%;min-height:1080px;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;max-width:1360px">
+  <div><h1 style="margin:0;font-size:30px">Sistema visual Argos</h1><p style="margin:4px 0 0;color:#64748B">Las mismas piezas en todo el panel y el portal. Cada estado lleva color, icono y texto.</p></div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+    <section class="card">
+      <h2 class="h">Colores</h2>
+      <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px">
+        <div class="sw"><span style="background:#4F46E5"></span>Índigo · principal</div>
+        <div class="sw"><span style="background:#818CF8"></span>Índigo · oscuro</div>
+        <div class="sw"><span style="background:#06B6D4"></span>Cian · acento</div>
+        <div class="sw"><span style="background:linear-gradient(135deg,#4F46E5,#06B6D4)"></span>Degradado de marca</div>
+        <div class="sw"><span style="background:#F7F8FC;border:1px solid #E6E8F0"></span>Fondo claro</div>
+        <div class="sw"><span style="background:#0B0F1A"></span>Fondo oscuro</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px">
+        <div class="sw"><span style="background:#16A34A;height:28px"></span>Correcto</div>
+        <div class="sw"><span style="background:#D97706;height:28px"></span>Atención</div>
+        <div class="sw"><span style="background:#DC2626;height:28px"></span>Peligro</div>
+        <div class="sw"><span style="background:#2563EB;height:28px"></span>Información</div>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="h">Botones</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <button class="btn" style="background:#4F46E5;color:#fff">Registrar pago</button>
+        <button class="btn" style="background:#EEF2FF;color:#3730A3">Ver historial</button>
+        <button class="btn" style="background:#fff;color:#334155;border:1px solid #E2E8F0">Cancelar</button>
+        <button class="btn" style="background:#DC2626;color:#fff">Retirar servicio</button>
+        <button class="btn" style="background:#E2E8F0;color:#94A3B8;cursor:not-allowed" disabled>Sin permiso</button>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:14px 0 0">Siempre ícono + verbo + qué: «Registrar pago», nunca «Aceptar». El ícono se entiende aunque no se lea; el texto confirma. Una acción principal por pantalla; lo peligroso en rojo y al final.</p>
+    </section>
+    <section class="card">
+      <h2 class="h">Estados del servicio</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <span class="badge" style="background:#DCFCE7;color:#166534">✓ Activo</span>
+        <span class="badge" style="background:#FEF3C7;color:#92400E">! Limitado</span>
+        <span class="badge" style="background:#FEE2E2;color:#991B1B">✕ Suspendido</span>
+        <span class="badge" style="background:#FEE2E2;color:#991B1B">✋ Suspendido a mano</span>
+        <span class="badge" style="background:#E0E7FF;color:#3730A3">○ Por instalar</span>
+        <span class="badge" style="background:#F1F5F9;color:#334155">— Retirado</span>
+        <span class="badge" style="background:#CFFAFE;color:#155E75">⏱ Promesa activa</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="h">Dónde va cada cosa</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;font-size:13px;line-height:1.45">
+        <div style="background:#F8FAFC;border-radius:12px;padding:12px"><div style="font-weight:700;margin-bottom:4px">Ventana (solo si hace falta)</div>Confirmar algo que no se deshace, o pedir 1 a 4 datos sin salir de donde estás: suspender con motivo, anular, aprobar comprobante.</div>
+        <div style="background:#F8FAFC;border-radius:12px;padding:12px"><div style="font-weight:700;margin-bottom:4px">Panel lateral</div>Vista rápida, filtros, editar un catálogo mediano sin dejar la lista.</div>
+        <div style="background:#F8FAFC;border-radius:12px;padding:12px"><div style="font-weight:700;margin-bottom:4px">Página propia</div>Cliente, servicio, router, plantillas, procesos de varios pasos y vistas de PDF.</div>
+      </div>
+    </section>
+    <section class="card" style="grid-column:span 2">
+      <h2 class="h">Cursores según la acción</h2>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+        <div class="cur" style="cursor:pointer">Todo lo que se pulsa<code>mano</code></div>
+        <div class="cur" style="cursor:not-allowed">Deshabilitado o sin permiso<code>prohibido</code></div>
+        <div class="cur" style="cursor:help">Botón de ayuda «?»<code>ayuda</code></div>
+        <div class="cur" style="cursor:copy">IP, códigos, cuentas<code>copiar</code></div>
+        <div class="cur" style="cursor:context-menu">Filas con clic derecho<code>menú</code></div>
+        <div class="cur" style="cursor:zoom-in">Comprobantes y fotos<code>lupa</code></div>
+        <div class="cur" style="cursor:grab">Lo que se arrastra<code>agarrar</code></div>
+        <div class="cur" style="cursor:progress">Mientras se procesa<code>espera</code></div>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:12px 0 0">Pasa el mouse sobre cada recuadro para ver el cursor.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

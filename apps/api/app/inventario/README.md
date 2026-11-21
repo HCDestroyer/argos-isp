@@ -27,6 +27,8 @@ desde XML FEL, PDF o imagen con IA; la bodega del técnico e Iris).
 | `tipos_producto.ts` | Fase D: catálogo de tipos (empresa o global) y la modalidad (`comodato`, `consumible_gasto`, `consumible_cobro`) |
 | `consumos.ts` | Fase D: el consumo a un servicio según la modalidad de cada producto (gasto, cargo único al cliente o comodato), de una línea o en lote |
 | `tecnicos.ts`, `mi_bodega.ts` | Fase D: el técnico de Argos por `id_externo` o correo (Iris), su bodega, `GET /inventario/mi-bodega` y `GET /inventario/tecnicos` (cada elemento de `bodegas[]` con `id`, `empresa_id`, `activa` y `nombre`, contrato Iris 0.6.4, A22; toda bodega `tecnico` tiene usuario por restricción en base) |
+| `cuadrillas.ts`, `actor_tecnico.ts`, `actions/sincronizar_cuadrilla.ts` | Bodega de cuadrilla (Iris 0.11.0 §3.9, A47): membresía en el tiempo, bodegas del técnico (cuadrilla primero, después la personal), actor `X-Iris-Actor`, jefe al recibir, la ventana de la fecha de Iris 0.12.0 y quién usó el material en cada movimiento. La membresía llega por `cuadrilla.*` (receptor de webhooks de Iris). Contrato en `contratos/inventario.md` «Bodega de cuadrilla» |
+| `equipos.ts`, `unidad_detalle.ts`, `cobros_equipo.ts` y sus acciones (`cambiar_equipo`, `registrar_intento_recuperacion`, `declarar_no_recuperada`, `decidir_cobro_equipo`, `registrar_contacto_recuperacion`, `garantia_unidad`) | Equipos del cliente (Iris 0.12.0 §3.10, A48): estado del equipo (revisión y garantía sobre `en_reparacion`), historial de estados, cambio de equipo en una transacción, garantía del proveedor, intentos de recuperación, declarar no recuperado y la cola de cobros de equipo. Rutas en `start/routes/inventario_equipos.ts`. Contrato en `contratos/inventario.md` «Equipos del cliente» |
 | `facturas_compra/` | Fase D: esquema común de la factura (`extraccion.ts`), parser FEL (`fel_xml.ts`), lector mínimo de texto de PDF, IA configurable por `fetch` (`ia.ts`) y borradores con su propuesta y duplicados (`borradores.ts`) |
 | `actions/` | `productos.*`, `bodegas.*`, `inventario.cargar_saldo_inicial`, `consumir`, `trasladar`, `ajustar`, `dar_de_baja`, `asignar_comodato`, `devolver_comodato`, `declarar_perdida_comodato`, `abrir_conteo`, `contar`, `cerrar_conteo`, `cancelar_conteo`, `marcar_reparada` y la interna `revisar_comodatos` |
 | `start/routes/inventario_traslados.ts`, `inventario_catalogo.ts`, `inventario_compras.ts` | Fase D: `/inventario/traslados` (`/enviar`, `/:id/recibir`, `/cancelar`, `/pdf`, `/firma`, `/documento`), `/inventario/configuracion`, `/inventario/mi-bodega`, `/inventario/tipos-producto`, `/compras/borradores[...]`, `/inventario/ia/configuracion` (se montan desde `inventario.ts`) |
@@ -80,6 +82,8 @@ desde XML FEL, PDF o imagen con IA; la bodega del técnico e Iris).
   existencia total cruza el mínimo hacia abajo), `inventario.comodato_asignado`,
   `inventario.comodato_devuelto`, `inventario.equipo_por_recuperar`, `inventario.conteo_cerrado` (y
   `activo.dado_de_baja` al devolver o perder un comodato); fase D: `inventario.traslado_enviado`,
-  `inventario.traslado_recibido`, `inventario.traslado_cancelado` e `inventario.ia_config_cambiada`.
+  `inventario.traslado_recibido`, `inventario.traslado_cancelado` e `inventario.ia_config_cambiada`;
+  A48: `inventario.unidad_estado_cambiado`, `inventario.equipo_cambiado` e `inventario.recuperacion_intentada`.
+- Recibe de Iris (por el receptor de webhooks): `cuadrilla.creada` y `cuadrilla.actualizada` (A47).
 - Consume: `servicio.estado_cambiado` (grupo `inventario`, `billing:worker`): retirado → equipos por
   recuperar; de vuelta a otro estado → en comodato.

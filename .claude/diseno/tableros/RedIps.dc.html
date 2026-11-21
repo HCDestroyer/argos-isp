@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Red · Direcciones IP</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.cel{width:100%;aspect-ratio:1;border-radius:4px;background:#E0E7FF;display:block}
+.cel.a{background:#4F46E5}.cel.l{background:#E2E8F0}.cel.r{background:#FCD34D}.cel.g{background:#06B6D4}.cel.s{background:#F87171}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#475569}
+.lg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.gr{padding:8px 18px;background:#F8FAFC;border-bottom:1px solid #EEF0F5;font-size:12px;font-weight:700;color:#475569;display:flex;align-items:center;gap:8px}
+.bq{display:flex;height:16px;border-radius:999px;overflow:hidden;background:#EEF0F5}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Red › <b>Direcciones IP</b></div>
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+ <div><h1 class="h1">Direcciones IP</h1><div class="sub">Todas las redes de todos los routers en un solo lugar</div></div>
+ <span style="flex:1"></span>
+ <button class="ib f" title="Ayuda: redes, rangos y IPv6 (manual)" style="width:40px;height:40px;border-radius:999px;cursor:help"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button>
+</div>
+<section class="isla" style="border-radius:20px;padding:14px 18px;flex:0 0 auto;display:flex;flex-direction:column;gap:10px">
+ <div style="display:flex;gap:10px;align-items:center">
+  <div class="busca" style="flex:1;height:48px;font-size:15px;border:2px solid #4F46E5;box-shadow:0 0 0 4px rgba(79,70,229,.12);color:#0F172A;cursor:text" onClick="{{buscar}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span style="color:{{qCol}}" class="mono">{{qTxt}}</span></div>
+  <span class="selp" style="height:48px;padding:0 16px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Hoy<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><span class="nuevo">por fecha: nuevo</span>
+  <button class="btn p" style="height:48px;padding:0 24px" onClick="{{buscar}}">¿De quién es?</button>
+ </div>
+ <div style="display:{{vRes}};align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#F0FDF4;border:1px solid #BBF7D0">
+  <span class="av" style="background:#DCFCE7;color:#166534">RM</span>
+  <div style="flex:1;min-width:0"><div style="font-size:15px"><b>Rosa Méndez</b> <span class="m2">· CLI-00388 · Internet hogar · Fibra 50</span></div><div class="m2">Usuario <span class="mono" style="font-size:12px">rosa.3</span> · MK Centro · conectada desde hace 3 d · la tiene asignada desde el 12 mar 2025</div></div>
+  <span class="b ok"><span class="dot" style="background:currentColor"></span>En línea</span>
+  <button class="btn o" style="padding:8px 14px">Ver historial de esta IP</button><button class="btn p" style="padding:8px 16px">Abrir cliente</button>
+ </div>
+ <div style="display:{{vTip}};font-size:12px;color:#64748B;gap:6px;align-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Escribe una IPv4, una IPv6 o un prefijo. Sirve para reclamos y requerimientos: te dice el cliente, su servicio y desde cuándo. <button class="lnk" style="font-size:12px" onClick="{{buscar}}">Probar con 10.20.4.18</button></div>
+</section>
+<div style="display:flex;gap:12px;flex:0 0 auto"><div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico nf" style="width:34px;height:34px;border-radius:10px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></svg></span><div style="min-width:0"><div class="m2">IPv4 privadas</div><b style="font-size:17px" class="num">1,597</b> <span class="m2">de 2,709 · 59 %</span></div></div><div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico cy" style="width:34px;height:34px;border-radius:10px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span><div style="min-width:0"><div class="m2">IPv4 públicas</div><b style="font-size:17px" class="num">19</b> <span class="m2">de 28 · 9 libres</span></div></div><div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico wa" style="width:34px;height:34px;border-radius:10px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg></span><div style="min-width:0"><div class="m2">Redes casi llenas</div><b style="font-size:17px" class="num">1</b> <span class="m2">10.30.8.0/24 al 92 %</span></div></div><div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px;flex:1;min-width:0"><span class="ico ok" style="width:34px;height:34px;border-radius:10px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span><div style="min-width:0"><div class="m2">Clientes con IPv6</div><b style="font-size:17px" class="num">713</b> <span class="m2">de 1,295 · 55 %</span></div></div></div>
+<section class="isla" style="flex:1;min-height:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid #F1F5F9;flex:0 0 auto">
+  <div class="segb"><sc-for list="{{tabs}}" as="t"><button class="ts {{t.cls}}" onClick="{{t.ir}}">{{t.nom}}<span class="c">{{t.n}}</span></button></sc-for></div>
+  <span style="flex:1"></span><span class="selp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 17h.01M11 17h.01M12 13V9M8 6a6 6 0 0 1 8 0"/></svg>Todos los routers<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><span class="selp">Más llenas primero<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+ </div>
+ <div style="display:{{v.v4}};flex:1;min-height:0">
+ <div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid #F1F5F9">
+  <div class="lh" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 84px minmax(0,1.2fr);border-top:0"><span>Red</span><span>Router</span><span>Tipo</span><span>Ocupación</span></div>
+  <div class="sc" style="flex:1">
+  <sc-for list="{{redes}}" as="r"><div class="lr {{r.cls}}" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 84px minmax(0,1.2fr)" onClick="{{r.ver}}">
+   <div><b class="mono" style="font-size:13px">{{r.cidr}}</b> <span class="b cy" style="display:{{r.vp}};font-size:11px;padding:1px 7px">pública</span><div class="m2 el">{{r.nom}}</div></div>
+   <div class="el m2" style="color:#334155">{{r.rt}}</div>
+   <div><span class="b ne">{{r.tipo}}</span></div>
+   <div><div style="display:flex;justify-content:space-between" class="num"><b>{{r.p}} %</b><span class="m2">{{r.l}} libres</span></div><div class="bar" style="margin-top:4px"><i style="width:{{r.p}}%;background:{{r.bc}}"></i></div></div>
+  </div></sc-for>
+  </div>
+  <div style="padding:10px 18px;border-top:1px solid #F1F5F9;display:flex;gap:10px;align-items:center;flex:0 0 auto"><span class="m2">7 redes · 4 routers</span><span style="flex:1"></span><button class="btn o" style="padding:7px 14px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Agregar red</button></div>
+ </div>
+ <div style="width:470px;flex:0 0 auto;display:flex;flex-direction:column;min-height:0">
+  <div style="padding:14px 18px 10px;border-bottom:1px solid #F1F5F9">
+   <div style="display:flex;align-items:center;gap:8px"><b class="mono" style="font-size:16px">{{s.cidr}}</b><span class="m2 el" style="flex:1">{{s.nom}} · {{s.rt}}</span><button class="ib" title="Editar la red"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><button class="ib" title="Mover a otro router"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5h4v4M5 9v3a3 3 0 0 0 3 3h8a3 3 0 0 1 3 3v3M16 21h4"/></svg></button></div>
+   <div style="display:flex;gap:14px;margin-top:8px;font-size:13px"><span><b class="num">{{s.a}}</b> <span class="m2">asignadas</span></span><span><b class="num">{{s.l}}</b> <span class="m2">libres</span></span><span><b class="num">{{s.r}}</b> <span class="m2">reservadas</span></span></div>
+  </div>
+  <div class="sc" style="flex:1;padding:12px 18px;display:flex;flex-direction:column;gap:10px">
+   <div style="display:flex;align-items:center;gap:8px"><span class="sec" style="margin:0">Mapa</span><span class="selp" style="height:30px;font-size:12px;margin-left:auto"><span class="mono" style="font-size:12px">{{s.sub}}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+   <div style="display:grid;grid-template-columns:repeat(32,1fr);gap:2px"><sc-for list="{{celdas}}" as="c"><i class="cel {{c.k}}" title="{{c.t}}"></i></sc-for></div>
+   <div style="display:flex;gap:12px;flex-wrap:wrap"><span class="lg"><i style="background:#4F46E5"></i>Asignada</span><span class="lg"><i style="background:#E2E8F0"></i>Libre</span><span class="lg"><i style="background:#FCD34D"></i>Reservada</span><span class="lg"><i style="background:#06B6D4"></i>Gateway</span><span class="lg"><i style="background:#F87171"></i>Suspendido</span></div>
+   <div style="border:1px solid #E6E8F0;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:13px"><span class="mono" style="font-weight:700">.18</span><div style="flex:1;min-width:0"><b>Rosa Méndez</b> <span class="m2">· rosa.3 · Fibra 50</span><div class="m2">Conectada hace 3 d · asignada desde 12 mar 2025</div></div><button class="lnk">Abrir</button></div>
+   <div>
+    <div class="kv" style="font-size:13px"><span>Gateway</span><b class="mono" style="font-size:12px">{{s.gw}}</b></div>
+    <div class="kv" style="font-size:13px"><span>Rango que se entrega</span><b>{{s.rango}}</b></div>
+    <div class="kv" style="font-size:13px"><span>DNS</span><b class="mono" style="font-size:12px">10.255.0.1 · 1.1.1.1</b></div>
+   </div>
+  </div>
+ </div>
+</div><div style="display:{{v.v6}};flex:1;min-height:0;gap:0">
+ <div class="sc" style="flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+  <div class="card" style="padding:14px 16px"><div style="display:flex;align-items:center;gap:10px"><b class="mono" style="font-size:15px">2803:d100:40::/40</b><span class="m2">MK Centro · proveedor Tigo</span><span style="flex:1"></span><span class="m2">62 % repartido en pools</span></div>
+  <div class="bq" style="margin:10px 0 6px"><i style="width:12%;background:#06B6D4"></i><i style="width:38%"></i><i style="width:50%;background:#4F46E5"></i></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:40::/52</span><span class="b cy" style="justify-self:start">Enlace · /64</span><span><span class="bar"><i style="width:10%;background:#06B6D4"></i></span><span class="m2 num">412 de 4,096</span></span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:40:8000::/42</span><span class="b nf" style="justify-self:start">Casa · /56</span><span><span class="bar"><i style="width:3%"></i></span><span class="m2 num">412 de 16,384</span></span></div></div><div class="card" style="padding:14px 16px"><div style="display:flex;align-items:center;gap:10px"><b class="mono" style="font-size:15px">2803:d100:80::/44</b><span class="m2">MK Norte · Chimaltenango · proveedor Claro</span><span style="flex:1"></span><span class="m2">100 % repartido en pools</span></div>
+  <div class="bq" style="margin:10px 0 6px"><i style="width:50%;background:#06B6D4"></i><i style="width:50%;background:#4F46E5"></i></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:80::/45</span><span class="b cy" style="justify-self:start">Enlace · /64</span><span><span class="bar"><i style="width:1%;background:#06B6D4"></i></span><span class="m2 num">301 de 524,288</span></span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px minmax(0,1fr);gap:10px;font-size:13px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9"><span class="mono" style="font-size:12px">2803:d100:88::/45</span><span class="b nf" style="justify-self:start">Casa · /56</span><span><span class="bar"><i style="width:15%"></i></span><span class="m2 num">301 de 2,048</span></span></div></div>
+  <button class="btn o" style="align-self:flex-start"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Agregar bloque</button>
+ </div>
+ <aside style="width:400px;flex:0 0 auto;border-left:1px solid #F1F5F9;background:#FAFBFE;padding:16px 18px;display:flex;flex-direction:column;gap:12px;overflow:auto">
+  <div class="sec" style="margin:0">Qué recibe cada cliente</div>
+  <div class="card" style="padding:12px 14px"><div style="display:flex;gap:10px;align-items:center"><span class="ico cy" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5h4v4M5 9v3a3 3 0 0 0 3 3h8a3 3 0 0 1 3 3v3M16 21h4"/></svg></span><div><b style="font-size:13px">Un /64 para el enlace</b><div class="m2">La conexión entre tu router y el suyo.</div></div></div><div class="mono" style="font-size:12px;margin-top:8px;color:#475569">2803:d100:40:0::/64 · 2803:d100:40:1::/64 …</div></div>
+  <div class="card" style="padding:12px 14px"><div style="display:flex;gap:10px;align-items:center"><span class="ico nf" style="width:32px;height:32px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></span><div><b style="font-size:13px">Un /56 para su casa</b><div class="m2">256 redes para su WiFi, cámaras, invitados…</div></div></div><div class="mono" style="font-size:12px;margin-top:8px;color:#475569">2803:d100:40:8000::/56 · …:8100::/56 …</div></div>
+  <div class="av2 nf" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><div>Al agregar un bloque, Argos sugiere cómo partirlo (mitad para casas, y los enlaces justos para los mismos clientes) y te lo muestra antes de guardar.</div></div>
+  <div class="av2 wa" style="align-items:flex-start"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>Radio 10 en MK Torre San Juan</b> no tiene de dónde sacar IPv6: el router no tiene bloque.</div></div>
+ </aside>
+</div><div style="display:{{v.fijas}};flex:1;min-height:0;flex-direction:column">
+ <div style="display:flex;gap:10px;align-items:center;padding:10px 18px"><span class="fc on">Públicas <span class="c">19</span></span><span class="fc">Privadas fijas <span class="c">86</span></span><span style="flex:1"></span><span class="m2">9 públicas libres en 190.56.12.64/27</span></div>
+ <div class="lh" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span>IP</span><span>Cliente</span><span>Plan</span><span>Router</span><span>Estado</span><span>Desde</span><span></span></div>
+ <div class="sc" style="flex:1"><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">190.56.12.66</span><b class="el">Ferretería El Clavo</b><span>Pyme 100</span><span class="m2 el">MK Centro</span><span><span class="b ok">Conectado</span></span><span class="m2">12 ene 2025</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">190.56.12.67</span><b class="el">Colegio Belén</b><span>Dedicado 200</span><span class="m2 el">MK Centro</span><span><span class="b ok">Conectado</span></span><span class="m2">3 feb 2025</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">190.56.12.70</span><b class="el">Hotel Posada del Sol</b><span>Pyme 200</span><span class="m2 el">MK Centro</span><span><span class="b ok">Conectado</span></span><span class="m2">20 jun 2025</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">190.56.12.72</span><b class="el">Clínica Santa Ana</b><span>Pyme 100</span><span class="m2 el">MK Centro</span><span><span class="b er">Suspendido</span></span><span class="m2">8 ago 2025</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">190.56.12.75</span><b class="el">Municipalidad · cámaras</b><span>Dedicado 500</span><span class="m2 el">MK Centro</span><span><span class="b ok">Conectado</span></span><span class="m2">1 sep 2026</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div><div class="lr" style="grid-template-columns:150px minmax(0,1.4fr) 130px minmax(0,1fr) 120px 120px 30px"><span class="copy" style="justify-self:start">172.16.40.120</span><b class="el">Finca La Esperanza</b><span>Radio 10</span><span class="m2 el">MK Torre San Juan</span><span><span class="b ok">En línea</span></span><span class="m2">14 oct 2026</span><span style="color:#94A3B8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></div></div>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const rs = [{"id": 1, "cidr": "10.20.4.0/22", "nom": "Clientes fibra", "rt": "MK Centro", "tipo": "Pool", "pub": 0, "p": 78, "a": "796", "l": "222", "r": "2", "gw": "10.20.4.1 (derivado)", "rango": "Toda la red", "bc": "#4F46E5", "sub": "10.20.4.0/24"}, {"id": 2, "cidr": "190.56.12.64/27", "nom": "IP fija pública", "rt": "MK Centro", "tipo": "Estático", "pub": 1, "p": 63, "a": "19", "l": "9", "r": "2", "gw": "190.56.12.65", "rango": ".66 a .94", "bc": "#06B6D4", "sub": "190.56.12.64/27"}, {"id": 3, "cidr": "100.64.20.0/24", "nom": "CGNAT respaldo", "rt": "MK Centro", "tipo": "Pool", "pub": 0, "p": 8, "a": "19", "l": "222", "r": "13", "gw": "100.64.20.1", "rango": ".10 a .250", "bc": "#4F46E5", "sub": "100.64.20.0/24"}, {"id": 4, "cidr": "10.30.8.0/24", "nom": "Clientes Chimaltenango", "rt": "MK Norte · Chimaltenango", "tipo": "Pool", "pub": 0, "p": 92, "a": "233", "l": "20", "r": "1", "gw": "10.30.8.1 (derivado)", "rango": "Toda la red", "bc": "#D97706", "sub": "10.30.8.0/24"}, {"id": 5, "cidr": "10.30.9.0/24", "nom": "Ampliación norte", "rt": "MK Norte · Chimaltenango", "tipo": "Pool", "pub": 0, "p": 27, "a": "68", "l": "185", "r": "1", "gw": "10.30.9.1 (derivado)", "rango": "Toda la red", "bc": "#4F46E5", "sub": "10.30.9.0/24"}, {"id": 6, "cidr": "172.16.40.0/24", "nom": "Radios San Juan", "rt": "MK Torre San Juan", "tipo": "Estático", "pub": 0, "p": 61, "a": "86", "l": "55", "r": "113", "gw": "172.16.40.1", "rango": ".100 a .240", "bc": "#4F46E5", "sub": "172.16.40.0/24"}, {"id": 7, "cidr": "10.50.0.0/22", "nom": "Clientes Escuintla", "rt": "MK Sur · Escuintla", "tipo": "Pool", "pub": 0, "p": 70, "a": "395", "l": "625", "r": "2", "gw": "10.50.0.1 (derivado)", "rango": "Toda la red", "bc": "#4F46E5", "sub": "10.50.0.0/24"}];
+const st = this.state || {};
+const tab = st.tab || 'v4';
+const sel = rs.find((r) => r.id === (st.sel || 1)) || rs[0];
+const pct = sel.p;
+const celdas = [];
+for (let i = 0; i < 256; i++) {
+  let k = 'l';
+  const h = (i * 37 + sel.id * 11) % 100;
+  if (i === 0 || i === 255) k = 'r'; else if (i === 1) k = 'g'; else if (h < pct) k = (i % 41 === 7) ? 's' : 'a';
+  if (sel.id === 3 && (i < 10 || i > 250)) k = 'r';
+  celdas.push({ k, t: '.' + i });
+}
+const tabs = [['v4', 'IPv4', 7], ['v6', 'IPv6', 2], ['fijas', 'IPs fijas y públicas', 105]].map(([id, nom, n]) => ({ id, nom, n, cls: id === tab ? 'on' : '', ir: () => this.setState({ tab: id }) }));
+return { tabs, celdas, s: sel, v: { v4: tab === 'v4' ? 'flex' : 'none', v6: tab === 'v6' ? 'flex' : 'none', fijas: tab === 'fijas' ? 'flex' : 'none' },
+  redes: rs.map((r) => ({ ...r, cls: r.id === sel.id ? 'on' : '', vp: r.pub ? 'inline-flex' : 'none', ver: () => this.setState({ sel: r.id }) })),
+  buscar: () => this.setState({ q: !st.q }), vRes: st.q ? 'flex' : 'none', vTip: st.q ? 'none' : 'flex',
+  qTxt: st.q ? '10.20.4.18' : 'Escribe una IP…', qCol: st.q ? '#0F172A' : '#94A3B8' };
+}
+}
+</script>
+</body>
+</html>

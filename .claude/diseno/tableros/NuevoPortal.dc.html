@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Portal del cliente · escritorio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#F7F8FC}
+a{color:#4338CA}a:hover{color:#3730A3}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:14px;padding:18px}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:500;color:#334155;text-decoration:none;cursor:pointer}
+.nav.on{background:#EEF2FF;color:#4338CA}
+.ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:14px;border:0;cursor:pointer;font-family:inherit;text-decoration:none}
+.p{background:#4F46E5;color:#fff}.o{background:#fff;color:#334155;border:1px solid #E2E8F0}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600}
+.row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #F1F5F9;font-size:14px;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+.tile{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #E6E8F0;border-radius:12px;background:#fff;cursor:pointer;text-decoration:none;color:#0F172A}
+.tile:hover{border-color:#C7D2FE}
+</style>
+</helmet>
+<div style="width:100%;min-height:1000px;display:flex;flex-wrap:wrap">
+  <nav aria-label="Menú del portal" style="flex:0 0 240px;background:#fff;border-right:1px solid #E6E8F0;padding:20px 14px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 8px 16px"><span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#4F46E5,#0891B2)"></span><b>Red Altiplano</b></div>
+    <a class="nav on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas y pagos</a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>Mi WiFi</a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Soporte<span class="badge" style="margin-left:auto;background:#FEF3C7;color:#92400E;padding:1px 7px">1</span></a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Solicitar servicio</a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3h12l4 6-10 13L2 9z"/></svg>Mis puntos</a>
+    <a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Mi cuenta</a>
+  </nav>
+  <main style="flex:999 1 640px;min-width:0;padding:26px 30px;box-sizing:border-box;display:flex;flex-direction:column;gap:18px;max-width:1200px">
+    <section style="border-radius:18px;padding:24px 28px;background:linear-gradient(120deg,#4F46E5,#3730A3 50%,#0E7490);color:#fff;display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+      <div style="flex:1"><div style="opacity:.9">Hola, Juan Pérez López</div><div class="num" style="font-size:34px;font-weight:700">Q 200.00</div><div style="opacity:.9">por pagar · vence el 5 de diciembre</div></div>
+      <span class="badge" style="background:rgba(255,255,255,.18);color:#fff">✓ Servicio activo · 50 Mbps</span>
+      <a href="#" class="btn" style="background:#fff;color:#3730A3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Pagar factura</a>
+    </section>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">
+      <section class="card">
+        <div style="display:flex;align-items:center;gap:10px"><span class="ico" style="background:#CFFAFE;color:#0E7490"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></span><b>Mi WiFi</b><span class="badge" style="margin-left:auto;background:#DCFCE7;color:#166534">En línea</span></div>
+        <div style="margin-top:12px;font-size:14px"><div style="color:#64748B;font-size:12px">Nombre de la red</div><b>Familia_Perez</b></div>
+        <div style="margin-top:8px;font-size:14px"><div style="color:#64748B;font-size:12px">Contraseña</div><span style="font-family:ui-monospace,monospace">••••••••••</span> <a href="#" style="font-size:13px">Ver</a></div>
+        <div style="display:flex;gap:8px;margin-top:14px"><a href="#" class="btn p" style="flex:1;padding:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Cambiar contraseña</a><a href="#" class="btn o" style="padding:8px 12px" aria-label="Reiniciar equipo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg></a></div>
+        <div style="font-size:12px;color:#64748B;margin-top:8px">Se aplica en tu equipo en menos de un minuto.</div>
+      </section>
+      <section class="card" style="grid-column:span 2">
+        <div style="display:flex;align-items:center;gap:10px"><span class="ico" style="background:#FEF3C7;color:#B45309"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span><b>Soporte</b><a href="#" class="btn p" style="margin-left:auto;padding:8px 14px;font-size:13px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Reportar un problema</a></div>
+        <div class="row"><span class="ico" style="background:#FEF3C7;color:#92400E;width:32px;height:32px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div style="flex:1"><b>Internet lento en la noche</b><div style="font-size:12px;color:#64748B">Ticket #1042 · hace 2 h · «Revisamos tu señal, un técnico te llamará hoy»</div></div><span class="badge" style="background:#FEF3C7;color:#92400E">En proceso</span></div>
+        <div class="row"><span class="ico" style="background:#DCFCE7;color:#166534;width:32px;height:32px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span><div style="flex:1"><b>Cambio de contraseña del router</b><div style="font-size:12px;color:#64748B">Ticket #998 · 2 nov.</div></div><span class="badge" style="background:#DCFCE7;color:#166534">Resuelto</span></div>
+        <div style="font-size:12px;color:#64748B;margin-top:6px">Lo atiende el equipo de soporte; las respuestas llegan aquí y por WhatsApp.</div>
+      </section>
+    </div>
+    <section class="card">
+      <div style="display:flex;align-items:center;gap:10px"><span class="ico" style="background:#EEF2FF;color:#4F46E5"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><b>Solicitar un servicio</b><span style="font-size:13px;color:#64748B">Un asesor te contacta para confirmarlo.</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px">
+        <a class="tile" href="#"><span class="ico" style="background:#EEF2FF;color:#4F46E5"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><b>Subir de plan</b><span style="font-size:13px;color:#64748B">Más velocidad desde el próximo mes</span></a>
+        <a class="tile" href="#"><span class="ico" style="background:#CFFAFE;color:#0E7490"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 11v6M9 14h6"/></svg></span><b>Otro servicio</b><span style="font-size:13px;color:#64748B">Internet en otra casa o negocio</span></a>
+        <a class="tile" href="#"><span class="ico" style="background:#FEF3C7;color:#B45309"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s7-6 7-12a7 7 0 0 0-14 0c0 6 7 12 7 12z"/></svg></span><b>Traslado</b><span style="font-size:13px;color:#64748B">Me mudo y quiero llevar mi internet</span></a>
+        <a class="tile" href="#"><span class="ico" style="background:#FCE7F3;color:#9D174D"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg></span><b>TV y adicionales</b><span style="font-size:13px;color:#64748B">Streaming, IPTV y más</span></a>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

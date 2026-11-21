@@ -1,3 +1,4 @@
+import { extrasIrisPago } from '#billing/iris_eventos'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
@@ -681,6 +682,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             facturas: aplicaciones.map((a) => a.factura_id),
             clientes: clientesDelPago(input.cliente_id, aplicaciones),
             ...(input.origen === 'iris' ? { origen: 'iris' as const } : {}),
+            ...(await extrasIrisPago(t.trx, pagoId)),
         })
         return { pagoId, aplicaciones }
     }

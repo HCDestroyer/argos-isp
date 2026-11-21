@@ -423,6 +423,13 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
             'Relacionado',
         ],
     },
+    '/configuracion': {
+        titulo: 'Configuración',
+        resumen: 'Empresa, empresas, apariencia y ajustes generales.',
+        pagina: 'configuracion',
+        ancla: null,
+        temas: [],
+    },
     '/configuracion/apariencia': {
         titulo: 'Apariencia',
         resumen: 'Cambia cómo se ve el sistema para todos: el color del panel y del portal, el modo inicial (claro, oscuro o el del dispositivo), el nombre de la marca, un eslogan y el logo y la imagen de fondo de las pantallas de inicio de sesión del panel y del portal.',

@@ -536,7 +536,12 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
             client.get('/api/v1/inventario/configuracion').bearerToken(e.token).headers(cabecera),
             200,
         )
-        assert.deepEqual(config.body(), { empresa_id: e.B, traslado_firma_obligatoria: true, version: 0 })
+        assert.deepEqual(config.body(), {
+            empresa_id: e.B,
+            traslado_firma_obligatoria: true,
+            recuperacion_tecnicos_minimos: 2,
+            version: 0,
+        })
         await estado(
             client
                 .post('/api/v1/inventario/configuracion')
@@ -553,7 +558,12 @@ test.group('Inventario · órdenes de traslado (fase D)', (group) => {
                 .json({ traslado_firma_obligatoria: false, version: 0 }),
             200,
         )
-        assert.deepEqual(cambiada.body(), { empresa_id: e.B, traslado_firma_obligatoria: false, version: 1 })
+        assert.deepEqual(cambiada.body(), {
+            empresa_id: e.B,
+            traslado_firma_obligatoria: false,
+            recuperacion_tecnicos_minimos: 2,
+            version: 1,
+        })
         await estado(
             client
                 .post('/api/v1/inventario/configuracion')

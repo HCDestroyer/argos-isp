@@ -606,6 +606,10 @@ export const estadoCuentaValidator = vine.compile(
         empresa_id: idEntidad().optional().meta({
             description: 'Solo la sección de esa empresa; sin ella, una sección por cada empresa del alcance',
         }),
+        servicio_id: idEntidad().optional().meta({
+            description:
+                'Solo el saldo, las facturas y la parte de cada movimiento de ese servicio del cliente (sin el desglose de los otros); 404 si el servicio no es del cliente',
+        }),
     }),
 )
 

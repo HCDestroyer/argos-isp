@@ -1,3 +1,4 @@
+import { usuarioDelActor } from '#shared/contexto'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { dec, type Dec } from '#ledger/dinero'
@@ -63,7 +64,23 @@ export default class DarDeBajaInventario extends DomainAction<EntradaBaja, Movim
             cantidad = dec('1')
             costo = dec(unidad!.costo)
             unidadId = unidad!.id
-            await actualizarUnidad(t, unidad!.id, { estado: 'dada_de_baja', bodega_id: null })
+            await actualizarUnidad(
+                t,
+                unidad!.id,
+                { estado: 'dada_de_baja', bodega_id: null },
+                { motivo: 'baja' },
+            )
+            // A48: una unidad en garantía que se da de baja cierra su garantía (resultado `baja`)
+            await t.trx
+                .from('inventario.garantias')
+                .where('unidad_id', unidad!.id)
+                .whereNull('resultado')
+                .update({
+                    resultado: 'baja',
+                    resuelta_en: t.trx.knexRawQuery('now()'),
+                    resuelta_por: usuarioDelActor(t.ctx.actor),
+                    version: t.trx.knexRawQuery('version + 1'),
+                } as Record<string, unknown>)
         } else {
             cantidad = cantidadValida(input.cantidad ?? '')
             costo = costoSalida(await saldoDe(t, producto.id, bodega.id), cantidad, producto, bodega.id)

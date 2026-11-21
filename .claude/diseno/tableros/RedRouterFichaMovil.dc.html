@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Red · Router (teléfono)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1.5px solid #E2E8F0;font-size:12.5px;font-weight:600;color:#475569;background:#fff;cursor:pointer;white-space:nowrap}.pill.on{border-color:#4F46E5;background:#EEF2FF;color:#3730A3}
+.pill .nm{display:inline}
+.pill.off{opacity:1;text-decoration:none;cursor:pointer;color:#94A3B8}
+.pill.off .nm{text-decoration:line-through}
+.pill .qi{width:18px;height:18px;border-radius:999px;background:#E0E7FF;color:#3730A3;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;font-style:normal}
+.pill.ver{box-shadow:0 0 0 3px rgba(79,70,229,.18);border-color:#A5B4FC}
+.pill.on.ver{border-color:#4F46E5}
+.exq{margin-top:10px;border:1px solid #C7D2FE;background:#F5F7FF;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;color:#334155}
+.rec{font-size:10px;font-weight:700;color:#166534;background:#DCFCE7;border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<div style="height:100%;display:flex;flex-direction:column">
+<header style="display:flex;align-items:center;gap:10px;padding:14px 14px 8px;flex:0 0 auto"><span class="f ci" style="width:38px;height:38px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span><div style="min-width:0;flex:1"><b style="font-size:17px;display:block" class="el">Router</b><span class="m2">Red › Routers</span></div><span class="f ci" style="width:38px;height:38px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span></header>
+<section class="isla" style="margin:0 12px 10px;border-radius:20px;padding:12px 14px;flex:0 0 auto;display:flex;gap:12px;align-items:center">
+ <span class="ico ok" style="width:44px;height:44px;border-radius:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 17h.01M11 17h.01M12 13V9M8 6a6 6 0 0 1 8 0"/></svg></span>
+ <div style="flex:1;min-width:0"><b style="font-size:17px">MK Centro</b><div class="m2 el">CCR2004 · RouterOS 7.16.1</div><div style="display:flex;gap:6px;margin-top:5px"><span class="b ok" style="font-size:11px;padding:2px 8px">En línea</span><span class="b nf" style="font-size:11px;padding:2px 8px">PPPoE</span><span class="b nf" style="font-size:11px;padding:2px 8px">RADIUS</span></div></div>
+</section>
+<section class="isla" style="flex:1;min-height:0;margin:0 12px 10px;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="padding:10px 10px 8px;flex:0 0 auto"><div class="segb" style="display:flex"><sc-for list="{{tabs}}" as="t"><button class="ts {{t.cls}}" style="padding:7px 9px" onClick="{{t.ir}}">{{t.nom}}</button></sc-for></div></div>
+ <div class="sc" style="flex:1;padding:4px 12px 12px;display:{{v.res}};flex-direction:column;gap:10px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="card" style="padding:10px 12px"><div class="m2" style="display:flex;gap:6px;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h3l2-6 4 12 3-9 2 3h6"/></svg>Contacto</div><b style="font-size:15px;color:#166534">En línea</b><div class="m2 el">hace 12 s</div></div><div class="card" style="padding:10px 12px"><div class="m2" style="display:flex;gap:6px;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0M17 5a3.5 3.5 0 0 1 0 7M22 20a6 6 0 0 0-4-5.6"/></svg>Conectados</div><b style="font-size:15px;color:#0F172A">412</b><div class="m2 el">de 438</div></div><div class="card" style="padding:10px 12px"><div class="m2" style="display:flex;gap:6px;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>CPU</div><b style="font-size:15px;color:#0F172A">23 %</b><div class="m2 el">memoria 41 %</div></div><div class="card" style="padding:10px 12px"><div class="m2" style="display:flex;gap:6px;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></svg>IPs</div><b style="font-size:15px;color:#0F172A">78 %</b><div class="m2 el">222 libres</div></div></div>
+  <div class="av2 wa" style="align-items:flex-start"><div style="flex:1"><b>3 servicios no usan PPPoE</b><div>Quedaron con IP estática de antes.</div></div><button class="lnk">Unificar</button></div>
+  <div class="av2 nf" style="align-items:flex-start"><div style="flex:1"><b>4 clientes con caídas repetidas</b></div><button class="lnk">Ver</button></div>
+  <div class="card" style="padding:10px 12px"><div class="sec" style="margin-bottom:4px">Direcciones</div>
+   <div class="kv" style="font-size:13px;border-top:0"><span class="mono" style="color:#0F172A;font-size:12px">10.20.4.0/22</span><b class="num">78 %</b></div>
+   <div class="kv" style="font-size:13px"><span class="mono" style="color:#0F172A;font-size:12px">190.56.12.64/27</span><b class="num">63 %</b></div></div>
+ </div>
+ <div class="sc" style="flex:1;padding:4px 12px 12px;display:{{v.con}};flex-direction:column;gap:10px">
+  <div class="card" style="padding:10px 12px"><div class="sec" style="margin-bottom:4px">Túnel seguro</div><div class="kv" style="font-size:13px;border-top:0"><span>Estado</span><span class="b ok">Conectado</span></div><div class="kv" style="font-size:13px"><span>Último saludo</span><b>hace 18 s</b></div><div class="kv" style="font-size:13px"><span>IP en el túnel</span><span class="copy">10.255.0.12</span></div></div>
+  <div class="card" style="padding:10px 12px"><div class="sec" style="margin-bottom:4px">RADIUS y corte</div><div class="kv" style="font-size:13px;border-top:0"><span>RADIUS</span><span class="b ok">Funcionando</span></div><div class="kv" style="font-size:13px"><span>Página de corte</span><b>Por código · 6 de 6</b></div></div>
+  <div class="m2">El script de conexión y los cambios de velocidad se hacen desde una computadora.</div>
+ </div>
+ <div class="sc" style="flex:1;padding:4px 12px 12px;display:{{v.vel}};flex-direction:column;gap:8px">
+  <div class="sec" style="margin:4px 0 0">Cómo se limita a cada cliente</div>
+  <div style="border:1.5px solid #4F46E5;background:#EEF2FF;border-radius:14px;padding:10px 12px"><b style="font-size:13px;display:block">Árbol con PCQ<span class="rec">Recomendado</span></b><span class="m2" style="display:block;line-height:1.35">Una rama por plan. Lo mejor con muchos clientes.</span></div><div style="border:1.5px solid #E2E8F0;background:#fff;border-radius:14px;padding:10px 12px"><b style="font-size:13px;display:block">RADIUS</b><span class="m2" style="display:block;line-height:1.35">Argos manda la velocidad al conectarse. Solo PPPoE.</span></div><div style="border:1.5px solid #E2E8F0;background:#fff;border-radius:14px;padding:10px 12px"><b style="font-size:13px;display:block">Cola simple</b><span class="m2" style="display:block;line-height:1.35">Una cola fija por servicio.</span></div>
+  <div style="display:{{vOtras}};flex-direction:column;gap:8px"><div style="border:1.5px solid #E2E8F0;background:#fff;border-radius:14px;padding:10px 12px"><b style="font-size:13px;display:block">Perfil PPP</b><span class="m2" style="display:block;line-height:1.35">La velocidad vive en el perfil del plan. Solo PPPoE.</span></div><div style="border:1.5px solid #E2E8F0;background:#fff;border-radius:14px;padding:10px 12px"><b style="font-size:13px;display:block">PCQ por plan</b><span class="m2" style="display:block;line-height:1.35">Una cola por plan, repartida. Necesita RADIUS.</span></div></div>
+  <button class="lnk" style="align-self:flex-start;padding:6px 0" onClick="{{verOtras}}">{{otrasTxt}}</button>
+  <div class="sec" style="margin:4px 0 0">Tipo de cola</div>
+  <div><div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{colas}}" as="c"><button class="pill {{c.cls}}" onClick="{{c.ir}}" title="Cómo funciona"><span class="nm">{{c.nom}}</span><span class="qi" aria-hidden="true">?</span></button></sc-for></div>
+   <div class="exq"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="font-size:14px;color:#0F172A">{{colaX.tit}}</b><span class="b {{colaX.ec}}" style="font-size:11px;padding:2px 8px">{{colaX.est}}</span></div>{{colaX.txt}}<div style="margin-top:4px"><b>Cuándo conviene:</b> {{colaX.cuando}}</div><div style="display:{{colaX.vno}};gap:8px;align-items:flex-start;margin-top:8px;padding-top:8px;border-top:1px dashed #C7D2FE;color:#92400E"><span><b>Por qué está tachada:</b> {{colaX.no}}</span></div></div></div>
+  <div class="m2">Se cambia desde una computadora, con vista previa antes de aplicar.</div>
+ </div>
+ <div class="sc" style="flex:1;padding:4px 0 12px;display:{{v.bit}};flex-direction:column">
+  <div style="padding:10px 14px;border-top:1px solid #F1F5F9"><div style="display:flex;gap:8px;align-items:center"><span class="b ok" style="font-size:11px;padding:2px 8px">CoA</span><span class="m2 num" style="margin-left:auto">09:41</span></div><div style="font-size:13px;margin-top:3px">Cambiar velocidad de rosa.3</div><div class="m2" style="color:#166534;font-weight:600">Aceptado</div></div><div style="padding:10px 14px;border-top:1px solid #F1F5F9"><div style="display:flex;gap:8px;align-items:center"><span class="b ok" style="font-size:11px;padding:2px 8px">Desconectar</span><span class="m2 num" style="margin-left:auto">09:38</span></div><div style="font-size:13px;margin-top:3px">Cerrar sesión de juan.perez.12</div><div class="m2" style="color:#166534;font-weight:600">Aceptado</div></div><div style="padding:10px 14px;border-top:1px solid #F1F5F9"><div style="display:flex;gap:8px;align-items:center"><span class="b er" style="font-size:11px;padding:2px 8px">RouterOS</span><span class="m2 num" style="margin-left:auto">09:12</span></div><div style="font-size:13px;margin-top:3px">Crear cola del plan «Pyme 100»</div><div class="m2" style="color:#B91C1C;font-weight:600">Falló: el padre no existe</div></div><div style="padding:10px 14px;border-top:1px solid #F1F5F9"><div style="display:flex;gap:8px;align-items:center"><span class="b er" style="font-size:11px;padding:2px 8px">CoA</span><span class="m2 num" style="margin-left:auto">08:55</span></div><div style="font-size:13px;margin-top:3px">Cambiar velocidad de luis.coc.1</div><div class="m2" style="color:#B91C1C;font-weight:600">Sin respuesta (3 intentos)</div></div>
+ </div>
+</section>
+<div style="flex:0 0 auto;display:flex;gap:8px;padding:10px 12px 14px;background:#fff;border-top:1px solid #E6E8F0"><button class="btn o" style="flex:1;justify-content:center;padding:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-4L3 10M3 4v6h6M4 13a8 8 0 0 0 14 4l3-3M21 20v-6h-6"/></svg>Reconciliar</button><button class="btn p" style="flex:1.3;justify-content:center;padding:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h3l2-6 4 12 3-9 2 3h6"/></svg>Probar conexión</button></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {};
+const tab = st.tab || 'res';
+const colas = [
+  ['def', 'Predeterminada', 'La cola básica del router: atiende en orden de llegada. No gasta CPU, pero una descarga grande puede trabar lo demás del mismo cliente.', 'Con pocos clientes y routers pequeños.', 'No aplica con Árbol ni con PCQ por plan: ahí la cola se comparte entre varios clientes y solo sirve PCQ.'],
+  ['sfq', 'SFQ', 'Atiende por turnos a cada conexión del cliente. Es ligera y evita que una sola descarga se lleve todo.', 'Como mejora barata en routers con poca CPU.', 'No aplica con Árbol ni con PCQ por plan: ahí solo sirve PCQ.'],
+  ['fq', 'FQ-CoDel', 'Evita que una descarga trabe la navegación, las llamadas y los juegos del mismo cliente. Buen equilibrio entre calidad y CPU.', 'En casi todos los casos con colas por cliente. Solo RouterOS 7.', 'No aplica con Árbol ni con PCQ por plan: ahí solo sirve PCQ.'],
+  ['cake', 'CAKE', 'Lo más completo: reparte parejo entre los aparatos del cliente y mantiene baja la espera, pero pide más CPU.', 'Con pocos clientes o routers potentes. Solo RouterOS 7.', 'No aplica con Árbol ni con PCQ por plan: ahí solo sirve PCQ.'],
+  ['pcq', 'PCQ', 'Reparte el ancho entre los clientes de un plan: una sola cola por plan y cada cliente con su tope. Es la que menos carga al router con muchos clientes.', 'Obligatoria con Árbol con PCQ y con PCQ por plan.', '']
+];
+const cv = st.cola || 'pcq';
+const cx = colas.find((c) => c[0] === cv);
+const colasV = colas.map((c) => ({ nom: c[1], cls: (c[0] === 'pcq' ? 'on' : 'off') + (c[0] === cv ? ' ver' : ''), ir: () => this.setState({ cola: c[0] }) }));
+const colaX = { tit: cx[1], txt: cx[2], cuando: cx[3], no: cx[4], vno: cx[4] ? 'flex' : 'none', est: cx[0] === 'pcq' ? 'En uso' : 'No disponible aquí', ec: cx[0] === 'pcq' ? 'ok' : 'ne' };
+const otras = !!st.otras;
+const tabs = [['res', 'Resumen'], ['con', 'Conexión'], ['vel', 'Velocidad'], ['bit', 'Bitácora']].map(([id, nom]) => ({ id, nom, cls: id === tab ? 'on' : '', ir: () => this.setState({ tab: id }) }));
+return { colas: colasV, colaX, vOtras: otras ? 'flex' : 'none', otrasTxt: otras ? 'Ocultar las otras' : 'Ver las otras (2)', verOtras: () => this.setState({ otras: !otras }), tabs, v: { vel: tab === 'vel' ? 'flex' : 'none', res: tab === 'res' ? 'flex' : 'none', con: tab === 'con' ? 'flex' : 'none', bit: tab === 'bit' ? 'flex' : 'none' } };
+}
+}
+</script>
+</body>
+</html>

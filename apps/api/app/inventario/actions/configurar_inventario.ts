@@ -16,6 +16,8 @@ export const DETALLE_EMPRESA_CONFIGURACION =
 export interface EntradaConfigurarInventario {
     empresa_id?: number | null
     traslado_firma_obligatoria: boolean
+    /** A48: técnicos distintos para declarar un equipo no recuperado (1–10); sin él, se conserva */
+    recuperacion_tecnicos_minimos?: number | null
     version: number
 }
 
@@ -36,10 +38,12 @@ export default class ConfigurarInventario extends DomainAction<
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3073, empresaId])
         const antes = await configuracionInventario(empresaId, t.trx)
         if (antes.version !== input.version) throw new ConflictoVersion('configuracion_inventario', empresaId)
+        const minimos = input.recuperacion_tecnicos_minimos ?? antes.recuperacion_tecnicos_minimos
         if (antes.version === 0) {
             await t.trx.insertQuery().table('inventario.configuracion').insert({
                 empresa_id: empresaId,
                 traslado_firma_obligatoria: input.traslado_firma_obligatoria,
+                recuperacion_tecnicos_minimos: minimos,
             })
         } else {
             await t.trx
@@ -47,6 +51,7 @@ export default class ConfigurarInventario extends DomainAction<
                 .where('empresa_id', empresaId)
                 .update({
                     traslado_firma_obligatoria: input.traslado_firma_obligatoria,
+                    recuperacion_tecnicos_minimos: minimos,
                     version: t.trx.knexRawQuery('version + 1'),
                     updated_at: t.trx.knexRawQuery('now()'),
                 })
@@ -59,8 +64,14 @@ export default class ConfigurarInventario extends DomainAction<
         t.fijarEntidad('configuracion_inventario', Number(fila!.id))
         await t.registrarCambios(
             { tipo: 'configuracion_inventario', id: Number(fila!.id) },
-            { traslado_firma_obligatoria: antes.traslado_firma_obligatoria },
-            { traslado_firma_obligatoria: input.traslado_firma_obligatoria },
+            {
+                traslado_firma_obligatoria: antes.traslado_firma_obligatoria,
+                recuperacion_tecnicos_minimos: antes.recuperacion_tecnicos_minimos,
+            },
+            {
+                traslado_firma_obligatoria: input.traslado_firma_obligatoria,
+                recuperacion_tecnicos_minimos: minimos,
+            },
         )
         return configuracionInventario(empresaId, t.trx)
     }
