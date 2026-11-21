@@ -336,6 +336,7 @@ function erroresDe(capa: string): string | undefined {
                         :key="opcion.valor"
                         role="radio"
                         :aria-checked="valorCapa('padre') === opcion.valor"
+                        :value="opcion.valor"
                         :label="opcion.etiqueta"
                         :color="valorCapa('padre') === opcion.valor ? 'primary' : 'neutral'"
                         :variant="valorCapa('padre') === opcion.valor ? 'soft' : 'outline'"
@@ -380,6 +381,8 @@ function erroresDe(capa: string): string | undefined {
                         <UButton
                             role="radio"
                             :aria-checked="valorCapa('tipo_cola') === opcion.valor"
+                            :value="opcion.valor"
+                            :title="opcion.valida ? undefined : `No disponible: ${opcion.motivo}`"
                             :label="opcion.etiqueta"
                             :disabled="!opcion.valida"
                             color="neutral"

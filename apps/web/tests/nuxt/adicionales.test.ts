@@ -12,7 +12,7 @@ import PlanFormulario from '~/components/PlanFormulario.vue'
 import ServicioAdicionales from '~/components/ServicioAdicionales.vue'
 import PaginaAdicionales from '~/pages/adicionales/index.vue'
 import PaginaMotivos from '~/pages/adicionales/motivos.vue'
-import PaginaPlan from '~/pages/planes/[id].vue'
+import PaginaPlan from '~/pages/planes/[id]/index.vue'
 import PaginaPlanes from '~/pages/planes/index.vue'
 import { esperar } from '../ayudas/esperar'
 

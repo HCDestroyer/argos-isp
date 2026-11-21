@@ -1041,14 +1041,8 @@ onMounted(cargar)
                                     v-if="precio"
                                     class="shrink-0 text-lg font-bold text-highlighted"
                                     data-prueba="precio-mensual-servicio"
-                                >{{ formatearQuetzales(precio) }} <span class="text-xs font-normal text-muted">/mes</span></span>
+                                >{{ formatearQuetzales(precio) }}{{ servicio.costo_override ? ' (precio especial)' : '' }} <span class="text-xs font-normal text-muted">/mes</span></span>
                             </div>
-                            <p
-                                v-if="servicio.costo_override"
-                                class="text-xs text-muted"
-                            >
-                                Precio especial del servicio.
-                            </p>
                             <dl>
                                 <RedFila
                                     etiqueta="Plantilla de facturación"

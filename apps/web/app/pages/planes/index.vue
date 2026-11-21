@@ -22,10 +22,10 @@ const { puede } = usePermisos()
 const TODOS = 'todos'
 const tipo = ref<string>(esTipoPlan(route.query.tipo) ? route.query.tipo : TODOS)
 const routerFiltro = ref<string>(typeof route.query.router === 'string' ? route.query.router : TODOS)
-const enVenta = ref(route.query.todos !== '1')
+const enVenta = ref(route.query.venta === '1')
 const busqueda = ref('')
 
-watch([tipo, routerFiltro, enVenta], ([t, r, v]) => void router.replace({ query: { ...(t !== TODOS ? { tipo: t } : {}), ...(r !== TODOS ? { router: r } : {}), ...(!v ? { todos: '1' } : {}) } }))
+watch([tipo, routerFiltro, enVenta], ([t, r, v]) => void router.replace({ query: { ...(t !== TODOS ? { tipo: t } : {}), ...(r !== TODOS ? { router: r } : {}), ...(v ? { venta: '1' } : {}) } }))
 
 const planes = shallowRef<Plan[]>([])
 const cargando = ref(true)
@@ -228,7 +228,10 @@ const sincronizarAbierto = ref(false)
                                     :to="`/planes/${row.original.id}`"
                                     class="font-semibold text-highlighted hover:text-primary"
                                 >{{ row.original.nombre }}</ULink>
-                                <span class="text-xs text-muted">{{ TIPOS_PLAN[row.original.tipo]?.etiqueta }}{{ row.original.activo ? '' : ' · no en venta' }}</span>
+                                <span class="text-xs text-muted">
+                                    <span :data-tipo-plan="row.original.tipo">{{ TIPOS_PLAN[row.original.tipo]?.etiqueta }}</span>
+                                    <span v-if="!row.original.activo"> · no en venta</span>
+                                </span>
                             </div>
                         </div>
                     </template>

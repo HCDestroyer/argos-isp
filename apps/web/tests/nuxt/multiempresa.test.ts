@@ -11,6 +11,7 @@ import PaginaCliente from '~/pages/clientes/[id]/index.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
 import PaginaEmpresas from '~/pages/configuracion/empresas.vue'
 import PaginaServicio from '~/pages/servicios/[id]/index.vue'
+import { opcionesMasServicio } from '../ayudas/fichaServicio'
 import { esperar } from '../ayudas/esperar'
 import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
@@ -240,7 +241,7 @@ describe('multiempresa · pantallas', () => {
         const vista = await mountSuspended(PaginaServicio, { route: '/servicios/4' })
         await esperar(() => expect(vista.find('[data-prueba="empresa-servicio"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="empresa-servicio"]').text()).toContain('Fibra del Sur')
-        expect(vista.find('[data-prueba="abrir-cambiar-empresa"]').exists()).toBe(true)
+        expect(await opcionesMasServicio(vista)).toContain('Cambiar empresa')
     })
 
     it('ficha del cliente: avisos pendientes agrupados por empresa con lo que falta en cada una', async () => {
