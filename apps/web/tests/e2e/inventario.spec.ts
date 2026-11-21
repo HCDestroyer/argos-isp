@@ -18,7 +18,7 @@ async function elegir(page: Page, contenedor: Locator, prueba: string, opcion: s
 test('existencias: registrar un consumo de cable al costo promedio', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/inventario')
-    const fila = page.locator('[data-existencia="1/1"]')
+    const fila = page.locator('[data-existencia="1"]')
     await expect(fila).toContainText('Cable UTP Cat6', { timeout: 15_000 })
     await page.locator('[data-prueba="inventario-registrar"]').click()
     await page.getByRole('menuitem', { name: 'Consumo' }).click()
@@ -104,7 +104,7 @@ test('servicio: asignar un equipo en comodato y devolverlo a reparación', async
 test('cajero: ve el inventario pero no registra movimientos', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     await ir(page, 'Existencias', /\/inventario$/)
-    await expect(page.locator('[data-existencia="1/1"]')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('[data-existencia="1"]')).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('[data-prueba="inventario-registrar"]')).toHaveCount(0)
 })
 
