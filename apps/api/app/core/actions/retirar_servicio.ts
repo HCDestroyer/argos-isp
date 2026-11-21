@@ -45,6 +45,8 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             .where('id', input.id)
             .update({
                 estado: 'retirado',
+                // A38: la IP reservada en sitio de un pendiente se libera con el resto
+                ip_reservada_en: null,
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
