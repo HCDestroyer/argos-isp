@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends string">
 import type { TabsItem } from '@nuxt/ui'
 
 /**
@@ -11,12 +11,12 @@ defineProps<{
     etiqueta: string
 }>()
 
-const valor = defineModel<string>({ required: true })
+const valor = defineModel<T>({ required: true })
 </script>
 
 <template>
     <UTabs
-        v-model="valor"
+        :model-value="valor"
         :items="items"
         variant="pill"
         color="neutral"
@@ -30,5 +30,6 @@ const valor = defineModel<string>({ required: true })
             leadingIcon: 'size-4',
             trailingBadge: 'rounded-full',
         }"
+        @update:model-value="nuevo => valor = String(nuevo) as T"
     />
 </template>

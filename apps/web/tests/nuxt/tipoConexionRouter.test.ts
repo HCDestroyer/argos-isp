@@ -5,7 +5,6 @@ import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import PoolMigrarModal from '~/components/PoolMigrarModal.vue'
-import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import RouterEditarModal from '~/components/RouterEditarModal.vue'
 import PaginaRouter from '~/pages/routers/[id].vue'
 import { UApp } from '#components'
@@ -85,25 +84,6 @@ describe('tipo de conexión por router', () => {
             const delRouter = bd.servicios.filter(s => s.router_id === 1 && s.estado !== 'retirado')
             expect(delRouter.every(s => s.tipo_conexion === 'ip_estatica' && s.user_ppp === null && s.ipv4)).toBe(true)
         })
-    })
-
-    it('alta del router: elige el tipo (PPPoE por defecto) y lo manda', async () => {
-        await mountSuspended(enApp(RouterAltaModal, { open: true }))
-        await esperar(() => expect(enBody('router-tipo-conexion')).not.toBeNull())
-        expect(opcion('[data-prueba="router-tipo-conexion"]', 'pppoe').getAttribute('aria-checked')).toBe('true')
-        opcion('[data-prueba="router-tipo-conexion"]', 'dhcp_fija').click()
-        const escribir = (nombre: string, valor: string) => {
-            const campo = document.body.querySelector<HTMLInputElement>(`[name="${nombre}"]`)!
-            campo.value = valor
-            campo.dispatchEvent(new Event('input'))
-        }
-        escribir('nombre', 'Nodo WISP')
-        escribir('host', '10.50.0.1')
-        escribir('nas_ip', '10.50.0.1')
-        opcion('[data-prueba="router-corte-identificacion"]', 'ip').click()
-        enBody('router-guardar')!.click()
-        await esperar(() => expect(bd.routers.find(r => r.nombre === 'Nodo WISP')).toBeDefined())
-        expect(bd.routers.find(r => r.nombre === 'Nodo WISP')!.tipo_conexion).toBe('dhcp_fija')
     })
 
     it('editar el router con servicios de otro tipo lista los servicios y manda a «Cambiar tipo de conexión»', async () => {

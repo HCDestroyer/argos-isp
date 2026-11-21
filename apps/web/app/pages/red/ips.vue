@@ -177,6 +177,9 @@ const routerParaAgregar = ref<string>('')
 const elegirRouterAbierto = ref(false)
 
 function editar(red: RedIpv4) {
+    if (!puede('redes.editar')) {
+        return
+    }
     modalRed.value = red
     modalAbierto.value = true
 }

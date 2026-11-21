@@ -466,7 +466,7 @@ function elegirPuerto(id: number) {
                                 <span class="text-xs text-warning">Argos la conoce pero no la toca. {{ formatearEntero(clientesDeVlan(vlan)) }} clientes. Para que la administre, toma el control desde el router.</span>
                             </div>
                             <UButton
-                                v-if="puede('red_acceso.tomar_control')"
+                                v-if="puede('red_acceso.tomar_control') && puede('routers.ver')"
                                 :to="`/routers/${vlan.router_id}?pestana=red`"
                                 label="Tomar control"
                                 color="neutral"

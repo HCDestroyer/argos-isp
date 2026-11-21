@@ -582,7 +582,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                             <span class="truncate font-semibold text-highlighted">{{ estado.nombre || 'Plan nuevo' }}</span>
                             <TipoPlanBadge :tipo="estado.tipo" />
                         </span>
-                        <span class="font-bold text-highlighted">{{ estado.precio ? formatearQuetzales(estado.precio) : 'Q —' }}</span>
+                        <span class="font-bold text-highlighted">{{ /^\d+(\.\d{1,2})?$/.test(estado.precio.trim()) ? formatearQuetzales(estado.precio.trim()) : 'Q —' }}</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <div class="rounded-xl bg-(--ax-panel) px-3 py-2">

@@ -312,9 +312,14 @@ const TEXTO_ATENDER: Record<Atender['tono'], string> = {
                             class="flex items-center justify-between gap-2 border-t border-(--ax-borde) py-1.5 text-sm first:border-t-0"
                         >
                             <ULink
+                                v-if="puede('servicios.ver')"
                                 :to="`/servicios/${servicio.servicio_id}`"
                                 class="truncate text-highlighted hover:text-primary"
                             >{{ servicio.cliente_nombre }}</ULink>
+                            <span
+                                v-else
+                                class="truncate text-highlighted"
+                            >{{ servicio.cliente_nombre }}</span>
                             <EstadoServicioBadge
                                 :estado="servicio.estado"
                                 size="sm"

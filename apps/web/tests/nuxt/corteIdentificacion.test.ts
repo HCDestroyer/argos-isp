@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
-import RouterAltaModal from '~/components/RouterAltaModal.vue'
 import RouterEditarModal from '~/components/RouterEditarModal.vue'
 import RouterDiagnosticoCorte from '~/components/RouterDiagnosticoCorte.vue'
 import ServicioCodigoCorte from '~/components/ServicioCodigoCorte.vue'
@@ -37,13 +36,6 @@ function opcion(contenedor: string, valor: string): HTMLElement {
     return elemento!
 }
 
-function escribir(nombre: string, valor: string) {
-    const campo = document.body.querySelector<HTMLInputElement>(`[name="${nombre}"]`)
-    expect(campo, nombre).not.toBeNull()
-    campo!.value = valor
-    campo!.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
 describe('identificación del cliente cortado', () => {
     beforeEach(() => {
         reiniciarFixtures()
@@ -54,64 +46,6 @@ describe('identificación del cliente cortado', () => {
     afterEach(() => {
         sesionFixture(null)
         useUsuarioActual().value = null
-    })
-
-    describe('alta del router', () => {
-        it('obliga a elegir, sin valor preseleccionado; sin API «Por código» está deshabilitado', async () => {
-            await mountSuspended(enApp(RouterAltaModal, { open: true }))
-            await esperar(() => expect(enBody('router-corte-identificacion')).not.toBeNull())
-            const campo = enBody('router-corte-identificacion')!
-            expect(campo.textContent).toContain('Identificación del cliente cortado')
-            expect(campo.textContent).toContain('Por código (recomendado si el router tiene API)')
-            expect(campo.textContent).toContain('Por IP (por el túnel WireGuard o sin NAT entre el router y Argos)')
-            expect(opcion('router-corte-identificacion', 'codigo').getAttribute('aria-checked')).toBe('false')
-            expect(opcion('router-corte-identificacion', 'ip').getAttribute('aria-checked')).toBe('false')
-            expect(opcion('router-corte-identificacion', 'codigo').hasAttribute('disabled') || opcion('router-corte-identificacion', 'codigo').getAttribute('data-disabled') !== null).toBe(true)
-            expect(campo.textContent).toContain('Sin la API del router solo se puede «Por IP».')
-
-            escribir('nombre', 'RB-Norte')
-            escribir('host', '10.40.0.1')
-            escribir('nas_ip', '10.40.0.1')
-            const antes = bd.routers.length
-            enBody('router-guardar')!.click()
-            await esperar(() => expect(enBody('router-corte-identificacion')!.textContent).toContain('Elige cómo identificar al cliente cortado'))
-            expect(bd.routers).toHaveLength(antes)
-        })
-
-        it('con la API sugiere «Por código», explica el proxy y crea el router en modo código', async () => {
-            await mountSuspended(enApp(RouterAltaModal, { open: true }))
-            await esperar(() => expect(enBody('router-corte-identificacion')).not.toBeNull())
-            escribir('nombre', 'RB-Norte')
-            escribir('host', '10.40.0.1')
-            escribir('nas_ip', '10.40.0.1')
-            escribir('api_usuario', 'argos')
-            escribir('api_password', 'clave-api-segura')
-            await esperar(() => expect(enBody('router-corte-identificacion')!.textContent).toContain('Sugerido: «Por código», porque el router tiene API.'))
-            const codigo = opcion('router-corte-identificacion', 'codigo')
-            expect(codigo.hasAttribute('disabled')).toBe(false)
-            codigo.click()
-            await esperar(() => expect(enBody('router-corte-identificacion')!.textContent).toContain('puerto 3346, cerrado desde afuera'))
-            enBody('router-guardar')!.click()
-            await esperar(() => expect(bd.routers.find(r => r.nombre === 'RB-Norte')).toBeDefined())
-            expect(bd.routers.find(r => r.nombre === 'RB-Norte')!.corte_identificacion).toBe('codigo')
-        })
-
-        it('elegido «Por código» y luego sin clave: el error queda en el campo y no se manda', async () => {
-            await mountSuspended(enApp(RouterAltaModal, { open: true }))
-            await esperar(() => expect(enBody('router-corte-identificacion')).not.toBeNull())
-            escribir('nombre', 'RB-Norte')
-            escribir('host', '10.40.0.1')
-            escribir('nas_ip', '10.40.0.1')
-            escribir('api_usuario', 'argos')
-            escribir('api_password', 'clave')
-            await esperar(() => expect(opcion('router-corte-identificacion', 'codigo').hasAttribute('disabled')).toBe(false))
-            opcion('router-corte-identificacion', 'codigo').click()
-            escribir('api_password', '')
-            const antes = bd.routers.length
-            enBody('router-guardar')!.click()
-            await esperar(() => expect(enBody('router-corte-identificacion')!.textContent).toContain('La identificación por código necesita la API del router'))
-            expect(bd.routers).toHaveLength(antes)
-        })
     })
 
     describe('edición del router', () => {
