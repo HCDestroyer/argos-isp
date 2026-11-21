@@ -48,6 +48,12 @@ import { listarBorradores, verBorrador } from '#ledger/borradores'
 import RegistrarAsientoManual from '#ledger/actions/registrar_asiento_manual'
 import AprobarAsiento from '#ledger/actions/aprobar_asiento'
 import RechazarAsiento from '#ledger/actions/rechazar_asiento'
+import ReconectarTemporal from '#billing/actions/reconectar_temporal'
+import * as v from '#billing/validators'
+import { ReconexionTemporal } from '#billing/esquemas'
+import { exigirAcceso } from '#billing/empresa'
+import { dimensionesDeComprobante } from '#billing/comprobantes'
+import { dimensionesDeServicio as dimensionesDeServicioPromesa } from '#billing/promesas'
 import AdjuntarGestionCobro from '#billing/actions/adjuntar_gestion_cobro'
 
 const sinCampos = vine.compile(vine.object({}))
@@ -333,4 +339,37 @@ const asientos: Ruta[] = [
     }),
 ]
 
-export default [...gestiones, ...ajustes, ...asientos]
+const reconexion: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/comprobantes/:id/reconectar',
+        operacion: 'comprobantesReconectar',
+        resumen: 'Dar desde el panel la reconexión temporal mientras caja revisa el comprobante',
+        etiqueta: 'pagos',
+        permiso: 'comprobantes.reconectar',
+        cuerpo: v.reconexionTemporalValidator,
+        idempotente: true,
+        descripcion:
+            'Decisión del PM 15: mismas reglas y mismo cupo que la reconexión de Iris (POST /comprobantes/:id/reconexion-temporal); las del panel y las de Iris cuentan juntas para max_por_periodo. Crea la promesa reconexion_temporal (canal operador) y evaluarEstadoServicio reactiva en la misma transacción. 422 reconexion_no_permitida con la razón en errors[0].rule: servicio_de_otro_cliente, comprobante_no_pendiente, no_habilitada, suspension_manual, promesa_abierta, servicio_no_cortado, cupo_agotado, comprobante_no_cubre. Emite promesa.creada.',
+        respuesta: { status: 201, descripcion: 'Reconexión temporal', esquema: ReconexionTemporal },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeComprobante(id))
+            if (cuerpo.servicio_id) {
+                const deServicio = await dimensionesDeServicioPromesa(cuerpo.servicio_id).catch(() => null)
+                if (deServicio) exigirAcceso(ctx, deServicio)
+            }
+            return new ReconectarTemporal().execute(
+                {
+                    comprobante_id: id,
+                    servicio_id: cuerpo.servicio_id ?? null,
+                    motivo: cuerpo.motivo,
+                    canal: 'operador',
+                },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+]
+
+export default [...gestiones, ...ajustes, ...asientos, ...reconexion]

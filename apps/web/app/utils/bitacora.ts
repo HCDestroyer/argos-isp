@@ -123,6 +123,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'ajustes_cobro.editar': 'Ajustes de cobro y libro editados',
     'libro.aprobar_asiento': 'Asiento manual aprobado',
     'libro.rechazar_asiento': 'Asiento manual rechazado',
+    'comprobantes.reconectar': 'Reconexión temporal dada desde el panel',
     'documentos.editar': 'Plantilla de documento editada',
     'documentos.crear': 'Plantilla de documento creada',
     'documentos.predeterminar': 'Plantilla de documento predeterminada',
