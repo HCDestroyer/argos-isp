@@ -1,3 +1,4 @@
+import { codigoServicio } from './datos'
 import type { Schema } from '@argosisp/contracts'
 import { bd, siguienteId } from '../bd'
 
@@ -26,6 +27,7 @@ export function agregarServicioIpEstatica(cambios: Partial<Servicio> = {}): Serv
     const servicio: Servicio = {
         ...structuredClone(base),
         id,
+        codigo: codigoServicio(id),
         tipo_conexion: 'ip_estatica',
         amarre_ip_mac: true,
         user_ppp: null,
