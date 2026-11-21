@@ -1,3 +1,4 @@
+import { DENOMINACIONES } from '#ledger/resumen_turno'
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
@@ -8,7 +9,28 @@ export const abrirCajaValidator = vine.compile(vine.object({ fondo_inicial: dine
 
 export const cerrarCajaValidator = vine.compile(
     vine.object({
-        contado: dinero(),
+        contado: dinero()
+            .nullable()
+            .optional()
+            .meta({ description: 'Total contado; sin él, la suma de `denominaciones`' }),
+        denominaciones: vine
+            .array(
+                vine.object({
+                    valor: vine.enum(DENOMINACIONES),
+                    cantidad: vine.number().withoutDecimals().min(0).max(1000000),
+                }),
+            )
+            .maxLength(DENOMINACIONES.length)
+            .nullable()
+            .optional()
+            .meta({ description: 'Conteo por billete y moneda (Q200 … 1¢)' }),
+        fondo_siguiente: dinero()
+            .nullable()
+            .optional()
+            .meta({ description: 'Efectivo que queda en la caja para el turno siguiente (≤ contado)' }),
+        entregado_a: idEntidad().nullable().optional().meta({
+            description: 'Usuario que recibe el resto (obligatorio si contado − fondo_siguiente > 0)',
+        }),
         motivo: vine
             .string()
             .trim()
@@ -17,6 +39,14 @@ export const cerrarCajaValidator = vine.compile(
             .nullable()
             .optional()
             .meta({ description: 'Obligatorio si hay diferencia entre esperado y contado' }),
+    }),
+)
+
+export const resumenTurnoValidator = vine.compile(
+    vine.object({
+        caja_id: idEntidad()
+            .optional()
+            .meta({ description: 'Caja; sin ella, la del turno abierto del usuario (su caja)' }),
     }),
 )
 

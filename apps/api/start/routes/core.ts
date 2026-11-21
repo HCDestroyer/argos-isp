@@ -99,6 +99,8 @@ import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import adicionales from '#start/routes/adicionales'
 import iris from '#start/routes/iris'
+import contactos from '#start/routes/contactos'
+import instalacionIris from '#start/routes/instalacion_iris'
 import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
@@ -608,7 +610,10 @@ const clientes: Ruta[] = [
         respuesta: { status: 201, descripcion: 'Cliente creado', esquema: Cliente },
         handler: (ctx, { cuerpo }) => {
             exigirAlcance(ctx.alcance, { zona: [cuerpo.zona_id] })
-            return new CrearCliente().execute(cuerpo, ctx.contextoAccion())
+            return new CrearCliente().execute(
+                { ...cuerpo, desdeIris: esTokenIris(ctx) },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({
@@ -1602,7 +1607,9 @@ export default [
     ...usuarios,
     ...empresas,
     ...clientes,
+    ...contactos,
     ...servicios,
+    ...instalacionIris,
     ...adicionales,
     ...bitacora,
     ...ip,

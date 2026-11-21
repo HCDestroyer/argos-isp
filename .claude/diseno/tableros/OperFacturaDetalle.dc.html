@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Factura · detalle</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.pan{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:20px}
+.ph2{padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pf{padding:12px 18px;border-top:1px solid #F1F5F9;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.kv2{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:8px 0;border-top:1px solid #F1F5F9}
+.kv2:first-child{border-top:0}
+.kv2>span:first-child{color:#64748B;flex:0 0 auto}
+.kv2>*:last-child{text-align:right;min-width:0}
+.cd{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-width:0}
+.cdh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin-bottom:8px}
+.cdh .lnk{margin-left:auto;text-transform:none;letter-spacing:0}
+.btn.r{background:#fff;color:#B91C1C;border-color:#FECACA}
+.btn.rr{background:#B91C1C;color:#fff}
+.btn.sm{padding:6px 12px;font-size:12.5px}
+.velo{position:absolute;inset:0;background:rgba(15,23,42,.45);z-index:8}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:22px;padding:22px;z-index:9;flex-direction:column;gap:12px;max-height:88%;overflow:auto}
+.dest{border:2px solid #4F46E5;border-radius:14px;padding:10px 14px;background:#fff;box-shadow:0 0 0 4px rgba(79,70,229,.12);font-size:22px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:13.5px;font-weight:600;color:#475569;cursor:pointer;text-decoration:none}
+.sn:hover{background:#F8FAFC}.sn.on{background:#EEF2FF;color:#3730A3}
+.sn small{display:block;font-weight:500;font-size:11.5px;color:#94A3B8}
+.cod{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;background:#0F172A;color:#CBD5E1;border-radius:14px;padding:14px;overflow:auto;white-space:pre}
+.cod em{color:#67E8F9;font-style:normal}.cod u{color:#FCD34D;text-decoration:none}
+.tk80{width:302px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:16px 14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;color:#0F172A}
+.tk80 hr{border:0;border-top:1px dashed #94A3B8;margin:7px 0}
+.tk80 .fl{display:flex;justify-content:space-between;gap:8px}
+.rd2{width:18px;height:18px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;box-sizing:border-box}
+.rd2.on{border:5.5px solid #4F46E5}
+.ck2{width:20px;height:20px;border-radius:6px;border:2px solid #CBD5E1;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;color:#fff;box-sizing:border-box}
+.ck2.on{background:#4F46E5;border-color:#4F46E5}
+.dfa{background:#FEE2E2;color:#991B1B;border-radius:6px;padding:1px 6px;text-decoration:line-through}
+.dfb{background:#DCFCE7;color:#166534;border-radius:6px;padding:1px 6px}
+.rap{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.mbar{flex:0 0 auto;display:flex;gap:8px;padding:10px 12px 14px;background:#fff;border-top:1px solid #E6E8F0}
+.mbar .btn{flex:1;justify-content:center;padding:13px 10px;font-size:14px}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Facturas › Todas las facturas › <b>FAC-A 004512</b></div>
+<section class="isla" style="border-radius:20px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex:0 0 auto">
+ <span class="ico er" style="width:52px;height:52px;border-radius:16px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg></span>
+ <div style="min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b class="mono" style="font-size:20px">FAC-A 004512</b><span class="b er">Vencida hace 11 días</span><span class="b ok"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Certificada</span></div>
+  <div class="m2" style="margin-top:3px"><a href="#">Rosa Méndez</a> · <a href="#" class="mono">S-000412</a> Casa · Noviembre 2026 · emitida el 1 nov · venció el 10 nov</div></div>
+ <span style="flex:1"></span>
+ <div style="text-align:right;padding-right:6px"><div class="m2">Saldo de Q 325.00</div><b class="num" style="font-size:22px;color:#B91C1C">Q 250.00</b></div>
+ <button class="btn v" style="padding:11px 18px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</button>
+ <button class="btn o" onClick="{{m.nc.ir}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 11h6"/></svg>Nota de crédito</button>
+ <div style="position:relative"><button class="ib f" style="width:40px;height:40px;border-radius:999px" aria-label="Más acciones" onClick="{{m.mas.ir}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+  <div class="isla" style="display:{{m.mas.b}};position:absolute;right:0;top:46px;width:260px;border-radius:16px;padding:8px;z-index:9"><div class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Enviar al cliente</div><div class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg>Sustituir (corregir datos)</div><div class="mi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11V5a2 2 0 0 1 4 0v5M11 10V4a2 2 0 0 1 4 0v6M15 10V6a2 2 0 0 1 4 0v8a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3l-3-5a2 2 0 0 1 3-2l2 2"/></svg>Promesa de pago</div><div class="mi" style="color:#B91C1C" onClick="{{m.anu.ir}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg>Anular factura</div></div></div>
+</section>
+<div style="flex:1;min-height:0;display:flex;gap:12px">
+ <section class="isla pan" style="flex:1;min-width:0">
+  <div style="padding:12px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px"><div class="segb"><button class="ts {{t.lin.cls}}" onClick="{{t.lin.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Líneas y pagos</button><button class="ts {{t.dte.cls}}" onClick="{{t.dte.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Factura electrónica</button><button class="ts {{t.his.cls}}" onClick="{{t.his.ir}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Historial</button></div><span style="flex:1"></span><button class="ib f" title="Ayuda: la factura" aria-label="Ayuda: la factura" style="width:40px;height:40px;border-radius:999px;cursor:help;flex:0 0 auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button></div>
+  <div class="sc" style="flex:1;display:{{t.lin.v}};flex-direction:column">
+   <div class="lh" style="grid-template-columns:minmax(0,1fr) 80px 120px 120px;border-top:0"><span>Descripción</span><span class="r">Cant.</span><span class="r">Precio</span><span class="r">Importe</span></div>
+   <div class="lr" style="grid-template-columns:minmax(0,1fr) 80px 120px 120px;cursor:default"><b>Internet Fibra 50 · noviembre 2026</b><span class="num r">1</span><span class="num r">Q 250.00</span><span class="num r">Q 250.00</span></div><div class="lr" style="grid-template-columns:minmax(0,1fr) 80px 120px 120px;cursor:default"><b>IP pública fija · noviembre 2026</b><span class="num r">1</span><span class="num r">Q 75.00</span><span class="num r">Q 75.00</span></div>
+   <div style="display:flex;justify-content:flex-end;padding:14px 18px"><div style="width:300px"><div class="kv2"><span>Subtotal sin IVA</span><span><span class="num">Q 290.18</span></span></div><div class="kv2"><span>IVA 12 %</span><span><span class="num">Q 34.82</span></span></div><div class="kv2"><b style="color:#0F172A">Total</b><b class="num" style="font-size:17px">Q 325.00</b></div><div class="kv2"><span>Pagado</span><span><span class="num">− Q 75.00</span></span></div><div class="kv2"><b style="color:#B91C1C">Saldo</b><b class="num" style="font-size:17px;color:#B91C1C">Q 250.00</b></div></div></div>
+   <div style="padding:0 18px 14px"><div class="sec">Pagos aplicados</div>
+    <div class="lr" style="grid-template-columns:38px minmax(0,1fr) 150px 110px;padding:10px 0;border-top:1px solid #F1F5F9"><span class="ico ok" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><div><b>Pago #20391 · efectivo</b><div class="m2">5 nov · Caja Centro · Ana Cruz · abono</div></div><a href="#">Recibo R-018822</a><b class="num r">Q 75.00</b></div>
+    <div class="sec" style="margin-top:12px">Notas de crédito</div><div class="m2" style="padding:6px 0">Ninguna. Una nota de crédito baja el saldo sin que entre dinero (descuento, días sin servicio, error).</div></div>
+  </div>
+  <div class="sc" style="flex:1;display:{{t.dte.v}};flex-direction:column;padding:14px 18px;gap:0"><div class="kv2"><span>Tipo de documento</span><span><b>FACT</b> · Factura</span></div><div class="kv2"><span>Serie y número</span><span><span class="copy">A · 004512</span></span></div><div class="kv2"><span>Autorización</span><span><span class="copy" style="font-size:12px">8F3A1C22-77B0-4E1D-9A55-0C12D4E6A901</span></span></div><div class="kv2"><span>Certificada</span><span>1 nov 2026 06:02 · INFILE · en línea</span></div><div class="kv2"><span>Receptor</span><span>CF · Rosa Méndez</span></div><div style="display:flex;gap:8px;padding-top:12px"><button class="btn o sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 5l-2 14"/></svg>Descargar XML</button><button class="btn o sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>PDF certificado</button><button class="btn o sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Intentos (1)</button></div></div>
+  <div class="sc" style="flex:1;display:{{t.his.v}};flex-direction:column;padding:6px 18px"><div class="tl"><span class="ic ico er" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg></span><div style="flex:1"><b>Venció</b><div class="m2">Sin pago completo · el servicio se limitó el 12 y se suspendió el 15</div></div><span class="m2">10 nov</span></div><div class="tl"><span class="ic ico ok" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><div style="flex:1"><b>Abono de Q 75.00</b><div class="m2">Pago #20391 · efectivo · Ana Cruz</div></div><span class="m2">5 nov</span></div><div class="tl"><span class="ic ico nf" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span><div style="flex:1"><b>Aviso de cobro enviado</b><div class="m2">WhatsApp por Iris · entregado y leído</div></div><span class="m2">1 nov 08:00</span></div><div class="tl"><span class="ic ico ok" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></span><div style="flex:1"><b>Certificada por INFILE</b><div class="m2">Al primer intento</div></div><span class="m2">1 nov 06:02</span></div><div class="tl"><span class="ic ico nf" style="width:34px;height:34px;border-radius:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span><div style="flex:1"><b>Emitida</b><div class="m2">Corrida mensual · sistema</div></div><span class="m2">1 nov 06:00</span></div></div>
+ </section>
+ <aside class="isla pan" style="width:380px;flex:0 0 auto">
+  <div class="ph2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg><b style="flex:1">Imprimir</b><div class="segb"><button class="ts {{p.carta.cls}}" style="padding:6px 12px" onClick="{{p.carta.ir}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4"/></svg>Carta</button><button class="ts {{p.pos.cls}}" style="padding:6px 12px" onClick="{{p.pos.ir}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4"/></svg>POS 80 mm</button></div></div>
+  <div class="sc" style="flex:1;background:#F1F5F9;display:flex;justify-content:center;align-items:flex-start;padding:16px">
+   <div style="display:{{p.pos.b}}"><div class="tk80"><div style="text-align:center"><b style="font-size:13px">CONECTA, S.A.</b><br>NIT 8123456-7<br>4.ª av. 3-20 z.1, Chimaltenango</div><hr><div class="fl"><span>FACTURA</span><b>A 004512</b></div><div class="fl"><span>Fecha</span><span>01/11/2026</span></div><div>Rosa Méndez · NIT CF</div><div>Servicio S-000412</div><hr><div class="fl"><span>Internet Fibra 50 nov</span><span>250.00</span></div><div class="fl"><span>IP pública fija nov</span><span>75.00</span></div><hr><div class="fl"><b>TOTAL Q</b><b>325.00</b></div><div class="fl"><span>Pagado</span><span>75.00</span></div><div class="fl"><b>SALDO Q</b><b>250.00</b></div><hr><div style="font-size:10px;word-break:break-all">Autorización: 8F3A1C22-77B0-4E1D-9A55-0C12D4E6A901</div><div style="text-align:center;margin-top:6px"><span style="display:inline-block;width:64px;height:64px;background:repeating-conic-gradient(#0F172A 0 25%,#fff 0 50%) 0 0/12px 12px"></span><br>Certificador: INFILE</div></div></div>
+   <div style="display:{{p.carta.b}};width:300px;height:388px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:22px;font-size:9px;line-height:1.6;color:#334155"><div style="display:flex;justify-content:space-between"><span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#4F46E5,#06B6D4)"></span><div style="text-align:right"><b style="font-size:12px;color:#0F172A">FACTURA A 004512</b><br>01/11/2026</div></div><div style="margin:12px 0"><b>Rosa Méndez</b><br>NIT CF · S-000412 Casa</div><div style="border-top:1px solid #E2E8F0;padding:5px 0;display:flex;justify-content:space-between"><span>Internet Fibra 50 · nov</span><span>250.00</span></div><div style="border-top:1px solid #E2E8F0;padding:5px 0;display:flex;justify-content:space-between"><span>IP pública fija · nov</span><span>75.00</span></div><div style="border-top:2px solid #0F172A;padding:6px 0;display:flex;justify-content:space-between;font-size:11px"><b>Total</b><b>Q 325.00</b></div><div style="margin-top:60px;color:#94A3B8">Autorización 8F3A1C22-77B0… · Certificador INFILE · Sujeto a pagos trimestrales ISR</div></div>
+  </div>
+  <div class="pf"><span class="m2" style="flex:1">Plantilla: «Factura {{pNom}}» <a href="#">Cambiar</a></span><button class="btn p sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg>Imprimir</button></div>
+ </aside>
+</div>
+</main><div class="velo" style="display:{{velo}}" onClick="{{m.no.ir}}"></div><div class="isla dlg" role="dialog" aria-label="Nota de crédito a FAC-A 004512" style="display:{{m.nc.v}};width:480px">
+ <div style="display:flex;gap:12px;align-items:center"><span class="ico nf"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 11h6"/></svg></span><b style="font-size:17px;flex:1">Nota de crédito a FAC-A 004512</b><button class="ib" aria-label="Cerrar" onClick="{{m.no.ir}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+ <div class="m2" style="font-size:13px">Baja el saldo sin que entre dinero. Se certifica en SAT como nota de crédito.</div>
+ <div><div class="lb">Monto a acreditar</div><div class="dest"><span style="color:#64748B">Q</span>41.67<span style="flex:1"></span><span class="m2" style="font-weight:500;font-size:12px">máx. Q 250.00</span></div><div style="display:flex;gap:6px;margin-top:8px"><span class="rap">5 días sin servicio · 41.67</span><span class="rap">Todo el saldo · 250.00</span></div></div>
+ <div><div class="lb">Motivo<span class=req>*</span></div><div class="in sel">Días sin servicio</div></div><div><div class="lb">Detalle para el cliente</div><div class="in  ph">Ej.: falla de fibra del 12 al 16 de nov</div></div>
+ <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><span class="m2" style="flex:1;align-self:center">Saldo nuevo: <b style="color:#0F172A">Q 208.33</b></span><button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn p" onClick="{{m.no.ir}}">Emitir nota de crédito</button></div>
+</div><div class="isla dlg" role="dialog" aria-label="Anular FAC-A 004512" style="display:{{m.anu.v}};width:480px">
+ <div style="display:flex;gap:12px;align-items:center"><span class="ico er"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg></span><b style="font-size:17px;flex:1">Anular FAC-A 004512</b><button class="ib" aria-label="Cerrar" onClick="{{m.no.ir}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+ <div class="av2 wa" style="align-items:flex-start"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div>Tiene un <b>abono de Q 75.00</b>. Al anular, ese dinero queda como saldo a favor de Rosa Méndez.</div></div><div style="font-size:14px;color:#475569;line-height:1.5">Se anula también en SAT. El libro guarda un asiento de reverso; nada se borra.</div><div><div class="lb">Motivo<span class="req">*</span></div><div class="in ph">Ej.: se facturó a un servicio equivocado</div></div>
+ <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn g" onClick="{{m.no.ir}}">Cancelar</button><button class="btn rr" onClick="{{m.no.ir}}">Anular factura</button></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {};
+const G = {"t": {"ids": ["lin", "dte", "his"], "def": "lin"}, "p": {"ids": ["pos", "carta"], "def": "pos"}, "m": {"ids": ["no", "nc", "anu", "mas"], "def": "no"}};
+const L = {};
+const out = {};
+const cur = (g) => (st[g] === undefined ? G[g].def : st[g]);
+Object.keys(G).forEach((g) => {
+const c = cur(g); const o = {};
+G[g].ids.forEach((id) => { o[id] = { cls: id === c ? 'on' : '', v: id === c ? 'flex' : 'none', b: id === c ? 'block' : 'none', ir: () => this.setState({ [g]: id }) }; });
+out[g] = o; out[g + 'On'] = c !== G[g].def ? 'block' : 'none';
+});
+Object.keys(L).forEach((n) => {
+let rows = L[n].rows;
+if (L[n].por) { const c = cur(L[n].por); rows = rows.filter((r) => c === L[n].todos || String(r.g || '').split(' ').includes(c)); }
+const k = 's_' + n; const s = st[k] === undefined ? L[n].def : st[k];
+out[n] = rows.map((r) => ({ ...r, cls: r.id === s ? 'on' : '', ver: () => this.setState({ [k]: r.id }) }));
+out[n + 'Sel'] = L[n].rows.find((r) => r.id === s) || L[n].rows[0];
+out[n + 'N'] = rows.length;
+out[n + 'Vacio'] = rows.length ? 'none' : 'block';
+});
+out.velo = (st.m && st.m !== 'no' && st.m !== 'mas') ? 'block' : 'none'; out.pNom = (st.p || 'pos') === 'pos' ? 'POS 80 mm' : 'carta';
+return out;
+}
+}
+</script>
+</body>
+</html>

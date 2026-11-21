@@ -443,6 +443,32 @@ revisor y su rastreador no ejecutan JavaScript). Manual: `docs/manual/portal/pol
 | Enlaces en el pie de todas las páginas, `/corte` incluida (enlaces internos, sin recursos externos) | `app/layouts/default.vue` |
 | Pruebas: HTML del servidor (`tests/servidor/portal.test.ts`), axe y 390/1280 px en claro y oscuro (`tests/e2e/accesibilidad.spec.ts`) | |
 
+## Soporte, solicitudes, mis contactos y servicios a cargo (Iris 0.9.0 §11, 0.10.x §3.5 y §3.8)
+
+- **Soporte** (`/cuenta?seccion=soporte`, `components/soporte/Seccion.vue`): solo si la instalación
+  tiene Iris (`useSoporte`: `GET /portal/soporte` distinto de `sin_iris`). Una tarjeta con pestañas
+  segmentadas «Mis tickets» y «Solicitudes» (diseño `NuevoPortal`). Si Iris está apagado, es anterior a
+  0.9.0 o no responde: el error con «Reintentar» y ninguna lista.
+- **Reportar un problema** (`/soporte/nuevo`): asunto, descripción, categoría de Iris, servicio y hasta
+  3 fotos o PDF (`SoporteAdjuntos`). `?contacto=&servicio=` para un servicio a cargo.
+- **Ticket** (`/soporte/:id`): mensajes públicos, adjuntos por Argos, responder y «Ya quedó, cerrar».
+- **Solicitar un servicio** (`/solicitudes/nueva?tipo=`): cambio de plan, otro servicio, traslado u otra.
+- **Sesión de `/corte`** («Ver mi cuenta», por la IP): la lista sin asunto, reportar sin adjuntos, sin
+  detalle, sin solicitudes y sin contactos (la API responde `403 sesion_insuficiente`).
+- **Mis contactos** (en «Cuenta», `CuentaContactos` y `/contactos/:id`): agregar, cambiar y quitar con
+  permisos (consultar, reportar fallas, pagar, avisos), servicios y de 1 a 5 teléfonos con uno principal.
+- **Está a tu cargo** (en el inicio, `CuentaACargo`): código y nombre del servicio, estado, saldo solo
+  con «consultar» y «Reportar una falla» con «reportar». Nunca datos del titular.
+- **Tickets del servicio a cargo** (Iris ≥ 0.12.1, `contactos` en `GET /portal/soporte`): la tarjeta
+  lista los tickets del servicio (`SoporteTicketsACargo`); los que abrió la persona se abren en
+  `/soporte/:id?contacto=&servicio=`, los demás solo con número y estado. Los errores al enviar
+  muestran «Reintentar».
+- `Idempotency-Key`: un UUID por envío, el mismo en los reintentos sin respuesta (`claveIdempotencia`).
+- Fixtures: `?soporte=disponible|apagado|sin_iris|ip` (queda para la pestaña; por defecto `sin_iris`).
+  Capturas: `PW_CAPTURAS=/ruta pnpm test:e2e tests/e2e/capturas-soporte.spec.ts`.
+- Los colores son los semánticos de Nuxt UI (primary, secondary…): toman el índigo con cian del
+  rediseño en cuanto llegue el tema nuevo.
+
 ## Lo que deja el día 1
 
 | Pieza | Dónde |

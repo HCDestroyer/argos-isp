@@ -16,8 +16,16 @@ export const PERMISOS = {
     'clientes.quitar_responsable_pago': 'Quitar el responsable de pago de un cliente',
     'clientes.verificar_identidad':
         'Verificar la identidad de un cliente (documento, nombre o código) sin ver el dato (contrato Iris 0.6.0 §7.5)',
+    'clientes.registrar_identidad':
+        'Registrar la identidad del titular (foto del documento, número y nombre; contrato Iris 0.10.0 §3.4.3)',
+    'clientes.ver_identidad':
+        'Ver la identidad del titular (número y foto del documento); cada vista queda auditada',
     'clientes.restaurar_contrasena_portal':
         'Restaurar la contraseña del portal de un cliente a la de por defecto de la empresa (cierra sus sesiones del portal)',
+    'contactos.buscar':
+        'Buscar de quién es un número de teléfono y ver los contactos de un cliente, con su rol y permisos (contrato Iris 0.10.0 §3.5)',
+    'contactos.gestionar':
+        'Crear, editar y quitar contactos de un cliente (familiares, inquilinos, quien está a cargo de sus servicios)',
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
@@ -42,6 +50,14 @@ export const PERMISOS = {
         'Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió',
     'servicios.activar_instalacion':
         'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
+    'servicios.reservar_ip':
+        'Reservar en sitio la IP de un servicio pendiente de instalación (IP fija o amarre; vence a los 30 días)',
+    'servicios.cambiar_plan_pendiente':
+        'Cambiar el plan de un servicio pendiente de instalación a otro plan aplicable (sin factura ni prorrateo)',
+    'servicios.completar_datos':
+        'Completar antes de activar los datos que faltan del titular (solo los vacíos) y corregir el lugar del servicio',
+    'servicios.cambiar_titular':
+        'Pasar un servicio pendiente de instalación a otro titular (Argos decide si es un cliente existente por documento y nombre)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -192,6 +208,10 @@ export const PERMISOS = {
     'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
     'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
+    'bancos.importar_extracto_archivo':
+        'Importar el estado de cuenta tal como lo descarga el banco (.xlsx, .xls o .csv) y ver su vista previa',
+    'bancos.guardar_mapeo_extracto':
+        'Guardar el mapeo de columnas del estado de cuenta de una cuenta bancaria',
     'bancos.conciliar':
         'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
     'bancos.reatribuir_llegada':
@@ -220,6 +240,8 @@ export const PERMISOS = {
     'iris.configurar':
         'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
     'iris.abrir': 'Abrir un ticket, orden o prospecto en Iris sin volver a iniciar sesión',
+    'prospectos.registrar':
+        'Registrar en Iris a alguien interesado en un servicio y ver los prospectos registrados desde Argos (contrato Iris 0.10.0 §3.6)',
     'iris.generar_token':
         'Generar el token atk_ del usuario técnico Iris (permisos del contrato Iris §1.1); solo admin',
     'iris.revocar_token': 'Revocar un token del usuario técnico Iris',
@@ -287,6 +309,22 @@ export const PERMISOS = {
     'inventario.configurar':
         'Configurar el inventario de la empresa (firma obligatoria al recibir traslados)',
     'inventario.configurar_ia': 'Configurar la IA que lee facturas de compra (proveedor, modelo y clave)',
+    // contrato Iris 0.12.0 §3.10 (A48): equipos del cliente
+    'servicios.cambiar_equipo':
+        'Cambiar el equipo en comodato de un servicio (sale y entra en una sola operación) y registrar intentos de recuperación',
+    'inventario.ver_unidad':
+        'Ver una unidad (serie, MAC, modelo, estado e historial) sin costos ni proveedor',
+    'inventario.cobrar_equipo':
+        'Declarar un equipo no recuperado y decidir los cobros de equipo (Equipo no devuelto y cobros propuestos)',
+    'inventario.enviar_garantia':
+        'Enviar a garantía del proveedor una unidad en revisión (proveedor, RMA y vencimiento)',
+    'inventario.resolver_garantia':
+        'Resolver la garantía de una unidad: volvió reparada, reemplazada o rechazada',
+    'inventario.registrar_contacto_recuperacion':
+        'Registrar un contacto con el cliente para recuperar un equipo (cuenta para declararlo no recuperado)',
+    // contrato Iris 0.11.0 §3.9 (A47): la membresía de la bodega de cuadrilla llega de Iris (sistema)
+    'inventario.sincronizar_cuadrilla':
+        'Aplicar la membresía de una cuadrilla que llega de Iris (bodega de cuadrilla, jefe y miembros)',
     'tipos_producto.crear': 'Crear tipos de producto',
     'tipos_producto.editar': 'Editar tipos de producto',
     'tipos_producto.desactivar': 'Desactivar tipos de producto',
@@ -438,6 +476,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
         descripcion: 'Cobro en caja: pagos, turnos y promesas',
         permisos: [
             'clientes.ver',
+            // caja: cuentas a cargo de un contacto (contrato Iris 0.10.1 §3.8)
+            'contactos.buscar',
             'clientes.estado_cuenta',
             'clientes.asignar_responsable_pago',
             'clientes.quitar_responsable_pago',
@@ -471,15 +511,19 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'lealtad.ver',
             'lealtad.canjear',
             'inventario.ver',
+            'prospectos.registrar',
         ],
     },
     soporte: {
         descripcion: 'Atención al cliente y gestión de servicios',
         permisos: [
             'clientes.ver',
+            'contactos.buscar',
+            'contactos.gestionar',
             'clientes.crear',
             'clientes.editar',
             'notificaciones.registrar_consentimiento',
+            'prospectos.registrar',
             'clientes.estado_cuenta',
             'clientes.vincular_telegram',
             'clientes.desvincular_telegram',
@@ -495,6 +539,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.limitar',
             'servicios.quitar_limite',
             'servicios.activar_instalacion',
+            'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
+            'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -541,6 +590,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.editar',
             // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
             'servicios.activar_instalacion',
+            'servicios.reservar_ip',
+            'servicios.cambiar_plan_pendiente',
+            'clientes.registrar_identidad',
+            'servicios.completar_datos',
+            'servicios.cambiar_titular',
             'servicios.desconectar',
             'servicios.sincronizar_router',
             'servicios.ver_credenciales',
@@ -596,6 +650,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.crear_traslado',
             'inventario.recibir_traslado',
             'inventario.cancelar_traslado',
+            // A48: cambio de equipo e intentos de recuperación desde el panel
+            'servicios.cambiar_equipo',
+            'inventario.ver_unidad',
         ],
     },
     contabilidad: {
@@ -661,6 +718,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'bancos.ver',
             'bancos.trasladar',
             'bancos.importar_extracto',
+            'bancos.importar_extracto_archivo',
+            'bancos.guardar_mapeo_extracto',
             'bancos.conciliar',
             'bancos.reatribuir_llegada',
             'cartera.provisionar',
@@ -675,6 +734,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.cerrar_conteo',
             'inventario.cancelar_conteo',
             'inventario.marcar_reparada',
+            'inventario.enviar_garantia',
+            'inventario.resolver_garantia',
+            'inventario.registrar_contacto_recuperacion',
             'productos.crear',
             'productos.editar',
             'productos.desactivar',

@@ -1,3 +1,4 @@
+import { DENOMINACIONES } from '#ledger/resumen_turno'
 import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import {
     Dinero,
@@ -308,10 +309,79 @@ export const CajaTurno = definirEsquema(
             cerrado_por: { ...nulable(id), description: 'Usuario que cerró el turno' },
             abierto_por_nombre: nulable(texto),
             cerrado_por_nombre: nulable(texto),
+            denominaciones: {
+                ...nulable(lista(objeto({ valor: enumerado(DENOMINACIONES), cantidad: entero }))),
+                description: 'Conteo del cierre por billete y moneda (null si se escribió solo el total)',
+            },
+            fondo_siguiente: {
+                ...nulable(Dinero),
+                description: 'Efectivo que quedó en la caja para abrir el turno siguiente',
+            },
+            entregado_a: {
+                ...nulable(id),
+                description: 'Usuario que recibió el efectivo que no quedó de fondo',
+            },
+            entregado_a_nombre: nulable(texto),
+            entregado_monto: { ...nulable(Dinero), description: 'contado − fondo_siguiente' },
             ...auditable,
         },
-        ['abierto_por', 'cerrado_por', 'abierto_por_nombre', 'cerrado_por_nombre'],
+        [
+            'abierto_por',
+            'cerrado_por',
+            'abierto_por_nombre',
+            'cerrado_por_nombre',
+            'denominaciones',
+            'fondo_siguiente',
+            'entregado_a',
+            'entregado_a_nombre',
+            'entregado_monto',
+        ],
     ),
+)
+
+const Conteo = objeto({ cantidad: entero, monto: Dinero })
+
+export const ResumenTurnoCaja = definirEsquema(
+    'ResumenTurnoCaja',
+    objeto({
+        caja_id: id,
+        caja_nombre: texto,
+        empresa_id: id,
+        turno_id: id,
+        abierto_en: instante,
+        abierto_por: nulable(id),
+        abierto_por_nombre: nulable(texto),
+        cerrado_en: nulable(instante),
+        fondo_inicial: Dinero,
+        cobros: {
+            ...objeto({
+                cantidad: entero,
+                monto: Dinero,
+                por_metodo: lista(objeto({ metodo: texto, cantidad: entero, monto: Dinero })),
+            }),
+            description: 'Cobros vigentes del turno: en efectivo y por otros medios del cajero',
+        },
+        efectivo_cobrado: { ...Conteo, description: 'Cobros en efectivo (monto − retenido)' },
+        otros_medios: {
+            ...Conteo,
+            description: 'Cobros por otros medios que registró el cajero mientras el turno estuvo abierto',
+        },
+        ingresos: {
+            ...objeto({ cantidad: entero, monto: Dinero, cobros_efectivo: Conteo }),
+            description: 'Efectivo que entró a la caja (sin el fondo)',
+        },
+        retiros: {
+            ...objeto({
+                cantidad: entero,
+                monto: Dinero,
+                egresos: Conteo,
+                depositos: Conteo,
+                pagos_proveedores: Conteo,
+            }),
+            description: 'Efectivo que salió: egresos, depósitos al banco y pagos a proveedores',
+        },
+        esperado: { ...Dinero, description: 'Debe haber en efectivo: fondo + ingresos − retiros' },
+    }),
 )
 
 export const CategoriaEgreso = definirEsquema(

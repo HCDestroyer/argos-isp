@@ -1,3 +1,4 @@
+import { columnasActorTecnico } from '#inventario/actor_tecnico'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
@@ -508,6 +509,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
             actor_tipo: t.ctx.actor.tipo,
             actor_id: t.ctx.actor.id,
             request_id: t.ctx.requestId,
+            ...columnasActorTecnico(t),
         })
         .returning('id')) as Array<{ id: number }>
     const id = Number(fila!.id)
@@ -613,6 +615,10 @@ export interface MovimientoVista {
     origen_id: number | null
     origen_externo_tipo: OrigenExternoTipo | null
     origen_externo_id: string | null
+    /** quién usó el material desde Iris (`X-Iris-Actor`), su usuario de Argos y la hora del teléfono */
+    actor_tecnico: string | null
+    actor_tecnico_id: number | null
+    ocurrido_en: Date | null
     traslado_id: number | null
     reverso_de: number | null
     causa: CausaBaja | null
@@ -666,6 +672,9 @@ function columnasMovimiento(cliente: QueryClientContract) {
         'm.origen_id',
         'm.origen_externo_tipo',
         'm.origen_externo_id',
+        'm.actor_tecnico',
+        'm.actor_tecnico_id',
+        'm.ocurrido_en',
         'm.traslado_id',
         'm.reverso_de',
         'm.causa',

@@ -451,6 +451,16 @@ export const Servicio = definirEsquema(
     objeto(
         {
             id,
+            codigo: {
+                ...texto,
+                description:
+                    'Código del servicio (`S-000412`): automático, único e inmutable (contrato Iris 0.10.0 §3.7). ' +
+                    'Es el «número de servicio» con que el cliente se identifica',
+            },
+            nombre: {
+                ...nulable(texto),
+                description: 'Nombre opcional del servicio (hasta 60: «Casa», «Negocio»); texto del cliente',
+            },
             cliente_id: id,
             empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
             router_id: id,
@@ -478,6 +488,10 @@ export const Servicio = definirEsquema(
                 description: 'Teléfono del contacto en sitio, normalizado: `+502 5512-3344` o `+<dígitos>`',
             },
             coordenadas: nulable(texto),
+            precision_m: {
+                ...nulable({ type: 'integer' }),
+                description: 'Precisión del GPS de las coordenadas en metros enteros (Iris 0.10.0 §3.4.6)',
+            },
             fecha_instalacion: nulable(fecha),
             instalado_en: {
                 ...nulable(instante),
@@ -589,8 +603,12 @@ export const Servicio = definirEsquema(
         // `contacto_telefono` (Iris 0.5.0): la API siempre los envía; opcionales en el esquema hasta que
         // las fixtures del panel los traigan (pedido a A4 en `a1.md`)
         // `servidor_pppoe_id` y `local_address` (red de acceso, 2026-11-05): igual, opcionales hasta las fixtures
+        // `codigo` y `nombre` (Iris 0.10.0, A45): la API siempre los envía; opcionales hasta las fixtures
         [
             'warnings',
+            'codigo',
+            'nombre',
+            'precision_m',
             'referencia',
             'contacto_nombre',
             'contacto_telefono',

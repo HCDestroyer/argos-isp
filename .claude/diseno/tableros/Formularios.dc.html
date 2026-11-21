@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel · Formulario y confirmación</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#F7F8FC}
+a{color:#4338CA}a:hover{color:#3730A3}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:14px}
+.sec{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:28px;padding:24px;border-top:1px solid #F1F5F9}
+.lbl{font-size:14px;font-weight:600;color:#334155}
+.req{color:#DC2626}
+.inp{border:1px solid #CBD5E1;border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;width:100%;box-sizing:border-box;background:#fff;cursor:text}
+.help{font-size:12px;color:#64748B}
+.f{display:flex;flex-direction:column;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 18px;font-weight:600;font-size:14px;border:0;cursor:pointer;font-family:inherit}
+.btn.p{background:#4F46E5;color:#fff}.btn.o{background:#fff;color:#334155;border:1px solid #E2E8F0}.btn.r{background:#DC2626;color:#fff}
+.q{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;background:transparent;color:#94A3B8;cursor:help;padding:0}
+</style>
+</helmet>
+<div style="width:100%;min-height:1080px;display:flex;flex-wrap:wrap;gap:28px;padding:28px;box-sizing:border-box;align-items:flex-start">
+  <div style="flex:999 1 640px;min-width:0;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13px;color:#64748B">Clientes <span aria-hidden="true">›</span> José López <span aria-hidden="true">›</span> <span style="color:#0F172A">Editar servicio</span></div>
+    <div style="display:flex;align-items:center;gap:10px"><a href="#" aria-label="Atrás" style="display:inline-flex;width:36px;height:36px;border-radius:10px;border:1px solid #E2E8F0;align-items:center;justify-content:center;background:#fff"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a><h1 style="margin:0;font-size:28px">Editar servicio</h1><span style="font-size:12px;font-weight:600;background:#FEF3C7;color:#92400E;border-radius:999px;padding:3px 10px">Cambios sin guardar</span></div>
+    <form class="card" aria-label="Editar servicio">
+      <div class="sec" style="border-top:0">
+        <div><div style="font-weight:600">Plan y precio</div><div class="help" style="margin-top:4px">Lo que se cobra cada mes. La factura cobra el precio completo del plan.</div></div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+          <div class="f"><label class="lbl" for="plan">Plan <span class="req">*</span></label><select id="plan" class="inp" style="cursor:pointer"><option>50 Mbps · Q 200.00</option></select></div>
+          <div class="f"><label class="lbl" for="precio">Precio especial</label><div style="display:flex;align-items:center;border:1px solid #CBD5E1;border-radius:10px;overflow:hidden"><span style="padding:10px 12px;background:#F8FAFC;color:#64748B;font-size:14px;border-right:1px solid #CBD5E1">Q</span><input id="precio" class="inp" style="border:0;border-radius:0" placeholder="Usar el del plan"></div><div class="help">Déjalo vacío para cobrar el precio del plan.</div></div>
+          <div class="f"><label class="lbl" for="pl">Plantilla de facturación <span class="req">*</span> <button type="button" class="q" aria-label="¿Qué es la plantilla de facturación?"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></button></label><select id="pl" class="inp" style="cursor:pointer"><option>Se crea el 1 · vence el 5</option></select></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div><div style="font-weight:600">Conexión</div><div class="help" style="margin-top:4px">Router, IP y cómo se conecta. Cambiarlo desconecta al cliente un momento.</div></div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+          <div class="f"><label class="lbl" for="router">Router <span class="req">*</span></label><select id="router" class="inp" style="cursor:pointer"><option>Router Norte</option></select></div>
+          <div class="f"><label class="lbl" for="ip">IP <span class="req">*</span></label><input id="ip" class="inp" value="10.20.4.300" style="border-color:#DC2626" aria-describedby="iperr"><div id="iperr" style="font-size:12px;color:#B91C1C;display:flex;gap:6px;align-items:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>La IP no es válida: cada número va de 0 a 255.</div></div>
+          <label style="grid-column:span 2;display:flex;gap:12px;align-items:flex-start;cursor:pointer"><span style="width:40px;height:22px;border-radius:999px;background:#4F46E5;position:relative;flex:0 0 auto;margin-top:2px"><span style="position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:999px;background:#fff"></span></span><span><span class="lbl" style="display:block">Amarrar IP y MAC</span><span class="help">Solo navega el equipo con esta MAC. Evita que otro use la IP.</span></span></label>
+        </div>
+      </div>
+      <div style="position:sticky;bottom:0;display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid #E6E8F0;background:rgba(255,255,255,.95);border-radius:0 0 14px 14px"><button type="button" class="btn o"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Cancelar</button><button type="button" class="btn p"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Guardar cambios</button></div>
+    </form>
+  </div>
+  <div style="flex:1 1 420px;min-width:0;position:relative;border-radius:18px;background:rgba(15,23,42,.45);min-height:520px;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box">
+    <div role="dialog" aria-modal="true" aria-labelledby="mt" class="card" style="width:100%;max-width:440px;padding:24px;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.3);display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;gap:14px;align-items:flex-start"><span style="width:44px;height:44px;border-radius:12px;background:#FEE2E2;color:#B91C1C;display:flex;align-items:center;justify-content:center;flex:0 0 auto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg></span><div><h2 id="mt" style="margin:0;font-size:18px">¿Retirar el servicio de José López?</h2><p style="margin:6px 0 0;font-size:14px;color:#475569;line-height:1.5">Deja de facturarse y se desconecta del router. Las facturas pendientes (Q 400.00) se mantienen. No se puede deshacer.</p></div></div>
+      <div class="f"><label class="lbl" for="motivo">Motivo <span class="req">*</span></label><input id="motivo" class="inp" placeholder="Ej.: se mudó fuera de cobertura"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px"><button type="button" class="btn o"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Volver</button><button type="button" class="btn r"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Retirar servicio</button></div>
+    </div>
+    <div style="position:absolute;top:14px;left:18px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff">Confirmación (ventana)</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

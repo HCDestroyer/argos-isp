@@ -20,6 +20,7 @@ import {
 } from '#inventario/comodato'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { bodegaDelTecnico, resolverTecnico, type TecnicoExterno } from '#inventario/tecnicos'
+import { bodegaDeUnidadDelTecnico, fechaKardexDe } from '#inventario/cuadrillas'
 import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
@@ -50,6 +51,9 @@ export interface EntradaAsignarComodato {
     bodega_id?: number | null
     /** técnico de Argos de la orden de Iris (`id_externo` o `correo`) */
     tecnico?: TecnicoExterno | null
+    /** `X-Iris-Actor` (de la cabecera) y la ventana de Iris 0.12.0 */
+    iris_actor?: string | null
+    recibido_en_iris?: string | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
     origen_tipo?: OrigenExternoTipo | null
     origen_id?: string | null
@@ -77,8 +81,17 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
         await bloquearProducto(t, producto.id)
         // con el lock del producto la unidad ya no cambia: se vuelve a leer
         let bodegaId = input.bodega_id ?? undefined
-        if (bodegaId === undefined && input.tecnico) {
-            bodegaId = await bodegaDelTecnico(t.trx, await resolverTecnico(t, input.tecnico), empresaId)
+        if (input.tecnico) {
+            // A47 (§3.9 i): la personal del técnico o una cuadrilla de la que es miembro
+            const r = await bodegaDeUnidadDelTecnico(
+                t,
+                input.unidad_id,
+                input,
+                empresaId,
+                resolverTecnico,
+                (u) => bodegaDelTecnico(t.trx, u, empresaId),
+            )
+            bodegaId = r.bodegaId
         }
         const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
             empresaId,
@@ -89,7 +102,7 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
         // un equipo que volvió totalmente depreciado vale Q0: su activo nace en Q0, sin depreciación ni
         // asiento (decisión del líder, fase B)
         const costo = dec(unidad!.costo)
-        const fecha = await fechaDeComodato(t, unidad!.id, input.fecha)
+        const fecha = await fechaDeComodato(t, unidad!.id, fechaKardexDe(input))
         const clase = (producto.clase_activo ?? 'equipo_red') as ClaseActivo
         const cuentas = await cuentasDeClase(t.trx, clase)
         const nombre = unidad!.serie ?? unidad!.mac

@@ -8,7 +8,7 @@ pantallas:
 
 Los gastos de la empresa pagados con efectivo de caja, desde el banco o desde una cuenta bancaria propia: energía, tránsito de internet, nómina, vehículos, alquileres y otros. Cada egreso deja su asiento en el libro.
 
-Está en **Contabilidad → Egresos**.
+Está en **Finanzas → Egresos**.
 
 ## Quién la usa
 

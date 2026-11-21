@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ValidacionFallida } from '#shared/errores'
+import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { bloquearProducto } from '#inventario/kardex'
 import {
@@ -50,7 +50,21 @@ export default class MarcarReparada extends DomainAction<EntradaMarcarReparada, 
             estados: ['en_reparacion'],
             campo: 'unidad_id',
         })
-        await actualizarUnidad(t, unidad!.id, { estado: 'disponible' })
+        // A48: una en garantía se resuelve con `inventario.resolver_garantia`
+        const enGarantia = await t.trx
+            .from('inventario.garantias')
+            .where('unidad_id', unidad!.id)
+            .whereNull('resultado')
+            .select('id')
+            .first()
+        if (enGarantia) {
+            throw new Conflicto(
+                `La unidad ${unidad!.id} está en garantía: resuélvela con POST /inventario/unidades/${unidad!.id}/resolver-garantia`,
+                'en_garantia',
+                'Unidad en garantía',
+            )
+        }
+        await actualizarUnidad(t, unidad!.id, { estado: 'disponible' }, { motivo: 'reparada' })
         await t.registrarCambios(
             { tipo: 'unidad_inventario', id: unidad!.id },
             { estado: 'en_reparacion' },

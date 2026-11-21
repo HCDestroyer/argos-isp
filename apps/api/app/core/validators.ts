@@ -26,6 +26,7 @@ import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 import { FORMATO_TELEFONO } from '#core/telefonos'
+import { telefonosAdicionales } from '#core/validators_contactos'
 
 /*
 |--------------------------------------------------------------------------
@@ -145,6 +146,7 @@ const camposCliente = {
 export const crearClienteValidator = vine.compile(
     vine.object({
         ...camposCliente,
+        telefonos_adicionales: telefonosAdicionales(),
         codigo_referido: vine
             .string()
             .trim()
@@ -434,6 +436,10 @@ export const crearServicioValidator = vine.compile(
             .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
             .nullable()
             .optional(),
+        nombre: vine.string().trim().minLength(1).maxLength(60).nullable().optional().meta({
+            description:
+                'Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda',
+        }),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
         referencia: referencia(),
         contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({
@@ -510,6 +516,10 @@ export const editarServicioValidator = vine.compile(
             .regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/)
             .nullable()
             .optional(),
+        nombre: vine.string().trim().minLength(1).maxLength(60).nullable().optional().meta({
+            description:
+                'Nombre del servicio (hasta 60: «Casa», «Negocio»; contrato Iris 0.10.0 §3.7). El `codigo` lo pone Argos y nunca se manda',
+        }),
         direccion: vine.string().trim().maxLength(300).nullable().optional(),
         referencia: referencia(),
         contacto_nombre: vine.string().trim().maxLength(200).nullable().optional().meta({

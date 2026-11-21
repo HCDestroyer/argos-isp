@@ -16,7 +16,7 @@ Las notas **se emiten desde el detalle de la factura** (botón «Nota de crédit
 - **Ver:** `facturas.ver` (`admin`, `cajero`, `soporte`, `contabilidad`, `lectura`).
 - **Anular una nota:** `facturas.anular_nota_credito` (`admin`, `contabilidad`).
 
-Se llega desde **Cobros → Notas de crédito**.
+Se llega desde **Facturación → Notas de crédito**.
 
 ## Qué ves
 

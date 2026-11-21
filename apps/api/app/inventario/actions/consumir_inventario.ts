@@ -34,6 +34,10 @@ export interface EntradaConsumo extends LineaConsumo {
     servicio_id?: number | null
     motivo?: string | null
     fecha?: string | null
+    /** Iris 0.12.0 §3.10: hora del servidor de Iris al aceptar el lote */
+    recibido_en_iris?: string | null
+    /** `X-Iris-Actor` (lo pone la ruta desde la cabecera) */
+    iris_actor?: string | null
     /** técnico de Argos de la orden de Iris (su bodega es la de salida si no hay bodega_id) */
     tecnico?: TecnicoExterno | null
     /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */

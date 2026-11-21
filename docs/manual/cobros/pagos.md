@@ -17,7 +17,7 @@ Los pagos se registran en [Cobrar](./cobrar.md), al aprobar un comprobante o sol
 - **Anular:** `pagos.anular` (`admin`, `contabilidad`).
 - **Cerrar diferencia:** `pagos.cerrar_diferencia` (`admin`, `contabilidad`).
 
-Se llega desde **Cobros → Pagos**. Con `pagos.registrar`, el botón «Cobrar» lleva a la pantalla de cobro (con el cliente ya elegido si filtraste por uno).
+Se llega desde **Facturación → Pagos**. Con `pagos.registrar`, el botón «Cobrar» lleva a la pantalla de cobro (con el cliente ya elegido si filtraste por uno).
 
 ## Qué ves
 

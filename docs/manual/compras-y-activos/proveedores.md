@@ -10,7 +10,7 @@ pantallas:
 
 Los proveedores de la empresa con lo que se les debe, sus compras y los pagos que se les hicieron.
 
-Están en **Compras → Proveedores** y **Compras → Pagos a proveedores**.
+Están en **Finanzas → Compras → Proveedores** y **Finanzas → Compras → Pagos a proveedores**.
 
 ## Quién la usa
 

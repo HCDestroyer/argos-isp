@@ -29,6 +29,7 @@ export default class IrisWorker extends BaseCommand {
         const { ConsumidorIris, GRUPO_IRIS } = await import('#integraciones/iris/consumidor')
         const { entregarPendientesIris } = await import('#integraciones/iris/envios')
         const { entregarConsentimientosIris } = await import('#notify/consentimientos')
+        const { entregarProspectosIris } = await import('#integraciones/iris/prospectos')
         const { default: ConciliarAvisosIris } = await import('#notify/actions/conciliar_avisos_iris')
         const { contextoSistema } = await import('#shared/contexto')
         const CADA_CONCILIACION_MS = 3600 * 1000
@@ -57,6 +58,11 @@ export default class IrisWorker extends BaseCommand {
                     this.logger.error(
                         `iris:worker: error entregando consentimientos: ${(error as Error).message}`,
                     )
+                }
+                try {
+                    await entregarProspectosIris({ limite: 50 })
+                } catch (error) {
+                    this.logger.error(`iris:worker: error entregando prospectos: ${(error as Error).message}`)
                 }
                 if (Date.now() - ultimaConciliacion >= CADA_CONCILIACION_MS) {
                     ultimaConciliacion = Date.now()

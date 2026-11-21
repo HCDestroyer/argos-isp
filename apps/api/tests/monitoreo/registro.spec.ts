@@ -10,9 +10,15 @@ import { enmascararTexto, registroSistema, type EntradaRegistro } from '#monitor
 
 const nunca = () => new Promise<never>(() => {})
 
-/** Siembra una fila de cada fuente con una marca propia en el `request_id` o el payload. */
+/**
+ * Siembra una fila de cada fuente con una marca propia en el `request_id` o el payload.
+ * Las fechas van un minuto adelante de `now()`: con la suite completa, otras pruebas
+ * escriben cientos de filas en los mismos segundos y las sembradas quedarían fuera de
+ * la primera página (CI de #271). Adelantadas siguen en el mismo orden relativo y
+ * siempre son las más nuevas.
+ */
 async function sembrar(marca: string) {
-    const hace = (s: number) => new Date(Date.now() - s * 1000)
+    const hace = (s: number) => new Date(Date.now() + 60_000 - s * 1000)
     await db.table('audit.acciones').multiInsert([
         {
             actor_tipo: 'sistema',

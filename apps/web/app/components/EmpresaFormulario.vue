@@ -278,12 +278,12 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                     <UFormField
                         name="color_marca"
                         label="Color de marca"
-                        description="Solo para el PDF y el correo; el panel y el portal usan el teal de ArgosIsp"
+                        description="Solo para el PDF y el correo; el panel y el portal usan el índigo de ArgosIsp"
                         class="sm:col-span-2"
                     >
                         <UInput
                             v-model="estado.color_marca"
-                            placeholder="#0F766E"
+                            placeholder="#4F46E5"
                             class="w-full font-mono"
                         />
                     </UFormField>
@@ -315,6 +315,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
             <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <UButton
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     class="justify-center"

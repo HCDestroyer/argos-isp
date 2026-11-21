@@ -12,7 +12,7 @@ Para cada cuenta bancaria y una fecha, compara el saldo del libro con el del ext
 
 - **Permiso:** `reportes.ver` (`admin`, `contabilidad`, `lectura`).
 
-Se llega desde **Bancos → Conciliación bancaria → Reporte**.
+Se llega desde **Finanzas → Bancos → Conciliación bancaria → Reporte**.
 
 ## Qué ves
 

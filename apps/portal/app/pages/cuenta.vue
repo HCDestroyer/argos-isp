@@ -5,7 +5,7 @@ import Decimal from 'decimal.js'
  * Portal con sesión: el "dashboard" del cliente, pensado para el teléfono.
  *
  * - Encabezado compacto con el total y el estado más urgente; "Actualizar" y jalar para actualizar.
- * - Secciones en la URL (`?seccion=inicio|pagar|facturas|puntos|sorteos|cuenta`, `utils/navegacion.ts`;
+ * - Secciones en la URL (`?seccion=inicio|pagar|facturas|soporte|puntos|sorteos|cuenta`; «Soporte» solo con Iris, `utils/navegacion.ts`;
  *   «Puntos» solo con el programa visible en el portal; «Sorteos», desde el aviso del carrusel)
  *   con la barra inferior del layout en el teléfono y la barra superior en escritorio.
  * - Inicio: accesos rápidos (`utils/accesos.ts`: solo lo que la API aceptaría ahora) y los
@@ -361,7 +361,9 @@ watch(() => route.hash, async (hash) => {
                             class="flex min-w-0 flex-col gap-6"
                             aria-label="Lo último de tu cuenta"
                         >
+                            <CuentaACargo />
                             <CuentaRecientes :key="`recientes-${recargas}`" />
+                            <PuntosResumen />
                             <PromoPromociones lugar="portal_inicio" />
                         </aside>
                     </div>
@@ -493,6 +495,12 @@ watch(() => route.hash, async (hash) => {
                     </section>
                 </div>
 
+                <SoporteSeccion
+                    v-else-if="seccion === 'soporte'"
+                    :key="`soporte-${recargas}`"
+                    :servicios="cuenta.servicios"
+                />
+
                 <SorteoSeccion
                     v-else-if="seccion === 'sorteos'"
                     :key="`sorteos-${recargas}`"
@@ -519,6 +527,7 @@ watch(() => route.hash, async (hash) => {
                             :contacto="cuenta.cliente"
                             @actualizado="contactoActualizado"
                         />
+                        <CuentaContactos :key="`contactos-${recargas}`" />
                     </div>
                     <div class="flex min-w-0 flex-col gap-4">
                         <template v-if="telegramPorEmpresa">

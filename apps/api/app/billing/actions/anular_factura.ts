@@ -1,3 +1,4 @@
+import { extrasIrisFactura } from '#billing/iris_eventos'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
@@ -342,6 +343,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 cliente_id: f.cliente_id,
                 total: f.total,
                 vence: f.vence_en,
+                ...(await extrasIrisFactura(t.trx, f.id)),
             })
         }
         t.fijarEntidad('factura', factura.id)

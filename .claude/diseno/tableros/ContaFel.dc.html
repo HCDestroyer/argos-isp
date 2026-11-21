@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Finanzas · FEL (cola, contingencia, rechazados) y libros legales con folio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}html,body{height:100%;overflow:hidden}
+*{box-sizing:border-box}
+button{font-family:inherit}
+.segb{display:inline-flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px;max-width:100%;overflow:auto}
+.ts{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;border:0;background:transparent;white-space:nowrap}
+.ts.on{background:#fff;color:#4338CA;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.ts .c{font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;background:#E2E8F0;color:#475569}
+.ts .c.rj{background:#FEE2E2;color:#B91C1C}
+.migas{font-size:13px;color:#64748B;display:flex;align-items:center;gap:6px;height:22px;flex:0 0 auto}
+.migas b{color:#0F172A;font-weight:600}
+.h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{font-size:13px;color:#64748B}
+.busca{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#94A3B8;font-size:13px;cursor:text}
+.selp{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.lh{display:grid;gap:12px;padding:9px 18px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;align-items:center}
+.lr{display:grid;gap:12px;padding:12px 18px;border-bottom:1px solid #F1F5F9;align-items:center;font-size:13px;cursor:pointer;min-width:0}
+.lr:hover{background:#FAFAFF}.lr.on{background:#F5F7FF;box-shadow:inset 3px 0 0 #4F46E5}
+.lr>*{min-width:0}
+.el{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m2{font-size:12px;color:#64748B}
+.bar{display:block;height:6px;border-radius:999px;background:#EEF0F5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:#4F46E5}
+.ico{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ico.ok{background:#DCFCE7;color:#166534}.ico.wa{background:#FEF3C7;color:#92400E}.ico.er{background:#FEE2E2;color:#B91C1C}.ico.ne{background:#F1F5F9;color:#64748B}.ico.nf{background:#EEF2FF;color:#4338CA}.ico.cy{background:#CFFAFE;color:#0E7490}
+.av2{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:14px;font-size:13px}
+.av2.wa{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.av2.er{background:#FEF2F2;border:1px solid #FECACA;color:#991B1B}.av2.nf{background:#EEF2FF;border:1px solid #C7D2FE;color:#3730A3}.av2.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;padding:0;white-space:nowrap}
+.sc{overflow:auto;min-height:0}
+.nota{position:absolute;right:28px;bottom:28px;width:360px;background:#0F172A;color:#E2E8F0;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.5;box-shadow:0 20px 40px rgba(15,23,42,.3);z-index:6}
+.nota b{color:#fff}
+.b.nf{background:#EEF2FF;color:#3730A3}.b.cy{background:#CFFAFE;color:#0E7490}
+.nuevo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0E7490;background:#CFFAFE;border-radius:999px;padding:2px 7px}
+
+.kt{background:#fff;border:1px solid #E6E8F0;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.kt .kl{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}.kt .kl .nuevo{margin-left:auto}
+.kt .kv{font-size:23px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kt .ks{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 7px}
+.dl.up{background:#DCFCE7;color:#166534}.dl.dn{background:#FEE2E2;color:#B91C1C}.dl.eq{background:#F1F5F9;color:#475569}
+.pan{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.06);border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;min-width:0;min-height:0}
+.ct{font-size:15px;font-weight:700;margin:0;line-height:1.3}
+.cs{font-size:12px;color:#64748B;margin-top:2px}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#475569}
+.lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.ax{font-size:11px;fill:#94A3B8;font-family:Inter,system-ui,sans-serif}
+.axv{font-size:11px;fill:#334155;font-weight:600;font-family:Inter,system-ui,sans-serif}
+.tb{width:100%;border-collapse:collapse;font-size:13px}
+.tb th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:8px 12px;background:#F8FAFC;position:sticky;top:0;white-space:nowrap}
+.tb td{padding:9px 12px;border-top:1px solid #F1F5F9;vertical-align:middle}
+.tb .r{text-align:right;font-variant-numeric:tabular-nums}
+.tb tr.tot td{font-weight:700;background:#F8FAFC;border-top:2px solid #E2E8F0}
+.tb tr.hv:hover td{background:#FAFAFF;cursor:pointer}
+.tb tr.act td{background:#F5F7FF}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}
+.stp{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#64748B;white-space:nowrap}
+.stp .n{width:26px;height:26px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.stp.hecho{color:#166534}.stp.hecho .n{background:#DCFCE7;color:#166534}
+.stp.act{color:#3730A3}.stp.act .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.stl{flex:1;height:2px;background:#E2E8F0;border-radius:2px;min-width:16px}.stl.hecho{background:#86EFAC}
+.chk{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid #F1F5F9;font-size:13px}
+.chk:first-child{border-top:0}
+.ci2{width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ci2.ok{background:#DCFCE7;color:#166534}.ci2.er{background:#FEE2E2;color:#B91C1C}.ci2.wa{background:#FEF3C7;color:#92400E}.ci2.ne{background:#F1F5F9;color:#64748B}
+.side{position:absolute;top:0;right:0;bottom:0;background:#fff;border-left:1px solid #E6E8F0;box-shadow:-20px 0 50px rgba(15,23,42,.14);display:flex;flex-direction:column;z-index:5}
+.cat{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;width:100%;text-align:left}
+.cat.on{background:#EEF2FF;color:#3730A3}
+.cat .c{margin-left:auto;font-size:11px;font-weight:700;color:#94A3B8}
+.rp{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13px}
+.rp:hover{background:#FAFAFF}
+.fav{color:#CBD5E1;display:inline-flex}.fav.on{color:#D97706}.fav.on svg{fill:#FBBF24}
+.mes{flex:1;border:1px solid #E6E8F0;border-radius:12px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#475569;background:#fff;min-width:0;cursor:pointer}
+.mes.cer{background:#F0FDF4;border-color:#BBF7D0;color:#166534}.mes.dur{background:#F1F5F9;border-color:#CBD5E1;color:#334155}.mes.act{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.15);color:#3730A3}.mes.fut{color:#CBD5E1;border-style:dashed}
+.hbar{display:flex;height:22px;gap:2px;border-radius:6px;overflow:hidden}
+.hbar i{display:block;height:100%}
+.av2 b{font-weight:700}
+.grp{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#F8FAFC;border-top:1px solid #EEF0F5;border-bottom:1px solid #EEF0F5;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B}
+.grp .m2{font-weight:600;letter-spacing:0}
+.nsh>*{flex:0 0 auto}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav><header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header><main style="position:absolute;left:108px;right:16px;top:70px;bottom:16px;display:flex;flex-direction:column;gap:10px;min-height:0;padding:0 4px">
+<div class="migas">Finanzas › Fiscal › <b>Facturación electrónica y libros</b></div>
+<div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+ <div><h1 class="h1">Facturación electrónica y libros legales</h1><div class="sub">3 empresas · certificador INFILE · lo que la SAT y el Registro Mercantil pueden pedirte</div></div>
+ <span style="flex:1"></span><span class="selp" style="height:40px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"/></svg>Todas las empresas<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><button class="ib f" title="Ayuda: estados de un documento electrónico y cómo emitir un libro (manual)" style="width:40px;height:40px;border-radius:999px;cursor:help"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></button>
+</div>
+<div class="av2 er" style="flex:0 0 auto;display:{{dfel}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><div style="flex:1"><b>Conecta Occidente está en contingencia desde las 09:14.</b> El certificador no responde. Se sigue cobrando: las facturas salen con número de acceso y se certifican solas al volver. 12 DTE en cola.</div><button class="btn o" style="padding:7px 14px">Levantar contingencia</button></div>
+<section class="isla" style="flex:1;min-height:0;border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;flex-wrap:wrap">
+  <div class="segb"><button class="ts {{t1}}" onClick="{{irFel}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Documentos</button><button class="ts {{t2}}" onClick="{{irLib}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21a2 2 0 0 0 2 2h13v-4M9 8h6"/></svg>Libros legales</button></div>
+  <span style="width:8px"></span>
+  <div style="display:{{dfel}};gap:6px"><sc-for list="{{chips}}" as="c"><span class="fc {{c.cls}}" onClick="{{c.ir}}">{{c.nom}}<span class="c">{{c.n}}</span></span></sc-for></div>
+  <span style="flex:1"></span>
+  <span class="busca" style="width:230px;display:{{dfel}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Número, NIT o cliente…</span>
+  <button class="btn o" style="display:{{dlib2}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar folios habilitados</button>
+ </div>
+ <div style="flex:1;min-height:0;display:{{dfel}};flex-direction:column">
+  <div class="lh" style="grid-template-columns:120px minmax(0,1.1fr) 100px 170px minmax(0,1.5fr) 70px 150px"><span>Documento</span><span>Receptor</span><span style="text-align:right">Total (Q)</span><span>Estado</span><span>Detalle</span><span>Hora</span><span></span></div>
+  <div class="sc" style="flex:1"><sc-for list="{{filas}}" as="d"><div class="lr" style="grid-template-columns:120px minmax(0,1.1fr) 100px 170px minmax(0,1.5fr) 70px 150px">
+   <div><span class="b ne">{{d.tipo}}</span> <span class="mono" style="font-size:12.5px">{{d.num}}</span></div>
+   <div><b class="el" style="display:block">{{d.cli}}</b><div class="m2">{{d.rec}}</div></div>
+   <b class="num r">{{d.tot}}</b>
+   <div><span class="b {{d.cls}}">{{d.svg}}{{d.est}}</span></div>
+   <span class="m2 el" style="{{d.dc}}">{{d.det}}</span>
+   <span class="m2">{{d.hora}}</span>
+   <div style="display:flex;justify-content:flex-end"><button class="btn o" style="padding:6px 12px;display:{{d.av}}">{{d.acc}}</button><button class="lnk" style="display:{{d.lv}};font-size:12px">{{d.acc}}</button></div>
+  </div></sc-for></div>
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid #F1F5F9;font-size:12px;color:#64748B"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Un rechazado no se reintenta solo: se corrige el dato y se crea un documento nuevo. Los avisos de cobro se certifican cuando el cliente paga.<span style="flex:1"></span>{{cuenta}}</div>
+ </div>
+ <div style="flex:1;min-height:0;display:{{dlib}};flex-direction:column">
+  <div class="sc" style="flex:1;padding:4px 18px 16px;display:flex;flex-direction:column;gap:12px">
+   <div class="av2 nf"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><div>Un libro solo se emite con folio de un mes <b>cerrado y bloqueado</b>. Octubre aún no está cerrado: mientras tanto puedes ver el borrador sin folio.</div><button class="btn o" style="padding:7px 14px">Ir a cierres</button></div>
+   <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico nf"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21a2 2 0 0 0 2 2h13v-4M9 8h6"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Diario</b><div class="m2">Septiembre emitido · 1 oct</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">Folio 412</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">588</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico nf"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Mayor</b><div class="m2">Septiembre emitido · 1 oct</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">Folio 233</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">767</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico nf"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Ventas y servicios prestados</b><div class="m2">Septiembre emitido · 1 oct</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">Folio 96</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">104</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico wa"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h11v10H2zM13 9h5l3 3v4h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Compras y servicios recibidos</b><div class="m2">Quedan pocos folios</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">Folio 41</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">9</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico ne"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Inventarios</b><div class="m2">Se emite al 31 dic</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">—</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">—</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div><div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span class="ico ne"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></svg></span><div style="flex:1;min-width:0"><b class="el" style="display:block;font-size:14px">Estados financieros</b><div class="m2">Se emite al cerrar el año</div></div></div><div style="display:flex;gap:8px"><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Siguiente</div><b style="font-size:15px">—</b></div><div class="kpi" style="flex:1;padding:8px 10px"><div class="l">Folios</div><b style="font-size:15px">—</b></div></div><div style="display:flex;gap:6px"><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Vista previa</button><button class="btn o" style="flex:1;justify-content:center;padding:7px 10px;color:#94A3B8;cursor:not-allowed"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Emitir octubre</button></div></div></div>
+   <div style="border:1px solid #EEF0F5;border-radius:14px;overflow:hidden"><table class="tb"><tr><th>Últimas emisiones</th><th>Periodo</th><th>Folios</th><th>Archivo</th><th>Huella del archivo</th><th>Emitió</th></tr>
+    <tr class="hv"><td><b>Diario</b></td><td>Septiembre 2026</td><td class="num">371–411</td><td><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 17v-4h1.5a1.5 1.5 0 0 1 0 3H9"/></svg> PDF</td><td class="mono" style="font-size:12px">a81c…77f0</td><td class="m2">M. Méndez · 1 oct</td></tr>
+    <tr class="hv"><td><b>Ventas y servicios prestados</b></td><td>Septiembre 2026</td><td class="num">88–95</td><td><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg> Excel</td><td class="mono" style="font-size:12px">03be…c219</td><td class="m2">M. Méndez · 1 oct</td></tr>
+    <tr class="hv"><td><b>Mayor</b> <span class="b ne">reimpresión</span></td><td>Agosto 2026</td><td class="num">180–206</td><td><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 17v-4h1.5a1.5 1.5 0 0 1 0 3H9"/></svg> PDF</td><td class="mono" style="font-size:12px">5d20…e4a8</td><td class="m2">A. Castillo · 14 sep</td></tr></table></div>
+  </div>
+ </div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const ds = [{"g": "cola", "tipo": "FACT", "num": "A-10241", "cli": "Comercial El Roble, S.A.", "rec": "NIT 3318820-1", "tot": "1,290.00", "est": "En contingencia", "cls": "wa", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>", "det": "Se enviará al volver el certificador", "hora": "09:22", "acc": "", "av": "none", "lv": "none", "dc": ""}, {"g": "cola", "tipo": "FACT", "num": "A-10240", "cli": "Rosa Ixcot", "rec": "CF", "tot": "215.00", "est": "En contingencia", "cls": "wa", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>", "det": "Se enviará al volver el certificador", "hora": "09:19", "acc": "", "av": "none", "lv": "none", "dc": ""}, {"g": "rech", "tipo": "FACT", "num": "A-10236", "cli": "Hotel Vista Real", "rec": "NIT 771234-K", "tot": "2,150.00", "est": "Rechazado", "cls": "er", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m9 9 6 6M15 9l-6 6\"/></svg>", "det": "NIT del receptor inválido · corrige el NIT en la ficha", "hora": "08:50", "acc": "Corregir y reintentar", "av": "inline-flex", "lv": "none", "dc": "color:#B91C1C"}, {"g": "rech", "tipo": "NCRE", "num": "A-00413", "cli": "Luis Morales", "rec": "NIT 5567123-9", "tot": "75.00", "est": "Rechazado", "cls": "er", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m9 9 6 6M15 9l-6 6\"/></svg>", "det": "La factura de origen tiene más de 2 meses", "hora": "ayer", "acc": "Corregir y reintentar", "av": "inline-flex", "lv": "none", "dc": "color:#B91C1C"}, {"g": "cola", "tipo": "FACT", "num": "A-10239", "cli": "Julio Tax", "rec": "CUI 2456 78901 0101", "tot": "325.00", "est": "Reintentando", "cls": "nf", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 11a8 8 0 0 0-14-4L3 10M3 4v6h6M4 13a8 8 0 0 0 14 4l3-3M21 20v-6h-6\"/></svg>", "det": "Error temporal · intento 3 de 8 · siguiente en 12 min", "hora": "09:05", "acc": "", "av": "none", "lv": "none", "dc": ""}, {"g": "anul", "tipo": "FACT", "num": "A-10102", "cli": "Ferretería La Paz", "rec": "NIT 992817-3", "tot": "430.00", "est": "Anulación pendiente", "cls": "wa", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>", "det": "Esperando confirmación del certificador", "hora": "ayer", "acc": "", "av": "none", "lv": "none", "dc": ""}, {"g": "cert", "tipo": "FACT", "num": "A-10238", "cli": "María López Tzoc", "rec": "NIT 4471902-5", "tot": "215.00", "est": "Certificado", "cls": "ok", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 5 5L20 7\"/></svg>", "det": "Autorización 6F2A-…-91C4", "hora": "08:41", "acc": "XML · PDF", "av": "none", "lv": "inline", "dc": ""}, {"g": "cert", "tipo": "FACT", "num": "A-10237", "cli": "Pedro Ajú", "rec": "CF", "tot": "215.00", "est": "Certificado", "cls": "ok", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 5 5L20 7\"/></svg>", "det": "Autorización 1B77-…-0D2E", "hora": "08:40", "acc": "XML · PDF", "av": "none", "lv": "inline", "dc": ""}, {"g": "cert", "tipo": "FPEQ", "num": "B-00871", "cli": "Tienda Mi Fortuna", "rec": "NIT 1204551-8", "tot": "180.00", "est": "Certificado", "cls": "ok", "svg": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12 5 5L20 7\"/></svg>", "det": "TeleSur · Autorización 88C1-…-AA07", "hora": "08:12", "acc": "XML · PDF", "av": "none", "lv": "inline", "dc": ""}];
+const st = this.state || {}; const lib = st.t === 'libros'; const f = st.f || 'todos';
+const filas = ds.filter((d) => f === 'todos' || d.g === f);
+const n = (g) => ds.filter((d) => d.g === g).length;
+const chips = [['todos', 'Todos', 38], ['cola', 'En cola', 12], ['rech', 'Rechazados', 2], ['anul', 'Por anular', 1], ['cert', 'Certificados hoy', 23]].map(([id, nom, c]) => ({ id, nom, n: c, cls: id === f ? 'on' : '', ir: () => this.setState({ f: id }) }));
+return { filas, chips, cuenta: filas.length + ' de 38 de hoy', t1: lib ? '' : 'on', t2: lib ? 'on' : '', dfel: lib ? 'none' : 'flex', dlib: lib ? 'flex' : 'none', dlib2: lib ? 'inline-flex' : 'none', irFel: () => this.setState({ t: 'fel' }), irLib: () => this.setState({ t: 'libros' }) };
+}
+}
+</script>
+</body>
+</html>

@@ -95,7 +95,20 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
                 }),
             201,
         )
-        return { servicio: r.body(), eventos: await eventosDe(requestId) }
+        // Iris 0.10.0 (A38): el pendiente nace sin IP; con IP fija o amarre se reserva en sitio
+        const sinIp = r.body()
+        const reserva = await estado(
+            client
+                .post(`/api/v1/servicios/${sinIp.id}/reservar-ip`)
+                .bearerToken(token)
+                .header('X-Request-Id', requestId)
+                .json({ origen_tipo: 'iris_orden', origen_id: 'orden-1' }),
+            200,
+        )
+        return {
+            servicio: { ...sinIp, ipv4: reserva.body().ipv4, ip_sin_reserva: sinIp.ipv4 },
+            eventos: await eventosDe(requestId),
+        }
     }
 
     async function activar(client: any, servicio: { id: number; version: number }) {
@@ -127,7 +140,8 @@ test.group('RouterOS · servicio pendiente de instalación', (group) => {
             amarre_ip_mac: true,
         })
         assert.equal(servicio.estado, 'pendiente_instalacion')
-        assert.isString(servicio.ipv4, 'el pendiente ya tiene IP asignada (IPAM)')
+        assert.isNull(servicio.ip_sin_reserva, 'el pendiente nace sin IP (A38)')
+        assert.isString(servicio.ipv4, 'la reserva en sitio le da la IP')
         assert.isTrue(eventos.some((e) => e.evento === 'servicio.creado'))
         await entregar(eventos)
         assert.equal(falso.escrituras.length, 0)

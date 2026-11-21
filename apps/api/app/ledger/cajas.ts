@@ -41,6 +41,11 @@ export interface TurnoVista {
     cerrado_por: number | null
     abierto_por_nombre: string | null
     cerrado_por_nombre: string | null
+    denominaciones: Array<{ valor: string; cantidad: number }> | null
+    fondo_siguiente: string | null
+    entregado_a: number | null
+    entregado_a_nombre: string | null
+    entregado_monto: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -60,6 +65,11 @@ const COLUMNAS_TURNO = [
     't.cerrado_por',
     db.raw('(select u.nombre from core.usuarios u where u.id = t.abierto_por) as abierto_por_nombre'),
     db.raw('(select u.nombre from core.usuarios u where u.id = t.cerrado_por) as cerrado_por_nombre'),
+    't.denominaciones',
+    't.fondo_siguiente',
+    't.entregado_a',
+    db.raw('(select u.nombre from core.usuarios u where u.id = t.entregado_a) as entregado_a_nombre'),
+    't.entregado_monto',
     't.version',
     't.created_at',
     't.updated_at',

@@ -1,17 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, fijarHoyFixtures, ir, menu } from './ayudas'
+import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 
 /**
  * Libros legales con folio (A3, fase 6 PR D) en modo fixtures, en escritorio y teléfono. ArgosNet tiene
  * septiembre cerrado, el bloqueo global hasta el 31/08, el Diario habilitado del 1 al 50 (usados 1–8) y
  * Compras sin habilitación. Hoy es el 15/10/2026: la vista previa abre en septiembre.
  */
-async function elegirEmpresa(page: Page, nombre: RegExp) {
-    const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
-    await selector.click()
-    await page.getByRole('option', { name: nombre }).click()
-    await expect(selector).toContainText(nombre)
-}
 
 async function emitir(page: Page, libro: string) {
     await page.locator('[data-prueba="abrir-emitir"]').click()

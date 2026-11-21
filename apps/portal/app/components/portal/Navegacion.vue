@@ -20,7 +20,10 @@ const route = useRoute()
 const activa = computed(() => seccionActiva(route))
 // «Puntos» aparece solo si el programa está visible en el portal (lo activa el panel).
 const { visible: conPuntos } = usePuntos()
-const secciones = computed(() => seccionesVisibles(conPuntos.value))
+// «Soporte» aparece solo con Iris conectado (tickets y solicitudes del cliente).
+const { visible: conSoporte } = useSoporte()
+const secciones = computed(() => seccionesVisibles(conPuntos.value, conSoporte.value))
+const columnas: Record<number, string> = { 4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6' }
 </script>
 
 <template>
@@ -34,7 +37,7 @@ const secciones = computed(() => seccionesVisibles(conPuntos.value))
         <ul
             class="mx-auto grid w-full max-w-xl gap-1"
             :class="[
-                secciones.length === 5 ? 'grid-cols-5' : 'grid-cols-4',
+                columnas[secciones.length] ?? 'grid-cols-4',
                 props.variante === 'superior' ? 'ax-tarjeta rounded-full p-1' : '',
             ]"
         >
@@ -44,7 +47,7 @@ const secciones = computed(() => seccionesVisibles(conPuntos.value))
             >
                 <UButton
                     :to="item.to"
-                    :icon="props.variante === 'superior' && secciones.length === 5 ? undefined : item.icono"
+                    :icon="props.variante === 'superior' && secciones.length >= 5 ? undefined : item.icono"
                     :label="item.etiqueta"
                     :color="activa === item.seccion ? 'primary' : 'neutral'"
                     :variant="activa === item.seccion ? 'soft' : 'ghost'"
@@ -56,7 +59,7 @@ const secciones = computed(() => seccionesVisibles(conPuntos.value))
                             base: ['min-h-14 flex-col gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium', activa === item.seccion ? 'text-highlighted' : ''].join(' '),
                             leadingIcon: 'size-6',
                         }
-                        : { base: ['min-h-11 gap-2 rounded-full text-sm', secciones.length === 5 ? 'justify-center px-2' : '', activa === item.seccion ? 'text-highlighted' : ''].join(' ') }"
+                        : { base: ['min-h-11 gap-2 rounded-full text-sm', secciones.length >= 5 ? 'justify-center px-2' : '', activa === item.seccion ? 'text-highlighted' : ''].join(' ') }"
                 />
             </li>
         </ul>

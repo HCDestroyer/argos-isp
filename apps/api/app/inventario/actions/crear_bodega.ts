@@ -44,7 +44,7 @@ export async function validarDatosBodega(
             rule: 'required',
         })
     }
-    if (datos.tipo === 'bodega' && datos.usuario_id) {
+    if (datos.tipo !== 'tecnico' && datos.usuario_id) {
         errores.push({
             field: 'usuario_id',
             message: 'Solo la bodega de un técnico lleva usuario',

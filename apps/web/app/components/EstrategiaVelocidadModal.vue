@@ -250,6 +250,7 @@ const puedeAplicar = computed(() => vista.value?.valida && (!reconectar.value ||
                 <UButton
                     v-else
                     label="Cancelar"
+                    :icon="ICONOS.cancelar"
                     color="neutral"
                     variant="ghost"
                     @click="abierto = false"
