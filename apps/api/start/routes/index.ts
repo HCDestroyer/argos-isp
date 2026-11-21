@@ -20,18 +20,22 @@ import lealtad from '#start/routes/lealtad'
 import inventario from '#start/routes/inventario'
 import monitoreo from '#start/routes/monitoreo'
 import apariencia from '#start/routes/apariencia'
+import extractosBancarios from '#start/routes/extractos_bancarios'
+import irisProspectos from '#start/routes/iris_prospectos'
 
 export const registroRutas: Ruta[] = [
     ...core,
     ...network,
     ...billing,
     ...ledger,
+    ...extractosBancarios,
     ...fiscal,
     ...lealtad,
     ...inventario,
     ...portal,
     ...notify,
     ...integraciones,
+    ...irisProspectos,
     ...monitoreo,
     ...apariencia,
 ]

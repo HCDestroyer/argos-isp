@@ -204,6 +204,8 @@ export default class EnviarNotificacion extends DomainAction<EntradaEnviar, Resu
     /** Si falló un canal distinto de correo, notifica por correo con la plantilla de correo. */
     private async fallbackCorreo(t: Transaccion, envio: FilaEnvio): Promise<number | undefined> {
         if (envio.canal === 'correo' || envio.cliente_id === null) return undefined
+        // El aviso a un contacto del titular (`<origen>:contacto:<id>`) no cae al correo del titular
+        if (envio.origen.includes(':contacto:')) return undefined
         const destinatario = await cargarDestinatario(t.trx, envio.cliente_id)
         const plantillas = await plantillasActivas(t.trx, envio.evento)
         const plantilla = plantillas.get('correo')
