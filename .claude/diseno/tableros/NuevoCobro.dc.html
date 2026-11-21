@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cobrar (POS)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A}
+a{color:#4338CA}a:hover{color:#3730A3}
+.isla{background:#fff;border:1px solid #E6E8F0;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.f{background:#fff;border:1px solid #E6E8F0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.rail{width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:12px;color:#64748B;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer}
+.rail.on{background:#EEF2FF;color:#4338CA}
+.ci{position:relative;width:42px;height:42px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;color:#475569;cursor:pointer;box-sizing:border-box}
+.pt{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:999px;border:2px solid #fff}
+.pi{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;box-sizing:border-box}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:16px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn.p{background:#4F46E5;color:#fff;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.btn.v{background:#16A34A;color:#fff}
+.btn.o{background:#fff;color:#334155;border-color:#E2E8F0}
+.btn.g{background:transparent;color:#475569}
+.ib{width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#64748B;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#F1F5F9;color:#0F172A}
+.av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;text-align:left;padding:11px 16px;background:#F8FAFC}
+.td{padding:12px 16px;border-top:1px solid #F1F5F9;font-size:14px;vertical-align:middle}
+tr.fila{cursor:pointer}tr.fila:hover td{background:#FAFAFF}tr.sel td{background:#EEF2FF}
+.b{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.b.ok{background:#DCFCE7;color:#166534}.b.wa{background:#FEF3C7;color:#92400E}.b.er{background:#FEE2E2;color:#B91C1C}.b.in{background:#EEF2FF;color:#3730A3}.b.ne{background:#F1F5F9;color:#475569}
+.num{font-variant-numeric:tabular-nums}
+.r{text-align:right}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.copy{cursor:copy;font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#F1F5F9;border-radius:6px;padding:2px 6px}
+.fc{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:1px solid #E2E8F0;background:#fff}
+.fc.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.fc .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9;color:#475569}
+.fc.on .c{background:rgba(255,255,255,.25);color:#fff}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:9px 0;border-top:1px solid #F1F5F9}
+.kv>span:first-child{color:#64748B}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:14px;color:#334155;cursor:pointer}
+.mi:hover{background:#F1F5F9}
+.mcap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;padding:8px 10px 4px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;border:0;background:transparent;font-family:inherit}
+.tab:hover{background:#F1F5F9}
+.tab.on{background:#EEF2FF;color:#3730A3}
+.tab .c{font-size:11px;border-radius:999px;padding:0 6px;background:#F1F5F9}
+.tab.on .c{background:#fff}
+.kpi{background:#F8FAFC;border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px}
+.kpi b{font-size:20px;display:block;margin-top:2px}
+.sec{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:0 0 10px}
+.dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+.tl{display:flex;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;font-size:14px}
+.tl .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.paso{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;cursor:pointer;border:0;background:transparent;font-family:inherit;text-align:left;width:100%}
+.paso:hover{background:#F8FAFC}
+.paso .n{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:#F1F5F9;color:#64748B;font-weight:700;font-size:13px}
+.paso b{font-size:14px;color:#334155;display:block}.paso small{font-size:12px;color:#94A3B8}
+.paso.on{background:#EEF2FF}.paso.on .n{background:#4F46E5;color:#fff;box-shadow:0 6px 14px rgba(79,70,229,.35)}.paso.on b{color:#3730A3}
+.paso.ok .n{background:#DCFCE7;color:#166534}
+.lb{font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lb .req{color:#B91C1C}
+.in{display:flex;align-items:center;gap:8px;border:1px solid #CBD5E1;border-radius:12px;padding:10px 12px;font-size:14px;color:#0F172A;background:#fff;cursor:text;min-height:20px}
+.in.ph{color:#94A3B8}
+.in.sel{cursor:pointer}.in.sel::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8;transform:rotate(45deg) translateY(-2px)}
+.in.auto{background:#F8FAFC;border-style:dashed;cursor:default}
+.ay{font-size:12px;color:#64748B;margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.op{border:1.5px solid #E2E8F0;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.op.on{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.op .rd{width:16px;height:16px;border-radius:999px;border:2px solid #CBD5E1;flex:0 0 auto;margin-top:2px}
+.op.on .rd{border:5px solid #4F46E5}
+.plan{border:1.5px solid #E2E8F0;border-radius:16px;padding:14px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:4px}
+.plan.on{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.plan b{font-size:20px}
+.tit{font-size:18px;font-weight:700;margin:0}
+.subt{font-size:13px;color:#64748B;margin:2px 0 0}
+.res{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #F1F5F9}
+.res span:first-child{color:#64748B}
+.pc{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;padding:4px 6px;border-radius:999px;white-space:nowrap}
+.pc .n{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:700}
+.pc.on{color:#3730A3}.pc.on .n{background:#4F46E5;color:#fff;box-shadow:0 0 0 4px #E0E7FF}
+.pc.ok{color:#166534}.pc.ok .n{background:#DCFCE7;color:#166534}
+.ln{flex:1;height:2px;border-radius:2px;background:#E2E8F0;min-width:24px}.ln.ok{background:#86EFAC}.ln.fin{display:none}
+.ok-note{display:flex;gap:8px;align-items:center;font-size:12px;color:#166534;background:#F0FDF4;border-radius:10px;padding:8px 10px}
+.tg{display:inline-flex;align-items:center}.tg i{width:44px;height:26px;border-radius:999px;background:#CBD5E1;position:relative;display:inline-block}.tg i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}.tg.on i{background:#16A34A}.tg.on i::after{left:21px}.fx{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid #F1F5F9;cursor:pointer}
+.fx:hover{background:#FAFAFF}
+.ck{width:20px;height:20px;border-radius:6px;border:2px solid #CBD5E1;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;box-sizing:border-box}
+.ck.on{background:#4F46E5;border-color:#4F46E5}
+.met{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border-radius:14px;border:1.5px solid #E2E8F0;font-size:13px;font-weight:600;color:#334155;cursor:pointer;background:#fff;font-family:inherit}
+.met.on{border-color:#4F46E5;background:#EEF2FF;color:#3730A3;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.rap{padding:8px 14px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;font-weight:600;font-size:14px;cursor:pointer;font-variant-numeric:tabular-nums}.ti{width:22px;height:22px;display:inline-block;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}.ti-cobro{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%2220%22%20height%3D%2212%22%20rx%3D%222%22/%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%222.5%22/%3E%3C/svg%3E")}.ti-mano{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M7%2011V5a2%202%200%200%201%204%200v5M11%2010V4a2%202%200%200%201%204%200v6M15%2010V6a2%202%200%200%201%204%200v8a7%207%200%200%201-7%207h-1a7%207%200%200%201-6-3l-3-5a2%202%200%200%201%203-2l2%202%22/%3E%3C/svg%3E")}.ti-mas1{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%205v14M5%2012h14%22/%3E%3C/svg%3E")}.ti-cerrar{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206%206%2018%22/%3E%3C/svg%3E")}.ti-efectivo{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%2220%22%20height%3D%2212%22%20rx%3D%222%22/%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%222.5%22/%3E%3C/svg%3E")}.ti-tarjeta{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%225%22%20width%3D%2220%22%20height%3D%2214%22%20rx%3D%222%22/%3E%3Cpath%20d%3D%22M2%2010h20M6%2015h4%22/%3E%3C/svg%3E")}.ti-deposito{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2010h18L12%204zM5%2010v8M9%2010v8M15%2010v8M19%2010v8M3%2020h18%22/%3E%3C/svg%3E")}.ti-transferencia{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M13%202%204%2014h7l-1%208%209-12h-7z%22/%3E%3C/svg%3E")}.ti-wifi{--m:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012.5a10%2010%200%200%201%2014%200M8.5%2016a5%205%200%200%201%207%200M12%2019.5h.01%22/%3E%3C/svg%3E")}
+.tile{position:relative;text-align:left;border:1.5px solid #E2E8F0;background:#fff;border-radius:18px;padding:14px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:6px;transition:transform .12s,box-shadow .12s}
+.tile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}
+.tile.on{border-color:#4F46E5;background:#F5F7FF;box-shadow:0 0 0 3px rgba(79,70,229,.15)}
+.tile .ok{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:999px;background:#4F46E5;color:#fff;display:none;align-items:center;justify-content:center}
+.tile.on .ok{display:flex}
+.tile .mt{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.tk{background:#fff;border-radius:24px;border:1px solid #E6E8F0;box-shadow:0 20px 50px rgba(15,23,42,.12);display:flex;flex-direction:column;overflow:hidden}
+.tln{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px;border-bottom:1px dashed #E2E8F0}
+.key{height:52px;border-radius:14px;border:1px solid #E2E8F0;background:#F8FAFC;font-size:20px;font-weight:600;cursor:pointer;font-family:inherit;color:#0F172A;font-variant-numeric:tabular-nums}
+.key:hover{background:#EEF2FF}.key:active{transform:scale(.97)}
+.den{flex:1;height:40px;border-radius:12px;border:1px solid #C7D2FE;background:#EEF2FF;color:#3730A3;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+.seg{display:flex;gap:4px;padding:4px;background:#F1F5F9;border-radius:14px}
+.seg button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;border-radius:10px;padding:9px;font-size:13px;font-weight:600;color:#64748B;cursor:pointer;font-family:inherit}
+.seg button.on{background:#fff;color:#3730A3;box-shadow:0 2px 8px rgba(15,23,42,.1)}
+.seg .ti{width:16px;height:16px}
+.cobrar{height:58px;border:0;border-radius:16px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 10px 24px rgba(22,163,74,.35);display:flex;align-items:center;justify-content:center;gap:10px}
+.cobrar.off{background:#CBD5E1;box-shadow:none;cursor:not-allowed}
+
+.gh{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#F8FAFC;border-top:1px solid #EEF0F5;font-size:13px}
+.gh:first-child{border-top:0}
+.rw{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid #F1F5F9;cursor:pointer;background:#fff;width:100%;border-left:0;border-right:0;border-bottom:0;font-family:inherit;text-align:left}
+.rw:hover{background:#FAFAFF}
+.rw.on{background:#F5F7FF}
+.rw .ck{width:22px;height:22px;border-radius:7px;border:2px solid #CBD5E1;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;flex:0 0 auto;box-sizing:border-box}
+.rw.on .ck{background:#4F46E5;border-color:#4F46E5}
+.seg{display:grid;grid-template-columns:repeat(4,1fr)}
+.seg button{flex-direction:column;gap:4px;padding:8px 4px;font-size:12px}
+.seg .ti{width:18px;height:18px}
+.fl{display:flex;flex-direction:column;gap:10px}
+.lnk{border:0;background:transparent;color:#4338CA;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;padding:0}
+</style>
+</helmet>
+<div style="width:100%;height:100vh;min-height:560px;background:radial-gradient(1200px 500px at 20% -10%,#E0E7FF 0%,transparent 60%),radial-gradient(900px 400px at 100% 0%,#CFFAFE 0%,transparent 55%),#F4F6FB;position:relative;overflow:hidden">
+<nav class="isla" aria-label="Menú principal compacto" style="position:absolute;left:16px;top:16px;bottom:16px;width:76px;border-radius:22px;padding:12px 10px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2">
+    <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#4F46E5,#06B6D4);margin-bottom:10px"></div><span title="Expandir menú" aria-label="Expandir menú" role="button" style="position:absolute;right:-14px;top:24px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(15,23,42,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#4338CA;z-index:3"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a><a class="rail on" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Día a día</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Red</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/></svg>Inventario</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11"/></svg>Finanzas</a><a class="rail" href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>Reportes</a>
+    <a class="rail" href="#" style="margin-top:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Ajustes</a></nav>
+<header style="position:absolute;left:108px;right:16px;top:16px;height:44px;display:flex;align-items:center;gap:10px;z-index:2">
+    <span class="f pi" style="color:#94A3B8;font-weight:500;width:240px;cursor:text"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar…<span style="margin-left:auto;font-size:11px">Ctrl K</span></span>
+    <a class="f pi" href="#" style="color:#166534;background:#DCFCE7;border-color:#BBF7D0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="f pi" href="#" style="color:#334155"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M19 8v6M16 11h6"/></svg>Cliente</a>
+    <span class="f ci" title="Más accesos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+    <span style="margin-left:auto"></span>
+    <span class="f ci" title="Caja"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span class="pt" style="background:#16A34A"></span></span>
+    <span class="f ci" title="Sistema"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="pt" style="background:#F59E0B"></span></span>
+    <span class="f ci" title="Notificaciones"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg><span class="pt" style="background:#06B6D4"></span></span>
+    <span class="f ci" title="Tu cuenta" style="background:#E0E7FF;color:#3730A3;font-weight:700;font-size:13px;border-color:#C7D2FE">AC</span></header>
+<main style="position:absolute;left:108px;right:16px;top:76px;bottom:16px;padding:8px 4px;display:flex;gap:16px">
+<section style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px">
+  <div class="isla" style="border-radius:20px;padding:10px;display:flex;align-items:center;gap:10px">
+    <div style="flex:1;display:flex;align-items:center;gap:10px;border-radius:14px;background:#F8FAFC;padding:11px 14px;font-size:15px;color:#94A3B8"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Buscar cliente: nombre, teléfono, S-… o IP<span style="margin-left:auto;font-size:11px;border:1px solid #E2E8F0;border-radius:6px;padding:1px 6px">F2</span></div>
+    <span class="b ok" title="Caja 1 · Ana">● Caja 1</span><button class="btn o" title="Clientes atendidos hoy" style="padding:10px 12px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Recientes</button>
+  </div>
+  <div class="isla" style="border-radius:20px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+    <div class="av" style="width:44px;height:44px;border-radius:14px;background:#CFFAFE;color:#0E7490">JL</div>
+    <div style="min-width:0"><b style="font-size:16px">José López</b><div style="font-size:12px;color:#64748B">CLI-00412 · 5555-8890</div></div>
+    <div style="margin-left:auto;text-align:right"><div style="font-size:11px;color:#64748B">Debe</div><b class="num" style="color:#B91C1C;font-size:18px">Q 600.00</b></div>
+    <button class="ib" title="Otro cliente"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="isla" style="border-radius:20px;overflow:hidden;display:flex;flex-direction:column;min-height:0">
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #EEF0F5"><b style="font-size:15px">¿Qué paga?</b><span style="font-size:12px;color:#64748B">marca las facturas</span><button class="btn o" style="margin-left:auto;padding:5px 12px" onClick="{{todas}}">Todas las vencidas</button></div>
+    <div style="overflow:auto"><sc-for list="{{filas}}" as="r" hint-placeholder-count="7"><div class="gh" style="display:{{r.vGrupo}}"><span class="ti ti-{{r.gIcono}}" style="width:15px;height:15px;color:#4338CA"></span><b>{{r.gTitulo}}</b><span style="color:#64748B">{{r.gSub}}</span><span class="b {{r.gBadgeCls}}" style="margin-left:auto">{{r.gBadge}}</span></div><button class="rw {{r.clase}}" style="display:{{r.vFila}}" onClick="{{r.ir}}"><span class="ck">{{r.marca}}</span><div style="min-width:0"><b style="font-size:14px">{{r.titulo}}</b><div style="font-size:12px;color:#64748B">{{r.sub}}</div></div><span class="b {{r.badgeCls}}" style="margin-left:auto">{{r.badge}}</span><b class="num" style="font-size:15px;min-width:86px;text-align:right">{{r.montoTxt}}</b></button></sc-for></div>
+  </div>
+</section>
+<aside class="tk" style="width:440px;flex:0 0 440px">
+  <div style="display:{{vacio}};padding:22px 20px 0;color:#94A3B8;font-size:13px">Marca a la izquierda lo que va a pagar</div>
+  <div style="padding:18px 20px 0;display:{{verLnk}}"><div class="seg" style="grid-template-columns:1fr 1fr"><button class="{{pcCls}}" onClick="{{setCompleto}}" style="flex-direction:row;font-size:13px">Pago completo</button><button class="{{abCls}}" onClick="{{setAbono}}" style="flex-direction:row;font-size:13px">Abono</button></div></div>
+  <div style="flex:1;min-height:0;overflow:auto;padding:4px 0 6px;display:flex;flex-direction:column;gap:12px;overscroll-behavior:contain">  <div style="padding:4px 20px 0;display:{{verCompleto}};align-items:center;gap:8px"><span style="color:#64748B;font-size:13px">A cobrar</span><span class="num" style="margin-left:auto;font-size:36px;font-weight:800;letter-spacing:-.02em">{{totalTxt}}</span></div>
+  <div style="padding:4px 20px 0;display:{{verOtroMonto}};flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="color:#64748B;font-size:13px;white-space:nowrap">Abona<br><span style="font-size:11px">de {{seleccionTxt}}</span></span><div onClick="{{focoAbono}}" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:6px;{{abEstilo}}"><b class="num" style="font-size:{{abTam}}">{{totalTxt}}</b><span style="font-size:12px;color:#4338CA;display:{{abEditar}}">✎</span></div></div>
+    <div style="font-size:12px;color:#64748B;line-height:1.4">{{distTxt}}</div>
+  </div>
+<div style="padding:0 20px;display:flex;flex-direction:column;gap:12px"><div class="seg"><sc-for list="{{metodos}}" as="x" hint-placeholder-count="4"><button class="{{x.clase}}" onClick="{{x.ir}}"><span class="ti ti-{{x.id}}"></span>{{x.nombre}}</button></sc-for></div><div class="fl" style="display:{{m.efectivo}}">
+    <div onClick="{{focoRec}}" style="cursor:pointer;display:flex;align-items:center;gap:10px;{{recEstilo}}"><span style="font-size:13px;font-weight:600;color:{{recLblCol}}">Recibido</span><b class="num" style="margin-left:auto;font-size:{{recTam}}">{{recibidoTxt}}</b><span style="font-size:12px;color:#4338CA;display:{{recEditar}}">✎</span></div>
+    <div style="text-align:right;font-size:14px;font-weight:600;color:{{cambioCol}};margin-top:-4px;padding-right:4px">{{cambioLinea}}</div>
+    <div style="display:flex;gap:6px"><sc-for list="{{dens}}" as="d" hint-placeholder-count="4"><button class="den" onClick="{{d.ir}}">{{d.t}}</button></sc-for></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"><sc-for list="{{teclas}}" as="k" hint-placeholder-count="12"><button class="key" onClick="{{k.ir}}">{{k.t}}</button></sc-for></div>
+    <div style="font-size:11px;color:#94A3B8;text-align:center">También con tu teclado: números y punto · Tab cambia de campo · Enter cobra</div></div><div class="fl" style="display:{{m.tarjeta}}">
+    <div style="display:flex;gap:6px"><span class="fc on">Visa</span><span class="fc">Mastercard</span><span class="fc">Otra</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div class="lb" style="font-size:12px;margin-bottom:4px">Autorización<span class=req>*</span></div><div class="in ph" style="padding:9px 12px">del voucher</div></div><div><div class="lb" style="font-size:12px;margin-bottom:4px">Últimos 4 dígitos</div><div class="in ph" style="padding:9px 12px">opcional</div></div></div>
+    <div><div class="lb" style="font-size:12px;margin-bottom:4px">Terminal (POS)</div><div class="in" style="padding:9px 12px">BAC · Caja 1</div></div></div><div class="fl" style="display:{{m.transferencia}}">
+    <div><div class="lb" style="font-size:12px;margin-bottom:4px">Tipo<span class="req">*</span></div><div class="seg" style="grid-template-columns:1fr 1fr"><button class="{{ttMismo}}" onClick="{{setMismo}}" style="flex-direction:row">Mismo banco</button><button class="{{ttAch}}" onClick="{{setAch}}" style="flex-direction:row">ACH · otro banco</button></div></div>
+    <div><div class="lb" style="font-size:12px;margin-bottom:4px">Cuenta que recibió<span class=req>*</span></div><div class="in" style="padding:9px 12px">Banrural · Monetaria ···4567</div></div>
+    <div style="display:{{verAch}}"><div><div class="lb" style="font-size:12px;margin-bottom:4px">Banco de origen<span class=req>*</span></div><div class="in" style="padding:9px 12px">Banco Industrial</div><div class=ay>De la lista de bancos de Configuración</div></div></div>
+    <div style="display:{{verMismo}}" class="ay">Banco de origen: Banrural (el mismo de la cuenta)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div class="lb" style="font-size:12px;margin-bottom:4px">Número de referencia<span class=req>*</span></div><div class="in ph" style="padding:9px 12px">de la transferencia</div></div><div><div class="lb" style="font-size:12px;margin-bottom:4px">Fecha<span class=req>*</span></div><div class="in" style="padding:9px 12px">21/11/2026</div></div></div>
+    <div style="height:46px;border-radius:12px;border:1px dashed #A5B4FC;background:#EEF2FF;color:#4338CA;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l2-2h4l2 2"/></svg>Captura del comprobante (opcional)</div></div><div class="fl" style="display:{{m.deposito}}">
+    <div><div class="lb" style="font-size:12px;margin-bottom:4px">Cuenta donde depositó<span class=req>*</span></div><div class="in" style="padding:9px 12px">Banrural · Monetaria ···4567</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div class="lb" style="font-size:12px;margin-bottom:4px">Número de boleta<span class=req>*</span></div><div class="in ph" style="padding:9px 12px">impreso en la boleta</div></div><div><div class="lb" style="font-size:12px;margin-bottom:4px">Fecha del depósito<span class=req>*</span></div><div class="in" style="padding:9px 12px">21/11/2026</div></div></div>
+    <div style="height:46px;border-radius:12px;border:1px dashed #A5B4FC;background:#EEF2FF;color:#4338CA;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l2-2h4l2 2"/></svg>Foto de la boleta (obligatoria)</div></div></div></div>
+  <div style="padding:14px 20px 20px;border-top:1px solid #F1F5F9;margin-top:10px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="fc on" style="padding:5px 10px;font-size:12px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg> Recibo POS</span><span class="fc on" style="padding:5px 10px;font-size:12px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> WhatsApp</span><a href="#" style="margin-left:auto;font-size:13px;font-weight:600"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11V5a2 2 0 0 1 4 0v5M11 10V4a2 2 0 0 1 4 0v6M15 10V6a2 2 0 0 1 4 0v8a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3l-3-5a2 2 0 0 1 3-2l2 2"/></svg> Promesa en vez de pago</a></div>
+    <button class="cobrar {{cobrarCls}}" onClick="{{cobrar}}"><span class="ti ti-cobro" style="width:22px;height:22px"></span>{{cobrarTxt}}</button>
+  </div>
+</aside>
+</main>
+<div style="position:absolute;inset:0;background:rgba(15,23,42,.4);z-index:8;display:{{verListo}};align-items:center;justify-content:center">
+<div class="isla" style="width:400px;max-width:90%;border-radius:26px;padding:28px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+<span style="width:72px;height:72px;border-radius:999px;background:#DCFCE7;color:#166534;display:flex;align-items:center;justify-content:center"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>
+<b style="font-size:21px">¡Cobro listo!</b><div style="font-size:14px;color:#475569">Recibo <span class="mono">R-0957</span> · {{totalTxt}} · {{metodoTxt}}</div>
+<div style="font-size:15px;display:{{verCambioListo}}">Entregar cambio: <b class="num" style="font-size:22px;color:#166534">{{cambioTxt}}</b></div>
+<div class="ok-note" style="width:100%;box-sizing:border-box"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>{{efectoTxt}}</div>
+<div style="display:flex;gap:8px;width:100%"><button class="btn o" style="flex:1;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg>Reimprimir</button><button class="btn o" style="flex:1;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>WhatsApp</button></div>
+<button class="btn p" style="width:100%;justify-content:center;padding:12px" onClick="{{nuevo}}">Siguiente cliente</button></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const st = this.state || {};
+const base = [{"tipo": "g", "gTitulo": "S-000412 · Casa", "gSub": "50 Mbps", "gBadge": "Suspendido", "gBadgeCls": "er", "gIcono": "wifi"}, {"tipo": "f", "id": "f1", "titulo": "Octubre 2026", "sub": "A-1882 · venció 5 oct", "monto": 20000, "badge": "Vencida", "badgeCls": "er", "servicioCorto": "S-000412 · Casa"}, {"tipo": "f", "id": "f2", "titulo": "Noviembre 2026", "sub": "A-1940 · venció 5 nov", "monto": 20000, "badge": "Vencida", "badgeCls": "er", "servicioCorto": "S-000412 · Casa"}, {"tipo": "f", "id": "f4", "titulo": "Diciembre 2026", "sub": "A-2004 · vence 5 dic", "monto": 20000, "badge": "Por vencer", "badgeCls": "ne", "servicioCorto": "S-000412 · Casa"}, {"tipo": "g", "gTitulo": "S-000977 · Cámaras", "gSub": "20 Mbps", "gBadge": "Suspendido", "gBadgeCls": "er", "gIcono": "wifi"}, {"tipo": "f", "id": "f3", "titulo": "Noviembre 2026", "sub": "A-1941 · venció 5 nov", "monto": 20000, "badge": "Vencida", "badgeCls": "er", "servicioCorto": "S-000977 · Cámaras"}, {"tipo": "g", "gTitulo": "A su cargo · S-000518", "gSub": "de su mamá", "gBadge": "Vence 24 nov", "gBadgeCls": "wa", "gIcono": "mano"}, {"tipo": "f", "id": "f5", "titulo": "Noviembre 2026", "sub": "A-1950 · vence 24 nov", "monto": 17500, "badge": "Por vencer", "badgeCls": "ne", "servicioCorto": "S-000518 · a su cargo"}];
+const sel = st.sel || ['f1', 'f2'];
+const met = st.met || 'efectivo';
+const rec = st.rec != null ? st.rec : '500';
+const otro = !!st.otro;
+const foco = otro ? (st.foco || 'abono') : 'recibido';
+const q = (c) => 'Q ' + (c / 100).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const toggle = (id) => () => this.setState({ sel: sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id] });
+const elegidos = base.filter((f) => f.tipo === 'f' && sel.includes(f.id));
+const seleccion = elegidos.reduce((a, f) => a + f.monto, 0);
+const abTxt = st.ab != null ? st.ab : '300';
+const abono = Math.round(parseFloat(abTxt || '0') * 100) || 0;
+const total = otro ? Math.min(seleccion, abono) : seleccion;
+const recibido = Math.round(parseFloat(rec || '0') * 100) || 0;
+const cambio = recibido - total;
+const tecla = (t) => () => {
+  const campo = foco === 'abono' ? 'ab' : 'rec';
+  let r = foco === 'abono' ? abTxt : rec;
+  if (t === '⌫') r = r.slice(0, -1);
+  else if (t === '.') { if (!r.includes('.')) r = (r || '0') + '.'; }
+  else if (!(r.includes('.') && r.split('.')[1].length >= 2)) r = (r === '0' ? '' : r) + t;
+  r = r.slice(0, 10);
+  this.setState({ [campo]: r });
+};
+const ef = met === 'efectivo';
+const ok = total > 0 && (!ef || cambio >= 0);
+const nombres = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', deposito: 'Depósito' };
+const m = {}; Object.keys(nombres).forEach((k) => { m[k] = k === met ? 'flex' : 'none'; });
+const reactiva = sel.includes('f1') && sel.includes('f2') && !otro;
+const tt = st.tt || 'ach';
+let resto = total; const dist = elegidos.map((f) => { const pago = Math.min(resto, f.monto); resto -= pago;
+  const m3 = f.titulo.slice(0, 3); return pago === f.monto ? { cls: 'ok', estado: 'Completa', txt: f.titulo + ' · ' + q(pago), corto: m3 + ' ✓ pagada' } : (pago > 0 ? { cls: 'wa', estado: 'Abono', txt: f.titulo + ' · ' + q(pago) + ' · queda ' + q(f.monto - pago), corto: m3 + ' abona ' + q(pago) + ', queda ' + q(f.monto - pago) } : { cls: 'ne', estado: 'Sin pago', txt: f.titulo + ' · queda ' + q(f.monto), corto: m3 + ' sin pago' }); });
+return {
+  filas: base.map((f) => ({ ...f, vGrupo: f.tipo === 'g' ? 'flex' : 'none', vFila: f.tipo === 'f' ? 'flex' : 'none',
+    clase: sel.includes(f.id) ? 'on' : '', marca: sel.includes(f.id) ? '✓' : '', montoTxt: f.monto ? q(f.monto) : '', ir: f.tipo === 'f' ? toggle(f.id) : () => {} })),
+  lineas: elegidos.map((f) => ({ ...f, montoTxt: q(f.monto), ir: toggle(f.id) })),
+  vacio: elegidos.length ? 'none' : 'block',
+  totalTxt: q(total), seleccionTxt: q(seleccion),
+  totalLbl: otro ? 'A cobrar (abono)' : 'A cobrar',
+  verCompleto: otro ? 'none' : 'flex',
+  recEstilo: foco === 'recibido' ? 'border:2px solid #4F46E5;border-radius:16px;padding:10px 14px;box-shadow:0 0 0 4px rgba(79,70,229,.1);background:#fff' : 'border:1px dashed #CBD5E1;border-radius:12px;padding:6px 12px;background:#F8FAFC', recTam: foco === 'recibido' ? '28px' : '16px', recLblCol: foco === 'recibido' ? '#3730A3' : '#64748B', recEditar: foco === 'recibido' ? 'none' : 'inline',
+  abEstilo: foco === 'abono' ? 'border:2px solid #4F46E5;border-radius:16px;padding:10px 14px;box-shadow:0 0 0 4px rgba(79,70,229,.1);background:#fff;width:190px;box-sizing:border-box' : 'border:1px dashed #CBD5E1;border-radius:12px;padding:6px 12px;background:#F8FAFC', abTam: foco === 'abono' ? '26px' : '18px', abEditar: foco === 'abono' ? 'none' : 'inline',
+  focoRec: () => this.setState({ foco: 'recibido' }), focoAbono: () => this.setState({ foco: 'abono' }),
+  distTxt: dist.map((d) => d.corto).join(' · ') + (otro ? ' · sigue suspendido' : ''),
+  cambioLinea: !total ? '' : (cambio >= 0 ? 'Cambio a entregar: ' + q(cambio) : 'Falta recibir ' + q(-cambio)),
+  verCambioLinea: ef && total ? 'block' : 'none',
+  dist, verSigue: otro ? 'block' : 'none', verLnk: elegidos.length ? 'block' : 'none',
+  ttMismo: tt === 'mismo' ? 'on' : '', ttAch: tt === 'ach' ? 'on' : '', verAch: tt === 'ach' ? 'block' : 'none', verMismo: tt === 'mismo' ? 'block' : 'none',
+  setMismo: () => this.setState({ tt: 'mismo' }), setAch: () => this.setState({ tt: 'ach' }),
+  pantLista: (st.pant || 'lista') === 'lista' ? 'flex' : 'none', pantCobro: st.pant === 'cobro' ? 'flex' : 'none',
+  irCobro: () => this.setState({ pant: 'cobro' }), irLista: () => this.setState({ pant: 'lista' }),
+  nSel: elegidos.length + (elegidos.length === 1 ? ' factura' : ' facturas'),
+  otroTxt: otro ? '↺ Cobrar el total' : '✎ Pagará menos (abono)',
+  alternarOtro: () => this.setState({ otro: !otro }),
+  pcCls: otro ? '' : 'on', abCls: otro ? 'on' : '', setCompleto: () => this.setState({ otro: false }), setAbono: () => this.setState({ otro: true }),
+  verOtroMonto: otro && elegidos.length ? 'flex' : 'none',
+  recibidoTxt: q(recibido), cambioTxt: q(Math.abs(cambio)),
+  cambioLbl: cambio >= 0 ? 'Cambio' : 'Falta', cambioCol: cambio >= 0 ? '#166534' : '#B91C1C', cambioBg: cambio >= 0 ? '#F0FDF4' : '#FEF2F2',
+  m, metodoTxt: nombres[met],
+  teclas: ['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((t) => ({ t, ir: tecla(t) })),
+  dens: [['Exacto', total], ['Q 100', 10000], ['Q 500', 50000], ['Q 1,000', 100000]].map(([t, v]) => ({ t, ir: () => this.setState({ rec: (v / 100).toFixed(2).replace(/\.00$/, ''), foco: 'recibido' }) })),
+  metodos: Object.entries(nombres).map(([id, nombre]) => ({ id, nombre, clase: id === met ? 'on' : '', ir: () => this.setState({ met: id }) })),
+  cobrarCls: ok ? '' : 'off',
+  cobrarTxt: !total ? 'Marca qué paga' : 'Cobrar ' + q(total),
+  cobrar: () => { if (ok) this.setState({ listo: true }); },
+  verListo: st.listo ? 'flex' : 'none',
+  verCambioListo: ef && cambio > 0 ? 'block' : 'none',
+  efectoTxt: reactiva ? 'S-000412 · Casa se reactiva al instante' : 'Pago aplicado a las facturas más antiguas',
+  todas: () => this.setState({ sel: ['f1', 'f2', 'f3'] }),
+  nuevo: () => this.setState({ listo: false, sel: [], rec: '', otro: false, pant: 'lista', foco: null, ab: null })
+};
+}
+}
+</script>
+</body>
+</html>

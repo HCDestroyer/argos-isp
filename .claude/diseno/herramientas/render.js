@@ -1,0 +1,15 @@
+const fs=require('fs');const {chromium}=require('playwright');
+const [,,inp,out,w,h,stateJson]=process.argv;
+let t=fs.readFileSync(inp,'utf8');
+const js=(t.match(/data-dc-script[^>]*>([\s\S]*?)<\/script>/)||[])[1]||'class Component extends DCLogic{renderVals(){return{}}}';
+const C=new Function('DCLogic',js+';return Component;')(class{setState(){}});
+const c=new C(); c.state=stateJson?JSON.parse(stateJson):{};
+const v=c.renderVals();
+const get=(o,p)=>p.split('.').reduce((a,k)=>a==null?a:a[k],o);
+const sub=(s,ctx)=>s.replace(/\{\{([\w.]+)\}\}/g,(_,p)=>{const x=get(ctx,p);return typeof x==='function'?'':(x==null?'':String(x))});
+t=t.replace(/<sc-for list="\{\{(\w+)\}\}" as="(\w+)"[^>]*>([\s\S]*?)<\/sc-for>/g,(_,l,a,inner)=>(v[l]||[]).map(it=>sub(inner,{...v,[a]:it})).join(''));
+t=sub(t,v);
+const helmet=(t.match(/<helmet>([\s\S]*?)<\/helmet>/)||[])[1]||'';
+const body=(t.match(/<\/helmet>([\s\S]*?)<\/x-dc>/)||[])[1]||'';
+const html=`<!doctype html><html><head><meta charset="utf-8">${helmet}</head><body style="margin:0">${body}</body></html>`;
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:+w,height:+h}});await p.setContent(html,{waitUntil:'load'});await p.screenshot({path:out});await b.close();})();

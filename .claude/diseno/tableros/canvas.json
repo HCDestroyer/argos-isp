@@ -1,0 +1,1057 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Clientes.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Clientes (tabla, menú contextual y vista rápida)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Configuracion.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Configuración agrupada",
+      "w": 1440,
+      "x": 0,
+      "y": 1420
+    },
+    "FlujoAlta.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "1 · Nuevo cliente y su servicio",
+      "w": 2400,
+      "x": 0,
+      "y": 0
+    },
+    "FlujoCierre.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "4 · Cortes, promesas y cierre del día",
+      "w": 2400,
+      "x": 0,
+      "y": 3300
+    },
+    "FlujoCobro.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "3 · Cobrar en caja",
+      "w": 2400,
+      "x": 0,
+      "y": 2200
+    },
+    "FlujoInstalacion.dc.html": {
+      "h": 760,
+      "page": "dia",
+      "title": "2 · Instalar y asignar (equipo, plantilla, activar)",
+      "w": 2400,
+      "x": 0,
+      "y": 1100
+    },
+    "Formularios.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Formulario en página y confirmación",
+      "w": 1440,
+      "x": 0,
+      "y": 2840
+    },
+    "IslasA.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas · Propuesta A: dos islas flotantes",
+      "w": 1440,
+      "x": 0,
+      "y": 4300
+    },
+    "IslasA1.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 1: título libre + una pastilla",
+      "w": 1440,
+      "x": 0,
+      "y": 5600
+    },
+    "IslasA2.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 2: dos pastillas",
+      "w": 1440,
+      "x": 1520,
+      "y": 5600
+    },
+    "IslasA3.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 3: barra dentro de la isla del contenido",
+      "w": 1440,
+      "x": 0,
+      "y": 6620
+    },
+    "IslasA4.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · encabezado 4: sin barra, todo en el menú",
+      "w": 1440,
+      "x": 1520,
+      "y": 6620
+    },
+    "IslasA5.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · menú flotante expandido + encabezado de botones sueltos",
+      "w": 1440,
+      "x": 0,
+      "y": 7620
+    },
+    "IslasA6.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas A · menú flotante compacto + encabezado de botones sueltos",
+      "w": 1440,
+      "x": 1520,
+      "y": 7620
+    },
+    "IslasB.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Islas · Propuesta B: barra en islas y menú centrado",
+      "w": 1440,
+      "x": 1520,
+      "y": 4300
+    },
+    "Login.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "Panel · Inicio de sesión",
+      "w": 1440,
+      "x": 1520,
+      "y": 1420
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Panel · Inicio",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoAbrirCaja.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Abrir caja con fondo inicial (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 12820
+    },
+    "NuevoAlmacenamiento.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "page": "novedades",
+      "title": "Sistema · Almacenamiento",
+      "w": 1440,
+      "x": 1520,
+      "y": 1760
+    },
+    "NuevoAltaCliente.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Nuevo cliente y servicio · 3 pasos, progreso arriba, planes con buscador (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 9720
+    },
+    "NuevoAltaClienteMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Nuevo cliente · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 9720
+    },
+    "NuevoApariencia.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Configuración · Apariencia",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "NuevoBodegas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Bodegas y traslados · nuevo traslado (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "NuevoCajas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cajas · cierres, depósitos (boleta) y retiros (interactiva)",
+      "w": 1440,
+      "x": 2040,
+      "y": 11820
+    },
+    "NuevoCierreCaja.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cierre de caja · contar, revisar y cerrar (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 11820
+    },
+    "NuevoCierreCajaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cierre de caja · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 11820
+    },
+    "NuevoClienteFicha.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Ficha del cliente · franja compacta + pestañas segmentadas flotantes (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 8620
+    },
+    "NuevoClienteFichaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Ficha del cliente · teléfono (390 px, interactiva)",
+      "w": 390,
+      "x": 3040,
+      "y": 8620
+    },
+    "NuevoClientes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Clientes · lista con contadores, vista rápida y menú contextual",
+      "w": 1440,
+      "x": 0,
+      "y": 8620
+    },
+    "NuevoCobro.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cobrar tipo POS · cuentas en tarjetas, ticket con teclado y cambio (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 10820
+    },
+    "NuevoCobroMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Cobrar tipo POS · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 10820
+    },
+    "NuevoConciliacion.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Conciliación bancaria · banco contra Argos (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 12820
+    },
+    "NuevoConteo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Conteo físico con diferencias valorizadas",
+      "w": 1440,
+      "x": 0,
+      "y": 1000
+    },
+    "NuevoImportarExtracto.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "novedades",
+      "title": "Importar estado de cuenta del banco (interactiva)",
+      "w": 1440,
+      "x": 3040,
+      "y": 12820
+    },
+    "NuevoInicio.dc.html": {
+      "expand": "fill",
+      "h": 1420,
+      "page": "novedades",
+      "title": "Inicio combinado: el de antes + salud, registro y accesos rápidos de un clic",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoInventario.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Inventario · existencias, equipos, kardex y por recuperar (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NuevoMenuExpandido.dc.html": {
+      "h": 1080,
+      "page": "novedades",
+      "title": "Menú expandido · menú del usuario",
+      "w": 820,
+      "x": -900,
+      "y": 0
+    },
+    "NuevoMiBodega.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "inventario",
+      "title": "Mi bodega del técnico · teléfono",
+      "w": 390,
+      "x": 1520,
+      "y": 1000
+    },
+    "NuevoPortal.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "page": "novedades",
+      "title": "Portal del cliente en escritorio · tickets, solicitudes y WiFi",
+      "w": 1440,
+      "x": 0,
+      "y": 1760
+    },
+    "NuevoProspecto.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "novedades",
+      "title": "Registrar prospecto (va a ventas en Iris) · panel lateral",
+      "w": 1440,
+      "x": 2040,
+      "y": 9720
+    },
+    "NuevoTecnico.dc.html": {
+      "h": 760,
+      "page": "novedades",
+      "title": "Técnico en Iris → Argos activa todo solo",
+      "w": 2400,
+      "x": 0,
+      "y": 3100
+    },
+    "Oscuro.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "Modo oscuro · panel y portal",
+      "w": 1440,
+      "x": 1520,
+      "y": 4260
+    },
+    "Portal.dc.html": {
+      "h": 980,
+      "title": "Portal del cliente (teléfono)",
+      "w": 1400,
+      "x": 0,
+      "y": 4260
+    },
+    "RedAcceso.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "red",
+      "title": "6 · Red de acceso: OLT → puerto PON → VLAN → servidor PPPoE → red",
+      "w": 1440,
+      "x": 1520,
+      "y": 3600
+    },
+    "RedIps.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "red",
+      "title": "5 · Direcciones IP: ¿de quién es esta IP?, redes con mapa, IPv6 e IPs fijas y públicas (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 3600
+    },
+    "RedPlanForm.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "page": "red",
+      "title": "4 · Plan: formulario en página con «así queda» al lado",
+      "w": 1440,
+      "x": 1520,
+      "y": 2300
+    },
+    "RedPlanes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "4 · Planes: buscador, filtros por tipo y por router, vista rápida (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2300
+    },
+    "RedRouterFicha.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "red",
+      "title": "2 · Ficha del router: resumen, conexión, red e IPs, velocidad, servicios y bitácora (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 1100
+    },
+    "RedRouterFichaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "2 · Ficha del router · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 1100
+    },
+    "RedRouterNuevo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "3 · Conectar router: 4 pasos con el script para MikroTik y verificación en vivo (interactiva)",
+      "w": 1440,
+      "x": 2040,
+      "y": 0
+    },
+    "RedRouters.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "1 · Routers: estado en vivo, conexión, control, clientes y ocupación (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "RedRoutersMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "1 · Routers · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 0
+    },
+    "RedSesiones.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "red",
+      "title": "7 · Conectados ahora: sesiones, caídas repetidas y activos sin conexión (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 4800
+    },
+    "RedSesionesMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "red",
+      "title": "7 · Conectados ahora · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 4800
+    },
+    "Sistema.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Sistema visual Argos",
+      "w": 1440,
+      "x": 1520,
+      "y": 2840
+    },
+    "ContaPanel.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "1 · Panel financiero del dueño: cobranza, morosidad, efectivo, impuestos, empresas y alertas (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "ContaPanelMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "1 · Panel financiero · teléfono (consulta)",
+      "w": 390,
+      "x": 1520,
+      "y": 0
+    },
+    "ContaPanelMovil2.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "1 · Finanzas por empresa e impuestos · teléfono",
+      "w": 390,
+      "x": 1990,
+      "y": 0
+    },
+    "ContaReportes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "2 · Reportes: catálogo agrupado con buscador, favoritos y envíos programados (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 1120
+    },
+    "ContaReporteVisor.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "2 · Visor de reporte: filtros, gráfica, tabla, Excel/PDF y programar envío (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 1120
+    },
+    "ContaLibro.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "3 · Libro: diario, mayor, auxiliar de cliente y detalle de un asiento con reverso (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2140
+    },
+    "ContaCierres.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "4 · Periodos y cierres: verificaciones del mes, bloqueos, ejercicio y reabrir con motivo (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 2140
+    },
+    "ContaFiscal.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "5 · Fiscal: calendario de obligaciones y declaración (calcular → revisar → presentar → pagar)",
+      "w": 1440,
+      "x": 0,
+      "y": 3160
+    },
+    "ContaFel.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "5 · FEL: cola, contingencia y rechazados · libros legales con folio (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 3160
+    },
+    "ContaCompras.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "6 · Compras y gastos: compras, borradores desde archivo, proveedores y activos fijos (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 4180
+    },
+    "ContaCartera.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "page": "contabilidad",
+      "title": "7 · Cartera: antigüedad, gestión de cobro, castigos y notas de crédito (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 4180
+    },
+    "OperComprobantes.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "1 · Comprobantes: cola de revisión con la imagen, sugerencia de factura, aprobar o rechazar con causa (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 0,
+      "is_interactive": true
+    },
+    "OperPromesas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "1 · Promesas por servicio: activas, por vencer, por aprobar, cumplidas, incumplidas y reconexión temporal (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0,
+      "is_interactive": true
+    },
+    "OperComprobanteMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "page": "operacion",
+      "title": "1 · Revisar un comprobante · teléfono",
+      "w": 390,
+      "x": 3040,
+      "y": 0
+    },
+    "OperServicioFicha.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "page": "operacion",
+      "title": "2 · Ficha del servicio S-000412: sesión, IPs, equipo, tráfico, plan, adicionales, facturas, contactos, bitácora y portal de corte (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 1100,
+      "is_interactive": true
+    },
+    "OperServicioFichaMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "page": "operacion",
+      "title": "2 · Ficha del servicio · teléfono (interactiva)",
+      "w": 390,
+      "x": 1520,
+      "y": 1100,
+      "is_interactive": true
+    },
+    "OperFacturas.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "3 · Facturas: lista con filtros y vista rápida (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 2300,
+      "is_interactive": true
+    },
+    "OperFacturaDetalle.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "3 · Factura: líneas, pagos, DTE, nota de crédito, imprimir en carta o POS y anular (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 2300,
+      "is_interactive": true
+    },
+    "OperFacturasPeriodo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "3 · Emitir facturas por periodo, incluidas las pasadas: sin prorrateo, monto editable y tramo inicial",
+      "w": 1440,
+      "x": 3040,
+      "y": 2300
+    },
+    "OperPlantillasFacturacion.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "3 · Plantillas de facturación: ciclo, corte, promesas y reconexión temporal (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 3400,
+      "is_interactive": true
+    },
+    "OperPlantillaDocumento.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "3 · Plantillas de documentos con formato POS de 80 mm",
+      "w": 1440,
+      "x": 1520,
+      "y": 3400
+    },
+    "OperLogin.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "4 · Inicio de sesión con logo y fondo de Apariencia",
+      "w": 1440,
+      "x": 0,
+      "y": 4500,
+      "is_interactive": true
+    },
+    "OperLoginMovil.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "page": "operacion",
+      "title": "4 · Inicio de sesión · teléfono",
+      "w": 390,
+      "x": 1520,
+      "y": 4500,
+      "is_interactive": true
+    },
+    "OperConfigEmpresa.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: empresa y fiscal (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 5600,
+      "is_interactive": true
+    },
+    "OperConfigCobro.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: facturación y cobro, cuentas y bancos de origen (interactiva)",
+      "w": 1440,
+      "x": 1520,
+      "y": 5600,
+      "is_interactive": true
+    },
+    "OperConfigRed.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: red y portal",
+      "w": 1440,
+      "x": 3040,
+      "y": 5600
+    },
+    "OperConfigNotificaciones.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: notificaciones y plantillas de mensajes",
+      "w": 1440,
+      "x": 0,
+      "y": 6700,
+      "is_interactive": true
+    },
+    "OperConfigIntegraciones.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: integraciones (Iris, Horus, pasarela)",
+      "w": 1440,
+      "x": 1520,
+      "y": 6700
+    },
+    "OperConfigImportar.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "5 · Configuración: importar desde Mikrowisp",
+      "w": 1440,
+      "x": 3040,
+      "y": 6700
+    },
+    "OperUsuarios.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "6 · Usuarios: lista y perfil",
+      "w": 1440,
+      "x": 0,
+      "y": 7800
+    },
+    "OperRoles.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "6 · Roles y permisos con alcance por router, zona o caja",
+      "w": 1440,
+      "x": 1520,
+      "y": 7800
+    },
+    "OperBitacora.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "6 · Bitácora: filtros y diff por campo (interactiva)",
+      "w": 1440,
+      "x": 3040,
+      "y": 7800,
+      "is_interactive": true
+    },
+    "OperLealtad.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "6 · Lealtad: programa, puntos, canjes y referidos (interactiva)",
+      "w": 1440,
+      "x": 0,
+      "y": 8900,
+      "is_interactive": true
+    },
+    "OperSorteo.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "operacion",
+      "title": "6 · Sorteo con ganadores, entrega y acta",
+      "w": 1440,
+      "x": 1520,
+      "y": 8900
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-21T03:10:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "novedades",
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "titulo",
+    "tituloDia",
+    "tituloNuevo",
+    "tituloIslas",
+    "tituloA",
+    "tituloRed",
+    "tituloConta",
+    "tituloOper"
+  ],
+  "notes": {
+    "titulo": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Propuesta de rediseño · índigo eléctrico",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloA": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Propuesta A elegida · 2 opciones de encabezado",
+      "w": 240,
+      "x": 0,
+      "y": 5300
+    },
+    "tituloDia": {
+      "kind": "title1",
+      "maxW": 2400,
+      "page": "dia",
+      "text": "El día a día en ArgosIsp · wireframes",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloIslas": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Menús como islas · 2 propuestas",
+      "w": 240,
+      "x": 0,
+      "y": 4000
+    },
+    "tituloNuevo": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "novedades",
+      "text": "Lo nuevo · propuesta para aprobar",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloRed": {
+      "kind": "title1",
+      "maxW": 3480,
+      "page": "red",
+      "text": "Red · routers, planes, IPs, red de acceso y conectados",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloConta": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "contabilidad",
+      "text": "Reportes y contabilidad · el corazón de la app",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "tituloOper": {
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "operacion",
+      "text": "Operación · comprobantes, servicio, facturas, acceso, configuración y control",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Clientes.dc.html",
+    "Configuracion.dc.html",
+    "Login.dc.html",
+    "Formularios.dc.html",
+    "Sistema.dc.html",
+    "Portal.dc.html",
+    "Oscuro.dc.html",
+    "FlujoAlta.dc.html",
+    "FlujoInstalacion.dc.html",
+    "FlujoCobro.dc.html",
+    "FlujoCierre.dc.html",
+    "NuevoInicio.dc.html",
+    "NuevoApariencia.dc.html",
+    "NuevoPortal.dc.html",
+    "NuevoTecnico.dc.html",
+    "NuevoAlmacenamiento.dc.html",
+    "NuevoMenuExpandido.dc.html",
+    "IslasA.dc.html",
+    "IslasB.dc.html",
+    "IslasA1.dc.html",
+    "IslasA2.dc.html",
+    "IslasA3.dc.html",
+    "IslasA4.dc.html",
+    "IslasA5.dc.html",
+    "IslasA6.dc.html",
+    "NuevoClientes.dc.html",
+    "NuevoClienteFicha.dc.html",
+    "NuevoClienteFichaMovil.dc.html",
+    "NuevoAltaCliente.dc.html",
+    "NuevoAltaClienteMovil.dc.html",
+    "NuevoProspecto.dc.html",
+    "NuevoCobro.dc.html",
+    "NuevoCobroMovil.dc.html",
+    "NuevoCierreCaja.dc.html",
+    "NuevoCierreCajaMovil.dc.html",
+    "NuevoCajas.dc.html",
+    "NuevoAbrirCaja.dc.html",
+    "NuevoConciliacion.dc.html",
+    "NuevoImportarExtracto.dc.html",
+    "NuevoInventario.dc.html",
+    "NuevoBodegas.dc.html",
+    "NuevoConteo.dc.html",
+    "NuevoMiBodega.dc.html",
+    "RedRouters.dc.html",
+    "RedRoutersMovil.dc.html",
+    "RedRouterNuevo.dc.html",
+    "RedRouterFicha.dc.html",
+    "RedRouterFichaMovil.dc.html",
+    "RedPlanes.dc.html",
+    "RedPlanForm.dc.html",
+    "RedIps.dc.html",
+    "RedAcceso.dc.html",
+    "RedSesiones.dc.html",
+    "RedSesionesMovil.dc.html",
+    "ContaPanel.dc.html",
+    "ContaPanelMovil.dc.html",
+    "ContaPanelMovil2.dc.html",
+    "ContaReportes.dc.html",
+    "ContaReporteVisor.dc.html",
+    "ContaLibro.dc.html",
+    "ContaCierres.dc.html",
+    "ContaFiscal.dc.html",
+    "ContaFel.dc.html",
+    "ContaCompras.dc.html",
+    "ContaCartera.dc.html",
+    "OperComprobantes.dc.html",
+    "OperPromesas.dc.html",
+    "OperComprobanteMovil.dc.html",
+    "OperServicioFicha.dc.html",
+    "OperServicioFichaMovil.dc.html",
+    "OperFacturas.dc.html",
+    "OperFacturaDetalle.dc.html",
+    "OperFacturasPeriodo.dc.html",
+    "OperPlantillasFacturacion.dc.html",
+    "OperPlantillaDocumento.dc.html",
+    "OperLogin.dc.html",
+    "OperLoginMovil.dc.html",
+    "OperConfigEmpresa.dc.html",
+    "OperConfigCobro.dc.html",
+    "OperConfigRed.dc.html",
+    "OperConfigNotificaciones.dc.html",
+    "OperConfigIntegraciones.dc.html",
+    "OperConfigImportar.dc.html",
+    "OperUsuarios.dc.html",
+    "OperRoles.dc.html",
+    "OperBitacora.dc.html",
+    "OperLealtad.dc.html",
+    "OperSorteo.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "propuesta",
+      "name": "Propuesta visual"
+    },
+    {
+      "id": "dia",
+      "name": "Día a día (wireframes)"
+    },
+    {
+      "id": "novedades",
+      "name": "Lo nuevo (propuesta)"
+    },
+    {
+      "id": "inventario",
+      "name": "Inventario y bodegas"
+    },
+    {
+      "id": "red",
+      "name": "Red: routers, planes e IPs"
+    },
+    {
+      "id": "contabilidad",
+      "name": "Reportes y contabilidad"
+    },
+    {
+      "id": "operacion",
+      "name": "Operación: servicios, facturas, comprobantes y más"
+    }
+  ],
+  "title": "Rediseño ArgosIsp"
+}

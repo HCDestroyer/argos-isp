@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Flujo 3 · Cobrar en caja</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0F172A;background:#EEF0F7}
+a{color:#4338CA}a:hover{color:#3730A3}
+.paso{flex:0 0 440px;display:flex;flex-direction:column;gap:12px}
+.n{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.n .k{width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,#4F46E5,#06B6D4);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+.tipo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4338CA;background:#EEF2FF;margin-left:auto;border-radius:999px;padding:3px 10px}
+.app{border:1px solid #E6E8F0;border-radius:16px;background:#F7F8FC;height:540px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(15,23,42,.08);position:relative}
+.top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid #E6E8F0;font-size:12px;color:#64748B}
+.body{padding:14px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
+.card{background:#fff;border:1px solid #E6E8F0;border-radius:12px;padding:12px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:12px;font-weight:600;color:#334155}
+.f .in{border:1px solid #CBD5E1;border-radius:9px;padding:7px 10px;font-size:13px;background:#fff;display:flex;align-items:center;gap:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;padding:8px 14px;font-weight:600;font-size:13px;border:0}
+.p{background:#4F46E5;color:#fff}.o{background:#fff;color:#334155;border:1px solid #E2E8F0}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600}
+.flecha{flex:0 0 44px;display:flex;align-items:center;justify-content:center;color:#4F46E5;padding-top:70px}
+.nota{font-size:13px;color:#475569;line-height:1.45}
+.velo{position:absolute;inset:0;background:rgba(15,23,42,.38);display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:#fff;border-radius:16px;padding:16px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(15,23,42,.3)}
+.mi{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.fila{display:flex;align-items:center;gap:10px;font-size:13px;padding:9px 0;border-top:1px solid #F1F5F9}
+.chk{width:18px;height:18px;border-radius:5px;background:#4F46E5;display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 auto}
+.chk.no{background:#fff;border:1.5px solid #CBD5E1}
+.av{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:0 0 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #E2E8F0;border-radius:12px;padding:9px 10px;font-size:13px;font-weight:600;background:#fff;flex:1;justify-content:center}
+.chip.on{background:#EEF2FF;border-color:#818CF8;color:#3730A3}
+.num{font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div style="width:2400px;height:760px;box-sizing:border-box;padding:26px 32px;display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;align-items:baseline;gap:14px"><h1 style="margin:0;font-size:26px">3 · Cobrar en caja</h1><span class="nota">Cajero · Todo en una sola pantalla, «Cobrar». Con el teclado: Enter registra, Esc empieza otro cobro.</span></div>
+  <div style="display:flex;align-items:flex-start">
+
+    <div class="paso" style="flex-basis:360px">
+      <div class="n"><span class="k">0</span>Abrir la caja<span class="tipo">Ventana</span></div>
+      <div class="app">
+        <div class="top"><b style="color:#0F172A">Cobrar</b></div>
+        <div class="velo"><div class="modal">
+          <div style="display:flex;gap:10px;align-items:center"><span class="mi" style="background:#EEF2FF;color:#4F46E5"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2"/></svg></span><b>Abrir caja</b></div>
+          <div class="f"><label>Caja *</label><div class="in">Caja principal</div></div>
+          <div class="f"><label>Efectivo inicial *</label><div class="in"><span style="color:#64748B">Q</span> 500.00</div></div>
+          <span class="btn p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Abrir caja</span>
+        </div></div>
+      </div>
+      <div class="nota">Una vez al día. Si ya está abierta, este paso no aparece.</div>
+    </div>
+    <div class="flecha"><svg width="34" height="24" viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h28M22 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k">1</span>Buscar al cliente<span class="tipo">Página «Cobrar»</span></div>
+      <div class="app">
+        <div class="top"><b style="color:#0F172A">Cobrar</b><span class="badge" style="margin-left:auto;background:#DCFCE7;color:#166534">Caja abierta</span></div>
+        <div class="body">
+          <div style="display:flex;align-items:center;gap:8px;border:2px solid #4F46E5;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 0 0 4px rgba(79,70,229,.12)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span style="font-size:14px">José Ló</span><span style="font-size:11px;color:#94A3B8;margin-left:auto">nombre, DPI, teléfono o IP</span></div>
+          <div class="card" style="padding:6px 12px">
+            <div class="fila" style="border:0;background:#EEF2FF;margin:0 -12px;padding:9px 12px;border-radius:8px"><div class="av" style="background:#CFFAFE;color:#0E7490">JL</div><div style="flex:1"><b>José López</b><div style="font-size:12px;color:#64748B">CLI-00412 · 10.20.4.18</div></div><span class="badge" style="background:#FEE2E2;color:#991B1B">✕ Suspendido</span></div>
+            <div class="fila"><div class="av" style="background:#E0E7FF;color:#3730A3">JL</div><div style="flex:1"><b>José Lopera</b><div style="font-size:12px;color:#64748B">CLI-00877</div></div><span class="badge" style="background:#DCFCE7;color:#166534">✓ Activo</span></div>
+          </div>
+          <div class="nota" style="font-size:12px">Aparecen mientras escribe. Flechas y Enter para elegir sin el mouse.</div>
+        </div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="34" height="24" viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h28M22 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k">2</span>Lo que debe<span class="tipo">Misma página</span></div>
+      <div class="app">
+        <div class="top"><b style="color:#0F172A">Cobrar</b> › José López</div>
+        <div class="body">
+          <div class="card" style="display:flex;gap:10px;align-items:center"><div class="av" style="background:#CFFAFE;color:#0E7490">JL</div><div style="flex:1"><b>José López</b><div style="font-size:12px;color:#64748B">50 Mbps · 2 facturas vencidas</div></div><span class="badge" style="background:#FEE2E2;color:#991B1B">✕ Suspendido</span></div>
+          <div class="card" style="padding:4px 12px">
+            <div class="fila" style="border:0"><span class="chk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Octubre<span class="badge" style="background:#FEE2E2;color:#991B1B;padding:1px 7px">vencida</span><b class="num" style="margin-left:auto">Q 200.00</b></div>
+            <div class="fila"><span class="chk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span>Noviembre<span class="badge" style="background:#FEE2E2;color:#991B1B;padding:1px 7px">vencida</span><b class="num" style="margin-left:auto">Q 200.00</b></div>
+            <div class="fila"><span class="chk no"></span>Diciembre<span class="badge" style="background:#F1F5F9;color:#475569;padding:1px 7px">vence 5 dic.</span><span class="num" style="margin-left:auto">Q 200.00</span></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#0F172A;color:#fff;border-radius:12px;padding:12px 14px"><span>Total a cobrar</span><b class="num" style="font-size:20px">Q 400.00</b></div>
+          <div class="nota" style="font-size:12px">Lo vencido viene marcado. Marca más meses para adelantar.</div>
+        </div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="34" height="24" viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h28M22 4l8 8-8 8"/></svg></div>
+
+    <div class="paso">
+      <div class="n"><span class="k">3</span>Cómo paga<span class="tipo">Misma página</span></div>
+      <div class="app">
+        <div class="top"><b style="color:#0F172A">Cobrar</b> › José López</div>
+        <div class="body">
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+            <span class="chip on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Efectivo</span>
+            <span class="chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10h18M5 10v8M19 10v8M3 21h18M12 3l9 5H3z"/></svg>Depósito</span>
+            <span class="chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Tarjeta</span>
+            <span class="chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 7h10l-3-3M17 17H7l3 3"/></svg>Transferencia</span>
+          </div>
+          <div class="f"><label>Recibido</label><div class="in" style="font-size:20px;font-weight:700;padding:10px 12px"><span style="color:#64748B;font-weight:500">Q</span> 500.00</div></div>
+          <div class="card" style="display:flex;justify-content:space-between;background:#F0FDF4;border-color:#BBF7D0"><span>Cambio a devolver</span><b class="num" style="color:#166534">Q 100.00</b></div>
+          <div class="nota" style="font-size:12px">Con depósito pide banco y número de boleta; no acepta una boleta ya usada.</div>
+          <span class="btn p" style="margin-top:auto;padding:12px;font-size:14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Registrar pago · Q 400.00</span>
+        </div>
+      </div>
+    </div>
+    <div class="flecha"><svg width="34" height="24" viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 12h28M22 4l8 8-8 8"/></svg></div>
+
+    <div class="paso" style="flex-basis:420px">
+      <div class="n"><span class="k">4</span>Recibo y reactivación<span class="tipo">Misma página</span></div>
+      <div class="app">
+        <div class="top"><b style="color:#0F172A">Cobrar</b> › Recibo</div>
+        <div class="body">
+          <div class="card" style="display:flex;gap:10px;align-items:center;background:#F0FDF4;border-color:#BBF7D0"><span class="mi" style="background:#DCFCE7;color:#166534"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span><div style="font-size:13px"><b>Pago registrado</b><div style="color:#166534">El servicio de José ya se está reactivando.</div></div></div>
+          <div class="card" style="font-size:12px;color:#334155;line-height:1.7;font-family:ui-monospace,Menlo,monospace">KNS TELECOM · RECIBO 000318<br>José López · CLI-00412<br>Octubre ........ Q 200.00<br>Noviembre ...... Q 200.00<br><b>TOTAL .......... Q 400.00</b><br>Efectivo · Caja principal · Ana</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z"/></svg>Imprimir POS 80 mm</span><span class="btn o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/></svg>PDF</span><span class="btn o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>WhatsApp</span></div>
+          <span class="btn o" style="margin-top:auto;padding:11px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Siguiente cliente (Esc)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2400,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

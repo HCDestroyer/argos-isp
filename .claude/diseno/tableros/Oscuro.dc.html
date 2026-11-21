@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Modo oscuro</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#E2E8F0;background:#0B0F1A}
+a{color:#A5B4FC}a:hover{color:#C7D2FE}
+.side{flex:0 0 250px;background:#0F1524;border-right:1px solid #1E2638;padding:20px 14px;display:flex;flex-direction:column;gap:4px;box-sizing:border-box}
+.cap{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7C8AA5;padding:14px 10px 6px}
+.item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;color:#CBD5E1;font-size:14px;font-weight:500;text-decoration:none;cursor:pointer}
+.item:hover{background:#161E31}
+.item.on{background:rgba(129,140,248,.16);color:#C7D2FE}
+.pill{margin-left:auto;font-size:11px;font-weight:700;background:#818CF8;color:#0B0F1A;border-radius:999px;padding:2px 7px}
+.card{background:#121A2B;border:1px solid #1E2638;border-radius:14px}
+.ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.inner{background:#0F1524;border-radius:10px;padding:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 18px;font-weight:600;font-size:14px;border:0;cursor:pointer;font-family:inherit;text-decoration:none}
+.p{background:#818CF8;color:#0B0F1A}.o{background:transparent;color:#CBD5E1;border:1px solid #2A3550}.r{background:#F87171;color:#1F0A0A}
+.th{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7C8AA5;text-align:left;padding:12px 16px;background:#0F1524}
+.td{padding:12px 16px;border-top:1px solid #1A2235;font-size:14px}
+.av{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#94A3B8}
+</style>
+</helmet>
+<div style="width:100%;min-height:1100px;display:flex;flex-wrap:wrap">
+  <nav class="side" aria-label="Menú principal (oscuro)">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 8px 14px"><div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#06B6D4);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></div><div style="font-weight:700;font-size:18px">Argos<span style="color:#818CF8">Isp</span></div></div>
+    <a class="item on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+    <div class="cap">Día a día</div>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>Clientes</a>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0M12 20h.01"/></svg>Servicios</a>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/></svg>Promesas<span class="pill">4</span></a>
+    <div class="cap">Facturación</div>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/></svg>Facturas</a>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>Pagos</a>
+    <div class="cap">Red</div>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="14" width="20" height="7" rx="2"/></svg>Routers</a>
+    <div class="cap">Más áreas</div>
+    <a class="item" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Configuración</a>
+  </nav>
+  <main style="flex:999 1 560px;min-width:0;padding:26px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+    <section style="border-radius:18px;padding:26px 30px;background:linear-gradient(120deg,#3730A3 0%,#312E81 50%,#155E75 100%);display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;border:1px solid #2A3550">
+      <div><h1 style="margin:0 0 6px;font-size:26px;color:#fff">Buenas noches, Ángel</h1><p style="margin:0;color:#C7D2FE">Hay 7 comprobantes por revisar.</p></div>
+      <a class="btn" href="#" style="background:#fff;color:#312E81"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Cobrar</a>
+    </section>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px">
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><div class="ico" style="background:rgba(129,140,248,.16);color:#A5B4FC"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></div><b style="font-size:14px">Cobrado hoy</b></div><div class="inner"><div class="num" style="font-size:22px;font-weight:700">Q 18,450</div><div style="font-size:12px;color:#4ADE80;font-weight:600">↑ 12 %</div></div></div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><div class="ico" style="background:rgba(34,211,238,.14);color:#67E8F9"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0M12 20h.01"/></svg></div><b style="font-size:14px">Activos</b></div><div class="inner"><div class="num" style="font-size:22px;font-weight:700">1,284</div><div style="font-size:12px;color:#4ADE80;font-weight:600">↑ 9 esta semana</div></div></div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><div class="ico" style="background:rgba(251,191,36,.14);color:#FBBF24"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><b style="font-size:14px">Por vencer</b></div><div class="inner"><div class="num" style="font-size:22px;font-weight:700">Q 42,300</div><div class="muted" style="font-size:12px;font-weight:600">218 facturas</div></div></div>
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:10px"><div class="ico" style="background:rgba(248,113,113,.14);color:#F87171"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18.4 5.6 5.6 18.4M4 12a8 8 0 1 0 16 0 8 8 0 0 0-16 0"/></svg></div><b style="font-size:14px">Suspendidos</b></div><div class="inner"><div class="num" style="font-size:22px;font-weight:700">47</div><div style="font-size:12px;color:#F87171;font-weight:600">↓ 6 desde ayer</div></div></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section class="card" style="flex:999 1 520px;min-width:0;overflow:hidden">
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+          <thead><tr><th class="th">Cliente</th><th class="th">Saldo</th><th class="th">Estado</th></tr></thead>
+          <tbody>
+            <tr><td class="td"><div style="display:flex;gap:10px;align-items:center"><div class="av" style="background:rgba(129,140,248,.18);color:#C7D2FE">MP</div><div><b>María Pérez</b><div class="muted" style="font-size:12px">CLI-00231</div></div></div></td><td class="td num">Q 0.00</td><td class="td"><span class="badge" style="background:rgba(74,222,128,.14);color:#86EFAC">✓ Activo</span></td></tr>
+            <tr><td class="td"><div style="display:flex;gap:10px;align-items:center"><div class="av" style="background:rgba(34,211,238,.16);color:#A5F3FC">JL</div><div><b>José López</b><div class="muted" style="font-size:12px">CLI-00412</div></div></div></td><td class="td num" style="color:#FCA5A5;font-weight:600">Q 400.00</td><td class="td"><span class="badge" style="background:rgba(248,113,113,.14);color:#FCA5A5">✕ Suspendido</span></td></tr>
+            <tr><td class="td"><div style="display:flex;gap:10px;align-items:center"><div class="av" style="background:rgba(244,114,182,.16);color:#FBCFE8">AR</div><div><b>Ana Ramírez</b><div class="muted" style="font-size:12px">CLI-00518</div></div></div></td><td class="td num">Q 175.00</td><td class="td"><span class="badge" style="background:rgba(251,191,36,.14);color:#FDE68A">! Limitado</span></td></tr>
+          </tbody>
+        </table></div>
+      </section>
+      <div role="dialog" aria-modal="true" aria-labelledby="mo" class="card" style="flex:1 1 360px;padding:22px;border-radius:16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 24px 60px rgba(0,0,0,.5)">
+        <div style="display:flex;gap:12px;align-items:flex-start"><span class="ico" style="background:rgba(248,113,113,.16);color:#F87171"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg></span><div><h2 id="mo" style="margin:0;font-size:17px">¿Retirar el servicio?</h2><p class="muted" style="margin:6px 0 0;font-size:14px;line-height:1.5">Deja de facturarse y se desconecta. No se puede deshacer.</p></div></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn o"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Volver</button><button class="btn r"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Retirar servicio</button></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+      <div style="width:320px;border-radius:30px;border:7px solid #1E2638;background:#0B0F1A;overflow:hidden;flex:0 0 auto">
+        <div style="padding:18px 16px;background:linear-gradient(135deg,#3730A3,#155E75)"><div style="font-size:13px;color:#C7D2FE">Hola, José</div><div class="num" style="font-size:28px;font-weight:700;color:#fff">Q 200.00</div><div style="font-size:12px;color:#C7D2FE">vence el 5 de diciembre</div><a href="#" class="btn" style="margin-top:12px;width:100%;box-sizing:border-box;justify-content:center;background:#fff;color:#312E81"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Pagar factura</a></div>
+        <div style="padding:14px;display:flex;flex-direction:column;gap:10px"><div class="card" style="padding:12px;display:flex;align-items:center;gap:10px"><span class="ico" style="width:34px;height:34px;background:rgba(74,222,128,.14);color:#4ADE80"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg></span><div style="flex:1"><b style="font-size:14px">Noviembre</b><div class="muted" style="font-size:12px">Pagada</div></div><span class="num muted" style="font-weight:700">Q 200.00</span></div></div>
+      </div>
+      <div style="flex:1 1 300px;font-size:14px;line-height:1.6;color:#94A3B8">
+        <h3 style="margin:0 0 6px;color:#E2E8F0;font-size:15px">Cómo funciona el modo oscuro</h3>
+        Fondo azul noche (#0B0F1A), nunca negro puro. El índigo se aclara (#818CF8) para leerse bien sobre fondo oscuro. Los estados usan el mismo color en versión suave, siempre con ícono y texto. Se cambia con el botón de luna en la barra superior, o sigue el modo del teléfono o la computadora.
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
