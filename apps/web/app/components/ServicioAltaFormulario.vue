@@ -23,15 +23,20 @@ const props = withDefaults(defineProps<{
     clienteId?: number
     /** Dentro de un panel lateral: sin la columna de resumen. */
     compacto?: boolean
+    /** El progreso lo pinta quien lo contiene (alta de cliente en 3 pasos): sin el stepper propio; avisa con `paso`. */
+    pasosExternos?: boolean
 }>(), {
     cliente: null,
     clienteId: undefined,
     compacto: false,
+    pasosExternos: false,
 })
 
 const emit = defineEmits<{
     creado: [servicio: Servicio]
     cancelar: []
+    /** Paso actual (`conexion`, `red`, `instalacion`, `resumen`), para el progreso de quien lo contiene. */
+    paso: [id: string]
 }>()
 
 const toast = useToast()
@@ -102,6 +107,7 @@ const alcanzado = ref(paso.value)
 const itemsStepper = computed(() => pasos.value.map((p, indice) => ({ ...p, value: indice, disabled: indice > alcanzado.value })))
 const ultimo = computed(() => pasos.value.length - 1)
 const pasoActual = computed(() => pasos.value[paso.value]?.id ?? 'resumen')
+watch(pasoActual, id => emit('paso', id), { immediate: true })
 
 function irA(id: IdPaso) {
     const indice = pasos.value.findIndex(p => p.id === id)
@@ -494,6 +500,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
         @submit="alEnviar"
     >
         <UStepper
+            v-if="!pasosExternos"
             v-model="paso"
             :items="itemsStepper"
             size="sm"

@@ -257,6 +257,7 @@ export const INDICE_AYUDA: Record<string, EntradaAyuda> = {
         ancla: 'ficha-del-cliente',
         temas: [
             'Botones de la ficha',
+            'Datos del cliente',
             'Pestañas',
             'Telegram',
             'Portal del cliente',

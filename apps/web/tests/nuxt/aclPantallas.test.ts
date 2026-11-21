@@ -174,6 +174,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ReglaConciliacionModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/reglas.vue'] },
     'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
     'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClientePagos.vue': { permisos: ['pagos.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ClientePromesas.vue': { permisos: ['promesas.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     // Anuncios del portal (A5, `contratos/anuncios.md`).
     'AnuncioFormulario.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/index.vue', 'pages/anuncios/[id].vue'] },
