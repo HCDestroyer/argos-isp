@@ -65666,7 +65666,7 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
-            "required": true,
+            "required": false,
             "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
             "schema": {
               "type": "string",
@@ -65742,16 +65742,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalSolicitudServicio"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -66023,7 +66013,7 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
-            "required": true,
+            "required": false,
             "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
             "schema": {
               "type": "string",
@@ -66091,16 +66081,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalTicket"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -66596,7 +66576,7 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
-            "required": true,
+            "required": false,
             "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
             "schema": {
               "type": "string",
@@ -66648,16 +66628,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortalRespuestaTicket"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

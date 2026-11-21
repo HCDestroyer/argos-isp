@@ -11,7 +11,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  * - Con la sesión de «Ver mi cuenta» en `/corte` no hay adjuntos (§11.2).
  * - `Idempotency-Key`: la misma en los reintentos de un envío que no llegó.
  */
-definePageMeta({ name: 'soporte-nuevo' })
 useHead({ title: 'Reportar un problema' })
 
 const route = useRoute()

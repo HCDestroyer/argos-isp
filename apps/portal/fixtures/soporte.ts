@@ -158,13 +158,31 @@ export function fijarSoporteFixture(escenario: EscenarioSoporte | null): void {
 }
 fijarSoporteFixture(null)
 
+const CLAVE_ESCENARIO = 'argos:fixture:soporte'
+
 function escenario(): EscenarioSoporte {
     if (estado.escenario) {
         return estado.escenario
     }
-    const pedido = typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('soporte')
-    return ESCENARIOS.find(e => e === pedido) ?? 'sin_iris'
+    if (typeof window === 'undefined') {
+        return 'sin_iris'
+    }
+    // El escenario de la URL queda para toda la pestaña (la navegación del portal no lo repite).
+    const pedido = new URL(window.location.href).searchParams.get('soporte')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_ESCENARIO, pedido)
+        }
+        const guardado = pedido ?? sessionStorage.getItem(CLAVE_ESCENARIO)
+        return ESCENARIOS.find(e => e === guardado) ?? 'sin_iris'
+    }
+    catch {
+        return ESCENARIOS.find(e => e === pedido) ?? 'sin_iris'
+    }
 }
+
+// Al cargar el portal se guarda el escenario de la URL (p. ej. `/entrar?soporte=disponible`).
+escenario()
 
 function problema(status: number, codigo: string, title: string, detail: string): RespuestaFixture {
     const cuerpo: Problem = { type: `urn:argosisp:problema:${codigo}`, title, status, detail }

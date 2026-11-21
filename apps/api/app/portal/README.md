@@ -563,6 +563,69 @@ por suspensión»). Solo los activos (bloqueados incluidos) de los servicios del
 credencial** ni el motivo interno de la cortesía. Por la IP no sale nada de esto (el identificador
 puede ser un correo). Pruebas: `tests/portal/adicionales.spec.ts`.
 
+## Soporte con Iris, mis contactos y servicios a cargo (contrato Iris 0.9.0 §11 y 0.10.x §3.5, §3.8)
+
+Pedidos A30 (tickets), A31 (solicitudes de servicio), A42 (contactos desde el portal; decisión del PM
+«También el titular desde el portal») y A46 (un cliente a cargo del servicio de otro). Código en
+`soporte/` (`iris_portal.ts`, `sesion.ts`, `adjuntos.ts`, `vistas.ts`, `validators.ts`,
+`esquemas.ts`, `rutas.ts`) y `contactos.ts`.
+
+- **Argos → Iris, servidor a servidor** (`soporte/iris_portal.ts`): `Authorization: Bearer
+  <token_portal>`, `X-Iris-Empresa` (empresa de un servicio vigente del cliente de la sesión, nunca
+  la que diga el navegador sin validar), `X-Argos-Portal-Sesion: <documento|ip>:<HMAC del id de la
+  sesión con APP_KEY>` (nunca el documento, la IP ni la cookie) e `Idempotency-Key:
+  argos:portal:<ticket|respuesta|solicitud>:<uuid>` (el UUID lo genera el portal por envío; confirmar:
+  `argos:portal:confirmar:<ticket_id>:<version>`). Sesión `codigo` o `contrasena` → `documento`;
+  «Ver mi cuenta» en `/corte` (`origen = corte`, un único servicio por PPPoE vigente o código) → `ip`.
+- **Disponibilidad** (`GET /portal/soporte`): conector activo con URL, contrato ≥ 0.9.0
+  (`contratoAdmite`), `token_portal` y `capacidades.portal_argos` leído en cada consulta de
+  `GET <iris>/api/v1/integraciones/argosisp/estado` con el token del panel (sin caché). Estados:
+  `disponible`, `sin_iris` (el portal no muestra Soporte), `apagado`, `version`, `sin_token`,
+  `sin_respuesta` (el portal muestra el error con «Reintentar»).
+- **`token_portal`**: el conector de A1 aún no lo guarda (pedido en `a5.md`). Se lee de la columna
+  `integraciones.iris_conector.token_portal_cifrado` en cuanto exista y, mientras tanto, de
+  `IRIS_TOKEN_PORTAL` (solo laboratorio; `.env.example`).
+- **Errores**: los de Iris salen con su mismo código (`urn:argosisp:problema:<codigo>`) y texto para el
+  cliente (`traducirProblemaIris`); los `429` con `Retry-After`; `solicitud_abierta` con
+  `solicitud_id`. Credencial, empresa fuera de alcance, conector apagado en Iris, `404` de un Iris sin
+  §11, red o `5xx`: `503 soporte_no_disponible`, sin detalles internos.
+- **Lo que pasa al navegador**: solo los campos del contrato (`soporte/vistas.ts`): un campo nuevo de
+  Iris no pasa hasta agregarlo aquí y al OpenAPI. Con sesión `ip` la lista va sin `asunto` aunque Iris
+  lo mande, y detalle, mensajes, adjuntos, responder, confirmar, solicitudes y contactos responden
+  `403 sesion_insuficiente`. Abrir ticket con sesión `ip`: sin adjuntos y con el servicio de la sesión.
+- **Adjuntos** (`soporte/adjuntos.ts`): hasta 3, 10 MB, JPEG, PNG, WebP, HEIC o PDF por la firma de
+  los primeros bytes (413 `tamano_excedido`, 422 `mime_no_permitido`, `demasiados_adjuntos`); el total
+  lo acota el bodyparser (20 MB). Descarga por Argos con `Content-Disposition: attachment`,
+  `nosniff` y `Content-Security-Policy: sandbox`.
+- **A cargo** (A46): `GET /portal/a-cargo` lista los contactos con `persona_cliente_id` = cliente de la
+  sesión y sus servicios (código, nombre, estado y saldo solo con `consultar`). `POST
+  /portal/soporte/tickets` con `contacto_id` abre el ticket en la cuenta del dueño si el contacto
+  apunta a la persona, el servicio está entre los suyos y tiene `reportar` (404 / 403
+  `permiso_de_contacto`).
+
+| Ruta | Acción | Notas |
+| --- | --- | --- |
+| `GET /portal/soporte` | lectura | Disponibilidad, capacidades, `sesion` y empresas |
+| `GET /portal/soporte/categorias` | lectura | Categorías de Iris |
+| `GET /portal/soporte/tickets`, `/:ticketId`, `/:ticketId/mensajes`, `/:ticketId/adjuntos/:adjunto` | lectura | La lista con `?estado=a,b`; el resto solo `documento` |
+| `POST /portal/soporte/tickets` (multipart) | `portal.abrir_ticket` | Hasta 3 `archivos`; `contacto_id` para un servicio a cargo |
+| `POST /portal/soporte/tickets/:ticketId/responder` (multipart) | `portal.responder_ticket` | `version` opcional |
+| `POST /portal/soporte/tickets/:ticketId/confirmar-solucion` | `portal.confirmar_solucion` | `version` |
+| `GET /portal/soporte/solicitudes`, `/:solicitudId` | lectura | Solo `estado_cliente` |
+| `POST /portal/soporte/solicitudes` | `portal.solicitar_servicio` | Reglas por tipo de §11.7 |
+| `GET /portal/soporte/planes` | lectura | Planes activos para «plan de interés» |
+| `GET /portal/contactos` | lectura | Titular primero |
+| `POST /portal/contactos` | `portal.agregar_contacto` → `contactos.gestionar` (A1) | `Idempotency-Key` |
+| `PUT /portal/contactos/:contactoId` | `portal.cambiar_contacto` → `contactos.gestionar` | `version` |
+| `POST /portal/contactos/:contactoId/quitar` | `portal.quitar_contacto` → `contactos.gestionar` | `version`; rompe el vínculo A46 |
+| `GET /portal/a-cargo` | lectura | Vacía con sesión `ip` |
+
+Todas con sesión, límite por IP y actor `cliente`, canal `portal`. Las acciones de Iris no cambian
+nada en Argos (Iris emite `ticket.creado`, `ticket.mensaje_cliente`, `ticket.estado_cambiado` y
+`prospecto.creado`); las de contactos emiten `cliente.contactos_cambiados` por la acción de A1.
+Pruebas: `tests/portal/soporte_iris.spec.ts` (Iris falso con `fijarFetchPortalIris` y
+`fijarConectorPortalIris`) y `tests/portal/contactos_portal.spec.ts`.
+
 ## Portal de corte configurable (pedido del PM, 6 nov)
 
 `core.portal_corte` (una fila global; `corte.ts`): IPv4, IPv6 y puerto a los que el dst-nat de los routers

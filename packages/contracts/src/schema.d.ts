@@ -59709,9 +59709,9 @@ export interface operations {
     portalSoporteSolicitar: {
         parameters: {
             query?: never;
-            header: {
+            header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
-                "Idempotency-Key": string;
+                "Idempotency-Key"?: string;
             };
             path?: never;
             cookie?: never;
@@ -59745,15 +59745,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalSolicitudServicio"];
-                };
-            };
-            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
@@ -59917,9 +59908,9 @@ export interface operations {
     portalSoporteAbrirTicket: {
         parameters: {
             query?: never;
-            header: {
+            header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
-                "Idempotency-Key": string;
+                "Idempotency-Key"?: string;
             };
             path?: never;
             cookie?: never;
@@ -59953,15 +59944,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalTicket"];
-                };
-            };
-            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
@@ -60263,9 +60245,9 @@ export interface operations {
     portalSoporteResponder: {
         parameters: {
             query?: never;
-            header: {
+            header?: {
                 /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
-                "Idempotency-Key": string;
+                "Idempotency-Key"?: string;
             };
             path: {
                 ticketId: number;
@@ -60296,15 +60278,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalRespuestaTicket"];
-                };
-            };
-            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */

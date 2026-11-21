@@ -7,7 +7,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  * de 1 a 5 números con uno principal. Quitar pide confirmación. La API valida y normaliza los
  * números; un 409 pide recargar.
  */
-definePageMeta({ name: 'contacto' })
 
 const route = useRoute()
 const toast = useToast()

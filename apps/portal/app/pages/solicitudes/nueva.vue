@@ -8,7 +8,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  *
  * `?tipo=` elige la opción (por defecto, cambio de plan) y `?empresa=` la empresa.
  */
-definePageMeta({ name: 'solicitud-nueva' })
 
 const route = useRoute()
 const toast = useToast()

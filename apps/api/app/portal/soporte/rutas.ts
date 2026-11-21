@@ -344,7 +344,7 @@ const soporte: Ruta[] = [
         seguridad: 'portal',
         permiso: null,
         limitada: true,
-        idempotente: 'obligatoria',
+        idempotente: true,
         antes: limitarAntes('soporte_abrir'),
         cuerpo: abrirTicketValidator,
         multipart: { archivos: { archivos: 'Hasta 3 fotos o PDF' }, archivosOpcionales: ['archivos'] },
@@ -413,7 +413,7 @@ const soporte: Ruta[] = [
         seguridad: 'portal',
         permiso: null,
         limitada: true,
-        idempotente: 'obligatoria',
+        idempotente: true,
         antes: limitarAntes('soporte_responder'),
         cuerpo: responderTicketValidator,
         multipart: { archivos: { archivos: 'Hasta 3 fotos o PDF' }, archivosOpcionales: ['archivos'] },
@@ -543,7 +543,7 @@ const soporte: Ruta[] = [
         seguridad: 'portal',
         permiso: null,
         limitada: true,
-        idempotente: 'obligatoria',
+        idempotente: true,
         antes: limitarAntes('soporte_solicitar'),
         cuerpo: solicitarServicioValidator,
         respuesta: { status: 201, descripcion: 'Solicitud recibida', esquema: PortalSolicitudServicio },
@@ -646,8 +646,12 @@ const SOBRE_CONTACTOS =
     'Solo los contactos de la cuenta del cliente; el titular no se edita ni se quita aquí (404). Delega en ' +
     '`contactos.gestionar` de A1 (diff en audit.cambios, aviso al titular y `cliente.contactos_cambiados`).'
 
-async function titularDocumento(ctx: HttpContext, endpoint: string): Promise<number> {
-    const s = await contexto(ctx, endpoint)
+/**
+ * Cliente de la sesión con código o contraseña. Con `endpoint` cuenta el límite aquí; sin él, ya lo
+ * contó el gancho `antes` de la ruta (no se cuenta dos veces).
+ */
+async function titularDocumento(ctx: HttpContext, endpoint?: string): Promise<number> {
+    const s = endpoint ? await contexto(ctx, endpoint) : await sesionSoporte(ctx)
     exigirDocumento(s)
     return s.clienteId
 }
@@ -688,7 +692,7 @@ const contactos: Ruta[] = [
         cuerpo: agregarContactoValidator,
         respuesta: { status: 201, descripcion: 'Contacto agregado', esquema: PortalContactoCliente },
         handler: async (ctx, { cuerpo }) => {
-            const clienteId = await titularDocumento(ctx, 'contactos_agregar')
+            const clienteId = await titularDocumento(ctx)
             const contacto = await new AgregarContactoPortal().execute(
                 { ...cuerpo, clienteId },
                 ctx.contextoCliente(clienteId),
@@ -711,7 +715,7 @@ const contactos: Ruta[] = [
         cuerpo: cambiarContactoValidator,
         respuesta: { status: 200, descripcion: 'Contacto actualizado', esquema: PortalContactoCliente },
         handler: async (ctx, { cuerpo, params }) => {
-            const clienteId = await titularDocumento(ctx, 'contactos_cambiar')
+            const clienteId = await titularDocumento(ctx)
             const contacto = await new CambiarContactoPortal().execute(
                 { ...cuerpo, clienteId, contactoId: Number(params.contactoId) },
                 ctx.contextoCliente(clienteId),
@@ -734,7 +738,7 @@ const contactos: Ruta[] = [
         cuerpo: quitarContactoValidator,
         respuesta: { status: 204, descripcion: 'Quitado' },
         handler: async (ctx, { cuerpo, params }) => {
-            const clienteId = await titularDocumento(ctx, 'contactos_quitar')
+            const clienteId = await titularDocumento(ctx)
             await new QuitarContactoPortal().execute(
                 { clienteId, contactoId: Number(params.contactoId), version: cuerpo.version },
                 ctx.contextoCliente(clienteId),

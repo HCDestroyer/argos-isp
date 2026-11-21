@@ -6,7 +6,6 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  * notas internas ni datos del personal), responder con fotos o PDF y «Ya quedó, cerrar» cuando
  * soporte lo marcó resuelto. Si Iris no responde, el error con «Reintentar» y nada inventado.
  */
-definePageMeta({ name: 'soporte-ticket' })
 
 const route = useRoute()
 const toast = useToast()
