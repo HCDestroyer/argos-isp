@@ -161,4 +161,3 @@ test('alta, paso Servicio: router con buscador e IP automática, por red o escri
     await campo.fill('192.168.50.4')
     await expect(ip).toContainText('No es de ninguna red de RB-Centro')
 })
-

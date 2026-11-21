@@ -129,6 +129,15 @@ watch([ipv4, modo, () => props.redes], ([ip, valor]) => {
 
 onBeforeUnmount(() => clearTimeout(espera))
 
+/** IP bien escrita que no cae en ninguna red del router: se dice al momento (el esquema también la bloquea). */
+const fueraDeRed = computed(() => {
+    const ip = ipv4.value.trim()
+    if (modo.value !== 'fija' || !PATRON_IPV4.test(ip) || !props.redes.length || redEscrita.value) {
+        return undefined
+    }
+    return `No es de ninguna red de ${nombreRouter.value}: ${props.redes.map(r => r.cidr).join(', ')}`
+})
+
 const ayudaIp = computed(() => {
     const red = redEscrita.value
     if (red) {
@@ -234,6 +243,7 @@ const ayudaIp = computed(() => {
             name="ipv4"
             label="IP fija"
             :error-pattern="/^(ipv4|red_id)$/"
+            :error="fueraDeRed"
             :help="ayudaIp"
             required
         >
