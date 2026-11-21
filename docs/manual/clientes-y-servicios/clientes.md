@@ -110,7 +110,7 @@ Las pestañas van dentro de la misma tarjeta que su contenido:
 
 - **Resumen:** si un servicio está suspendido o limitado, el aviso con «Cobrar» y «Promesa»; los contadores de saldo pendiente, próximo vencimiento, pagado en el año y cliente desde; sus servicios y la actividad reciente.
 - **Servicios** (con `servicios.ver`): cada servicio con su usuario PPP, router, plan y precio (con «precio especial» si lo tiene), direcciones IP y estado. Con varias empresas, los servicios se agrupan por empresa.
-- **Contactos:** se mostrarán cuando la API los entregue.
+- **Contactos** (con `contactos.buscar`): «A cargo de sus servicios», con el titular primero (sus números adicionales) y cada contacto con su relación, números (y si tiene WhatsApp), a qué servicios aplica y qué puede hacer (Consulta, Fallas, Paga, Avisos); «Agregar contacto» y quitar uno con `contactos.gestionar`. Debajo, «Está a cargo de»: servicios de otros clientes que esta persona tiene a cargo.
 - **Facturación** (con `clientes.estado_cuenta`): facturas, pagos y notas de crédito, con el número de vencidas en la pestaña. Ver [Cobros](../cobros/index.md).
 - **Pagos** (con `pagos.ver`) y **Promesas** (con `promesas.ver`) del cliente.
 - **Puntos** (con `lealtad.ver`): el programa de lealtad.

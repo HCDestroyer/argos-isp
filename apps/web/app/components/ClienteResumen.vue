@@ -222,7 +222,7 @@ onMounted(() => {
                         v-for="servicio in vivos"
                         :key="servicio.id"
                         :titulo="etiquetaServicio(servicio)"
-                        :subtitulo="[servicio.plan_nombre, servicio.ipv4].filter(Boolean).join(' · ')"
+                        :subtitulo="[servicio.codigo, servicio.nombre, servicio.plan_nombre, servicio.ipv4].filter(Boolean).join(' · ')"
                         icono="i-lucide-wifi"
                         :to="enlace(`/servicios/${servicio.id}`)"
                     >

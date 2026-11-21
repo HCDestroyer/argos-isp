@@ -83,7 +83,7 @@ const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
 
 const pasos = computed<Paso[]>(() => [
     ...(clienteFijo.value ? [] : [{ id: 'cliente' as const, title: 'Cliente', icon: 'i-lucide-user', campos: ['cliente_id'] as (keyof EntradaServicio)[] }]),
-    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion'] },
+    { id: 'conexion', title: 'Conexión', description: 'Router y plan', icon: 'i-lucide-router', campos: ['router_id', 'plan_id', 'tipo_conexion', 'nombre'] },
     {
         id: 'red',
         title: conPppoe.value ? 'Red y PPPoE' : 'Red y equipo',
@@ -602,6 +602,20 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                             variant="card"
                             class="w-full"
                             :ui="{ fieldset: compacto ? 'grid gap-2' : 'grid gap-2 sm:grid-cols-2' }"
+                        />
+                    </UFormField>
+
+                    <UFormField
+                        name="nombre"
+                        label="Nombre del servicio"
+                        hint="Opcional"
+                        help="Para distinguirlo: «Casa», «Negocio». El código (S-000412) lo pone el sistema al crearlo."
+                    >
+                        <UInput
+                            v-model="estado.nombre"
+                            placeholder="Casa, Negocio…"
+                            maxlength="60"
+                            class="w-full"
                         />
                     </UFormField>
 

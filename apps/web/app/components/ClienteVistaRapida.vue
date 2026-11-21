@@ -178,7 +178,7 @@ function alCrearPromesa() {
                             :to="enlace(`/servicios/${servicio.id}`)"
                             class="truncate hover:text-primary"
                         >
-                            {{ etiquetaServicio(servicio) }}
+                            {{ servicio.nombre ?? etiquetaServicio(servicio) }}
                         </ULink>
                     </dt>
                     <dd>

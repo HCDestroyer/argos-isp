@@ -80,8 +80,8 @@ const CANALES: Record<Cliente['canal_preferido'], string> = {
 
 /*
  * Pestañas segmentadas dentro de la tarjeta (tablero NuevoClienteFicha). Los datos del cliente y
- * los fiscales se abren con el ícono de persona de la franja (`?datos=1`). Contactos, Soporte y
- * Documentos esperan su API (`.claude/integration/a4.md`): muestran qué falta, sin datos inventados.
+ * los fiscales se abren con el ícono de persona de la franja (`?datos=1`). Contactos con la API de
+ * A1 (#281); Soporte y Documentos esperan su API (`.claude/integration/a4.md`): muestran qué falta, sin datos inventados.
  * Ids viejos de la URL: `datos`/`fiscal` abren los datos y `linea` es la bitácora.
  */
 const pestanas = computed<TabsItem[]>(() => {
@@ -89,7 +89,9 @@ const pestanas = computed<TabsItem[]>(() => {
     if (puede('servicios.ver')) {
         lista.push({ label: 'Servicios', value: 'servicios', icon: 'i-lucide-wifi' })
     }
-    lista.push({ label: 'Contactos', value: 'contactos', icon: 'i-lucide-user-plus' })
+    if (puede('contactos.buscar')) {
+        lista.push({ label: 'Contactos', value: 'contactos', icon: 'i-lucide-user-plus', badge: cantidadContactos.value ? { label: String(cantidadContactos.value), color: 'neutral', variant: 'subtle' } : undefined })
+    }
     if (puede('clientes.estado_cuenta')) {
         const vencidas = resumenCuentaCliente(cuenta.value)?.vencidas
         lista.push({ label: 'Facturación', value: 'cuenta', icon: 'i-lucide-receipt', badge: vencidas ? { label: String(vencidas), color: 'error', variant: 'subtle' } : undefined })
@@ -133,6 +135,18 @@ const datosAbiertos = computed<boolean>({
         void router.replace({ query: { ...resto, tab, ...(abiertos ? { datos: '1' } : {}) } })
     },
 })
+
+/** Contactos que no son el titular, para el número de la pestaña (A1, #281). */
+const cantidadContactos = ref<number | null>(null)
+
+async function cargarContactos() {
+    cantidadContactos.value = null
+    if (!puede('contactos.buscar')) {
+        return
+    }
+    const resultado = await useContactos().listar(clienteId.value)
+    cantidadContactos.value = resultado.ok ? resultado.data.data.filter(c => !c.es_titular).length : null
+}
 
 /** Estado de cuenta para la franja, el resumen y el número de Facturación. */
 const cuenta = shallowRef<EstadoCuenta | null>(null)
@@ -280,6 +294,7 @@ async function cargar() {
     void cargarZona(resultado.data.zona_id)
     void cargarServicios()
     void cargarCuenta()
+    void cargarContactos()
 }
 
 watch(clienteId, cargar)
@@ -667,11 +682,11 @@ onMounted(cargar)
                         />
                     </template>
 
-                    <SeccionSinApi
+                    <ClienteContactos
                         v-else-if="pestana === 'contactos'"
-                        icono="i-lucide-user-plus"
-                        titulo="Contactos del cliente"
-                        descripcion="Los contactos («A cargo de sus servicios» y «Está a cargo de») se muestran aquí en cuanto la API los entregue."
+                        :cliente-id="cliente.id"
+                        :servicios="serviciosLeidos ? servicios : null"
+                        @cambiados="cantidadContactos = $event"
                     />
 
                     <ClienteEstadoCuenta

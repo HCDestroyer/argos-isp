@@ -28,8 +28,9 @@ test('lista: los contadores filtran y la vista rápida flota con saldo y Cobrar'
 
     // Vista rápida: clic en la fila (fuera del nombre) y se cierra con Esc.
     await page.getByLabel(/Buscar clientes/).fill('Juan Carlos')
+    // Espera a que la búsqueda se aplique (la lista entera tiene más filas).
+    await expect(page.locator('tbody tr')).toHaveCount(1)
     const fila = page.locator('tbody tr', { hasText: 'Juan Carlos Ramírez' })
-    await expect(fila).toHaveCount(1)
     await fila.locator('td').first().click({ position: { x: 12, y: 12 } })
     const vista = page.getByRole('dialog', { name: /Juan Carlos Ramírez/ })
     await expect(vista).toBeVisible()
@@ -49,9 +50,25 @@ test('ficha: franja con saldo, pestañas en la tarjeta, Contactos sin inventar y
     await expect(page.locator('[data-prueba="aviso-corte"]')).toContainText('suspendido')
 
     const pestanas = page.locator('[data-prueba="pestanas-cliente"]')
+    // Contactos (A1, #281): el titular primero, sus contactos con permisos y agregar uno.
     await pestanas.getByRole('tab', { name: /Contactos/ }).click()
-    await expect(page.locator('[data-prueba="seccion-sin-api"]')).toContainText('en cuanto la API los entregue')
     await expect(page).toHaveURL(/tab=contactos/)
+    const contactos = page.locator('[data-prueba="cliente-contactos"]')
+    await expect(contactos.locator('li').first()).toContainText('Titular')
+    await expect(contactos).toContainText('Luis Ramírez')
+    await expect(contactos).toContainText('4444-1234 · WhatsApp')
+    await contactos.locator('[data-prueba="agregar-contacto"]').click()
+    const panel = page.getByRole('dialog', { name: 'Agregar contacto' })
+    await panel.getByLabel('Nombre').fill('Rosa Inquilina Pruebas')
+    await panel.getByLabel('Teléfono').fill('5599 1122')
+    await panel.getByRole('button', { name: 'Agregar contacto' }).click()
+    await expect(panel).toBeHidden()
+    await expect(contactos).toContainText('Rosa Inquilina Pruebas')
+    await expect(contactos).toContainText('5599-1122 · WhatsApp')
+
+    // Soporte todavía sin API: lo dice, sin datos inventados.
+    await pestanas.getByRole('tab', { name: /Soporte/ }).click()
+    await expect(page.locator('[data-prueba="seccion-sin-api"]')).toContainText('en cuanto la API los entregue')
 
     await verDatosCliente(page)
     await expect(page).toHaveURL(/datos=1/)
