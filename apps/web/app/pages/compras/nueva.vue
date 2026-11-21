@@ -201,522 +201,526 @@ onMounted(cargarCatalogos)
         :titulo="egresoId ? `Compra del egreso #${egresoId}` : 'Registrar compra'"
         icono="i-lucide-shopping-cart"
     >
-        <div class="flex flex-col gap-6">
-            <ProblemaAlerta
-                v-if="problemaCatalogos"
-                :problema="problemaCatalogos"
-                :reintentar="cargarCatalogos"
-            />
-            <UAlert
-                v-if="egresoId"
-                color="info"
-                variant="subtle"
-                icon="i-lucide-receipt"
-                :title="egreso ? `Egreso #${egreso.id} · ${formatearQuetzales(egreso.monto)} · ${formatearFecha(egreso.fecha)}` : `Egreso #${egresoId}`"
-                description="El asiento del egreso no cambia: la compra agrega la reclasificación del IVA como crédito fiscal. El total menos las retenciones debe ser el monto del egreso."
-                data-prueba="compra-desde-egreso"
-            />
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-4 sm:p-5">
+                    <ProblemaAlerta
+                        v-if="problemaCatalogos"
+                        :problema="problemaCatalogos"
+                        :reintentar="cargarCatalogos"
+                    />
+                    <UAlert
+                        v-if="egresoId"
+                        color="info"
+                        variant="subtle"
+                        icon="i-lucide-receipt"
+                        :title="egreso ? `Egreso #${egreso.id} · ${formatearQuetzales(egreso.monto)} · ${formatearFecha(egreso.fecha)}` : `Egreso #${egresoId}`"
+                        description="El asiento del egreso no cambia: la compra agrega la reclasificación del IVA como crédito fiscal. El total menos las retenciones debe ser el monto del egreso."
+                        data-prueba="compra-desde-egreso"
+                    />
 
-            <UForm
-                ref="formulario"
-                :schema="esquema"
-                :state="estado"
-                class="flex flex-col gap-6"
-                @submit="enviar"
-            >
-                <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <UFormField
-                        label="Proveedor"
-                        name="proveedor_id"
-                        required
-                        class="sm:col-span-2 lg:col-span-1"
+                    <UForm
+                        ref="formulario"
+                        :schema="esquema"
+                        :state="estado"
+                        class="flex flex-col gap-6"
+                        @submit="enviar"
                     >
-                        <USelectMenu
-                            v-model="proveedorElegido"
-                            :items="itemsProveedor"
-                            value-key="value"
-                            placeholder="Busca el proveedor"
-                            class="w-full"
-                            data-prueba="compra-proveedor"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Documento"
-                        name="tipo_documento"
-                        required
-                    >
-                        <USelect
-                            v-model="estado.tipo_documento"
-                            :items="itemsTipoDocumento"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Fecha del documento"
-                        name="fecha_documento"
-                        required
-                    >
-                        <UInput
-                            v-model="estado.fecha_documento"
-                            type="date"
-                            :max="hoy"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Serie"
-                        name="serie"
-                    >
-                        <UInput
-                            v-model="estado.serie"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Número"
-                        name="numero"
-                        required
-                    >
-                        <UInput
-                            v-model="estado.numero"
-                            class="w-full"
-                            data-prueba="compra-numero"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Autorización del DTE"
-                        name="autorizacion"
-                        help="UUID de la factura electrónica del proveedor (opcional)."
-                    >
-                        <UInput
-                            v-model="estado.autorizacion"
-                            class="w-full font-mono"
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Mes del IVA"
-                        name="periodo_iva"
-                        help="Vacío: el del documento. Hasta la ventana del crédito fiscal."
-                    >
-                        <UInput
-                            v-model="estado.periodo_iva"
-                            type="month"
-                            :max="hoy.slice(0, 7)"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        v-if="corrige"
-                        label="Compra que corrige"
-                        name="compra_referencia_id"
-                        :required="estado.tipo_documento === 'NCRE'"
-                    >
-                        <USelect
-                            v-model="estado.compra_referencia_id"
-                            :items="itemsReferencia"
-                            placeholder="Elige la compra"
-                            class="w-full"
-                        />
-                    </UFormField>
-                    <UFormField
-                        name="credito_fiscal"
-                        class="self-end"
-                    >
-                        <UCheckbox
-                            v-model="estado.credito_fiscal"
-                            label="Tomar el crédito fiscal del IVA"
-                            :disabled="['FPEQ', 'FCAP', 'RECIBO'].includes(estado.tipo_documento)"
-                            description="Sin crédito, el IVA va al costo."
-                        />
-                    </UFormField>
-                    <UFormField
-                        label="Descripción"
-                        name="descripcion"
-                        class="sm:col-span-2 lg:col-span-3"
-                    >
-                        <UInput
-                            v-model="estado.descripcion"
-                            class="w-full"
-                        />
-                    </UFormField>
-                </section>
-
-                <section class="flex flex-col gap-3">
-                    <div class="flex items-center justify-between gap-2">
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Líneas
-                        </h2>
-                        <UButton
-                            label="Agregar línea"
-                            icon="i-lucide-plus"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            data-prueba="agregar-linea"
-                            @click="agregarLinea"
-                        />
-                    </div>
-                    <UCard
-                        v-for="(linea, i) in estado.lineas"
-                        :key="i"
-                        :ui="{ body: 'p-3 sm:p-4' }"
-                        :data-linea="i"
-                    >
-                        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <UFormField
-                                label="Descripción"
-                                :name="`lineas.${i}.descripcion`"
+                                label="Proveedor"
+                                name="proveedor_id"
                                 required
-                                class="sm:col-span-2"
-                            >
-                                <UInput
-                                    v-model="linea.descripcion"
-                                    class="w-full"
-                                    data-prueba="linea-descripcion"
-                                />
-                            </UFormField>
-                            <UFormField
-                                label="Tipo"
-                                :name="`lineas.${i}.tipo`"
-                            >
-                                <USelect
-                                    v-model="linea.tipo"
-                                    :items="itemsTipoLinea"
-                                    class="w-full"
-                                    data-prueba="linea-tipo"
-                                />
-                            </UFormField>
-                            <UFormField
-                                label="Total con IVA"
-                                :name="`lineas.${i}.total`"
-                                required
-                            >
-                                <UInput
-                                    v-model="linea.total"
-                                    inputmode="decimal"
-                                    placeholder="0.00"
-                                    class="w-full"
-                                    data-prueba="linea-total"
-                                />
-                            </UFormField>
-                            <UFormField
-                                v-if="linea.tipo !== 'activo_fijo' && cuentas.length"
-                                label="Cuenta"
-                                :name="`lineas.${i}.cuenta`"
-                                class="sm:col-span-2"
+                                class="sm:col-span-2 lg:col-span-1"
                             >
                                 <USelectMenu
-                                    v-model="linea.cuenta"
-                                    :items="itemsCuenta"
+                                    v-model="proveedorElegido"
+                                    :items="itemsProveedor"
                                     value-key="value"
+                                    placeholder="Busca el proveedor"
+                                    class="w-full"
+                                    data-prueba="compra-proveedor"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Documento"
+                                name="tipo_documento"
+                                required
+                            >
+                                <USelect
+                                    v-model="estado.tipo_documento"
+                                    :items="itemsTipoDocumento"
                                     class="w-full"
                                 />
                             </UFormField>
-                            <template v-if="linea.tipo === 'activo_fijo'">
-                                <UFormField
-                                    label="Clase del activo"
-                                    :name="`lineas.${i}.clase_activo`"
-                                    required
-                                >
-                                    <USelect
-                                        v-model="linea.clase_activo"
-                                        :items="itemsClase"
-                                        placeholder="Elige la clase"
-                                        class="w-full"
-                                    />
-                                </UFormField>
-                                <UFormField
-                                    label="Tasa anual"
-                                    :name="`lineas.${i}.activo_tasa_anual`"
-                                    help="Vacía: el máximo legal de la clase."
-                                >
-                                    <UInput
-                                        v-model="linea.activo_tasa_anual"
-                                        inputmode="decimal"
-                                        class="w-full"
-                                    >
-                                        <template #trailing>
-                                            <span class="text-xs text-muted">%</span>
-                                        </template>
-                                    </UInput>
-                                </UFormField>
-                            </template>
-                            <template v-if="linea.tipo === 'bien' && productosInventario.length">
-                                <UFormField
-                                    label="Producto del inventario"
-                                    :name="`lineas.${i}.producto_id`"
-                                    help="Opcional: con producto, entra a la bodega."
-                                    class="sm:col-span-2"
-                                >
-                                    <USelectMenu
-                                        :model-value="linea.producto_id ?? 0"
-                                        :items="itemsProductoInventario"
-                                        value-key="value"
-                                        class="w-full"
-                                        data-prueba="linea-producto"
-                                        @update:model-value="v => elegirProducto(i, v)"
-                                    />
-                                </UFormField>
-                                <template v-if="linea.producto_id">
+                            <UFormField
+                                label="Fecha del documento"
+                                name="fecha_documento"
+                                required
+                            >
+                                <UInput
+                                    v-model="estado.fecha_documento"
+                                    type="date"
+                                    :max="hoy"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Serie"
+                                name="serie"
+                            >
+                                <UInput
+                                    v-model="estado.serie"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Número"
+                                name="numero"
+                                required
+                            >
+                                <UInput
+                                    v-model="estado.numero"
+                                    class="w-full"
+                                    data-prueba="compra-numero"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Autorización del DTE"
+                                name="autorizacion"
+                                help="UUID de la factura electrónica del proveedor (opcional)."
+                            >
+                                <UInput
+                                    v-model="estado.autorizacion"
+                                    class="w-full font-mono"
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Mes del IVA"
+                                name="periodo_iva"
+                                help="Vacío: el del documento. Hasta la ventana del crédito fiscal."
+                            >
+                                <UInput
+                                    v-model="estado.periodo_iva"
+                                    type="month"
+                                    :max="hoy.slice(0, 7)"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                v-if="corrige"
+                                label="Compra que corrige"
+                                name="compra_referencia_id"
+                                :required="estado.tipo_documento === 'NCRE'"
+                            >
+                                <USelect
+                                    v-model="estado.compra_referencia_id"
+                                    :items="itemsReferencia"
+                                    placeholder="Elige la compra"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                            <UFormField
+                                name="credito_fiscal"
+                                class="self-end"
+                            >
+                                <UCheckbox
+                                    v-model="estado.credito_fiscal"
+                                    label="Tomar el crédito fiscal del IVA"
+                                    :disabled="['FPEQ', 'FCAP', 'RECIBO'].includes(estado.tipo_documento)"
+                                    description="Sin crédito, el IVA va al costo."
+                                />
+                            </UFormField>
+                            <UFormField
+                                label="Descripción"
+                                name="descripcion"
+                                class="sm:col-span-2 lg:col-span-3"
+                            >
+                                <UInput
+                                    v-model="estado.descripcion"
+                                    class="w-full"
+                                />
+                            </UFormField>
+                        </section>
+
+                        <section class="flex flex-col gap-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <h2 class="text-sm font-semibold text-highlighted">
+                                    Líneas
+                                </h2>
+                                <UButton
+                                    label="Agregar línea"
+                                    icon="i-lucide-plus"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    data-prueba="agregar-linea"
+                                    @click="agregarLinea"
+                                />
+                            </div>
+                            <UCard
+                                v-for="(linea, i) in estado.lineas"
+                                :key="i"
+                                :ui="{ body: 'p-3 sm:p-4' }"
+                                :data-linea="i"
+                            >
+                                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                     <UFormField
-                                        :label="estado.tipo_documento === 'NCRE' ? 'Bodega de la que sale' : 'Bodega que recibe'"
-                                        :name="`lineas.${i}.bodega_id`"
+                                        label="Descripción"
+                                        :name="`lineas.${i}.descripcion`"
                                         required
+                                        class="sm:col-span-2"
+                                    >
+                                        <UInput
+                                            v-model="linea.descripcion"
+                                            class="w-full"
+                                            data-prueba="linea-descripcion"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        label="Tipo"
+                                        :name="`lineas.${i}.tipo`"
                                     >
                                         <USelect
-                                            :model-value="linea.bodega_id ?? undefined"
-                                            :items="itemsBodegaInventario"
-                                            placeholder="Elige la bodega"
+                                            v-model="linea.tipo"
+                                            :items="itemsTipoLinea"
                                             class="w-full"
-                                            data-prueba="linea-bodega"
-                                            @update:model-value="v => linea.bodega_id = typeof v === 'number' ? v : null"
+                                            data-prueba="linea-tipo"
                                         />
                                     </UFormField>
                                     <UFormField
-                                        v-if="!(estado.tipo_documento === 'NCRE' && linea.seguimiento === 'serie')"
-                                        label="Cantidad"
-                                        :name="`lineas.${i}.cantidad`"
+                                        label="Total con IVA"
+                                        :name="`lineas.${i}.total`"
+                                        required
                                     >
-                                        <UInputNumber
-                                            v-model="linea.cantidad"
-                                            :min="1"
-                                            :format-options="{ useGrouping: false }"
+                                        <UInput
+                                            v-model="linea.total"
+                                            inputmode="decimal"
+                                            placeholder="0.00"
                                             class="w-full"
-                                            data-prueba="linea-cantidad"
+                                            data-prueba="linea-total"
                                         />
                                     </UFormField>
                                     <UFormField
-                                        v-if="linea.seguimiento === 'serie' && estado.tipo_documento !== 'NCRE'"
-                                        label="Series o MAC"
-                                        :name="`lineas.${i}.series`"
-                                        help="Una por línea: pega la lista o escanéalas."
-                                        class="sm:col-span-2 lg:col-span-4"
-                                    >
-                                        <UTextarea
-                                            v-model="linea.series"
-                                            :rows="3"
-                                            autoresize
-                                            class="w-full font-mono"
-                                            data-prueba="linea-series"
-                                        />
-                                    </UFormField>
-                                    <UFormField
-                                        v-if="linea.seguimiento === 'serie' && estado.tipo_documento === 'NCRE'"
-                                        label="Equipos que se devuelven"
-                                        :name="`lineas.${i}.unidad_ids`"
-                                        :help="unidadesDevolubles[i]?.length ? 'De la compra que corrige esta NCRE, disponibles.' : 'Elige la compra que se corrige para ver sus equipos.'"
+                                        v-if="linea.tipo !== 'activo_fijo' && cuentas.length"
+                                        label="Cuenta"
+                                        :name="`lineas.${i}.cuenta`"
                                         class="sm:col-span-2"
                                     >
                                         <USelectMenu
-                                            v-model="linea.unidad_ids"
-                                            :items="unidadesDevolubles[i] ?? []"
+                                            v-model="linea.cuenta"
+                                            :items="itemsCuenta"
                                             value-key="value"
-                                            multiple
                                             class="w-full"
-                                            data-prueba="linea-unidades"
                                         />
                                     </UFormField>
-                                </template>
-                            </template>
-                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-4">
-                                <UCheckbox
-                                    v-model="linea.exento"
-                                    label="Exenta de IVA"
-                                />
-                                <UCheckbox
-                                    v-if="linea.tipo !== 'activo_fijo'"
-                                    v-model="linea.diferir"
-                                    label="Gasto anticipado: diferir"
-                                />
-                                <UFormField
-                                    v-if="linea.diferir && linea.tipo !== 'activo_fijo'"
-                                    :name="`lineas.${i}.diferir_meses`"
-                                    class="w-36"
+                                    <template v-if="linea.tipo === 'activo_fijo'">
+                                        <UFormField
+                                            label="Clase del activo"
+                                            :name="`lineas.${i}.clase_activo`"
+                                            required
+                                        >
+                                            <USelect
+                                                v-model="linea.clase_activo"
+                                                :items="itemsClase"
+                                                placeholder="Elige la clase"
+                                                class="w-full"
+                                            />
+                                        </UFormField>
+                                        <UFormField
+                                            label="Tasa anual"
+                                            :name="`lineas.${i}.activo_tasa_anual`"
+                                            help="Vacía: el máximo legal de la clase."
+                                        >
+                                            <UInput
+                                                v-model="linea.activo_tasa_anual"
+                                                inputmode="decimal"
+                                                class="w-full"
+                                            >
+                                                <template #trailing>
+                                                    <span class="text-xs text-muted">%</span>
+                                                </template>
+                                            </UInput>
+                                        </UFormField>
+                                    </template>
+                                    <template v-if="linea.tipo === 'bien' && productosInventario.length">
+                                        <UFormField
+                                            label="Producto del inventario"
+                                            :name="`lineas.${i}.producto_id`"
+                                            help="Opcional: con producto, entra a la bodega."
+                                            class="sm:col-span-2"
+                                        >
+                                            <USelectMenu
+                                                :model-value="linea.producto_id ?? 0"
+                                                :items="itemsProductoInventario"
+                                                value-key="value"
+                                                class="w-full"
+                                                data-prueba="linea-producto"
+                                                @update:model-value="v => elegirProducto(i, v)"
+                                            />
+                                        </UFormField>
+                                        <template v-if="linea.producto_id">
+                                            <UFormField
+                                                :label="estado.tipo_documento === 'NCRE' ? 'Bodega de la que sale' : 'Bodega que recibe'"
+                                                :name="`lineas.${i}.bodega_id`"
+                                                required
+                                            >
+                                                <USelect
+                                                    :model-value="linea.bodega_id ?? undefined"
+                                                    :items="itemsBodegaInventario"
+                                                    placeholder="Elige la bodega"
+                                                    class="w-full"
+                                                    data-prueba="linea-bodega"
+                                                    @update:model-value="v => linea.bodega_id = typeof v === 'number' ? v : null"
+                                                />
+                                            </UFormField>
+                                            <UFormField
+                                                v-if="!(estado.tipo_documento === 'NCRE' && linea.seguimiento === 'serie')"
+                                                label="Cantidad"
+                                                :name="`lineas.${i}.cantidad`"
+                                            >
+                                                <UInputNumber
+                                                    v-model="linea.cantidad"
+                                                    :min="1"
+                                                    :format-options="{ useGrouping: false }"
+                                                    class="w-full"
+                                                    data-prueba="linea-cantidad"
+                                                />
+                                            </UFormField>
+                                            <UFormField
+                                                v-if="linea.seguimiento === 'serie' && estado.tipo_documento !== 'NCRE'"
+                                                label="Series o MAC"
+                                                :name="`lineas.${i}.series`"
+                                                help="Una por línea: pega la lista o escanéalas."
+                                                class="sm:col-span-2 lg:col-span-4"
+                                            >
+                                                <UTextarea
+                                                    v-model="linea.series"
+                                                    :rows="3"
+                                                    autoresize
+                                                    class="w-full font-mono"
+                                                    data-prueba="linea-series"
+                                                />
+                                            </UFormField>
+                                            <UFormField
+                                                v-if="linea.seguimiento === 'serie' && estado.tipo_documento === 'NCRE'"
+                                                label="Equipos que se devuelven"
+                                                :name="`lineas.${i}.unidad_ids`"
+                                                :help="unidadesDevolubles[i]?.length ? 'De la compra que corrige esta NCRE, disponibles.' : 'Elige la compra que se corrige para ver sus equipos.'"
+                                                class="sm:col-span-2"
+                                            >
+                                                <USelectMenu
+                                                    v-model="linea.unidad_ids"
+                                                    :items="unidadesDevolubles[i] ?? []"
+                                                    value-key="value"
+                                                    multiple
+                                                    class="w-full"
+                                                    data-prueba="linea-unidades"
+                                                />
+                                            </UFormField>
+                                        </template>
+                                    </template>
+                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-4">
+                                        <UCheckbox
+                                            v-model="linea.exento"
+                                            label="Exenta de IVA"
+                                        />
+                                        <UCheckbox
+                                            v-if="linea.tipo !== 'activo_fijo'"
+                                            v-model="linea.diferir"
+                                            label="Gasto anticipado: diferir"
+                                        />
+                                        <UFormField
+                                            v-if="linea.diferir && linea.tipo !== 'activo_fijo'"
+                                            :name="`lineas.${i}.diferir_meses`"
+                                            class="w-36"
+                                        >
+                                            <UInputNumber
+                                                v-model="linea.diferir_meses"
+                                                :min="2"
+                                                :max="120"
+                                                placeholder="Meses"
+                                                aria-label="Meses a diferir"
+                                            />
+                                        </UFormField>
+                                        <UButton
+                                            v-if="estado.lineas.length > 1"
+                                            label="Quitar"
+                                            icon="i-lucide-trash-2"
+                                            color="error"
+                                            variant="ghost"
+                                            size="xs"
+                                            class="ml-auto"
+                                            @click="quitarLinea(i)"
+                                        />
+                                    </div>
+                                </div>
+                            </UCard>
+                            <dl
+                                class="grid grid-cols-3 gap-3 rounded-lg bg-elevated px-3 py-2 text-sm"
+                                data-prueba="totales-compra"
+                            >
+                                <DatoFicha etiqueta="Base (referencia)">
+                                    <span class="tabular-nums">{{ formatearQuetzales(totales.base) }}</span>
+                                </DatoFicha>
+                                <DatoFicha etiqueta="IVA 12 % (referencia)">
+                                    <span class="tabular-nums">{{ formatearQuetzales(totales.iva) }}</span>
+                                </DatoFicha>
+                                <DatoFicha etiqueta="Total">
+                                    <span class="font-semibold tabular-nums">{{ formatearQuetzales(totales.total) }}</span>
+                                </DatoFicha>
+                            </dl>
+                            <UAlert
+                                v-if="!cuadraConEgreso"
+                                color="warning"
+                                variant="subtle"
+                                icon="i-lucide-triangle-alert"
+                                :description="`Sin retenciones, el total (${formatearQuetzales(totales.total)}) debe ser el monto del egreso (${formatearQuetzales(egreso?.monto ?? '0')}).`"
+                            />
+                        </section>
+
+                        <section
+                            v-if="estado.tipo_documento !== 'NCRE'"
+                            class="flex flex-col gap-3"
+                        >
+                            <h2 class="text-sm font-semibold text-highlighted">
+                                Retenciones
+                            </h2>
+                            <URadioGroup
+                                v-model="estado.retenciones_modo"
+                                :items="itemsRetencionesModo"
+                                orientation="horizontal"
+                                class="flex-wrap"
+                            />
+                            <p
+                                v-if="estado.retenciones_modo === 'sugeridas' && proveedor?.regimen_isr === 'opcional_simplificado'"
+                                class="text-xs text-muted"
+                            >
+                                {{ proveedor.nombre }} está en el régimen opcional simplificado: se le retiene ISR (5 % de la base).
+                            </p>
+                            <template v-if="estado.retenciones_modo === 'manual'">
+                                <div
+                                    v-for="(r, i) in estado.retenciones"
+                                    :key="i"
+                                    class="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"
                                 >
-                                    <UInputNumber
-                                        v-model="linea.diferir_meses"
-                                        :min="2"
-                                        :max="120"
-                                        placeholder="Meses"
-                                        aria-label="Meses a diferir"
+                                    <UFormField
+                                        :name="`retenciones.${i}.codigo`"
+                                        label="Retención"
+                                    >
+                                        <USelect
+                                            v-model="r.codigo"
+                                            :items="itemsRetencion"
+                                            class="w-full"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        :name="`retenciones.${i}.monto`"
+                                        label="Monto"
+                                        help="Vacío: con la tasa."
+                                    >
+                                        <UInput
+                                            v-model="r.monto"
+                                            inputmode="decimal"
+                                            class="w-full"
+                                        />
+                                    </UFormField>
+                                    <UButton
+                                        icon="i-lucide-trash-2"
+                                        color="error"
+                                        variant="ghost"
+                                        class="self-end"
+                                        :aria-label="`Quitar la retención ${i + 1}`"
+                                        @click="estado.retenciones.splice(i, 1)"
+                                    />
+                                </div>
+                                <UButton
+                                    label="Agregar retención"
+                                    icon="i-lucide-plus"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    class="self-start"
+                                    @click="agregarRetencion"
+                                />
+                            </template>
+                        </section>
+
+                        <section
+                            v-if="!egresoId"
+                            class="flex flex-col gap-3"
+                        >
+                            <h2 class="text-sm font-semibold text-highlighted">
+                                Pago
+                            </h2>
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <UFormField
+                                    label="Condición"
+                                    name="condicion"
+                                    required
+                                >
+                                    <USelect
+                                        v-model="estado.condicion"
+                                        :items="itemsCondicion"
+                                        :disabled="estado.tipo_documento === 'NCRE'"
+                                        class="w-full"
+                                        data-prueba="compra-condicion"
                                     />
                                 </UFormField>
-                                <UButton
-                                    v-if="estado.lineas.length > 1"
-                                    label="Quitar"
-                                    icon="i-lucide-trash-2"
-                                    color="error"
-                                    variant="ghost"
-                                    size="xs"
-                                    class="ml-auto"
-                                    @click="quitarLinea(i)"
-                                />
+                                <UFormField
+                                    v-if="estado.condicion === 'credito'"
+                                    label="Vence"
+                                    name="vence_en"
+                                    :help="proveedor ? `Vacío: ${proveedor.dias_credito} días de crédito del proveedor.` : 'Vacío: los días de crédito del proveedor.'"
+                                >
+                                    <UInput
+                                        v-model="estado.vence_en"
+                                        type="date"
+                                        class="w-full"
+                                    />
+                                </UFormField>
                             </div>
-                        </div>
-                    </UCard>
-                    <dl
-                        class="grid grid-cols-3 gap-3 rounded-lg bg-elevated px-3 py-2 text-sm"
-                        data-prueba="totales-compra"
-                    >
-                        <DatoFicha etiqueta="Base (referencia)">
-                            <span class="tabular-nums">{{ formatearQuetzales(totales.base) }}</span>
-                        </DatoFicha>
-                        <DatoFicha etiqueta="IVA 12 % (referencia)">
-                            <span class="tabular-nums">{{ formatearQuetzales(totales.iva) }}</span>
-                        </DatoFicha>
-                        <DatoFicha etiqueta="Total">
-                            <span class="font-semibold tabular-nums">{{ formatearQuetzales(totales.total) }}</span>
-                        </DatoFicha>
-                    </dl>
-                    <UAlert
-                        v-if="!cuadraConEgreso"
-                        color="warning"
-                        variant="subtle"
-                        icon="i-lucide-triangle-alert"
-                        :description="`Sin retenciones, el total (${formatearQuetzales(totales.total)}) debe ser el monto del egreso (${formatearQuetzales(egreso?.monto ?? '0')}).`"
-                    />
-                </section>
-
-                <section
-                    v-if="estado.tipo_documento !== 'NCRE'"
-                    class="flex flex-col gap-3"
-                >
-                    <h2 class="text-sm font-semibold text-highlighted">
-                        Retenciones
-                    </h2>
-                    <URadioGroup
-                        v-model="estado.retenciones_modo"
-                        :items="itemsRetencionesModo"
-                        orientation="horizontal"
-                        class="flex-wrap"
-                    />
-                    <p
-                        v-if="estado.retenciones_modo === 'sugeridas' && proveedor?.regimen_isr === 'opcional_simplificado'"
-                        class="text-xs text-muted"
-                    >
-                        {{ proveedor.nombre }} está en el régimen opcional simplificado: se le retiene ISR (5 % de la base).
-                    </p>
-                    <template v-if="estado.retenciones_modo === 'manual'">
-                        <div
-                            v-for="(r, i) in estado.retenciones"
-                            :key="i"
-                            class="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"
-                        >
-                            <UFormField
-                                :name="`retenciones.${i}.codigo`"
-                                label="Retención"
-                            >
-                                <USelect
-                                    v-model="r.codigo"
-                                    :items="itemsRetencion"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UFormField
-                                :name="`retenciones.${i}.monto`"
-                                label="Monto"
-                                help="Vacío: con la tasa."
-                            >
-                                <UInput
-                                    v-model="r.monto"
-                                    inputmode="decimal"
-                                    class="w-full"
-                                />
-                            </UFormField>
-                            <UButton
-                                icon="i-lucide-trash-2"
-                                color="error"
-                                variant="ghost"
-                                class="self-end"
-                                :aria-label="`Quitar la retención ${i + 1}`"
-                                @click="estado.retenciones.splice(i, 1)"
+                            <MedioPagoCampos
+                                v-if="estado.condicion === 'contado'"
+                                v-model:metodo="estado.metodo"
+                                v-model:caja-id="estado.caja_id"
+                                v-model:banco-id="estado.banco_id"
+                                v-model:cuenta-bancaria-id="estado.cuenta_bancaria_id"
                             />
-                        </div>
-                        <UButton
-                            label="Agregar retención"
-                            icon="i-lucide-plus"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            class="self-start"
-                            @click="agregarRetencion"
+                            <p
+                                v-if="estado.condicion === 'contado'"
+                                class="text-xs text-muted"
+                            >
+                                Al contado se crea el egreso que la paga, con el asiento de la compra.
+                            </p>
+                        </section>
+
+                        <ProblemaAlerta
+                            v-if="problema"
+                            :problema="problema"
+                            con-errores
+                            data-prueba="compra-problema"
                         />
-                    </template>
-                </section>
 
-                <section
-                    v-if="!egresoId"
-                    class="flex flex-col gap-3"
-                >
-                    <h2 class="text-sm font-semibold text-highlighted">
-                        Pago
-                    </h2>
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <UFormField
-                            label="Condición"
-                            name="condicion"
-                            required
-                        >
-                            <USelect
-                                v-model="estado.condicion"
-                                :items="itemsCondicion"
-                                :disabled="estado.tipo_documento === 'NCRE'"
-                                class="w-full"
-                                data-prueba="compra-condicion"
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <UButton
+                                :to="egresoId ? '/egresos' : '/compras'"
+                                label="Cancelar"
+                                :icon="ICONOS.cancelar"
+                                color="neutral"
+                                variant="ghost"
                             />
-                        </UFormField>
-                        <UFormField
-                            v-if="estado.condicion === 'credito'"
-                            label="Vence"
-                            name="vence_en"
-                            :help="proveedor ? `Vacío: ${proveedor.dias_credito} días de crédito del proveedor.` : 'Vacío: los días de crédito del proveedor.'"
-                        >
-                            <UInput
-                                v-model="estado.vence_en"
-                                type="date"
-                                class="w-full"
+                            <UButton
+                                type="submit"
+                                label="Registrar compra"
+                                icon="i-lucide-check"
+                                :loading="enviando"
+                                data-prueba="guardar-compra"
                             />
-                        </UFormField>
-                    </div>
-                    <MedioPagoCampos
-                        v-if="estado.condicion === 'contado'"
-                        v-model:metodo="estado.metodo"
-                        v-model:caja-id="estado.caja_id"
-                        v-model:banco-id="estado.banco_id"
-                        v-model:cuenta-bancaria-id="estado.cuenta_bancaria_id"
-                    />
-                    <p
-                        v-if="estado.condicion === 'contado'"
-                        class="text-xs text-muted"
-                    >
-                        Al contado se crea el egreso que la paga, con el asiento de la compra.
-                    </p>
-                </section>
-
-                <ProblemaAlerta
-                    v-if="problema"
-                    :problema="problema"
-                    con-errores
-                    data-prueba="compra-problema"
-                />
-
-                <div class="flex flex-wrap justify-end gap-2">
-                    <UButton
-                        :to="egresoId ? '/egresos' : '/compras'"
-                        label="Cancelar"
-                        :icon="ICONOS.cancelar"
-                        color="neutral"
-                        variant="ghost"
-                    />
-                    <UButton
-                        type="submit"
-                        label="Registrar compra"
-                        icon="i-lucide-check"
-                        :loading="enviando"
-                        data-prueba="guardar-compra"
-                    />
+                        </div>
+                    </UForm>
                 </div>
-            </UForm>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
     </PanelPagina>
 </template>

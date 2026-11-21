@@ -365,7 +365,7 @@ onMounted(async () => {
                             color="neutral"
                             variant="outline"
                             size="sm"
-                            :to="enlace('/libro?tab=integridad')"
+                            :to="enlace('/libro/integridad')"
                             data-prueba="cierre-a-integridad"
                         />
                     </div>

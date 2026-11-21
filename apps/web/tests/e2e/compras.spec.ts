@@ -30,7 +30,7 @@ test('proveedor nuevo, compra al crédito con un activo fijo y su pago desde la 
     await expect(page.locator('[data-prueba="proveedor-saldo"]')).toContainText('Q 0.00')
 
     // Registrar compra desde la ficha: el proveedor ya viene elegido.
-    await page.getByRole('link', { name: 'Registrar compra' }).click()
+    await page.getByRole('link', { name: 'Registrar a mano' }).click()
     await expect(page).toHaveURL(/\/compras\/nueva\?proveedor=6/)
     await page.locator('[data-prueba="compra-numero"]').fill('4410')
     const linea = page.locator('[data-linea="0"]')

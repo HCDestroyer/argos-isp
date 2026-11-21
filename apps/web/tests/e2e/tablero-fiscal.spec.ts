@@ -11,8 +11,9 @@ import { elegirEmpresa, entrar, fijarHoyFixtures, ir, menu } from './ayudas'
 test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; enlaces al calendario y a libros', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Tablero fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /ArgosNet/)
+    await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
 
     const argos = page.locator('[data-empresa="1"]')
     await expect(argos.locator('[data-prueba="tablero-regimen"]')).toHaveText('Sobre utilidades')
@@ -57,7 +58,8 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
     await expect(page.locator('[data-prueba="obligacion-detalle"]')).toHaveCount(0)
 
     // Del bloque de libros a los libros legales.
-    await ir(page, 'Tablero fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
+    await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
     await page.locator('[data-empresa="1"] [data-prueba="tablero-libros"]').click()
     await expect(page).toHaveURL(/\/libros$/)
 })
@@ -65,8 +67,9 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
 test('Fibra del Sur con FEL obligatoria desactivada y «Todas» con una sección por empresa', async ({ page }) => {
     await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Tablero fiscal', /\/fiscal\/tablero/)
+    await ir(page, 'Fiscal', /\/fiscal\/tablero/)
     await elegirEmpresa(page, /Fibra del Sur/)
+    await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
 
     const fibra = page.locator('[data-empresa="2"]')
     await expect(fibra.locator('[data-alerta="fel"]')).toContainText('FEL es obligatoria para su régimen')
@@ -76,6 +79,7 @@ test('Fibra del Sur con FEL obligatoria desactivada y «Todas» con una sección
     await expect(page.locator('[data-empresa="1"]')).toHaveCount(0)
 
     await elegirEmpresa(page, /Todas/)
+    await page.locator('[data-prueba="pestanas-conta"]').getByRole('tab', { name: 'Detalle' }).click()
     await expect(page.locator('[data-empresa]')).toHaveCount(2)
     await expect(page.getByText('una sección por empresa, sin totales consolidados')).toBeVisible()
     await expect(page.locator('[data-empresa="1"] h2')).toContainText('ArgosNet')
@@ -85,5 +89,5 @@ test('Fibra del Sur con FEL obligatoria desactivada y «Todas» con una sección
 test('el cajero no ve el tablero fiscal', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
     const contenedor = await menu(page)
-    await expect(contenedor.getByRole('link', { name: 'Tablero fiscal', exact: true })).toHaveCount(0)
+    await expect(contenedor.getByRole('link', { name: 'Fiscal', exact: true })).toHaveCount(0)
 })

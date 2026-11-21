@@ -244,380 +244,387 @@ onMounted(() => {
         titulo="Calendario fiscal"
         icono="i-lucide-calendar-check"
     >
-        <div class="flex flex-col gap-4">
-            <UAlert
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-info"
-                description="Vencimientos de las declaraciones según el régimen y las banderas de cada periodo. Un vencimiento en sábado, domingo o feriado corre al siguiente día hábil. El sistema nunca presenta nada a la SAT."
-                :actions="puede('fiscal.ver') ? [{ label: 'Feriados', icon: 'i-lucide-flag', color: 'neutral', variant: 'outline', to: '/configuracion/fiscal?pestana=feriados' }] : undefined"
-            />
-
-            <ProblemaAlerta
-                v-if="problemaVencidas"
-                :problema="problemaVencidas"
-                :reintentar="cargarVencidas"
-                :reintentando="cargandoVencidas"
-            />
-            <UAlert
-                v-else-if="vencidas && vencidas.length"
-                color="error"
-                variant="subtle"
-                icon="i-lucide-alarm-clock-off"
-                :title="vencidas.length === 1 ? '1 obligación vencida sin presentar' : `${vencidas.length} obligaciones vencidas sin presentar`"
-                data-prueba="calendario-vencidas"
-            >
-                <template #description>
-                    <ul class="mt-1 flex flex-col gap-1">
-                        <li
-                            v-for="obligacion in vencidas.slice(0, 5)"
-                            :key="obligacion.id"
-                        >
-                            <ULink
-                                raw
-                                class="text-left text-error underline underline-offset-2 hover:decoration-2"
-                                :to="{ query: { ...route.query, obligacion: String(obligacion.id) } }"
-                                :data-vencida="obligacion.id"
-                            >
-                                {{ obligacion.nombre }}, {{ periodoObligacion(obligacion) }}<template v-if="consolidado">
-                                    ({{ nombreEmpresa(obligacion.empresa_id) }})
-                                </template> · venció el {{ formatearFecha(obligacion.vence_en) }}
-                            </ULink>
-                        </li>
-                    </ul>
-                </template>
-            </UAlert>
-
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <UTabs
-                    v-model="vista"
-                    :items="itemsVista"
-                    :content="false"
-                    size="sm"
-                    class="w-full sm:w-56"
-                    data-prueba="calendario-vista"
-                />
-                <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
-                    <USelectMenu
-                        v-model="impuestos"
-                        :items="itemsImpuesto"
-                        value-key="value"
-                        multiple
-                        icon="i-lucide-landmark"
-                        placeholder="Todos los impuestos"
-                        aria-label="Filtrar por impuesto"
-                        class="w-full lg:w-56"
-                        data-prueba="filtro-impuestos"
-                    />
-                    <USelectMenu
-                        v-model="estados"
-                        :items="itemsEstado"
-                        value-key="value"
-                        multiple
-                        icon="i-lucide-activity"
-                        placeholder="Todos los estados"
-                        aria-label="Filtrar por estado"
-                        class="w-full lg:w-48"
-                        data-prueba="filtro-estados"
-                    />
-                    <UButton
-                        v-if="hayFiltros || desde || hasta"
-                        label="Quitar filtros"
-                        icon="i-lucide-x"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-4 p-3 sm:p-4">
+                    <UAlert
                         color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        class="justify-self-start"
-                        @click="limpiarFiltros"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        description="Vencimientos de las declaraciones según el régimen y las banderas de cada periodo. Un vencimiento en sábado, domingo o feriado corre al siguiente día hábil. El sistema nunca presenta nada a la SAT."
+                        :actions="puede('fiscal.ver') ? [{ label: 'Feriados', icon: 'i-lucide-flag', color: 'neutral', variant: 'outline', to: '/configuracion/fiscal?pestana=feriados' }] : undefined"
                     />
-                </div>
-            </div>
 
-            <!-- Vista por mes -->
-            <section
-                v-if="vista === 'mes'"
-                class="flex flex-col gap-3"
-                aria-label="Calendario del mes"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-1">
-                        <UButton
-                            icon="i-lucide-chevron-left"
-                            color="neutral"
-                            variant="ghost"
-                            aria-label="Mes anterior"
-                            data-prueba="mes-anterior"
-                            @click="irAMes(moverMes(mes, -1))"
-                        />
-                        <h2
-                            class="min-w-36 text-center text-base font-semibold text-highlighted"
-                            data-prueba="calendario-titulo-mes"
-                        >
-                            {{ etiquetaMes(mes) }}
-                        </h2>
-                        <UButton
-                            icon="i-lucide-chevron-right"
-                            color="neutral"
-                            variant="ghost"
-                            aria-label="Mes siguiente"
-                            data-prueba="mes-siguiente"
-                            @click="irAMes(moverMes(mes, 1))"
-                        />
-                    </div>
-                    <UButton
-                        v-if="mes !== mesDe(hoy)"
-                        label="Hoy"
-                        color="neutral"
-                        variant="outline"
-                        size="sm"
-                        @click="irAMes(mesDe(hoy))"
+                    <ProblemaAlerta
+                        v-if="problemaVencidas"
+                        :problema="problemaVencidas"
+                        :reintentar="cargarVencidas"
+                        :reintentando="cargandoVencidas"
                     />
-                </div>
-
-                <UAlert
-                    v-if="problemaFeriados"
-                    color="warning"
-                    variant="subtle"
-                    icon="i-lucide-flag-off"
-                    title="No se pudieron leer los feriados"
-                    description="El calendario se ve sin marcar los feriados; los vencimientos ya vienen corridos por la API."
-                    :actions="[{ label: 'Reintentar', icon: 'i-lucide-rotate-cw', color: 'warning', variant: 'outline', onClick: () => void cargarFeriados(true) }]"
-                />
-
-                <ProblemaAlerta
-                    v-if="problemaMes"
-                    :problema="problemaMes"
-                    :reintentar="cargarMes"
-                    :reintentando="cargandoMes"
-                />
-                <USkeleton
-                    v-else-if="delMes === null"
-                    class="h-96 w-full"
-                />
-                <div
-                    v-else
-                    class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
-                >
-                    <CalendarioFiscalMes
-                        :mes="mes"
-                        :hoy="hoy"
-                        :obligaciones="delMes"
-                        :feriados="feriados"
-                        :empresa="empresaDe"
-                        @elegir="abrirDetalle"
-                    />
-                    <div
-                        class="flex flex-col gap-3"
-                        data-prueba="calendario-agenda"
+                    <UAlert
+                        v-else-if="vencidas && vencidas.length"
+                        color="error"
+                        variant="subtle"
+                        icon="i-lucide-alarm-clock-off"
+                        :title="vencidas.length === 1 ? '1 obligación vencida sin presentar' : `${vencidas.length} obligaciones vencidas sin presentar`"
+                        data-prueba="calendario-vencidas"
                     >
-                        <h3 class="text-sm font-semibold text-highlighted">
-                            Vencimientos de {{ etiquetaMes(mes).toLowerCase() }}
-                        </h3>
-                        <UEmpty
-                            v-if="!agenda.length"
-                            icon="i-lucide-calendar-check"
-                            title="Sin vencimientos en el mes"
-                            :description="hayFiltros ? 'Con los filtros elegidos.' : undefined"
-                            variant="naked"
+                        <template #description>
+                            <ul class="mt-1 flex flex-col gap-1">
+                                <li
+                                    v-for="obligacion in vencidas.slice(0, 5)"
+                                    :key="obligacion.id"
+                                >
+                                    <ULink
+                                        raw
+                                        class="text-left text-error underline underline-offset-2 hover:decoration-2"
+                                        :to="{ query: { ...route.query, obligacion: String(obligacion.id) } }"
+                                        :data-vencida="obligacion.id"
+                                    >
+                                        {{ obligacion.nombre }}, {{ periodoObligacion(obligacion) }}<template v-if="consolidado">
+                                            ({{ nombreEmpresa(obligacion.empresa_id) }})
+                                        </template> · venció el {{ formatearFecha(obligacion.vence_en) }}
+                                    </ULink>
+                                </li>
+                            </ul>
+                        </template>
+                    </UAlert>
+
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <UTabs
+                            v-model="vista"
+                            :items="itemsVista"
+                            :content="false"
+                            size="sm"
+                            class="w-full sm:w-56"
+                            data-prueba="calendario-vista"
                         />
-                        <div
-                            v-for="grupo in agenda"
-                            :key="grupo.fecha"
-                            class="flex flex-col gap-1.5"
-                        >
-                            <span class="text-xs font-medium capitalize text-muted">{{ diaSemana(grupo.fecha) }} {{ formatearFecha(grupo.fecha) }}<template v-if="feriados[grupo.fecha]"> · {{ feriados[grupo.fecha] }}</template></span>
+                        <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
+                            <USelectMenu
+                                v-model="impuestos"
+                                :items="itemsImpuesto"
+                                value-key="value"
+                                multiple
+                                icon="i-lucide-landmark"
+                                placeholder="Todos los impuestos"
+                                aria-label="Filtrar por impuesto"
+                                class="w-full lg:w-56"
+                                data-prueba="filtro-impuestos"
+                            />
+                            <USelectMenu
+                                v-model="estados"
+                                :items="itemsEstado"
+                                value-key="value"
+                                multiple
+                                icon="i-lucide-activity"
+                                placeholder="Todos los estados"
+                                aria-label="Filtrar por estado"
+                                class="w-full lg:w-48"
+                                data-prueba="filtro-estados"
+                            />
                             <UButton
-                                v-for="obligacion in grupo.obligaciones"
-                                :key="obligacion.id"
+                                v-if="hayFiltros || desde || hasta"
+                                label="Quitar filtros"
+                                icon="i-lucide-x"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                class="justify-self-start"
+                                @click="limpiarFiltros"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Vista por mes -->
+                    <section
+                        v-if="vista === 'mes'"
+                        class="flex flex-col gap-3"
+                        aria-label="Calendario del mes"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-1">
+                                <UButton
+                                    icon="i-lucide-chevron-left"
+                                    color="neutral"
+                                    variant="ghost"
+                                    aria-label="Mes anterior"
+                                    data-prueba="mes-anterior"
+                                    @click="irAMes(moverMes(mes, -1))"
+                                />
+                                <h2
+                                    class="min-w-36 text-center text-base font-semibold text-highlighted"
+                                    data-prueba="calendario-titulo-mes"
+                                >
+                                    {{ etiquetaMes(mes) }}
+                                </h2>
+                                <UButton
+                                    icon="i-lucide-chevron-right"
+                                    color="neutral"
+                                    variant="ghost"
+                                    aria-label="Mes siguiente"
+                                    data-prueba="mes-siguiente"
+                                    @click="irAMes(moverMes(mes, 1))"
+                                />
+                            </div>
+                            <UButton
+                                v-if="mes !== mesDe(hoy)"
+                                label="Hoy"
                                 color="neutral"
                                 variant="outline"
-                                block
-                                class="items-start justify-start text-left"
-                                :class="{ 'border-dashed bg-elevated/50': obligacion.estado === 'no_aplica', 'ring-error/60': obligacion.vencida }"
-                                :data-agenda="obligacion.id"
-                                @click="abrirDetalle(obligacion)"
+                                size="sm"
+                                @click="irAMes(mesDe(hoy))"
+                            />
+                        </div>
+
+                        <UAlert
+                            v-if="problemaFeriados"
+                            color="warning"
+                            variant="subtle"
+                            icon="i-lucide-flag-off"
+                            title="No se pudieron leer los feriados"
+                            description="El calendario se ve sin marcar los feriados; los vencimientos ya vienen corridos por la API."
+                            :actions="[{ label: 'Reintentar', icon: 'i-lucide-rotate-cw', color: 'warning', variant: 'outline', onClick: () => void cargarFeriados(true) }]"
+                        />
+
+                        <ProblemaAlerta
+                            v-if="problemaMes"
+                            :problema="problemaMes"
+                            :reintentar="cargarMes"
+                            :reintentando="cargandoMes"
+                        />
+                        <USkeleton
+                            v-else-if="delMes === null"
+                            class="h-96 w-full"
+                        />
+                        <div
+                            v-else
+                            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
+                        >
+                            <CalendarioFiscalMes
+                                :mes="mes"
+                                :hoy="hoy"
+                                :obligaciones="delMes"
+                                :feriados="feriados"
+                                :empresa="empresaDe"
+                                @elegir="abrirDetalle"
+                            />
+                            <div
+                                class="flex flex-col gap-3"
+                                data-prueba="calendario-agenda"
                             >
-                                <span class="flex min-w-0 flex-1 flex-col gap-1">
-                                    <span
-                                        class="text-sm font-medium"
-                                        :class="obligacion.vencida ? 'text-error' : obligacion.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
-                                    >{{ obligacion.nombre }}</span>
-                                    <span class="text-xs font-normal text-muted">
-                                        {{ periodoObligacion(obligacion) }}<template v-if="consolidado"> · {{ nombreEmpresa(obligacion.empresa_id) }}</template><template v-if="obligacion.formulario"> · {{ obligacion.formulario }}</template>
-                                    </span>
-                                    <span
-                                        v-if="obligacion.estado === 'no_aplica'"
-                                        class="text-xs font-normal text-muted"
-                                        data-prueba="agenda-motivo"
-                                    >{{ motivoObligacion(obligacion.motivo_estado) }}</span>
-                                    <span class="flex flex-wrap gap-1">
+                                <h3 class="text-sm font-semibold text-highlighted">
+                                    Vencimientos de {{ etiquetaMes(mes).toLowerCase() }}
+                                </h3>
+                                <UEmpty
+                                    v-if="!agenda.length"
+                                    icon="i-lucide-calendar-check"
+                                    title="Sin vencimientos en el mes"
+                                    :description="hayFiltros ? 'Con los filtros elegidos.' : undefined"
+                                    variant="naked"
+                                />
+                                <div
+                                    v-for="grupo in agenda"
+                                    :key="grupo.fecha"
+                                    class="flex flex-col gap-1.5"
+                                >
+                                    <span class="text-xs font-medium capitalize text-muted">{{ diaSemana(grupo.fecha) }} {{ formatearFecha(grupo.fecha) }}<template v-if="feriados[grupo.fecha]"> · {{ feriados[grupo.fecha] }}</template></span>
+                                    <UButton
+                                        v-for="obligacion in grupo.obligaciones"
+                                        :key="obligacion.id"
+                                        color="neutral"
+                                        variant="outline"
+                                        block
+                                        class="items-start justify-start text-left"
+                                        :class="{ 'border-dashed bg-elevated/50': obligacion.estado === 'no_aplica', 'ring-error/60': obligacion.vencida }"
+                                        :data-agenda="obligacion.id"
+                                        @click="abrirDetalle(obligacion)"
+                                    >
+                                        <span class="flex min-w-0 flex-1 flex-col gap-1">
+                                            <span
+                                                class="text-sm font-medium"
+                                                :class="obligacion.vencida ? 'text-error' : obligacion.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
+                                            >{{ obligacion.nombre }}</span>
+                                            <span class="text-xs font-normal text-muted">
+                                                {{ periodoObligacion(obligacion) }}<template v-if="consolidado"> · {{ nombreEmpresa(obligacion.empresa_id) }}</template><template v-if="obligacion.formulario"> · {{ obligacion.formulario }}</template>
+                                            </span>
+                                            <span
+                                                v-if="obligacion.estado === 'no_aplica'"
+                                                class="text-xs font-normal text-muted"
+                                                data-prueba="agenda-motivo"
+                                            >{{ motivoObligacion(obligacion.motivo_estado) }}</span>
+                                            <span class="flex flex-wrap gap-1">
+                                                <UBadge
+                                                    :label="estadoVisible(obligacion).etiqueta"
+                                                    :icon="estadoVisible(obligacion).icono"
+                                                    :color="estadoVisible(obligacion).color"
+                                                    variant="subtle"
+                                                    size="sm"
+                                                />
+                                                <UBadge
+                                                    v-if="textoDiasRestantes(obligacion)"
+                                                    :label="textoDiasRestantes(obligacion) ?? ''"
+                                                    :color="colorDiasRestantes(obligacion)"
+                                                    variant="outline"
+                                                    size="sm"
+                                                />
+                                                <UBadge
+                                                    v-if="esRectificativa(obligacion)"
+                                                    label="Rectificativa por presentar"
+                                                    icon="i-lucide-file-diff"
+                                                    color="warning"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    data-prueba="agenda-rectificativa"
+                                                />
+                                                <UBadge
+                                                    v-if="!obligacion.formulario"
+                                                    label="Formulario por confirmar"
+                                                    icon="i-lucide-user-check"
+                                                    color="warning"
+                                                    variant="subtle"
+                                                    size="sm"
+                                                />
+                                            </span>
+                                        </span>
+                                    </UButton>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Vista en lista -->
+                    <section
+                        v-else
+                        class="flex flex-col gap-3"
+                        aria-label="Obligaciones"
+                    >
+                        <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                            <UInput
+                                v-model="desde"
+                                type="date"
+                                aria-label="Vence desde"
+                                class="w-full sm:w-44"
+                                data-prueba="filtro-desde"
+                            />
+                            <UInput
+                                v-model="hasta"
+                                type="date"
+                                aria-label="Vence hasta"
+                                class="w-full sm:w-44"
+                                data-prueba="filtro-hasta"
+                            />
+                        </div>
+                        <ProblemaAlerta
+                            v-if="lista.problema.value"
+                            :problema="lista.problema.value"
+                            :reintentar="lista.recargar"
+                            :reintentando="lista.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="lista.filas.value"
+                                :columns="columnas"
+                                :meta="metaTabla"
+                                :loading="lista.cargando.value"
+                                data-prueba="tabla-obligaciones"
+                                @select="(_evento, fila) => abrirDetalle(fila.original)"
+                            >
+                                <template #vence_en-cell="{ row }">
+                                    <div
+                                        class="flex flex-col"
+                                        :data-obligacion="row.original.id"
+                                        :data-estado="row.original.vencida ? 'vencida' : row.original.estado"
+                                    >
+                                        <span
+                                            class="text-sm tabular-nums"
+                                            :class="row.original.vencida ? 'font-semibold text-error' : 'text-highlighted'"
+                                        >{{ formatearFecha(row.original.vence_en) }}</span>
+                                        <span
+                                            v-if="textoDiasRestantes(row.original)"
+                                            class="text-xs"
+                                            :class="row.original.vencida ? 'text-error' : 'text-muted'"
+                                        >{{ textoDiasRestantes(row.original) }}</span>
+                                    </div>
+                                </template>
+                                <template #nombre-cell="{ row }">
+                                    <div class="flex min-w-0 flex-col">
+                                        <span
+                                            class="text-sm font-medium"
+                                            :class="row.original.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
+                                        >{{ row.original.nombre }}</span>
+                                        <span class="text-xs text-muted">{{ periodoObligacion(row.original) }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template></span>
+                                        <span
+                                            v-if="row.original.estado === 'no_aplica'"
+                                            class="text-xs text-muted"
+                                            data-prueba="fila-motivo"
+                                        >{{ motivoObligacion(row.original.motivo_estado) }}</span>
                                         <UBadge
-                                            :label="estadoVisible(obligacion).etiqueta"
-                                            :icon="estadoVisible(obligacion).icono"
-                                            :color="estadoVisible(obligacion).color"
+                                            :label="estadoVisible(row.original).etiqueta"
+                                            :icon="estadoVisible(row.original).icono"
+                                            :color="estadoVisible(row.original).color"
                                             variant="subtle"
                                             size="sm"
+                                            class="mt-1 self-start sm:hidden"
                                         />
                                         <UBadge
-                                            v-if="textoDiasRestantes(obligacion)"
-                                            :label="textoDiasRestantes(obligacion) ?? ''"
-                                            :color="colorDiasRestantes(obligacion)"
-                                            variant="outline"
-                                            size="sm"
-                                        />
-                                        <UBadge
-                                            v-if="esRectificativa(obligacion)"
+                                            v-if="esRectificativa(row.original)"
                                             label="Rectificativa por presentar"
                                             icon="i-lucide-file-diff"
                                             color="warning"
                                             variant="outline"
                                             size="sm"
-                                            data-prueba="agenda-rectificativa"
+                                            class="mt-1 self-start"
+                                            data-prueba="fila-rectificativa"
                                         />
-                                        <UBadge
-                                            v-if="!obligacion.formulario"
-                                            label="Formulario por confirmar"
-                                            icon="i-lucide-user-check"
-                                            color="warning"
-                                            variant="subtle"
-                                            size="sm"
-                                        />
-                                    </span>
-                                </span>
-                            </UButton>
-                        </div>
-                    </div>
+                                    </div>
+                                </template>
+                                <template #estado-cell="{ row }">
+                                    <UBadge
+                                        :label="estadoVisible(row.original).etiqueta"
+                                        :icon="estadoVisible(row.original).icono"
+                                        :color="estadoVisible(row.original).color"
+                                        variant="subtle"
+                                    />
+                                </template>
+                                <template #formulario-cell="{ row }">
+                                    <span
+                                        v-if="row.original.formulario"
+                                        class="font-mono text-xs"
+                                    >{{ row.original.formulario }}</span>
+                                    <UBadge
+                                        v-else
+                                        label="Por confirmar con contador"
+                                        color="warning"
+                                        variant="subtle"
+                                        size="sm"
+                                    />
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-calendar-check"
+                                        title="Sin obligaciones"
+                                        :description="hayFiltros || desde || hasta ? 'Ninguna con los filtros elegidos.' : 'El calendario se genera cada hora para todo lo pendiente hasta el periodo en curso.'"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="lista.pagina.value"
+                                :hay-anterior="lista.hayAnterior.value"
+                                :hay-siguiente="lista.haySiguiente.value"
+                                :cargando="lista.cargando.value"
+                                :filas="lista.filas.value.length"
+                                @anterior="lista.anterior"
+                                @siguiente="lista.siguiente"
+                            />
+                        </template>
+                    </section>
                 </div>
-            </section>
-
-            <!-- Vista en lista -->
-            <section
-                v-else
-                class="flex flex-col gap-3"
-                aria-label="Obligaciones"
-            >
-                <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-                    <UInput
-                        v-model="desde"
-                        type="date"
-                        aria-label="Vence desde"
-                        class="w-full sm:w-44"
-                        data-prueba="filtro-desde"
-                    />
-                    <UInput
-                        v-model="hasta"
-                        type="date"
-                        aria-label="Vence hasta"
-                        class="w-full sm:w-44"
-                        data-prueba="filtro-hasta"
-                    />
-                </div>
-                <ProblemaAlerta
-                    v-if="lista.problema.value"
-                    :problema="lista.problema.value"
-                    :reintentar="lista.recargar"
-                    :reintentando="lista.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="lista.filas.value"
-                        :columns="columnas"
-                        :meta="metaTabla"
-                        :loading="lista.cargando.value"
-                        data-prueba="tabla-obligaciones"
-                        @select="(_evento, fila) => abrirDetalle(fila.original)"
-                    >
-                        <template #vence_en-cell="{ row }">
-                            <div
-                                class="flex flex-col"
-                                :data-obligacion="row.original.id"
-                                :data-estado="row.original.vencida ? 'vencida' : row.original.estado"
-                            >
-                                <span
-                                    class="text-sm tabular-nums"
-                                    :class="row.original.vencida ? 'font-semibold text-error' : 'text-highlighted'"
-                                >{{ formatearFecha(row.original.vence_en) }}</span>
-                                <span
-                                    v-if="textoDiasRestantes(row.original)"
-                                    class="text-xs"
-                                    :class="row.original.vencida ? 'text-error' : 'text-muted'"
-                                >{{ textoDiasRestantes(row.original) }}</span>
-                            </div>
-                        </template>
-                        <template #nombre-cell="{ row }">
-                            <div class="flex min-w-0 flex-col">
-                                <span
-                                    class="text-sm font-medium"
-                                    :class="row.original.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
-                                >{{ row.original.nombre }}</span>
-                                <span class="text-xs text-muted">{{ periodoObligacion(row.original) }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template></span>
-                                <span
-                                    v-if="row.original.estado === 'no_aplica'"
-                                    class="text-xs text-muted"
-                                    data-prueba="fila-motivo"
-                                >{{ motivoObligacion(row.original.motivo_estado) }}</span>
-                                <UBadge
-                                    :label="estadoVisible(row.original).etiqueta"
-                                    :icon="estadoVisible(row.original).icono"
-                                    :color="estadoVisible(row.original).color"
-                                    variant="subtle"
-                                    size="sm"
-                                    class="mt-1 self-start sm:hidden"
-                                />
-                                <UBadge
-                                    v-if="esRectificativa(row.original)"
-                                    label="Rectificativa por presentar"
-                                    icon="i-lucide-file-diff"
-                                    color="warning"
-                                    variant="outline"
-                                    size="sm"
-                                    class="mt-1 self-start"
-                                    data-prueba="fila-rectificativa"
-                                />
-                            </div>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <UBadge
-                                :label="estadoVisible(row.original).etiqueta"
-                                :icon="estadoVisible(row.original).icono"
-                                :color="estadoVisible(row.original).color"
-                                variant="subtle"
-                            />
-                        </template>
-                        <template #formulario-cell="{ row }">
-                            <span
-                                v-if="row.original.formulario"
-                                class="font-mono text-xs"
-                            >{{ row.original.formulario }}</span>
-                            <UBadge
-                                v-else
-                                label="Por confirmar con contador"
-                                color="warning"
-                                variant="subtle"
-                                size="sm"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-calendar-check"
-                                title="Sin obligaciones"
-                                :description="hayFiltros || desde || hasta ? 'Ninguna con los filtros elegidos.' : 'El calendario se genera cada hora para todo lo pendiente hasta el periodo en curso.'"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="lista.pagina.value"
-                        :hay-anterior="lista.hayAnterior.value"
-                        :hay-siguiente="lista.haySiguiente.value"
-                        :cargando="lista.cargando.value"
-                        :filas="lista.filas.value.length"
-                        @anterior="lista.anterior"
-                        @siguiente="lista.siguiente"
-                    />
+                <template #pie>
+                    Los plazos cuentan días hábiles y feriados; las vencidas van en rojo.
                 </template>
-            </section>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <USlideover
             v-model:open="viendoDetalle"

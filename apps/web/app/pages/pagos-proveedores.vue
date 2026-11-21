@@ -62,96 +62,111 @@ onMounted(() => void lista.recargar())
 <template>
     <PanelPagina
         id="pagos-proveedores"
-        titulo="Pagos a proveedores"
+        titulo="Compras y gastos"
+        descripcion="Pagos aplicados a las compras, por caja, banco o cuenta; anular devuelve el saldo."
         icono="i-lucide-banknote"
     >
-        <div class="flex flex-col gap-4">
-            <USelect
-                v-model="estado"
-                :items="itemsEstado"
-                aria-label="Estado"
-                class="w-full sm:max-w-xs"
-            />
-            <p
-                v-if="puede('proveedores.ver')"
-                class="text-xs text-muted"
-            >
-                Un pago se registra desde la ficha del proveedor, con lo que se le debe a la vista.
-            </p>
+        <template #acciones>
+            <ContaComprasAcciones />
+        </template>
 
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-            />
-            <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    data-prueba="tabla-pagos-proveedores"
-                >
-                    <template #fecha-cell="{ row }">
-                        <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
-                    </template>
-                    <template #proveedor_nombre-cell="{ row }">
-                        <div
-                            class="flex flex-col"
-                            :data-pago="row.original.id"
+        <ContaCuerpo>
+            <ContaIsla llenar>
+                <template #cabecera>
+                    <ContaComprasPestanas />
+                </template>
+                <div class="flex flex-col gap-4 p-3 sm:p-4">
+                    <USelect
+                        v-model="estado"
+                        :items="itemsEstado"
+                        aria-label="Estado"
+                        class="w-full sm:max-w-xs"
+                    />
+                    <p
+                        v-if="puede('proveedores.ver')"
+                        class="text-xs text-muted"
+                    >
+                        Un pago se registra desde la ficha del proveedor, con lo que se le debe a la vista.
+                    </p>
+
+                    <ProblemaAlerta
+                        v-if="lista.problema.value"
+                        :problema="lista.problema.value"
+                        :reintentar="lista.recargar"
+                        :reintentando="lista.cargando.value"
+                    />
+                    <template v-else>
+                        <UTable
+                            :data="lista.filas.value"
+                            :columns="columnas"
+                            :loading="lista.cargando.value"
+                            data-prueba="tabla-pagos-proveedores"
                         >
-                            <ULink
-                                :to="puede('proveedores.ver') ? `/proveedores/${row.original.proveedor_id}?tab=pagos` : undefined"
-                                class="text-sm font-medium text-highlighted"
-                            >
-                                #{{ row.original.id }} · {{ row.original.proveedor_nombre }}
-                            </ULink>
-                            <span class="text-xs text-muted">{{ METODOS_PAGO_COMPRA[row.original.metodo] }}<template v-if="row.original.referencia"> · {{ row.original.referencia }}</template></span>
-                            <span class="text-xs text-muted">{{ row.original.aplicaciones.map(a => `${a.documento} (${formatearQuetzales(a.monto)})`).join(', ') }}</span>
-                            <span
-                                v-if="row.original.estado === 'anulado'"
-                                class="text-xs text-muted"
-                            >Anulado: {{ row.original.motivo_anulacion }}</span>
-                            <span class="text-xs text-muted sm:hidden">{{ formatearFecha(row.original.fecha) }}</span>
-                        </div>
-                    </template>
-                    <template #monto-cell="{ row }">
-                        <span
-                            class="whitespace-nowrap tabular-nums"
-                            :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'font-medium'"
-                        >{{ formatearQuetzales(row.original.monto) }}</span>
-                    </template>
-                    <template #acciones-cell="{ row }">
-                        <UButton
-                            v-if="puede('compras.pagar') && row.original.estado === 'registrado'"
-                            icon="i-lucide-ban"
-                            color="error"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`Anular el pago ${row.original.id}`"
-                            data-prueba="anular-pago-proveedor"
-                            @click="aAnular = row.original"
+                            <template #fecha-cell="{ row }">
+                                <span class="whitespace-nowrap text-sm">{{ formatearFecha(row.original.fecha) }}</span>
+                            </template>
+                            <template #proveedor_nombre-cell="{ row }">
+                                <div
+                                    class="flex flex-col"
+                                    :data-pago="row.original.id"
+                                >
+                                    <ULink
+                                        :to="puede('proveedores.ver') ? `/proveedores/${row.original.proveedor_id}?tab=pagos` : undefined"
+                                        class="text-sm font-medium text-highlighted"
+                                    >
+                                        #{{ row.original.id }} · {{ row.original.proveedor_nombre }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">{{ METODOS_PAGO_COMPRA[row.original.metodo] }}<template v-if="row.original.referencia"> · {{ row.original.referencia }}</template></span>
+                                    <span class="text-xs text-muted">{{ row.original.aplicaciones.map(a => `${a.documento} (${formatearQuetzales(a.monto)})`).join(', ') }}</span>
+                                    <span
+                                        v-if="row.original.estado === 'anulado'"
+                                        class="text-xs text-muted"
+                                    >Anulado: {{ row.original.motivo_anulacion }}</span>
+                                    <span class="text-xs text-muted sm:hidden">{{ formatearFecha(row.original.fecha) }}</span>
+                                </div>
+                            </template>
+                            <template #monto-cell="{ row }">
+                                <span
+                                    class="whitespace-nowrap tabular-nums"
+                                    :class="row.original.estado === 'anulado' ? 'text-muted line-through' : 'font-medium'"
+                                >{{ formatearQuetzales(row.original.monto) }}</span>
+                            </template>
+                            <template #acciones-cell="{ row }">
+                                <UButton
+                                    v-if="puede('compras.pagar') && row.original.estado === 'registrado'"
+                                    icon="i-lucide-ban"
+                                    color="error"
+                                    variant="ghost"
+                                    size="sm"
+                                    :aria-label="`Anular el pago ${row.original.id}`"
+                                    data-prueba="anular-pago-proveedor"
+                                    @click="aAnular = row.original"
+                                />
+                            </template>
+                            <template #empty>
+                                <UEmpty
+                                    icon="i-lucide-banknote"
+                                    title="Sin pagos a proveedores"
+                                    variant="naked"
+                                />
+                            </template>
+                        </UTable>
+                        <PaginacionCursor
+                            :pagina="lista.pagina.value"
+                            :hay-anterior="lista.hayAnterior.value"
+                            :hay-siguiente="lista.haySiguiente.value"
+                            :cargando="lista.cargando.value"
+                            :filas="lista.filas.value.length"
+                            @anterior="lista.anterior"
+                            @siguiente="lista.siguiente"
                         />
                     </template>
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-banknote"
-                            title="Sin pagos a proveedores"
-                            variant="naked"
-                        />
-                    </template>
-                </UTable>
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
-            </template>
-        </div>
+                </div>
+                <template #pie>
+                    Un pago no se edita: se anula con su reverso y la compra vuelve a quedar por pagar.
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <AccionMotivoModal
             v-model:open="anulando"

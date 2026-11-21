@@ -161,268 +161,275 @@ onMounted(() => {
             />
         </template>
 
-        <div class="flex flex-col gap-6">
-            <UAlert
-                color="neutral"
-                variant="subtle"
-                icon="i-lucide-info"
-                description="Nada se registra con fecha hasta el día bloqueado bajo un bloqueo que le aplique (global, ventas, compras o impuestos), salvo con una excepción vigente. Bajo el bloqueo duro no entra nada, ni con excepción, y ningún mes se reabre."
-            />
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-3 sm:p-4">
+                    <UAlert
+                        color="neutral"
+                        variant="subtle"
+                        icon="i-lucide-info"
+                        description="Nada se registra con fecha hasta el día bloqueado bajo un bloqueo que le aplique (global, ventas, compras o impuestos), salvo con una excepción vigente. Bajo el bloqueo duro no entra nada, ni con excepción, y ningún mes se reabre."
+                    />
 
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <USkeleton
-                v-else-if="cargando && !empresas.length"
-                class="h-40 w-full"
-            />
-            <UPageCard
-                v-for="empresa in empresas"
-                v-else
-                :key="empresa.empresa_id"
-                :title="nombreEmpresa(empresa.empresa_id) ?? 'Bloqueos vigentes'"
-                icon="i-lucide-lock"
-                variant="subtle"
-                :data-empresa="empresa.empresa_id"
-                data-prueba="bloqueos-empresa"
-            >
-                <div class="flex flex-col gap-4">
-                    <div class="flex flex-wrap gap-2">
-                        <UButton
-                            v-if="puede('libro.bloquear')"
-                            label="Bloquear"
-                            icon="i-lucide-lock"
-                            size="sm"
-                            data-prueba="abrir-bloquear"
-                            @click="abrir('bloquear', empresa)"
-                        />
-                        <UButton
-                            v-if="puedeDesbloquear(empresa)"
-                            label="Desbloquear"
-                            icon="i-lucide-lock-open"
-                            color="warning"
-                            variant="outline"
-                            size="sm"
-                            data-prueba="abrir-desbloquear"
-                            @click="abrir('desbloquear', empresa, TIPOS_DESBLOQUEABLES.find(t => empresa.vigentes[t]) ?? 'global')"
-                        />
-                        <UButton
-                            v-if="puede('libro.bloquear_duro')"
-                            label="Bloqueo duro"
-                            icon="i-lucide-shield-alert"
-                            color="error"
-                            variant="outline"
-                            size="sm"
-                            data-prueba="abrir-duro"
-                            @click="abrir('duro', empresa)"
-                        />
-                        <UButton
-                            v-if="puede('libro.excepcion_bloqueo')"
-                            label="Nueva excepción"
-                            icon="i-lucide-key-round"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            data-prueba="abrir-excepcion"
-                            @click="abrir('excepcion', empresa)"
-                        />
-                    </div>
-                    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        <li
-                            v-for="tipo in TIPOS"
-                            :key="tipo"
-                            class="flex flex-col gap-1 rounded-lg border p-3"
-                            :class="tipo === 'duro' && empresa.vigentes.duro ? 'border-error/40 bg-error/5' : 'border-default'"
-                            :data-tipo="tipo"
-                        >
-                            <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
-                                <UIcon
-                                    :name="TIPOS_BLOQUEO[tipo].icono"
-                                    class="size-4 shrink-0"
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
+                        :reintentar="cargar"
+                        :reintentando="cargando"
+                    />
+                    <USkeleton
+                        v-else-if="cargando && !empresas.length"
+                        class="h-40 w-full"
+                    />
+                    <UPageCard
+                        v-for="empresa in empresas"
+                        v-else
+                        :key="empresa.empresa_id"
+                        :title="nombreEmpresa(empresa.empresa_id) ?? 'Bloqueos vigentes'"
+                        icon="i-lucide-lock"
+                        variant="subtle"
+                        :data-empresa="empresa.empresa_id"
+                        data-prueba="bloqueos-empresa"
+                    >
+                        <div class="flex flex-col gap-4">
+                            <div class="flex flex-wrap gap-2">
+                                <UButton
+                                    v-if="puede('libro.bloquear')"
+                                    label="Bloquear"
+                                    icon="i-lucide-lock"
+                                    size="sm"
+                                    data-prueba="abrir-bloquear"
+                                    @click="abrir('bloquear', empresa)"
                                 />
-                                {{ TIPOS_BLOQUEO[tipo].etiqueta }}
-                            </span>
-                            <span
-                                class="text-base font-semibold tabular-nums"
-                                :class="empresa.vigentes[tipo] ? 'text-highlighted' : 'text-muted'"
-                                data-prueba="bloqueo-vigente"
-                            >{{ empresa.vigentes[tipo] ? `Hasta ${formatearFecha(empresa.vigentes[tipo] ?? '')}` : 'Sin bloqueo' }}</span>
-                            <span
-                                v-if="ultimo(empresa, tipo)"
-                                class="text-xs text-muted"
+                                <UButton
+                                    v-if="puedeDesbloquear(empresa)"
+                                    label="Desbloquear"
+                                    icon="i-lucide-lock-open"
+                                    color="warning"
+                                    variant="outline"
+                                    size="sm"
+                                    data-prueba="abrir-desbloquear"
+                                    @click="abrir('desbloquear', empresa, TIPOS_DESBLOQUEABLES.find(t => empresa.vigentes[t]) ?? 'global')"
+                                />
+                                <UButton
+                                    v-if="puede('libro.bloquear_duro')"
+                                    label="Bloqueo duro"
+                                    icon="i-lucide-shield-alert"
+                                    color="error"
+                                    variant="outline"
+                                    size="sm"
+                                    data-prueba="abrir-duro"
+                                    @click="abrir('duro', empresa)"
+                                />
+                                <UButton
+                                    v-if="puede('libro.excepcion_bloqueo')"
+                                    label="Nueva excepción"
+                                    icon="i-lucide-key-round"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    data-prueba="abrir-excepcion"
+                                    @click="abrir('excepcion', empresa)"
+                                />
+                            </div>
+                            <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                                <li
+                                    v-for="tipo in TIPOS"
+                                    :key="tipo"
+                                    class="flex flex-col gap-1 rounded-lg border p-3"
+                                    :class="tipo === 'duro' && empresa.vigentes.duro ? 'border-error/40 bg-error/5' : 'border-default'"
+                                    :data-tipo="tipo"
+                                >
+                                    <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
+                                        <UIcon
+                                            :name="TIPOS_BLOQUEO[tipo].icono"
+                                            class="size-4 shrink-0"
+                                        />
+                                        {{ TIPOS_BLOQUEO[tipo].etiqueta }}
+                                    </span>
+                                    <span
+                                        class="text-base font-semibold tabular-nums"
+                                        :class="empresa.vigentes[tipo] ? 'text-highlighted' : 'text-muted'"
+                                        data-prueba="bloqueo-vigente"
+                                    >{{ empresa.vigentes[tipo] ? `Hasta ${formatearFecha(empresa.vigentes[tipo] ?? '')}` : 'Sin bloqueo' }}</span>
+                                    <span
+                                        v-if="ultimo(empresa, tipo)"
+                                        class="text-xs text-muted"
+                                    >
+                                        {{ ultimo(empresa, tipo)?.motivo }} · {{ ultimo(empresa, tipo)?.creado_por_nombre ?? 'Sistema' }}, {{ formatearFecha(ultimo(empresa, tipo)?.created_at ?? '') }}
+                                    </span>
+                                    <span
+                                        v-if="tipo !== 'global' && tipo !== 'duro' && bloqueoEfectivo(empresa.vigentes, tipo) !== empresa.vigentes[tipo]"
+                                        class="text-xs text-muted"
+                                    >Efectivo hasta {{ formatearFecha(bloqueoEfectivo(empresa.vigentes, tipo) ?? '') }} (global o duro)</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </UPageCard>
+
+                    <ProcesosDetenidos v-if="puede('facturas.ver')" />
+
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-label="Excepciones"
+                    >
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="text-base font-semibold text-highlighted">
+                                Excepciones
+                            </h3>
+                            <USelect
+                                v-model="estadoExcepcion"
+                                :items="itemsEstado"
+                                aria-label="Estado de la excepción"
+                                class="w-40"
+                            />
+                        </div>
+                        <ProblemaAlerta
+                            v-if="excepciones.problema.value"
+                            :problema="excepciones.problema.value"
+                            :reintentar="excepciones.recargar"
+                            :reintentando="excepciones.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="excepciones.filas.value"
+                                :columns="columnasExcepcion"
+                                :loading="excepciones.cargando.value"
+                                data-prueba="tabla-excepciones"
                             >
-                                {{ ultimo(empresa, tipo)?.motivo }} · {{ ultimo(empresa, tipo)?.creado_por_nombre ?? 'Sistema' }}, {{ formatearFecha(ultimo(empresa, tipo)?.created_at ?? '') }}
-                            </span>
-                            <span
-                                v-if="tipo !== 'global' && tipo !== 'duro' && bloqueoEfectivo(empresa.vigentes, tipo) !== empresa.vigentes[tipo]"
-                                class="text-xs text-muted"
-                            >Efectivo hasta {{ formatearFecha(bloqueoEfectivo(empresa.vigentes, tipo) ?? '') }} (global o duro)</span>
-                        </li>
-                    </ul>
-                </div>
-            </UPageCard>
+                                <template #tipo-cell="{ row }">
+                                    <span class="text-sm">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
+                                </template>
+                                <template #usuario_nombre-cell="{ row }">
+                                    <div class="flex min-w-0 flex-col">
+                                        <span class="text-xs text-muted sm:hidden">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
+                                        <span class="text-sm">{{ row.original.usuario_nombre ?? 'Todos los usuarios' }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.motivo }}</span>
+                                        <span
+                                            v-if="row.original.estado === 'revocada' && row.original.motivo_revocacion"
+                                            class="text-xs text-muted"
+                                        >Revocada: {{ row.original.motivo_revocacion }}</span>
+                                    </div>
+                                </template>
+                                <template #hasta_en-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.hasta_en) }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.asientos }} {{ row.original.asientos === 1 ? 'asiento' : 'asientos' }}</span>
+                                    </div>
+                                </template>
+                                <template #estado-cell="{ row }">
+                                    <UBadge
+                                        :label="ESTADOS_EXCEPCION[row.original.estado].etiqueta"
+                                        :color="ESTADOS_EXCEPCION[row.original.estado].color"
+                                        variant="subtle"
+                                        size="sm"
+                                        data-prueba="excepcion-estado"
+                                    />
+                                </template>
+                                <template #acciones-cell="{ row }">
+                                    <UButton
+                                        v-if="puede('libro.excepcion_bloqueo') && row.original.estado === 'vigente'"
+                                        label="Revocar"
+                                        icon="i-lucide-ban"
+                                        color="error"
+                                        variant="ghost"
+                                        size="xs"
+                                        :aria-label="`Revocar la excepción ${row.original.id}`"
+                                        data-prueba="revocar-excepcion"
+                                        @click="excepcionARevocar = row.original"
+                                    />
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-key-round"
+                                        title="Sin excepciones"
+                                        description="Nadie puede registrar bajo un bloqueo con estos filtros."
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="excepciones.pagina.value"
+                                :hay-anterior="excepciones.hayAnterior.value"
+                                :hay-siguiente="excepciones.haySiguiente.value"
+                                :cargando="excepciones.cargando.value"
+                                :filas="excepciones.filas.value.length"
+                                @anterior="excepciones.anterior"
+                                @siguiente="excepciones.siguiente"
+                            />
+                        </template>
+                    </section>
 
-            <ProcesosDetenidos v-if="puede('facturas.ver')" />
-
-            <section
-                class="flex flex-col gap-3"
-                aria-label="Excepciones"
-            >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h3 class="text-base font-semibold text-highlighted">
-                        Excepciones
-                    </h3>
-                    <USelect
-                        v-model="estadoExcepcion"
-                        :items="itemsEstado"
-                        aria-label="Estado de la excepción"
-                        class="w-40"
-                    />
-                </div>
-                <ProblemaAlerta
-                    v-if="excepciones.problema.value"
-                    :problema="excepciones.problema.value"
-                    :reintentar="excepciones.recargar"
-                    :reintentando="excepciones.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="excepciones.filas.value"
-                        :columns="columnasExcepcion"
-                        :loading="excepciones.cargando.value"
-                        data-prueba="tabla-excepciones"
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-label="Historial de bloqueos"
                     >
-                        <template #tipo-cell="{ row }">
-                            <span class="text-sm">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
-                        </template>
-                        <template #usuario_nombre-cell="{ row }">
-                            <div class="flex min-w-0 flex-col">
-                                <span class="text-xs text-muted sm:hidden">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
-                                <span class="text-sm">{{ row.original.usuario_nombre ?? 'Todos los usuarios' }}</span>
-                                <span class="text-xs text-muted">{{ row.original.motivo }}</span>
-                                <span
-                                    v-if="row.original.estado === 'revocada' && row.original.motivo_revocacion"
-                                    class="text-xs text-muted"
-                                >Revocada: {{ row.original.motivo_revocacion }}</span>
-                            </div>
-                        </template>
-                        <template #hasta_en-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.hasta_en) }}</span>
-                                <span class="text-xs text-muted">{{ row.original.asientos }} {{ row.original.asientos === 1 ? 'asiento' : 'asientos' }}</span>
-                            </div>
-                        </template>
-                        <template #estado-cell="{ row }">
-                            <UBadge
-                                :label="ESTADOS_EXCEPCION[row.original.estado].etiqueta"
-                                :color="ESTADOS_EXCEPCION[row.original.estado].color"
-                                variant="subtle"
-                                size="sm"
-                                data-prueba="excepcion-estado"
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="text-base font-semibold text-highlighted">
+                                Historial
+                            </h3>
+                            <USelect
+                                v-model="tipoHistorial"
+                                :items="itemsTipoHistorial"
+                                aria-label="Tipo de bloqueo"
+                                class="w-44"
+                            />
+                        </div>
+                        <ProblemaAlerta
+                            v-if="historial.problema.value"
+                            :problema="historial.problema.value"
+                            :reintentar="historial.recargar"
+                            :reintentando="historial.cargando.value"
+                        />
+                        <template v-else>
+                            <UTable
+                                :data="historial.filas.value"
+                                :columns="columnasHistorial"
+                                :loading="historial.cargando.value"
+                                data-prueba="tabla-historial-bloqueos"
+                            >
+                                <template #created_at-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.created_at) }}</span>
+                                        <span class="text-xs text-muted">{{ row.original.creado_por_nombre ?? 'Sistema' }}</span>
+                                        <span class="text-xs text-muted sm:hidden">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
+                                        <span class="text-xs text-muted sm:hidden">{{ row.original.motivo }}</span>
+                                    </div>
+                                </template>
+                                <template #tipo-cell="{ row }">
+                                    <span class="text-sm">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
+                                </template>
+                                <template #hasta-cell="{ row }">
+                                    <span class="text-sm tabular-nums">{{ row.original.hasta ? formatearFecha(row.original.hasta) : 'Sin bloqueo' }}<span
+                                        v-if="row.original.anterior"
+                                        class="text-xs text-muted"
+                                    > (antes {{ formatearFecha(row.original.anterior) }})</span></span>
+                                </template>
+                                <template #empty>
+                                    <UEmpty
+                                        icon="i-lucide-history"
+                                        title="Sin cambios de bloqueo"
+                                        variant="naked"
+                                    />
+                                </template>
+                            </UTable>
+                            <PaginacionCursor
+                                :pagina="historial.pagina.value"
+                                :hay-anterior="historial.hayAnterior.value"
+                                :hay-siguiente="historial.haySiguiente.value"
+                                :cargando="historial.cargando.value"
+                                :filas="historial.filas.value.length"
+                                @anterior="historial.anterior"
+                                @siguiente="historial.siguiente"
                             />
                         </template>
-                        <template #acciones-cell="{ row }">
-                            <UButton
-                                v-if="puede('libro.excepcion_bloqueo') && row.original.estado === 'vigente'"
-                                label="Revocar"
-                                icon="i-lucide-ban"
-                                color="error"
-                                variant="ghost"
-                                size="xs"
-                                :aria-label="`Revocar la excepción ${row.original.id}`"
-                                data-prueba="revocar-excepcion"
-                                @click="excepcionARevocar = row.original"
-                            />
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-key-round"
-                                title="Sin excepciones"
-                                description="Nadie puede registrar bajo un bloqueo con estos filtros."
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="excepciones.pagina.value"
-                        :hay-anterior="excepciones.hayAnterior.value"
-                        :hay-siguiente="excepciones.haySiguiente.value"
-                        :cargando="excepciones.cargando.value"
-                        :filas="excepciones.filas.value.length"
-                        @anterior="excepciones.anterior"
-                        @siguiente="excepciones.siguiente"
-                    />
-                </template>
-            </section>
-
-            <section
-                class="flex flex-col gap-3"
-                aria-label="Historial de bloqueos"
-            >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h3 class="text-base font-semibold text-highlighted">
-                        Historial
-                    </h3>
-                    <USelect
-                        v-model="tipoHistorial"
-                        :items="itemsTipoHistorial"
-                        aria-label="Tipo de bloqueo"
-                        class="w-44"
-                    />
+                    </section>
                 </div>
-                <ProblemaAlerta
-                    v-if="historial.problema.value"
-                    :problema="historial.problema.value"
-                    :reintentar="historial.recargar"
-                    :reintentando="historial.cargando.value"
-                />
-                <template v-else>
-                    <UTable
-                        :data="historial.filas.value"
-                        :columns="columnasHistorial"
-                        :loading="historial.cargando.value"
-                        data-prueba="tabla-historial-bloqueos"
-                    >
-                        <template #created_at-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm tabular-nums">{{ formatearFechaHora(row.original.created_at) }}</span>
-                                <span class="text-xs text-muted">{{ row.original.creado_por_nombre ?? 'Sistema' }}</span>
-                                <span class="text-xs text-muted sm:hidden">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
-                                <span class="text-xs text-muted sm:hidden">{{ row.original.motivo }}</span>
-                            </div>
-                        </template>
-                        <template #tipo-cell="{ row }">
-                            <span class="text-sm">{{ TIPOS_BLOQUEO[row.original.tipo].etiqueta }}</span>
-                        </template>
-                        <template #hasta-cell="{ row }">
-                            <span class="text-sm tabular-nums">{{ row.original.hasta ? formatearFecha(row.original.hasta) : 'Sin bloqueo' }}<span
-                                v-if="row.original.anterior"
-                                class="text-xs text-muted"
-                            > (antes {{ formatearFecha(row.original.anterior) }})</span></span>
-                        </template>
-                        <template #empty>
-                            <UEmpty
-                                icon="i-lucide-history"
-                                title="Sin cambios de bloqueo"
-                                variant="naked"
-                            />
-                        </template>
-                    </UTable>
-                    <PaginacionCursor
-                        :pagina="historial.pagina.value"
-                        :hay-anterior="historial.hayAnterior.value"
-                        :hay-siguiente="historial.haySiguiente.value"
-                        :cargando="historial.cargando.value"
-                        :filas="historial.filas.value.length"
-                        @anterior="historial.anterior"
-                        @siguiente="historial.siguiente"
-                    />
+                <template #pie>
+                    Un bloqueo solo avanza; el bloqueo duro nunca se mueve hacia atrás.
                 </template>
-            </section>
-        </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <template v-if="empresaAccion">
             <BloqueoLibroModal

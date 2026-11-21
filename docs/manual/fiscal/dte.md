@@ -9,7 +9,7 @@ pantallas:
 
 Los documentos tributarios electrónicos (DTE) de cada factura, mora (nota de débito, NDEB) y nota de crédito (NCRE): cuáles están en cola, cuáles se certificaron, cuáles rechazó el certificador y cuáles están en contingencia.
 
-Está en **Facturación → Cola de DTE**.
+Está en **Finanzas → Impuestos → Facturación electrónica**, en la pestaña **Documentos**.
 
 ## Quién la usa
 

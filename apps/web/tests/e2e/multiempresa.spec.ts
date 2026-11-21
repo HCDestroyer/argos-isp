@@ -77,8 +77,9 @@ test('cobro repartido: un pago por empresa y el recibo con una sección por empr
 
 test('libro: balance por empresa con el total del grupo', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Libro', /\/libro/)
-    await page.getByRole('tab', { name: 'Balance' }).click()
+    await ir(page, 'Reportes', /\/reportes/)
+    await page.locator('[data-prueba="reporte-balance"]').click()
+    await expect(page).toHaveURL(/\/reportes\/balance/)
     await expect(page.locator('[data-prueba="total-grupo"]')).toBeVisible()
     await expect(page.locator('[data-prueba="libro-balance"] section[data-empresa="2"]')).toContainText('Fibra del Sur')
 })

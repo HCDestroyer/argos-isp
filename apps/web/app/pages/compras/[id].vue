@@ -132,265 +132,269 @@ onMounted(cargar)
             </div>
         </template>
 
-        <div class="flex flex-col gap-6">
-            <ProblemaAlerta
-                v-if="problema"
-                :problema="problema"
-                :reintentar="cargar"
-                :reintentando="cargando"
-            />
-            <template v-else-if="compra">
-                <UAlert
-                    v-if="compra.estado === 'anulada'"
-                    color="neutral"
-                    variant="subtle"
-                    icon="i-lucide-ban"
-                    title="Compra anulada"
-                    :description="`${compra.motivo_anulacion ?? ''}${compra.anulado_en ? ` · ${formatearFechaHora(compra.anulado_en)}` : ''}. El libro de compras resta la anulación en su mes.`"
-                    data-prueba="compra-anulada"
-                />
-                <UCard :ui="{ body: 'p-4 sm:p-4' }">
-                    <div class="flex flex-col gap-4">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h2 class="text-base font-semibold text-highlighted">
-                                {{ documentoCompra(compra) }}
-                            </h2>
-                            <UBadge
-                                :label="ESTADOS_COMPRA[compra.estado].etiqueta"
-                                :color="ESTADOS_COMPRA[compra.estado].color"
-                                :icon="ESTADOS_COMPRA[compra.estado].icono"
-                                variant="subtle"
-                                data-prueba="estado-compra"
-                            />
-                            <UBadge
-                                :label="compra.condicion === 'credito' ? 'Al crédito' : 'Al contado'"
-                                color="neutral"
-                                variant="outline"
-                            />
-                            <UBadge
-                                v-if="!compra.credito_fiscal"
-                                label="Sin crédito fiscal"
-                                color="warning"
-                                variant="subtle"
-                            />
-                        </div>
-                        <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                            <DatoFicha etiqueta="Proveedor">
-                                <ULink
-                                    :to="puede('proveedores.ver') ? `/proveedores/${compra.proveedor_id}` : undefined"
-                                    class="text-highlighted"
-                                >
-                                    {{ compra.proveedor_nombre }}
-                                </ULink>
-                                <span class="block text-xs text-muted">NIT {{ compra.proveedor_nit }}</span>
-                            </DatoFicha>
-                            <DatoFicha
-                                etiqueta="Tipo"
-                                :valor="TIPOS_DOCUMENTO_COMPRA[compra.tipo_documento]"
-                            />
-                            <DatoFicha
-                                etiqueta="Fecha del documento"
-                                :valor="formatearFecha(compra.fecha_documento)"
-                            />
-                            <DatoFicha
-                                etiqueta="Mes del IVA"
-                                :valor="compra.periodo_iva.slice(0, 7)"
-                            />
-                            <DatoFicha
-                                etiqueta="Fecha contable"
-                                :valor="formatearFecha(compra.fecha)"
-                            />
-                            <DatoFicha
-                                v-if="compra.vence_en"
-                                etiqueta="Vence"
-                                :valor="formatearFecha(compra.vence_en)"
-                            />
-                            <DatoFicha
-                                v-if="compra.autorizacion"
-                                etiqueta="Autorización"
-                                :valor="compra.autorizacion"
-                                mono
-                                class="col-span-2"
-                            />
-                            <DatoFicha
-                                v-if="compra.compra_referencia_id"
-                                etiqueta="Corrige"
-                            >
-                                <ULink
-                                    :to="`/compras/${compra.compra_referencia_id}`"
-                                    class="text-highlighted underline"
-                                >
-                                    Compra #{{ compra.compra_referencia_id }}
-                                </ULink>
-                            </DatoFicha>
-                            <DatoFicha
-                                v-if="compra.egreso_pago_id"
-                                etiqueta="Pagada con"
-                                :valor="`Egreso #${compra.egreso_pago_id}`"
-                            />
-                            <DatoFicha
-                                v-if="compra.egreso_id"
-                                etiqueta="Registrada desde"
-                                :valor="`Egreso #${compra.egreso_id}`"
-                            />
-                            <DatoFicha
-                                v-if="compra.descripcion"
-                                etiqueta="Descripción"
-                                :valor="compra.descripcion"
-                                class="col-span-2"
-                            />
-                        </dl>
-                    </div>
-                </UCard>
-
-                <dl
-                    class="grid grid-cols-2 gap-4 rounded-lg bg-elevated p-4 sm:grid-cols-4"
-                    data-prueba="totales-compra"
-                >
-                    <DatoFicha etiqueta="Base">
-                        <span class="tabular-nums">{{ formatearQuetzales(baseCompra(compra)) }}</span>
-                    </DatoFicha>
-                    <DatoFicha :etiqueta="compra.credito_fiscal ? 'IVA (crédito fiscal)' : 'IVA (al costo)'">
-                        <span class="tabular-nums">{{ formatearQuetzales(compra.iva) }}</span>
-                    </DatoFicha>
-                    <DatoFicha etiqueta="Total">
-                        <span class="font-semibold tabular-nums">{{ formatearQuetzales(compra.total) }}</span>
-                    </DatoFicha>
-                    <DatoFicha etiqueta="Retenido">
-                        <span class="tabular-nums">{{ formatearQuetzales(new Decimal(compra.retencion_iva).plus(compra.retencion_isr).toFixed(2)) }}</span>
-                    </DatoFicha>
-                    <DatoFicha etiqueta="Neto al proveedor">
-                        <span class="font-semibold tabular-nums">{{ formatearQuetzales(compra.neto) }}</span>
-                    </DatoFicha>
-                    <DatoFicha etiqueta="Saldo por pagar">
-                        <span
-                            class="font-semibold tabular-nums"
-                            data-prueba="saldo-compra"
-                        >{{ formatearQuetzales(compra.saldo) }}</span>
-                    </DatoFicha>
-                </dl>
-
-                <ProblemaAlerta
-                    v-if="problemaRelacionados"
-                    :problema="problemaRelacionados"
-                    :reintentar="() => compra && cargarRelacionados(compra)"
-                />
-
-                <section class="flex flex-col gap-2">
-                    <h2 class="text-sm font-semibold text-highlighted">
-                        Líneas
-                    </h2>
-                    <UTable
-                        :data="compra.lineas"
-                        :columns="columnasLineas"
-                        data-prueba="tabla-lineas-compra"
-                    >
-                        <template #descripcion-cell="{ row }">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-medium text-highlighted">{{ row.original.descripcion }}</span>
-                                <span class="text-xs text-muted">{{ TIPOS_LINEA_COMPRA[row.original.tipo] }}<template v-if="row.original.exento"> · exenta</template><template v-if="row.original.clase_activo"> · {{ etiquetaClaseActivo(row.original.clase_activo) }}</template><template v-if="row.original.diferir_meses"> · diferida en {{ row.original.diferir_meses }} meses</template></span>
-                                <ULink
-                                    v-if="row.original.producto_id"
-                                    :to="enlace(`/inventario/kardex?producto=${row.original.producto_id}`)"
-                                    class="text-xs text-primary"
-                                    :data-prueba="`linea-inventario-${row.original.id}`"
-                                >Inventario: {{ row.original.cantidad ?? 1 }} al kardex del producto #{{ row.original.producto_id }}</ULink>
-                            </div>
-                        </template>
-                        <template #cuenta_codigo-cell="{ row }">
-                            <span class="font-mono text-xs">{{ row.original.cuenta_codigo }}</span>
-                        </template>
-                        <template #base-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.base) }}</span>
-                        </template>
-                        <template #iva-cell="{ row }">
-                            <span class="tabular-nums">{{ formatearQuetzales(row.original.iva) }}</span>
-                        </template>
-                    </UTable>
-                </section>
-
-                <section
-                    v-if="compra.retenciones.length"
-                    class="flex flex-col gap-2"
-                    data-prueba="retenciones-compra"
-                >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h2 class="text-sm font-semibold text-highlighted">
-                            Retenciones emitidas
-                        </h2>
-                        <UButton
-                            v-if="puede('compras.registrar') && compra.estado === 'vigente' && retencionesSinConstancia.length"
-                            label="Registrar constancia"
-                            icon="i-lucide-file-check-2"
+        <ContaCuerpo libre>
+            <ContaIsla>
+                <div class="flex flex-col gap-6 p-4 sm:p-5">
+                    <ProblemaAlerta
+                        v-if="problema"
+                        :problema="problema"
+                        :reintentar="cargar"
+                        :reintentando="cargando"
+                    />
+                    <template v-else-if="compra">
+                        <UAlert
+                            v-if="compra.estado === 'anulada'"
                             color="neutral"
-                            variant="outline"
-                            size="sm"
-                            data-prueba="abrir-constancia"
-                            @click="registrandoConstancia = true"
+                            variant="subtle"
+                            icon="i-lucide-ban"
+                            title="Compra anulada"
+                            :description="`${compra.motivo_anulacion ?? ''}${compra.anulado_en ? ` · ${formatearFechaHora(compra.anulado_en)}` : ''}. El libro de compras resta la anulación en su mes.`"
+                            data-prueba="compra-anulada"
                         />
-                    </div>
-                    <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                        <li
-                            v-for="r in compra.retenciones"
-                            :key="r.impuesto_codigo"
-                            class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                            :data-retencion="r.impuesto_codigo"
-                        >
-                            <div class="flex flex-col">
-                                <span class="text-sm font-medium text-highlighted">{{ RETENCIONES_EMITIDAS[r.impuesto_codigo] ?? r.impuesto_codigo }}</span>
-                                <span class="text-xs text-muted">{{ r.tasa }} % sobre {{ formatearQuetzales(r.base) }}</span>
+                        <UCard :ui="{ body: 'p-4 sm:p-4' }">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h2 class="text-base font-semibold text-highlighted">
+                                        {{ documentoCompra(compra) }}
+                                    </h2>
+                                    <UBadge
+                                        :label="ESTADOS_COMPRA[compra.estado].etiqueta"
+                                        :color="ESTADOS_COMPRA[compra.estado].color"
+                                        :icon="ESTADOS_COMPRA[compra.estado].icono"
+                                        variant="subtle"
+                                        data-prueba="estado-compra"
+                                    />
+                                    <UBadge
+                                        :label="compra.condicion === 'credito' ? 'Al crédito' : 'Al contado'"
+                                        color="neutral"
+                                        variant="outline"
+                                    />
+                                    <UBadge
+                                        v-if="!compra.credito_fiscal"
+                                        label="Sin crédito fiscal"
+                                        color="warning"
+                                        variant="subtle"
+                                    />
+                                </div>
+                                <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                    <DatoFicha etiqueta="Proveedor">
+                                        <ULink
+                                            :to="puede('proveedores.ver') ? `/proveedores/${compra.proveedor_id}` : undefined"
+                                            class="text-highlighted"
+                                        >
+                                            {{ compra.proveedor_nombre }}
+                                        </ULink>
+                                        <span class="block text-xs text-muted">NIT {{ compra.proveedor_nit }}</span>
+                                    </DatoFicha>
+                                    <DatoFicha
+                                        etiqueta="Tipo"
+                                        :valor="TIPOS_DOCUMENTO_COMPRA[compra.tipo_documento]"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Fecha del documento"
+                                        :valor="formatearFecha(compra.fecha_documento)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Mes del IVA"
+                                        :valor="compra.periodo_iva.slice(0, 7)"
+                                    />
+                                    <DatoFicha
+                                        etiqueta="Fecha contable"
+                                        :valor="formatearFecha(compra.fecha)"
+                                    />
+                                    <DatoFicha
+                                        v-if="compra.vence_en"
+                                        etiqueta="Vence"
+                                        :valor="formatearFecha(compra.vence_en)"
+                                    />
+                                    <DatoFicha
+                                        v-if="compra.autorizacion"
+                                        etiqueta="Autorización"
+                                        :valor="compra.autorizacion"
+                                        mono
+                                        class="col-span-2"
+                                    />
+                                    <DatoFicha
+                                        v-if="compra.compra_referencia_id"
+                                        etiqueta="Corrige"
+                                    >
+                                        <ULink
+                                            :to="`/compras/${compra.compra_referencia_id}`"
+                                            class="text-highlighted underline"
+                                        >
+                                            Compra #{{ compra.compra_referencia_id }}
+                                        </ULink>
+                                    </DatoFicha>
+                                    <DatoFicha
+                                        v-if="compra.egreso_pago_id"
+                                        etiqueta="Pagada con"
+                                        :valor="`Egreso #${compra.egreso_pago_id}`"
+                                    />
+                                    <DatoFicha
+                                        v-if="compra.egreso_id"
+                                        etiqueta="Registrada desde"
+                                        :valor="`Egreso #${compra.egreso_id}`"
+                                    />
+                                    <DatoFicha
+                                        v-if="compra.descripcion"
+                                        etiqueta="Descripción"
+                                        :valor="compra.descripcion"
+                                        class="col-span-2"
+                                    />
+                                </dl>
                             </div>
-                            <UBadge
-                                :label="constanciaDe(r.impuesto_codigo) ? `Constancia ${constanciaDe(r.impuesto_codigo)?.numero}` : 'Sin constancia'"
-                                :color="constanciaDe(r.impuesto_codigo) ? 'success' : 'warning'"
-                                variant="subtle"
-                                size="sm"
-                                data-prueba="constancia-estado"
-                            />
-                            <span class="text-sm font-semibold tabular-nums">{{ formatearQuetzales(r.monto) }}</span>
-                        </li>
-                    </ul>
-                </section>
+                        </UCard>
 
-                <section
-                    v-if="activos.length || diferimientos.length"
-                    class="flex flex-col gap-2"
-                >
-                    <h2 class="text-sm font-semibold text-highlighted">
-                        Activos y diferidos de esta compra
-                    </h2>
-                    <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                        <li
-                            v-for="a in activos"
-                            :key="`a-${a.id}`"
-                            class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                        <dl
+                            class="grid grid-cols-2 gap-4 rounded-lg bg-elevated p-4 sm:grid-cols-4"
+                            data-prueba="totales-compra"
                         >
-                            <ULink
-                                :to="`/activos/${a.id}`"
-                                class="text-sm font-medium text-highlighted underline"
+                            <DatoFicha etiqueta="Base">
+                                <span class="tabular-nums">{{ formatearQuetzales(baseCompra(compra)) }}</span>
+                            </DatoFicha>
+                            <DatoFicha :etiqueta="compra.credito_fiscal ? 'IVA (crédito fiscal)' : 'IVA (al costo)'">
+                                <span class="tabular-nums">{{ formatearQuetzales(compra.iva) }}</span>
+                            </DatoFicha>
+                            <DatoFicha etiqueta="Total">
+                                <span class="font-semibold tabular-nums">{{ formatearQuetzales(compra.total) }}</span>
+                            </DatoFicha>
+                            <DatoFicha etiqueta="Retenido">
+                                <span class="tabular-nums">{{ formatearQuetzales(new Decimal(compra.retencion_iva).plus(compra.retencion_isr).toFixed(2)) }}</span>
+                            </DatoFicha>
+                            <DatoFicha etiqueta="Neto al proveedor">
+                                <span class="font-semibold tabular-nums">{{ formatearQuetzales(compra.neto) }}</span>
+                            </DatoFicha>
+                            <DatoFicha etiqueta="Saldo por pagar">
+                                <span
+                                    class="font-semibold tabular-nums"
+                                    data-prueba="saldo-compra"
+                                >{{ formatearQuetzales(compra.saldo) }}</span>
+                            </DatoFicha>
+                        </dl>
+
+                        <ProblemaAlerta
+                            v-if="problemaRelacionados"
+                            :problema="problemaRelacionados"
+                            :reintentar="() => compra && cargarRelacionados(compra)"
+                        />
+
+                        <section class="flex flex-col gap-2">
+                            <h2 class="text-sm font-semibold text-highlighted">
+                                Líneas
+                            </h2>
+                            <UTable
+                                :data="compra.lineas"
+                                :columns="columnasLineas"
+                                data-prueba="tabla-lineas-compra"
                             >
-                                Activo #{{ a.id }} · {{ a.descripcion }}
-                            </ULink>
-                            <span class="text-xs text-muted">{{ etiquetaClaseActivo(a.clase) }} · {{ a.tasa_anual }} % anual · {{ ESTADOS_ACTIVO[a.estado].etiqueta }}</span>
-                        </li>
-                        <li
-                            v-for="d in diferimientos"
-                            :key="`d-${d.id}`"
-                            class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                            :data-diferimiento="d.id"
+                                <template #descripcion-cell="{ row }">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium text-highlighted">{{ row.original.descripcion }}</span>
+                                        <span class="text-xs text-muted">{{ TIPOS_LINEA_COMPRA[row.original.tipo] }}<template v-if="row.original.exento"> · exenta</template><template v-if="row.original.clase_activo"> · {{ etiquetaClaseActivo(row.original.clase_activo) }}</template><template v-if="row.original.diferir_meses"> · diferida en {{ row.original.diferir_meses }} meses</template></span>
+                                        <ULink
+                                            v-if="row.original.producto_id"
+                                            :to="enlace(`/inventario/kardex?producto=${row.original.producto_id}`)"
+                                            class="text-xs text-primary"
+                                            :data-prueba="`linea-inventario-${row.original.id}`"
+                                        >Inventario: {{ row.original.cantidad ?? 1 }} al kardex del producto #{{ row.original.producto_id }}</ULink>
+                                    </div>
+                                </template>
+                                <template #cuenta_codigo-cell="{ row }">
+                                    <span class="font-mono text-xs">{{ row.original.cuenta_codigo }}</span>
+                                </template>
+                                <template #base-cell="{ row }">
+                                    <span class="tabular-nums">{{ formatearQuetzales(row.original.base) }}</span>
+                                </template>
+                                <template #iva-cell="{ row }">
+                                    <span class="tabular-nums">{{ formatearQuetzales(row.original.iva) }}</span>
+                                </template>
+                            </UTable>
+                        </section>
+
+                        <section
+                            v-if="compra.retenciones.length"
+                            class="flex flex-col gap-2"
+                            data-prueba="retenciones-compra"
                         >
-                            <ULink
-                                :to="`/diferimientos/${d.id}`"
-                                class="text-sm font-medium text-highlighted underline"
-                            >
-                                Diferido #{{ d.id }} · {{ d.descripcion }}
-                            </ULink>
-                            <span class="text-xs text-muted">{{ d.meses }} meses desde {{ d.inicio.slice(0, 7) }} · pendiente {{ formatearQuetzales(d.pendiente) }} · {{ ESTADOS_DIFERIMIENTO[d.estado].etiqueta }}</span>
-                        </li>
-                    </ul>
-                </section>
-            </template>
-        </div>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h2 class="text-sm font-semibold text-highlighted">
+                                    Retenciones emitidas
+                                </h2>
+                                <UButton
+                                    v-if="puede('compras.registrar') && compra.estado === 'vigente' && retencionesSinConstancia.length"
+                                    label="Registrar constancia"
+                                    icon="i-lucide-file-check-2"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    data-prueba="abrir-constancia"
+                                    @click="registrandoConstancia = true"
+                                />
+                            </div>
+                            <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
+                                <li
+                                    v-for="r in compra.retenciones"
+                                    :key="r.impuesto_codigo"
+                                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                    :data-retencion="r.impuesto_codigo"
+                                >
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium text-highlighted">{{ RETENCIONES_EMITIDAS[r.impuesto_codigo] ?? r.impuesto_codigo }}</span>
+                                        <span class="text-xs text-muted">{{ r.tasa }} % sobre {{ formatearQuetzales(r.base) }}</span>
+                                    </div>
+                                    <UBadge
+                                        :label="constanciaDe(r.impuesto_codigo) ? `Constancia ${constanciaDe(r.impuesto_codigo)?.numero}` : 'Sin constancia'"
+                                        :color="constanciaDe(r.impuesto_codigo) ? 'success' : 'warning'"
+                                        variant="subtle"
+                                        size="sm"
+                                        data-prueba="constancia-estado"
+                                    />
+                                    <span class="text-sm font-semibold tabular-nums">{{ formatearQuetzales(r.monto) }}</span>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section
+                            v-if="activos.length || diferimientos.length"
+                            class="flex flex-col gap-2"
+                        >
+                            <h2 class="text-sm font-semibold text-highlighted">
+                                Activos y diferidos de esta compra
+                            </h2>
+                            <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
+                                <li
+                                    v-for="a in activos"
+                                    :key="`a-${a.id}`"
+                                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                >
+                                    <ULink
+                                        :to="`/activos/${a.id}`"
+                                        class="text-sm font-medium text-highlighted underline"
+                                    >
+                                        Activo #{{ a.id }} · {{ a.descripcion }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">{{ etiquetaClaseActivo(a.clase) }} · {{ a.tasa_anual }} % anual · {{ ESTADOS_ACTIVO[a.estado].etiqueta }}</span>
+                                </li>
+                                <li
+                                    v-for="d in diferimientos"
+                                    :key="`d-${d.id}`"
+                                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                    :data-diferimiento="d.id"
+                                >
+                                    <ULink
+                                        :to="`/diferimientos/${d.id}`"
+                                        class="text-sm font-medium text-highlighted underline"
+                                    >
+                                        Diferido #{{ d.id }} · {{ d.descripcion }}
+                                    </ULink>
+                                    <span class="text-xs text-muted">{{ d.meses }} meses desde {{ d.inicio.slice(0, 7) }} · pendiente {{ formatearQuetzales(d.pendiente) }} · {{ ESTADOS_DIFERIMIENTO[d.estado].etiqueta }}</span>
+                                </li>
+                            </ul>
+                        </section>
+                    </template>
+                </div>
+            </ContaIsla>
+        </ContaCuerpo>
 
         <AccionMotivoModal
             v-if="compra"

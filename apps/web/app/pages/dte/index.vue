@@ -8,7 +8,14 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
  */
 definePageMeta({ permiso: 'fel.ver' })
 
-useHead({ title: 'Cola de DTE · ArgosIsp' })
+useHead({ title: 'Facturación electrónica · ArgosIsp' })
+
+/** Pestañas de la pantalla (tablero ContaFel): documentos y libros legales, cada una su página. */
+const vista = ref('documentos')
+const VISTAS_FEL: PestanaConta[] = [
+    { label: 'Documentos', value: 'documentos', icon: 'i-lucide-zap', to: '/dte' },
+    { label: 'Libros legales', value: 'libros', icon: 'i-lucide-book', to: '/libros' },
+]
 
 const route = useRoute()
 const router = useRouter()
@@ -123,16 +130,19 @@ onMounted(() => void lista.recargar())
 <template>
     <PanelPagina
         id="dte"
-        titulo="Cola de DTE"
+        titulo="Facturación electrónica y libros legales"
         icono="i-lucide-badge-check"
+        descripcion="Documentos FEL de cada factura, mora y nota de crédito, y los libros que la SAT y el Registro Mercantil pueden pedirte."
     >
         <template #acciones>
+            <ContaSelectorEmpresa />
             <UButton
                 v-if="puede('fel.certificar')"
                 label="Certificar en lote"
                 icon="i-lucide-badge-check"
                 color="neutral"
-                variant="outline"
+                variant="ghost"
+                class="boton-flotante boton-pastilla"
                 data-prueba="certificar-lote"
                 @click="loteAbierto = true"
             />
@@ -141,177 +151,231 @@ onMounted(() => void lista.recargar())
             v-model:open="loteAbierto"
             @hecho="lista.recargar()"
         />
-        <div class="flex flex-col gap-4">
-            <p class="text-sm text-muted">
-                Documentos tributarios electrónicos de cada factura, mora (NDEB) y nota de crédito (NCRE). Un rechazado se corrige y se reintenta; uno con error temporal se reintenta solo.
-            </p>
 
-            <div class="flex flex-wrap gap-2">
-                <UButton
-                    v-for="atajo in ATAJOS"
-                    :key="atajo.id"
-                    :label="atajo.etiqueta"
-                    :icon="atajo.icono"
-                    :color="mismosEstados(estados, atajo.estados) ? 'primary' : 'neutral'"
-                    :variant="mismosEstados(estados, atajo.estados) ? 'subtle' : 'outline'"
-                    size="sm"
-                    :aria-pressed="mismosEstados(estados, atajo.estados)"
-                    :data-prueba="`atajo-${atajo.id}`"
-                    @click="estados = mismosEstados(estados, atajo.estados) ? [] : [...atajo.estados]"
-                />
-            </div>
-
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,18rem)_minmax(0,14rem)_repeat(2,minmax(0,11rem))_1fr]">
-                <USelectMenu
-                    v-model="estados"
-                    :items="itemsEstado"
-                    value-key="value"
-                    multiple
-                    icon="i-lucide-activity"
-                    placeholder="Todos los estados"
-                    aria-label="Filtrar por estado"
-                    class="w-full"
-                    data-prueba="filtro-estados"
-                />
-                <USelect
-                    v-model="documento"
-                    :items="itemsDocumento"
-                    icon="i-lucide-file-text"
-                    aria-label="Filtrar por documento"
-                    class="w-full"
-                />
-                <UInput
-                    v-model="desde"
-                    type="date"
-                    aria-label="Emitidos desde"
-                    class="w-full"
-                />
-                <UInput
-                    v-model="hasta"
-                    type="date"
-                    aria-label="Emitidos hasta"
-                    class="w-full"
-                />
-                <div
-                    v-if="hayFiltros"
-                    class="flex sm:col-span-2 lg:col-span-1"
-                >
+        <ContaCuerpo>
+            <ContaIsla llenar>
+                <template #cabecera>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <ContaPestanas
+                            v-model="vista"
+                            :items="VISTAS_FEL"
+                            etiqueta="Facturación electrónica y libros"
+                        />
+                        <div
+                            class="flex flex-wrap gap-1.5"
+                            role="group"
+                            aria-label="Estados de los documentos"
+                        >
+                            <UButton
+                                label="Todos"
+                                :color="!estados.length ? 'primary' : 'neutral'"
+                                :variant="!estados.length ? 'solid' : 'outline'"
+                                size="sm"
+                                class="rounded-full"
+                                :aria-pressed="!estados.length"
+                                @click="estados = []"
+                            />
+                            <UButton
+                                v-for="atajo in ATAJOS"
+                                :key="atajo.id"
+                                :label="atajo.etiqueta"
+                                :icon="atajo.icono"
+                                :color="mismosEstados(estados, atajo.estados) ? 'primary' : 'neutral'"
+                                :variant="mismosEstados(estados, atajo.estados) ? 'solid' : 'outline'"
+                                size="sm"
+                                class="rounded-full"
+                                :aria-pressed="mismosEstados(estados, atajo.estados)"
+                                :data-prueba="`atajo-${atajo.id}`"
+                                @click="estados = mismosEstados(estados, atajo.estados) ? [] : [...atajo.estados]"
+                            />
+                        </div>
+                    </div>
+                </template>
+                <template #herramientas>
+                    <UPopover>
+                        <UButton
+                            label="Más filtros"
+                            icon="i-lucide-filter"
+                            color="neutral"
+                            :variant="documento !== TODOS || desde || hasta ? 'subtle' : 'outline'"
+                            class="rounded-full"
+                            data-prueba="mas-filtros-dte"
+                        />
+                        <template #content>
+                            <div class="flex w-72 flex-col gap-3 p-3">
+                                <UFormField label="Estados">
+                                    <USelectMenu
+                                        v-model="estados"
+                                        :items="itemsEstado"
+                                        value-key="value"
+                                        multiple
+                                        icon="i-lucide-activity"
+                                        placeholder="Todos los estados"
+                                        aria-label="Filtrar por estado"
+                                        class="w-full"
+                                        data-prueba="filtro-estados"
+                                    />
+                                </UFormField>
+                                <UFormField label="Documento">
+                                    <USelect
+                                        v-model="documento"
+                                        :items="itemsDocumento"
+                                        icon="i-lucide-file-text"
+                                        aria-label="Filtrar por documento"
+                                        class="w-full"
+                                    />
+                                </UFormField>
+                                <UFormField label="Emitidos desde">
+                                    <UInput
+                                        v-model="desde"
+                                        type="date"
+                                        aria-label="Emitidos desde"
+                                        class="w-full"
+                                    />
+                                </UFormField>
+                                <UFormField label="Emitidos hasta">
+                                    <UInput
+                                        v-model="hasta"
+                                        type="date"
+                                        aria-label="Emitidos hasta"
+                                        class="w-full"
+                                    />
+                                </UFormField>
+                            </div>
+                        </template>
+                    </UPopover>
                     <UButton
-                        label="Limpiar filtros"
-                        icon="i-lucide-filter-x"
-                        color="neutral"
+                        v-if="hayFiltros"
+                        label="Limpiar"
+                        icon="i-lucide-rotate-ccw"
+                        color="primary"
                         variant="ghost"
+                        size="sm"
                         @click="limpiarFiltros"
                     />
-                </div>
-            </div>
+                </template>
 
-            <ProblemaAlerta
-                v-if="lista.problema.value"
-                :problema="lista.problema.value"
-                :reintentar="lista.recargar"
-                :reintentando="lista.cargando.value"
-                data-prueba="dte-lista-error"
-            />
-
-            <template v-else>
-                <UTable
-                    :data="lista.filas.value"
-                    :columns="columnas"
-                    :loading="lista.cargando.value"
-                    sticky
-                    class="flex-1"
-                    :ui="{ td: 'py-3' }"
-                    data-prueba="tabla-dte"
+                <div
+                    v-if="lista.problema.value"
+                    class="p-4"
                 >
-                    <template #dte-cell="{ row }">
-                        <div class="flex min-w-36 flex-col">
-                            <ULink
-                                :to="`/dte/${row.original.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                            >
-                                {{ row.original.tipo_dte }} · DTE #{{ row.original.id }}
-                            </ULink>
-                            <ULink
-                                :to="rutaDocumento(row.original)"
-                                class="text-xs text-muted hover:text-primary"
-                            >
-                                {{ DOCUMENTOS_DTE[row.original.documento_tipo] }} #{{ row.original.documento_id }}
-                            </ULink>
-                            <span
-                                v-if="row.original.serie"
-                                class="truncate font-mono text-xs text-muted"
-                            >{{ serieNumeroDte(row.original) }}</span>
-                            <span
-                                v-if="row.original.ultimo_error"
-                                class="mt-1 line-clamp-2 max-w-72 whitespace-normal text-xs text-error"
-                            >{{ row.original.ultimo_error }}</span>
-                            <span class="truncate text-xs text-muted sm:hidden">{{ row.original.receptor.nombre }} · {{ formatearQuetzales(row.original.total) }}</span>
-                        </div>
-                    </template>
+                    <ProblemaAlerta
+                        :problema="lista.problema.value"
+                        :reintentar="lista.recargar"
+                        :reintentando="lista.cargando.value"
+                        data-prueba="dte-lista-error"
+                    />
+                </div>
+                <template v-else>
+                    <UTable
+                        :data="lista.filas.value"
+                        :columns="columnas"
+                        :loading="lista.cargando.value"
+                        sticky
+                        :ui="{ td: 'py-3' }"
+                        data-prueba="tabla-dte"
+                    >
+                        <template #dte-cell="{ row }">
+                            <div class="flex min-w-36 flex-col">
+                                <ULink
+                                    :to="`/dte/${row.original.id}`"
+                                    class="text-sm font-medium text-highlighted hover:text-primary"
+                                >
+                                    {{ row.original.tipo_dte }} · DTE #{{ row.original.id }}
+                                </ULink>
+                                <ULink
+                                    :to="rutaDocumento(row.original)"
+                                    class="text-xs text-muted hover:text-primary"
+                                >
+                                    {{ DOCUMENTOS_DTE[row.original.documento_tipo] }} #{{ row.original.documento_id }}
+                                </ULink>
+                                <span
+                                    v-if="row.original.serie"
+                                    class="truncate font-mono text-xs text-muted"
+                                >{{ serieNumeroDte(row.original) }}</span>
+                                <span
+                                    v-if="row.original.ultimo_error"
+                                    class="mt-1 line-clamp-2 max-w-72 whitespace-normal text-xs text-error"
+                                >{{ row.original.ultimo_error }}</span>
+                                <span class="truncate text-xs text-muted sm:hidden">{{ row.original.receptor.nombre }} · {{ formatearQuetzales(row.original.total) }}</span>
+                            </div>
+                        </template>
 
-                    <template #receptor-cell="{ row }">
-                        <div class="flex max-w-56 flex-col">
-                            <span class="truncate text-sm">{{ row.original.receptor.nombre }}</span>
-                            <span class="text-xs text-muted">{{ TIPOS_RECEPTOR[row.original.receptor.tipo] }}<template v-if="row.original.receptor.tipo !== 'cf'"> {{ row.original.receptor.id }}</template></span>
-                        </div>
-                    </template>
+                        <template #receptor-cell="{ row }">
+                            <div class="flex max-w-56 flex-col">
+                                <span class="truncate text-sm">{{ row.original.receptor.nombre }}</span>
+                                <span class="text-xs text-muted">{{ TIPOS_RECEPTOR[row.original.receptor.tipo] }}<template v-if="row.original.receptor.tipo !== 'cf'"> {{ row.original.receptor.id }}</template></span>
+                            </div>
+                        </template>
 
-                    <template #empresa-cell="{ row }">
-                        <span class="text-sm">{{ nombreEmpresa(row.original.empresa_id) }}</span>
-                    </template>
+                        <template #empresa-cell="{ row }">
+                            <span class="text-sm">{{ nombreEmpresa(row.original.empresa_id) }}</span>
+                        </template>
 
-                    <template #total-cell="{ row }">
-                        <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
-                    </template>
+                        <template #total-cell="{ row }">
+                            <span class="tabular-nums">{{ formatearQuetzales(row.original.total) }}</span>
+                        </template>
 
-                    <template #intentos-cell="{ row }">
-                        <div class="flex flex-col text-sm">
-                            <span class="tabular-nums">{{ row.original.intentos }}</span>
-                            <span
-                                v-if="row.original.proximo_intento && row.original.estado !== 'certificado'"
-                                class="text-xs text-muted"
-                            >próximo {{ formatearFechaHora(row.original.proximo_intento) }}</span>
-                        </div>
-                    </template>
+                        <template #intentos-cell="{ row }">
+                            <div class="flex flex-col text-sm">
+                                <span class="tabular-nums">{{ row.original.intentos }}</span>
+                                <span
+                                    v-if="row.original.proximo_intento && row.original.estado !== 'certificado'"
+                                    class="text-xs text-muted"
+                                >próximo {{ formatearFechaHora(row.original.proximo_intento) }}</span>
+                            </div>
+                        </template>
 
-                    <template #estado-cell="{ row }">
-                        <div class="flex flex-col items-start gap-1">
-                            <EstadoDteBadge
-                                :estado="row.original.estado"
-                                size="sm"
+                        <template #estado-cell="{ row }">
+                            <div class="flex flex-col items-start gap-1">
+                                <EstadoDteBadge
+                                    :estado="row.original.estado"
+                                    size="sm"
+                                />
+                                <UBadge
+                                    v-if="row.original.contingencia"
+                                    label="Contingencia"
+                                    icon="i-lucide-cloud-off"
+                                    color="warning"
+                                    variant="outline"
+                                    size="sm"
+                                />
+                            </div>
+                        </template>
+
+                        <template #empty>
+                            <UEmpty
+                                icon="i-lucide-badge-check"
+                                :title="hayFiltros ? 'Ningún DTE coincide' : 'Todavía no hay DTE'"
+                                :description="hayFiltros ? 'Prueba con otro estado o documento.' : 'Aparecen al certificar facturas y notas.'"
+                                variant="naked"
                             />
-                            <UBadge
-                                v-if="row.original.contingencia"
-                                label="Contingencia"
-                                icon="i-lucide-cloud-off"
-                                color="warning"
-                                variant="outline"
-                                size="sm"
-                            />
-                        </div>
-                    </template>
+                        </template>
+                    </UTable>
 
-                    <template #empty>
-                        <UEmpty
-                            icon="i-lucide-badge-check"
-                            :title="hayFiltros ? 'Ningún DTE coincide' : 'Todavía no hay DTE'"
-                            :description="hayFiltros ? 'Prueba con otro estado o documento.' : 'Aparecen al certificar facturas y notas.'"
-                            variant="naked"
+                    <div class="px-3 pb-3">
+                        <PaginacionCursor
+                            :pagina="lista.pagina.value"
+                            :hay-anterior="lista.hayAnterior.value"
+                            :hay-siguiente="lista.haySiguiente.value"
+                            :cargando="lista.cargando.value"
+                            :filas="lista.filas.value.length"
+                            @anterior="lista.anterior"
+                            @siguiente="lista.siguiente"
                         />
-                    </template>
-                </UTable>
+                    </div>
+                </template>
 
-                <PaginacionCursor
-                    :pagina="lista.pagina.value"
-                    :hay-anterior="lista.hayAnterior.value"
-                    :hay-siguiente="lista.haySiguiente.value"
-                    :cargando="lista.cargando.value"
-                    :filas="lista.filas.value.length"
-                    @anterior="lista.anterior"
-                    @siguiente="lista.siguiente"
-                />
-            </template>
-        </div>
+                <template #pie>
+                    Un rechazado no se reintenta solo: se corrige el dato y se crea un documento nuevo. Uno con error temporal se reintenta solo.
+                </template>
+                <template
+                    v-if="lista.filas.value.length"
+                    #pie-derecha
+                >
+                    {{ lista.filas.value.length }} en esta página
+                </template>
+            </ContaIsla>
+        </ContaCuerpo>
     </PanelPagina>
 </template>

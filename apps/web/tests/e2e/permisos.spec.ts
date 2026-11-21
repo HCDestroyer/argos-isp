@@ -16,7 +16,7 @@ test('el cajero no ve Routers y la ruta lo manda a sin permiso', async ({ page }
     await expect(lateral.getByRole('link', { name: 'Routers', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Plantillas de facturación', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Bitácora', exact: true })).toHaveCount(0)
-    await expect(lateral.getByRole('link', { name: 'Libro', exact: true })).toHaveCount(0)
+    await expect(lateral.getByRole('link', { name: 'Libro contable', exact: true })).toHaveCount(0)
     await expect(lateral.getByRole('link', { name: 'Usuarios', exact: true })).toHaveCount(0)
     // Sin ninguna sección permitida, el grupo entero no aparece.
     await expect(lateral.getByRole('button', { name: 'Reportes y bitácora' })).toHaveCount(0)

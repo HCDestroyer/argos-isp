@@ -15,14 +15,18 @@ describe('menú lateral agrupado', () => {
     }
 
     it('día a día primero, grupos en orden de uso con su etiqueta corta y cada sección en uno solo', () => {
-        expect(GRUPOS_PANEL.map(grupo => grupo.id)).toEqual(['dia', 'facturacion', 'red', 'inventario', 'lealtad', 'finanzas', 'contabilidad', 'control', 'configuracion'])
+        expect(GRUPOS_PANEL.map(grupo => grupo.id)).toEqual(['dia', 'facturacion', 'red', 'inventario', 'lealtad', 'finanzas', 'control', 'configuracion'])
         expect([...new Set(GRUPOS_PANEL.map(grupo => grupo.bloque))]).toEqual(['Día a día', 'Gestión', 'Administración', 'Sistema'])
         const ids = SECCIONES_PANEL.map(seccion => seccion.id)
         expect(new Set(ids).size).toBe(ids.length)
         expect(ids).toContain('migracion')
         const dia = GRUPOS_PANEL.find(grupo => grupo.id === 'dia')
         expect(dia?.secciones.map(seccion => seccion.id)).toEqual(['cobro', 'caja', 'clientes', 'servicios', 'promesas', 'comprobantes'])
-        expect(GRUPOS_PANEL.map(grupo => grupo.corta)).toEqual(['Día a día', 'Facturas', 'Red', 'Inventario', 'Lealtad', 'Finanzas', 'Contable', 'Reportes', 'Ajustes'])
+        expect(GRUPOS_PANEL.map(grupo => grupo.corta)).toEqual(['Día a día', 'Facturas', 'Red', 'Inventario', 'Lealtad', 'Finanzas', 'Reportes', 'Ajustes'])
+        // Decisión 1 del PM: Finanzas agrupa panel, libro, cierres, cartera, impuestos, compras y bancos.
+        const finanzas = GRUPOS_PANEL.find(grupo => grupo.id === 'finanzas')
+        expect(finanzas?.secciones.map(seccion => seccion.id)).toEqual(['panel-financiero', 'libro', 'cierres-libro', 'bloqueos-libro', 'cartera'])
+        expect(finanzas?.subgrupos?.map(subgrupo => subgrupo.id)).toEqual(['impuestos', 'compras', 'bancos'])
     })
 
     it('ningún grupo ni subgrupo pasa de 7 secciones sueltas: los largos van en subgrupos', () => {
@@ -54,7 +58,7 @@ describe('menú lateral agrupado', () => {
         useUsuarioActual().value = { ...meCajero, permisos: meCajero.permisos.filter(p => !['cajas.ver', 'pagos.registrar', 'clientes.ver', 'servicios.ver', 'promesas.ver', 'comprobantes.ver'].includes(p)) }
         expect(gruposVisibles()).not.toContain('dia')
         useUsuarioActual().value = meAdmin
-        expect(gruposVisibles()).toHaveLength(9)
+        expect(gruposVisibles()).toHaveLength(8)
     })
 
     it('el grupo de la página actual: por prefijo, gana la ruta más larga', () => {
@@ -68,6 +72,8 @@ describe('menú lateral agrupado', () => {
         expect(ubicacionDeRuta('/configuracion/empresa')?.subgrupo?.id).toBe('config-empresa')
         expect(ubicacionDeRuta('/configuracion')?.subgrupo).toBeNull()
         expect(grupoDeRuta('/cartera')?.id).toBe('finanzas')
+        expect(ubicacionDeRuta('/libro/cierres')?.seccion.id).toBe('cierres-libro')
+        expect(ubicacionDeRuta('/declaraciones/3')?.subgrupo?.id).toBe('impuestos')
         expect(grupoDeRuta('/')).toBeNull()
         expect(grupoDeRuta('/clientes-viejos')).toBeNull()
     })
